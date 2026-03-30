@@ -18,11 +18,6 @@ from ciris_engine.logic.config.config_accessor import ConfigAccessor
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 
-# CoreToolService removed - SELF_HELP moved to memory per user request
-# BasicTelemetryCollector removed - using GraphTelemetryService instead
-from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
-
 # Removed AuditSinkManager - audit is consolidated, no sink needed
 from ciris_engine.logic.runtime.startup_logging import (
     FIRST_RUN_SERVICES,
@@ -32,6 +27,11 @@ from ciris_engine.logic.runtime.startup_logging import (
     _log_service_started,
     _set_service_phase,
 )
+
+# CoreToolService removed - SELF_HELP moved to memory per user request
+# BasicTelemetryCollector removed - using GraphTelemetryService instead
+from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
 from ciris_engine.logic.services.governance.wise_authority import WiseAuthorityService
 from ciris_engine.logic.services.graph.audit_service import GraphAuditService as AuditService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService

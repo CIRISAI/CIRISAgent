@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_adapters.ciris_accord_metrics.services import (
-    CompleteTrace,
     AccordMetricsService,
+    CompleteTrace,
     SimpleCapabilities,
     TraceComponent,
 )

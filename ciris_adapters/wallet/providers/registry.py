@@ -52,6 +52,7 @@ _loaded_classes: Dict[str, Type[Any]] = {}
 
 class ProviderLoadError(Exception):
     """Raised when a provider fails to load."""
+
     pass
 
 
@@ -79,10 +80,7 @@ def get_provider_class(provider_name: str) -> Type[Any]:
         ProviderLoadError: If provider not found or fails to load
     """
     if provider_name not in PROVIDER_MODULES:
-        raise ProviderLoadError(
-            f"Unknown provider: {provider_name}. "
-            f"Available: {list(PROVIDER_MODULES.keys())}"
-        )
+        raise ProviderLoadError(f"Unknown provider: {provider_name}. " f"Available: {list(PROVIDER_MODULES.keys())}")
 
     # Return cached class if already loaded
     if provider_name in _loaded_classes:
@@ -102,9 +100,7 @@ def get_provider_class(provider_name: str) -> Type[Any]:
 
         # Get the provider class
         if not hasattr(module, class_name):
-            raise ProviderLoadError(
-                f"Module {module_path} does not have class {class_name}"
-            )
+            raise ProviderLoadError(f"Module {module_path} does not have class {class_name}")
 
         provider_class: Type[Any] = getattr(module, class_name)
         _loaded_classes[provider_name] = provider_class
@@ -113,13 +109,9 @@ def get_provider_class(provider_name: str) -> Type[Any]:
         return provider_class
 
     except ImportError as e:
-        raise ProviderLoadError(
-            f"Failed to import {provider_name} provider from {module_path}: {e}"
-        ) from e
+        raise ProviderLoadError(f"Failed to import {provider_name} provider from {module_path}: {e}") from e
     except Exception as e:
-        raise ProviderLoadError(
-            f"Failed to load {provider_name} provider: {e}"
-        ) from e
+        raise ProviderLoadError(f"Failed to load {provider_name} provider: {e}") from e
 
 
 def create_provider(

@@ -146,6 +146,24 @@ actual class EnvFileUpdater {
         println("[EnvFileUpdater.desktop] Signing key and data cleared successfully")
         true
     }
+
+    /**
+     * Clear only the data directory, preserving the signing key.
+     * Use this for a "soft reset" that keeps wallet access intact.
+     */
+    actual suspend fun clearDataOnly(): Result<Boolean> = runCatching {
+        // Only delete the data directory (databases, audit logs, etc.)
+        val dataDir = File(cirisHome, "data")
+        if (dataDir.exists()) {
+            val deleted = dataDir.deleteRecursively()
+            println("[EnvFileUpdater.desktop] Data directory ${if (deleted) "deleted" else "NOT deleted"}: ${dataDir.absolutePath}")
+        } else {
+            println("[EnvFileUpdater.desktop] Data directory does not exist")
+        }
+
+        println("[EnvFileUpdater.desktop] Data cleared - signing key preserved for wallet access")
+        true
+    }
 }
 
 actual fun createEnvFileUpdater(): EnvFileUpdater = EnvFileUpdater()

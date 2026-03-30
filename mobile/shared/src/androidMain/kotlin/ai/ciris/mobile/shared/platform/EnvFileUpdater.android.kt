@@ -344,6 +344,38 @@ actual class EnvFileUpdater {
             Result.failure(e)
         }
     }
+
+    /**
+     * Clear only the data directory, preserving the signing key.
+     * Use this for a "soft reset" that keeps wallet access intact.
+     *
+     * Deletes:
+     * - The data directory (databases, audit logs, etc.)
+     *
+     * Preserves:
+     * - The encrypted key file (agent_signing.ed25519.enc)
+     * - The AES wrapper key in Android Keystore
+     */
+    actual suspend fun clearDataOnly(): Result<Boolean> = withContext(Dispatchers.IO) {
+        Log.i(TAG, "[clearDataOnly] Starting data cleanup (preserving signing key)...")
+
+        try {
+            // Only delete the data directory (databases, audit logs, etc.)
+            val dataDir = cirisHome?.let { File(it, "data") }
+            if (dataDir != null && dataDir.exists()) {
+                val deleted = dataDir.deleteRecursively()
+                Log.i(TAG, "[clearDataOnly] Data directory ${if (deleted) "deleted" else "NOT deleted"}: ${dataDir.absolutePath}")
+            } else {
+                Log.i(TAG, "[clearDataOnly] Data directory does not exist")
+            }
+
+            Log.i(TAG, "[clearDataOnly] Data cleared - signing key preserved for wallet access")
+            Result.success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "[clearDataOnly] Error: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
 
 /**

@@ -347,7 +347,9 @@ def update_thought_status(
                 if "selected_action" in action_data and "action_type" not in action_data:
                     # Extract enum value if selected_action is an enum, otherwise use string
                     selected_action = action_data.get("selected_action", "")
-                    action_type_str = selected_action.value if hasattr(selected_action, "value") else str(selected_action)
+                    action_type_str = (
+                        selected_action.value if hasattr(selected_action, "value") else str(selected_action)
+                    )
                     final_action_data = {
                         "action_type": action_type_str,
                         "action_params": action_data.get("action_parameters", {}),

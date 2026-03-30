@@ -115,8 +115,7 @@ class VisionHelper:
         source_path.write_text(_VISION_OCR_SWIFT)
 
         result = subprocess.run(
-            ["swiftc", "-O", "-o", str(binary_path), str(source_path),
-             "-framework", "Vision", "-framework", "AppKit"],
+            ["swiftc", "-O", "-o", str(binary_path), str(source_path), "-framework", "Vision", "-framework", "AppKit"],
             capture_output=True,
             text=True,
             timeout=60,
@@ -159,14 +158,16 @@ class VisionHelper:
             if len(parts) != 6:
                 continue
             try:
-                regions.append(TextRegion(
-                    text=parts[0],
-                    x=int(parts[1]),
-                    y=int(parts[2]),
-                    width=int(parts[3]),
-                    height=int(parts[4]),
-                    confidence=float(parts[5]),
-                ))
+                regions.append(
+                    TextRegion(
+                        text=parts[0],
+                        x=int(parts[1]),
+                        y=int(parts[2]),
+                        width=int(parts[3]),
+                        height=int(parts[4]),
+                        confidence=float(parts[5]),
+                    )
+                )
             except (ValueError, IndexError):
                 continue
 

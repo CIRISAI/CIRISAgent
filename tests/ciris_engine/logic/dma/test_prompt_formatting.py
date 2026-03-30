@@ -75,7 +75,10 @@ class TestPromptBraceEscaping:
                     if unescaped_pattern.search(line):
                         lines_with_issues.append(f"  Line {i}: {line[:100]}...")
 
-                errors.append(f"{prompt_file.relative_to(prompt_file.parent.parent.parent.parent)}:\n" + "\n".join(lines_with_issues))
+                errors.append(
+                    f"{prompt_file.relative_to(prompt_file.parent.parent.parent.parent)}:\n"
+                    + "\n".join(lines_with_issues)
+                )
 
         assert not errors, (
             f"Found unescaped JSON braces in {len(errors)} file(s). "
@@ -94,7 +97,7 @@ class TestPromptBraceEscaping:
 
             # Check for lines with ""}} that don't have {{ before the JSON
             for i, line in enumerate(content.split("\n"), 1):
-                if '""}}' in line and '{{' not in line:
+                if '""}}' in line and "{{" not in line:
                     errors.append(f"{prompt_file.name}:{i}: Malformed brace escaping: {line[:100]}...")
 
         assert not errors, f"Found malformed brace escaping:\n" + "\n".join(errors)
@@ -121,6 +124,7 @@ class TestPromptBraceEscaping:
 
         if warnings:
             import pytest
+
             pytest.skip(f"Skipping due to {len(warnings)} localized files with YAML issues: {warnings[:3]}")
 
     def test_no_json_keyerrors_in_format(self, all_prompt_files: list[Path]) -> None:

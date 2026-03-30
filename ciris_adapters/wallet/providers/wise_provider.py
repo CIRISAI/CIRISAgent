@@ -62,9 +62,30 @@ class WiseProvider(WalletProvider):
 
     # Most commonly used currencies
     SUPPORTED_CURRENCIES = [
-        "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CHF", "SGD",
-        "HKD", "NZD", "SEK", "NOK", "DKK", "PLN", "MXN", "BRL",
-        "INR", "ZAR", "THB", "MYR", "PHP", "IDR", "KRW", "TWD",
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "SGD",
+        "HKD",
+        "NZD",
+        "SEK",
+        "NOK",
+        "DKK",
+        "PLN",
+        "MXN",
+        "BRL",
+        "INR",
+        "ZAR",
+        "THB",
+        "MYR",
+        "PHP",
+        "IDR",
+        "KRW",
+        "TWD",
     ]
 
     def __init__(self, config: WiseProviderConfig) -> None:
@@ -76,11 +97,7 @@ class WiseProvider(WalletProvider):
         self._recipients: Dict[str, Dict[str, Any]] = {}
 
         # Select environment
-        self._base_url = (
-            self.PRODUCTION_URL
-            if config.environment == "production"
-            else self.SANDBOX_URL
-        )
+        self._base_url = self.PRODUCTION_URL if config.environment == "production" else self.SANDBOX_URL
 
         logger.info(f"WiseProvider created ({config.environment})")
 
@@ -400,12 +417,15 @@ class WiseProvider(WalletProvider):
                             return self._balances[currency.upper()]
 
                         # Return USD balance as default
-                        return self._balances.get("USD", Balance(
-                            currency="USD",
-                            available=Decimal("0"),
-                            pending=Decimal("0"),
-                            total=Decimal("0"),
-                        ))
+                        return self._balances.get(
+                            "USD",
+                            Balance(
+                                currency="USD",
+                                available=Decimal("0"),
+                                pending=Decimal("0"),
+                                total=Decimal("0"),
+                            ),
+                        )
 
             return Balance(
                 currency=currency or "USD",
@@ -460,16 +480,14 @@ class WiseProvider(WalletProvider):
                             amount=-Decimal(str(item["targetValue"])),
                             currency=item["targetCurrency"],
                             recipient=str(item.get("targetAccount")),
-                            timestamp=datetime.fromisoformat(
-                                item["created"].replace("Z", "+00:00")
-                            ),
+                            timestamp=datetime.fromisoformat(item["created"].replace("Z", "+00:00")),
                         )
                         transactions.append(tx)
                     return transactions
-                return self._transactions[offset:offset + limit]
+                return self._transactions[offset : offset + limit]
         except Exception as e:
             logger.error(f"Wise history error: {e}")
-            return self._transactions[offset:offset + limit]
+            return self._transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get Wise account details."""
@@ -510,9 +528,7 @@ class WiseProvider(WalletProvider):
                         transaction_id=str(transfer["id"]),
                         amount=Decimal(str(transfer["targetValue"])),
                         currency=transfer["targetCurrency"],
-                        timestamp=datetime.fromisoformat(
-                            transfer["created"].replace("Z", "+00:00")
-                        ),
+                        timestamp=datetime.fromisoformat(transfer["created"].replace("Z", "+00:00")),
                     )
 
                 return PaymentVerification(

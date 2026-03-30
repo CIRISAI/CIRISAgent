@@ -49,7 +49,6 @@ router.include_router(tools.router)
 from .schemas import (
     AdapterActionRequest,
     ConfigStepInfo,
-    StartupStatusResponse,
     ConfigurableAdapterInfo,
     ConfigurableAdaptersResponse,
     ConfigurationCompleteRequest,
@@ -65,6 +64,7 @@ from .schemas import (
     ServiceStatus,
     ShutdownRequest,
     ShutdownResponse,
+    StartupStatusResponse,
     StateTransitionRequest,
     StateTransitionResponse,
     StepExecutionRequest,

@@ -41,11 +41,14 @@ fun DataManagementScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isDeletingLensTraces by viewModel.isDeletingLensTraces.collectAsState()
     val lensDeletionResult by viewModel.lensDeletionResult.collectAsState()
-    val isFactoryResetting by viewModel.isFactoryResetting.collectAsState()
-    val factoryResetSuccess by viewModel.factoryResetSuccess.collectAsState()
+    val isResetting by viewModel.isResetting.collectAsState()
+    val resetSuccess by viewModel.resetSuccess.collectAsState()
+    val isWipingSigningKey by viewModel.isWipingSigningKey.collectAsState()
+    val wipeSigningKeySuccess by viewModel.wipeSigningKeySuccess.collectAsState()
     val isLoadingAdapter by viewModel.isLoadingAdapter.collectAsState()
 
-    var showFactoryResetDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showWipeSigningKeyDialog by remember { mutableStateOf(false) }
     var showDeleteTracesDialog by remember { mutableStateOf(false) }
     var deletionReason by remember { mutableStateOf("") }
 
@@ -56,10 +59,18 @@ fun DataManagementScreen(
         viewModel.refresh()
     }
 
-    // Handle factory reset success - trigger app restart
-    LaunchedEffect(factoryResetSuccess) {
-        if (factoryResetSuccess) {
+    // Handle reset success - trigger app restart (signing key preserved)
+    LaunchedEffect(resetSuccess) {
+        if (resetSuccess) {
             viewModel.clearFactoryResetSuccess()
+            onResetSetup()
+        }
+    }
+
+    // Handle wipe signing key success - trigger app restart (wallet access destroyed)
+    LaunchedEffect(wipeSigningKeySuccess) {
+        if (wipeSigningKeySuccess) {
+            viewModel.clearWipeSigningKeySuccess()
             onResetSetup()
         }
     }
@@ -85,36 +96,101 @@ fun DataManagementScreen(
         }
     }
 
-    // Factory reset confirmation dialog
-    if (showFactoryResetDialog) {
+    // Reset account confirmation dialog (preserves signing key)
+    if (showResetDialog) {
         AlertDialog(
-            onDismissRequest = { showFactoryResetDialog = false },
-            title = { Text(localizedString("mobile.data_delete_confirm")) },
+            onDismissRequest = { showResetDialog = false },
+            title = { Text(localizedString("mobile.data_reset_confirm")) },
             text = {
-                Text(localizedString("mobile.data_delete_confirm_body"))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(localizedString("mobile.data_reset_confirm_body"))
+                    Text(
+                        text = localizedString("mobile.data_reset_wallet_preserved"),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showFactoryResetDialog = false
+                        showResetDialog = false
                         viewModel.factoryReset()
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error
                     ),
-                    modifier = Modifier.testableClickable("btn_factory_reset_confirm") {
-                        showFactoryResetDialog = false
+                    modifier = Modifier.testableClickable("btn_reset_confirm") {
+                        showResetDialog = false
                         viewModel.factoryReset()
                     }
                 ) {
-                    Text(localizedString("mobile.data_delete_account"))
+                    Text(localizedString("mobile.data_reset_account"))
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showFactoryResetDialog = false },
-                    modifier = Modifier.testableClickable("btn_factory_reset_cancel") {
-                        showFactoryResetDialog = false
+                    onClick = { showResetDialog = false },
+                    modifier = Modifier.testableClickable("btn_reset_cancel") {
+                        showResetDialog = false
+                    }
+                ) {
+                    Text(localizedString("mobile.common_cancel"))
+                }
+            }
+        )
+    }
+
+    // DANGER: Wipe signing key confirmation dialog (destroys wallet access)
+    if (showWipeSigningKeyDialog) {
+        AlertDialog(
+            onDismissRequest = { showWipeSigningKeyDialog = false },
+            title = {
+                Text(
+                    localizedString("mobile.data_wipe_key_confirm"),
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = localizedString("mobile.data_wipe_key_warning"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Text(localizedString("mobile.data_wipe_key_body"))
+                    Text(
+                        text = localizedString("mobile.data_wipe_key_funds_lost"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showWipeSigningKeyDialog = false
+                        viewModel.wipeSigningKey()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.testableClickable("btn_wipe_key_confirm") {
+                        showWipeSigningKeyDialog = false
+                        viewModel.wipeSigningKey()
+                    }
+                ) {
+                    Text(localizedString("mobile.data_wipe_key_button"))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showWipeSigningKeyDialog = false },
+                    modifier = Modifier.testableClickable("btn_wipe_key_cancel") {
+                        showWipeSigningKeyDialog = false
                     }
                 ) {
                     Text(localizedString("mobile.common_cancel"))
@@ -270,16 +346,30 @@ fun DataManagementScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // Section 2: Delete Local Account & Data
+                // Section 2: Reset Account (preserves signing key for wallet access)
                 Text(
-                    text = localizedString("mobile.data_local_title"),
+                    text = localizedString("mobile.data_reset_title"),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                DeleteLocalDataCard(
-                    isResetting = isFactoryResetting,
-                    onDeleteClick = { showFactoryResetDialog = true }
+                ResetAccountCard(
+                    isResetting = isResetting,
+                    onResetClick = { showResetDialog = true }
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Section 3: DANGER - Wipe Signing Key (destroys wallet access)
+                Text(
+                    text = localizedString("mobile.data_wipe_key_title"),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                WipeSigningKeyCard(
+                    isWiping = isWipingSigningKey,
+                    onWipeClick = { showWipeSigningKeyDialog = true }
                 )
             }
         }
@@ -473,15 +563,77 @@ private fun DeleteTracesCard(
 }
 
 /**
- * Card for deleting all local data (factory reset).
+ * Card for resetting account data while preserving the signing key.
+ * This allows wallet access to be retained after reset.
  */
 @Composable
-private fun DeleteLocalDataCard(
+private fun ResetAccountCard(
     isResetting: Boolean,
-    onDeleteClick: () -> Unit
+    onResetClick: () -> Unit
 ) {
-    val uriHandler = LocalUriHandler.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = localizedString("mobile.data_reset_account"),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
 
+            Text(
+                text = localizedString("mobile.data_reset_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+            )
+
+            Text(
+                text = localizedString("mobile.data_reset_preserves"),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Button(
+                onClick = onResetClick,
+                enabled = !isResetting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary
+                ),
+                modifier = Modifier.fillMaxWidth().testableClickable("btn_reset_account") {
+                    if (!isResetting) onResetClick()
+                }
+            ) {
+                if (isResetting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onTertiary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (isResetting) localizedString("mobile.data_resetting") else localizedString("mobile.data_reset_account"))
+            }
+        }
+    }
+}
+
+/**
+ * Card for DANGER zone - wiping the agent signing key.
+ * WARNING: This destroys wallet access permanently!
+ */
+@Composable
+private fun WipeSigningKeyCard(
+    isWiping: Boolean,
+    onWipeClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -493,35 +645,42 @@ private fun DeleteLocalDataCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = localizedString("mobile.data_delete_account"),
+                text = localizedString("mobile.data_wipe_key_danger"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                color = MaterialTheme.colorScheme.error
             )
 
             Text(
-                text = localizedString("mobile.data_delete_local_desc"),
+                text = localizedString("mobile.data_wipe_key_desc"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
             )
 
             Text(
-                text = localizedString("mobile.data_billing_note_full"),
+                text = localizedString("mobile.data_wipe_key_warning_short"),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error
+            )
+
+            Text(
+                text = localizedString("mobile.data_wipe_key_deletes"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
             )
 
             Button(
-                onClick = onDeleteClick,
-                enabled = !isResetting,
+                onClick = onWipeClick,
+                enabled = !isWiping,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error
                 ),
-                modifier = Modifier.fillMaxWidth().testableClickable("btn_factory_reset") {
-                    if (!isResetting) onDeleteClick()
+                modifier = Modifier.fillMaxWidth().testableClickable("btn_wipe_signing_key") {
+                    if (!isWiping) onWipeClick()
                 }
             ) {
-                if (isResetting) {
+                if (isWiping) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         color = MaterialTheme.colorScheme.onError,
@@ -529,7 +688,7 @@ private fun DeleteLocalDataCard(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (isResetting) localizedString("mobile.data_deleting") else localizedString("mobile.data_delete_account"))
+                Text(if (isWiping) localizedString("mobile.data_wiping") else localizedString("mobile.data_wipe_key_button"))
             }
         }
     }

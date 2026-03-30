@@ -11,8 +11,8 @@ They verify the running app state via screenshots and API endpoints.
 
 import json
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Dict, List, Optional, Tuple
 
 from .ios.idevice_helper import IDeviceHelper

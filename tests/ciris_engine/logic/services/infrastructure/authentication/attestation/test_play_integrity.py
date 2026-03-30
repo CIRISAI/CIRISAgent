@@ -97,6 +97,7 @@ class TestRunPlayIntegrityVerification:
         # Mock the FFI to hang
         def slow_ffi(*args, **kwargs):
             import time
+
             time.sleep(10)  # Sleep longer than timeout
             return 0
 

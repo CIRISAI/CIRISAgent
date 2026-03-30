@@ -256,9 +256,7 @@ class TestFoundingPartnershipInSetupFlow:
             enabled_adapters=["api"],
         )
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership"
-        ) as mock_fp:
+        with patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership") as mock_fp:
             # AuthenticationService is imported inside the function body, so we
             # must patch it at the source module, not the complete module
             with patch(
@@ -319,6 +317,7 @@ class TestFoundingPartnershipInSetupFlow:
 
 
 # -- Async helper stubs for mocking auth service --
+
 
 async def _async_noop(*args, **kwargs):
     pass

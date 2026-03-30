@@ -1285,9 +1285,9 @@ class SetupViewModel : ViewModel() {
 
                 // Language and location preferences
                 preferred_language = currentState.preferredLanguage,
-                location_country = currentState.country.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.COUNTRY },
-                location_region = currentState.region.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.REGION },
-                location_city = currentState.city.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.CITY },
+                location_country = null,  // Simplified: only city is collected now
+                location_region = null,
+                location_city = currentState.city.takeIf { it.isNotEmpty() },
                 share_location_in_traces = currentState.shareLocationInTraces,
 
                 // Node flow fields
@@ -1353,9 +1353,9 @@ class SetupViewModel : ViewModel() {
 
                 // Language and location preferences
                 preferred_language = currentState.preferredLanguage,
-                location_country = currentState.country.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.COUNTRY },
-                location_region = currentState.region.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.REGION },
-                location_city = currentState.city.takeIf { it.isNotEmpty() && currentState.locationGranularity >= LocationGranularity.CITY },
+                location_country = null,  // Simplified: only city is collected now
+                location_region = null,
+                location_city = currentState.city.takeIf { it.isNotEmpty() },
                 share_location_in_traces = currentState.shareLocationInTraces,
 
                 // Node flow fields

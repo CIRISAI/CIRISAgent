@@ -298,16 +298,14 @@ class PIXProvider(WalletProvider):
                                 amount=Decimal(str(item["transaction_amount"])),
                                 currency="BRL",
                                 sender=item.get("payer", {}).get("email"),
-                                timestamp=datetime.fromisoformat(
-                                    item["date_created"].replace("Z", "+00:00")
-                                ),
+                                timestamp=datetime.fromisoformat(item["date_created"].replace("Z", "+00:00")),
                             )
                             transactions.append(tx)
                     return transactions
-                return self._transactions[offset:offset + limit]
+                return self._transactions[offset : offset + limit]
         except Exception as e:
             logger.error(f"PIX history error: {e}")
-            return self._transactions[offset:offset + limit]
+            return self._transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get PIX account details."""
@@ -347,9 +345,11 @@ class PIXProvider(WalletProvider):
                         transaction_id=str(payment["id"]),
                         amount=Decimal(str(payment["transaction_amount"])),
                         currency="BRL",
-                        timestamp=datetime.fromisoformat(
-                            payment["date_approved"].replace("Z", "+00:00")
-                        ) if payment.get("date_approved") else None,
+                        timestamp=(
+                            datetime.fromisoformat(payment["date_approved"].replace("Z", "+00:00"))
+                            if payment.get("date_approved")
+                            else None
+                        ),
                     )
 
                 return PaymentVerification(

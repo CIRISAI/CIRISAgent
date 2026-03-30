@@ -14,7 +14,6 @@ import pytest
 
 from ciris_engine.logic.adapters.api.routes.audit import (
     AuditEntryResponse,
-    _MergedAuditEntry,
     _add_new_graph_entry,
     _add_new_sqlite_entry,
     _entry_has_additional_metadata,
@@ -24,6 +23,7 @@ from ciris_engine.logic.adapters.api.routes.audit import (
     _handle_duplicate_graph_entry,
     _infer_outcome_from_event,
     _merge_graph_metadata_into_entry,
+    _MergedAuditEntry,
     _normalize_timestamp_str,
     _parse_event_payload_metadata,
     _track_sqlite_dedup_key,
@@ -547,10 +547,12 @@ class TestAddNewSqliteEntry:
             "originator_id": "user-123",
             "event_type": "TOOL",
             "event_id": "evt-456",
-            "event_payload": json.dumps({
-                "action_type": "tool_call",
-                "parameters": json.dumps({"tool_name": "calculator"}),
-            }),
+            "event_payload": json.dumps(
+                {
+                    "action_type": "tool_call",
+                    "parameters": json.dumps({"tool_name": "calculator"}),
+                }
+            ),
             "signature": "sig-123",
             "previous_hash": "hash-123",
         }

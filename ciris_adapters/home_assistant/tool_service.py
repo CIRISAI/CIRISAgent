@@ -454,7 +454,7 @@ If you need a specific entity but don't know its ID:
                     UsageExample(
                         title="List all entities",
                         description="See everything (prioritized list)",
-                        code='{}',
+                        code="{}",
                     ),
                     UsageExample(
                         title="List all automations",
@@ -1187,7 +1187,7 @@ MA supports synchronized multi-room audio. If players are grouped:
                     UsageExample(
                         title="List all players",
                         description="Get all available players and their states",
-                        code='{}',
+                        code="{}",
                     ),
                 ],
                 gotchas=[

@@ -1254,11 +1254,13 @@ class StreamingVerificationModule:
                 if stored_lang != target_language:
                     errors.append(f"Language not persisted: expected '{target_language}', got '{stored_lang}'")
                 else:
-                    localization_evidence.append({
-                        "source": "user_profile_api",
-                        "field": "preferred_language",
-                        "value": stored_lang,
-                    })
+                    localization_evidence.append(
+                        {
+                            "source": "user_profile_api",
+                            "field": "preferred_language",
+                            "value": stored_lang,
+                        }
+                    )
         except Exception as e:
             errors.append(f"Failed to verify user profile: {e}")
 
@@ -1316,8 +1318,7 @@ class StreamingVerificationModule:
             if target_language != "en":
                 # For non-English, we expect target markers and NO English markers
                 analysis["is_localized"] = (
-                    len(analysis["target_markers_found"]) > 0
-                    and len(analysis["english_markers_found"]) == 0
+                    len(analysis["target_markers_found"]) > 0 and len(analysis["english_markers_found"]) == 0
                 )
             else:
                 # For English, we expect English markers
@@ -1343,16 +1344,25 @@ class StreamingVerificationModule:
         # Step 5: Check the received events include all expected types
         received_events_list: List[Any] = streaming_result.get("received_events", []) if streaming_result else []
         received = set(received_events_list)
-        expected = {"thought_start", "snapshot_and_context", "dma_results", "idma_result",
-                   "aspdma_result", "conscience_result", "action_result"}
+        expected = {
+            "thought_start",
+            "snapshot_and_context",
+            "dma_results",
+            "idma_result",
+            "aspdma_result",
+            "conscience_result",
+            "action_result",
+        }
 
         if expected.issubset(received):
             print(f"\n  ✅ All 7 reasoning event types received")
-            localization_evidence.append({
-                "source": "streaming_events",
-                "field": "event_types",
-                "value": list(received),
-            })
+            localization_evidence.append(
+                {
+                    "source": "streaming_events",
+                    "field": "event_types",
+                    "value": list(received),
+                }
+            )
         else:
             missing = expected - received
             print(f"\n  ⚠️  Missing events: {missing}")
@@ -1363,11 +1373,13 @@ class StreamingVerificationModule:
             # and NO English markers were found
             localization_passed = conscience_localized and not english_detected
             if localization_passed:
-                localization_evidence.append({
-                    "source": "conscience_prompts",
-                    "field": "localization",
-                    "value": f"Prompts localized to {target_language}",
-                })
+                localization_evidence.append(
+                    {
+                        "source": "conscience_prompts",
+                        "field": "localization",
+                        "value": f"Prompts localized to {target_language}",
+                    }
+                )
             else:
                 if english_detected:
                     errors.append(
@@ -1404,12 +1416,7 @@ class StreamingVerificationModule:
                 print(f"   - {error}")
 
         # Success requires: language stored, streaming passed, AND conscience prompts localized
-        success = (
-            len(localization_evidence) > 0
-            and streaming_success
-            and localization_passed
-            and len(errors) == 0
-        )
+        success = len(localization_evidence) > 0 and streaming_success and localization_passed and len(errors) == 0
 
         if success:
             print(f"\n✅ LOCALIZATION TEST PASSED")
@@ -1509,28 +1516,42 @@ class StreamingVerificationModule:
                                             conscience_type = "entropy"
                                         elif "IRIS-C" in conscience_prompt or "coherence" in conscience_prompt.lower():
                                             conscience_type = "coherence"
-                                        elif "CIRIS-EOV" in conscience_prompt or "optimization" in conscience_prompt.lower():
+                                        elif (
+                                            "CIRIS-EOV" in conscience_prompt
+                                            or "optimization" in conscience_prompt.lower()
+                                        ):
                                             conscience_type = "optimization_veto"
-                                        elif "CIRIS-EH" in conscience_prompt or "epistemic" in conscience_prompt.lower():
+                                        elif (
+                                            "CIRIS-EH" in conscience_prompt or "epistemic" in conscience_prompt.lower()
+                                        ):
                                             conscience_type = "epistemic_humility"
 
-                                        conscience_prompts.append({
-                                            "type": conscience_type,
-                                            "prompt": conscience_prompt,
-                                            "thought_id": event.get("thought_id"),
-                                        })
+                                        conscience_prompts.append(
+                                            {
+                                                "type": conscience_type,
+                                                "prompt": conscience_prompt,
+                                                "thought_id": event.get("thought_id"),
+                                            }
+                                        )
 
                                 # Track audit data
                                 if event_type == "action_result":
-                                    audit_fields = ["audit_entry_id", "audit_sequence_number", "audit_entry_hash", "audit_signature"]
+                                    audit_fields = [
+                                        "audit_entry_id",
+                                        "audit_sequence_number",
+                                        "audit_entry_hash",
+                                        "audit_signature",
+                                    ]
                                     if all(event.get(f) for f in audit_fields):
                                         events_with_audit_data += 1
 
-                                event_details.append({
-                                    "event_type": event_type,
-                                    "thought_id": event.get("thought_id"),
-                                    "task_id": event.get("task_id"),
-                                })
+                                event_details.append(
+                                    {
+                                        "event_type": event_type,
+                                        "thought_id": event.get("thought_id"),
+                                        "task_id": event.get("task_id"),
+                                    }
+                                )
 
                         except json.JSONDecodeError as e:
                             errors.append(f"JSON decode error: {e}")

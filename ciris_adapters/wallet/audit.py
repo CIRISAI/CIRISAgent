@@ -29,15 +29,15 @@ logger = logging.getLogger(__name__)
 
 # Dust thresholds - amounts below these are not audited to prevent spam
 DUST_THRESHOLDS: Dict[str, Decimal] = {
-    "USDC": Decimal("0.01"),      # $0.01 minimum
-    "USDT": Decimal("0.01"),      # $0.01 minimum
-    "ETH": Decimal("0.0001"),     # ~$0.20 minimum
-    "BTC": Decimal("0.000001"),   # ~$0.10 minimum
+    "USDC": Decimal("0.01"),  # $0.01 minimum
+    "USDT": Decimal("0.01"),  # $0.01 minimum
+    "ETH": Decimal("0.0001"),  # ~$0.20 minimum
+    "BTC": Decimal("0.000001"),  # ~$0.10 minimum
 }
 
 # Rate limiting constants
-ERROR_COOLDOWN_SECONDS = 60.0     # Max 1 error per fingerprint per minute
-EVENT_DEDUP_SECONDS = 30.0        # Skip duplicate events within 30 seconds
+ERROR_COOLDOWN_SECONDS = 60.0  # Max 1 error per fingerprint per minute
+EVENT_DEDUP_SECONDS = 30.0  # Skip duplicate events within 30 seconds
 
 
 @dataclass
@@ -109,12 +109,8 @@ class WalletAuditHelper:
         cutoff_event = now - EVENT_DEDUP_SECONDS * 2
         cutoff_error = now - ERROR_COOLDOWN_SECONDS * 2
 
-        self._event_timestamps = {
-            k: v for k, v in self._event_timestamps.items() if v > cutoff_event
-        }
-        self._error_timestamps = {
-            k: v for k, v in self._error_timestamps.items() if v > cutoff_error
-        }
+        self._event_timestamps = {k: v for k, v in self._event_timestamps.items() if v > cutoff_event}
+        self._error_timestamps = {k: v for k, v in self._error_timestamps.items() if v > cutoff_error}
 
     async def audit_send(
         self,

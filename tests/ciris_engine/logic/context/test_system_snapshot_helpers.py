@@ -1185,6 +1185,7 @@ class TestContextEnrichment:
     def clear_enrichment_cache(self):
         """Clear the enrichment cache before each test."""
         from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
         get_enrichment_cache().clear()
         yield
         get_enrichment_cache().clear()

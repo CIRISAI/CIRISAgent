@@ -20,12 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from ciris_engine.logic.utils.path_resolution import is_android
-from ciris_engine.schemas.accord import (
-    ACCORD_PAYLOAD_SIZE,
-    AccordExtractionResult,
-    AccordMessage,
-    AccordPayload,
-)
+from ciris_engine.schemas.accord import ACCORD_PAYLOAD_SIZE, AccordExtractionResult, AccordMessage, AccordPayload
 
 logger = logging.getLogger(__name__)
 

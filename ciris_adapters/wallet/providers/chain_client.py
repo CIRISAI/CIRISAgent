@@ -36,6 +36,7 @@ def keccak256(data: bytes) -> bytes:
     # Try pysha3 first (has correct keccak_256)
     try:
         import sha3  # type: ignore[import-not-found]
+
         result = sha3.keccak_256(data).digest()
         return bytes(result)
     except ImportError:
@@ -44,6 +45,7 @@ def keccak256(data: bytes) -> bytes:
     # Try PyCryptodome (has correct Keccak)
     try:
         from Crypto.Hash import keccak
+
         result = keccak.new(data=data, digest_bits=256).digest()
         return bytes(result)
     except ImportError:
@@ -52,14 +54,14 @@ def keccak256(data: bytes) -> bytes:
     # Last resort: try eth_hash if available (from eth-utils)
     try:
         from eth_hash.auto import keccak as eth_keccak  # type: ignore[import-not-found]
+
         result = eth_keccak(data)
         return bytes(result)
     except ImportError:
         pass
 
     raise ImportError(
-        "No keccak256 implementation available. "
-        "Install one of: pysha3, pycryptodome, or eth-hash[pycryptodome]"
+        "No keccak256 implementation available. " "Install one of: pysha3, pycryptodome, or eth-hash[pycryptodome]"
     )
 
 
@@ -86,15 +88,15 @@ def rlp_encode(item: Union[bytes, List[Any], int]) -> bytes:
             return bytes([0x80 + len(item)]) + item
         else:
             len_bytes = _encode_length(len(item))
-            return bytes([0xb7 + len(len_bytes)]) + len_bytes + item
+            return bytes([0xB7 + len(len_bytes)]) + len_bytes + item
 
     elif isinstance(item, list):
         encoded_items = b"".join(rlp_encode(i) for i in item)
         if len(encoded_items) < 56:
-            return bytes([0xc0 + len(encoded_items)]) + encoded_items
+            return bytes([0xC0 + len(encoded_items)]) + encoded_items
         else:
             len_bytes = _encode_length(len(encoded_items))
-            return bytes([0xf7 + len(len_bytes)]) + len_bytes + encoded_items
+            return bytes([0xF7 + len(len_bytes)]) + len_bytes + encoded_items
 
     raise TypeError(f"Cannot RLP encode type: {type(item)}")
 
@@ -106,6 +108,7 @@ def _encode_length(length: int) -> bytes:
 
 class ChainConfigEntry(TypedDict):
     """Type definition for chain configuration entries."""
+
     chain_id: int
     rpc_url: str
     usdc_address: str
@@ -130,29 +133,25 @@ CHAIN_CONFIG: Dict[str, ChainConfigEntry] = {
 
 # ERC-20 function selectors
 BALANCE_OF_SELECTOR = "0x70a08231"  # keccak256("balanceOf(address)")[:4]
-TRANSFER_SELECTOR = "0xa9059cbb"     # keccak256("transfer(address,uint256)")[:4]
-APPROVE_SELECTOR = "0x095ea7b3"      # keccak256("approve(address,uint256)")[:4]
-ALLOWANCE_SELECTOR = "0xdd62ed3e"    # keccak256("allowance(address,address)")[:4]
-
-# Uniswap V3 function selectors
-# exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))
-EXACT_INPUT_SINGLE_SELECTOR = "0x04e45aaf"
+TRANSFER_SELECTOR = "0xa9059cbb"  # keccak256("transfer(address,uint256)")[:4]
+APPROVE_SELECTOR = "0x095ea7b3"  # keccak256("approve(address,uint256)")[:4]
+ALLOWANCE_SELECTOR = "0xdd62ed3e"  # keccak256("allowance(address,address)")[:4]
 
 # USDC has 6 decimals
 USDC_DECIMALS = 6
 
-# WETH address (same on Base mainnet and testnet)
-WETH_ADDRESS = "0x4200000000000000000000000000000000000006"
+# ERC-4337 EntryPoint v0.6 (same on all EVM chains)
+ENTRYPOINT_V06 = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 
-# Uniswap V3 SwapRouter02 addresses
-UNISWAP_ROUTER: Dict[str, str] = {
-    "base-mainnet": "0x2626664c2603336E57B271c5C0b26F421741e481",
-    "base-sepolia": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4",
+# Simple Account Factory (for creating smart accounts)
+SIMPLE_ACCOUNT_FACTORY: Dict[str, str] = {
+    "base-mainnet": "0x9406Cc6185a346906296840746125a0E44976454",
+    "base-sepolia": "0x9406Cc6185a346906296840746125a0E44976454",
 }
 
-# Pool fee tier (0.3% = 3000, 0.05% = 500, 1% = 10000)
-# USDC/ETH typically uses 0.3% fee tier on Base
-DEFAULT_POOL_FEE = 3000
+# Execute function selector for SimpleAccount
+# execute(address dest, uint256 value, bytes calldata func)
+EXECUTE_SELECTOR = "0xb61d27f6"
 
 
 class ChainClient:
@@ -181,8 +180,11 @@ class ChainClient:
         self.timeout = timeout
         self._request_id = 0
 
-        # Uniswap router for this network
-        self.uniswap_router: str = UNISWAP_ROUTER.get(network, UNISWAP_ROUTER["base-mainnet"])
+        # ERC-4337 contracts
+        self.entrypoint: str = ENTRYPOINT_V06
+        self.account_factory: str = SIMPLE_ACCOUNT_FACTORY.get(
+            network, SIMPLE_ACCOUNT_FACTORY["base-mainnet"]
+        )
 
         logger.info(f"ChainClient initialized for {network} (chain_id={self.chain_id})")
 
@@ -565,94 +567,158 @@ class ChainClient:
             return 0
 
     # =========================================================================
-    # Uniswap V3 Swap Methods
+    # ERC-4337 UserOperation Building Methods
     # =========================================================================
 
-    def build_uniswap_exact_input_single(
+    def build_execute_calldata(
         self,
-        token_in: str,
-        token_out: str,
-        fee: int,
-        recipient: str,
-        amount_in: int,
-        amount_out_minimum: int,
-        sqrt_price_limit_x96: int = 0,
+        dest: str,
+        value: int,
+        func_data: bytes,
     ) -> bytes:
         """
-        Build Uniswap V3 exactInputSingle calldata.
+        Build execute() calldata for SimpleAccount.
+
+        This wraps the actual transaction (e.g., ERC-20 transfer) in the
+        smart account's execute function.
 
         Args:
-            token_in: Input token address (e.g., USDC)
-            token_out: Output token address (e.g., WETH)
-            fee: Pool fee tier (500, 3000, or 10000)
-            recipient: Address to receive output tokens
-            amount_in: Input amount in raw token units
-            amount_out_minimum: Minimum output amount (slippage protection)
-            sqrt_price_limit_x96: Price limit (0 = no limit)
+            dest: Target contract address
+            value: ETH value to send (usually 0 for ERC-20)
+            func_data: Encoded function call (e.g., transfer calldata)
 
         Returns:
-            ABI-encoded calldata for exactInputSingle
+            ABI-encoded calldata for execute(address,uint256,bytes)
         """
-        selector = bytes.fromhex(EXACT_INPUT_SINGLE_SELECTOR[2:])
+        selector = bytes.fromhex(EXECUTE_SELECTOR[2:])
 
-        # Encode the struct parameters as a tuple
-        # (address tokenIn, address tokenOut, uint24 fee, address recipient,
-        #  uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)
-        params = (
-            bytes.fromhex(token_in.lower().replace("0x", "").zfill(64)) +      # tokenIn
-            bytes.fromhex(token_out.lower().replace("0x", "").zfill(64)) +     # tokenOut
-            fee.to_bytes(32, "big") +                                           # fee (uint24 padded)
-            bytes.fromhex(recipient.lower().replace("0x", "").zfill(64)) +     # recipient
-            amount_in.to_bytes(32, "big") +                                     # amountIn
-            amount_out_minimum.to_bytes(32, "big") +                            # amountOutMinimum
-            sqrt_price_limit_x96.to_bytes(32, "big")                            # sqrtPriceLimitX96
-        )
+        # Encode parameters:
+        # address dest (32 bytes)
+        # uint256 value (32 bytes)
+        # bytes func offset (32 bytes) -> points to 96 (0x60)
+        # bytes func length (32 bytes)
+        # bytes func data (padded to 32 bytes)
+        padded_dest = bytes.fromhex(dest.lower().replace("0x", "").zfill(64))
+        padded_value = value.to_bytes(32, "big")
+        func_offset = (96).to_bytes(32, "big")  # Offset to func data (after 3 * 32 bytes)
+        func_length = len(func_data).to_bytes(32, "big")
 
-        return selector + params
+        # Pad func_data to 32-byte boundary
+        padding_needed = (32 - (len(func_data) % 32)) % 32
+        padded_func = func_data + (b"\x00" * padding_needed)
 
-    async def get_eth_price_usdc(self) -> Decimal:
-        """
-        Get approximate ETH/USDC price from chain.
+        return selector + padded_dest + padded_value + func_offset + func_length + padded_func
 
-        For MVP, we use a simple price estimate. Production would query
-        the Uniswap pool or an oracle.
-
-        Returns:
-            ETH price in USDC
-        """
-        # TODO: Query Uniswap pool for actual price
-        # For now, use a conservative estimate
-        return Decimal("2000")
-
-    def calculate_min_eth_out(
+    def build_userop_calldata_for_transfer(
         self,
-        usdc_amount: Decimal,
-        eth_price: Decimal,
-        slippage_percent: Decimal = Decimal("2"),
-    ) -> int:
+        recipient: str,
+        amount: Decimal,
+        token_address: Optional[str] = None,
+    ) -> bytes:
         """
-        Calculate minimum ETH output for slippage protection.
+        Build UserOperation calldata for a token transfer.
+
+        This creates the nested calldata structure:
+        execute(USDC, 0, transfer(recipient, amount))
 
         Args:
-            usdc_amount: USDC amount being swapped
-            eth_price: Current ETH/USDC price
-            slippage_percent: Maximum acceptable slippage (default 2%)
+            recipient: Recipient address
+            amount: Amount in token units (e.g., 1.5 USDC)
+            token_address: Token contract (defaults to USDC)
 
         Returns:
-            Minimum ETH in wei
+            Encoded calldata for the UserOperation
         """
-        # Expected ETH = USDC / price
-        expected_eth = usdc_amount / eth_price
+        token = token_address or self.usdc_address
 
-        # Apply slippage tolerance
-        slippage_multiplier = Decimal("1") - (slippage_percent / Decimal("100"))
-        min_eth = expected_eth * slippage_multiplier
+        # First build the inner transfer call
+        transfer_calldata = self.build_erc20_transfer(recipient, amount, USDC_DECIMALS)
 
-        # Convert to wei (18 decimals)
-        min_eth_wei = int(min_eth * Decimal(10**18))
-
-        logger.debug(
-            f"[ChainClient] Swap {usdc_amount} USDC → min {min_eth:.6f} ETH "
-            f"(price={eth_price}, slippage={slippage_percent}%)"
+        # Wrap in execute() for SimpleAccount
+        return self.build_execute_calldata(
+            dest=token,
+            value=0,
+            func_data=transfer_calldata,
         )
-        return min_eth_wei
+
+    async def get_smart_account_nonce(self, account: str) -> int:
+        """
+        Get the ERC-4337 nonce for a smart account from EntryPoint.
+
+        Args:
+            account: Smart account address
+
+        Returns:
+            Current nonce (key=0)
+        """
+        # getNonce(address sender, uint192 key)
+        # selector = 0x35567e1a
+        padded_account = account.lower().replace("0x", "").zfill(64)
+        padded_key = "0".zfill(64)  # key = 0
+        call_data = f"0x35567e1a{padded_account}{padded_key}"
+
+        try:
+            result = await self._rpc_call(
+                "eth_call",
+                [{"to": self.entrypoint, "data": call_data}, "latest"],
+            )
+            nonce = int(result, 16)
+            logger.debug(f"[ChainClient] Smart account nonce for {account}: {nonce}")
+            return nonce
+        except Exception as e:
+            logger.error(f"[ChainClient] Failed to get smart account nonce: {e}")
+            return 0
+
+    def compute_smart_account_address(self, owner: str, salt: int = 0) -> str:
+        """
+        Compute the counterfactual smart account address for an owner.
+
+        Uses CREATE2 deterministic deployment.
+
+        Args:
+            owner: EOA owner address
+            salt: Salt for address generation (default 0)
+
+        Returns:
+            Smart account address (may not be deployed yet)
+        """
+        # This is a simplified computation - the actual address depends
+        # on the factory's implementation. For SimpleAccountFactory:
+        # createAccount(owner, salt) -> address
+
+        # For now, we'll query the factory's getAddress function
+        # getAddress(address owner, uint256 salt)
+        # selector = 0x8cb84e18 (example - actual may vary)
+
+        # Note: In production, we'd call the factory to get the address
+        # For MVP, we assume the account already exists
+        logger.debug(f"[ChainClient] Computing smart account for owner={owner}")
+        return owner  # Placeholder - actual implementation queries factory
+
+    async def get_fee_data(self) -> tuple[int, int]:
+        """
+        Get current fee data for EIP-1559 transactions.
+
+        Returns:
+            Tuple of (maxFeePerGas, maxPriorityFeePerGas) in wei
+        """
+        try:
+            # Get base fee from latest block
+            block = await self._rpc_call("eth_getBlockByNumber", ["latest", False])
+            base_fee = int(block.get("baseFeePerGas", "0x0"), 16)
+
+            # Priority fee (tip) - Base L2 typically needs minimal tip
+            priority_fee = 1_000_000  # 0.001 gwei - Base is cheap
+
+            # Max fee = base fee * 2 + priority fee (buffer for price fluctuation)
+            max_fee = base_fee * 2 + priority_fee
+
+            logger.debug(
+                f"[ChainClient] Fee data: baseFee={base_fee}, "
+                f"maxFee={max_fee}, priorityFee={priority_fee}"
+            )
+            return max_fee, priority_fee
+        except Exception as e:
+            logger.error(f"[ChainClient] Failed to get fee data: {e}")
+            # Fallback to reasonable defaults for Base
+            return 100_000_000, 1_000_000  # 0.1 gwei max, 0.001 gwei priority

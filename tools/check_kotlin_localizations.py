@@ -140,7 +140,7 @@ def main():
         print("=" * 60)
         for key in sorted(missing_keys.keys()):
             locations = missing_keys[key]
-            print(f"\n  \"{key}\"")
+            print(f'\n  "{key}"')
             for file_path, line_num in locations[:3]:  # Show first 3 locations
                 rel_path = file_path.relative_to(root)
                 print(f"    └─ {rel_path}:{line_num}")

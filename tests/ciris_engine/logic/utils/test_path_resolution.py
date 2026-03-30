@@ -475,15 +475,9 @@ class TestSyncEnvVarSecurity:
         env_file.write_text("EXISTING=value\n")
 
         # Patch to use our test .env file
-        monkeypatch.setattr(
-            "ciris_engine.logic.utils.path_resolution.get_env_file_path",
-            lambda: env_file
-        )
+        monkeypatch.setattr("ciris_engine.logic.utils.path_resolution.get_env_file_path", lambda: env_file)
         # Patch allowlist check to allow tmp_path for testing
-        monkeypatch.setattr(
-            "ciris_engine.logic.utils.path_resolution._is_path_in_allowed_env_dirs",
-            lambda p: True
-        )
+        monkeypatch.setattr("ciris_engine.logic.utils.path_resolution._is_path_in_allowed_env_dirs", lambda p: True)
 
         # Try to inject via value - attacker tries to close quotes, add newline, set new var
         sync_env_var("TEST_VAR", 'value"\nINJECTED=evil', persist_to_file=True)

@@ -339,7 +339,7 @@ class ActionInstructionGenerator:
             tools_info.append(tool_line)
 
             # Log each tool being added to help debug tool selection issues
-            logger.info(f"[TOOL_PROMPT] Added to prompt: tool_name=\"{tool_name}\" when_to_use=\"{when_to_use[:60]}...\"")
+            logger.info(f'[TOOL_PROMPT] Added to prompt: tool_name="{tool_name}" when_to_use="{when_to_use[:60]}..."')
 
         final_tools_str = "\n".join(tools_info)
         logger.info(f"[TOOL_PROMPT] Final tools section length: {len(final_tools_str)} chars")

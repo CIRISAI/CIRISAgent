@@ -173,11 +173,7 @@ class AccordTestModule:
         """Test Ed25519 signature verification."""
         start = time.time()
         try:
-            from ciris_engine.schemas.accord import (
-                AccordCommandType,
-                create_accord_payload,
-                verify_accord_signature,
-            )
+            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
             from tools.security.accord_keygen import derive_accord_keypair
 
             if not self._setup_test_keys():

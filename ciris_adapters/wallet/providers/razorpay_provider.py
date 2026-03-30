@@ -285,17 +285,15 @@ class RazorpayProvider(WalletProvider):
                             amount=Decimal(item["amount"]) / 100,
                             currency=item["currency"],
                             sender=item.get("email"),
-                            timestamp=datetime.fromtimestamp(
-                                item["created_at"], tz=timezone.utc
-                            ),
+                            timestamp=datetime.fromtimestamp(item["created_at"], tz=timezone.utc),
                             metadata={"method": item.get("method")},
                         )
                         transactions.append(tx)
                     return transactions
-                return self._transactions[offset:offset + limit]
+                return self._transactions[offset : offset + limit]
         except Exception as e:
             logger.error(f"Razorpay history error: {e}")
-            return self._transactions[offset:offset + limit]
+            return self._transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get Razorpay account details."""
@@ -333,9 +331,7 @@ class RazorpayProvider(WalletProvider):
                         transaction_id=payment["id"],
                         amount=Decimal(payment["amount"]) / 100,
                         currency=payment["currency"],
-                        timestamp=datetime.fromtimestamp(
-                            payment["created_at"], tz=timezone.utc
-                        ),
+                        timestamp=datetime.fromtimestamp(payment["created_at"], tz=timezone.utc),
                     )
 
                 # Try as order ID
@@ -351,7 +347,11 @@ class RazorpayProvider(WalletProvider):
                         payment = items[0]
                         return PaymentVerification(
                             verified=payment["status"] == "captured",
-                            status=TransactionStatus.CONFIRMED if payment["status"] == "captured" else TransactionStatus.PENDING,
+                            status=(
+                                TransactionStatus.CONFIRMED
+                                if payment["status"] == "captured"
+                                else TransactionStatus.PENDING
+                            ),
                             transaction_id=payment["id"],
                             amount=Decimal(payment["amount"]) / 100,
                             currency=payment["currency"],

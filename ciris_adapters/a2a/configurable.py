@@ -149,7 +149,10 @@ class A2AConfigurableAdapter:
         host = config.get("host", "").strip()
         if host:
             # Basic validation - should be IP address or hostname
-            if not host.replace(".", "").replace(":", "").replace("-", "").replace("_", "").isalnum() and host != "0.0.0.0":
+            if (
+                not host.replace(".", "").replace(":", "").replace("-", "").replace("_", "").isalnum()
+                and host != "0.0.0.0"
+            ):
                 return False, f"Invalid host format: {host}"
 
         # Validate port if provided
@@ -205,9 +208,11 @@ class A2AConfigurableAdapter:
             os.environ["CIRIS_A2A_TIMEOUT"] = str(config["timeout"])
 
         # Log configuration (safe - no secrets)
-        logger.info(f"A2A configuration applied: host={config.get('host', self.DEFAULT_HOST)}, "
-                    f"port={config.get('port', self.DEFAULT_PORT)}, "
-                    f"timeout={config.get('timeout', self.DEFAULT_TIMEOUT)}")
+        logger.info(
+            f"A2A configuration applied: host={config.get('host', self.DEFAULT_HOST)}, "
+            f"port={config.get('port', self.DEFAULT_PORT)}, "
+            f"timeout={config.get('timeout', self.DEFAULT_TIMEOUT)}"
+        )
 
         return True
 

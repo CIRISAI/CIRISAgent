@@ -79,11 +79,7 @@ class MPesaProvider(WalletProvider):
         self._pending_requests: Dict[str, PaymentRequest] = {}
 
         # Select environment
-        self._base_url = (
-            self.PRODUCTION_URL
-            if config.environment == "production"
-            else self.SANDBOX_URL
-        )
+        self._base_url = self.PRODUCTION_URL if config.environment == "production" else self.SANDBOX_URL
 
         logger.info(f"MPesaProvider created ({config.environment})")
 
@@ -148,6 +144,7 @@ class MPesaProvider(WalletProvider):
         # Refresh if expired (with 5 minute buffer)
         if self._token_expires_at:
             from datetime import timedelta
+
             buffer = timedelta(minutes=5)
             if datetime.now(timezone.utc) >= self._token_expires_at - buffer:
                 return await self._refresh_token()
@@ -319,7 +316,7 @@ class MPesaProvider(WalletProvider):
             "PhoneNumber": phone_number,
             "CallBackURL": callback_url or f"{self.config.callback_base_url}/mpesa/stkpush/callback",
             "AccountReference": description[:12],  # Max 12 chars
-            "TransactionDesc": description[:13],   # Max 13 chars
+            "TransactionDesc": description[:13],  # Max 13 chars
         }
 
         try:
@@ -408,7 +405,7 @@ class MPesaProvider(WalletProvider):
         currency: Optional[str] = None,
     ) -> List[Transaction]:
         """Get transaction history."""
-        return self._transactions[offset:offset + limit]
+        return self._transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get M-Pesa account details."""
@@ -461,15 +458,18 @@ class MPesaProvider(WalletProvider):
                         verified=True,
                         status=TransactionStatus.CONFIRMED,
                         transaction_id=payment_ref,
-                        amount=self._pending_requests.get(payment_ref, PaymentRequest(
-                            request_id="",
-                            provider=self.provider_id,
-                            amount=Decimal("0"),
-                            currency="KES",
-                            description="",
-                            status=PaymentRequestStatus.PENDING,
-                            created_at=datetime.now(timezone.utc),
-                        )).amount,
+                        amount=self._pending_requests.get(
+                            payment_ref,
+                            PaymentRequest(
+                                request_id="",
+                                provider=self.provider_id,
+                                amount=Decimal("0"),
+                                currency="KES",
+                                description="",
+                                status=PaymentRequestStatus.PENDING,
+                                created_at=datetime.now(timezone.utc),
+                            ),
+                        ).amount,
                         currency="KES",
                         timestamp=datetime.now(timezone.utc),
                     )

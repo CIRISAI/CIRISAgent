@@ -98,7 +98,11 @@ class WalletTests:
             except Exception as e:
                 error_msg = str(e)
                 # Some failures are expected (e.g., no wallet adapter in test mode)
-                if "not available" in error_msg.lower() or "not configured" in error_msg.lower() or "cirisverify" in error_msg.lower():
+                if (
+                    "not available" in error_msg.lower()
+                    or "not configured" in error_msg.lower()
+                    or "cirisverify" in error_msg.lower()
+                ):
                     self.results.append({"test": name, "status": "SKIP", "error": error_msg})
                     self.console.print(f"    [yellow]SKIP[/yellow] {name}: {error_msg[:60]}")
                 else:

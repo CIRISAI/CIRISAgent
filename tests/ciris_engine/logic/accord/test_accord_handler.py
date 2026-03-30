@@ -124,9 +124,7 @@ class TestAccordHandler:
     def test_auto_load_no_authorities_terminates(self):
         """Auto-load mode with no authorities should terminate."""
         with patch("os.kill") as mock_kill:
-            with patch(
-                "ciris_engine.logic.accord.verifier.AccordVerifier._load_default_authorities", return_value=0
-            ):
+            with patch("ciris_engine.logic.accord.verifier.AccordVerifier._load_default_authorities", return_value=0):
                 from ciris_engine.logic.accord.handler import AccordHandler
 
                 # This should trigger SIGKILL because auto_load=True but no authorities loaded

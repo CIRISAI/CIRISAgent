@@ -43,7 +43,10 @@ class TestGetAgentRoot:
     def test_mobile_uses_package_path(self):
         """Test mobile mode uses Python package path."""
         with patch.dict(os.environ, {"ANDROID_ROOT": "/system"}):
-            with patch("ciris_engine.logic.services.infrastructure.authentication.attestation.paths.is_mobile", return_value=True):
+            with patch(
+                "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.is_mobile",
+                return_value=True,
+            ):
                 # The actual implementation would use ciris_engine.__file__
                 root = get_agent_root()
                 # Should not be empty
@@ -80,7 +83,7 @@ class TestFindAuditDbPath:
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.get_audit_db_search_paths",
-            return_value=[db_path]
+            return_value=[db_path],
         ):
             result = find_audit_db_path(str(tmp_path))
 
@@ -92,7 +95,7 @@ class TestFindAuditDbPath:
         nonexistent_dir = tmp_path / "nonexistent_subdir"
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.get_audit_db_search_paths",
-            return_value=[nonexistent_dir / "audit.db"]
+            return_value=[nonexistent_dir / "audit.db"],
         ):
             result = find_audit_db_path(str(nonexistent_dir))
         assert result is None

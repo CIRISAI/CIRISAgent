@@ -27,13 +27,7 @@ from ..constants import (
     ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
-from ._common import (
-    RESPONSES_402_403_503,
-    RESPONSES_500,
-    RESPONSES_503,
-    AuthObserverDep,
-    derive_credit_account,
-)
+from ._common import RESPONSES_402_403_503, RESPONSES_500, RESPONSES_503, AuthObserverDep, derive_credit_account
 
 logger = logging.getLogger(__name__)
 

@@ -22,10 +22,7 @@ def is_ios() -> bool:
     Returns:
         True if iOS framework or static link environment variables are set
     """
-    return (
-        os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None
-        or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
-    )
+    return os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
 
 
 def is_mobile() -> bool:

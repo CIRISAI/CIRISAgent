@@ -155,6 +155,7 @@ elif ACCORD_MODE == "full":
 else:
     logger.info(f"[ACCORD] Mode '{ACCORD_MODE}' - no accord in system prompts")
 
+
 def get_accord_text(mode: str = "default") -> str:
     """Get ACCORD text based on mode.
 

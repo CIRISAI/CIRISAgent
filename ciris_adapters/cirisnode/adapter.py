@@ -97,9 +97,11 @@ class CIRISNodeAdapter(Service):
         # Check service registry for license:verify capability
         if self.runtime and hasattr(self.runtime, "service_registry") and self.runtime.service_registry:
             from ciris_engine.schemas.runtime.enums import ServiceType
+
             providers = self.runtime.service_registry.get_providers(ServiceType.TOOL)
             has_verify = any(
-                hasattr(p, "adapter_id") and p.adapter_id == "ciris_verify"
+                hasattr(p, "adapter_id")
+                and p.adapter_id == "ciris_verify"
                 or (hasattr(p, "__class__") and "CIRISVerify" in p.__class__.__name__)
                 for p in providers
             )
@@ -110,6 +112,7 @@ class CIRISNodeAdapter(Service):
         # Fallback: check if the package is importable
         try:
             from ciris_verify import CIRISVerify  # noqa: F401
+
             logger.info("CIRISNode: ciris-verify package available")
         except ImportError:
             logger.warning(

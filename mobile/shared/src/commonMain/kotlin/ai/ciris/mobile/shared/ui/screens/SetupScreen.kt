@@ -61,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
 import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -1326,8 +1327,11 @@ private fun LlmConfigurationStep(
                         .menuAnchor()
                         .testable("input_llm_provider"),
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SetupColors.TextPrimary,
+                        unfocusedTextColor = SetupColors.TextPrimary,
                         focusedBorderColor = SetupColors.Primary,
-                        unfocusedBorderColor = SetupColors.GrayLight
+                        unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                        cursorColor = SetupColors.Primary
                     )
                 )
 
@@ -1384,8 +1388,11 @@ private fun LlmConfigurationStep(
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SetupColors.TextPrimary,
+                        unfocusedTextColor = SetupColors.TextPrimary,
                         focusedBorderColor = SetupColors.Primary,
-                        unfocusedBorderColor = SetupColors.GrayLight
+                        unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                        cursorColor = SetupColors.Primary
                     ),
                     singleLine = true
                 )
@@ -1425,8 +1432,11 @@ private fun LlmConfigurationStep(
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SetupColors.TextPrimary,
+                            unfocusedTextColor = SetupColors.TextPrimary,
                             focusedBorderColor = SetupColors.Primary,
-                            unfocusedBorderColor = SetupColors.GrayLight
+                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                            cursorColor = SetupColors.Primary
                         )
                     )
 
@@ -1533,8 +1543,11 @@ private fun LlmConfigurationStep(
                         )
                     },
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SetupColors.TextPrimary,
+                        unfocusedTextColor = SetupColors.TextPrimary,
                         focusedBorderColor = SetupColors.Primary,
-                        unfocusedBorderColor = SetupColors.GrayLight
+                        unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                        cursorColor = SetupColors.Primary
                     ),
                     singleLine = true
                 )
@@ -1761,6 +1774,33 @@ private fun OptionalFeaturesStep(
                         color = SetupColors.InfoDark,
                         fontSize = 14.sp
                     )
+                }
+
+                // Optional: Include location in traces (only show if city selected and metrics consent given)
+                AnimatedVisibility(visible = state.accordMetricsConsent && state.city.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testableClickable("item_share_location_traces") {
+                                viewModel.setShareLocationInTraces(!state.shareLocationInTraces)
+                            }
+                    ) {
+                        Checkbox(
+                            checked = state.shareLocationInTraces,
+                            onCheckedChange = { viewModel.setShareLocationInTraces(it) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = SetupColors.Primary,
+                                uncheckedColor = SetupColors.TextSecondary
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = localizedString("mobile.setup_include_location"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }
@@ -2326,10 +2366,15 @@ private fun AccountConfirmationStep(
                 value = state.username,
                 onValueChange = { viewModel.setUsername(it) },
                 modifier = Modifier.fillMaxWidth().testable("input_username"),
-                label = { Text(localizedString("mobile.login_username")) },
+                label = { Text(localizedString("mobile.login_username"), color = SetupColors.TextSecondary) },
                 colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = SetupColors.TextPrimary,
+                    unfocusedTextColor = SetupColors.TextPrimary,
                     focusedBorderColor = SetupColors.Primary,
-                    unfocusedBorderColor = SetupColors.GrayLight
+                    unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                    focusedLabelColor = SetupColors.Primary,
+                    unfocusedLabelColor = SetupColors.TextSecondary,
+                    cursorColor = SetupColors.Primary
                 ),
                 singleLine = true
             )
@@ -2342,7 +2387,7 @@ private fun AccountConfirmationStep(
                 value = state.userPassword,
                 onValueChange = { viewModel.setUserPassword(it) },
                 modifier = Modifier.fillMaxWidth().testable("input_password"),
-                label = { Text(localizedString("mobile.login_password_label")) },
+                label = { Text(localizedString("mobile.login_password_label"), color = SetupColors.TextSecondary) },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(
@@ -2353,8 +2398,13 @@ private fun AccountConfirmationStep(
                     }
                 },
                 colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = SetupColors.TextPrimary,
+                    unfocusedTextColor = SetupColors.TextPrimary,
                     focusedBorderColor = SetupColors.Primary,
-                    unfocusedBorderColor = SetupColors.GrayLight
+                    unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                    focusedLabelColor = SetupColors.Primary,
+                    unfocusedLabelColor = SetupColors.TextSecondary,
+                    cursorColor = SetupColors.Primary
                 ),
                 singleLine = true
             )
@@ -2545,6 +2595,7 @@ private fun NavigationButtons(
  * Preferences Step - Language and Location selection
  * Mirrors the CLI wizard's language/location prompts (wizard.py:324-395)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PreferencesStep(
     viewModel: SetupViewModel,
@@ -2553,6 +2604,7 @@ private fun PreferencesStep(
 ) {
     val scrollState = rememberScrollState()
     var showLanguageDropdown by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = modifier
@@ -2637,184 +2689,118 @@ private fun PreferencesStep(
             }
         }
 
-        // Location Selection
+        // Location Selection - Simple city text entry with typeahead
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = SetupColors.GrayLight,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = localizedString("setup.prefs_location_label"),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    color = SetupColors.TextPrimary
-                )
-
-                Text(
-                    text = localizedString("setup.prefs_location_hint"),
-                    fontSize = 12.sp,
-                    color = SetupColors.TextSecondary,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                )
-
-                // Location granularity options
-                LocationGranularity.entries.forEach { granularity ->
-                    val isSelected = state.locationGranularity == granularity
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) SetupColors.SuccessLight else Color.White,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { viewModel.setLocationGranularity(granularity) }
-                            .border(
-                                1.dp,
-                                if (isSelected) SetupColors.SuccessBorder else SetupColors.TextSecondary.copy(alpha = 0.3f),
-                                RoundedCornerShape(8.dp)
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { viewModel.setLocationGranularity(granularity) },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = SetupColors.SuccessDark
+                // Use ExposedDropdownMenuBox for proper dropdown positioning (shows above keyboard)
+                ExposedDropdownMenuBox(
+                    expanded = state.locationSearchResults.isNotEmpty(),
+                    onExpandedChange = { /* Controlled by search results */ }
+                ) {
+                    OutlinedTextField(
+                        value = state.locationSearchQuery,
+                        onValueChange = { viewModel.searchLocations(it) },
+                        label = { Text(localizedString("setup.prefs_city_label"), color = SetupColors.TextPrimary) },
+                        placeholder = { Text(localizedString("setup.prefs_city_hint"), color = SetupColors.TextSecondary) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SetupColors.TextPrimary,
+                            unfocusedTextColor = SetupColors.TextPrimary,
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                            focusedLabelColor = SetupColors.Primary,
+                            unfocusedLabelColor = SetupColors.TextSecondary,
+                            cursorColor = SetupColors.Primary
+                        ),
+                        trailingIcon = {
+                            if (state.locationSearchLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                                 )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = when (granularity) {
-                                    LocationGranularity.NONE -> localizedString("setup.prefs_location_none")
-                                    LocationGranularity.COUNTRY -> localizedString("setup.prefs_location_country")
-                                    LocationGranularity.REGION -> localizedString("setup.prefs_location_region")
-                                    LocationGranularity.CITY -> localizedString("setup.prefs_location_city")
+                            } else if (state.locationSearchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.clearLocationSearch() }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = SetupColors.TextSecondary)
+                                }
+                            } else {
+                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = SetupColors.TextSecondary)
+                            }
+                        }
+                    )
+
+                    // Dropdown menu - will automatically position above if no space below
+                    ExposedDropdownMenu(
+                        expanded = state.locationSearchResults.isNotEmpty(),
+                        onDismissRequest = { viewModel.clearLocationSearch() },
+                        modifier = Modifier.background(Color.White)
+                    ) {
+                        state.locationSearchResults.forEach { result ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = Color(0xFF666666),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = result.displayName,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF1A1A1A)
+                                            )
+                                            if (result.population > 0) {
+                                                Text(
+                                                    text = localizedString("setup.prefs_location_pop", "pop", formatPopulation(result.population)),
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFF666666)
+                                                )
+                                            }
+                                        }
+                                    }
                                 },
-                                color = SetupColors.TextPrimary
+                                onClick = {
+                                    viewModel.selectLocation(result)
+                                    focusManager.clearFocus()
+                                },
+                                modifier = Modifier.background(Color.White)
                             )
                         }
                     }
                 }
 
-                // Location search (typeahead autocomplete)
-                if (state.locationGranularity != LocationGranularity.NONE) {
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Search box with typeahead
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Column {
-                            OutlinedTextField(
-                                value = state.locationSearchQuery,
-                                onValueChange = { viewModel.searchLocations(it) },
-                                label = { Text(localizedString("setup.prefs_location_search_label")) },
-                                placeholder = { Text(localizedString("setup.prefs_location_search_hint")) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                trailingIcon = {
-                                    if (state.locationSearchLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else if (state.locationSearchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { viewModel.clearLocationSearch() }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                        }
-                                    } else {
-                                        Icon(Icons.Default.Search, contentDescription = "Search")
-                                    }
-                                }
-                            )
-
-                            // Search results dropdown
-                            if (state.locationSearchResults.isNotEmpty()) {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 200.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = Color.White,
-                                    shadowElevation = 4.dp
-                                ) {
-                                    LazyColumn {
-                                        items(state.locationSearchResults) { result ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { viewModel.selectLocation(result) }
-                                                    .padding(12.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.LocationOn,
-                                                    contentDescription = null,
-                                                    tint = SetupColors.TextSecondary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Column {
-                                                    Text(
-                                                        text = result.displayName,
-                                                        fontSize = 14.sp,
-                                                        color = SetupColors.TextPrimary
-                                                    )
-                                                    if (result.population > 0) {
-                                                        Text(
-                                                            text = localizedString("setup.prefs_location_pop").replace("{pop}", formatPopulation(result.population)),
-                                                            fontSize = 11.sp,
-                                                            color = SetupColors.TextSecondary
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            HorizontalDivider()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Show selected location details
-                    if (state.selectedLocation != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = SetupColors.SuccessLight,
-                            modifier = Modifier.fillMaxWidth()
+                // Show selected location
+                if (state.selectedLocation != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SetupColors.SuccessLight,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = SetupColors.SuccessDark,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "${state.city}, ${state.region.takeIf { it.isNotEmpty() }?.let { "$it, " } ?: ""}${state.country}",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = SetupColors.TextPrimary
-                                    )
-                                    state.selectedLocation?.timezone?.let { tz ->
-                                        Text(
-                                            text = tz,
-                                            fontSize = 12.sp,
-                                            color = SetupColors.TextSecondary
-                                        )
-                                    }
-                                }
-                            }
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = SetupColors.SuccessDark,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = state.selectedLocation!!.displayName,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SetupColors.TextPrimary
+                            )
                         }
                     }
                 }

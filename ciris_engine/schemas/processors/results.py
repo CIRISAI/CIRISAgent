@@ -60,6 +60,8 @@ class DreamResult(BaseModel):
     thoughts_processed: int = Field(0)
     errors: int = Field(0)
     duration_seconds: float = Field(...)
+    edges_created: int = Field(0, description="Number of graph edges created during consolidation")
+    session_complete: bool = Field(False, description="Whether the dream session completed")
 
     model_config = ConfigDict(defer_build=True)
 

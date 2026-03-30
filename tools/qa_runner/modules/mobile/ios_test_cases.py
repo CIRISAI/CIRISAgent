@@ -455,8 +455,7 @@ def test_ios_connect_node(xcrun: XCRunHelper, ui: iOSUIAutomator, config: dict) 
                     result=TestResult.PASSED,
                     duration=time.time() - start_time,
                     message=(
-                        f"Device auth completed. Template shown: {has_template}, "
-                        f"Adapters shown: {has_adapters}"
+                        f"Device auth completed. Template shown: {has_template}, " f"Adapters shown: {has_adapters}"
                     ),
                     screenshots=screenshots,
                 )
@@ -692,8 +691,7 @@ def test_ios_connect_node_error(xcrun: XCRunHelper, ui: iOSUIAutomator, config: 
         screenshots.append(screenshot_path)
 
         has_error = any(
-            "error" in t.lower() or "failed" in t.lower() or "connection" in t.lower()
-            for t in screen_texts
+            "error" in t.lower() or "failed" in t.lower() or "connection" in t.lower() for t in screen_texts
         )
 
         if has_error:

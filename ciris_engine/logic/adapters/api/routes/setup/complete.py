@@ -280,7 +280,9 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     # Store location sharing consent as a boolean
     attributes["share_location_in_traces"] = setup.share_location_in_traces
 
-    if not attributes or (len(attributes) == 1 and "share_location_in_traces" in attributes and not setup.share_location_in_traces):
+    if not attributes or (
+        len(attributes) == 1 and "share_location_in_traces" in attributes and not setup.share_location_in_traces
+    ):
         return
 
     # Build location string at user-chosen granularity

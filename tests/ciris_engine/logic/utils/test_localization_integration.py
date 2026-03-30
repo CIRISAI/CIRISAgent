@@ -9,28 +9,26 @@ Tests verify that:
 """
 
 import os
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ciris_engine.logic.utils.localization import (
-    get_string,
-    get_localizer,
-    get_preferred_language,
-    get_user_language_from_context,
     clear_cache,
     get_available_languages,
+    get_localizer,
+    get_preferred_language,
+    get_string,
+    get_user_language_from_context,
 )
-from ciris_engine.logic.utils.path_resolution import (
-    sync_env_var,
-    sync_language_preference,
-)
-
+from ciris_engine.logic.utils.path_resolution import sync_env_var, sync_language_preference
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture(autouse=True)
 def clear_localization_cache():
@@ -72,6 +70,7 @@ def mock_context_english():
 # ============================================================================
 # Basic Localization Utility Tests
 # ============================================================================
+
 
 class TestLocalizationUtility:
     """Tests for core localization utility functions."""
@@ -155,6 +154,7 @@ class TestLanguageFromContext:
 # Environment Sync Tests
 # ============================================================================
 
+
 class TestEnvironmentSync:
     """Tests for syncing language preference to environment."""
 
@@ -189,6 +189,7 @@ class TestEnvironmentSync:
 # ============================================================================
 # Conscience Localization Tests
 # ============================================================================
+
 
 class TestConscienceLocalization:
     """Tests for conscience ponder string localization."""
@@ -233,18 +234,14 @@ class TestConscienceLocalization:
 
     def test_conscience_override_rationale_interpolation(self):
         """Test override_rationale string interpolation."""
-        result = get_string(
-            "en",
-            "conscience.override_rationale",
-            conscience_name="EntropyConscience",
-            action="SPEAK"
-        )
+        result = get_string("en", "conscience.override_rationale", conscience_name="EntropyConscience", action="SPEAK")
         assert result is not None
 
 
 # ============================================================================
 # DMA Localization Tests
 # ============================================================================
+
 
 class TestDMALocalization:
     """Tests for DMA ACCORD text.
@@ -256,6 +253,7 @@ class TestDMALocalization:
     def test_polyglot_accord_contains_english(self):
         """Test that polyglot ACCORD contains English content."""
         from ciris_engine.logic.utils.constants import get_accord_text
+
         accord = get_accord_text()
         assert accord is not None
         assert len(accord) > 100  # ACCORD is a substantial document
@@ -265,6 +263,7 @@ class TestDMALocalization:
     def test_polyglot_accord_contains_amharic(self):
         """Test that polyglot ACCORD contains Amharic content."""
         from ciris_engine.logic.utils.constants import get_accord_text
+
         accord = get_accord_text()
         assert accord is not None
         # Polyglot version contains Amharic (Ge'ez script)
@@ -278,10 +277,11 @@ class TestCSDMALocalization:
 
     def test_csdma_extract_context_syncs_language(self, mock_context_with_language):
         """Test that CSDMA._extract_context_data syncs user's language."""
-        with patch("ciris_engine.logic.dma.csdma.get_prompt_loader") as mock_loader, \
-             patch("ciris_engine.logic.dma.csdma.format_system_snapshot") as mock_format_ss, \
-             patch("ciris_engine.logic.dma.csdma.format_user_profiles") as mock_format_up, \
-             patch("ciris_engine.logic.dma.prompt_loader.set_prompt_language") as mock_set_lang:
+        with patch("ciris_engine.logic.dma.csdma.get_prompt_loader") as mock_loader, patch(
+            "ciris_engine.logic.dma.csdma.format_system_snapshot"
+        ) as mock_format_ss, patch("ciris_engine.logic.dma.csdma.format_user_profiles") as mock_format_up, patch(
+            "ciris_engine.logic.dma.prompt_loader.set_prompt_language"
+        ) as mock_set_lang:
 
             # Setup mocks
             mock_loader_instance = MagicMock()
@@ -295,6 +295,7 @@ class TestCSDMALocalization:
             # Create CSDMA
             mock_registry = MagicMock()
             from ciris_engine.logic.dma.csdma import CSDMAEvaluator
+
             csdma = CSDMAEvaluator(service_registry=mock_registry)
 
             # Call _extract_context_data
@@ -310,6 +311,7 @@ class TestPDMALocalization:
     def test_pdma_accord_contains_pdma_content(self):
         """Test that ACCORD contains PDMA-related content."""
         from ciris_engine.logic.utils.constants import get_accord_text
+
         accord = get_accord_text()
         assert accord is not None
         # ACCORD should reference PDMA process
@@ -323,6 +325,7 @@ class TestIDMALocalization:
         """Test that IDMA has _extract_context_data method."""
         with patch("ciris_engine.logic.dma.idma.get_prompt_loader"):
             from ciris_engine.logic.dma.idma import IDMAEvaluator
+
             assert hasattr(IDMAEvaluator, "_extract_context_data")
 
 
@@ -332,6 +335,7 @@ class TestDSDMALocalization:
     def test_dsdma_uses_polyglot_accord(self):
         """Test that DSDMA uses the polyglot ACCORD via get_accord_text."""
         from ciris_engine.logic.utils.constants import get_accord_text
+
         # All DMAs now use the same polyglot ACCORD
         accord = get_accord_text()
         assert accord is not None
@@ -347,6 +351,7 @@ class TestDSDMALocalization:
 
             mock_registry = MagicMock()
             from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
+
             # BaseDSDMA has a prompt_loader attribute
             assert hasattr(BaseDSDMA, "__init__")
 
@@ -374,6 +379,7 @@ class TestTSASPDMALocalization:
     def test_tsaspdma_uses_polyglot_accord(self):
         """Test that TSASPDMA uses polyglot ACCORD via get_accord_text."""
         from ciris_engine.logic.utils.constants import get_accord_text
+
         accord = get_accord_text()
         # ACCORD should be present and contain relevant content
         assert accord is not None
@@ -383,12 +389,14 @@ class TestTSASPDMALocalization:
         """Test that TSASPDMA has _sync_language_from_context method."""
         with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader"):
             from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+
             assert hasattr(TSASPDMAEvaluator, "_sync_language_from_context")
 
     def test_tsaspdma_sync_language_from_context(self, mock_context_with_language):
         """Test that TSASPDMA syncs language from context."""
-        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader, \
-             patch("ciris_engine.logic.dma.prompt_loader.set_prompt_language") as mock_set_lang:
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader, patch(
+            "ciris_engine.logic.dma.prompt_loader.set_prompt_language"
+        ) as mock_set_lang:
 
             mock_loader_instance = MagicMock()
             mock_loader_instance.language = "en"  # Different from user's "am"
@@ -397,6 +405,7 @@ class TestTSASPDMALocalization:
 
             mock_registry = MagicMock()
             from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+
             tsaspdma = TSASPDMAEvaluator(service_registry=mock_registry)
 
             # Call _sync_language_from_context
@@ -409,6 +418,7 @@ class TestTSASPDMALocalization:
 # ============================================================================
 # Integration Tests
 # ============================================================================
+
 
 class TestLocalizationIntegration:
     """Integration tests for full localization flow."""
@@ -425,6 +435,7 @@ class TestLocalizationIntegration:
 
             # 3. Verify localization uses the new language
             from ciris_engine.logic.utils.localization import get_preferred_language
+
             assert get_preferred_language() == "am"
 
         finally:
@@ -463,15 +474,13 @@ class TestLocalizationIntegration:
 # Prompt Loader Sync Tests
 # ============================================================================
 
+
 class TestPromptLoaderSync:
     """Tests for DMA prompt loader language synchronization."""
 
     def test_set_prompt_language(self):
         """Test that set_prompt_language updates the loader."""
-        from ciris_engine.logic.dma.prompt_loader import (
-            get_prompt_loader,
-            set_prompt_language,
-        )
+        from ciris_engine.logic.dma.prompt_loader import get_prompt_loader, set_prompt_language
 
         # Get initial state
         loader = get_prompt_loader()

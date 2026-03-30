@@ -626,9 +626,12 @@ async def update_my_settings(
         # Sync language preference to env and DMA prompt loader if it was updated
         if request.preferred_language is not None:
             from ciris_engine.logic.utils.path_resolution import sync_language_preference
+
             try:
                 sync_language_preference(request.preferred_language)
-                logger.info(f"Synced language preference '{_sanitize_for_log(request.preferred_language)}' for user {_sanitize_for_log(auth.user_id)}")
+                logger.info(
+                    f"Synced language preference '{_sanitize_for_log(request.preferred_language)}' for user {_sanitize_for_log(auth.user_id)}"
+                )
             except ValueError as e:
                 # Invalid language code - return 400 Bad Request
                 raise HTTPException(status_code=400, detail=str(e))

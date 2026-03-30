@@ -135,3 +135,39 @@ class TaskCompleteParams(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class DreamConsolidationParams(BaseModel):
+    """
+    Parameters for MEMORIZE action during DREAM state - creates exactly 3 edges.
+
+    The dream consolidation process weaves memories together through:
+    1. CONNECTS - Linking two memories that share a pattern (past-oriented)
+    2. IMPLIES - Extracting behavioral insight from patterns (present-oriented)
+    3. ASPIRES_TO - Defining who the agent wants to become (future-oriented)
+
+    This creates triangulated, temporally-complete graph structures that
+    move the agent toward sustainable adaptive coherence (M-1).
+    """
+
+    channel_id: Optional[str] = Field(None, description="Channel ID (typically 'dream')")
+
+    # Edge 1: CONNECTS - Link two memories
+    connect_from_id: str = Field(..., description="Source memory node ID to connect")
+    connect_to_id: str = Field(..., description="Target memory node ID to connect")
+    connect_pattern: str = Field(..., description="The pattern that links these memories")
+
+    # Edge 2: IMPLIES - Behavioral insight
+    pattern_insight: str = Field(..., description="The insight extracted from this pattern")
+    implied_action: str = Field(..., description="How the agent should act differently")
+
+    # Edge 3: ASPIRES_TO - Future aspiration
+    aspiration: str = Field(..., description="Description of the ideal state to aspire to")
+    aspiration_category: str = Field(
+        default="growth", description="Category of aspiration: growth, coherence, service, understanding, connection"
+    )
+
+    # Optional context
+    reflection_notes: Optional[str] = Field(None, description="Additional reflection on this consolidation")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)

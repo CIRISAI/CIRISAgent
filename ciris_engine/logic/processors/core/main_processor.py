@@ -40,7 +40,7 @@ from ciris_engine.schemas.types import JSONDict
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
 
-from ciris_engine.logic.processors.states.dream_processor import DreamProcessor
+from ciris_engine.logic.processors.states.minimal_dream_processor import MinimalDreamProcessor
 from ciris_engine.logic.processors.states.play_processor import PlayProcessor
 from ciris_engine.logic.processors.states.shutdown_processor import ShutdownProcessor
 from ciris_engine.logic.processors.states.solitude_processor import SolitudeProcessor
@@ -147,23 +147,12 @@ class AgentProcessor:
             services=services,
         )
 
-        # Enhanced dream processor with self-configuration and memory consolidation
-        # Cast services for type safety
-        from typing import cast
-
-        from ciris_engine.logic.registries.base import ServiceRegistry
-        from ciris_engine.logic.runtime.identity_manager import IdentityManager
-
-        service_registry_typed = cast(ServiceRegistry, services.service_registry) if services.service_registry else None
-        identity_manager_typed = cast(IdentityManager, services.identity_manager) if services.identity_manager else None
-
-        self.dream_processor = DreamProcessor(
+        # Minimal dream processor - uses standard H3ERE pipeline with 3-edge consolidation
+        self.dream_processor = MinimalDreamProcessor(
             config_accessor=app_config,
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
             services=services,
-            service_registry=service_registry_typed,
-            identity_manager=identity_manager_typed,
             startup_channel_id=startup_channel_id,
             agent_occurrence_id=agent_occurrence_id,
         )

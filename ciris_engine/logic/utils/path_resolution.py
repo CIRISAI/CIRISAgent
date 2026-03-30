@@ -70,24 +70,26 @@ CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
 
 # Allowlist of valid ISO 639-1 language codes supported by CIRIS
 # This is the ONLY source of truth for valid language codes - user input MUST match
-SUPPORTED_LANGUAGE_CODES = frozenset({
-    "am",  # Amharic
-    "ar",  # Arabic
-    "de",  # German
-    "en",  # English
-    "es",  # Spanish
-    "fr",  # French
-    "hi",  # Hindi
-    "it",  # Italian
-    "ja",  # Japanese
-    "ko",  # Korean
-    "pt",  # Portuguese
-    "ru",  # Russian
-    "sw",  # Swahili
-    "tr",  # Turkish
-    "ur",  # Urdu
-    "zh",  # Chinese
-})
+SUPPORTED_LANGUAGE_CODES = frozenset(
+    {
+        "am",  # Amharic
+        "ar",  # Arabic
+        "de",  # German
+        "en",  # English
+        "es",  # Spanish
+        "fr",  # French
+        "hi",  # Hindi
+        "it",  # Italian
+        "ja",  # Japanese
+        "ko",  # Korean
+        "pt",  # Portuguese
+        "ru",  # Russian
+        "sw",  # Swahili
+        "tr",  # Turkish
+        "ur",  # Urdu
+        "zh",  # Chinese
+    }
+)
 
 
 def validate_path_safety(path: Path, context: str = "path") -> Path:
@@ -696,7 +698,7 @@ def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
 
         # Parse VAR=value or VAR="value" format
         # Use \w for word characters (alphanumeric + underscore)
-        match = re.match(r'^([A-Za-z_]\w*)=(.*)$', line)
+        match = re.match(r"^([A-Za-z_]\w*)=(.*)$", line)
         if not match:
             # Skip malformed lines (potential injection attempts)
             continue
@@ -709,8 +711,9 @@ def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
             continue
 
         # Strip quotes if present (single or double)
-        if (raw_value.startswith('"') and raw_value.endswith('"')) or \
-           (raw_value.startswith("'") and raw_value.endswith("'")):
+        if (raw_value.startswith('"') and raw_value.endswith('"')) or (
+            raw_value.startswith("'") and raw_value.endswith("'")
+        ):
             raw_value = raw_value[1:-1]
 
         # Sanitize the value
@@ -743,8 +746,9 @@ def _validate_env_var_name(var_name: str) -> bool:
         True if valid, False otherwise
     """
     import re
+
     # Env var names: start with letter/underscore, contain only word characters (\w)
-    return bool(re.match(r'^[A-Za-z_]\w*$', var_name))
+    return bool(re.match(r"^[A-Za-z_]\w*$", var_name))
 
 
 def sanitize_for_log(value: str, max_length: int = 20) -> str:
@@ -760,8 +764,9 @@ def sanitize_for_log(value: str, max_length: int = 20) -> str:
         Sanitized value safe for logging
     """
     import re
+
     # Remove newlines, carriage returns, and control characters
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
     # Truncate to max length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
@@ -911,6 +916,7 @@ def sync_language_preference(language_code: str) -> bool:
     # Update the DMA prompt loader
     try:
         from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
         set_prompt_language(language_code)
         logger.info(f"[env_sync] Synced language preference to DMA prompt loader: {sanitize_for_log(language_code)}")
     except ImportError:

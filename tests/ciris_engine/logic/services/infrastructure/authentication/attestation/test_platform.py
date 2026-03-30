@@ -5,11 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_engine.logic.services.infrastructure.authentication.attestation.platform import (
-    is_android,
-    is_ios,
-    is_mobile,
-)
+from ciris_engine.logic.services.infrastructure.authentication.attestation.platform import is_android, is_ios, is_mobile
 
 
 class TestIsAndroid:

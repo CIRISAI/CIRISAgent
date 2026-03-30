@@ -20,7 +20,7 @@ from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import MemorySearchResult, TimeSeriesDataPoint
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
-from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
 
 from .base_bus import BaseBus, BusMessage
@@ -371,6 +371,42 @@ class MemoryBus(BaseBus[MemoryService]):
             self._error_count += 1
             logger.error(f"Failed to memorize log: {e}", exc_info=True)
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+
+    async def create_edge(
+        self,
+        edge: "GraphEdge",
+        handler_name: Optional[str] = None,
+    ) -> "MemoryOpResult[GraphEdge]":
+        """
+        Create an edge between two nodes in the memory graph.
+
+        Args:
+            edge: The GraphEdge to create
+            handler_name: Name of the handler making this request (for debugging)
+
+        Returns:
+            MemoryOpResult[GraphEdge] with the created edge in data field
+        """
+        from ciris_engine.schemas.services.graph_core import GraphEdge as GraphEdgeType
+
+        service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["create_edge"])
+
+        if not service:
+            logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
+            return MemoryOpResult[GraphEdgeType](
+                status=MemoryOpStatus.FAILED,
+                reason=ERROR_NO_MEMORY_SERVICE,
+                data=None,
+            )
+
+        try:
+            result = await service.create_edge(edge)
+            self._operation_count += 1
+            return result
+        except Exception as e:
+            self._error_count += 1
+            logger.error(f"Failed to create edge: {e}", exc_info=True)
+            return MemoryOpResult[GraphEdgeType](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def export_identity_context(self, handler_name: Optional[str] = None) -> str:
         """Export identity nodes as string representation."""

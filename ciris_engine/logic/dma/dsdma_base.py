@@ -155,6 +155,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 user_lang = getattr(user_profiles_data[0], "preferred_language", None)
                 if user_lang and user_lang != self.prompt_loader.language:
                     from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
                     set_prompt_language(user_lang)
                     logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
 
@@ -282,6 +283,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     )
                     if user_lang and user_lang != self.prompt_loader.language:
                         from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
                         set_prompt_language(user_lang)
                         logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
                 # Cast dict to SystemSnapshot for format_system_snapshot

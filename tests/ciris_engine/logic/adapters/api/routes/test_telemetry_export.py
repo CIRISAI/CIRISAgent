@@ -292,9 +292,7 @@ class TestUpdateDestination:
 
     def test_update_destination_not_found(self, client):
         """Test 404 for updating non-existent destination."""
-        response = client.put(
-            "/telemetry/export/destinations/nonexistent", json={"name": "New Name"}
-        )
+        response = client.put("/telemetry/export/destinations/nonexistent", json={"name": "New Name"})
         assert response.status_code == 404
 
 

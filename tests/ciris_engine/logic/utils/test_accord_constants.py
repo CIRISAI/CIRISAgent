@@ -42,6 +42,7 @@ class TestAccordMode:
         # Simulate what the default would be without env var
         if "CIRIS_ACCORD_MODE" not in os.environ:
             from ciris_engine.logic.utils.constants import ACCORD_MODE
+
             assert ACCORD_MODE == "compressed"
         else:
             # Env var is set, just verify it's valid
@@ -103,12 +104,7 @@ class TestGetAccordText:
 
     def test_get_accord_text_default_uses_accord_mode(self):
         """get_accord_text('default') should respect ACCORD_MODE setting."""
-        from ciris_engine.logic.utils.constants import (
-            ACCORD_MODE,
-            ACCORD_TEXT,
-            ACCORD_TEXT_COMPRESSED,
-            get_accord_text,
-        )
+        from ciris_engine.logic.utils.constants import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
 
         result = get_accord_text("default")
 
@@ -121,12 +117,7 @@ class TestGetAccordText:
 
     def test_get_accord_text_full_uses_accord_mode(self):
         """get_accord_text('full') should also respect ACCORD_MODE setting."""
-        from ciris_engine.logic.utils.constants import (
-            ACCORD_MODE,
-            ACCORD_TEXT,
-            ACCORD_TEXT_COMPRESSED,
-            get_accord_text,
-        )
+        from ciris_engine.logic.utils.constants import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
 
         result = get_accord_text("full")
 
@@ -195,12 +186,7 @@ class TestAccordModeIntegration:
 
     def test_accord_exports_available(self):
         """All ACCORD constants should be exported from utils module."""
-        from ciris_engine.logic.utils import (
-            ACCORD_MODE,
-            ACCORD_TEXT,
-            ACCORD_TEXT_COMPRESSED,
-            get_accord_text,
-        )
+        from ciris_engine.logic.utils import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
 
         assert ACCORD_MODE is not None
         assert ACCORD_TEXT is not None

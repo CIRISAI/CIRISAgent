@@ -28,7 +28,7 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .config import WalletAdapterConfig
-from .providers.registry import create_provider, get_loaded_providers, ProviderLoadError
+from .providers.registry import ProviderLoadError, create_provider, get_loaded_providers
 from .tool_service import WalletToolService
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,9 @@ class WalletAdapter(Service):
         # Load configuration
         logger.warning("[WALLET_INIT] Loading config from environment")
         self.adapter_config = config or self._load_config_from_env()
-        logger.warning(f"[WALLET_INIT] Config loaded with providers: {list(self.adapter_config.provider_configs.keys())}")
+        logger.warning(
+            f"[WALLET_INIT] Config loaded with providers: {list(self.adapter_config.provider_configs.keys())}"
+        )
 
         # Initialize providers
         self._providers: Dict[str, Any] = {}
@@ -86,14 +88,15 @@ class WalletAdapter(Service):
     def _load_config_from_env(self) -> WalletAdapterConfig:
         """Load configuration from environment variables."""
         import os
+
         from .config import (
-            X402ProviderConfig,
             ChapaProviderConfig,
             MPesaProviderConfig,
-            RazorpayProviderConfig,
             PIXProviderConfig,
-            WiseProviderConfig,
+            RazorpayProviderConfig,
             StripeProviderConfig,
+            WiseProviderConfig,
+            X402ProviderConfig,
         )
 
         provider_configs: Dict[str, Any] = {}
@@ -105,9 +108,7 @@ class WalletAdapter(Service):
                 network=os.getenv("WALLET_X402_NETWORK", "base-mainnet"),
                 rpc_url=os.getenv("WALLET_X402_RPC_URL"),
                 treasury_address=os.getenv("WALLET_X402_TREASURY_ADDRESS"),
-                facilitator_url=os.getenv(
-                    "WALLET_X402_FACILITATOR_URL", "https://x402.org/facilitator"
-                ),
+                facilitator_url=os.getenv("WALLET_X402_FACILITATOR_URL", "https://x402.org/facilitator"),
             )
 
         # Chapa (ETB - Ethiopia)
@@ -179,7 +180,9 @@ class WalletAdapter(Service):
         For x402: CIRISVerify 1.3.1+ is REQUIRED. No fallback.
         """
         provider_configs = self.adapter_config.provider_configs
-        logger.warning(f"[WALLET_INIT] _init_providers: {len(provider_configs)} configs: {list(provider_configs.keys())}")
+        logger.warning(
+            f"[WALLET_INIT] _init_providers: {len(provider_configs)} configs: {list(provider_configs.keys())}"
+        )
 
         for provider_name, config in provider_configs.items():
             logger.warning(f"[WALLET_INIT] Processing provider: {provider_name}, enabled={config.enabled}")
@@ -219,6 +222,7 @@ class WalletAdapter(Service):
                 logger.error(f"[WALLET_INIT] ValueError for {provider_name}: {e}")
             except Exception as e:
                 import traceback
+
                 logger.error(f"[WALLET_INIT] Exception for {provider_name}: {type(e).__name__}: {e}")
                 logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
 
@@ -239,6 +243,7 @@ class WalletAdapter(Service):
         The private key NEVER leaves the secure boundary.
         """
         import os
+
         logger.warning("[WALLET_INIT] Starting CIRISVerify wallet initialization...")
         logger.warning(f"[WALLET_INIT] CIRIS_HOME={os.environ.get('CIRIS_HOME', 'NOT SET')}")
         logger.warning(f"[WALLET_INIT] CIRIS_DATA_DIR={os.environ.get('CIRIS_DATA_DIR', 'NOT SET')}")
@@ -249,6 +254,7 @@ class WalletAdapter(Service):
                 get_verifier,
                 has_verifier,
             )
+
             logger.warning(f"[WALLET_INIT] verifier_singleton imported, has_verifier={has_verifier()}")
 
             logger.warning("[WALLET_INIT] Calling get_verifier()...")
@@ -264,7 +270,7 @@ class WalletAdapter(Service):
                 return None, None
 
             # Check for wallet support (CIRISVerify 1.3.0+)
-            has_wallet = getattr(verifier, '_has_wallet_support', False)
+            has_wallet = getattr(verifier, "_has_wallet_support", False)
             logger.warning(f"[WALLET_INIT] _has_wallet_support={has_wallet}")
             if not has_wallet:
                 logger.error("[WALLET_INIT] FAILED: CIRISVerify version < 1.3.0, no wallet support")
@@ -278,7 +284,9 @@ class WalletAdapter(Service):
                 logger.warning(f"[WALLET_INIT] SUCCESS: EVM address = {evm_address}")
             except Exception as addr_err:
                 # Fallback to get_wallet_info if get_evm_address_checksummed fails
-                logger.warning(f"[WALLET_INIT] get_evm_address_checksummed failed: {addr_err}, trying get_wallet_info...")
+                logger.warning(
+                    f"[WALLET_INIT] get_evm_address_checksummed failed: {addr_err}, trying get_wallet_info..."
+                )
                 wallet_info = verifier.get_wallet_info()
                 logger.warning(f"[WALLET_INIT] wallet_info keys: {list(wallet_info.keys()) if wallet_info else 'None'}")
                 evm_address = wallet_info.get("evm_address")
@@ -297,16 +305,19 @@ class WalletAdapter(Service):
         except ImportError as e:
             logger.error(f"[WALLET_INIT] FAILED: Import error - {e}")
             import traceback
+
             logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
         except RuntimeError as e:
             logger.error(f"[WALLET_INIT] FAILED: Runtime error - {e}")
             import traceback
+
             logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
         except Exception as e:
             logger.error(f"[WALLET_INIT] FAILED: Unexpected error - {type(e).__name__}: {e}")
             import traceback
+
             logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
 
@@ -360,12 +371,7 @@ class WalletAdapter(Service):
             x402_provider.set_receive_audit_callback(self._audit_receive_with_spam_prevention)
             logger.info("Registered async receive audit callback for x402 provider")
 
-    def _on_funds_received(
-        self,
-        provider_id: str,
-        new_balance: Any,
-        incoming_tx: Optional[Any]
-    ) -> None:
+    def _on_funds_received(self, provider_id: str, new_balance: Any, incoming_tx: Optional[Any]) -> None:
         """Handle balance change and emit audit event for received funds.
 
         NOTE: This is a legacy sync callback. The async audit with spam prevention
@@ -382,11 +388,7 @@ class WalletAdapter(Service):
         )
 
     async def _audit_receive_with_spam_prevention(
-        self,
-        sender: str,
-        amount: Decimal,
-        currency: str,
-        tx_hash: Optional[str]
+        self, sender: str, amount: Decimal, currency: str, tx_hash: Optional[str]
     ) -> None:
         """
         Audit a received payment using the wallet audit helper.

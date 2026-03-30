@@ -65,9 +65,30 @@ class StripeProvider(WalletProvider):
 
     # Major supported currencies
     SUPPORTED_CURRENCIES = [
-        "USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CHF", "SGD",
-        "HKD", "NZD", "SEK", "NOK", "DKK", "PLN", "MXN", "BRL",
-        "INR", "ZAR", "THB", "MYR", "PHP", "IDR", "KRW", "TWD",
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "SGD",
+        "HKD",
+        "NZD",
+        "SEK",
+        "NOK",
+        "DKK",
+        "PLN",
+        "MXN",
+        "BRL",
+        "INR",
+        "ZAR",
+        "THB",
+        "MYR",
+        "PHP",
+        "IDR",
+        "KRW",
+        "TWD",
     ]
 
     def __init__(self, config: StripeProviderConfig) -> None:
@@ -393,17 +414,15 @@ class StripeProvider(WalletProvider):
                             amount=Decimal(item["amount"]) / 100,
                             currency=item["currency"].upper(),
                             sender=item.get("billing_details", {}).get("email"),
-                            timestamp=datetime.fromtimestamp(
-                                item["created"], tz=timezone.utc
-                            ),
+                            timestamp=datetime.fromtimestamp(item["created"], tz=timezone.utc),
                             metadata={"payment_method": item.get("payment_method_details", {}).get("type")},
                         )
                         transactions.append(tx)
                     return transactions
-                return self._transactions[offset:offset + limit]
+                return self._transactions[offset : offset + limit]
         except Exception as e:
             logger.error(f"Stripe history error: {e}")
-            return self._transactions[offset:offset + limit]
+            return self._transactions[offset : offset + limit]
 
     async def get_account_details(self) -> AccountDetails:
         """Get Stripe account details."""
@@ -443,9 +462,7 @@ class StripeProvider(WalletProvider):
                         transaction_id=intent["id"],
                         amount=Decimal(intent["amount"]) / 100,
                         currency=intent["currency"].upper(),
-                        timestamp=datetime.fromtimestamp(
-                            intent["created"], tz=timezone.utc
-                        ),
+                        timestamp=datetime.fromtimestamp(intent["created"], tz=timezone.utc),
                     )
 
                 # Try as Charge

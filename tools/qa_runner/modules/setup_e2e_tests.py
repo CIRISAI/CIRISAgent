@@ -293,7 +293,11 @@ class SetupE2ETestModule:
                 )
             else:
                 await self._record_step(
-                    step, True, duration_ms, f"Loaded {len(provider_ids)} providers", details={"providers": provider_ids}
+                    step,
+                    True,
+                    duration_ms,
+                    f"Loaded {len(provider_ids)} providers",
+                    details={"providers": provider_ids},
                 )
 
         except Exception as e:
@@ -333,7 +337,11 @@ class SetupE2ETestModule:
                 )
             else:
                 await self._record_step(
-                    step, True, duration_ms, f"Loaded {len(template_ids)} templates", details={"templates": template_ids}
+                    step,
+                    True,
+                    duration_ms,
+                    f"Loaded {len(template_ids)} templates",
+                    details={"templates": template_ids},
                 )
 
         except Exception as e:

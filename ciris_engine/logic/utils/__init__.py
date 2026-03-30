@@ -2,7 +2,14 @@
 
 import logging
 
-from .constants import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, ENGINE_OVERVIEW_TEMPLATE, WA_USER_IDS, get_accord_text  # noqa:F401
+from .constants import (  # noqa:F401
+    ACCORD_MODE,
+    ACCORD_TEXT,
+    ACCORD_TEXT_COMPRESSED,
+    ENGINE_OVERVIEW_TEMPLATE,
+    WA_USER_IDS,
+    get_accord_text,
+)
 from .graphql_context_provider import GraphQLClient, GraphQLContextProvider  # noqa:F401
 from .user_utils import extract_user_nick  # noqa:F401
 

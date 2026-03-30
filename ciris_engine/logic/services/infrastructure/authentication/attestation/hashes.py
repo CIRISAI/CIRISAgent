@@ -69,10 +69,7 @@ def load_python_hashes(
             # Strip -stable/-dev/-rc suffixes for registry lookup
             agent_version = file_version.split("-")[0] if "-" in file_version else file_version
 
-        logger.info(
-            f"[attestation] Loaded {python_hashes.module_count} "
-            f"module hashes from {hashes_path}"
-        )
+        logger.info(f"[attestation] Loaded {python_hashes.module_count} " f"module hashes from {hashes_path}")
 
         # Debug: show first 5 module paths
         first_5 = list(python_hashes.module_hashes.keys())[:5]

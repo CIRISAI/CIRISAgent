@@ -492,12 +492,21 @@ class IDeviceHelper(DeviceHelper):
 
         result = subprocess.run(
             [
-                "xcrun", "devicectl", "device", "copy", "from",
-                "--device", device,
-                "--domain-type", "appDataContainer",
-                "--domain-identifier", bundle_id,
-                "--source", source,
-                "--destination", str(destination),
+                "xcrun",
+                "devicectl",
+                "device",
+                "copy",
+                "from",
+                "--device",
+                device,
+                "--domain-type",
+                "appDataContainer",
+                "--domain-identifier",
+                bundle_id,
+                "--source",
+                source,
+                "--destination",
+                str(destination),
             ],
             capture_output=True,
             text=True,
@@ -506,7 +515,10 @@ class IDeviceHelper(DeviceHelper):
         return result.returncode == 0
 
     def _resolve_log_from_marker(
-        self, device: str, bundle_id: str, output_path: Path,
+        self,
+        device: str,
+        bundle_id: str,
+        output_path: Path,
         marker_name: str,
     ) -> Optional[str]:
         """
@@ -524,7 +536,8 @@ class IDeviceHelper(DeviceHelper):
         """
         marker_dest = output_path / marker_name
         ok = self._pull_single_file_devicectl(
-            device, bundle_id,
+            device,
+            bundle_id,
             f"Documents/ciris/logs/{marker_name}",
             marker_dest,
         )
@@ -554,13 +567,12 @@ class IDeviceHelper(DeviceHelper):
         failed_files: list = []
 
         # --- 1. Resolve and pull the current incidents log via marker ---
-        incidents_name = self._resolve_log_from_marker(
-            device, bundle_id, output_path, ".current_incident_log"
-        )
+        incidents_name = self._resolve_log_from_marker(device, bundle_id, output_path, ".current_incident_log")
         if incidents_name:
             dest = logs_dir / incidents_name
             ok = self._pull_single_file_devicectl(
-                device, bundle_id,
+                device,
+                bundle_id,
                 f"Documents/ciris/logs/{incidents_name}",
                 dest,
             )
@@ -569,6 +581,7 @@ class IDeviceHelper(DeviceHelper):
                 latest_dest = logs_dir / "incidents_latest.log"
                 try:
                     import shutil
+
                     shutil.copy2(dest, latest_dest)
                 except Exception:
                     pass
@@ -581,13 +594,12 @@ class IDeviceHelper(DeviceHelper):
             print("  [WARN] Could not resolve current incidents log filename")
 
         # --- 1b. Resolve and pull the current main log via marker ---
-        main_log_name = self._resolve_log_from_marker(
-            device, bundle_id, output_path, ".current_log"
-        )
+        main_log_name = self._resolve_log_from_marker(device, bundle_id, output_path, ".current_log")
         if main_log_name:
             dest = logs_dir / main_log_name
             ok = self._pull_single_file_devicectl(
-                device, bundle_id,
+                device,
+                bundle_id,
                 f"Documents/ciris/logs/{main_log_name}",
                 dest,
             )
@@ -596,6 +608,7 @@ class IDeviceHelper(DeviceHelper):
                 latest_dest = logs_dir / "latest.log"
                 try:
                     import shutil
+
                     shutil.copy2(dest, latest_dest)
                 except Exception:
                     pass
@@ -660,12 +673,21 @@ class IDeviceHelper(DeviceHelper):
         db_dir.mkdir(exist_ok=True)
         db_result = subprocess.run(
             [
-                "xcrun", "devicectl", "device", "copy", "from",
-                "--device", device,
-                "--domain-type", "appDataContainer",
-                "--domain-identifier", bundle_id,
-                "--source", "Documents/ciris/databases",
-                "--destination", str(db_dir),
+                "xcrun",
+                "devicectl",
+                "device",
+                "copy",
+                "from",
+                "--device",
+                device,
+                "--domain-type",
+                "appDataContainer",
+                "--domain-identifier",
+                bundle_id,
+                "--source",
+                "Documents/ciris/databases",
+                "--destination",
+                str(db_dir),
             ],
             capture_output=True,
             text=True,

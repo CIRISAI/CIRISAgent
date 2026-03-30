@@ -273,11 +273,7 @@ class PortalRegistrationTester:
                 name="connect_node",
                 status=PortalTestStatus.PASSED,
                 duration=time.time() - start,
-                message=(
-                    f"Device auth initiated. "
-                    f"User code: {user_code}, "
-                    f"Expires in: {expires_in}s"
-                ),
+                message=(f"Device auth initiated. " f"User code: {user_code}, " f"Expires in: {expires_in}s"),
                 details=details,
             )
         except Exception as e:
@@ -391,8 +387,12 @@ class PortalRegistrationTester:
                     self._log(f"Poll {poll_count}: status={poll_status} (HTTP {resp.status_code})")
                     elapsed = int(time.time() - start)
                     remaining = self.poll_timeout - elapsed
-                    print(f"\r  Waiting for Portal authorization... "
-                          f"({elapsed}s / {self.poll_timeout}s, poll #{poll_count})", end="", flush=True)
+                    print(
+                        f"\r  Waiting for Portal authorization... "
+                        f"({elapsed}s / {self.poll_timeout}s, poll #{poll_count})",
+                        end="",
+                        flush=True,
+                    )
 
                     time.sleep(self.poll_interval)
 

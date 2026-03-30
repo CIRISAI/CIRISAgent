@@ -163,10 +163,7 @@ class ProgressTracker:
         """Background task that prints progress every PROGRESS_INTERVAL_SECONDS."""
         while not self._stop_event.is_set():
             try:
-                await asyncio.wait_for(
-                    self._stop_event.wait(),
-                    timeout=PROGRESS_INTERVAL_SECONDS
-                )
+                await asyncio.wait_for(self._stop_event.wait(), timeout=PROGRESS_INTERVAL_SECONDS)
             except asyncio.TimeoutError:
                 if self.completed > 0:
                     self.print_status()
@@ -212,10 +209,7 @@ def get_api_key(provider: str) -> str:
     if config["key_file"].exists():
         return config["key_file"].read_text().strip()
 
-    raise ValueError(
-        f"No API key found for {provider}. "
-        f"Set {config['env_key']} or create {config['key_file']}"
-    )
+    raise ValueError(f"No API key found for {provider}. " f"Set {config['env_key']} or create {config['key_file']}")
 
 
 class ServerManager:
@@ -304,16 +298,12 @@ class ServerManager:
 
         return env
 
-    async def _wait_for_health(
-        self, url: str, name: str, timeout: int = 60
-    ) -> bool:
+    async def _wait_for_health(self, url: str, name: str, timeout: int = 60) -> bool:
         """Wait for a server to become healthy."""
         async with aiohttp.ClientSession() as session:
             for i in range(timeout):
                 try:
-                    async with session.get(
-                        url, timeout=aiohttp.ClientTimeout(total=5)
-                    ) as resp:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                         if resp.status == 200:
                             logger.info(f"  {name} ready")
                             return True
@@ -383,21 +373,13 @@ class ServerManager:
         logger.info("Waiting for servers to be ready...")
         await asyncio.sleep(5)
 
-        ciris_healthy = await self._wait_for_health(
-            f"http://127.0.0.1:{self.a2a_port}/health", "CIRIS A2A"
-        )
+        ciris_healthy = await self._wait_for_health(f"http://127.0.0.1:{self.a2a_port}/health", "CIRIS A2A")
         if not ciris_healthy:
-            raise RuntimeError(
-                f"CIRIS failed to start. Check {ciris_log}"
-            )
+            raise RuntimeError(f"CIRIS failed to start. Check {ciris_log}")
 
-        bench_healthy = await self._wait_for_health(
-            f"http://127.0.0.1:{self.cirisbench_port}/health", "CIRISBench"
-        )
+        bench_healthy = await self._wait_for_health(f"http://127.0.0.1:{self.cirisbench_port}/health", "CIRISBench")
         if not bench_healthy:
-            raise RuntimeError(
-                f"CIRISBench failed to start. Check {cirisbench_log}"
-            )
+            raise RuntimeError(f"CIRISBench failed to start. Check {cirisbench_log}")
 
         logger.info("All servers ready")
 
@@ -446,9 +428,7 @@ class ServerManager:
 
         await asyncio.sleep(10)
 
-        ciris_healthy = await self._wait_for_health(
-            f"http://127.0.0.1:{self.a2a_port}/health", "CIRIS A2A", timeout=60
-        )
+        ciris_healthy = await self._wait_for_health(f"http://127.0.0.1:{self.a2a_port}/health", "CIRIS A2A", timeout=60)
         if not ciris_healthy:
             raise RuntimeError("CIRIS failed to restart")
 
@@ -547,16 +527,12 @@ async def run_single_benchmark(
 
     if tracker:
         # Start SSE consumer for progress updates
-        sse_task = asyncio.create_task(
-            consume_sse_progress(cirisbench_url, tracker, stop_event)
-        )
+        sse_task = asyncio.create_task(consume_sse_progress(cirisbench_url, tracker, stop_event))
         tracker.start()
 
     try:
         async with aiohttp.ClientSession() as session:
-            timeout = aiohttp.ClientTimeout(
-                total=timeout_per_scenario * sample_size + 300
-            )
+            timeout = aiohttp.ClientTimeout(total=timeout_per_scenario * sample_size + 300)
 
             async with session.post(endpoint, json=payload, timeout=timeout) as resp:
                 if resp.status != 200:

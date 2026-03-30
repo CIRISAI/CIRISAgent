@@ -49,6 +49,7 @@ def _get_wallet_audit_helper(request: Request) -> Any:
         logger.warning(f"[WALLET_AUDIT] Could not get wallet audit helper: {e}")
         return None
 
+
 # Type alias for admin authentication dependency
 AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
 
@@ -229,12 +230,12 @@ def _get_wallet_provider_from_app(request: Request) -> Any:
 
     try:
         # Get runtime from app state
-        runtime = getattr(request.app.state, 'runtime', None)
+        runtime = getattr(request.app.state, "runtime", None)
         logger.info(f"[WALLET_PROVIDER] runtime: {runtime is not None}")
 
         if runtime:
             # runtime.adapters is a List, not a Dict
-            adapters = getattr(runtime, 'adapters', [])
+            adapters = getattr(runtime, "adapters", [])
             logger.info(f"[WALLET_PROVIDER] runtime.adapters count: {len(adapters)}")
 
             for adapter in adapters:
@@ -242,12 +243,12 @@ def _get_wallet_provider_from_app(request: Request) -> Any:
                 logger.info(f"[WALLET_PROVIDER] Checking adapter: {adapter_name}")
 
                 # Check if this adapter has a _providers dict with 'x402'
-                if hasattr(adapter, '_providers'):
-                    providers = getattr(adapter, '_providers', {})
+                if hasattr(adapter, "_providers"):
+                    providers = getattr(adapter, "_providers", {})
                     logger.info(f"[WALLET_PROVIDER] {adapter_name} has _providers: {list(providers.keys())}")
-                    if 'x402' in providers:
+                    if "x402" in providers:
                         logger.info(f"[WALLET_PROVIDER] Found x402 in {adapter_name}!")
-                        return providers['x402']
+                        return providers["x402"]
 
         logger.warning("[WALLET_PROVIDER] Could not find x402 provider in runtime.adapters")
 
@@ -277,9 +278,10 @@ def _parse_transfer_amount(amount_str: str) -> tuple[Optional[Decimal], Optional
 
 def _get_spending_authority(provider: Any) -> Any:
     """Get spending authority from provider, defaulting to level 0 if not available."""
-    spending_authority = getattr(provider, '_spending_authority', None)
+    spending_authority = getattr(provider, "_spending_authority", None)
     if not spending_authority:
         from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
+
         spending_authority = SpendingAuthority.from_attestation(0)
         logger.info("[WALLET_TRANSFER] No spending_authority on provider - using receive-only defaults (level 0)")
     return spending_authority
@@ -331,8 +333,8 @@ async def get_wallet_status(
             )
 
         # Get provider details
-        address = getattr(provider, '_evm_address', None)
-        network = getattr(provider.config, 'network', 'base-mainnet') if hasattr(provider, 'config') else 'base-mainnet'
+        address = getattr(provider, "_evm_address", None)
+        network = getattr(provider.config, "network", "base-mainnet") if hasattr(provider, "config") else "base-mainnet"
 
         # Get attestation level from auth_service's cached attestation (same source as trust badge)
         attestation_level = 0
@@ -349,23 +351,26 @@ async def get_wallet_status(
                 cached_result = auth_service.get_cached_attestation(allow_stale=True)
                 if cached_result:
                     attestation_level = cached_result.max_level
-                    hardware_degraded = getattr(cached_result, 'hardware_trust_degraded', False)
-                    degradation_reason = getattr(cached_result, 'trust_degradation_reason', None)
+                    hardware_degraded = getattr(cached_result, "hardware_trust_degraded", False)
+                    degradation_reason = getattr(cached_result, "trust_degradation_reason", None)
 
                     # Extract security advisories if available
-                    raw_advisories = getattr(cached_result, 'security_advisories', None)
+                    raw_advisories = getattr(cached_result, "security_advisories", None)
                     if raw_advisories:
                         for adv in raw_advisories:
-                            security_advisories_list.append(SecurityAdvisory(
-                                cve=adv.get("cve"),
-                                title=adv.get("title", "Unknown"),
-                                impact=adv.get("impact", "Unknown"),
-                                remediation=adv.get("remediation"),
-                            ))
+                            security_advisories_list.append(
+                                SecurityAdvisory(
+                                    cve=adv.get("cve"),
+                                    title=adv.get("title", "Unknown"),
+                                    impact=adv.get("impact", "Unknown"),
+                                    remediation=adv.get("remediation"),
+                                )
+                            )
 
                     logger.info(f"[WALLET_STATUS] Using cached attestation: level={attestation_level}")
 
                     from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
+
                     spending_authority = SpendingAuthority.from_attestation(
                         attestation_level=attestation_level,
                         hardware_trust_degraded=hardware_degraded,
@@ -384,7 +389,7 @@ async def get_wallet_status(
         # Get balance (cached, don't block on RPC)
         balance = "0.00"
         eth_balance = "0.00"
-        if hasattr(provider, '_balance'):
+        if hasattr(provider, "_balance"):
             balance = str(provider._balance.available)
             if provider._balance.metadata:
                 eth_balance = provider._balance.metadata.get("eth_balance", "0.00")
@@ -398,10 +403,11 @@ async def get_wallet_status(
 
         # Get spending progress from validator
         spending_progress = None
-        validator = getattr(provider, '_validator', None)
+        validator = getattr(provider, "_validator", None)
         if validator:
             try:
                 import time
+
                 tracker = validator.spending_tracker
 
                 # Calculate time until resets
@@ -428,7 +434,7 @@ async def get_wallet_status(
 
         # Get gas estimates from chain client
         gas_estimate = None
-        chain_client = getattr(provider, '_chain_client', None)
+        chain_client = getattr(provider, "_chain_client", None)
         if chain_client:
             try:
                 gas_price = await chain_client.get_gas_price()
@@ -453,28 +459,32 @@ async def get_wallet_status(
 
         # Get recent transactions
         recent_transactions: List[TransactionSummary] = []
-        transactions = getattr(provider, '_transactions', [])
+        transactions = getattr(provider, "_transactions", [])
         for tx in transactions[:5]:
             try:
                 explorer_url = None
                 if tx.confirmation and tx.confirmation.get("explorer_url"):
                     explorer_url = tx.confirmation["explorer_url"]
 
-                recent_transactions.append(TransactionSummary(
-                    transaction_id=tx.transaction_id,
-                    type=tx.type.value if hasattr(tx.type, 'value') else str(tx.type),
-                    amount=str(abs(tx.amount)),
-                    currency=tx.currency,
-                    recipient=tx.recipient,
-                    sender=tx.sender,
-                    status=tx.status.value if hasattr(tx.status, 'value') else str(tx.status),
-                    timestamp=tx.timestamp.isoformat(),
-                    explorer_url=explorer_url,
-                ))
+                recent_transactions.append(
+                    TransactionSummary(
+                        transaction_id=tx.transaction_id,
+                        type=tx.type.value if hasattr(tx.type, "value") else str(tx.type),
+                        amount=str(abs(tx.amount)),
+                        currency=tx.currency,
+                        recipient=tx.recipient,
+                        sender=tx.sender,
+                        status=tx.status.value if hasattr(tx.status, "value") else str(tx.status),
+                        timestamp=tx.timestamp.isoformat(),
+                        explorer_url=explorer_url,
+                    )
+                )
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not parse transaction: {e}")
 
-        logger.info(f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}")
+        logger.info(
+            f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}"
+        )
 
         return WalletStatusResponse(
             has_wallet=True,
@@ -648,259 +658,6 @@ async def transfer_usdc(
         )
 
 
-@router.post("/swap-for-gas")
-async def swap_usdc_for_eth(
-    swap_request: SwapRequest,
-    request: Request,
-    auth: AuthAdminDep,
-) -> SwapResponse:
-    """
-    Swap USDC for ETH to pay for gas fees.
-
-    This is a self-custody swap - the user's wallet signs the swap
-    transaction via Uniswap V3 on Base. CIRIS does not custody or
-    touch the funds; we only facilitate the user's signed transaction.
-
-    Typical usage: Swap $2 USDC for ~0.0005 ETH (enough for ~10-20 transfers).
-    """
-    # Log swap request without user-controlled data to prevent log injection
-    logger.info("[WALLET_SWAP] Swap request received")
-
-    try:
-        provider = _get_wallet_provider_from_app(request)
-
-        if not provider:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error="Wallet provider not available",
-            )
-
-        # Parse amount
-        try:
-            usdc_amount = Decimal(swap_request.usdc_amount)
-            if usdc_amount <= 0:
-                raise ValueError("Amount must be positive")
-            if usdc_amount > Decimal("10"):
-                raise ValueError("Max swap amount is $10 USDC")
-        except ValueError as e:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error=str(e),
-            )
-
-        # Check spending authority (same as transfer)
-        spending_authority = getattr(provider, '_spending_authority', None)
-        if not spending_authority:
-            from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
-            spending_authority = SpendingAuthority.from_attestation(0)
-
-        can_spend, error_msg = spending_authority.can_spend(usdc_amount)
-        if not can_spend:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error=f"Cannot swap: {error_msg}",
-            )
-
-        # Execute swap via provider's chain client
-        # This calls Uniswap V3 on Base - user signs the swap tx
-        chain_client = getattr(provider, '_chain_client', None)
-        if not chain_client:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error="Chain client not available",
-            )
-
-        # Get signing callback from provider
-        signing_callback = getattr(provider, '_signing_callback', None)
-        if not signing_callback:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error="Signing not available - hardware key required",
-            )
-
-        # Get wallet address
-        wallet_address = getattr(provider, '_evm_address', None)
-        if not wallet_address:
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error="Wallet address not available",
-            )
-
-        audit_helper = _get_wallet_audit_helper(request)
-
-        try:
-            from ciris_adapters.wallet.providers.chain_client import (
-                DEFAULT_POOL_FEE,
-                USDC_DECIMALS,
-                WETH_ADDRESS,
-            )
-
-            # Convert USDC to raw units (6 decimals)
-            usdc_raw = int(usdc_amount * Decimal(10**USDC_DECIMALS))
-
-            # Check USDC balance first
-            usdc_balance = await chain_client.get_usdc_balance(wallet_address)
-            if usdc_balance < usdc_amount:
-                error_msg = f"Insufficient USDC balance: have {usdc_balance}, need {usdc_amount}"
-                if audit_helper:
-                    await audit_helper.audit_swap_failed(usdc_amount=usdc_amount, error=error_msg)
-                return SwapResponse(
-                    success=False,
-                    usdc_spent="0",
-                    eth_received="0",
-                    error=error_msg,
-                )
-
-            # Step 1: Check/set USDC approval for Uniswap router
-            current_allowance = await chain_client.get_allowance(
-                owner=wallet_address,
-                spender=chain_client.uniswap_router,
-                token_address=chain_client.usdc_address,
-            )
-
-            if current_allowance < usdc_raw:
-                logger.info(f"[WALLET_SWAP] Approving USDC for router (current={current_allowance}, need={usdc_raw})")
-
-                # Build and sign approval transaction
-                approve_data = chain_client.build_erc20_approve(
-                    spender=chain_client.uniswap_router,
-                    amount=2**256 - 1,  # Max approval to avoid repeated approvals
-                )
-
-                nonce = await chain_client.get_nonce(wallet_address)
-                gas_price = await chain_client.get_gas_price()
-
-                approve_tx = {
-                    "nonce": nonce,
-                    "gasPrice": gas_price,
-                    "gas": 50000,  # Approve is cheap
-                    "to": chain_client.usdc_address,
-                    "value": 0,
-                    "data": approve_data,
-                    "chainId": chain_client.chain_id,
-                }
-
-                # Hash and sign
-                approve_hash = chain_client.hash_transaction(approve_tx)
-                approve_sig = await signing_callback(approve_hash)
-                approve_signed = chain_client.encode_signed_transaction(approve_tx, approve_sig)
-
-                # Submit approval
-                approve_tx_hash = await chain_client.send_raw_transaction(approve_signed)
-                logger.info(f"[WALLET_SWAP] Approval tx submitted: {approve_tx_hash}")
-
-                # Wait briefly for approval to be mined
-                import asyncio
-                await asyncio.sleep(2)
-
-            # Step 2: Calculate minimum ETH output with slippage protection
-            eth_price = await chain_client.get_eth_price_usdc()
-            min_eth_wei = chain_client.calculate_min_eth_out(
-                usdc_amount=usdc_amount,
-                eth_price=eth_price,
-                slippage_percent=Decimal("3"),  # 3% slippage for small swaps
-            )
-
-            # Step 3: Build swap transaction
-            swap_data = chain_client.build_uniswap_exact_input_single(
-                token_in=chain_client.usdc_address,
-                token_out=WETH_ADDRESS,
-                fee=DEFAULT_POOL_FEE,
-                recipient=wallet_address,
-                amount_in=usdc_raw,
-                amount_out_minimum=min_eth_wei,
-            )
-
-            nonce = await chain_client.get_nonce(wallet_address)
-            gas_price = await chain_client.get_gas_price()
-
-            # Estimate gas for swap (typically ~150k for Uniswap V3)
-            try:
-                estimated_gas = await chain_client.estimate_gas({
-                    "from": wallet_address,
-                    "to": chain_client.uniswap_router,
-                    "data": "0x" + swap_data.hex(),
-                    "value": "0x0",
-                })
-                # Add 20% buffer
-                gas_limit = int(estimated_gas * 1.2)
-            except Exception:
-                # Fallback to safe default
-                gas_limit = 200000
-
-            swap_tx = {
-                "nonce": nonce,
-                "gasPrice": gas_price,
-                "gas": gas_limit,
-                "to": chain_client.uniswap_router,
-                "value": 0,
-                "data": swap_data,
-                "chainId": chain_client.chain_id,
-            }
-
-            # Hash and sign swap
-            swap_hash = chain_client.hash_transaction(swap_tx)
-            swap_sig = await signing_callback(swap_hash)
-            swap_signed = chain_client.encode_signed_transaction(swap_tx, swap_sig)
-
-            # Submit swap transaction
-            tx_hash = await chain_client.send_raw_transaction(swap_signed)
-            logger.info(f"[WALLET_SWAP] Swap tx submitted: {tx_hash}")
-
-            # Calculate expected ETH received (approximate)
-            expected_eth = usdc_amount / eth_price
-            eth_received_str = f"{expected_eth:.6f}"
-
-            # Audit successful swap
-            if audit_helper:
-                await audit_helper.audit_swap(
-                    usdc_spent=usdc_amount,
-                    eth_received=expected_eth,
-                    tx_hash=tx_hash,
-                )
-
-            return SwapResponse(
-                success=True,
-                usdc_spent=str(usdc_amount),
-                eth_received=eth_received_str,
-                tx_hash=tx_hash,
-            )
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"[WALLET_SWAP] Swap failed: {error_msg}", exc_info=True)
-
-            # Audit failed swap (rate limited)
-            if audit_helper:
-                await audit_helper.audit_swap_failed(usdc_amount=usdc_amount, error=error_msg)
-
-            return SwapResponse(
-                success=False,
-                usdc_spent="0",
-                eth_received="0",
-                error=f"Swap failed: {error_msg}",
-            )
-
-    except Exception as e:
-        logger.error(f"[WALLET_SWAP] Error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Swap failed: {str(e)}",
-        )
-
-
 @router.post("/validate-address")
 async def validate_address(
     validation_request: AddressValidationRequest,
@@ -1016,11 +773,11 @@ async def get_transactions(
         limit = min(limit, 100)
 
         # Get transactions from provider
-        transactions = getattr(provider, '_transactions', [])
+        transactions = getattr(provider, "_transactions", [])
         total_count = len(transactions)
 
         # Apply pagination
-        paginated = transactions[offset:offset + limit]
+        paginated = transactions[offset : offset + limit]
 
         # Convert to summaries
         tx_summaries: List[TransactionSummary] = []
@@ -1030,17 +787,19 @@ async def get_transactions(
                 if tx.confirmation and tx.confirmation.get("explorer_url"):
                     explorer_url = tx.confirmation["explorer_url"]
 
-                tx_summaries.append(TransactionSummary(
-                    transaction_id=tx.transaction_id,
-                    type=tx.type.value if hasattr(tx.type, 'value') else str(tx.type),
-                    amount=str(abs(tx.amount)),
-                    currency=tx.currency,
-                    recipient=tx.recipient,
-                    sender=tx.sender,
-                    status=tx.status.value if hasattr(tx.status, 'value') else str(tx.status),
-                    timestamp=tx.timestamp.isoformat(),
-                    explorer_url=explorer_url,
-                ))
+                tx_summaries.append(
+                    TransactionSummary(
+                        transaction_id=tx.transaction_id,
+                        type=tx.type.value if hasattr(tx.type, "value") else str(tx.type),
+                        amount=str(abs(tx.amount)),
+                        currency=tx.currency,
+                        recipient=tx.recipient,
+                        sender=tx.sender,
+                        status=tx.status.value if hasattr(tx.status, "value") else str(tx.status),
+                        timestamp=tx.timestamp.isoformat(),
+                        explorer_url=explorer_url,
+                    )
+                )
             except Exception as e:
                 logger.debug(f"[WALLET_TRANSACTIONS] Could not parse transaction: {e}")
 
@@ -1082,7 +841,7 @@ async def check_duplicate_transaction(
             )
 
         # Get validator's duplicate protection
-        validator = getattr(provider, '_validator', None)
+        validator = getattr(provider, "_validator", None)
         if not validator:
             return DuplicateCheckResponse(
                 is_duplicate=False,
@@ -1115,13 +874,14 @@ async def check_duplicate_transaction(
 
         if fingerprint in dup_protection.recent_transactions:
             import time
+
             elapsed = int(time.time() - dup_protection.recent_transactions[fingerprint])
             return DuplicateCheckResponse(
                 is_duplicate=True,
                 last_tx_seconds_ago=elapsed,
                 window_seconds=int(dup_protection.window_seconds),
                 warning=f"You sent {check_request.amount} {check_request.currency} to this address {elapsed} seconds ago. "
-                        f"Are you sure you want to send again?",
+                f"Are you sure you want to send again?",
             )
 
         return DuplicateCheckResponse(

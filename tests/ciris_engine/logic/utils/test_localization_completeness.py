@@ -68,11 +68,7 @@ class TestLocalizationKeyCompleteness:
     @pytest.fixture(scope="class")
     def language_files(self, localization_dir: Path) -> list:
         """Get all language JSON files except manifest."""
-        return [
-            f
-            for f in localization_dir.glob("*.json")
-            if f.name != "manifest.json" and f.name != "en.json"
-        ]
+        return [f for f in localization_dir.glob("*.json") if f.name != "manifest.json" and f.name != "en.json"]
 
     def test_english_has_expected_key_count(self, english_keys: Set[str]):
         """Verify English has the expected number of keys."""
@@ -83,9 +79,7 @@ class TestLocalizationKeyCompleteness:
         "lang_code",
         ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
-    def test_language_has_all_keys(
-        self, localization_dir: Path, english_keys: Set[str], lang_code: str
-    ):
+    def test_language_has_all_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has all keys from English."""
         lang_path = localization_dir / f"{lang_code}.json"
         if not lang_path.exists():
@@ -98,17 +92,14 @@ class TestLocalizationKeyCompleteness:
         missing = english_keys - lang_keys
 
         assert len(missing) == 0, (
-            f"{lang_code}.json is missing {len(missing)} keys. "
-            f"First 10 missing: {sorted(missing)[:10]}"
+            f"{lang_code}.json is missing {len(missing)} keys. " f"First 10 missing: {sorted(missing)[:10]}"
         )
 
     @pytest.mark.parametrize(
         "lang_code",
         ["en", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
-    def test_no_extra_keys(
-        self, localization_dir: Path, english_keys: Set[str], lang_code: str
-    ):
+    def test_no_extra_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has no extra keys not in English."""
         lang_path = localization_dir / f"{lang_code}.json"
         if not lang_path.exists():
@@ -123,10 +114,7 @@ class TestLocalizationKeyCompleteness:
         # Allow _meta keys which may vary
         extra = {k for k in extra if not k.startswith("_meta")}
 
-        assert len(extra) == 0, (
-            f"{lang_code}.json has {len(extra)} extra keys. "
-            f"Extra keys: {sorted(extra)[:10]}"
-        )
+        assert len(extra) == 0, f"{lang_code}.json has {len(extra)} extra keys. " f"Extra keys: {sorted(extra)[:10]}"
 
     @pytest.mark.parametrize(
         "lang_code",
@@ -161,9 +149,7 @@ class TestACCORDCompleteness:
         "lang_code",
         ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
-    def test_accord_translation_complete(
-        self, data_dir: Path, english_accord_lines: int, lang_code: str
-    ):
+    def test_accord_translation_complete(self, data_dir: Path, english_accord_lines: int, lang_code: str):
         """Test that ACCORD translation has similar line count to English."""
         localized_dir = data_dir / "localized"
         accord_path = localized_dir / f"accord_1.2b_{lang_code}.txt"
@@ -216,9 +202,7 @@ class TestGuideCompleteness:
         "lang_code",
         ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
-    def test_guide_translation_complete(
-        self, data_dir: Path, english_guide_lines: int, lang_code: str
-    ):
+    def test_guide_translation_complete(self, data_dir: Path, english_guide_lines: int, lang_code: str):
         """Test that Guide translation has reasonable line count."""
         localized_dir = data_dir / "localized"
         guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md"
@@ -264,9 +248,7 @@ class TestDMAPromptCompleteness:
         "lang_code",
         ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
-    def test_dma_prompts_complete(
-        self, prompts_dir: Path, english_prompt_files: list, lang_code: str
-    ):
+    def test_dma_prompts_complete(self, prompts_dir: Path, english_prompt_files: list, lang_code: str):
         """Test that all English prompt files exist in localized directory."""
         localized_dir = prompts_dir / "localized" / lang_code
 
@@ -279,9 +261,7 @@ class TestDMAPromptCompleteness:
         # Filter out test/example files that may not need translation
         missing = {f for f in missing if not f.startswith("test_")}
 
-        assert len(missing) == 0, (
-            f"{lang_code} DMA prompts missing {len(missing)} files: {missing}"
-        )
+        assert len(missing) == 0, f"{lang_code} DMA prompts missing {len(missing)} files: {missing}"
 
 
 class TestGlossaryCompleteness:

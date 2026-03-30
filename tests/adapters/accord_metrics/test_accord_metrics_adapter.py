@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_adapters.ciris_accord_metrics.adapter import Adapter, AccordMetricsAdapter
+from ciris_adapters.ciris_accord_metrics.adapter import AccordMetricsAdapter, Adapter
 from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import DeferralRequest
@@ -70,7 +70,7 @@ class TestAccordMetricsAdapterExports:
 
     def test_imports_from_package(self):
         """Test imports from package __init__."""
-        from ciris_adapters.ciris_accord_metrics import Adapter, AccordMetricsAdapter, AccordMetricsService
+        from ciris_adapters.ciris_accord_metrics import AccordMetricsAdapter, AccordMetricsService, Adapter
 
         assert Adapter is AccordMetricsAdapter
         assert AccordMetricsService is not None

@@ -156,6 +156,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             user_lang = getattr(user_profiles[0], "preferred_language", None)
             if user_lang and user_lang != self.prompt_loader.language:
                 from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
                 set_prompt_language(user_lang)
                 logger.debug(f"IDMA: Synced prompt language to user preference: {user_lang}")
 

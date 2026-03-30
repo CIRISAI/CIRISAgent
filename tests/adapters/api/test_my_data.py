@@ -18,7 +18,6 @@ from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.auth import get_current_user
 from ciris_engine.logic.adapters.api.models import TokenData
 
-
 # ============================================================================
 # Signing Infrastructure Mocking
 # ============================================================================

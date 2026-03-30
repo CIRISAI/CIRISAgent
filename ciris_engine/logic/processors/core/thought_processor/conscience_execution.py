@@ -13,9 +13,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
-from ciris_engine.logic.utils.localization import get_string, get_preferred_language, get_user_language_from_context
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string, get_user_language_from_context
 from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
@@ -267,8 +267,12 @@ class ConscienceExecutionPhase:
                     final_action = ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
                         action_parameters=ponder_params,
-                        rationale=get_string(lang, "conscience.override_rationale",
-                                            conscience_name=entry.name, action=attempted_action_desc),
+                        rationale=get_string(
+                            lang,
+                            "conscience.override_rationale",
+                            conscience_name=entry.name,
+                            action=attempted_action_desc,
+                        ),
                         raw_llm_response=None,
                         reasoning=None,
                         evaluation_time_ms=None,
@@ -361,8 +365,9 @@ class ConscienceExecutionPhase:
         return ActionSelectionDMAResult(
             selected_action=HandlerActionType.PONDER,
             action_parameters=ponder_params,
-            rationale=get_string(lang, "conscience.override_rationale",
-                                conscience_name=entry_name, action=attempted_action_desc),
+            rationale=get_string(
+                lang, "conscience.override_rationale", conscience_name=entry_name, action=attempted_action_desc
+            ),
             raw_llm_response=None,
             reasoning=None,
             evaluation_time_ms=None,

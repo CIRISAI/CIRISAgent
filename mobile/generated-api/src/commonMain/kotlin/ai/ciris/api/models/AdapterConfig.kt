@@ -35,6 +35,10 @@ import kotlinx.serialization.encoding.*
  * @param requiredBinaries Specific binary names needed
  * @param supportedPlatforms Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']
  * @param requiresCirisServices Requires CIRIS AI services (Google sign-in)
+ * @param requiresConfig Whether this adapter needs interactive configuration (wizard)
+ * @param configFields Fields that can be configured via wizard
+ * @param missingBinaries Missing binaries not found on system
+ * @param binariesAvailable Whether all required binaries are installed
  */
 @Serializable
 
@@ -74,7 +78,19 @@ data class AdapterConfig (
     @SerialName(value = "supported_platforms") val supportedPlatforms: kotlin.collections.List<kotlin.String>? = null,
 
     /* Requires CIRIS AI services (Google sign-in) */
-    @SerialName(value = "requires_ciris_services") val requiresCirisServices: kotlin.Boolean? = false
+    @SerialName(value = "requires_ciris_services") val requiresCirisServices: kotlin.Boolean? = false,
+
+    /* Whether this adapter needs interactive configuration (wizard) */
+    @SerialName(value = "requires_config") val requiresConfig: kotlin.Boolean? = false,
+
+    /* Fields that can be configured via wizard */
+    @SerialName(value = "config_fields") val configFields: kotlin.collections.List<kotlin.String>? = null,
+
+    /* Missing binaries that are not found on system */
+    @SerialName(value = "missing_binaries") val missingBinaries: kotlin.collections.List<kotlin.String>? = null,
+
+    /* Whether all required binaries are installed */
+    @SerialName(value = "binaries_available") val binariesAvailable: kotlin.Boolean? = true
 
 ) {
 

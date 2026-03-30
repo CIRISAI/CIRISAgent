@@ -146,6 +146,17 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
     # Get CLI dependency info
     cli_deps, missing_deps, deps_available = get_cli_dependency_status(module_info)
 
+    # Determine config fields from interactive_config or required params
+    config_fields: List[str] = []
+    if module_info.has_interactive_config:
+        # Adapter has wizard workflow
+        config_fields = ["wizard"]  # Placeholder indicating wizard-based config
+    else:
+        # Check for required configuration parameters
+        for param in (module_info.configuration_schema or []):
+            if param.required:
+                config_fields.append(param.name)
+
     return AdapterConfig(
         id=module_info.module_id,
         name=module_info.name.replace("_", " ").title(),
@@ -161,6 +172,8 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
         binaries_available=deps_available,
         supported_platforms=supported_platforms,
         requires_ciris_services=requires_ciris_services,
+        requires_config=module_info.has_interactive_config,
+        config_fields=config_fields,
     )
 
 

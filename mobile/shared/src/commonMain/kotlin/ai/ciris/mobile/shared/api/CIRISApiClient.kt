@@ -801,8 +801,9 @@ class CIRISApiClient(
                     id = adapter.id,
                     name = adapter.name,
                     description = adapter.description,
-                    requires_config = !adapter.requiredEnvVars.isNullOrEmpty(),
-                    config_fields = adapter.requiredEnvVars ?: emptyList(),
+                    // Use backend's requires_config field (wizard-based adapters)
+                    requires_config = adapter.requiresConfig ?: false,
+                    config_fields = adapter.configFields ?: emptyList(),
                     requires_binaries = adapter.requiresBinaries ?: false,
                     required_binaries = adapter.requiredBinaries ?: emptyList(),
                     supported_platforms = adapter.supportedPlatforms ?: emptyList(),

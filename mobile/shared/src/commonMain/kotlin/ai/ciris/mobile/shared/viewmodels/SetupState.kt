@@ -201,6 +201,22 @@ val SUPPORTED_CURRENCIES = listOf(
 )
 
 /**
+ * Location search result from GeoNames database.
+ * Used for typeahead autocomplete in the PREFERENCES step.
+ */
+data class LocationSearchResult(
+    val city: String,
+    val region: String?,
+    val country: String,
+    val countryCode: String,
+    val latitude: Double,
+    val longitude: Double,
+    val population: Int,
+    val timezone: String?,
+    val displayName: String  // Pre-formatted "City, Region, Country"
+)
+
+/**
  * CIRISVerify setup state for the optional verification step.
  */
 @Serializable
@@ -252,6 +268,15 @@ data class SetupFormState(
     // Consent to share location data in telemetry/traces
     // When enabled, location is included in anonymized telemetry
     val shareLocationInTraces: Boolean = false,
+
+    // Location search state (typeahead autocomplete)
+    val locationSearchQuery: String = "",
+    @kotlinx.serialization.Transient
+    val locationSearchResults: List<LocationSearchResult> = emptyList(),
+    val locationSearchLoading: Boolean = false,
+    // Selected location from search (auto-fills country/region/city)
+    @kotlinx.serialization.Transient
+    val selectedLocation: LocationSearchResult? = null,
 
     // LLM mode selection (CIRIS_PROXY or BYOK)
     val setupMode: SetupMode? = null,

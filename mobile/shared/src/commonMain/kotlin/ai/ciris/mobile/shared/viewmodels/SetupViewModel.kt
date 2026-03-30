@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
 
 private const val TAG = "SetupViewModel"
 
@@ -40,6 +42,14 @@ class SetupViewModel : ViewModel() {
 
     // OAuth poll job for adapter wizard
     private var adapterOAuthPollJob: Job? = null
+
+    // Location search debounce job
+    private var locationSearchJob: Job? = null
+
+    // API client for location search (lazy - only needed during setup)
+    private val apiClient: CIRISApiClientProtocol by lazy {
+        CIRISApiClient()
+    }
 
     // ========== Google OAuth State ==========
     // Source: SetupViewModel.kt:68-80, SetupWizardActivity.kt:110-174
@@ -188,6 +198,96 @@ class SetupViewModel : ViewModel() {
      */
     fun setShareLocationInTraces(share: Boolean) {
         _state.value = _state.value.copy(shareLocationInTraces = share)
+    }
+
+    // ========== Location Search (Typeahead) ==========
+
+    /**
+     * Search for cities by name.
+     * Uses debouncing to avoid excessive API calls during typing.
+     * Results are sorted by population (largest cities first).
+     *
+     * @param query Search query (minimum 2 characters)
+     */
+    fun searchLocations(query: String) {
+        // Update query immediately for responsive UI
+        _state.value = _state.value.copy(locationSearchQuery = query)
+
+        // Cancel any pending search
+        locationSearchJob?.cancel()
+
+        // Don't search for very short queries
+        if (query.length < 2) {
+            _state.value = _state.value.copy(
+                locationSearchResults = emptyList(),
+                locationSearchLoading = false
+            )
+            return
+        }
+
+        // Debounce: wait 300ms before searching
+        locationSearchJob = viewModelScope.launch {
+            _state.value = _state.value.copy(locationSearchLoading = true)
+
+            delay(300)
+
+            try {
+                val response = apiClient.searchLocations(query = query, limit = 10)
+                val results = response.results.map { result ->
+                    LocationSearchResult(
+                        city = result.city,
+                        region = result.region,
+                        country = result.country,
+                        countryCode = result.countryCode,
+                        latitude = result.latitude,
+                        longitude = result.longitude,
+                        population = result.population,
+                        timezone = result.timezone,
+                        displayName = result.displayName
+                    )
+                }
+                _state.value = _state.value.copy(
+                    locationSearchResults = results,
+                    locationSearchLoading = false
+                )
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "Location search failed: ${e.message}")
+                _state.value = _state.value.copy(
+                    locationSearchResults = emptyList(),
+                    locationSearchLoading = false
+                )
+            }
+        }
+    }
+
+    /**
+     * Select a location from search results.
+     * Auto-fills country, region, and city based on selection.
+     * Sets location granularity to CITY.
+     */
+    fun selectLocation(location: LocationSearchResult) {
+        _state.value = _state.value.copy(
+            selectedLocation = location,
+            country = location.country,
+            region = location.region ?: "",
+            city = location.city,
+            locationGranularity = LocationGranularity.CITY,
+            locationSearchQuery = location.displayName,
+            locationSearchResults = emptyList()
+        )
+    }
+
+    /**
+     * Clear location search state.
+     */
+    fun clearLocationSearch() {
+        locationSearchJob?.cancel()
+        _state.value = _state.value.copy(
+            locationSearchQuery = "",
+            locationSearchResults = emptyList(),
+            locationSearchLoading = false,
+            selectedLocation = null
+        )
     }
 
     // ========== Step Navigation ==========

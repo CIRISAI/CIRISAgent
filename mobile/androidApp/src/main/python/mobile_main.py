@@ -850,11 +850,7 @@ def setup_android_environment():
 
     # Use centralized path resolution for CIRIS_HOME setup
     # This handles all platforms: Android, iOS, Linux, macOS, Windows, Docker
-    from ciris_engine.logic.utils.path_resolution import (
-        ensure_ciris_home_env,
-        get_data_dir,
-        get_logs_dir,
-    )
+    from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env, get_data_dir, get_logs_dir
 
     # This sets CIRIS_HOME, CIRIS_DATA_DIR, and creates directories
     ciris_home = ensure_ciris_home_env()

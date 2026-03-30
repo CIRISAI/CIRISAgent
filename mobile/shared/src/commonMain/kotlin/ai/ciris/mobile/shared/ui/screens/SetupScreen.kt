@@ -42,7 +42,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.derivedStateOf
@@ -108,6 +115,17 @@ private object SetupColors {
 
     // Primary accent
     val Primary = Color(0xFF667eea)
+}
+
+/**
+ * Format population number for display (e.g., 12,691,836 -> "12.7M")
+ */
+private fun formatPopulation(pop: Int): String {
+    return when {
+        pop >= 1_000_000 -> "${(pop / 100_000) / 10.0}M"
+        pop >= 1_000 -> "${(pop / 100) / 10.0}K"
+        else -> pop.toString()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2683,41 +2701,121 @@ private fun PreferencesStep(
                     }
                 }
 
-                // Location text fields (shown based on granularity)
+                // Location search (typeahead autocomplete)
                 if (state.locationGranularity != LocationGranularity.NONE) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    OutlinedTextField(
-                        value = state.country,
-                        onValueChange = { viewModel.setCountry(it) },
-                        label = { Text(localizedString("setup.prefs_country_label")) },
-                        placeholder = { Text(localizedString("setup.prefs_country_hint")) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    // Search box with typeahead
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Column {
+                            OutlinedTextField(
+                                value = state.locationSearchQuery,
+                                onValueChange = { viewModel.searchLocations(it) },
+                                label = { Text(localizedString("setup.prefs_location_search_label")) },
+                                placeholder = { Text(localizedString("setup.prefs_location_search_hint")) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                trailingIcon = {
+                                    if (state.locationSearchLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else if (state.locationSearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { viewModel.clearLocationSearch() }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                        }
+                                    } else {
+                                        Icon(Icons.Default.Search, contentDescription = "Search")
+                                    }
+                                }
+                            )
 
-                    if (state.locationGranularity in listOf(LocationGranularity.REGION, LocationGranularity.CITY)) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = state.region,
-                            onValueChange = { viewModel.setRegion(it) },
-                            label = { Text(localizedString("setup.prefs_region_label")) },
-                            placeholder = { Text(localizedString("setup.prefs_region_hint")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                            // Search results dropdown
+                            if (state.locationSearchResults.isNotEmpty()) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 200.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.White,
+                                    shadowElevation = 4.dp
+                                ) {
+                                    LazyColumn {
+                                        items(state.locationSearchResults) { result ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { viewModel.selectLocation(result) }
+                                                    .padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.LocationOn,
+                                                    contentDescription = null,
+                                                    tint = SetupColors.TextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        text = result.displayName,
+                                                        fontSize = 14.sp,
+                                                        color = SetupColors.TextPrimary
+                                                    )
+                                                    if (result.population > 0) {
+                                                        Text(
+                                                            text = localizedString("setup.prefs_location_pop").replace("{pop}", formatPopulation(result.population)),
+                                                            fontSize = 11.sp,
+                                                            color = SetupColors.TextSecondary
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            HorizontalDivider()
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    if (state.locationGranularity == LocationGranularity.CITY) {
+                    // Show selected location details
+                    if (state.selectedLocation != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = state.city,
-                            onValueChange = { viewModel.setCity(it) },
-                            label = { Text(localizedString("setup.prefs_city_label")) },
-                            placeholder = { Text(localizedString("setup.prefs_city_hint")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SetupColors.SuccessLight,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SetupColors.SuccessDark,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "${state.city}, ${state.region.takeIf { it.isNotEmpty() }?.let { "$it, " } ?: ""}${state.country}",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SetupColors.TextPrimary
+                                    )
+                                    state.selectedLocation?.timezone?.let { tz ->
+                                        Text(
+                                            text = tz,
+                                            fontSize = 12.sp,
+                                            color = SetupColors.TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -194,11 +194,11 @@ def _search_locations_impl(
     return LocationSearchResponse(results=results, query=q, count=len(results))
 
 
-@router.get("/location-search", response_model=LocationSearchResponse)
+@router.get("/location-search")
 async def search_locations(
-    q: str = Query(..., min_length=2, max_length=100, description="Search query (city name or partial)"),
-    country: Optional[str] = Query(None, max_length=2, description="Filter by country code (ISO 3166-1 alpha-2)"),
-    limit: int = Query(10, ge=1, le=50, description="Maximum number of results"),
+    q: Annotated[str, Query(..., min_length=2, max_length=100, description="Search query (city name or partial)")],
+    country: Annotated[Optional[str], Query(max_length=2, description="Filter by country code (ISO 3166-1 alpha-2)")] = None,
+    limit: Annotated[int, Query(ge=1, le=50, description="Maximum number of results")] = 10,
 ) -> LocationSearchResponse:
     """Search for cities by name.
 
@@ -213,7 +213,7 @@ async def search_locations(
     return _search_locations_impl(q=q, country=country, limit=limit)
 
 
-@router.get("/countries", response_model=CountriesResponse)
+@router.get("/countries")
 async def list_countries() -> CountriesResponse:
     """Get list of all countries with currency information.
 

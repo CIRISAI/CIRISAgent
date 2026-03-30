@@ -428,9 +428,7 @@ async def get_partnership_options(
             "Report any concerning behaviors through proper channels",
             "Respect the bilateral nature of the partnership",
         ],
-        "revocation": (
-            "Either party can revoke partnership at any time. " "Data handling follows consent decay protocols."
-        ),
+        "revocation": "Either party can revoke partnership at any time. Data handling follows consent decay protocols.",
     }
 
     return create_partnership_response(

@@ -9,13 +9,16 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Constants for field descriptions
+_DESC_TOTAL_TOKENS = "Total tokens used"
+
 
 class TokenUsageStats(BaseModel):
     """Token usage statistics from LLM API."""
 
     prompt_tokens: int = Field(0, description="Number of tokens in the prompt")
     completion_tokens: int = Field(0, description="Number of tokens in the completion")
-    total_tokens: int = Field(0, description="Total tokens used")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -84,7 +87,7 @@ class LLMCallMetadata(BaseModel):
 
     prompt_tokens: int = Field(0, description="Number of tokens in prompt")
     completion_tokens: int = Field(0, description="Number of tokens in completion")
-    total_tokens: int = Field(0, description="Total tokens used")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
     model: str = Field(..., description="Model used")
     temperature: float = Field(..., description="Temperature setting")
     max_tokens: int = Field(..., description="Max tokens setting")
@@ -214,7 +217,7 @@ class EndpointStats(BaseModel):
     total_calls: int = Field(0, description="Total number of calls made")
     successful_calls: int = Field(0, description="Number of successful calls")
     failed_calls: int = Field(0, description="Number of failed calls")
-    total_tokens: int = Field(0, description="Total tokens used")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
     total_cost_usd: float = Field(0.0, description="Total cost in USD")
     avg_latency_ms: float = Field(0.0, description="Average latency in milliseconds")
     last_call_at: Optional[datetime] = Field(None, description="Timestamp of last call")

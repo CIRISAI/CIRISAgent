@@ -78,7 +78,7 @@ class DreamMemorizeHandler(BaseActionHandler):
             errors.append("CONNECTS edge failed")
 
         # Edge 2: IMPLIES - Create insight and link
-        edge2_result, insight_node_id = await self._create_implies_edge(params, thought_id)
+        edge2_result, _ = await self._create_implies_edge(params, thought_id)
         if edge2_result:
             edges_created.append("IMPLIES")
         else:
@@ -124,7 +124,7 @@ class DreamMemorizeHandler(BaseActionHandler):
         )
 
     async def _create_connects_edge(
-        self, params: DreamConsolidationParams, thought_id: str
+        self, params: DreamConsolidationParams, _thought_id: str
     ) -> bool:
         """Create CONNECTS edge between two memories."""
         try:

@@ -13,6 +13,7 @@ Philosophy (from Polyglot ACCORD):
 import asyncio
 import logging
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, List, Optional
@@ -477,7 +478,7 @@ class MinimalDreamProcessor(BaseProcessor):
                     break
 
                 # Process one round
-                result = await self.process(round_number)
+                _ = await self.process(round_number)
                 round_number += 1
 
                 # Check if dream is complete
@@ -495,6 +496,7 @@ class MinimalDreamProcessor(BaseProcessor):
 
         except asyncio.CancelledError:
             logger.info("[DREAM] Dream task cancelled")
+            raise  # Re-raise to properly propagate cancellation
         except Exception as e:
             logger.error(f"[DREAM] Error in dream loop: {e}")
         finally:
@@ -519,10 +521,9 @@ class MinimalDreamProcessor(BaseProcessor):
             except asyncio.TimeoutError:
                 logger.warning("[DREAM] Dream task did not stop in time, cancelling")
                 self._dream_task.cancel()
-                try:
+                # Suppress expected CancelledError - we deliberately cancelled this task
+                with suppress(asyncio.CancelledError):
                     await self._dream_task
-                except asyncio.CancelledError:
-                    pass
 
         # End the session if active
         if self.current_session:

@@ -275,6 +275,11 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
         attributes["location_region"] = setup.location_region
     if setup.location_city:
         attributes["location_city"] = setup.location_city
+    # Store coordinates if provided (ISO 6709 decimal degrees)
+    if setup.location_latitude is not None:
+        attributes["location_latitude"] = setup.location_latitude
+    if setup.location_longitude is not None:
+        attributes["location_longitude"] = setup.location_longitude
     if setup.timezone:
         attributes["timezone"] = setup.timezone
     # Store location sharing consent as a boolean
@@ -561,6 +566,11 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             if setup.location_city:
                 location_parts.append(setup.location_city)
             f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+        # Store coordinates in ISO 6709 decimal degrees format
+        if setup.location_latitude is not None:
+            f.write(f"CIRIS_USER_LATITUDE={setup.location_latitude}\n")
+        if setup.location_longitude is not None:
+            f.write(f"CIRIS_USER_LONGITUDE={setup.location_longitude}\n")
         if setup.timezone:
             f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
         # Location sharing consent for telemetry

@@ -2,6 +2,7 @@ package ai.ciris.mobile.shared.platform
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -61,3 +62,52 @@ actual fun openUrlInBrowser(url: String) {
         Log.e("Platform", "Failed to open URL: $url", e)
     }
 }
+
+/** Cached version info to avoid repeated PackageManager lookups. */
+private var cachedVersionName: String? = null
+private var cachedVersionCode: String? = null
+
+/**
+ * Android implementation: get version name from PackageManager.
+ * Falls back to "unknown" if context not initialized.
+ */
+actual fun getAppVersion(): String {
+    cachedVersionName?.let { return it }
+
+    val ctx = urlOpenerContext ?: return ANDROID_VERSION_FALLBACK
+    return try {
+        val packageInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+        packageInfo.versionName.also { cachedVersionName = it } ?: ANDROID_VERSION_FALLBACK
+    } catch (e: PackageManager.NameNotFoundException) {
+        Log.e("Platform", "Failed to get version name", e)
+        ANDROID_VERSION_FALLBACK
+    }
+}
+
+/**
+ * Android implementation: get version code from PackageManager.
+ */
+actual fun getAppBuildNumber(): String {
+    cachedVersionCode?.let { return it }
+
+    val ctx = urlOpenerContext ?: return "0"
+    return try {
+        val packageInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+        @Suppress("DEPRECATION")
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.longVersionCode.toString()
+        } else {
+            packageInfo.versionCode.toString()
+        }
+        code.also { cachedVersionCode = it }
+    } catch (e: PackageManager.NameNotFoundException) {
+        Log.e("Platform", "Failed to get version code", e)
+        "0"
+    }
+}
+
+/**
+ * Fallback version if context not initialized.
+ * Keep in sync with mobile/androidApp/build.gradle versionName.
+ */
+private const val ANDROID_VERSION_FALLBACK = "2.3.1"

@@ -29,3 +29,28 @@ actual fun openUrlInBrowser(url: String) {
         println("Failed to open URL: $url - ${e.message}")
     }
 }
+
+/**
+ * Desktop implementation: read version from JAR manifest or fallback to constant.
+ * The version is set in desktopApp/build.gradle.kts compose.desktop.application.version
+ */
+actual fun getAppVersion(): String {
+    // Try to read from JAR manifest (set by Compose Desktop build)
+    return try {
+        val pkg = Platform::class.java.`package`
+        pkg?.implementationVersion ?: DESKTOP_VERSION_FALLBACK
+    } catch (e: Exception) {
+        DESKTOP_VERSION_FALLBACK
+    }
+}
+
+/**
+ * Desktop implementation: build number (not applicable, return "0").
+ */
+actual fun getAppBuildNumber(): String = "0"
+
+/**
+ * Fallback version if JAR manifest is unavailable.
+ * Keep in sync with mobile/androidApp/build.gradle versionName.
+ */
+private const val DESKTOP_VERSION_FALLBACK = "2.3.1"

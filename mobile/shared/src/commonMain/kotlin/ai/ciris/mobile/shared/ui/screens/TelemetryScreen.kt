@@ -9,12 +9,14 @@ import ai.ciris.mobile.shared.models.SignalType
 import ai.ciris.mobile.shared.models.TestResult
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.components.LazyColumnScrollbar
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,13 +110,20 @@ fun TelemetryScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        val listState = rememberLazyListState()
+
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Services overview
             item {
                 ServicesOverviewCard(
@@ -225,7 +234,14 @@ fun TelemetryScreen(
                 }
             }
         }
+
+        // Scrollbar (visible on desktop)
+        LazyColumnScrollbar(
+            listState = listState,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
+}
 
     // Add/Edit Destination Dialog
     if (showDestinationDialog) {

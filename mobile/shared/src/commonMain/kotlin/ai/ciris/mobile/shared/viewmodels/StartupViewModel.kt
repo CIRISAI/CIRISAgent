@@ -54,6 +54,10 @@ class StartupViewModel(
     private val _hasError = MutableStateFlow(false)
     val hasError: StateFlow<Boolean> = _hasError.asStateFlow()
 
+    // Consolidator status for startup indicator
+    private val _consolidatorStatus = MutableStateFlow<String?>(null)
+    val consolidatorStatus: StateFlow<String?> = _consolidatorStatus.asStateFlow()
+
     // Flag to keep timer running even after phase == READY (for CIRISApp backend polling)
     private val _keepTimerAlive = MutableStateFlow(false)
     val keepTimerAlive: StateFlow<Boolean> = _keepTimerAlive.asStateFlow()
@@ -151,6 +155,7 @@ class StartupViewModel(
         val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
         val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
         val fatalPattern = Regex("""\[FATAL(?:_EXIT)?\]\s*(.+)""")
+        val consolidatorPattern = Regex("""\[CONSOLIDATOR\]\s*(.+)""")
         pythonRuntime.setOutputLineCallback { line ->
             // Check for FATAL errors first - these indicate unrecoverable startup failures
             fatalPattern.find(line)?.let { match ->
@@ -182,6 +187,19 @@ class StartupViewModel(
             // Forward verify messages
             if (line.contains("VERIFY")) {
                 onVerifyLogMessage(line)
+            }
+            // Check for consolidator status
+            consolidatorPattern.find(line)?.let { match ->
+                val status = match.groupValues[1].trim()
+                _consolidatorStatus.value = status
+                PlatformLogger.i(TAG, "[STARTUP][CONSOLIDATOR] $status")
+                // Clear status when complete
+                if (status.startsWith("Complete")) {
+                    viewModelScope.launch {
+                        delay(2000)  // Show completion message briefly
+                        _consolidatorStatus.value = null
+                    }
+                }
             }
         }
 
@@ -248,7 +266,8 @@ class StartupViewModel(
         var healthyCount = 0
         var lastOnline = 0
 
-        while (attempts < maxAttempts && currentCoroutineContext().isActive) {
+        // Don't time out while consolidator is running
+        while ((attempts < maxAttempts || _consolidatorStatus.value != null) && currentCoroutineContext().isActive) {
             // Fast polling (200ms) to catch rapid service startup
             delay(200)
 

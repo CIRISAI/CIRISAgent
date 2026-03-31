@@ -66,6 +66,7 @@ fun StartupScreen(
     val prepStepsCompleted by viewModel.prepStepsCompleted.collectAsState()
     val verifyStepsCompleted by viewModel.verifyStepsCompleted.collectAsState()
     val hasError by viewModel.hasError.collectAsState()
+    val consolidatorStatus by viewModel.consolidatorStatus.collectAsState()
 
     // Language rotation for startup screen when no explicit language selection
     val localization = LocalLocalization.current
@@ -291,6 +292,16 @@ fun StartupScreen(
                             ),
                             fontSize = 12.sp,
                             color = CIRISColors.AccentCyan
+                        )
+                    }
+
+                    // Consolidator status indicator
+                    consolidatorStatus?.let { status ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "📊 $status",
+                            fontSize = 10.sp,
+                            color = CIRISColors.WarningYellow.copy(alpha = 0.9f)
                         )
                     }
                 }

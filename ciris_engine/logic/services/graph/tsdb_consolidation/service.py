@@ -386,6 +386,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         """
         try:
             logger.info("Checking for missed consolidation windows...")
+            # Console output for mobile app startup indicator
+            print("[CONSOLIDATOR] Checking for missed windows...", flush=True)
 
             # Find the last consolidated period
             last_consolidated = await self._query_manager.get_last_consolidated_period()
@@ -427,6 +429,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                     lock_key = f"missed:{period_start.isoformat()}"
                     if self._query_manager._try_acquire_lock(lock_key, "missed", period_start.isoformat()):
                         logger.info(f"Acquired lock, consolidating missed period: {period_start} to {period_end}")
+                        # Console output for mobile app
+                        print(f"[CONSOLIDATOR] Processing period {periods_consolidated + 1}...", flush=True)
 
                         summaries = await self._consolidate_period(period_start, period_end)
                         if summaries:
@@ -451,9 +455,13 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
             if periods_consolidated > 0:
                 logger.info(f"Successfully consolidated {periods_consolidated} missed periods")
+                # Console output for mobile app
+                print(f"[CONSOLIDATOR] Complete - {periods_consolidated} periods processed", flush=True)
                 self._last_consolidation = now
             else:
                 logger.info("No missed periods needed consolidation")
+                # Console output for mobile app
+                print("[CONSOLIDATOR] Complete - no missed periods", flush=True)
 
         except Exception as e:
             logger.error(f"Failed to consolidate missed windows: {e}", exc_info=True)

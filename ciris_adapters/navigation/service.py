@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import aiohttp
 
+from ciris_engine.logic.utils.location_utils import get_user_location
 from ciris_engine.schemas.adapters.tools import (
     ToolDMAGuidance,
     ToolDocumentation,
@@ -61,6 +62,21 @@ class NavigationToolService:
         self._last_request_time: float = 0.0
         self._min_request_interval = 1.0  # 1 second between requests
 
+        # User location from setup (for route_from_me functionality)
+        self._user_lat: Optional[float] = None
+        self._user_lon: Optional[float] = None
+        self._user_location_string: Optional[str] = None
+
+        user_location = get_user_location()
+        if user_location.has_coordinates():
+            self._user_lat = user_location.latitude
+            self._user_lon = user_location.longitude
+            self._user_location_string = user_location.location_string
+            logger.info(
+                f"User location available: {user_location.location_string} "
+                f"({self._user_lat}, {self._user_lon})"
+            )
+
         # Tool definitions
         self._tools: Dict[str, ToolInfo] = self._define_tools()
 
@@ -68,7 +84,7 @@ class NavigationToolService:
 
     def _define_tools(self) -> Dict[str, ToolInfo]:
         """Define available tools."""
-        return {
+        tools: Dict[str, ToolInfo] = {
             "navigation:geocode": ToolInfo(
                 name="navigation:geocode",
                 description="Convert an address or place name to geographic coordinates (latitude/longitude)",
@@ -182,6 +198,61 @@ Multiple rapid requests will be automatically throttled.
             ),
         }
 
+        # Add user location tools if user location is available from setup
+        if self._user_lat is not None and self._user_lon is not None:
+            tools["navigation:my_location"] = ToolInfo(
+                name="navigation:my_location",
+                description=(
+                    f"Get the user's configured location coordinates ({self._user_location_string}). "
+                    "Returns latitude/longitude for use with other tools."
+                ),
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={},
+                    required=[],
+                ),
+                category="navigation",
+                cost=0.0,
+                when_to_use="When you need to reference the user's home location for navigation or weather",
+                context_enrichment=True,
+                context_enrichment_params={"_cache_ttl": 3600.0},  # Cache for 1 hour (location rarely changes)
+            )
+
+            tools["navigation:route_from_me"] = ToolInfo(
+                name="navigation:route_from_me",
+                description=(
+                    f"Calculate driving route FROM user's location ({self._user_location_string}) "
+                    "to a destination. Only requires destination - start is your location."
+                ),
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={
+                        "destination": {
+                            "type": "string",
+                            "description": "Destination address or place name",
+                        },
+                    },
+                    required=["destination"],
+                ),
+                category="navigation",
+                cost=0.0,
+                when_to_use="When the user asks 'how far is X' or 'how do I get to X' without specifying a start",
+                documentation=ToolDocumentation(
+                    quick_start=(
+                        f"Routes from your location ({self._user_location_string}). "
+                        "Just provide the destination - no need to specify start."
+                    ),
+                    examples=[
+                        UsageExample(
+                            title="Route to destination",
+                            code='{"destination": "San Francisco Airport"}',
+                        ),
+                    ],
+                ),
+            )
+
+        return tools
+
     def get_capabilities(self) -> ServiceCapabilities:
         """Return service capabilities."""
         return ServiceCapabilities(
@@ -229,6 +300,10 @@ Multiple rapid requests will be automatically throttled.
                 return await self._execute_reverse_geocode(parameters, correlation_id)
             elif tool_name == "navigation:route":
                 return await self._execute_route(parameters, correlation_id)
+            elif tool_name == "navigation:my_location":
+                return await self._execute_my_location(correlation_id)
+            elif tool_name == "navigation:route_from_me":
+                return await self._execute_route_from_me(parameters, correlation_id)
             else:
                 return ToolExecutionResult(
                     tool_name=tool_name,
@@ -392,6 +467,100 @@ Multiple rapid requests will be automatically throttled.
         return None
 
     # ========== Tool Implementations ==========
+
+    async def _execute_my_location(self, correlation_id: str) -> ToolExecutionResult:
+        """Execute my_location tool - returns user's configured location."""
+        if self._user_lat is None or self._user_lon is None:
+            return ToolExecutionResult(
+                tool_name="navigation:my_location",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error="No user location available. Set location during setup to use this feature.",
+                correlation_id=correlation_id,
+            )
+
+        return ToolExecutionResult(
+            tool_name="navigation:my_location",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={
+                "location": self._user_location_string,
+                "latitude": self._user_lat,
+                "longitude": self._user_lon,
+                "source": "user_setup",
+            },
+            correlation_id=correlation_id,
+        )
+
+    async def _execute_route_from_me(
+        self, parameters: Dict[str, Any], correlation_id: str
+    ) -> ToolExecutionResult:
+        """Execute route_from_me tool - routes from user's location to destination."""
+        if self._user_lat is None or self._user_lon is None:
+            return ToolExecutionResult(
+                tool_name="navigation:route_from_me",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error="No user location available. Set location during setup to use this feature.",
+                correlation_id=correlation_id,
+            )
+
+        destination = parameters.get("destination")
+        if not destination:
+            return ToolExecutionResult(
+                tool_name="navigation:route_from_me",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error="Missing required parameter: destination",
+                correlation_id=correlation_id,
+            )
+
+        # Use the regular route execution but with user location as start
+        # First, geocode the destination
+        dest_result = await self._geocode(destination)
+        if not dest_result:
+            return ToolExecutionResult(
+                tool_name="navigation:route_from_me",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error=f"Could not find destination: {destination}",
+                correlation_id=correlation_id,
+            )
+
+        # Calculate route from user's coordinates to destination
+        route = await self._get_route(
+            {"latitude": self._user_lat, "longitude": self._user_lon},
+            {"latitude": dest_result["latitude"], "longitude": dest_result["longitude"]},
+        )
+
+        if route:
+            return ToolExecutionResult(
+                tool_name="navigation:route_from_me",
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data={
+                    "start": self._user_location_string,
+                    "start_coordinates": {"latitude": self._user_lat, "longitude": self._user_lon},
+                    "destination": destination,
+                    "destination_coordinates": {
+                        "latitude": dest_result["latitude"],
+                        "longitude": dest_result["longitude"],
+                    },
+                    "distance_km": route["distance_km"],
+                    "distance_miles": route["distance_miles"],
+                    "duration_minutes": route["duration_minutes"],
+                    "duration_formatted": route["duration_formatted"],
+                },
+                correlation_id=correlation_id,
+            )
+        else:
+            return ToolExecutionResult(
+                tool_name="navigation:route_from_me",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error=f"Could not calculate route to {destination}",
+                correlation_id=correlation_id,
+            )
 
     async def _execute_geocode(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute geocode tool."""

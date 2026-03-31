@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-03-30
+
+### Added
+
+- **Urdu Language Support** - 16th language with full pipeline localization
+- **Desktop Scrollbars** - Visible scrollbars with platform-specific implementation
+- **Location Services** - User location for weather and navigation adapters
+- **Localization Sync Check** - Pre-commit hook to catch missing translations
+
+### Changed
+
+- **Language Selector** - Centered on login, shows "Interface + Agent" to clarify scope
+
+### Fixed
+
+- **Desktop Scroll** - Login, Startup, Telemetry screens scroll properly
+- **Language Selector Click** - Fixed z-order on desktop
+- **Wallet Attestation** - Correct attestation level display
+- **Startup Language Rotation** - Stops when startup completes
+- **Test Reliability** - Fixed flaky TSDB edge tests
+
 ## [2.3.0] - 2026-03-28
 
 ### Added

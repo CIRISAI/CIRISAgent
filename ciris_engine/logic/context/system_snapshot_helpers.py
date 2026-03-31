@@ -1206,9 +1206,7 @@ async def _run_context_enrichment_tools(
     return enrichment_results
 
 
-async def populate_enrichment_cache_at_startup(
-    runtime: Any, available_tools: Dict[str, List[ToolInfo]]
-) -> None:
+async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Dict[str, List[ToolInfo]]) -> None:
     """Populate the context enrichment cache at startup.
 
     This should be called during runtime initialization to ensure
@@ -1226,8 +1224,7 @@ async def populate_enrichment_cache_at_startup(
 
     cache.mark_startup_populated()
     logger.info(
-        f"[ENRICHMENT_CACHE] Startup population complete: "
-        f"{len(results)} tools cached, stats: {cache.stats}"
+        f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}"
     )
 
 

@@ -57,12 +57,8 @@ class Transaction(BaseModel):
     memo: Optional[str] = Field(None, description="Transaction memo/description")
     timestamp: datetime = Field(..., description="Transaction timestamp")
     fees: Optional[Dict[str, Decimal]] = Field(None, description="Fee breakdown")
-    confirmation: Optional[Dict[str, Any]] = Field(
-        None, description="Provider-specific confirmation data"
-    )
-    metadata: Optional[Dict[str, Any]] = Field(
-        None, description="Additional provider-specific metadata"
-    )
+    confirmation: Optional[Dict[str, Any]] = Field(None, description="Provider-specific confirmation data")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional provider-specific metadata")
 
 
 class TransactionResult(BaseModel):
@@ -88,16 +84,12 @@ class PaymentRequest(BaseModel):
     amount: Decimal = Field(..., description="Requested amount")
     currency: str = Field(..., description="Currency code")
     description: str = Field(..., description="What the payment is for")
-    status: PaymentRequestStatus = Field(
-        default=PaymentRequestStatus.PENDING, description="Request status"
-    )
+    status: PaymentRequestStatus = Field(default=PaymentRequestStatus.PENDING, description="Request status")
     checkout_url: Optional[str] = Field(None, description="URL for payer to complete payment")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: Optional[datetime] = Field(None, description="When request expires")
     paid_at: Optional[datetime] = Field(None, description="When payment was received")
-    transaction_id: Optional[str] = Field(
-        None, description="Transaction ID once paid"
-    )
+    transaction_id: Optional[str] = Field(None, description="Transaction ID once paid")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
@@ -122,9 +114,7 @@ class AccountDetails(BaseModel):
     phone: Optional[str] = Field(None, description="Phone number (mobile money)")
     account_id: Optional[str] = Field(None, description="Account identifier")
     network: Optional[str] = Field(None, description="Network (e.g., base-mainnet)")
-    attestation_level: Optional[int] = Field(
-        None, description="CIRISVerify attestation level (0-5)"
-    )
+    attestation_level: Optional[int] = Field(None, description="CIRISVerify attestation level (0-5)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional details")
 
 

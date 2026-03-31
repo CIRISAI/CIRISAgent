@@ -204,6 +204,69 @@ class StripeProviderConfig(BaseModel):
 
 
 # =============================================================================
+# ERC-4337 Paymaster Configuration (Gas Sponsorship)
+# =============================================================================
+
+
+class PaymasterConfig(BaseModel):
+    """
+    Configuration for ERC-4337 paymaster gas sponsorship.
+
+    Uses Etherspot Arka (MIT licensed, self-hostable) for gas sponsorship.
+    This eliminates the need for users to hold ETH for gas fees.
+
+    Regulatory Note: Gas sponsorship is infrastructure expense, not money transmission.
+    See FSD/WALLET_REGULATORY_COMPLIANCE.md Section 10.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable paymaster for gasless transactions",
+    )
+    arka_url: str = Field(
+        default="https://arka.etherspot.io",
+        description="Arka paymaster service URL (or self-hosted instance)",
+    )
+    arka_api_key: Optional[SecretStr] = Field(
+        None,
+        description="Arka API key for sponsorship (optional for self-hosted)",
+    )
+    bundler_url: str = Field(
+        default="https://bundler.etherspot.io/8453",
+        description="ERC-4337 bundler URL for Base (chain ID 8453)",
+    )
+    entrypoint_address: str = Field(
+        default="0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        description="ERC-4337 EntryPoint v0.6 contract address",
+    )
+    max_gas_limit: int = Field(
+        default=500000,
+        description="Maximum gas limit for sponsored operations",
+    )
+    max_priority_fee_gwei: int = Field(
+        default=2,
+        description="Maximum priority fee in gwei",
+    )
+
+
+class BundlerConfig(BaseModel):
+    """Configuration for ERC-4337 bundler service."""
+
+    url: str = Field(
+        default="https://bundler.etherspot.io/8453",
+        description="Bundler JSON-RPC URL",
+    )
+    timeout_seconds: int = Field(
+        default=60,
+        description="Timeout for bundler requests",
+    )
+    retry_attempts: int = Field(
+        default=3,
+        description="Number of retry attempts for failed submissions",
+    )
+
+
+# =============================================================================
 # Main Wallet Configuration
 # =============================================================================
 
@@ -228,8 +291,8 @@ class WalletAdapterConfig(BaseModel):
             "INR": "razorpay",
             "BRL": "pix",
             "USD": "stripe",  # Default for USD card payments
-            "EUR": "wise",    # Default for EUR transfers
-            "GBP": "wise",    # Default for GBP transfers
+            "EUR": "wise",  # Default for EUR transfers
+            "GBP": "wise",  # Default for GBP transfers
         },
         description="Default provider for each currency",
     )

@@ -61,3 +61,19 @@ actual fun openUrlInBrowser(url: String) {
         UIApplication.sharedApplication.openURL(nsUrl, emptyMap<Any?, Any>(), null)
     }
 }
+
+/**
+ * iOS implementation: get version from Info.plist CFBundleShortVersionString.
+ */
+actual fun getAppVersion(): String {
+    val bundle = NSBundle.mainBundle
+    return bundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: "unknown"
+}
+
+/**
+ * iOS implementation: get build number from Info.plist CFBundleVersion.
+ */
+actual fun getAppBuildNumber(): String {
+    val bundle = NSBundle.mainBundle
+    return bundle.objectForInfoDictionaryKey("CFBundleVersion") as? String ?: "0"
+}

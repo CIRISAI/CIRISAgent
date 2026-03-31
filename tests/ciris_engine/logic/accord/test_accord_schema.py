@@ -143,11 +143,7 @@ class TestAccordPayload:
 
     def test_timestamp_valid_at_boundary(self):
         """Timestamp at 5-minute boundary should be valid."""
-        from ciris_engine.schemas.accord import (
-            ACCORD_TIMESTAMP_WINDOW_SECONDS,
-            AccordCommandType,
-            AccordPayload,
-        )
+        from ciris_engine.schemas.accord import ACCORD_TIMESTAMP_WINDOW_SECONDS, AccordCommandType, AccordPayload
 
         now = int(time.time())
         payload = AccordPayload(
@@ -247,11 +243,7 @@ class TestCreateAccordPayload:
 
     def test_create_signed_payload(self):
         """Should create payload with valid signature."""
-        from ciris_engine.schemas.accord import (
-            AccordCommandType,
-            create_accord_payload,
-            verify_accord_signature,
-        )
+        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
         from tools.security.accord_keygen import derive_accord_keypair
 
         # Generate keypair
@@ -270,11 +262,7 @@ class TestCreateAccordPayload:
 
     def test_signature_invalid_with_wrong_key(self):
         """Signature should fail with wrong public key."""
-        from ciris_engine.schemas.accord import (
-            AccordCommandType,
-            create_accord_payload,
-            verify_accord_signature,
-        )
+        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
         from tools.security.accord_keygen import derive_accord_keypair
 
         # Generate two keypairs
@@ -365,12 +353,7 @@ class TestAccordExtractionResult:
 
     def test_found(self):
         """Should represent accord found."""
-        from ciris_engine.schemas.accord import (
-            AccordCommandType,
-            AccordExtractionResult,
-            AccordMessage,
-            AccordPayload,
-        )
+        from ciris_engine.schemas.accord import AccordCommandType, AccordExtractionResult, AccordMessage, AccordPayload
 
         payload = AccordPayload(
             timestamp=int(time.time()),

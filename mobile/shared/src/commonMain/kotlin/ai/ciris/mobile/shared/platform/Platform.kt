@@ -64,3 +64,15 @@ expect fun getDeviceDebugInfo(): String
  * On iOS calls UIApplication.shared.open, on Android uses Intent.ACTION_VIEW.
  */
 expect fun openUrlInBrowser(url: String)
+
+/**
+ * Get the app version string (e.g., "2.3.1").
+ * On Android reads from BuildConfig, on iOS from Bundle.main, on Desktop from constant.
+ */
+expect fun getAppVersion(): String
+
+/**
+ * Get the app build number/version code (e.g., "77").
+ * On Android reads versionCode, on iOS reads CFBundleVersion, on Desktop returns "0".
+ */
+expect fun getAppBuildNumber(): String

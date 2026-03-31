@@ -12,7 +12,9 @@ import ai.ciris.mobile.shared.ui.components.LanguageSelector
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -90,21 +92,13 @@ fun LoginScreen(
         color = LoginColors.Background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Language selector in top-right corner
-            LanguageSelector(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .testable("login_language_selector"),
-                compact = true
-            )
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
             ) {
                 // Logo "C"
                 Text(
@@ -278,6 +272,17 @@ fun LoginScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp)
+            )
+
+            // Language selector - prominent, centered at top (rendered last for z-order)
+            // This changes BOTH the interface AND agent reasoning language
+            LanguageSelector(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .testable("login_language_selector"),
+                compact = false,
+                centered = true
             )
         }
     }

@@ -463,7 +463,11 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
             )
 
             if register_resp.status_code != 200:
-                body = register_resp.json() if register_resp.headers.get("content-type", "").startswith("application/json") else {}
+                body = (
+                    register_resp.json()
+                    if register_resp.headers.get("content-type", "").startswith("application/json")
+                    else {}
+                )
                 error_msg = body.get("error", f"HTTP {register_resp.status_code}")
                 logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", error_msg)
                 return None
@@ -526,7 +530,11 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
                 )
                 return key_id
             else:
-                body = activate_resp.json() if activate_resp.headers.get("content-type", "").startswith("application/json") else {}
+                body = (
+                    activate_resp.json()
+                    if activate_resp.headers.get("content-type", "").startswith("application/json")
+                    else {}
+                )
                 error_msg = body.get("error", f"HTTP {activate_resp.status_code}")
                 logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", error_msg)
                 return None

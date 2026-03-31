@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
+from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
 

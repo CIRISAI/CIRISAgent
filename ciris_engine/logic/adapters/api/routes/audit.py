@@ -254,7 +254,9 @@ def _find_sqlite_entry_for_dedup_key(
     Used to merge graph metadata into existing SQLite entries.
     """
     for merged_entry in merged.values():
-        sqlite_dedup = f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+        sqlite_dedup = (
+            f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+        )
         if sqlite_dedup == dedup_key:
             return merged_entry
     return None
@@ -553,9 +555,7 @@ def _add_new_sqlite_entry(
 ) -> None:
     """Add a new SQLite entry to merged results."""
     timestamp = datetime.fromisoformat(entry_info["event_timestamp"].replace("Z", UTC_TIMEZONE_SUFFIX))
-    outcome = _infer_outcome_from_event(
-        get_str_optional(sqlite_entry, "outcome"), entry_info["event_type"]
-    )
+    outcome = _infer_outcome_from_event(get_str_optional(sqlite_entry, "outcome"), entry_info["event_type"])
 
     event_payload_str = get_str_optional(sqlite_entry, "event_payload")
     metadata, description = _parse_event_payload_metadata(event_payload_str)
@@ -585,8 +585,10 @@ def _add_new_sqlite_entry(
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, _MergedAuditEntry], jsonl_entries: list[dict[str, object]], seen_timestamps: set[str],
-    dedup_to_entry: Dict[str, str]
+    merged: Dict[str, _MergedAuditEntry],
+    jsonl_entries: list[dict[str, object]],
+    seen_timestamps: set[str],
+    dedup_to_entry: Dict[str, str],
 ) -> None:  # SERIALIZATION BOUNDARY - JSONL raw entries
     """Process JSONL entries and add them to merged results.
 

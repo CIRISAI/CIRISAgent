@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 
-from ._common import RESPONSES_400, RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep
+from ._common import RESPONSES_400_500_503, RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ async def get_destination(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/destinations", response_model=None, responses={**RESPONSES_400, **RESPONSES_500_503})
+@router.post("/destinations", response_model=None, responses=RESPONSES_400_500_503)
 async def create_destination(
     request: Request, auth: AuthAdminDep, destination: ExportDestinationCreate
 ) -> SuccessResponse[ExportDestination]:

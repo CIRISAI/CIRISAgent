@@ -46,11 +46,12 @@ def _sanitize_for_log(value: str, max_length: int = 64) -> str:
     if not value:
         return "unnamed"
     # Remove newlines, carriage returns, and other control characters
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
     # Truncate to max length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
     return sanitized or "unnamed"
+
 
 # Try to import croniter for cron scheduling support
 try:
@@ -186,7 +187,9 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
     def _should_trigger_cron(self, task: ScheduledTask, current_time: datetime) -> bool:
         """Check if a cron-scheduled task should trigger."""
         if not CRONITER_AVAILABLE:
-            logger.warning(f"Cron scheduling requested for task {task.task_id} but croniter not installed")
+            # Sanitize task_id for logging (CWE-117)
+            safe_task_id = _sanitize_for_log(task.task_id)
+            logger.warning(f"Cron scheduling requested for task {safe_task_id} but croniter not installed")
             return False
 
         try:
@@ -208,14 +211,19 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             # Add a small buffer (1 second) to avoid missing triggers due to timing
             return bool(current_time >= next_time - timedelta(seconds=1))
 
-        except Exception as e:
-            logger.error(f"Invalid cron expression '{task.schedule_cron}' for task {task.task_id}: {e}")
+        except Exception:
+            # Sanitize for logging (CWE-117) - don't log exception details
+            safe_task_id = _sanitize_for_log(task.task_id)
+            logger.error(f"Invalid cron expression for task {safe_task_id}: parse error")
             return False
 
     async def _trigger_task(self, task: ScheduledTask) -> None:
         """Trigger a scheduled task by creating a new thought or reactivating a deferred task."""
         try:
-            logger.info(f"Triggering scheduled task: {task.name} ({task.task_id})")
+            # Sanitize for logging (CWE-117)
+            safe_name = _sanitize_for_log(task.name)
+            safe_task_id = _sanitize_for_log(task.task_id)
+            logger.info(f"Triggering scheduled task: {safe_name} ({safe_task_id})")
 
             # Increment triggered counter
             self._tasks_triggered += 1
@@ -224,7 +232,8 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             if hasattr(task, "metadata") and task.metadata and "deferred_task_id" in task.metadata:
                 # Reactivate the deferred task
                 deferred_task_id = task.metadata["deferred_task_id"]
-                logger.info(f"Reactivating deferred task {deferred_task_id}")
+                safe_deferred_id = _sanitize_for_log(deferred_task_id)
+                logger.info(f"Reactivating deferred task {safe_deferred_id}")
 
                 # Update the task status from 'deferred' to 'pending'
                 from ciris_engine.logic.persistence import update_task_status
@@ -234,9 +243,9 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                     update_task_status(deferred_task_id, TaskStatus.PENDING, "default", self._time_service)
                 else:
                     # If no time service available, skip updating the task
-                    logger.warning(f"Cannot update task {deferred_task_id} status: no time service available")
+                    logger.warning(f"Cannot update task {safe_deferred_id} status: no time service available")
 
-                logger.info(f"Task {deferred_task_id} reactivated and marked as pending")
+                logger.info(f"Task {safe_deferred_id} reactivated and marked as pending")
 
             else:
                 # Create a new thought for regular scheduled tasks
@@ -275,10 +284,11 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             if task.defer_until and not task.schedule_cron:
                 await self._complete_task(task)
 
-        except Exception as e:
+        except Exception:
             # Increment failed counter
             self._tasks_failed += 1
-            logger.error(f"Failed to trigger task {task.task_id}: {e}")
+            # Sanitize task_id for logging (CWE-117) - don't log exception details
+            logger.error(f"Failed to trigger task {safe_task_id}: task execution error")
 
     async def _update_task_triggered(self, task: ScheduledTask) -> None:
         """Update task after triggering."""
@@ -361,16 +371,17 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
 
         # Log scheduling details - sanitize user-controlled data to prevent log injection (CWE-117)
         safe_name = _sanitize_for_log(name)
+        safe_task_id = _sanitize_for_log(task_id)
         if defer_until:
             # defer_until is validated datetime string, but sanitize anyway for defense in depth
             safe_defer = _sanitize_for_log(defer_until, max_length=30)
-            logger.info(f"Scheduled one-time task: {safe_name} ({task_id}) for {safe_defer}")
+            logger.info(f"Scheduled one-time task: {safe_name} ({safe_task_id}) for {safe_defer}")
         elif schedule_cron:
             next_run = self._get_next_cron_time(schedule_cron)
             # schedule_cron is validated above, next_run is computed datetime
-            logger.info(f"Scheduled recurring task: {safe_name} ({task_id}). Next run: {next_run}")
+            logger.info(f"Scheduled recurring task: {safe_name} ({safe_task_id}). Next run: {next_run}")
         else:
-            logger.info(f"Scheduled task: {safe_name} ({task_id})")
+            logger.info(f"Scheduled task: {safe_name} ({safe_task_id})")
 
         return task
 
@@ -417,7 +428,10 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             }
         )
 
-        logger.info(f"Scheduled deferred task {task_id} for reactivation at {defer_until}")
+        # Sanitize for logging (CWE-117)
+        safe_task_id = _sanitize_for_log(task_id)
+        safe_defer = _sanitize_for_log(defer_until, max_length=30)
+        logger.info(f"Scheduled deferred task {safe_task_id} for reactivation at {safe_defer}")
 
         return scheduled_task
 
@@ -435,9 +449,10 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             task = self._active_tasks[task_id]
             task.status = "CANCELLED"
             del self._active_tasks[task_id]
-            # Sanitize task name for logging to prevent log injection (CWE-117)
+            # Sanitize task name and ID for logging to prevent log injection (CWE-117)
             safe_name = _sanitize_for_log(task.name)
-            logger.info(f"Cancelled task: {safe_name} ({task_id})")
+            safe_id = _sanitize_for_log(task_id)
+            logger.info(f"Cancelled task: {safe_name} ({safe_id})")
             return True
 
         return False
@@ -495,7 +510,11 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                     "reason": reason,
                 }
             )
-            logger.info(f"Deferred task: {task.name} ({task_id}) until {defer_until}")
+            # Sanitize for logging (CWE-117)
+            safe_name = _sanitize_for_log(task.name)
+            safe_task_id = _sanitize_for_log(task_id)
+            safe_defer = _sanitize_for_log(defer_until, max_length=30)
+            logger.info(f"Deferred task: {safe_name} ({safe_task_id}) until {safe_defer}")
             return True
 
         return False

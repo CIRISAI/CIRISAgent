@@ -362,4 +362,6 @@ class TestSelfCustodySecurityInvariants:
             if "register-key" in req["url"]:
                 assert "ed25519_public_key" in json_data
                 # Public key should be hex-encoded (32 bytes = 64 hex chars)
-                assert len(json_data["ed25519_public_key"]) == 64, f"Expected 64 hex chars, got {len(json_data['ed25519_public_key'])}"
+                assert (
+                    len(json_data["ed25519_public_key"]) == 64
+                ), f"Expected 64 hex chars, got {len(json_data['ed25519_public_key'])}"

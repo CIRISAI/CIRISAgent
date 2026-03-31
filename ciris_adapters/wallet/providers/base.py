@@ -10,14 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from ..schemas import (
-    AccountDetails,
-    Balance,
-    PaymentRequest,
-    PaymentVerification,
-    Transaction,
-    TransactionResult,
-)
+from ..schemas import AccountDetails, Balance, PaymentRequest, PaymentVerification, Transaction, TransactionResult
 
 
 class WalletProvider(ABC):

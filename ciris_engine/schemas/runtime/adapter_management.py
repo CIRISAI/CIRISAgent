@@ -198,6 +198,10 @@ class ModuleTypeInfo(BaseModel):
     )
     platform_available: bool = Field(True, description="Whether this adapter is available on the current platform")
     internal_only: bool = Field(False, description="If True, adapter is hidden from UI and cannot be manually loaded")
+    # Interactive configuration (wizard) support
+    has_interactive_config: bool = Field(
+        False, description="Whether this adapter has interactive configuration (wizard workflow)"
+    )
 
     model_config = ConfigDict(defer_build=True)
 

@@ -138,16 +138,13 @@ class RecursiveProcessingPhase:
         self._log_retry_start(thought.thought_id, conscience_result, benchmark_mode, max_retries)
 
         result = await self._execute_retry_loop(
-            thought_item, thought, thought_context, dma_results,
-            conscience_result, benchmark_mode, max_retries
+            thought_item, thought, thought_context, dma_results, conscience_result, benchmark_mode, max_retries
         )
 
         logger.info(f"[RECURSIVE] {_LOG_SEPARATOR_MAJOR}")
         return result if result else (action_result, conscience_result)
 
-    def _log_retry_start(
-        self, thought_id: str, conscience_result: Any, benchmark_mode: bool, max_retries: int
-    ) -> None:
+    def _log_retry_start(self, thought_id: str, conscience_result: Any, benchmark_mode: bool, max_retries: int) -> None:
         """Log the start of recursive retry processing."""
         logger.info(f"[RECURSIVE] {_LOG_SEPARATOR_MAJOR}")
         logger.info(f"[RECURSIVE] Conscience override to PONDER for thought {thought_id}")
@@ -212,9 +209,7 @@ class RecursiveProcessingPhase:
         retry_count: int,
     ) -> Optional[RetryAttemptResult]:
         """Execute a single retry attempt, returning the result or None on failure."""
-        retry_result = await self._recursive_aspdma_step(
-            thought_item, thought_context, dma_results, current_conscience
-        )
+        retry_result = await self._recursive_aspdma_step(thought_item, thought_context, dma_results, current_conscience)
 
         if not retry_result:
             logger.warning(f"[RECURSIVE] ✗ Retry {retry_count} - ASPDMA returned no result, stopping")
@@ -228,7 +223,9 @@ class RecursiveProcessingPhase:
 
         passed = not conscience_result.overridden
         if not passed:
-            logger.warning(f"[RECURSIVE] ✗ Retry {retry_count} - Conscience override: {conscience_result.override_reason}")
+            logger.warning(
+                f"[RECURSIVE] ✗ Retry {retry_count} - Conscience override: {conscience_result.override_reason}"
+            )
 
         return RetryAttemptResult(
             action_result=retry_result,

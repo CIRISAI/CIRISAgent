@@ -387,7 +387,9 @@ Adhere strictly to the schema for your JSON output.
 
         cached_tools = self._get_cached_tools()
         if not cached_tools:
-            logger.warning("[CONTEXT] No cached tools available for tool summaries - tools may not have been pre-cached!")
+            logger.warning(
+                "[CONTEXT] No cached tools available for tool summaries - tools may not have been pre-cached!"
+            )
             return ""
 
         logger.info(f"[CONTEXT] Building tool summaries for {len(cached_tools)} cached tools")

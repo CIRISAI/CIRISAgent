@@ -154,10 +154,7 @@ class VerifyTrustTests:
             # Check for hardware-backed indicator
             if self.expectations.hardware_backed:
                 # Should show HW-AES or ANDROID_KEYSTORE or Hardware
-                if any(
-                    x in screen_text.upper()
-                    for x in ["HW-AES", "ANDROID_KEYSTORE", "HARDWARE", "HARDWARE-BACKED"]
-                ):
+                if any(x in screen_text.upper() for x in ["HW-AES", "ANDROID_KEYSTORE", "HARDWARE", "HARDWARE-BACKED"]):
                     return TestReport(
                         name="key_storage_display",
                         result=TestResult.PASSED,
@@ -473,9 +470,7 @@ class VerifyTrustTests:
             )
 
 
-def run_verify_trust_tests(
-    device_id: Optional[str] = None, verbose: bool = False
-) -> Tuple[bool, List[TestReport]]:
+def run_verify_trust_tests(device_id: Optional[str] = None, verbose: bool = False) -> Tuple[bool, List[TestReport]]:
     """
     Run verify trust page tests.
 

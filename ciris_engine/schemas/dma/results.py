@@ -135,7 +135,15 @@ class EthicalDMAResult(BaseModel):
     )
 
     # Validators to handle LLMs returning null or arrays instead of strings
-    @field_validator("subject_of_evaluation", "stakeholders", "conflicts", "proportionality_assessment", "reasoning", "alignment_check", mode="before")
+    @field_validator(
+        "subject_of_evaluation",
+        "stakeholders",
+        "conflicts",
+        "proportionality_assessment",
+        "reasoning",
+        "alignment_check",
+        mode="before",
+    )
     @classmethod
     def coerce_string_fields(cls, v: Any) -> str:
         return _coerce_to_string(v)
@@ -226,7 +234,9 @@ class ASPDMALLMResult(BaseModel):
 
     # === TOOL parameters ===
     # NOTE: ASPDMA only selects the tool NAME. TSASPDMA extracts parameters using full tool documentation.
-    tool_name: Optional[str] = Field(None, description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters.")
+    tool_name: Optional[str] = Field(
+        None, description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters."
+    )
 
     # === OBSERVE parameters ===
     observe_active: bool = Field(True, description="Whether observation is active (for OBSERVE)")
@@ -335,9 +345,7 @@ def _create_params_for_action(
     """
     # Dispatch table mapping action types to param creators
     dispatch: dict[HandlerActionType, Callable[[], ActionParams]] = {
-        HandlerActionType.SPEAK: lambda: SpeakParams(
-            channel_id=channel_id, content=llm_result.speak_content or ""
-        ),
+        HandlerActionType.SPEAK: lambda: SpeakParams(channel_id=channel_id, content=llm_result.speak_content or ""),
         HandlerActionType.PONDER: lambda: PonderParams(
             channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"]
         ),
@@ -356,9 +364,7 @@ def _create_params_for_action(
             name=llm_result.tool_name or "unknown_tool",
             parameters={},  # ASPDMA only selects tool name; TSASPDMA extracts parameters
         ),
-        HandlerActionType.OBSERVE: lambda: ObserveParams(
-            channel_id=channel_id, active=llm_result.observe_active
-        ),
+        HandlerActionType.OBSERVE: lambda: ObserveParams(channel_id=channel_id, active=llm_result.observe_active),
         HandlerActionType.MEMORIZE: lambda: _create_memorize_params(llm_result, channel_id),
         HandlerActionType.RECALL: lambda: _create_recall_params(llm_result, channel_id),
         HandlerActionType.FORGET: lambda: _create_forget_params(llm_result, channel_id),

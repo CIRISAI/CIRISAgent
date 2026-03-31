@@ -81,9 +81,36 @@ data class CreditStatus(
     val hasCredit: Boolean = false,
     val creditsRemaining: Int = 0,
     val freeUsesRemaining: Int = 0,
+    val dailyFreeUsesRemaining: Int = 0,
+    val dailyFreeUsesLimit: Int = 2,
     val planName: String? = null,
     val isLoaded: Boolean = false
-)
+) {
+    /**
+     * Total available uses (paid + free + daily free)
+     */
+    val totalAvailable: Int get() = creditsRemaining + freeUsesRemaining + dailyFreeUsesRemaining
+
+    /**
+     * Whether user can send a message (has any credits/uses available)
+     */
+    val canSendMessage: Boolean get() = hasCredit || totalAvailable > 0
+
+    /**
+     * Calculate hours until next midnight UTC (when daily credits renew).
+     * Returns a value between 0 and 24.
+     */
+    fun hoursUntilRenewal(): Int {
+        val now = Clock.System.now()
+        val currentHourUtc = (now.toEpochMilliseconds() / 3600000) % 24
+        return (24 - currentHourUtc.toInt()) % 24
+    }
+
+    /**
+     * Whether daily credits will renew (user has used some daily credits)
+     */
+    val willRenew: Boolean get() = dailyFreeUsesRemaining < dailyFreeUsesLimit
+}
 
 /**
  * Trust status for trust shield display
@@ -426,6 +453,20 @@ class InteractViewModel(
             return
         }
 
+        // Pre-flight credit check - only when using CIRIS proxy
+        val currentCredits = _creditStatus.value
+        if (_llmHealth.value.isCirisProxy && currentCredits.isLoaded && !currentCredits.canSendMessage) {
+            logWarn(method, "No credits available - blocking send")
+            val errorMessage = ChatMessage(
+                id = generateMessageId(),
+                text = LocalizationHelper.getString("mobile.credits_no_credits"),
+                type = MessageType.SYSTEM,
+                timestamp = Clock.System.now()
+            )
+            _messages.value = (_messages.value + errorMessage).takeLast(50)
+            return
+        }
+
         logInfo(method, "Sending message: '${text.take(50)}...' with ${files.size} attachments")
 
         viewModelScope.launch {
@@ -507,14 +548,25 @@ class InteractViewModel(
                     logInfo(method, "Timeout during send - response will arrive via SSE")
                     _processingStatus.value = LocalizationHelper.getString("mobile.processing_generic")
                 } else {
+                    // Determine user-friendly error message
+                    val userFriendlyMessage = getUserFriendlyErrorMessage(errorMsg)
                     val errorMessage = ChatMessage(
                         id = generateMessageId(),
-                        text = "Failed to send message: ${e.message}",
+                        text = userFriendlyMessage,
                         type = MessageType.SYSTEM,
                         timestamp = Clock.System.now()
                     )
-                    _messages.value = (_messages.value + errorMessage).takeLast(20)
+                    _messages.value = (_messages.value + errorMessage).takeLast(50)
                     _processingStatus.value = ""
+
+                    // If it's a credit error, refresh credit status
+                    if (errorMsg.contains("credit", ignoreCase = true) ||
+                        errorMsg.contains("insufficient", ignoreCase = true) ||
+                        errorMsg.contains("payment", ignoreCase = true)) {
+                        viewModelScope.launch {
+                            fetchHealthData()
+                        }
+                    }
                 }
             } finally {
                 _isSending.value = false
@@ -739,10 +791,11 @@ class InteractViewModel(
                             hasCredit = credits.hasCredit,
                             creditsRemaining = credits.creditsRemaining,
                             freeUsesRemaining = credits.freeUsesRemaining,
+                            dailyFreeUsesRemaining = credits.dailyFreeUsesRemaining ?: 0,
                             planName = credits.planName,
                             isLoaded = true
                         )
-                        logDebug(method, "Credits: remaining=${credits.creditsRemaining}")
+                        logDebug(method, "Credits: paid=${credits.creditsRemaining}, free=${credits.freeUsesRemaining}, daily=${credits.dailyFreeUsesRemaining}")
                     } catch (e: Exception) {
                         logWarn(method, "Failed to fetch credits: ${e.message}")
                     }
@@ -1350,6 +1403,76 @@ class InteractViewModel(
 
     private fun generateMessageId(): String {
         return "msg_${Clock.System.now().toEpochMilliseconds()}"
+    }
+
+    /**
+     * Convert raw error message to user-friendly localized message.
+     * Avoids showing raw JSON or technical details to users.
+     */
+    private fun getUserFriendlyErrorMessage(rawError: String): String {
+        val method = "getUserFriendlyErrorMessage"
+        val lowerError = rawError.lowercase()
+
+        return when {
+            // Credit/billing errors
+            lowerError.contains("insufficient") && lowerError.contains("credit") -> {
+                logDebug(method, "Detected credit insufficiency error")
+                LocalizationHelper.getString("mobile.credits_no_credits")
+            }
+            lowerError.contains("no credit") || lowerError.contains("out of credit") -> {
+                logDebug(method, "Detected no credits error")
+                LocalizationHelper.getString("mobile.credits_no_credits")
+            }
+            lowerError.contains("payment") || lowerError.contains("billing") -> {
+                logDebug(method, "Detected payment/billing error")
+                LocalizationHelper.getString("mobile.credits_purchase_required")
+            }
+
+            // Network errors
+            lowerError.contains("network") || lowerError.contains("unreachable") ||
+            lowerError.contains("connection refused") || lowerError.contains("no route") -> {
+                logDebug(method, "Detected network error")
+                LocalizationHelper.getString("mobile.credits_error_network")
+            }
+
+            // Server errors
+            lowerError.contains("500") || lowerError.contains("502") ||
+            lowerError.contains("503") || lowerError.contains("504") ||
+            lowerError.contains("internal server") || lowerError.contains("service unavailable") -> {
+                logDebug(method, "Detected server error")
+                LocalizationHelper.getString("mobile.credits_error_server")
+            }
+
+            // Auth errors - don't show raw 401
+            lowerError.contains("401") || lowerError.contains("unauthorized") ||
+            lowerError.contains("authentication") -> {
+                logDebug(method, "Detected auth error")
+                LocalizationHelper.getString("mobile.credits_error_generic")
+            }
+
+            // JSON parse errors - hide technical details
+            lowerError.contains("json") || lowerError.contains("parse") ||
+            lowerError.contains("deserialize") || lowerError.contains("serialization") -> {
+                logDebug(method, "Detected parsing error")
+                LocalizationHelper.getString("mobile.credits_error_server")
+            }
+
+            // Generic fallback - use localized message with truncated error
+            else -> {
+                // Only include error summary, not full JSON/stack traces
+                val cleanError = rawError
+                    .substringBefore("{")  // Remove JSON
+                    .substringBefore("\n") // Take first line only
+                    .trim()
+                    .take(100)  // Limit length
+
+                if (cleanError.isNotEmpty() && !cleanError.contains("Exception")) {
+                    LocalizationHelper.getString("mobile.processing_failed", mapOf("error" to cleanError))
+                } else {
+                    LocalizationHelper.getString("mobile.credits_error_generic")
+                }
+            }
+        }
     }
 
     /**

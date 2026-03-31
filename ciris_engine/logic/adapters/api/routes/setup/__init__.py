@@ -26,7 +26,7 @@ The legacy _setup_legacy.py file has been deleted.
 from fastapi import APIRouter
 
 # Import sub-routers
-from . import attestation, complete, config, device_auth_routes, llm_routes, providers, status
+from . import attestation, complete, config, device_auth_routes, llm_routes, location, providers, status
 
 # Complete helpers - imported from complete.py module
 from .complete import _create_founding_partnership, _create_setup_users, _save_setup_config
@@ -68,6 +68,9 @@ from .llm_validation import (
     _validate_llm_connection,
 )
 
+# Location models - imported from location.py module
+from .location import CountriesResponse, CountryInfo, LocationResult, LocationSearchResponse
+
 # Models - imported from models.py module
 from .models import (
     AdapterConfig,
@@ -103,9 +106,15 @@ router.include_router(device_auth_routes.router)
 router.include_router(config.router)
 router.include_router(complete.router)
 router.include_router(attestation.router, tags=["attestation"])
+router.include_router(location.router, tags=["location"])
 
 __all__ = [
     "router",
+    # Location models
+    "CountriesResponse",
+    "CountryInfo",
+    "LocationResult",
+    "LocationSearchResponse",
     # Models
     "AdapterConfig",
     "AgentTemplate",

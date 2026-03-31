@@ -229,6 +229,10 @@ def parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str)
     # Check platform availability
     platform_available = check_platform_requirements_satisfied(platform_requirements)
 
+    # Check for interactive configuration (wizard workflow)
+    interactive_config = manifest_data.get("interactive_config")
+    has_interactive_config = bool(interactive_config and isinstance(interactive_config, dict))
+
     return ModuleTypeInfo(
         module_id=module_id,
         name=module_info.get("name", module_id),
@@ -250,6 +254,7 @@ def parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str)
         platform_requirements_rationale=platform_requirements_rationale,
         platform_available=platform_available,
         internal_only=module_info.get("internal_only", False),
+        has_interactive_config=has_interactive_config,
     )
 
 

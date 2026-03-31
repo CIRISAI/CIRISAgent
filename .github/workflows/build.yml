@@ -265,11 +265,12 @@ jobs:
             echo "should_run=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: SonarQube Scan
+      - name: SonarCloud Scan
         if: steps.check_sonar.outputs.should_run == 'true'
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarcloud-github-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Platform-specific wheels: each runner builds the desktop JAR for its OS,
   # then setup.py detects the JAR platform and tags the wheel accordingly.

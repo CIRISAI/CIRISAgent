@@ -140,6 +140,7 @@ async def run_dma_with_retries(
 
     # Emit error to UI (fire and forget - don't block on emission)
     from ciris_engine.logic.utils import error_emitter
+
     task = asyncio.create_task(
         error_emitter.emit_dma_failure(
             dma_name=run_fn.__name__,

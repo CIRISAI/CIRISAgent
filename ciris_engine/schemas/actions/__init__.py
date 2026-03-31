@@ -5,8 +5,9 @@ These schemas define the parameters and results for all agent actions.
 """
 
 # Import all action parameters
-from .parameters import (  # External actions; Control actions; Memory actions; Terminal action
+from .parameters import (  # External actions; Control actions; Memory actions; Terminal action; Dream
     DeferParams,
+    DreamConsolidationParams,
     ForgetParams,
     MemorizeParams,
     ObserveParams,
@@ -34,4 +35,6 @@ __all__ = [
     "ForgetParams",
     # Terminal
     "TaskCompleteParams",
+    # Dream
+    "DreamConsolidationParams",
 ]

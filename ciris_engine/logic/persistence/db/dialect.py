@@ -5,19 +5,13 @@ Provides lightweight SQL translation to support both SQLite and PostgreSQL
 backends with a single connection string configuration.
 """
 
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import unquote, urlparse
 
+from ciris_engine.logic.persistence.db.types import Dialect
+
 if TYPE_CHECKING:
     from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
-
-
-class Dialect(str, Enum):
-    """Supported database dialects."""
-
-    SQLITE = "sqlite"
-    POSTGRESQL = "postgresql"
 
 
 def parse_postgres_url(url: str) -> tuple[str, str, str, int, str, str, str]:

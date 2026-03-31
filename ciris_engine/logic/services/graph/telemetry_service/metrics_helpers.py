@@ -224,9 +224,7 @@ def extract_governance_metrics(
     return results
 
 
-def compute_accord_metrics(
-    telemetry: Dict[str, Dict[str, ServiceTelemetryData]]
-) -> Dict[str, Union[float, int, str]]:
+def compute_accord_metrics(telemetry: Dict[str, Dict[str, ServiceTelemetryData]]) -> Dict[str, Union[float, int, str]]:
     """
     Compute accord/ethics metrics from governance services.
 

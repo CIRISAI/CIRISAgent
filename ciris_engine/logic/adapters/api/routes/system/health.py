@@ -78,19 +78,20 @@ async def get_startup_status() -> SuccessResponse[StartupStatusResponse]:
     Returns service initialization count and phase.
     Unauthenticated - available during boot before auth is ready.
     """
-    from ciris_engine.logic.runtime.service_initializer import (
+    from ciris_engine.logic.runtime.startup_logging import (
         SERVICE_NAMES,
         TOTAL_CORE_SERVICES,
-        _current_phase,
-        _services_started,
+        get_current_phase,
+        get_services_started,
     )
 
-    started_names = [SERVICE_NAMES[i - 1] for i in sorted(_services_started) if 1 <= i <= len(SERVICE_NAMES)]
+    services_started = get_services_started()
+    started_names = [SERVICE_NAMES[i - 1] for i in sorted(services_started) if 1 <= i <= len(SERVICE_NAMES)]
 
     return SuccessResponse(
         data=StartupStatusResponse(
-            phase=_current_phase,
-            services_online=len(_services_started),
+            phase=get_current_phase(),
+            services_online=len(services_started),
             services_total=TOTAL_CORE_SERVICES,
             service_names=started_names,
         )

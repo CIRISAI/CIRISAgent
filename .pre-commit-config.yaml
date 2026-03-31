@@ -98,6 +98,17 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      # Localization sync - Blocks if language files are out of sync
+      - id: localization-sync
+        name: Localization Sync Check
+        entry: python tools/dev/check_localization_sync.py
+        language: python
+        pass_filenames: false
+        files: '^localization/.*\.json$'
+        always_run: false
+        stages: [pre-commit]
+        verbose: true
+
 # Configuration
 default_language_version:
   python: python3.12

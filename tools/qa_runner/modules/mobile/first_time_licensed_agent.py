@@ -160,13 +160,10 @@ class FirstTimeLicensedAgentTester:
             status = health.get("status", "unknown")
             version = health.get("version", "unknown")
             if status == "healthy":
-                return StepResult("health", TestStatus.PASSED, time.time() - start,
-                                  f"API healthy v{version}")
-            return StepResult("health", TestStatus.FAILED, time.time() - start,
-                              f"Unhealthy: {status}", health)
+                return StepResult("health", TestStatus.PASSED, time.time() - start, f"API healthy v{version}")
+            return StepResult("health", TestStatus.FAILED, time.time() - start, f"Unhealthy: {status}", health)
         except Exception as e:
-            return StepResult("health", TestStatus.ERROR, time.time() - start,
-                              f"Cannot reach API: {e}")
+            return StepResult("health", TestStatus.ERROR, time.time() - start, f"Cannot reach API: {e}")
 
     def step_first_run(self) -> StepResult:
         """Step 2: Verify agent is in first-run mode."""
@@ -178,13 +175,18 @@ class FirstTimeLicensedAgentTester:
             setup_required = setup.get("setup_required", False)
 
             if is_first_run or setup_required:
-                return StepResult("first_run", TestStatus.PASSED, time.time() - start,
-                                  "First-run mode confirmed", setup)
-            return StepResult("first_run", TestStatus.FAILED, time.time() - start,
-                              "Agent is already configured (not first-run)", setup)
+                return StepResult(
+                    "first_run", TestStatus.PASSED, time.time() - start, "First-run mode confirmed", setup
+                )
+            return StepResult(
+                "first_run",
+                TestStatus.FAILED,
+                time.time() - start,
+                "Agent is already configured (not first-run)",
+                setup,
+            )
         except Exception as e:
-            return StepResult("first_run", TestStatus.ERROR, time.time() - start,
-                              f"Status check failed: {e}")
+            return StepResult("first_run", TestStatus.ERROR, time.time() - start, f"Status check failed: {e}")
 
     def step_enumerate(self) -> StepResult:
         """Step 3: Enumerate providers, templates, adapters."""
@@ -192,9 +194,11 @@ class FirstTimeLicensedAgentTester:
         details: Dict[str, Any] = {}
         errors: List[str] = []
 
-        for name, path in [("providers", "/v1/setup/providers"),
-                           ("templates", "/v1/setup/templates"),
-                           ("adapters", "/v1/setup/adapters")]:
+        for name, path in [
+            ("providers", "/v1/setup/providers"),
+            ("templates", "/v1/setup/templates"),
+            ("adapters", "/v1/setup/adapters"),
+        ]:
             try:
                 data = self._get(path)
                 items = data.get("data", [])
@@ -203,20 +207,24 @@ class FirstTimeLicensedAgentTester:
                 errors.append(f"{name}: {e}")
 
         if errors:
-            return StepResult("enumerate", TestStatus.FAILED, time.time() - start,
-                              f"Errors: {'; '.join(errors)}", details)
-        return StepResult("enumerate", TestStatus.PASSED, time.time() - start,
-                          f"providers={details.get('providers')}, "
-                          f"templates={details.get('templates')}, "
-                          f"adapters={details.get('adapters')}",
-                          details)
+            return StepResult(
+                "enumerate", TestStatus.FAILED, time.time() - start, f"Errors: {'; '.join(errors)}", details
+            )
+        return StepResult(
+            "enumerate",
+            TestStatus.PASSED,
+            time.time() - start,
+            f"providers={details.get('providers')}, "
+            f"templates={details.get('templates')}, "
+            f"adapters={details.get('adapters')}",
+            details,
+        )
 
     def step_connect_node(self) -> StepResult:
         """Step 4: Initiate device auth via portal."""
         start = time.time()
         try:
-            data = self._post("/v1/setup/connect-node",
-                              {"node_url": self.portal_url}, timeout=30)
+            data = self._post("/v1/setup/connect-node", {"node_url": self.portal_url}, timeout=30)
             rd = data.get("data", data)
 
             device_code = rd.get("device_code", "")
@@ -225,20 +233,26 @@ class FirstTimeLicensedAgentTester:
             expires_in = rd.get("expires_in", 0)
 
             if not device_code:
-                return StepResult("connect_node", TestStatus.FAILED, time.time() - start,
-                                  f"No device_code: {list(rd.keys())}", rd)
+                return StepResult(
+                    "connect_node", TestStatus.FAILED, time.time() - start, f"No device_code: {list(rd.keys())}", rd
+                )
 
-            return StepResult("connect_node", TestStatus.PASSED, time.time() - start,
-                              f"Code: {user_code}, expires: {expires_in}s",
-                              {"device_code": device_code,
-                               "user_code": user_code,
-                               "verification_uri_complete": verification_uri,
-                               "portal_url": rd.get("portal_url", self.portal_url),
-                               "expires_in": expires_in,
-                               "interval": rd.get("interval", 5)})
+            return StepResult(
+                "connect_node",
+                TestStatus.PASSED,
+                time.time() - start,
+                f"Code: {user_code}, expires: {expires_in}s",
+                {
+                    "device_code": device_code,
+                    "user_code": user_code,
+                    "verification_uri_complete": verification_uri,
+                    "portal_url": rd.get("portal_url", self.portal_url),
+                    "expires_in": expires_in,
+                    "interval": rd.get("interval", 5),
+                },
+            )
         except Exception as e:
-            return StepResult("connect_node", TestStatus.ERROR, time.time() - start,
-                              f"Connect failed: {e}")
+            return StepResult("connect_node", TestStatus.ERROR, time.time() - start, f"Connect failed: {e}")
 
     def step_poll_auth(self, device_code: str, portal_url: str) -> StepResult:
         """Step 5: Poll until portal authorization completes."""
@@ -267,37 +281,53 @@ class FirstTimeLicensedAgentTester:
                     tier = rd.get("stewardship_tier", 0)
 
                     return StepResult(
-                        "poll_auth", TestStatus.PASSED, time.time() - start,
+                        "poll_auth",
+                        TestStatus.PASSED,
+                        time.time() - start,
                         f"Authorized! template={template}, adapters={adapters}, "
                         f"key={'yes' if has_key else 'NO'}, tier={tier}",
-                        {"polls": poll_count, **rd})
+                        {"polls": poll_count, **rd},
+                    )
 
                 if poll_status == "error":
-                    return StepResult("poll_auth", TestStatus.FAILED, time.time() - start,
-                                      f"Rejected: {rd.get('error', '?')}",
-                                      {"polls": poll_count})
+                    return StepResult(
+                        "poll_auth",
+                        TestStatus.FAILED,
+                        time.time() - start,
+                        f"Rejected: {rd.get('error', '?')}",
+                        {"polls": poll_count},
+                    )
 
                 elapsed = int(time.time() - start)
-                print(f"\r  Waiting for Portal auth... "
-                      f"({elapsed}s / {self.poll_timeout}s, poll #{poll_count})",
-                      end="", flush=True)
+                print(
+                    f"\r  Waiting for Portal auth... " f"({elapsed}s / {self.poll_timeout}s, poll #{poll_count})",
+                    end="",
+                    flush=True,
+                )
                 time.sleep(self.poll_interval)
 
             print()
-            return StepResult("poll_auth", TestStatus.FAILED, time.time() - start,
-                              f"Timeout after {poll_count} polls ({self.poll_timeout}s)",
-                              {"polls": poll_count})
+            return StepResult(
+                "poll_auth",
+                TestStatus.FAILED,
+                time.time() - start,
+                f"Timeout after {poll_count} polls ({self.poll_timeout}s)",
+                {"polls": poll_count},
+            )
         except Exception as e:
-            return StepResult("poll_auth", TestStatus.ERROR, time.time() - start,
-                              f"Poll error: {e}")
+            return StepResult("poll_auth", TestStatus.ERROR, time.time() - start, f"Poll error: {e}")
 
     def step_complete_setup(self) -> StepResult:
         """Step 6: POST /v1/setup/complete with provisioned + LLM config."""
         start = time.time()
 
         if not self.llm_api_key:
-            return StepResult("complete_setup", TestStatus.SKIPPED, time.time() - start,
-                              "No LLM API key provided (--llm-key or --llm-key-file)")
+            return StepResult(
+                "complete_setup",
+                TestStatus.SKIPPED,
+                time.time() - start,
+                "No LLM API key provided (--llm-key or --llm-key-file)",
+            )
 
         prov = self._provisioned
 
@@ -337,15 +367,22 @@ class FirstTimeLicensedAgentTester:
 
             if status_code == 200:
                 rd = body.get("data", body)
-                return StepResult("complete_setup", TestStatus.PASSED, time.time() - start,
-                                  f"Setup completed: {rd.get('message', 'ok')}",
-                                  {"http_status": status_code, **rd})
-            return StepResult("complete_setup", TestStatus.FAILED, time.time() - start,
-                              f"HTTP {status_code}: {body}",
-                              {"http_status": status_code, "body": body})
+                return StepResult(
+                    "complete_setup",
+                    TestStatus.PASSED,
+                    time.time() - start,
+                    f"Setup completed: {rd.get('message', 'ok')}",
+                    {"http_status": status_code, **rd},
+                )
+            return StepResult(
+                "complete_setup",
+                TestStatus.FAILED,
+                time.time() - start,
+                f"HTTP {status_code}: {body}",
+                {"http_status": status_code, "body": body},
+            )
         except Exception as e:
-            return StepResult("complete_setup", TestStatus.ERROR, time.time() - start,
-                              f"Setup request failed: {e}")
+            return StepResult("complete_setup", TestStatus.ERROR, time.time() - start, f"Setup request failed: {e}")
 
     def step_verify_login(self) -> StepResult:
         """Step 7: Verify login with the newly created user."""
@@ -354,19 +391,18 @@ class FirstTimeLicensedAgentTester:
             # Small delay for server restart after setup
             time.sleep(3)
 
-            data = self._post("/v1/auth/login",
-                              {"username": self.admin_username,
-                               "password": self.admin_password})
+            data = self._post("/v1/auth/login", {"username": self.admin_username, "password": self.admin_password})
             token = data.get("access_token")
             if token:
                 self.token = token
-                return StepResult("verify_login", TestStatus.PASSED, time.time() - start,
-                                  f"Logged in as {self.admin_username}")
-            return StepResult("verify_login", TestStatus.FAILED, time.time() - start,
-                              f"No access_token: {list(data.keys())}", data)
+                return StepResult(
+                    "verify_login", TestStatus.PASSED, time.time() - start, f"Logged in as {self.admin_username}"
+                )
+            return StepResult(
+                "verify_login", TestStatus.FAILED, time.time() - start, f"No access_token: {list(data.keys())}", data
+            )
         except Exception as e:
-            return StepResult("verify_login", TestStatus.ERROR, time.time() - start,
-                              f"Login failed: {e}")
+            return StepResult("verify_login", TestStatus.ERROR, time.time() - start, f"Login failed: {e}")
 
     def step_verify_configured(self) -> StepResult:
         """Step 8: Verify agent is now configured (not first-run)."""
@@ -383,20 +419,30 @@ class FirstTimeLicensedAgentTester:
             is_first_run = setup.get("is_first_run", True)
 
             if not is_first_run and status == "healthy":
-                return StepResult("verify_configured", TestStatus.PASSED, time.time() - start,
-                                  f"Configured, state={cog_state}",
-                                  {"status": status, "cognitive_state": cog_state,
-                                   "is_first_run": is_first_run})
+                return StepResult(
+                    "verify_configured",
+                    TestStatus.PASSED,
+                    time.time() - start,
+                    f"Configured, state={cog_state}",
+                    {"status": status, "cognitive_state": cog_state, "is_first_run": is_first_run},
+                )
             if is_first_run:
-                return StepResult("verify_configured", TestStatus.FAILED, time.time() - start,
-                                  "Still in first-run mode after setup",
-                                  {"is_first_run": is_first_run, "status": status})
-            return StepResult("verify_configured", TestStatus.FAILED, time.time() - start,
-                              f"Unhealthy after setup: {status}",
-                              {"status": status, "is_first_run": is_first_run})
+                return StepResult(
+                    "verify_configured",
+                    TestStatus.FAILED,
+                    time.time() - start,
+                    "Still in first-run mode after setup",
+                    {"is_first_run": is_first_run, "status": status},
+                )
+            return StepResult(
+                "verify_configured",
+                TestStatus.FAILED,
+                time.time() - start,
+                f"Unhealthy after setup: {status}",
+                {"status": status, "is_first_run": is_first_run},
+            )
         except Exception as e:
-            return StepResult("verify_configured", TestStatus.ERROR, time.time() - start,
-                              f"Health check failed: {e}")
+            return StepResult("verify_configured", TestStatus.ERROR, time.time() - start, f"Health check failed: {e}")
 
     def step_verify_services(self) -> StepResult:
         """Step 9: Check telemetry for services online."""
@@ -412,17 +458,23 @@ class FirstTimeLicensedAgentTester:
             cog = telem.get("cognitive_state")
 
             if online > 0:
-                return StepResult("verify_services", TestStatus.PASSED, time.time() - start,
-                                  f"{online}/{total} services online, state={cog}",
-                                  {"services_online": online, "services_total": total,
-                                   "cognitive_state": cog})
-            return StepResult("verify_services", TestStatus.FAILED, time.time() - start,
-                              f"0/{total} services online",
-                              {"services_online": online, "services_total": total})
+                return StepResult(
+                    "verify_services",
+                    TestStatus.PASSED,
+                    time.time() - start,
+                    f"{online}/{total} services online, state={cog}",
+                    {"services_online": online, "services_total": total, "cognitive_state": cog},
+                )
+            return StepResult(
+                "verify_services",
+                TestStatus.FAILED,
+                time.time() - start,
+                f"0/{total} services online",
+                {"services_online": online, "services_total": total},
+            )
         except Exception as e:
             # Telemetry may not be available yet
-            return StepResult("verify_services", TestStatus.SKIPPED, time.time() - start,
-                              f"Telemetry unavailable: {e}")
+            return StepResult("verify_services", TestStatus.SKIPPED, time.time() - start, f"Telemetry unavailable: {e}")
 
 
 # -- Key file loader ---------------------------------------------------------
@@ -459,6 +511,7 @@ def _resolve_llm_key(provider: str, explicit_key: str, key_file: str) -> str:
 
 
 # -- Runner -------------------------------------------------------------------
+
 
 def run_first_time_licensed_agent(
     base_url: str = "http://localhost:8080",
@@ -549,27 +602,29 @@ def run_first_time_licensed_agent(
     # == Step 5: Poll auth ===================================================
     if not wait:
         # Single poll check only
-        r = run_step(5, "Poll status (single check)", tester.step_poll_auth,
-                     device_code, portal_url_resp)
+        r = run_step(5, "Poll status (single check)", tester.step_poll_auth, device_code, portal_url_resp)
         # Even if pending, report success for the single-check case
         print("\n  [INFO] Use --wait to poll until Portal authorization completes\n")
         return _finish(results, output_dir)
 
-    r = run_step(5, f"Polling for Portal authorization (timeout: {poll_timeout}s)",
-                 tester.step_poll_auth, device_code, portal_url_resp)
+    r = run_step(
+        5,
+        f"Polling for Portal authorization (timeout: {poll_timeout}s)",
+        tester.step_poll_auth,
+        device_code,
+        portal_url_resp,
+    )
     print()
     if r.status != TestStatus.PASSED:
         return _finish(results, output_dir)
 
     # == Step 6: Complete setup ==============================================
-    r = run_step(6, "Complete setup with provisioned credentials",
-                 tester.step_complete_setup)
+    r = run_step(6, "Complete setup with provisioned credentials", tester.step_complete_setup)
     if r.status not in (TestStatus.PASSED, TestStatus.SKIPPED):
         return _finish(results, output_dir)
 
     if r.status == TestStatus.SKIPPED:
-        print("  [INFO] Setup completion skipped (no LLM key). "
-              "Remaining steps will be skipped.")
+        print("  [INFO] Setup completion skipped (no LLM key). " "Remaining steps will be skipped.")
         return _finish(results, output_dir)
 
     # == Step 7: Verify login ================================================
@@ -623,15 +678,25 @@ def _finish(results: List[StepResult], output_dir: str) -> int:
                 "test_suite": "first_time_licensed_agent",
                 "timestamp": timestamp,
                 "results": [
-                    {"name": r.name, "status": r.status.value,
-                     "duration": r.duration, "message": r.message,
-                     "details": r.details}
+                    {
+                        "name": r.name,
+                        "status": r.status.value,
+                        "duration": r.duration,
+                        "message": r.message,
+                        "details": r.details,
+                    }
                     for r in results
                 ],
-                "summary": {"total": len(results), "passed": passed,
-                            "failed": failed, "errors": errors, "skipped": skipped},
+                "summary": {
+                    "total": len(results),
+                    "passed": passed,
+                    "failed": failed,
+                    "errors": errors,
+                    "skipped": skipped,
+                },
             },
-            f, indent=2,
+            f,
+            indent=2,
         )
     print(f"\nResults: {results_file}")
 

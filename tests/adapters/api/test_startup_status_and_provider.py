@@ -24,10 +24,10 @@ from ciris_engine.logic.adapters.api.routes.setup.config import (
 )
 from ciris_engine.logic.adapters.api.routes.system.schemas import StartupStatusResponse
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_request(mock_llm: bool = False) -> Mock:
     """Create a mock FastAPI Request with optional mock_llm runtime."""
@@ -46,6 +46,7 @@ def _make_request(mock_llm: bool = False) -> Mock:
 # ---------------------------------------------------------------------------
 # _is_mock_llm tests
 # ---------------------------------------------------------------------------
+
 
 class TestIsMockLlm:
     def test_from_runtime(self):
@@ -69,22 +70,26 @@ class TestIsMockLlm:
 # _detect_from_explicit_env tests
 # ---------------------------------------------------------------------------
 
+
 class TestDetectFromExplicitEnv:
     def test_returns_none_when_unset(self):
         with patch.dict(os.environ, {}, clear=True):
             assert _detect_from_explicit_env() is None
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("anthropic", "anthropic"),
-        ("claude", "anthropic"),
-        ("google", "google"),
-        ("gemini", "google"),
-        ("openai", "openai"),
-        ("openrouter", "openrouter"),
-        ("groq", "groq"),
-        ("together", "together"),
-        ("openai_compatible", "other"),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("anthropic", "anthropic"),
+            ("claude", "anthropic"),
+            ("google", "google"),
+            ("gemini", "google"),
+            ("openai", "openai"),
+            ("openrouter", "openrouter"),
+            ("groq", "groq"),
+            ("together", "together"),
+            ("openai_compatible", "other"),
+        ],
+    )
     def test_alias_mapping(self, raw, expected):
         with patch.dict(os.environ, {"CIRIS_LLM_PROVIDER": raw}, clear=True):
             assert _detect_from_explicit_env() == expected
@@ -105,6 +110,7 @@ class TestDetectFromExplicitEnv:
 # ---------------------------------------------------------------------------
 # _detect_from_api_keys tests
 # ---------------------------------------------------------------------------
+
 
 class TestDetectFromApiKeys:
     def test_no_keys(self):
@@ -132,22 +138,26 @@ class TestDetectFromApiKeys:
 # _detect_from_base_url tests
 # ---------------------------------------------------------------------------
 
+
 class TestDetectFromBaseUrl:
     def test_no_url(self):
         with patch.dict(os.environ, {}, clear=True):
             assert _detect_from_base_url() is None
 
-    @pytest.mark.parametrize("url,expected", [
-        ("https://openrouter.ai/v1", "openrouter"),
-        ("https://api.groq.com/v1", "groq"),
-        ("https://api.together.xyz/v1", "together"),
-        ("https://api.together.ai/v1", "together"),
-        ("https://api.mistral.ai/v1", "mistral"),
-        ("https://api.deepseek.com/v1", "deepseek"),
-        ("https://api.cohere.com/v1", "cohere"),
-        ("http://localhost:11434", "local"),
-        ("http://127.0.0.1:11434", "local"),
-    ])
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            ("https://openrouter.ai/v1", "openrouter"),
+            ("https://api.groq.com/v1", "groq"),
+            ("https://api.together.xyz/v1", "together"),
+            ("https://api.together.ai/v1", "together"),
+            ("https://api.mistral.ai/v1", "mistral"),
+            ("https://api.deepseek.com/v1", "deepseek"),
+            ("https://api.cohere.com/v1", "cohere"),
+            ("http://localhost:11434", "local"),
+            ("http://127.0.0.1:11434", "local"),
+        ],
+    )
     def test_known_patterns(self, url, expected):
         with patch.dict(os.environ, {"OPENAI_API_BASE": url}, clear=True):
             assert _detect_from_base_url() == expected
@@ -161,6 +171,7 @@ class TestDetectFromBaseUrl:
 # _detect_llm_provider (integration of all detectors)
 # ---------------------------------------------------------------------------
 
+
 class TestDetectLlmProvider:
     def _call(self, request=None, env=None):
         env = env or {}
@@ -169,28 +180,46 @@ class TestDetectLlmProvider:
             return _detect_llm_provider(request)
 
     def test_mock_overrides_all(self):
-        assert self._call(
-            request=_make_request(mock_llm=True),
-            env={"CIRIS_LLM_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "x"},
-        ) == "mockllm"
+        assert (
+            self._call(
+                request=_make_request(mock_llm=True),
+                env={"CIRIS_LLM_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "x"},
+            )
+            == "mockllm"
+        )
 
     def test_explicit_overrides_key(self):
-        assert self._call(env={
-            "CIRIS_LLM_PROVIDER": "google",
-            "ANTHROPIC_API_KEY": "sk-ant-123",
-        }) == "google"
+        assert (
+            self._call(
+                env={
+                    "CIRIS_LLM_PROVIDER": "google",
+                    "ANTHROPIC_API_KEY": "sk-ant-123",
+                }
+            )
+            == "google"
+        )
 
     def test_key_overrides_url(self):
-        assert self._call(env={
-            "ANTHROPIC_API_KEY": "sk-ant-123",
-            "OPENAI_API_BASE": "https://openrouter.ai/v1",
-        }) == "anthropic"
+        assert (
+            self._call(
+                env={
+                    "ANTHROPIC_API_KEY": "sk-ant-123",
+                    "OPENAI_API_BASE": "https://openrouter.ai/v1",
+                }
+            )
+            == "anthropic"
+        )
 
     def test_url_overrides_proxy(self):
-        assert self._call(env={
-            "OPENAI_API_BASE": "https://api.groq.com/v1",
-            "CIRIS_PROXY_URL": "https://proxy.ciris.ai",
-        }) == "groq"
+        assert (
+            self._call(
+                env={
+                    "OPENAI_API_BASE": "https://api.groq.com/v1",
+                    "CIRIS_PROXY_URL": "https://proxy.ciris.ai",
+                }
+            )
+            == "groq"
+        )
 
     def test_ciris_proxy_url(self):
         assert self._call(env={"CIRIS_PROXY_URL": "https://proxy.ciris.ai"}) == "ciris_proxy"
@@ -208,6 +237,7 @@ class TestDetectLlmProvider:
 # ---------------------------------------------------------------------------
 # _detect_api_key_set tests
 # ---------------------------------------------------------------------------
+
 
 class TestDetectApiKeySet:
     def test_openai_key(self):
@@ -260,6 +290,7 @@ class TestDetectApiKeySet:
 # StartupStatusResponse schema tests
 # ---------------------------------------------------------------------------
 
+
 class TestStartupStatusResponse:
     def test_basic_construction(self):
         r = StartupStatusResponse(
@@ -282,16 +313,17 @@ class TestStartupStatusResponse:
 # GET /startup-status endpoint tests
 # ---------------------------------------------------------------------------
 
+
 class TestStartupStatusEndpoint:
     @pytest.mark.asyncio
     async def test_returns_startup_status(self):
         from ciris_engine.logic.adapters.api.routes.system.health import get_startup_status
 
         with patch(
-            "ciris_engine.logic.runtime.service_initializer._services_started",
+            "ciris_engine.logic.runtime.startup_logging._services_started",
             new={1, 2, 3},
         ), patch(
-            "ciris_engine.logic.runtime.service_initializer._current_phase",
+            "ciris_engine.logic.runtime.startup_logging._current_phase",
             new="RESUME (test)",
         ):
             result = await get_startup_status()
@@ -307,10 +339,10 @@ class TestStartupStatusEndpoint:
         from ciris_engine.logic.adapters.api.routes.system.health import get_startup_status
 
         with patch(
-            "ciris_engine.logic.runtime.service_initializer._services_started",
+            "ciris_engine.logic.runtime.startup_logging._services_started",
             new=set(),
         ), patch(
-            "ciris_engine.logic.runtime.service_initializer._current_phase",
+            "ciris_engine.logic.runtime.startup_logging._current_phase",
             new="STARTUP",
         ):
             result = await get_startup_status()
@@ -322,10 +354,10 @@ class TestStartupStatusEndpoint:
         from ciris_engine.logic.adapters.api.routes.system.health import get_startup_status
 
         with patch(
-            "ciris_engine.logic.runtime.service_initializer._services_started",
+            "ciris_engine.logic.runtime.startup_logging._services_started",
             new=set(range(1, 23)),
         ), patch(
-            "ciris_engine.logic.runtime.service_initializer._current_phase",
+            "ciris_engine.logic.runtime.startup_logging._current_phase",
             new="RESUME (0 remaining services)",
         ):
             result = await get_startup_status()
@@ -337,10 +369,10 @@ class TestStartupStatusEndpoint:
         from ciris_engine.logic.adapters.api.routes.system.health import get_startup_status
 
         with patch(
-            "ciris_engine.logic.runtime.service_initializer._services_started",
+            "ciris_engine.logic.runtime.startup_logging._services_started",
             new={0, 1, 23, 99},  # 0 and 23/99 are out of range
         ), patch(
-            "ciris_engine.logic.runtime.service_initializer._current_phase",
+            "ciris_engine.logic.runtime.startup_logging._current_phase",
             new="STARTUP",
         ):
             result = await get_startup_status()
@@ -351,6 +383,7 @@ class TestStartupStatusEndpoint:
 # ---------------------------------------------------------------------------
 # MockLLM _log_service_started integration in loaders
 # ---------------------------------------------------------------------------
+
 
 class TestMockLlmLogging:
     def test_adapter_loader_calls_log_service_started(self):
@@ -366,9 +399,7 @@ class TestMockLlmLogging:
         service_decl.type = ServiceType.LLM
         manifest.services = [service_decl]
 
-        with patch(
-            "ciris_engine.logic.runtime.service_initializer._log_service_started"
-        ) as mock_log:
+        with patch("ciris_engine.logic.runtime.startup_logging._log_service_started") as mock_log:
             loader._log_mock_llm_startup(manifest)
             mock_log.assert_called_once_with(14, "MockLLMService")
 
@@ -380,9 +411,7 @@ class TestMockLlmLogging:
         manifest = Mock()
         manifest.module.is_mock = False
 
-        with patch(
-            "ciris_engine.logic.runtime.service_initializer._log_service_started"
-        ) as mock_log:
+        with patch("ciris_engine.logic.runtime.startup_logging._log_service_started") as mock_log:
             loader._log_mock_llm_startup(manifest)
             mock_log.assert_not_called()
 
@@ -398,8 +427,6 @@ class TestMockLlmLogging:
         service_decl.type = ServiceType.COMMUNICATION
         manifest.services = [service_decl]
 
-        with patch(
-            "ciris_engine.logic.runtime.service_initializer._log_service_started"
-        ) as mock_log:
+        with patch("ciris_engine.logic.runtime.startup_logging._log_service_started") as mock_log:
             loader._log_mock_llm_startup(manifest)
             mock_log.assert_not_called()

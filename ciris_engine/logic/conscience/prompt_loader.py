@@ -144,9 +144,7 @@ class ConsciencePromptLoader:
         prompts = self.load_prompts(conscience_type)
         return prompts.system_prompt
 
-    def get_user_prompt(
-        self, conscience_type: str, image_context: Optional[str] = None, **kwargs: str
-    ) -> str:
+    def get_user_prompt(self, conscience_type: str, image_context: Optional[str] = None, **kwargs: str) -> str:
         """Build user prompt from template with optional image context.
 
         Args:

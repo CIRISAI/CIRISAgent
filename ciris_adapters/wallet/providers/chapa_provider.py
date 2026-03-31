@@ -178,7 +178,7 @@ class ChapaProvider(WalletProvider):
 
         # Update balance
         fee = amount * Decimal("0.015")
-        self._balance.available -= (amount + fee)
+        self._balance.available -= amount + fee
         self._balance.total = self._balance.available + self._balance.pending
 
         return TransactionResult(

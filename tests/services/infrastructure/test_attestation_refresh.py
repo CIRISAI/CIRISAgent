@@ -53,9 +53,7 @@ class TestCheckIntegrityDegradation:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._baseline_attestation = None
@@ -120,12 +118,8 @@ class TestCheckIntegrityDegradation:
 
     def test_multiple_degradations_reported(self):
         svc = self._make_service()
-        svc._baseline_attestation = _make_result(
-            binary_ok=True, env_ok=True, file_integrity_ok=True
-        )
-        current = _make_result(
-            binary_ok=False, env_ok=False, file_integrity_ok=False
-        )
+        svc._baseline_attestation = _make_result(binary_ok=True, env_ok=True, file_integrity_ok=True)
+        current = _make_result(binary_ok=False, env_ok=False, file_integrity_ok=False)
 
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.service.request_global_shutdown"
@@ -195,9 +189,7 @@ class TestGetCachedAttestationStale:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_cache = None
@@ -261,9 +253,7 @@ class TestAttestationRefreshLoop:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_in_progress = False
@@ -296,9 +286,7 @@ class TestAttestationRefreshLoop:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_in_progress = False
@@ -332,9 +320,7 @@ class TestAttestationRefreshLoop:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_in_progress = True  # Simulate startup in progress
@@ -372,9 +358,7 @@ class TestAttestationRefreshLoop:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_in_progress = False
@@ -408,9 +392,7 @@ class TestStartupBaselineCapture:
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
             lambda self_inner, *a, **kw: None,
         ):
-            from ciris_engine.logic.services.infrastructure.authentication.service import (
-                AuthenticationService,
-            )
+            from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
             svc = AuthenticationService.__new__(AuthenticationService)
             svc._attestation_cache = None

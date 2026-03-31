@@ -24,6 +24,7 @@ def reset_language_to_english():
     # Reset localization cache
     try:
         from ciris_engine.logic.utils.localization import clear_cache
+
         clear_cache()
     except ImportError:
         pass
@@ -31,6 +32,7 @@ def reset_language_to_english():
     # Reset DMA prompt loader
     try:
         from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
         set_prompt_language("en")
     except ImportError:
         pass
@@ -46,9 +48,11 @@ def reset_language_to_english():
     # Clear cache again
     try:
         from ciris_engine.logic.utils.localization import clear_cache
+
         clear_cache()
     except ImportError:
         pass
+
 
 from ciris_engine.logic.processors.core.thought_processor.conscience_execution import ConscienceExecutionPhase
 from ciris_engine.schemas.actions.parameters import PonderParams

@@ -27,14 +27,20 @@ import androidx.compose.ui.unit.sp
  * Shows the current language's native name with a dropdown to select from
  * all 15 supported languages. Triggers immediate language change.
  *
+ * IMPORTANT: Changing the language affects BOTH:
+ * - The user interface (all UI text)
+ * - The agent's reasoning prompts (ACCORD, DMA prompts, conscience)
+ *
  * @param modifier Modifier for positioning
  * @param compact If true, shows minimal style suitable for login screen overlay
+ * @param centered If true, shows centered prominent style for login screen
  * @param onLanguageChanged Optional callback when language changes
  */
 @Composable
 fun LanguageSelector(
     modifier: Modifier = Modifier,
     compact: Boolean = true,
+    centered: Boolean = false,
     onLanguageChanged: ((String) -> Unit)? = null
 ) {
     val localization = LocalLocalization.current
@@ -43,36 +49,53 @@ fun LanguageSelector(
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.testable("language_selector")) {
-        // Current language button
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = if (compact) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { expanded = true }
+        // Current language button - use Box with background instead of Surface to avoid theming artifacts
+        Box(
+            modifier = Modifier
+                .background(
+                    color = if (compact || centered) Color.White.copy(alpha = if (centered) 0.2f else 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(if (centered) 24.dp else 20.dp)
+                )
+                .clickable { expanded = true }
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(
+                    horizontal = if (centered) 20.dp else 12.dp,
+                    vertical = if (centered) 12.dp else 8.dp
+                )
             ) {
-                if (!compact) {
-                    // Globe indicator for language
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Globe indicator
                     Text(
                         text = "\uD83C\uDF10", // Globe emoji
-                        fontSize = 14.sp
+                        fontSize = if (centered) 18.sp else 14.sp
+                    )
+                    Text(
+                        text = currentLanguage.nativeName,
+                        fontSize = if (centered) 16.sp else if (compact) 13.sp else 14.sp,
+                        fontWeight = if (centered) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (compact || centered) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand",
+                        modifier = Modifier.size(if (centered) 20.dp else 16.dp),
+                        tint = if (compact || centered) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = currentLanguage.nativeName,
-                    fontSize = if (compact) 13.sp else 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (compact) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Expand",
-                    modifier = Modifier.size(16.dp),
-                    tint = if (compact) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Hint text showing this affects agent reasoning too
+                if (centered) {
+                    Text(
+                        text = "Interface + Agent",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
 

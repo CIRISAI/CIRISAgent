@@ -112,6 +112,25 @@ interface CIRISApiClientProtocol {
      */
     fun close()
 
+    // ===== Location Search API =====
+
+    /**
+     * Search for cities by name (typeahead autocomplete)
+     * @param query Search query (city name or partial)
+     * @param countryCode Optional ISO 3166-1 alpha-2 country code to filter by
+     * @param limit Maximum number of results (1-50, default 10)
+     */
+    suspend fun searchLocations(
+        query: String,
+        countryCode: String? = null,
+        limit: Int = 10
+    ): LocationSearchResponse
+
+    /**
+     * Get list of all countries
+     */
+    suspend fun getCountries(): CountriesResponse
+
     // ===== Config API =====
 
     /**
@@ -284,4 +303,48 @@ data class SingleStepResponse(
     val message: String?,
     val processingTimeMs: Long?,
     val tokensUsed: Int?
+)
+
+// ===== Location Search API Data Models =====
+
+/**
+ * A single location search result
+ */
+data class LocationResultData(
+    val city: String,
+    val region: String?,
+    val country: String,
+    val countryCode: String,
+    val latitude: Double,
+    val longitude: Double,
+    val population: Int,
+    val timezone: String?,
+    val displayName: String
+)
+
+/**
+ * Response from location search endpoint
+ */
+data class LocationSearchResponse(
+    val results: List<LocationResultData>,
+    val query: String,
+    val count: Int
+)
+
+/**
+ * Country information
+ */
+data class CountryInfoData(
+    val code: String,
+    val name: String,
+    val currencyCode: String?,
+    val currencyName: String?
+)
+
+/**
+ * Response from countries list endpoint
+ */
+data class CountriesResponse(
+    val countries: List<CountryInfoData>,
+    val count: Int
 )

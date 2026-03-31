@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Minimum transaction amounts (dust thresholds) by currency
 DUST_THRESHOLDS: Dict[str, Decimal] = {
-    "USDC": Decimal("0.01"),      # 1 cent minimum
-    "ETH": Decimal("0.0001"),     # ~$0.20 at $2000/ETH
+    "USDC": Decimal("0.01"),  # 1 cent minimum
+    "ETH": Decimal("0.0001"),  # ~$0.20 at $2000/ETH
 }
 
 # Gas requirements for transaction types
@@ -57,9 +57,11 @@ DUPLICATE_WINDOW_SECONDS = 300  # 5 minutes
 # Validation Errors
 # =============================================================================
 
+
 @dataclass
 class ValidationError:
     """Validation error with code and message."""
+
     code: str
     message: str
     field: Optional[str] = None
@@ -73,6 +75,7 @@ class ValidationError:
 @dataclass
 class ValidationResult:
     """Result of validation with errors list."""
+
     valid: bool
     errors: List[ValidationError] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -94,6 +97,7 @@ class ValidationResult:
 # =============================================================================
 # EIP-55 Checksum Validation
 # =============================================================================
+
 
 def compute_checksum_address(address: str) -> str:
     """
@@ -167,6 +171,7 @@ def is_zero_address(address: str) -> bool:
 # Amount Validation
 # =============================================================================
 
+
 def validate_amount(
     amount: Decimal,
     currency: str,
@@ -193,20 +198,12 @@ def validate_amount(
 
     # Check negative
     if amount < 0:
-        result.add_error(
-            code="NEGATIVE_AMOUNT",
-            message=f"Amount cannot be negative: {amount}",
-            field="amount"
-        )
+        result.add_error(code="NEGATIVE_AMOUNT", message=f"Amount cannot be negative: {amount}", field="amount")
         return result
 
     # Check zero
     if amount == 0:
-        result.add_error(
-            code="ZERO_AMOUNT",
-            message="Amount cannot be zero",
-            field="amount"
-        )
+        result.add_error(code="ZERO_AMOUNT", message="Amount cannot be zero", field="amount")
         return result
 
     # Check dust threshold
@@ -215,7 +212,7 @@ def validate_amount(
         result.add_error(
             code="DUST_AMOUNT",
             message=f"Amount {amount} {currency} below minimum {dust_threshold} {currency}",
-            field="amount"
+            field="amount",
         )
         return result
 
@@ -225,7 +222,7 @@ def validate_amount(
         result.add_error(
             code="EXCEEDS_MAX_TRANSACTION",
             message=f"Amount {amount} exceeds max transaction limit {max_tx}",
-            field="amount"
+            field="amount",
         )
 
     return result
@@ -234,6 +231,7 @@ def validate_amount(
 # =============================================================================
 # Recipient Validation
 # =============================================================================
+
 
 def validate_recipient(address: str) -> ValidationResult:
     """
@@ -256,38 +254,26 @@ def validate_recipient(address: str) -> ValidationResult:
 
     # Check prefix
     if not address.startswith("0x"):
-        result.add_error(
-            code="MISSING_PREFIX",
-            message="Address must start with 0x",
-            field="recipient"
-        )
+        result.add_error(code="MISSING_PREFIX", message="Address must start with 0x", field="recipient")
         return result
 
     # Check length
     if len(address) != 42:
         result.add_error(
-            code="INVALID_LENGTH",
-            message=f"Address must be 42 characters, got {len(address)}",
-            field="recipient"
+            code="INVALID_LENGTH", message=f"Address must be 42 characters, got {len(address)}", field="recipient"
         )
         return result
 
     # Check hex characters
     hex_part = address[2:]
     if not re.match(r"^[0-9a-fA-F]{40}$", hex_part):
-        result.add_error(
-            code="INVALID_HEX",
-            message="Address contains invalid characters",
-            field="recipient"
-        )
+        result.add_error(code="INVALID_HEX", message="Address contains invalid characters", field="recipient")
         return result
 
     # Check zero address
     if is_zero_address(address):
         result.add_error(
-            code="ZERO_ADDRESS",
-            message="Cannot send to zero address (would burn funds)",
-            field="recipient"
+            code="ZERO_ADDRESS", message="Cannot send to zero address (would burn funds)", field="recipient"
         )
         return result
 
@@ -296,7 +282,7 @@ def validate_recipient(address: str) -> ValidationResult:
         result.add_error(
             code="INVALID_CHECKSUM",
             message="Invalid EIP-55 checksum. Verify the address is correct.",
-            field="recipient"
+            field="recipient",
         )
 
     return result
@@ -305,6 +291,7 @@ def validate_recipient(address: str) -> ValidationResult:
 # =============================================================================
 # Gas Validation
 # =============================================================================
+
 
 def validate_gas(
     eth_balance: Decimal,
@@ -315,16 +302,25 @@ def validate_gas(
     """
     Validate that sufficient ETH exists for gas.
 
+    When gas_price is 0, this indicates a paymaster is sponsoring gas fees
+    and validation is skipped. See FSD/WALLET_REGULATORY_COMPLIANCE.md Section 10.
+
     Args:
         eth_balance: Current ETH balance
         gas_needed: Estimated gas units needed
-        gas_price: Current gas price in wei
+        gas_price: Current gas price in wei (0 = paymaster enabled)
         currency: Transaction currency (affects gas estimate)
 
     Returns:
         ValidationResult with any errors
     """
     result = ValidationResult(valid=True)
+
+    # Skip gas validation when paymaster is enabled (gas_price=0)
+    # Paymaster sponsors gas fees as infrastructure expense
+    if gas_price == 0:
+        logger.debug("[Validation] Paymaster enabled - skipping gas validation")
+        return result
 
     # Calculate gas cost in ETH
     gas_cost_wei = gas_needed * gas_price
@@ -337,12 +333,10 @@ def validate_gas(
         result.add_error(
             code="INSUFFICIENT_GAS",
             message=f"Insufficient ETH for gas. Have: {eth_balance:.6f} ETH, need: ~{gas_with_buffer:.6f} ETH",
-            field="eth_balance"
+            field="eth_balance",
         )
         # Add helpful suggestion
-        result.add_warning(
-            f"Send at least {gas_with_buffer:.6f} ETH to this wallet address for gas."
-        )
+        result.add_warning(f"Send at least {gas_with_buffer:.6f} ETH to this wallet address for gas.")
 
     # Check for absurdly high gas price
     gas_price_gwei = gas_price / 10**9
@@ -350,7 +344,7 @@ def validate_gas(
         result.add_error(
             code="GAS_PRICE_TOO_HIGH",
             message=f"Gas price {gas_price_gwei:.0f} gwei is abnormally high. Network may be congested.",
-            field="gas_price"
+            field="gas_price",
         )
 
     return result
@@ -359,6 +353,7 @@ def validate_gas(
 # =============================================================================
 # Spending Limit Enforcement
 # =============================================================================
+
 
 @dataclass
 class SpendingTracker:
@@ -426,7 +421,7 @@ class SpendingTracker:
             result.add_error(
                 code="DAILY_LIMIT_EXCEEDED",
                 message=f"Daily limit exceeded. Spent: {daily_total}, limit: {self.daily_limit}",
-                field="amount"
+                field="amount",
             )
 
         # Check session limit
@@ -434,7 +429,7 @@ class SpendingTracker:
             result.add_error(
                 code="SESSION_LIMIT_EXCEEDED",
                 message=f"Session limit exceeded. Spent: {session_total}, limit: {self.session_limit}",
-                field="amount"
+                field="amount",
             )
 
         # Record if valid
@@ -465,6 +460,7 @@ class SpendingTracker:
 # Duplicate Transaction Protection
 # =============================================================================
 
+
 @dataclass
 class DuplicateProtection:
     """
@@ -492,10 +488,7 @@ class DuplicateProtection:
         """Remove transactions outside the window."""
         now = time.time()
         cutoff = now - self.window_seconds
-        self.recent_transactions = {
-            k: v for k, v in self.recent_transactions.items()
-            if v > cutoff
-        }
+        self.recent_transactions = {k: v for k, v in self.recent_transactions.items() if v > cutoff}
 
     def check_duplicate(
         self,
@@ -525,8 +518,8 @@ class DuplicateProtection:
             result.add_error(
                 code="DUPLICATE_TRANSACTION",
                 message=f"Duplicate transaction detected ({elapsed:.0f}s ago). "
-                        f"Same recipient, amount, and currency within {self.window_seconds}s window.",
-                field="transaction"
+                f"Same recipient, amount, and currency within {self.window_seconds}s window.",
+                field="transaction",
             )
 
         return result
@@ -546,6 +539,7 @@ class DuplicateProtection:
 # =============================================================================
 # Combined Validator
 # =============================================================================
+
 
 class WalletValidator:
     """
@@ -579,9 +573,7 @@ class WalletValidator:
         """Update limits based on attestation level."""
         self.max_transaction = max_transaction
         self.spending_tracker.daily_limit = daily_limit
-        logger.info(
-            f"[WalletValidator] Limits updated: max_tx={max_transaction}, daily={daily_limit}"
-        )
+        logger.info(f"[WalletValidator] Limits updated: max_tx={max_transaction}, daily={daily_limit}")
 
     def validate_send(
         self,
@@ -622,10 +614,7 @@ class WalletValidator:
 
         # 3. Check gas (only if amount is valid to avoid confusing errors)
         if result.valid:
-            gas_needed = GAS_REQUIREMENTS.get(
-                "erc20_transfer" if currency.upper() == "USDC" else "eth_transfer",
-                65000
-            )
+            gas_needed = GAS_REQUIREMENTS.get("erc20_transfer" if currency.upper() == "USDC" else "eth_transfer", 65000)
             gas_result = validate_gas(eth_balance, gas_needed, gas_price, currency)
             if not gas_result.valid:
                 result.errors.extend(gas_result.errors)

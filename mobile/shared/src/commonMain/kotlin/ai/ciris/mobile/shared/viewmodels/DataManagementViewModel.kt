@@ -66,12 +66,23 @@ class DataManagementViewModel(
     private val _lensDeletionResult = MutableStateFlow<LensDeletionResult?>(null)
     val lensDeletionResult: StateFlow<LensDeletionResult?> = _lensDeletionResult.asStateFlow()
 
-    // Factory reset state
-    private val _isFactoryResetting = MutableStateFlow(false)
-    val isFactoryResetting: StateFlow<Boolean> = _isFactoryResetting.asStateFlow()
+    // Reset state (soft reset - preserves signing key)
+    private val _isResetting = MutableStateFlow(false)
+    val isResetting: StateFlow<Boolean> = _isResetting.asStateFlow()
 
-    private val _factoryResetSuccess = MutableStateFlow(false)
-    val factoryResetSuccess: StateFlow<Boolean> = _factoryResetSuccess.asStateFlow()
+    private val _resetSuccess = MutableStateFlow(false)
+    val resetSuccess: StateFlow<Boolean> = _resetSuccess.asStateFlow()
+
+    // Wipe signing key state (DANGER - destroys wallet access)
+    private val _isWipingSigningKey = MutableStateFlow(false)
+    val isWipingSigningKey: StateFlow<Boolean> = _isWipingSigningKey.asStateFlow()
+
+    private val _wipeSigningKeySuccess = MutableStateFlow(false)
+    val wipeSigningKeySuccess: StateFlow<Boolean> = _wipeSigningKeySuccess.asStateFlow()
+
+    // Legacy aliases for backwards compatibility
+    val isFactoryResetting: StateFlow<Boolean> = _isResetting
+    val factoryResetSuccess: StateFlow<Boolean> = _resetSuccess
 
     init {
         logDebug("init", "DataManagementViewModel created")
@@ -157,30 +168,38 @@ class DataManagementViewModel(
     }
 
     /**
-     * Factory reset - wipe ALL local data and start fresh.
-     * Deletes .env file, signing keys, databases, audit logs, etc.
+     * Reset account - wipe local data but PRESERVE signing key.
+     * This allows wallet access to be retained after reset.
+     *
+     * Deletes:
+     * - .env file (configuration)
+     * - data directory (databases, audit logs, memory graphs)
+     *
+     * Preserves:
+     * - Signing key (wallet access maintained)
      *
      * @param onSuccess Callback before app restart
      */
     fun factoryReset(onSuccess: () -> Unit = {}) {
         val method = "factoryReset"
-        logInfo(method, "Factory reset - wiping ALL local data")
+        logInfo(method, "Reset account - clearing data but PRESERVING signing key")
 
         viewModelScope.launch {
-            _isFactoryResetting.value = true
+            _isResetting.value = true
             _errorMessage.value = null
 
             try {
-                // Clear the signing key and data directory (databases, audit logs, etc.)
-                logInfo(method, "Clearing signing key and data directory...")
-                envFileUpdater.clearSigningKey().getOrThrow()
-                logInfo(method, "Signing key and data cleared")
+                // Clear data directory (databases, audit logs, etc.) but PRESERVE signing key
+                logInfo(method, "Clearing data directory (preserving signing key for wallet access)...")
+                envFileUpdater.clearDataOnly().getOrThrow()
+                logInfo(method, "Data cleared, signing key preserved")
 
-                // Delete the .env file
+                // Delete the .env file to trigger setup wizard
                 envFileUpdater.deleteEnvFile().getOrThrow()
+                logInfo(method, ".env file deleted")
 
-                logInfo(method, "Factory reset complete - restarting app for setup wizard")
-                _factoryResetSuccess.value = true
+                logInfo(method, "Reset complete - restarting app for setup wizard")
+                _resetSuccess.value = true
 
                 // Invoke callback for any cleanup before restart
                 onSuccess()
@@ -193,9 +212,67 @@ class DataManagementViewModel(
                 AppRestarter.restartApp()
 
             } catch (e: Exception) {
-                logError(method, "Failed to factory reset: ${e.message}")
-                _errorMessage.value = "Failed to factory reset: ${e.message}"
-                _isFactoryResetting.value = false
+                logError(method, "Failed to reset: ${e.message}")
+                _errorMessage.value = "Failed to reset: ${e.message}"
+                _isResetting.value = false
+            }
+        }
+    }
+
+    /**
+     * DANGER: Wipe the agent signing key.
+     *
+     * WARNING: This will PERMANENTLY DESTROY wallet access!
+     * The signing key is used to derive the wallet address.
+     * Without the key, any funds in the wallet are LOST FOREVER.
+     *
+     * Only use this if:
+     * - User explicitly confirms they understand the risk
+     * - User has verified wallet balance is zero
+     * - User wants a completely fresh agent identity
+     *
+     * Deletes:
+     * - Signing key (encrypted file + keystore entry)
+     * - Data directory (databases, audit logs, memory graphs)
+     * - .env file (configuration)
+     *
+     * @param onSuccess Callback before app restart
+     */
+    fun wipeSigningKey(onSuccess: () -> Unit = {}) {
+        val method = "wipeSigningKey"
+        logWarn(method, "DANGER: Wiping agent signing key - wallet access will be DESTROYED")
+
+        viewModelScope.launch {
+            _isWipingSigningKey.value = true
+            _errorMessage.value = null
+
+            try {
+                // Clear signing key AND data directory
+                logWarn(method, "Clearing signing key and data directory...")
+                envFileUpdater.clearSigningKey().getOrThrow()
+                logWarn(method, "Signing key DESTROYED - wallet access lost")
+
+                // Delete the .env file
+                envFileUpdater.deleteEnvFile().getOrThrow()
+                logInfo(method, ".env file deleted")
+
+                logInfo(method, "Complete wipe finished - restarting app for setup wizard")
+                _wipeSigningKeySuccess.value = true
+
+                // Invoke callback for any cleanup before restart
+                onSuccess()
+
+                // Small delay to let UI update
+                kotlinx.coroutines.delay(100)
+
+                // Restart the app completely
+                logInfo(method, "Triggering app restart...")
+                AppRestarter.restartApp()
+
+            } catch (e: Exception) {
+                logError(method, "Failed to wipe signing key: ${e.message}")
+                _errorMessage.value = "Failed to wipe signing key: ${e.message}"
+                _isWipingSigningKey.value = false
             }
         }
     }
@@ -280,6 +357,10 @@ class DataManagementViewModel(
     }
 
     fun clearFactoryResetSuccess() {
-        _factoryResetSuccess.value = false
+        _resetSuccess.value = false
+    }
+
+    fun clearWipeSigningKeySuccess() {
+        _wipeSigningKeySuccess.value = false
     }
 }

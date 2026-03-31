@@ -40,7 +40,7 @@ class TestGetDefaultAgentVersion:
             # Force import error by patching
             with patch(
                 "ciris_engine.logic.services.infrastructure.authentication.attestation.hashes.get_default_agent_version",
-                side_effect=ImportError
+                side_effect=ImportError,
             ):
                 # Since we're patching the function itself, test the behavior differently
                 pass

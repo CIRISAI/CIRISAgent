@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 
 def _sanitize_for_log(value: str, max_length: int = 20) -> str:
     """Sanitize a value for safe inclusion in log messages."""
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
     return sanitized[:max_length] + "..." if len(sanitized) > max_length else sanitized
+
 
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"

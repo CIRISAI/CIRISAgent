@@ -52,10 +52,7 @@ class BalanceMonitor:
         """
         self.provider_id = provider_id
         self._get_balance_fn = get_balance_fn
-        self._poll_interval = max(
-            self.MIN_POLL_INTERVAL,
-            min(poll_interval, self.MAX_POLL_INTERVAL)
-        )
+        self._poll_interval = max(self.MIN_POLL_INTERVAL, min(poll_interval, self.MAX_POLL_INTERVAL))
         self._on_balance_change = on_balance_change
 
         # Cached state
@@ -69,10 +66,7 @@ class BalanceMonitor:
         self._running = False
         self._poll_task: Optional[asyncio.Task[None]] = None
 
-        logger.info(
-            f"BalanceMonitor created for {provider_id} "
-            f"(poll_interval={self._poll_interval}s)"
-        )
+        logger.info(f"BalanceMonitor created for {provider_id} " f"(poll_interval={self._poll_interval}s)")
 
     @property
     def cached_balance(self) -> Optional[Balance]:
@@ -126,8 +120,7 @@ class BalanceMonitor:
                 pass
 
         logger.info(
-            f"BalanceMonitor {self.provider_id} stopped "
-            f"(polls={self._poll_count}, errors={self._error_count})"
+            f"BalanceMonitor {self.provider_id} stopped " f"(polls={self._poll_count}, errors={self._error_count})"
         )
 
     async def force_refresh(self) -> Optional[Balance]:
@@ -204,24 +197,15 @@ class BalanceMonitor:
             self._error_count += 1
             self._consecutive_errors += 1
             logger.warning(
-                f"[{self.provider_id}] Balance poll failed: {e} "
-                f"(consecutive_errors={self._consecutive_errors})"
+                f"[{self.provider_id}] Balance poll failed: {e} " f"(consecutive_errors={self._consecutive_errors})"
             )
             return None
 
-    def _detect_change(
-        self,
-        old: Optional[Balance],
-        new: Balance
-    ) -> bool:
+    def _detect_change(self, old: Optional[Balance], new: Balance) -> bool:
         """Detect if balance has changed."""
         if old is None:
             return True  # First poll is always a "change"
-        return (
-            old.available != new.available or
-            old.pending != new.pending or
-            old.total != new.total
-        )
+        return old.available != new.available or old.pending != new.pending or old.total != new.total
 
     def get_stats(self) -> Dict[str, Any]:
         """Get monitoring statistics."""
@@ -234,10 +218,14 @@ class BalanceMonitor:
             "poll_interval": self._poll_interval,
             "last_poll": self._last_poll.isoformat() if self._last_poll else None,
             "cache_age_seconds": self.get_cache_age_seconds(),
-            "cached_balance": {
-                "available": str(self._cached_balance.available),
-                "pending": str(self._cached_balance.pending),
-                "total": str(self._cached_balance.total),
-                "currency": self._cached_balance.currency,
-            } if self._cached_balance else None,
+            "cached_balance": (
+                {
+                    "available": str(self._cached_balance.available),
+                    "pending": str(self._cached_balance.pending),
+                    "total": str(self._cached_balance.total),
+                    "currency": self._cached_balance.currency,
+                }
+                if self._cached_balance
+                else None
+            ),
         }

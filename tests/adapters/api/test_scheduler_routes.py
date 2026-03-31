@@ -15,7 +15,7 @@ Coverage targets:
 - Input validation
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -25,7 +25,6 @@ from fastapi.testclient import TestClient
 from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo
-
 
 # =============================================================================
 # FIXTURES
@@ -76,7 +75,7 @@ def sample_scheduled_task():
         created_at=now,
         last_triggered_at=None,
         deferral_count=0,
-        deferral_history=[]
+        deferral_history=[],
     )
 
 
@@ -93,7 +92,7 @@ def sample_scheduled_task_info():
         schedule_cron="0 9 * * *",
         created_at=now.isoformat(),
         last_triggered_at=None,
-        deferral_count=0
+        deferral_count=0,
     )
 
 
@@ -111,7 +110,7 @@ def sample_onetime_task_info():
         schedule_cron=None,
         created_at=now.isoformat(),
         last_triggered_at=None,
-        deferral_count=0
+        deferral_count=0,
     )
 
 
@@ -121,21 +120,20 @@ def mock_task_scheduler(sample_scheduled_task_info, sample_onetime_task_info):
     scheduler = AsyncMock()
 
     # Mock get_scheduled_tasks
-    scheduler.get_scheduled_tasks = AsyncMock(return_value=[
-        sample_scheduled_task_info,
-        sample_onetime_task_info
-    ])
+    scheduler.get_scheduled_tasks = AsyncMock(return_value=[sample_scheduled_task_info, sample_onetime_task_info])
 
     # Mock get_metrics
-    scheduler.get_metrics = AsyncMock(return_value={
-        "tasks_scheduled_total": 10.0,
-        "tasks_completed_total": 5.0,
-        "tasks_failed_total": 1.0,
-        "tasks_pending": 4.0,
-        "recurring_tasks": 2.0,
-        "oneshot_tasks": 2.0,
-        "scheduler_uptime_seconds": 3600.0
-    })
+    scheduler.get_metrics = AsyncMock(
+        return_value={
+            "tasks_scheduled_total": 10.0,
+            "tasks_completed_total": 5.0,
+            "tasks_failed_total": 1.0,
+            "tasks_pending": 4.0,
+            "recurring_tasks": 2.0,
+            "oneshot_tasks": 2.0,
+            "scheduler_uptime_seconds": 3600.0,
+        }
+    )
 
     # Mock cancel_task
     scheduler.cancel_task = AsyncMock(return_value=True)
@@ -171,10 +169,7 @@ class TestListScheduledTasks:
 
     def test_list_tasks_success(self, client_with_scheduler, admin_auth_headers):
         """Test successful task listing."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -186,10 +181,7 @@ class TestListScheduledTasks:
 
     def test_list_tasks_with_status_filter(self, client_with_scheduler, admin_auth_headers):
         """Test task listing with status filter."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks?status=PENDING",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks?status=PENDING", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -199,10 +191,7 @@ class TestListScheduledTasks:
 
     def test_list_tasks_with_limit(self, client_with_scheduler, admin_auth_headers):
         """Test task listing with limit."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks?limit=1",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks?limit=1", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -210,20 +199,14 @@ class TestListScheduledTasks:
 
     def test_list_tasks_scheduler_not_available(self, client, admin_auth_headers):
         """Test listing when scheduler is not available."""
-        response = client.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         assert "scheduler" in response.json()["detail"].lower()
 
     def test_list_tasks_includes_recurring_flag(self, client_with_scheduler, admin_auth_headers):
         """Test that tasks include is_recurring flag."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -252,10 +235,7 @@ class TestSchedulerStats:
 
     def test_get_stats_success(self, client_with_scheduler, admin_auth_headers):
         """Test successful stats retrieval."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/stats",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/stats", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -270,10 +250,7 @@ class TestSchedulerStats:
 
     def test_get_stats_scheduler_not_available(self, client, admin_auth_headers):
         """Test stats when scheduler is not available."""
-        response = client.get(
-            "/v1/scheduler/stats",
-            headers=admin_auth_headers
-        )
+        response = client.get("/v1/scheduler/stats", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -294,19 +271,15 @@ class TestCreateScheduledTask:
                 "name": "Test Task",
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
-                "schedule_cron": "0 9 * * *"
-            }
+                "schedule_cron": "0 9 * * *",
+            },
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_create_recurring_task_success(
-        self, app_with_scheduler, admin_auth_headers, sample_scheduled_task
-    ):
+    def test_create_recurring_task_success(self, app_with_scheduler, admin_auth_headers, sample_scheduled_task):
         """Test creating a recurring task."""
         # Mock schedule_task to return a task
-        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(
-            return_value=sample_scheduled_task
-        )
+        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(return_value=sample_scheduled_task)
 
         client = TestClient(app_with_scheduler)
         response = client.post(
@@ -316,8 +289,8 @@ class TestCreateScheduledTask:
                 "name": "Daily Report",
                 "goal_description": "Generate daily report",
                 "trigger_prompt": "Generate the daily activity report",
-                "schedule_cron": "0 9 * * *"
-            }
+                "schedule_cron": "0 9 * * *",
+            },
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -328,7 +301,7 @@ class TestCreateScheduledTask:
 
     def test_create_onetime_task_success(self, app_with_scheduler, admin_auth_headers):
         """Test creating a one-time task."""
-        future_time = (datetime.now(timezone.utc) + timedelta(hours=2))
+        future_time = datetime.now(timezone.utc) + timedelta(hours=2)
 
         # Create a one-time task
         onetime_task = ScheduledTask(
@@ -343,12 +316,10 @@ class TestCreateScheduledTask:
             created_at=datetime.now(timezone.utc),
             last_triggered_at=None,
             deferral_count=0,
-            deferral_history=[]
+            deferral_history=[],
         )
 
-        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(
-            return_value=onetime_task
-        )
+        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(return_value=onetime_task)
 
         client = TestClient(app_with_scheduler)
         response = client.post(
@@ -358,8 +329,8 @@ class TestCreateScheduledTask:
                 "name": "Reminder",
                 "goal_description": "Send reminder",
                 "trigger_prompt": "Send reminder notification",
-                "defer_until": future_time.isoformat()
-            }
+                "defer_until": future_time.isoformat(),
+            },
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -376,13 +347,15 @@ class TestCreateScheduledTask:
             json={
                 "name": "Test Task",
                 "goal_description": "Test",
-                "trigger_prompt": "Test prompt"
+                "trigger_prompt": "Test prompt",
                 # Neither defer_until nor schedule_cron
-            }
+            },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "defer_until" in response.json()["detail"].lower() or "schedule_cron" in response.json()["detail"].lower()
+        assert (
+            "defer_until" in response.json()["detail"].lower() or "schedule_cron" in response.json()["detail"].lower()
+        )
 
     def test_create_task_both_schedule_types_returns_400(self, client_with_scheduler, admin_auth_headers):
         """Test that creating task with both schedule types returns 400."""
@@ -396,8 +369,8 @@ class TestCreateScheduledTask:
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
                 "defer_until": future_time,
-                "schedule_cron": "0 9 * * *"  # Both specified
-            }
+                "schedule_cron": "0 9 * * *",  # Both specified
+            },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -418,8 +391,8 @@ class TestCreateScheduledTask:
                 "name": "Test Task",
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
-                "schedule_cron": "invalid_cron"
-            }
+                "schedule_cron": "invalid_cron",
+            },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -434,8 +407,8 @@ class TestCreateScheduledTask:
                 "name": "",  # Empty name
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
-                "schedule_cron": "0 9 * * *"
-            }
+                "schedule_cron": "0 9 * * *",
+            },
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -449,8 +422,8 @@ class TestCreateScheduledTask:
                 "name": "Test Task",
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
-                "schedule_cron": "0 9 * * *"
-            }
+                "schedule_cron": "0 9 * * *",
+            },
         )
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
@@ -471,10 +444,7 @@ class TestCancelScheduledTask:
 
     def test_cancel_task_success(self, client_with_scheduler, admin_auth_headers):
         """Test successful task cancellation."""
-        response = client_with_scheduler.delete(
-            "/v1/scheduler/tasks/task_1234567890",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.delete("/v1/scheduler/tasks/task_1234567890", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -488,20 +458,14 @@ class TestCancelScheduledTask:
         app_with_scheduler.state.task_scheduler.cancel_task = AsyncMock(return_value=False)
 
         client = TestClient(app_with_scheduler)
-        response = client.delete(
-            "/v1/scheduler/tasks/nonexistent_task",
-            headers=admin_auth_headers
-        )
+        response = client.delete("/v1/scheduler/tasks/nonexistent_task", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "not found" in response.json()["detail"].lower()
 
     def test_cancel_task_scheduler_not_available(self, client, admin_auth_headers):
         """Test cancelling task when scheduler is not available."""
-        response = client.delete(
-            "/v1/scheduler/tasks/task_123",
-            headers=admin_auth_headers
-        )
+        response = client.delete("/v1/scheduler/tasks/task_123", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -516,10 +480,7 @@ class TestResponseFormats:
 
     def test_list_response_has_metadata(self, client_with_scheduler, admin_auth_headers):
         """Test that list response includes metadata."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         json_data = response.json()
@@ -529,10 +490,7 @@ class TestResponseFormats:
 
     def test_stats_response_has_metadata(self, client_with_scheduler, admin_auth_headers):
         """Test that stats response includes metadata."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/stats",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/stats", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         json_data = response.json()
@@ -540,10 +498,7 @@ class TestResponseFormats:
 
     def test_task_response_fields(self, client_with_scheduler, admin_auth_headers):
         """Test that task response has all required fields."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         tasks = response.json()["data"]["tasks"]
@@ -551,9 +506,16 @@ class TestResponseFormats:
         if tasks:
             task = tasks[0]
             required_fields = [
-                "task_id", "name", "goal_description", "status",
-                "defer_until", "schedule_cron", "created_at",
-                "last_triggered_at", "deferral_count", "is_recurring"
+                "task_id",
+                "name",
+                "goal_description",
+                "status",
+                "defer_until",
+                "schedule_cron",
+                "created_at",
+                "last_triggered_at",
+                "deferral_count",
+                "is_recurring",
             ]
             for field in required_fields:
                 assert field in task, f"Missing field: {field}"
@@ -569,15 +531,10 @@ class TestEdgeCases:
 
     def test_empty_task_list(self, app_with_scheduler, admin_auth_headers):
         """Test handling of empty task list."""
-        app_with_scheduler.state.task_scheduler.get_scheduled_tasks = AsyncMock(
-            return_value=[]
-        )
+        app_with_scheduler.state.task_scheduler.get_scheduled_tasks = AsyncMock(return_value=[])
 
         client = TestClient(app_with_scheduler)
-        response = client.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"]
@@ -593,37 +550,27 @@ class TestEdgeCases:
         )
 
         client = TestClient(app_with_scheduler)
-        response = client.get(
-            "/v1/scheduler/tasks",
-            headers=admin_auth_headers
-        )
+        response = client.get("/v1/scheduler/tasks", headers=admin_auth_headers)
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     def test_limit_validation_max(self, client_with_scheduler, admin_auth_headers):
         """Test that limit over maximum is rejected."""
         response = client_with_scheduler.get(
-            "/v1/scheduler/tasks?limit=500",  # Over 200 max
-            headers=admin_auth_headers
+            "/v1/scheduler/tasks?limit=500", headers=admin_auth_headers  # Over 200 max
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_limit_validation_min(self, client_with_scheduler, admin_auth_headers):
         """Test that limit under minimum is rejected."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks?limit=0",  # Under 1 min
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks?limit=0", headers=admin_auth_headers)  # Under 1 min
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_invalid_status_filter_still_works(self, client_with_scheduler, admin_auth_headers):
         """Test that invalid status filter just returns empty results."""
-        response = client_with_scheduler.get(
-            "/v1/scheduler/tasks?status=INVALID_STATUS",
-            headers=admin_auth_headers
-        )
+        response = client_with_scheduler.get("/v1/scheduler/tasks?status=INVALID_STATUS", headers=admin_auth_headers)
 
         # Should succeed but return no matching tasks
         assert response.status_code == status.HTTP_200_OK
@@ -639,20 +586,21 @@ class TestEdgeCases:
 class TestCronExpressionValidation:
     """Test cron expression validation in task creation."""
 
-    @pytest.mark.parametrize("cron_expr,expected_valid", [
-        ("0 9 * * *", True),      # Daily at 9am
-        ("0 9 * * 1", True),      # Weekly on Monday at 9am
-        ("*/15 * * * *", True),   # Every 15 minutes
-        ("0 0 1 * *", True),      # Monthly on 1st at midnight
-    ])
+    @pytest.mark.parametrize(
+        "cron_expr,expected_valid",
+        [
+            ("0 9 * * *", True),  # Daily at 9am
+            ("0 9 * * 1", True),  # Weekly on Monday at 9am
+            ("*/15 * * * *", True),  # Every 15 minutes
+            ("0 0 1 * *", True),  # Monthly on 1st at midnight
+        ],
+    )
     def test_valid_cron_expressions(
         self, app_with_scheduler, admin_auth_headers, sample_scheduled_task, cron_expr, expected_valid
     ):
         """Test various valid cron expressions."""
         sample_scheduled_task.schedule_cron = cron_expr
-        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(
-            return_value=sample_scheduled_task
-        )
+        app_with_scheduler.state.task_scheduler.schedule_task = AsyncMock(return_value=sample_scheduled_task)
 
         client = TestClient(app_with_scheduler)
         response = client.post(
@@ -662,8 +610,8 @@ class TestCronExpressionValidation:
                 "name": "Test Cron Task",
                 "goal_description": "Test",
                 "trigger_prompt": "Test prompt",
-                "schedule_cron": cron_expr
-            }
+                "schedule_cron": cron_expr,
+            },
         )
 
         if expected_valid:

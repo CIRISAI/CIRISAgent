@@ -68,9 +68,7 @@ def _count_consent_nodes(db_path: str) -> int:
     """Count all consent graph nodes in the DB."""
     with get_db_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_id LIKE 'consent/%'"
-        )
+        cursor.execute("SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_id LIKE 'consent/%'")
         return cursor.fetchone()["cnt"]
 
 
@@ -132,10 +130,12 @@ class TestMigrateFoundingPartnerships:
         """Should do nothing when there are no ROOT WAs."""
         from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
 
-        runtime = _make_runtime(was=[
-            _MockWA("observer1", role="observer"),
-            _MockWA("authority1", role="authority"),
-        ])
+        runtime = _make_runtime(
+            was=[
+                _MockWA("observer1", role="observer"),
+                _MockWA("authority1", role="authority"),
+            ]
+        )
 
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
             await migrate_founding_partnerships(runtime)
@@ -164,11 +164,13 @@ class TestMigrateFoundingPartnerships:
         """Should backfill all ROOT WAs that lack consent nodes."""
         from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
 
-        runtime = _make_runtime(was=[
-            _MockWA("alice"),
-            _MockWA("bob"),
-            _MockWA("observer1", role="observer"),
-        ])
+        runtime = _make_runtime(
+            was=[
+                _MockWA("alice"),
+                _MockWA("bob"),
+                _MockWA("observer1", role="observer"),
+            ]
+        )
 
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
             await migrate_founding_partnerships(runtime)
@@ -243,9 +245,7 @@ class TestMigrateFoundingPartnerships:
         from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
 
         runtime = _make_runtime()
-        runtime.service_initializer.auth_service.list_was = AsyncMock(
-            side_effect=Exception("DB connection failed")
-        )
+        runtime.service_initializer.auth_service.list_was = AsyncMock(side_effect=Exception("DB connection failed"))
 
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
             # Should not raise
@@ -314,15 +314,9 @@ class TestMigrationCalledFromAdapterMigration:
         runtime.service_initializer.config_service = MagicMock()
         runtime.adapter_configs = {}
 
-        with patch(
-            "ciris_engine.logic.runtime.config_migration.migrate_founding_partnerships"
-        ) as mock_mfp:
-            with patch(
-                "ciris_engine.logic.runtime.config_migration.migrate_tickets_config_to_graph"
-            ):
-                with patch(
-                    "ciris_engine.logic.runtime.config_migration.migrate_cognitive_state_behaviors_to_graph"
-                ):
+        with patch("ciris_engine.logic.runtime.config_migration.migrate_founding_partnerships") as mock_mfp:
+            with patch("ciris_engine.logic.runtime.config_migration.migrate_tickets_config_to_graph"):
+                with patch("ciris_engine.logic.runtime.config_migration.migrate_cognitive_state_behaviors_to_graph"):
                     await migrate_adapter_configs_to_graph(runtime)
 
             mock_mfp.assert_called_once_with(runtime)

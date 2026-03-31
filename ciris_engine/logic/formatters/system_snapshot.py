@@ -170,8 +170,11 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
         lines.append("")
         lines.append("=== Context Enrichment (Pre-fetched Tool Results) ===")
         import logging
+
         ctx_logger = logging.getLogger(__name__)
-        ctx_logger.info(f"[CONTEXT BUILDER] Formatting {len(system_snapshot.context_enrichment_results)} enrichment results")
+        ctx_logger.info(
+            f"[CONTEXT BUILDER] Formatting {len(system_snapshot.context_enrichment_results)} enrichment results"
+        )
         for tool_key, result in system_snapshot.context_enrichment_results.items():
             lines.append(f"--- {tool_key} ---")
             ctx_logger.info(f"[CONTEXT BUILDER] Processing enrichment result: {tool_key}")
@@ -185,7 +188,9 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
 
                     # Log detailed structure for tuning
                     if "entities" in result:
-                        ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} has {result.get('count', len(result['entities']))} entities")
+                        ctx_logger.info(
+                            f"[CONTEXT BUILDER] {tool_key} has {result.get('count', len(result['entities']))} entities"
+                        )
                         for entity in result["entities"][:5]:
                             ctx_logger.info(f"[CONTEXT BUILDER] Entity for LLM: {entity}")
                         if len(result["entities"]) > 5:

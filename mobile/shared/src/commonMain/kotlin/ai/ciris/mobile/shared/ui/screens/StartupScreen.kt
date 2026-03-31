@@ -18,7 +18,9 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -66,6 +68,7 @@ fun StartupScreen(
     val prepStepsCompleted by viewModel.prepStepsCompleted.collectAsState()
     val verifyStepsCompleted by viewModel.verifyStepsCompleted.collectAsState()
     val hasError by viewModel.hasError.collectAsState()
+    val consolidatorStatus by viewModel.consolidatorStatus.collectAsState()
 
     // Language rotation for startup screen when no explicit language selection
     val localization = LocalLocalization.current
@@ -85,10 +88,13 @@ fun StartupScreen(
         languagesPreloaded = true
     }
 
-    // Rotate through languages every 2.5 seconds if no explicit selection
-    // Wait for languages to be preloaded before starting rotation
-    LaunchedEffect(hasExplicitLanguage, languagesPreloaded) {
-        if (!hasExplicitLanguage && languagesPreloaded) {
+    // Rotate through languages every 2.5 seconds during startup (visual effect)
+    // Always rotate regardless of language selection - it's a startup animation
+    // Stop rotation when startup completes (phase becomes READY or FIRST_RUN_SETUP)
+    LaunchedEffect(languagesPreloaded, phase) {
+        val shouldRotate = languagesPreloaded &&
+            phase != StartupPhase.READY && phase != StartupPhase.FIRST_RUN_SETUP
+        if (shouldRotate) {
             while (true) {
                 delay(2500)
                 rotationLanguageIndex = (rotationLanguageIndex + 1) % SUPPORTED_LANGUAGES.size
@@ -133,9 +139,10 @@ fun StartupScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),  // 24dp padding to match Android
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically)
         ) {
             // CIRIS Signet Logo (100dp like Android)
             CIRISSignet(
@@ -205,8 +212,8 @@ fun StartupScreen(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
-                // Show current language indicator if no explicit selection (rotating)
-                if (!hasExplicitLanguage) {
+                // Show current language indicator during startup (always rotating)
+                if (phase != StartupPhase.READY && phase != StartupPhase.FIRST_RUN_SETUP) {
                     Text(
                         text = currentLangInfo.nativeName,
                         fontSize = 9.sp,
@@ -288,6 +295,16 @@ fun StartupScreen(
                             ),
                             fontSize = 12.sp,
                             color = CIRISColors.AccentCyan
+                        )
+                    }
+
+                    // Consolidator status indicator
+                    consolidatorStatus?.let { status ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "📊 $status",
+                            fontSize = 10.sp,
+                            color = CIRISColors.WarningYellow.copy(alpha = 0.9f)
                         )
                     }
                 }

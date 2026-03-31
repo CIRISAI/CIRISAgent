@@ -801,8 +801,9 @@ class CIRISApiClient(
                     id = adapter.id,
                     name = adapter.name,
                     description = adapter.description,
-                    requires_config = !adapter.requiredEnvVars.isNullOrEmpty(),
-                    config_fields = adapter.requiredEnvVars ?: emptyList(),
+                    // Use backend's requires_config field (wizard-based adapters)
+                    requires_config = adapter.requiresConfig ?: false,
+                    config_fields = adapter.configFields ?: emptyList(),
                     requires_binaries = adapter.requiresBinaries ?: false,
                     required_binaries = adapter.requiredBinaries ?: emptyList(),
                     supported_platforms = adapter.supportedPlatforms ?: emptyList(),
@@ -5275,6 +5276,117 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Location Search API =====
+
+    /**
+     * Search for cities by name (typeahead autocomplete).
+     * Uses GeoNames cities15000 data (33K+ cities with population > 15,000).
+     *
+     * @param query Search query (city name or partial)
+     * @param countryCode Optional ISO 3166-1 alpha-2 country code to filter by
+     * @param limit Maximum number of results (1-50, default 10)
+     * @return LocationSearchResponse with matching cities
+     */
+    override suspend fun searchLocations(
+        query: String,
+        countryCode: String?,
+        limit: Int
+    ): LocationSearchResponse {
+        val method = "searchLocations"
+        logInfo(method, "Searching locations: query=$query, countryCode=$countryCode, limit=$limit")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val urlBuilder = StringBuilder("$baseUrl/v1/setup/location-search?q=${query.encodeURLParameter()}")
+            if (countryCode != null) {
+                urlBuilder.append("&country=$countryCode")
+            }
+            urlBuilder.append("&limit=$limit")
+
+            val response = client.get(urlBuilder.toString())
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned error: ${response.status}")
+                return LocationSearchResponse(results = emptyList(), query = query, count = 0)
+            }
+
+            val body = response.body<LocationSearchApiResponse>()
+            logDebug(method, "Found ${body.count} results for query: $query")
+
+            LocationSearchResponse(
+                results = body.results.map { result ->
+                    LocationResultData(
+                        city = result.city,
+                        region = result.region,
+                        country = result.country,
+                        countryCode = result.countryCode,
+                        latitude = result.latitude,
+                        longitude = result.longitude,
+                        population = result.population,
+                        timezone = result.timezone,
+                        displayName = result.displayName
+                    )
+                },
+                query = body.query,
+                count = body.count
+            )
+        } catch (e: Exception) {
+            logException(method, e, "query=$query")
+            LocationSearchResponse(results = emptyList(), query = query, count = 0)
+        }
+    }
+
+    /**
+     * Get list of all countries with currency information.
+     * Returns 252 countries sorted alphabetically by name.
+     */
+    override suspend fun getCountries(): CountriesResponse {
+        val method = "getCountries"
+        logDebug(method, "Fetching countries list")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/countries")
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned error: ${response.status}")
+                return CountriesResponse(countries = emptyList(), count = 0)
+            }
+
+            val body = response.body<CountriesApiResponse>()
+            logDebug(method, "Got ${body.count} countries")
+
+            CountriesResponse(
+                countries = body.countries.map { country ->
+                    CountryInfoData(
+                        code = country.code,
+                        name = country.name,
+                        currencyCode = country.currencyCode,
+                        currencyName = country.currencyName
+                    )
+                },
+                count = body.count
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            CountriesResponse(countries = emptyList(), count = 0)
+        }
+    }
+
     override fun close() {
     logInfo("close", "Closing CIRISApiClient")
     }
@@ -5975,4 +6087,56 @@ data class AccordSettingsUpdateResult(
     val success: Boolean,
     val message: String,
     val changes: List<String>
+)
+
+// ===== Location Search API Models =====
+
+/**
+ * API response for location search.
+ */
+@Serializable
+data class LocationSearchApiResponse(
+    val results: List<LocationResultApiData> = emptyList(),
+    val query: String,
+    val count: Int
+)
+
+/**
+ * Location result from API (snake_case).
+ */
+@Serializable
+data class LocationResultApiData(
+    val city: String,
+    val region: String? = null,
+    val country: String,
+    @SerialName("country_code")
+    val countryCode: String,
+    val latitude: Double,
+    val longitude: Double,
+    val population: Int,
+    val timezone: String? = null,
+    @SerialName("display_name")
+    val displayName: String
+)
+
+/**
+ * API response for countries list.
+ */
+@Serializable
+data class CountriesApiResponse(
+    val countries: List<CountryInfoApiData> = emptyList(),
+    val count: Int
+)
+
+/**
+ * Country info from API (snake_case).
+ */
+@Serializable
+data class CountryInfoApiData(
+    val code: String,
+    val name: String,
+    @SerialName("currency_code")
+    val currencyCode: String? = null,
+    @SerialName("currency_name")
+    val currencyName: String? = null
 )

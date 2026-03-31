@@ -2,8 +2,8 @@
 ## Functional Specification Document
 
 **Document:** FSD-CIRIS-WALLET-REG-001
-**Version:** 1.0.0
-**Date:** 2026-03-25
+**Version:** 1.1.0
+**Date:** 2026-03-29
 **Author:** CIRIS L3C
 **Status:** Active
 **CIRIS Agent Version:** 2.3.0
@@ -261,7 +261,93 @@ The wallet exists to serve the CIRIS mission of ethical AI development, not to g
 
 ---
 
-## 9. Summary
+## 10. Gas Fee Handling (ERC-4337 Paymaster)
+
+### 10.1 The Gas Problem
+
+EVM transactions require ETH for gas fees. Without mitigation, users would need to:
+- Acquire ETH through an exchange (creates exchange dependency)
+- Swap USDC→ETH within CIRIS (would constitute exchange activity)
+
+Both options risk regulatory classification as exchange/money transmission.
+
+### 10.2 Paymaster Solution
+
+CIRIS uses ERC-4337 account abstraction with a self-hosted open-source paymaster ([Etherspot Arka](https://github.com/etherspot/arka), MIT licensed):
+
+| Component | Description | Regulatory Status |
+|-----------|-------------|-------------------|
+| User signs UserOperation | User authorizes tx via CIRISVerify | Self-custody (unchanged) |
+| Paymaster sponsors gas | CIRIS infrastructure pays ETH gas | Infrastructure cost |
+| User pays in USDC | Direct peer-to-peer transfer | No intermediation |
+
+**Key Points:**
+- CIRIS deposits ETH to paymaster contract (infrastructure expense)
+- User's USDC goes directly to recipient (no CIRIS intermediation)
+- No swap, no exchange, no conversion
+- User signs their own transaction (wallet behavior)
+
+### 10.3 Why This Is Not Money Transmission
+
+Per [FinCEN Guidance FIN-2019-G001](https://www.fincen.gov/system/files/2019-05/FinCEN%20Guidance%20CVC%20FINAL%20508.pdf), money transmission requires:
+1. Accepting value from one person
+2. Transmitting to another location/person
+
+Paymaster sponsorship:
+- CIRIS does NOT accept user funds
+- CIRIS does NOT transmit user funds
+- CIRIS pays infrastructure costs (like server hosting)
+- User's USDC flows directly wallet-to-wallet on-chain
+
+**FinCEN Software Provider Exemption:**
+> "FinCEN exempts from the definition of money transmitter those persons providing the delivery, communication, or network access services used by a money transmitter to support money transmission services. This is because **suppliers of tools (communications, hardware, or software) that may be utilized in money transmission are engaged in trade and not money transmission.**"
+
+**Analogy:** A company paying for its users' postage stamps is not operating a postal service.
+
+### 10.4 App Store Precedent
+
+Multiple self-custody wallets with paymaster/gas sponsorship are live on Apple App Store:
+
+| Wallet | App Store Status | Paymaster Features |
+|--------|------------------|-------------------|
+| [Ready Wallet (Argent)](https://apps.apple.com/us/app/ready-wallet-formerly-argent/id6744935604) | ✅ Live (2M+ downloads) | "Smart wallet features like Paymaster" |
+| [Zerion](https://apps.apple.com/us/app/zerion-wallet-crypto-web3/id1456732565) | ✅ Live | Custom paymaster, gasless transactions |
+| Coinbase Wallet | ✅ Live | CDP Paymaster, account abstraction |
+| MetaMask | ✅ Live | Gas-included swaps, paymaster support |
+
+### 10.5 Implementation Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CIRIS Wallet Flow                        │
+├─────────────────────────────────────────────────────────────┤
+│  1. User initiates USDC send                                │
+│  2. CIRIS builds UserOperation (ERC-4337)                   │
+│  3. User signs via CIRISVerify (self-custody key)           │
+│  4. Arka paymaster adds sponsorship data                    │
+│  5. Bundler submits to Base L2                              │
+│  6. Paymaster pays gas in ETH (CIRIS infrastructure)        │
+│  7. User's USDC transfers directly to recipient             │
+└─────────────────────────────────────────────────────────────┘
+
+CIRIS never touches user funds. Gas sponsorship = infrastructure cost.
+```
+
+### 10.6 Open Source Compliance
+
+The paymaster implementation uses fully open-source components:
+
+| Component | License | Repository |
+|-----------|---------|------------|
+| Etherspot Arka | MIT | [github.com/etherspot/arka](https://github.com/etherspot/arka) |
+| Base Paymaster Contract | MIT | [github.com/base/paymaster](https://github.com/base/paymaster) |
+| ERC-4337 EntryPoint | GPL-3.0 | [github.com/eth-infinitism/account-abstraction](https://github.com/eth-infinitism/account-abstraction) |
+
+This maintains CIRIS's commitment to open-source software distribution under AGPL-3.0.
+
+---
+
+## 11. Summary
 
 CIRIS L3C is legally permitted to release wallet functionality because:
 
@@ -272,6 +358,7 @@ CIRIS L3C is legally permitted to release wallet functionality because:
 5. **Mission-locked structure** - L3C prevents proprietary capture or profit extraction
 6. **Attestation-gated limits** - Built-in safeguards prevent unauthorized spending
 7. **No custody, no transmission** - CIRIS provides software, users control funds
+8. **Paymaster gas sponsorship** - Infrastructure expense, not money transmission; follows App Store precedent (Ready Wallet, Zerion, Coinbase Wallet)
 
 ---
 

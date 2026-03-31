@@ -229,7 +229,9 @@ class SonarClient:
         """Get list of files with uncovered lines in a PR."""
         params = {
             "component": PROJECT_KEY,
-            "metricKeys": "new_uncovered_lines,new_lines_to_cover" if pull_request else "uncovered_lines,lines_to_cover",
+            "metricKeys": (
+                "new_uncovered_lines,new_lines_to_cover" if pull_request else "uncovered_lines,lines_to_cover"
+            ),
             "ps": 500,
             "strategy": "leaves",
         }
@@ -257,13 +259,15 @@ class SonarClient:
             uncovered = measures.get(metric_key, 0)
             to_cover = measures.get(cover_key, 0)
             if uncovered > 0:
-                files_with_uncovered.append({
-                    "path": comp.get("path", ""),
-                    "key": comp.get("key", ""),
-                    "uncovered": uncovered,
-                    "to_cover": to_cover,
-                    "coverage": ((to_cover - uncovered) / to_cover * 100) if to_cover > 0 else 0,
-                })
+                files_with_uncovered.append(
+                    {
+                        "path": comp.get("path", ""),
+                        "key": comp.get("key", ""),
+                        "uncovered": uncovered,
+                        "to_cover": to_cover,
+                        "coverage": ((to_cover - uncovered) / to_cover * 100) if to_cover > 0 else 0,
+                    }
+                )
 
         return sorted(files_with_uncovered, key=lambda x: -x["uncovered"])
 
@@ -915,6 +919,7 @@ def main():
             except Exception as e:
                 print(f"Error: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         elif args.command == "tangles":
@@ -960,9 +965,7 @@ def main():
                 print("\n📁 High Complexity Files (potential tangle participants):")
                 try:
                     tree_data = client.get_measures_component_tree(
-                        metrics=["complexity", "cognitive_complexity"],
-                        branch=args.branch,
-                        qualifier="FIL"
+                        metrics=["complexity", "cognitive_complexity"], branch=args.branch, qualifier="FIL"
                     )
                     components = tree_data.get("components", [])
 
@@ -972,11 +975,13 @@ def main():
                         measures = {m["metric"]: float(m.get("value", 0)) for m in comp.get("measures", [])}
                         complexity = measures.get("complexity", 0) + measures.get("cognitive_complexity", 0)
                         if complexity > 50:  # Threshold for "high complexity"
-                            complex_files.append({
-                                "path": comp.get("path", comp.get("key", "").split(":")[-1]),
-                                "complexity": measures.get("complexity", 0),
-                                "cognitive": measures.get("cognitive_complexity", 0),
-                            })
+                            complex_files.append(
+                                {
+                                    "path": comp.get("path", comp.get("key", "").split(":")[-1]),
+                                    "complexity": measures.get("complexity", 0),
+                                    "cognitive": measures.get("cognitive_complexity", 0),
+                                }
+                            )
 
                     complex_files.sort(key=lambda x: -(x["complexity"] + x["cognitive"]))
 
@@ -993,6 +998,7 @@ def main():
             except Exception as e:
                 print(f"Error: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         else:

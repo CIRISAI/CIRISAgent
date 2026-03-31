@@ -74,6 +74,9 @@ class AdapterConfig(BaseModel):
         description="Platforms supported - empty means all, otherwise ['android', 'ios', 'desktop']",
     )
     requires_ciris_services: bool = Field(False, description="Requires CIRIS AI services (Google sign-in)")
+    # Interactive configuration (wizard) support
+    requires_config: bool = Field(False, description="Whether this adapter needs interactive configuration (wizard)")
+    config_fields: List[str] = Field(default_factory=list, description="Fields that can be configured via wizard")
 
 
 class SetupStatusResponse(BaseModel):
@@ -303,12 +306,14 @@ class SetupCompleteRequest(BaseModel):
     location_region: Optional[str] = Field(
         None, description="Region/state/province name (user-chosen granularity, may be omitted)"
     )
-    location_city: Optional[str] = Field(
-        None, description="City name (user-chosen granularity, may be omitted)"
+    location_city: Optional[str] = Field(None, description="City name (user-chosen granularity, may be omitted)")
+    location_latitude: Optional[float] = Field(
+        None, ge=-90.0, le=90.0, description="Latitude in decimal degrees (ISO 6709)"
     )
-    timezone: Optional[str] = Field(
-        None, description="IANA timezone (e.g., 'America/Chicago', 'Africa/Addis_Ababa')"
+    location_longitude: Optional[float] = Field(
+        None, ge=-180.0, le=180.0, description="Longitude in decimal degrees (ISO 6709)"
     )
+    timezone: Optional[str] = Field(None, description="IANA timezone (e.g., 'America/Chicago', 'Africa/Addis_Ababa')")
     share_location_in_traces: bool = Field(
         default=False,
         description="Whether user consents to include location data in anonymized telemetry traces",

@@ -14,9 +14,9 @@ import pytest
 import yaml
 
 from ciris_engine.logic.conscience.prompt_loader import (
+    DEFAULT_LANGUAGE,
     ConsciencePromptLoader,
     ConsciencePrompts,
-    DEFAULT_LANGUAGE,
     get_conscience_prompt_loader,
     set_conscience_prompt_language,
 )
@@ -172,9 +172,7 @@ class TestConsciencePromptLoader:
     def test_get_user_prompt_with_image(self, temp_prompts_dir: Path) -> None:
         """Test get_user_prompt with image context."""
         loader = ConsciencePromptLoader(prompts_dir=str(temp_prompts_dir), language="en")
-        user_prompt = loader.get_user_prompt(
-            "entropy_conscience", image_context="[IMAGE CONTEXT]", text="Hello world"
-        )
+        user_prompt = loader.get_user_prompt("entropy_conscience", image_context="[IMAGE CONTEXT]", text="Hello world")
 
         assert "Hello world" in user_prompt
         assert "[IMAGE CONTEXT]" in user_prompt
@@ -264,9 +262,7 @@ class TestConsciencePromptLoaderRealFiles:
             ("am", "እርስዎ IRIS-E"),  # Amharic uses formal form
         ],
     )
-    def test_load_localized_prompts(
-        self, real_prompts_dir: Path, language: str, expected_substring: str
-    ) -> None:
+    def test_load_localized_prompts(self, real_prompts_dir: Path, language: str, expected_substring: str) -> None:
         """Test loading localized prompts for various languages."""
         if not real_prompts_dir.exists():
             pytest.skip("Prompts directory not found")
@@ -281,9 +277,9 @@ class TestConsciencePromptLoaderRealFiles:
         # Verify it's actually localized (not English)
         assert "You are IRIS-E" not in prompts.system_prompt
         # Verify expected language content is present
-        assert expected_substring in prompts.system_prompt, (
-            f"Expected '{expected_substring}' in {language} system_prompt"
-        )
+        assert (
+            expected_substring in prompts.system_prompt
+        ), f"Expected '{expected_substring}' in {language} system_prompt"
 
 
 class TestGlobalLoaderFunctions:
@@ -362,6 +358,7 @@ class TestConsciencePromptIntegration:
     def mock_config(self) -> Any:
         """Create a mock config with conscience settings."""
         from ciris_engine.logic.conscience.core import ConscienceConfig
+
         return ConscienceConfig()
 
     @pytest.fixture
@@ -381,18 +378,16 @@ class TestConsciencePromptIntegration:
         # Initialize with explicit English
         get_conscience_prompt_loader(language="en")
 
-        conscience = EntropyConscience(
-            mock_service_registry, mock_config, time_service=mock_time_service
-        )
+        conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
 
         # The _create_entropy_messages method should use the loader
         messages = conscience._create_entropy_messages("Test text")
 
         # Verify the messages contain expected content from YAML
         system_contents = [m.content for m in messages if m.role == "system"]
-        assert any("IRIS-E" in content for content in system_contents), (
-            "System messages should contain IRIS-E from loaded prompts"
-        )
+        assert any(
+            "IRIS-E" in content for content in system_contents
+        ), "System messages should contain IRIS-E from loaded prompts"
 
     def test_coherence_conscience_uses_loader(
         self, mock_service_registry: MagicMock, mock_config: Any, mock_time_service: MagicMock
@@ -404,15 +399,13 @@ class TestConsciencePromptIntegration:
         # Initialize with explicit English
         get_conscience_prompt_loader(language="en")
 
-        conscience = CoherenceConscience(
-            mock_service_registry, mock_config, time_service=mock_time_service
-        )
+        conscience = CoherenceConscience(mock_service_registry, mock_config, time_service=mock_time_service)
         messages = conscience._create_coherence_messages("Test text")
 
         system_contents = [m.content for m in messages if m.role == "system"]
-        assert any("IRIS-C" in content for content in system_contents), (
-            "System messages should contain IRIS-C from loaded prompts"
-        )
+        assert any(
+            "IRIS-C" in content for content in system_contents
+        ), "System messages should contain IRIS-C from loaded prompts"
 
     def test_localized_conscience_prompts_used(
         self, mock_service_registry: MagicMock, mock_config: Any, mock_time_service: MagicMock
@@ -420,17 +413,15 @@ class TestConsciencePromptIntegration:
         """Test that localized prompts are used when language is set."""
         from ciris_engine.logic.conscience.core import EntropyConscience
         from ciris_engine.logic.conscience.prompt_loader import (
-            set_conscience_prompt_language,
             get_conscience_prompt_loader,
+            set_conscience_prompt_language,
         )
 
         # Initialize and set to French
         get_conscience_prompt_loader(language="en")  # First init
         set_conscience_prompt_language("fr")
 
-        conscience = EntropyConscience(
-            mock_service_registry, mock_config, time_service=mock_time_service
-        )
+        conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
         messages = conscience._create_entropy_messages("Test text")
 
         # Verify French content appears
@@ -438,9 +429,9 @@ class TestConsciencePromptIntegration:
         all_content = " ".join(system_contents)
 
         # Should contain French, not English
-        assert "Vous êtes IRIS-E" in all_content or "l'éclat" in all_content, (
-            f"Expected French content in: {all_content[:500]}..."
-        )
-        assert "You are IRIS-E, the entropy-sensing" not in all_content, (
-            "Should not contain English original when French is set"
-        )
+        assert (
+            "Vous êtes IRIS-E" in all_content or "l'éclat" in all_content
+        ), f"Expected French content in: {all_content[:500]}..."
+        assert (
+            "You are IRIS-E, the entropy-sensing" not in all_content
+        ), "Should not contain English original when French is set"

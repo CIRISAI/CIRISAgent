@@ -393,9 +393,7 @@ Only request details when needed.
         self.config = config
         self._providers: Dict[str, WalletProvider] = providers or {}
         self._started = False
-        logger.info(
-            f"WalletToolService initialized with providers: {list(self._providers.keys())}"
-        )
+        logger.info(f"WalletToolService initialized with providers: {list(self._providers.keys())}")
 
     def register_provider(self, provider: WalletProvider) -> None:
         """Register a wallet provider."""
@@ -508,9 +506,7 @@ Only request details when needed.
         tool_info = self.TOOL_DEFINITIONS.get(tool_name)
         return tool_info.parameters if tool_info else None
 
-    async def validate_parameters(
-        self, tool_name: str, parameters: Dict[str, Any]
-    ) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
         """Validate parameters for a tool without executing it."""
         if tool_name not in self.TOOL_DEFINITIONS:
             return False
@@ -520,9 +516,7 @@ Only request details when needed.
         required = tool_info.parameters.required or []
         return all(param in parameters for param in required)
 
-    async def get_tool_result(
-        self, correlation_id: str, timeout: float = 30.0
-    ) -> Optional[ToolExecutionResult]:
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of previously executed tool. Not implemented for sync wallet tools."""
         return None
 
@@ -591,9 +585,7 @@ Only request details when needed.
                 correlation_id=correlation_id,
             )
 
-    async def _execute_send_money(
-        self, params: Dict[str, Any], correlation_id: str
-    ) -> ToolExecutionResult:
+    async def _execute_send_money(self, params: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute send_money tool."""
         # Validate required parameters
         recipient = params.get("recipient", "")
@@ -682,9 +674,7 @@ Only request details when needed.
                 correlation_id=correlation_id,
             )
 
-    async def _execute_request_money(
-        self, params: Dict[str, Any], correlation_id: str
-    ) -> ToolExecutionResult:
+    async def _execute_request_money(self, params: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute request_money tool."""
         # Validate required parameters
         amount_raw = params.get("amount")
@@ -784,9 +774,7 @@ Only request details when needed.
                 correlation_id=correlation_id,
             )
 
-    async def _execute_get_statement(
-        self, params: Dict[str, Any], correlation_id: str
-    ) -> ToolExecutionResult:
+    async def _execute_get_statement(self, params: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute get_statement tool."""
         include_balance = params.get("include_balance", True)
         include_history = params.get("include_history", True)
@@ -848,10 +836,12 @@ Only request details when needed.
 
             except Exception as e:
                 logger.error(f"[WALLET TOOL] Error getting statement for {provider_id}: {e}")
-                accounts.append({
-                    "provider": provider_id,
-                    "error": str(e),
-                })
+                accounts.append(
+                    {
+                        "provider": provider_id,
+                        "error": str(e),
+                    }
+                )
 
         return ToolExecutionResult(
             tool_name="get_statement",

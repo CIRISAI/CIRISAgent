@@ -73,6 +73,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             user_lang = getattr(user_profiles[0], "preferred_language", None)
             if user_lang and user_lang != self.prompt_loader.language:
                 from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
                 set_prompt_language(user_lang)
                 logger.debug(f"PDMA: Synced prompt language to user preference: {user_lang}")
 
@@ -142,7 +143,9 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         context_start = time.time()
         system_snapshot_str, user_profile_str = self._build_context_strings(context)
         full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
-        logger.info(f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms")
+        logger.info(
+            f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms"
+        )
 
         # Build messages
         prompt_start = time.time()

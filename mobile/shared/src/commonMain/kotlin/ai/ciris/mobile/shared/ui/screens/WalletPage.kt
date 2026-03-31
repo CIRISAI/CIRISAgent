@@ -229,21 +229,12 @@ fun WalletPage(
                         SpendingProgressCard(spending = status.spending)
                     }
 
-                    // Gas estimate card (show when ETH balance is too low for transfers)
-                    if (status.needsGas && status.address != null && !status.isReceiveOnly) {
-                        GetGasCard(
-                            walletAddress = status.address,
-                            gasEstimate = status.gasEstimate
-                        )
-                    }
-
                     // Transfer card (only show if not receive-only and has address)
                     if (!status.isReceiveOnly && status.address != null) {
                         WalletTransferCard(
                             apiClient = apiClient,
                             maxAmount = status.maxTransactionLimit,
                             currency = status.currency,
-                            needsGas = status.needsGas,
                             onTransferComplete = {
                                 // Refresh wallet status after transfer
                                 loading = true
@@ -378,29 +369,6 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                         fontWeight = FontWeight.Bold,
                         color = textColor
                     )
-                }
-
-                // ETH Balance (for gas)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "⛽",
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = "${status.ethBalance} ETH",
-                        fontSize = 14.sp,
-                        color = if (status.needsGas) SemanticColors.Default.warning else textColor.copy(alpha = 0.7f)
-                    )
-                    if (status.needsGas) {
-                        Text(
-                            text = localizedString("mobile.wallet_needs_gas"),
-                            fontSize = 12.sp,
-                            color = SemanticColors.Default.warning
-                        )
-                    }
                 }
 
                 // Provider/Network
@@ -841,130 +809,10 @@ private fun TransactionHistoryCard(transactions: List<TransactionSummary>) {
 }
 
 @Composable
-private fun GetGasCard(
-    walletAddress: String,
-    gasEstimate: GasEstimate? = null
-) {
-    val clipboardManager = LocalClipboardManager.current
-    var showCopied by remember { mutableStateOf(false) }
-
-    LaunchedEffect(showCopied) {
-        if (showCopied) {
-            kotlinx.coroutines.delay(2000)
-            showCopied = false
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning.copy(alpha = 0.3f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(text = "⛽", fontSize = 20.sp)
-                Text(
-                    text = localizedString("mobile.wallet_gas_required"),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            // Gas estimate display
-            if (gasEstimate != null) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "Transfer Cost Estimate",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 12.sp
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Gas Price:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(text = "${gasEstimate.gasPriceGwei} gwei", fontSize = 11.sp)
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "USDC Transfer:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(text = "${gasEstimate.usdcTransferCostEth} ETH (~$${gasEstimate.usdcTransferCostUsd})", fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = localizedString("mobile.wallet_gas_note"),
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-            )
-
-            Text(
-                text = localizedString("mobile.wallet_gas_how"),
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp
-            )
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = localizedString("mobile.wallet_gas_step1"),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = localizedString("mobile.wallet_gas_step2"),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = localizedString("mobile.wallet_gas_step3"),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                )
-            }
-
-            // Copy address button
-            OutlinedButton(
-                onClick = {
-                    clipboardManager.setText(AnnotatedString(walletAddress))
-                    showCopied = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = if (showCopied) "✓ ${localizedString("mobile.wallet_address_copied")}" else "📋 ${localizedString("mobile.wallet_copy_address")}",
-                    fontSize = 14.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun WalletTransferCard(
     apiClient: CIRISApiClient,
     maxAmount: String,
     currency: String,
-    needsGas: Boolean = false,
     onTransferComplete: () -> Unit
 ) {
     var recipientAddress by remember { mutableStateOf("") }
@@ -1228,15 +1076,6 @@ private fun WalletTransferCard(
                 } else {
                     Text(localizedString("mobile.wallet_send_currency", mapOf("currency" to currency)))
                 }
-            }
-
-            // Warning about gas if needed
-            if (needsGas) {
-                Text(
-                    text = "⚠️ ${localizedString("mobile.wallet_gas_warning")}",
-                    fontSize = 11.sp,
-                    color = SemanticColors.Default.error
-                )
             }
 
             // Warning about irreversibility

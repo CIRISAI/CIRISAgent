@@ -500,8 +500,14 @@ class AccordMetricsService:
         self._share_location_in_traces: bool = env_share_location
         self._user_location: str = os.environ.get("CIRIS_USER_LOCATION", "") if env_share_location else ""
         self._user_timezone: str = os.environ.get("CIRIS_USER_TIMEZONE", "") if env_share_location else ""
+        # Coordinates in ISO 6709 decimal degrees format
+        lat_str = os.environ.get("CIRIS_USER_LATITUDE", "") if env_share_location else ""
+        lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "") if env_share_location else ""
+        self._user_latitude: Optional[float] = float(lat_str) if lat_str else None
+        self._user_longitude: Optional[float] = float(lon_str) if lon_str else None
         if self._share_location_in_traces and self._user_location:
-            logger.info(f"   Location sharing enabled: {self._user_location}")
+            coords = f" ({self._user_latitude}, {self._user_longitude})" if self._user_latitude else ""
+            logger.info(f"   Location sharing enabled: {self._user_location}{coords}")
 
         # Event queue and batching
         self._event_queue: List[Dict[str, Any]] = []
@@ -843,6 +849,11 @@ class AccordMetricsService:
                 correlation_metadata["user_location"] = self._user_location
             if self._user_timezone:
                 correlation_metadata["user_timezone"] = self._user_timezone
+            # Include coordinates in ISO 6709 decimal degrees format
+            if self._user_latitude is not None:
+                correlation_metadata["user_latitude"] = str(self._user_latitude)
+            if self._user_longitude is not None:
+                correlation_metadata["user_longitude"] = str(self._user_longitude)
 
         payload: Dict[str, Any] = {
             "events": events,
@@ -955,6 +966,11 @@ class AccordMetricsService:
                 correlation_metadata["user_location"] = self._user_location
             if self._user_timezone:
                 correlation_metadata["user_timezone"] = self._user_timezone
+            # Include coordinates in ISO 6709 decimal degrees format
+            if self._user_latitude is not None:
+                correlation_metadata["user_latitude"] = str(self._user_latitude)
+            if self._user_longitude is not None:
+                correlation_metadata["user_longitude"] = str(self._user_longitude)
 
         timestamp = datetime.now(timezone.utc).isoformat()
 

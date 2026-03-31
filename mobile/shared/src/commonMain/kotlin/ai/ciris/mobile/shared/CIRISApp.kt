@@ -1288,6 +1288,7 @@ fun CIRISApp(
                             onTicketsClick = { currentScreen = Screen.Tickets },
                             onSchedulerClick = { currentScreen = Screen.Scheduler },
                             onToolsClick = { currentScreen = Screen.Tools },
+                            onHelpClick = { currentScreen = Screen.Help },
                             darkMode = isDarkMode,
                             // Theme picker
                             colorTheme = colorTheme,
@@ -1450,6 +1451,15 @@ fun CIRISApp(
                     },
                     onDismissError = {
                         billingViewModel.clearError()
+                    }
+                )
+            }
+
+            Screen.Help -> {
+                HelpScreen(
+                    onNavigateBack = {
+                        platformLog(TAG, "[Screen.Help] Navigating back to Interact")
+                        currentScreen = Screen.Interact
                     }
                 )
             }
@@ -2507,6 +2517,7 @@ private fun CIRISTopBar(
     onTicketsClick: () -> Unit = {},
     onSchedulerClick: () -> Unit = {},
     onToolsClick: () -> Unit = {},
+    onHelpClick: () -> Unit = {},
     darkMode: Boolean = false,
     // Theme picker
     colorTheme: ColorTheme = ColorTheme.DEFAULT,
@@ -2634,6 +2645,12 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
                         leadingIcon = { Icon(Icons.Default.Star, null) },
                         modifier = Modifier.testableClickable("menu_billing") { activeCategory = NavCategory.NONE; onBillingClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(localizedString("mobile.nav_help")) },
+                        onClick = { activeCategory = NavCategory.NONE; onHelpClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_help") { activeCategory = NavCategory.NONE; onHelpClick() }
                     )
                 }
             }
@@ -2841,6 +2858,7 @@ private sealed class Screen {
     object Scheduler : Screen()
     object Tools : Screen()
     object DataManagement : Screen()
+    object Help : Screen()
 }
 
 /**

@@ -80,8 +80,5 @@ class TestVerifyThreadResult:
 
     def test_with_both_result_and_error(self):
         """Test that error takes precedence."""
-        result = VerifyThreadResult(
-            result={"version": "1.0.0"},
-            error="Error occurred"
-        )
+        result = VerifyThreadResult(result={"version": "1.0.0"}, error="Error occurred")
         assert result.success is False  # Error takes precedence

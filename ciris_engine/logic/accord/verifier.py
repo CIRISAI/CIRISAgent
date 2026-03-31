@@ -18,12 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from ciris_engine.schemas.accord import (
-    AccordMessage,
-    AccordPayload,
-    AccordVerificationResult,
-    verify_accord_signature,
-)
+from ciris_engine.schemas.accord import AccordMessage, AccordPayload, AccordVerificationResult, verify_accord_signature
 
 logger = logging.getLogger(__name__)
 

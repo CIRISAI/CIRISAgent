@@ -139,6 +139,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             )
             if user_lang and user_lang != self.prompt_loader.language:
                 from ciris_engine.logic.dma.prompt_loader import set_prompt_language
+
                 set_prompt_language(user_lang)
                 logger.debug(f"TSASPDMA: Synced prompt language to user preference: {user_lang}")
 
@@ -292,7 +293,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                 sections.append(f"  ⭐ {message}")
                 if when_to_use:
                     sections.append(f"  When to use: {when_to_use}")
-                sections.append(f"  tool_name=\"{tool_name}\" - Use this EXACT name!")
+                sections.append(f'  tool_name="{tool_name}" - Use this EXACT name!')
                 logger.info(f"[TSASPDMA] Added tool highlight for: {tool_name}")
                 continue
 
@@ -417,8 +418,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - PONDER: Reconsider the approach
         """
         logger.info(f"[TSASPDMA] evaluate_tool_action called for tool: {tool_name}")
-        logger.info(f"[TSASPDMA] Tool info: name={tool_info.name}, when_to_use={tool_info.when_to_use[:50] if tool_info.when_to_use else 'N/A'}...")
-        logger.info(f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}")
+        logger.info(
+            f"[TSASPDMA] Tool info: name={tool_info.name}, when_to_use={tool_info.when_to_use[:50] if tool_info.when_to_use else 'N/A'}..."
+        )
+        logger.info(
+            f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}"
+        )
 
         # Sync user's language preference before building prompts
         self._sync_language_from_context(context)
@@ -564,7 +569,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                                 "What alternative approach should I take?",
                             ]
                         ),
-                        rationale=f"TSASPDMA-CORRECTION: Invalid tool correction - forcing reconsideration",
+                        rationale="TSASPDMA-CORRECTION: Invalid tool correction - forcing reconsideration",
                     )
 
             # Convert result, using the corrected tool_name if provided

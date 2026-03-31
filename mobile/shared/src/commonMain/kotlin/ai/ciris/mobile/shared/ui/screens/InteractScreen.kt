@@ -818,16 +818,23 @@ private fun CreditsIndicator(
             // Fire emoji for credits
             Text(text = "🔥", fontSize = 10.sp)
 
-            // Credits count
+            // Credits count - prioritize showing what's available
+            // Priority: paid credits > free uses > daily free uses > 0 with renewal time
             val creditsText = when {
                 credits.creditsRemaining > 0 -> "${credits.creditsRemaining}"
                 credits.freeUsesRemaining > 0 -> "Free: ${credits.freeUsesRemaining}"
-                else -> "0"
+                credits.dailyFreeUsesRemaining > 0 -> "Daily: ${credits.dailyFreeUsesRemaining}"
+                else -> {
+                    // Show renewal time when out of credits
+                    val hoursUntil = credits.hoursUntilRenewal()
+                    if (hoursUntil > 0) "⏰${hoursUntil}h" else "0"
+                }
             }
             val creditsColor = when {
                 credits.creditsRemaining > 10 -> theme.statusConnected
                 credits.creditsRemaining > 0 -> theme.statusWarning
                 credits.freeUsesRemaining > 0 -> theme.textAccent
+                credits.dailyFreeUsesRemaining > 0 -> theme.textAccent
                 else -> theme.statusDisconnected
             }
             Text(

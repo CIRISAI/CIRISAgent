@@ -52,6 +52,32 @@ from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 # Import from modular components
 from .aggregator import ConsolidationCandidate, GracePolicy, MemoryType, TelemetryAggregator
+from .exceptions import (
+    MemoryBusUnavailableError,
+    MetricCollectionError,
+    NoThoughtDataError,
+    QueueStatusUnavailableError,
+    RuntimeControlBusUnavailableError,
+)
+from .helpers import (
+    METRIC_TYPES,
+    build_continuity_summary_from_memory,
+    build_telemetry_summary,
+    calculate_average_latencies,
+    calculate_error_rate,
+    calculate_query_time_window,
+    check_summary_cache,
+    collect_circuit_breaker_state,
+    collect_metric_aggregates,
+    convert_to_metric_record,
+    filter_by_metric_name,
+    filter_by_tags,
+    filter_by_time_range,
+    get_average_thought_depth,
+    get_queue_saturation,
+    get_service_uptime,
+    store_summary_cache,
+)
 from .storage import (
     store_behavioral_data,
     store_identity_context,
@@ -305,19 +331,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             MemoryBusUnavailableError: If memory bus not available
             MetricCollectionError: If query fails
         """
-        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
-            MemoryBusUnavailableError,
-            MetricCollectionError,
-        )
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            calculate_query_time_window,
-            convert_to_metric_record,
-            filter_by_metric_name,
-            filter_by_tags,
-            filter_by_time_range,
-        )
-        from ciris_engine.schemas.services.graph.telemetry import MetricRecord
-
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for metric queries")
 
@@ -755,26 +768,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             RuntimeControlBusUnavailableError: If runtime control bus not available
             QueueStatusUnavailableError: If queue status cannot be retrieved
         """
-        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
-            MemoryBusUnavailableError,
-            NoThoughtDataError,
-            QueueStatusUnavailableError,
-            RuntimeControlBusUnavailableError,
-        )
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            METRIC_TYPES,
-            build_telemetry_summary,
-            calculate_average_latencies,
-            calculate_error_rate,
-            check_summary_cache,
-            collect_circuit_breaker_state,
-            collect_metric_aggregates,
-            get_average_thought_depth,
-            get_queue_saturation,
-            get_service_uptime,
-            store_summary_cache,
-        )
-
         now = self._now()
 
         # Always collect fresh circuit breaker state (not cacheable, changes rapidly)
@@ -855,12 +848,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         Returns:
             ContinuitySummary with lifecycle metrics, or None if memory service unavailable
         """
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            build_continuity_summary_from_memory,
-            check_summary_cache,
-            store_summary_cache,
-        )
-
         now = self._now()
 
         # Check cache

@@ -68,6 +68,9 @@ expect class EnvFileUpdater {
      * Clear the agent signing key for a complete setup reset.
      * This is necessary when re-running the setup wizard to get a fresh Portal key.
      *
+     * WARNING: This will destroy wallet access! The signing key is used to derive
+     * the wallet address. Without the key, any funds in the wallet are LOST FOREVER.
+     *
      * Deletes:
      * - The encrypted key file (agent_signing.ed25519.enc)
      * - The AES wrapper key from platform keystore (Android Keystore / iOS Keychain)
@@ -76,6 +79,21 @@ expect class EnvFileUpdater {
      * @return Result with true on success, exception on failure
      */
     suspend fun clearSigningKey(): Result<Boolean>
+
+    /**
+     * Clear only the data directory, preserving the signing key.
+     * Use this for a "soft reset" that keeps wallet access intact.
+     *
+     * Deletes:
+     * - The data directory (databases, audit logs, memory graphs, etc.)
+     *
+     * Preserves:
+     * - The encrypted signing key file (agent_signing.ed25519.enc)
+     * - The AES wrapper key in platform keystore
+     *
+     * @return Result with true on success, exception on failure
+     */
+    suspend fun clearDataOnly(): Result<Boolean>
 }
 
 /**

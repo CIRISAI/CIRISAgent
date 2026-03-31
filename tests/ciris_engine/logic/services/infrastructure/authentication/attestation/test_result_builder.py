@@ -14,9 +14,7 @@ from ciris_engine.logic.services.infrastructure.authentication.attestation.resul
     _extract_sources,
     build_attestation_result,
 )
-from ciris_engine.logic.services.infrastructure.authentication.attestation.types import (
-    VerifyThreadResult,
-)
+from ciris_engine.logic.services.infrastructure.authentication.attestation.types import VerifyThreadResult
 
 
 class TestExtractSources:

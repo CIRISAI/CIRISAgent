@@ -242,7 +242,8 @@ class AdapterLoader:
         if manifest.module.is_mock:
             for service_decl in manifest.services:
                 if service_decl.type == ServiceType.LLM:
-                    from ciris_engine.logic.runtime.service_initializer import _log_service_started
+                    from ciris_engine.logic.runtime.startup_logging import _log_service_started
+
                     _log_service_started(14, "MockLLMService")
 
     async def _initialize_single_adapter(self, manifest: Any, service_registry: Any, result: ModuleLoadResult) -> None:

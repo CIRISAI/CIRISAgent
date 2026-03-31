@@ -743,9 +743,7 @@ class LLMBus(BaseBus[LLMService]):
             cb.record_failure()
             # Emit error if circuit just opened
             if was_closed and cb.state == CircuitState.OPEN:
-                task = asyncio.create_task(
-                    error_emitter.emit_circuit_breaker_open(service_name)
-                )
+                task = asyncio.create_task(error_emitter.emit_circuit_breaker_open(service_name))
                 self._background_tasks.add(task)
                 task.add_done_callback(self._background_tasks.discard)
 

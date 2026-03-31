@@ -327,6 +327,36 @@ actual class EnvFileUpdater {
             Result.failure(e)
         }
     }
+
+    /**
+     * Clear only the data directory, preserving the signing key.
+     * Use this for a "soft reset" that keeps wallet access intact.
+     */
+    actual suspend fun clearDataOnly(): Result<Boolean> {
+        val home = cirisHome ?: run {
+            println("[$TAG] Cannot clear data - cirisHome not found")
+            return Result.failure(Exception("cirisHome not found"))
+        }
+
+        return try {
+            val fileManager = NSFileManager.defaultManager
+
+            // Only delete the data directory (databases, audit logs, etc.)
+            val dataPath = "$home/data"
+            if (fileManager.fileExistsAtPath(dataPath)) {
+                val deleted = fileManager.removeItemAtPath(dataPath, null)
+                println("[$TAG] Data directory ${if (deleted) "deleted" else "NOT deleted"}: $dataPath")
+            } else {
+                println("[$TAG] Data directory does not exist")
+            }
+
+            println("[$TAG] Data cleared - signing key preserved for wallet access")
+            Result.success(true)
+        } catch (e: Exception) {
+            println("[$TAG] Error clearing data: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }
 
 /**

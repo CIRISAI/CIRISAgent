@@ -116,7 +116,9 @@ def pull_logs_command(args) -> int:
             connected_phys = [d for d in phys_devices if d.state == "device"]
             if connected_phys:
                 platform = "ios"
-                print(f"[INFO] Auto-detected physical iOS device: {connected_phys[0].name or connected_phys[0].identifier[:8]}")
+                print(
+                    f"[INFO] Auto-detected physical iOS device: {connected_phys[0].name or connected_phys[0].identifier[:8]}"
+                )
         except (RuntimeError, Exception):
             pass
 
@@ -783,22 +785,27 @@ def test_ios_physical_command(args) -> int:
 
     # Save results
     import json as json_mod
+
     results_path = output_dir / f"ios_physical_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(results_path, "w") as f:
-        json_mod.dump({
-            "platform": "ios_physical",
-            "device": {
-                "name": device.name,
-                "identifier": device.identifier,
-                "os_version": device.os_version,
-                "model": device.model,
+        json_mod.dump(
+            {
+                "platform": "ios_physical",
+                "device": {
+                    "name": device.name,
+                    "identifier": device.identifier,
+                    "os_version": device.os_version,
+                    "model": device.model,
+                },
+                "reports": [
+                    {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
+                    for r in reports
+                ],
+                "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
             },
-            "reports": [
-                {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
-                for r in reports
-            ],
-            "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
-        }, f, indent=2)
+            f,
+            indent=2,
+        )
     print(f"Results: {results_path}")
 
     return 0 if (failed == 0 and errors == 0) else 1
@@ -948,16 +955,21 @@ def test_ios_command(args) -> int:
 
     # Save results
     import json
+
     results_path = output_dir / f"ios_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     with open(results_path, "w") as f:
-        json.dump({
-            "platform": "ios",
-            "reports": [
-                {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
-                for r in reports
-            ],
-            "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
-        }, f, indent=2)
+        json.dump(
+            {
+                "platform": "ios",
+                "reports": [
+                    {"name": r.name, "result": r.result.value, "duration": r.duration, "message": r.message}
+                    for r in reports
+                ],
+                "summary": {"total": len(reports), "passed": passed, "failed": failed, "errors": errors},
+            },
+            f,
+            indent=2,
+        )
     print(f"Results: {results_path}")
 
     return 0 if (failed == 0 and errors == 0) else 1
@@ -976,6 +988,7 @@ def test_command(args) -> int:
             # Auto-detect physical device
             try:
                 from .ios.idevice_helper import IDeviceHelper
+
                 phys_helper = IDeviceHelper(device_id=getattr(args, "device", None))
                 phys_devices = phys_helper.get_devices()
                 connected = [d for d in phys_devices if d.state == "device"]
@@ -1239,7 +1252,8 @@ Examples:
         help="CIRIS API password (default: ciris_admin_password)",
     )
     portal_parser.add_argument(
-        "--wait", "-w",
+        "--wait",
+        "-w",
         action="store_true",
         help="Wait for user to complete Portal authorization (polls until done)",
     )
@@ -1292,11 +1306,13 @@ Examples:
 """,
     )
     la_parser.add_argument(
-        "--portal-url", default="https://portal.ciris.ai",
+        "--portal-url",
+        default="https://portal.ciris.ai",
         help="Portal URL for device auth (default: https://portal.ciris.ai)",
     )
     la_parser.add_argument(
-        "--api-url", default="http://localhost:8080",
+        "--api-url",
+        default="http://localhost:8080",
         help="CIRIS API base URL (default: http://localhost:8080)",
     )
     la_parser.add_argument("--username", default="admin", help="Admin username to create")
@@ -1304,18 +1320,23 @@ Examples:
     la_parser.add_argument("--llm-provider", default="groq", help="LLM provider (default: groq)")
     la_parser.add_argument("--llm-key", default=None, help="LLM API key (overrides key file)")
     la_parser.add_argument(
-        "--llm-key-file", default="~/.groq_key",
+        "--llm-key-file",
+        default="~/.groq_key",
         help="Path to file containing LLM API key (default: ~/.groq_key)",
     )
     la_parser.add_argument("--llm-model", default=None, help="LLM model name (provider default if omitted)")
     la_parser.add_argument(
-        "--wait", "-w", action="store_true",
+        "--wait",
+        "-w",
+        action="store_true",
         help="Wait for Portal authorization (polls until done)",
     )
     la_parser.add_argument("--timeout", type=int, default=300, help="Poll timeout in seconds (default: 300)")
     la_parser.add_argument("--interval", type=int, default=5, help="Poll interval in seconds (default: 5)")
     la_parser.add_argument(
-        "--output-dir", "-o", default="mobile_qa_reports",
+        "--output-dir",
+        "-o",
+        default="mobile_qa_reports",
         help="Directory for test reports (default: mobile_qa_reports)",
     )
     la_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")

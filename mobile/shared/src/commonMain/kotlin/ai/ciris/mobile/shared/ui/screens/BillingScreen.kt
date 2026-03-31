@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.platform.getAppVersion
+import ai.ciris.mobile.shared.platform.getAppBuildNumber
 import ai.ciris.mobile.shared.localization.localizedString
 
 /**
@@ -167,7 +169,9 @@ fun BillingScreen(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(products) { product ->
@@ -178,6 +182,18 @@ fun BillingScreen(
                         }
                     }
                 }
+
+                // Version info at bottom
+                Spacer(modifier = Modifier.weight(if (products.isEmpty() && !isLoading) 1f else 0.01f))
+                Text(
+                    text = "CIRIS v${getAppVersion()} (${getAppBuildNumber()})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(vertical = 8.dp)
+                        .testable("txt_billing_version")
+                )
             }
 
             // Loading overlay

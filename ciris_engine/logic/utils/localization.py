@@ -222,7 +222,9 @@ def get_string(
     # Fall back to default or key itself
     if result is None:
         if default is not None:
-            logger.debug(f"[LOCALIZATION] Using default for key '{key}': {default[:50] if len(default) > 50 else default}")
+            logger.debug(
+                f"[LOCALIZATION] Using default for key '{key}': {default[:50] if len(default) > 50 else default}"
+            )
             result = default
         else:
             logger.warning(f"[LOCALIZATION] MISSING key: {key} (lang={lang_code}) - returning raw key")

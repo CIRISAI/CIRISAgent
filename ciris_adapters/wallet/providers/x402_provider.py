@@ -385,6 +385,11 @@ class X402Provider(WalletProvider):
 
             verifier = get_verifier()
 
+            # Get attestation level first (needed regardless of hardware trust status)
+            challenge = os.urandom(32)
+            status = verifier.get_license_status(challenge_nonce=challenge)
+            level = getattr(status, "attestation_level", 0)
+
             # Check for hardware trust degradation
             if getattr(verifier, "_has_wallet_support", False):
                 try:
@@ -404,8 +409,9 @@ class X402Provider(WalletProvider):
                                         }
                                     )
 
+                        # Use actual attestation level, not hardcoded 0
                         self._spending_authority = SpendingAuthority.from_attestation(
-                            attestation_level=0,
+                            attestation_level=level,
                             hardware_trust_degraded=True,
                             trust_degradation_reason=hw_info.trust_degradation_reason,
                             security_advisories=advisories,
@@ -413,11 +419,6 @@ class X402Provider(WalletProvider):
                         return self._spending_authority
                 except Exception as e:
                     logger.debug(f"[X402] Hardware info check failed: {e}")
-
-            # Get attestation level
-            challenge = os.urandom(32)
-            status = verifier.get_license_status(challenge_nonce=challenge)
-            level = getattr(status, "attestation_level", 0)
 
             self._spending_authority = SpendingAuthority.from_attestation(
                 attestation_level=level,

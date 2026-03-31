@@ -85,11 +85,11 @@ fun StartupScreen(
         languagesPreloaded = true
     }
 
-    // Rotate through languages every 2.5 seconds if no explicit selection
-    // Wait for languages to be preloaded before starting rotation
+    // Rotate through languages every 2.5 seconds during startup (visual effect)
+    // Always rotate regardless of language selection - it's a startup animation
     // Stop rotation when startup completes (phase becomes READY or FIRST_RUN_SETUP)
-    LaunchedEffect(hasExplicitLanguage, languagesPreloaded, phase) {
-        val shouldRotate = !hasExplicitLanguage && languagesPreloaded &&
+    LaunchedEffect(languagesPreloaded, phase) {
+        val shouldRotate = languagesPreloaded &&
             phase != StartupPhase.READY && phase != StartupPhase.FIRST_RUN_SETUP
         if (shouldRotate) {
             while (true) {
@@ -208,8 +208,8 @@ fun StartupScreen(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
-                // Show current language indicator if no explicit selection (rotating)
-                if (!hasExplicitLanguage) {
+                // Show current language indicator during startup (always rotating)
+                if (phase != StartupPhase.READY && phase != StartupPhase.FIRST_RUN_SETUP) {
                     Text(
                         text = currentLangInfo.nativeName,
                         fontSize = 9.sp,

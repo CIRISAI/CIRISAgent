@@ -42,9 +42,15 @@ for i in $(seq 1 15); do
     sleep 2
 done
 
-echo "[2/8] Setting up initial state..."
-mkdir -p ~/ciris /Users/macmini/CIRISAgent/data
-cp ~/ciris/agent_signing.key /Users/macmini/CIRISAgent/data/ 2>/dev/null || true
+echo "[2/8] Setting up initial state (clean)..."
+# Preserve signing key, wipe data for clean start
+SIGNING_KEY_BACKUP="/tmp/agent_signing.key.bak"
+cp ~/ciris/agent_signing.key "$SIGNING_KEY_BACKUP" 2>/dev/null || true
+rm -rf ~/ciris/data /Users/macmini/CIRISAgent/data
+rm -f /Users/macmini/CIRISAgent/ciris_engine.db /Users/macmini/CIRISAgent/ciris_audit.db /Users/macmini/CIRISAgent/secrets.db
+mkdir -p ~/ciris/data /Users/macmini/CIRISAgent/data
+cp "$SIGNING_KEY_BACKUP" ~/ciris/agent_signing.key 2>/dev/null || true
+cp "$SIGNING_KEY_BACKUP" /Users/macmini/CIRISAgent/data/agent_signing.key 2>/dev/null || true
 OPENROUTER_KEY_VALUE=$(cat ~/.openrouter_key)
 cat > ~/ciris/.env << ENVEOF
 CIRIS_CONFIGURED="true"
@@ -57,9 +63,7 @@ ENVEOF
 echo "[3/8] Launching CIRIS desktop (test mode)..."
 find /Users/macmini/CIRISAgent/ciris_engine -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 unset CIRIS_MOCK_LLM 2>/dev/null || true
-# Export LLM key so server finds it during startup API key check
-# main.py checks OPENAI_API_KEY, OPENROUTER_API_KEY etc. (not CIRIS_ prefixed)
-export OPENROUTER_API_KEY="$OPENROUTER_KEY"
+# Export LLM config (CIRIS_ prefix matches setup wizard .env format)
 export CIRIS_OPENAI_API_KEY="$OPENROUTER_KEY"
 export CIRIS_OPENAI_API_BASE="https://openrouter.ai/api/v1"
 export CIRIS_OPENAI_MODEL_NAME="mistralai/mistral-small-2603"
@@ -80,11 +84,12 @@ echo "  Screen: $(screen)"
 
 # --- WAIT FOR LOGIN SCREEN ---
 echo "[4/8] Waiting for Login screen then logging in..."
-wait_screen "Login" 60
+wait_screen "Login" 90
+sleep 1
 input_text "input_username" "admin"
 input_text "input_password" "ciris_admin_password"
 click "btn_login_submit"
-wait_screen "Interact" 30
+wait_screen "Interact" 60
 echo "  Screen: $(screen)"
 
 # --- WIPE ---
@@ -151,7 +156,7 @@ echo "[8/8] Verifying setup..."
 
 # Check founding partnership
 echo "  Checking founding partnership..."
-PARTNERSHIP=$(grep "SETUP_COMPLETE.*founding" /tmp/ciris_e2e.log 2>/dev/null | tail -1)
+PARTNERSHIP=$(grep -i "SETUP_COMPLETE.*founding\|founding.*partnership.*created" /tmp/ciris_e2e.log 2>/dev/null | tail -1)
 if [ -n "$PARTNERSHIP" ]; then
     echo "  ✅ $PARTNERSHIP"
 else

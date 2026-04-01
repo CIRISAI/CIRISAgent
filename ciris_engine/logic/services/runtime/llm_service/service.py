@@ -404,14 +404,22 @@ class OpenAIConfig(BaseModel):
         return []
 
 
+def _env(*names: str) -> str:
+    """Get first non-empty value from env var names (CIRIS_ prefix checked first)."""
+    for name in names:
+        val = os.environ.get(f"CIRIS_{name}") or os.environ.get(name) or ""
+        if val:
+            return val
+    return ""
+
+
 def _detect_provider_from_env() -> LLMProvider:
     """Detect LLM provider from environment variables.
 
-    Checks CIRIS_LLM_PROVIDER (preferred) or LLM_PROVIDER first,
-    then falls back to detecting based on which API key is set.
+    Checks CIRIS_ prefixed vars first (set by setup wizard), then unprefixed.
     """
-    # Explicit provider setting takes precedence (CIRIS_ prefix preferred)
-    provider_env = (os.environ.get("CIRIS_LLM_PROVIDER") or os.environ.get("LLM_PROVIDER") or "").lower()
+    # Explicit provider setting takes precedence
+    provider_env = _env("LLM_PROVIDER").lower()
     if provider_env:
         if provider_env in ("anthropic", "claude"):
             return LLMProvider.ANTHROPIC
@@ -423,32 +431,34 @@ def _detect_provider_from_env() -> LLMProvider:
             return LLMProvider.OPENAI_COMPATIBLE
 
     # Auto-detect based on which API key is set
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if _env("ANTHROPIC_API_KEY"):
         return LLMProvider.ANTHROPIC
-    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+    if _env("GOOGLE_API_KEY", "GEMINI_API_KEY"):
         return LLMProvider.GOOGLE
 
     # Default to OpenAI (or OpenAI-compatible if base_url is set)
-    if os.environ.get("OPENAI_API_BASE"):
+    if _env("OPENAI_API_BASE"):
         return LLMProvider.OPENAI_COMPATIBLE
     return LLMProvider.OPENAI
 
 
 def _get_api_key_for_provider(provider: LLMProvider) -> str:
-    """Get the appropriate API key for the given provider."""
-    # Check CIRIS_LLM_API_KEY first as override (takes precedence over provider-specific keys)
+    """Get the appropriate API key for the given provider.
+
+    Checks CIRIS_ prefixed vars first (set by setup wizard), then unprefixed.
+    """
+    # Check CIRIS_LLM_API_KEY first as override
     ciris_key = os.environ.get("CIRIS_LLM_API_KEY", "")
     if ciris_key:
         return ciris_key
 
     if provider == LLMProvider.ANTHROPIC:
-        return os.environ.get("ANTHROPIC_API_KEY", "")
+        return _env("ANTHROPIC_API_KEY")
     elif provider == LLMProvider.GOOGLE:
-        # Support both GOOGLE_API_KEY and GEMINI_API_KEY
-        return os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+        return _env("GOOGLE_API_KEY", "GEMINI_API_KEY")
     else:
-        # OpenAI and OpenAI-compatible use OPENAI_API_KEY
-        return os.environ.get("OPENAI_API_KEY", "")
+        # OpenAI and OpenAI-compatible
+        return _env("OPENAI_API_KEY")
 
 
 logger = logging.getLogger(__name__)

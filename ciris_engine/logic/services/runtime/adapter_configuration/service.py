@@ -348,14 +348,20 @@ class AdapterConfigurationService:
 
         selection = step_data.get("selection") or step_data.get("selected")
 
-        if selection:
-            session.collected_config[step.step_id] = selection
+        # "skip" means user chose to skip an optional step with no selection
+        if selection == "skip":
+            selection = ""
+
+        if selection is not None and (selection or getattr(step, "optional", False)):
+            # Advance: has selection, OR optional step with empty/skip selection
+            session.collected_config[step.step_id] = selection if selection else ""
             session.current_step_index += 1
             logger.info(
-                f"[SELECT STEP] Stored selection for {step.step_id}, advancing to step {session.current_step_index}"
+                f"[SELECT STEP] Stored selection for {step.step_id} (value='{selection}'), advancing to step {session.current_step_index}"
             )
             return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
+        # No selection key in step_data at all — fetch options for display
         logger.info(f"[SELECT STEP] No selection provided, fetching options for {step.step_id}")
         options = await adapter.get_config_options(step.step_id, session.collected_config)
         logger.info(f"[SELECT STEP] Got {len(options) if options else 0} options for {step.step_id}")

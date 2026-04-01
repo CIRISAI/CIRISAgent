@@ -163,6 +163,69 @@ This modifier:
 
 **Full API documentation:** `desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
+### End-to-End UI Automation Workflow
+
+The desktop test automation server enables fully scripted E2E flows via HTTP.
+The `testable()` and `testableClickable()` modifiers apply `testTag` on ALL
+platforms, but the HTTP automation server only runs on **desktop** (macOS/Linux/Windows).
+
+**Desktop E2E workflow:**
+```bash
+# 1. Launch with test mode
+CIRIS_TEST_MODE=true python3 -m ciris_engine.cli
+
+# 2. Wait for test server
+curl http://localhost:8091/health
+
+# 3. Drive UI via HTTP
+curl -X POST http://localhost:8091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
+curl -X POST http://localhost:8091/click -d '{"testTag":"btn_login_submit"}'
+curl http://localhost:8091/screen  # -> {"screen":"Interact"}
+
+# 4. Screenshots (java.awt.Robot, test mode only)
+curl -X POST http://localhost:8091/screenshot -d '{"path":"/tmp/screenshot.png"}'
+curl http://localhost:8091/screenshot > screenshot.png  # Raw PNG
+
+# 5. Mouse click (for dropdowns, popups - real AWT events)
+curl -X POST http://localhost:8091/mouse-click -d '{"testTag":"input_llm_provider"}'
+curl -X POST http://localhost:8091/mouse-click-xy -d '{"x":600,"y":400}'
+
+# 6. Full E2E test script (wipe → setup wizard → verify)
+bash tools/test_desktop_wipe_setup.sh
+```
+
+**Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/screen` | GET | Current screen name |
+| `/tree` | GET | All UI elements with positions |
+| `/click` | POST | Click by testTag (programmatic, falls back to mouse) |
+| `/mouse-click` | POST | Real AWT mouse click by testTag |
+| `/mouse-click-xy` | POST | Real AWT mouse click at coordinates |
+| `/input` | POST | Text input to element |
+| `/wait` | POST | Wait for element to appear |
+| `/screenshot` | GET/POST | Capture window (GET=raw PNG, POST=save to path) |
+| `/element/{tag}` | GET | Get element info |
+| `/navigate` | POST | Navigate to screen |
+
+**iOS/Android**: `testTag` is applied via `testable()` modifier for use with
+platform-native UI testing (Espresso `onView(withTag())`, XCTest accessibility
+identifiers). The HTTP server does NOT run on mobile — use `adb` + Espresso
+for Android or XCTest for iOS automation.
+
+**Key test tags for common flows:**
+- Login: `input_username`, `input_password`, `btn_login_submit`
+- Navigation: `btn_adapters_menu`, `menu_adapters`, `btn_data_menu`, `menu_data_management`
+- Setup: `btn_next`, `btn_back`, `input_llm_provider`, `input_api_key`, `input_llm_model_text`
+- Dropdowns: `input_llm_provider` (testableClickable toggles expansion), `menu_provider_openrouter`
+- Trust: `btn_trust_shield`, `btn_trust_refresh`, `btn_trust_back`
+- Data: `btn_reset_account`, `btn_reset_confirm`
+- Chat: `input_message`, `btn_send`, `btn_attach`
+- Adapters: `btn_add_adapter`, `item_adapter_type_home_assistant`, `item_discovered_*`
+- Wizard: `btn_wizard_next`, `btn_wizard_complete`, `btn_wizard_dismiss`, `btn_oauth_sign_in`
+
 ## Build Targets
 
 ```bash

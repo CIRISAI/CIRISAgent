@@ -160,6 +160,47 @@ See `modules/CLAUDE.md` for the full module inventory.
 | "Address already in use" | `lsof -ti:8080 \| xargs kill -9` |
 | Auth token expired | Runner auto-re-authenticates after logout/refresh tests |
 
+## Desktop UI E2E Testing
+
+In addition to API-level tests, CIRIS supports end-to-end desktop UI testing
+via the test automation HTTP server (port 8091). This is separate from the QA
+runner's API tests.
+
+**E2E test script:**
+```bash
+# Full wipe → setup wizard → verify consent/partnership/lens-identifier
+bash tools/test_desktop_wipe_setup.sh
+```
+
+**What the E2E test validates:**
+1. Clean launch (Login screen)
+2. Login with default admin
+3. Factory reset (wipe data, preserve signing keys)
+4. Server restart and first-run detection
+5. Setup wizard: location, LLM (OpenRouter), traces opt-in, account creation
+6. Founding partnership consent (PARTNERED stream)
+7. Lens-identifier endpoint (signing key based)
+8. .env configuration (no mock LLM, correct provider)
+
+**Home Assistant adapter setup (manual + scripted):**
+1. Navigate to Adapters → click + → select home_assistant
+2. mDNS discovery finds HA instances automatically
+3. OAuth via browser (emoore/ciristest1 for test HA)
+4. Feature selection (device control, automations, sensors, notifications)
+5. Camera selection (optional)
+6. Confirm → adapter loaded and running
+
+**Key tools:**
+- `tools/test_desktop_wipe_setup.sh` — Full E2E test script
+- `tools/record_demo_clips.py` — SwiftCapture video recording + automation
+- Test automation API at `:8091` (desktop only, `CIRIS_TEST_MODE=true`)
+
+**Platform notes:**
+- **Desktop**: HTTP test server at `:8091` with programmatic + mouse click support
+- **iOS**: Use XCTest with `testTag` accessibility identifiers
+- **Android**: Use Espresso `onView(withTag("testTag"))` or `tools/qa_runner.modules.mobile`
+- All platforms share the same `testTag` values via `testable()` modifier
+
 ## Reporting
 
 Test results are saved to `qa_reports/` with timestamps. Use `--json` for machine-readable output. The status tracker persists results across runs for the `--status` dashboard.

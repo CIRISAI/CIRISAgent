@@ -13,7 +13,14 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.awt.Rectangle
+import java.awt.Robot
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import javax.imageio.ImageIO
 
 /**
  * Test Automation Server for CIRIS Desktop App
@@ -47,8 +54,28 @@ class TestAutomationServer(
     @Volatile
     var currentScreen: String = "unknown"
 
+    // AWT window reference for screenshot capture
+    @Volatile
+    var awtWindow: java.awt.Window? = null
+
+    // AWT Robot for screen capture (lazy init)
+    private val robot: Robot by lazy { Robot() }
+
     // Callback for navigation requests
     var onNavigationRequest: ((String) -> Unit)? = null
+
+    /**
+     * Perform a real mouse click at screen coordinates using java.awt.Robot.
+     * This works for ALL UI elements including dropdowns, menus, and popups
+     * that don't have programmatic click handlers.
+     */
+    private fun performMouseClick(screenX: Int, screenY: Int) {
+        robot.mouseMove(screenX, screenY)
+        Thread.sleep(50)
+        robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+        Thread.sleep(30)
+        robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+    }
 
     /**
      * Update window position (call when window moves)
@@ -153,24 +180,27 @@ class TestAutomationServer(
                         return@post
                     }
 
-                    // Trigger click via registered handler (programmatic, no Robot)
+                    // Try programmatic click first (fastest, works for testableClickable)
                     val clicked = TestAutomation.triggerClick(request.testTag)
 
-                    if (!clicked) {
-                        call.respond(
-                            HttpStatusCode.NotFound,
-                            ActionResponse(
-                                success = false,
-                                error = "No click handler registered for: ${request.testTag}. Use testableClickable modifier."
-                            )
-                        )
+                    if (clicked) {
+                        call.respond(ActionResponse(
+                            success = true,
+                            element = element.testTag,
+                            action = "click",
+                            coordinates = "${element.centerX},${element.centerY}"
+                        ))
                         return@post
                     }
+
+                    // Fallback: use Robot mouse click (works for dropdowns, ExposedDropdownMenuBox, etc.)
+                    println("[TestAutomation] Programmatic click failed for ${request.testTag}, falling back to mouse click at (${element.centerX}, ${element.centerY})")
+                    performMouseClick(element.centerX, element.centerY)
 
                     call.respond(ActionResponse(
                         success = true,
                         element = element.testTag,
-                        action = "click",
+                        action = "mouse-click",
                         coordinates = "${element.centerX},${element.centerY}"
                     ))
                 }
@@ -254,6 +284,46 @@ class TestAutomationServer(
                     )
                 }
 
+                // Mouse click - real AWT Robot click at element or coordinates
+                // Works for dropdowns, popup menus, and any element
+                post("/mouse-click") {
+                    val request = call.receive<ClickRequest>()
+                    val element = elements[request.testTag]
+
+                    if (element == null) {
+                        call.respond(
+                            HttpStatusCode.NotFound,
+                            ActionResponse(success = false, error = "Element not found: ${request.testTag}")
+                        )
+                        return@post
+                    }
+
+                    performMouseClick(element.centerX, element.centerY)
+
+                    call.respond(ActionResponse(
+                        success = true,
+                        element = element.testTag,
+                        action = "mouse-click",
+                        coordinates = "${element.centerX},${element.centerY}"
+                    ))
+                }
+
+                // Mouse click at raw screen coordinates
+                post("/mouse-click-xy") {
+                    val body = call.receiveText()
+                    val json = kotlinx.serialization.json.Json.parseToJsonElement(body)
+                    val x = json.jsonObject["x"]?.jsonPrimitive?.int ?: 0
+                    val y = json.jsonObject["y"]?.jsonPrimitive?.int ?: 0
+
+                    performMouseClick(x, y)
+
+                    call.respond(ActionResponse(
+                        success = true,
+                        action = "mouse-click-xy",
+                        coordinates = "$x,$y"
+                    ))
+                }
+
                 // Inject a file attachment (bypasses native file picker for test automation)
                 post("/inject-file") {
                     val request = call.receive<InjectFileRequest>()
@@ -308,6 +378,91 @@ class TestAutomationServer(
                     }
 
                     call.respond(element)
+                }
+
+                // Screenshot - capture the CIRIS window as PNG (test mode only)
+                get("/screenshot") {
+                    if (!isTestModeEnabled()) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Screenshots require CIRIS_TEST_MODE=true"))
+                        return@get
+                    }
+                    val window = awtWindow
+                    if (window == null) {
+                        call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Window not available"))
+                        return@get
+                    }
+
+                    try {
+                        val bounds = window.bounds
+                        val screenRect = Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+                        val image = robot.createScreenCapture(screenRect)
+
+                        val format = call.request.queryParameters["format"] ?: "png"
+
+                        // Check if caller wants base64 JSON response
+                        if (call.request.queryParameters["base64"] == "true") {
+                            val baos = ByteArrayOutputStream()
+                            ImageIO.write(image, format, baos)
+                            val encoded = java.util.Base64.getEncoder().encodeToString(baos.toByteArray())
+                            call.respond(mapOf(
+                                "success" to true,
+                                "width" to bounds.width,
+                                "height" to bounds.height,
+                                "format" to format,
+                                "data" to encoded
+                            ))
+                        } else {
+                            // Return raw PNG bytes
+                            val baos = ByteArrayOutputStream()
+                            ImageIO.write(image, format, baos)
+                            call.respondBytes(
+                                bytes = baos.toByteArray(),
+                                contentType = ContentType.Image.PNG,
+                                status = HttpStatusCode.OK
+                            )
+                        }
+                    } catch (e: Exception) {
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            mapOf("error" to "Screenshot failed: ${e.message}")
+                        )
+                    }
+                }
+
+                // Save screenshot to file path (test mode only)
+                post("/screenshot") {
+                    if (!isTestModeEnabled()) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Screenshots require CIRIS_TEST_MODE=true"))
+                        return@post
+                    }
+                    val window = awtWindow
+                    if (window == null) {
+                        call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Window not available"))
+                        return@post
+                    }
+
+                    try {
+                        val request = call.receive<ScreenshotRequest>()
+                        val bounds = window.bounds
+                        val screenRect = Rectangle(bounds.x, bounds.y, bounds.width, bounds.height)
+                        val image = robot.createScreenCapture(screenRect)
+
+                        val file = java.io.File(request.path)
+                        file.parentFile?.mkdirs()
+                        ImageIO.write(image, request.format ?: "png", file)
+
+                        call.respond(ActionResponse(
+                            success = true,
+                            action = "screenshot",
+                            text = request.path
+                        ))
+                    } catch (e: Exception) {
+                        call.respond(ActionResponse(
+                            success = false,
+                            action = "screenshot",
+                            error = "Screenshot failed: ${e.message}"
+                        ))
+                    }
                 }
             }
         }
@@ -407,6 +562,12 @@ data class InjectFileRequest(
     val mediaType: String,
     val dataBase64: String,
     val sizeBytes: Long
+)
+
+@Serializable
+data class ScreenshotRequest(
+    val path: String,
+    val format: String? = "png"
 )
 
 @Serializable

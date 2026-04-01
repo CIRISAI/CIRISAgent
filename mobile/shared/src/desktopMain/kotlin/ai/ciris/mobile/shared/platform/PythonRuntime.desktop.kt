@@ -116,9 +116,14 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             when (cognitiveState) {
                 "WORK", "SETUP", "WAKEUP", "PLAY", "SOLITUDE", "DREAM" -> ExistingServerState.HEALTHY
                 "SHUTDOWN" -> ExistingServerState.STUCK_SHUTDOWN
+                "" -> {
+                    // Empty cognitive_state means server is still initializing
+                    println("[PythonRuntime.desktop] Server responding but cognitive_state empty (still starting)")
+                    ExistingServerState.HEALTHY
+                }
                 else -> {
-                    println("[PythonRuntime.desktop] Unknown cognitive_state: $cognitiveState - treating as stuck")
-                    ExistingServerState.STUCK_SHUTDOWN
+                    println("[PythonRuntime.desktop] Unknown cognitive_state: $cognitiveState - treating as healthy")
+                    ExistingServerState.HEALTHY
                 }
             }
         } catch (_: Exception) {

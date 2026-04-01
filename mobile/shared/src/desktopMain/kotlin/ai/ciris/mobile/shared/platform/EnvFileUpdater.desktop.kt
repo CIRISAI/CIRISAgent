@@ -102,8 +102,22 @@ actual class EnvFileUpdater {
     }
 
     actual suspend fun deleteEnvFile(): Result<Boolean> = runCatching {
+        // Delete primary .env location (~/ciris/.env or CIRIS_HOME/.env)
         if (envFile.exists()) {
             envFile.delete()
+            println("[EnvFileUpdater.desktop] Deleted: ${envFile.absolutePath}")
+        }
+        // Also delete legacy .env in CWD and CWD/ciris/ (Python first_run checks both)
+        val cwd = File(System.getProperty("user.dir") ?: ".")
+        val legacyEnv = File(cwd, ".env")
+        if (legacyEnv.exists()) {
+            legacyEnv.delete()
+            println("[EnvFileUpdater.desktop] Deleted legacy: ${legacyEnv.absolutePath}")
+        }
+        val cirisSubdirEnv = File(cwd, "ciris/.env")
+        if (cirisSubdirEnv.exists()) {
+            cirisSubdirEnv.delete()
+            println("[EnvFileUpdater.desktop] Deleted ciris subdir: ${cirisSubdirEnv.absolutePath}")
         }
         true
     }
@@ -152,13 +166,70 @@ actual class EnvFileUpdater {
      * Use this for a "soft reset" that keeps wallet access intact.
      */
     actual suspend fun clearDataOnly(): Result<Boolean> = runCatching {
-        // Only delete the data directory (databases, audit logs, etc.)
-        val dataDir = File(cirisHome, "data")
-        if (dataDir.exists()) {
-            val deleted = dataDir.deleteRecursively()
-            println("[EnvFileUpdater.desktop] Data directory ${if (deleted) "deleted" else "NOT deleted"}: ${dataDir.absolutePath}")
-        } else {
-            println("[EnvFileUpdater.desktop] Data directory does not exist")
+        // Clear data directories in all possible locations
+        // Python dev mode uses CWD/data/, production uses ~/ciris/data/
+        val dataDirs = mutableListOf<File>()
+
+        // Primary: cirisHome/data (~/ciris/data or CIRIS_HOME/data)
+        dataDirs.add(File(cirisHome, "data"))
+
+        // Dev mode: Python uses git repo root as CIRIS_HOME
+        // Walk up from CWD to find the repo root (contains .git)
+        var dir: File? = File(System.getProperty("user.dir") ?: ".")
+        while (dir != null) {
+            if (File(dir, ".git").exists()) {
+                val repoData = File(dir, "data")
+                if (repoData != dataDirs[0]) {
+                    dataDirs.add(repoData)
+                    println("[EnvFileUpdater.desktop] Dev mode: found repo root at ${dir.absolutePath}")
+                }
+                break
+            }
+            dir = dir.parentFile
+        }
+
+        // Also check for legacy root-level databases in repo root
+        if (dir != null) {
+            val repoRoot = dir
+            val legacyDbs = listOf("ciris_engine.db", "ciris_audit.db", "secrets.db", "audit.db")
+            for (dbName in legacyDbs) {
+                val legacyDb = File(repoRoot, dbName)
+                if (legacyDb.exists()) {
+                    val deleted = legacyDb.delete()
+                    println("[EnvFileUpdater.desktop] Legacy DB ${if (deleted) "deleted" else "NOT deleted"}: ${legacyDb.absolutePath}")
+                }
+                for (suffix in listOf("-wal", "-shm")) {
+                    val walFile = File(repoRoot, "$dbName$suffix")
+                    if (walFile.exists()) walFile.delete()
+                }
+            }
+        }
+
+        // Files to preserve during soft reset (signing keys for wallet access)
+        val preservePatterns = listOf("agent_signing", "agent_manifest")
+
+        for (dataDir in dataDirs) {
+            if (dataDir.exists()) {
+                // Selectively delete: preserve signing key files, delete everything else
+                var deletedCount = 0
+                var preservedCount = 0
+                dataDir.listFiles()?.forEach { file ->
+                    val shouldPreserve = preservePatterns.any { file.name.startsWith(it) }
+                    if (shouldPreserve) {
+                        preservedCount++
+                        println("[EnvFileUpdater.desktop] Preserved: ${file.name}")
+                    } else if (file.isDirectory) {
+                        file.deleteRecursively()
+                        deletedCount++
+                    } else {
+                        file.delete()
+                        deletedCount++
+                    }
+                }
+                println("[EnvFileUpdater.desktop] Data directory cleaned: ${dataDir.absolutePath} (deleted=$deletedCount, preserved=$preservedCount)")
+            } else {
+                println("[EnvFileUpdater.desktop] Data directory does not exist: ${dataDir.absolutePath}")
+            }
         }
 
         println("[EnvFileUpdater.desktop] Data cleared - signing key preserved for wallet access")

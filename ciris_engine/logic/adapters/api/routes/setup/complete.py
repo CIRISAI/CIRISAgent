@@ -194,7 +194,7 @@ async def _ensure_system_wa(auth_service: Any) -> None:
         logger.warning("⚠️ Could not create system WA - deferral handling may not work")
 
 
-def _create_founding_partnership(user_id: str) -> None:
+def _create_founding_partnership(wa_id: str) -> None:
     """Create a default PARTNERED consent record for the setup user.
 
     The user who completes the setup wizard has explicitly consented by
@@ -203,8 +203,11 @@ def _create_founding_partnership(user_id: str) -> None:
     ("Your growth supports mine").  This is configured consistency, not
     bypassed safeguards (see COGNITIVE_STATE_BEHAVIORS FSD).
 
-    Creates a GraphNode with type=CONSENT and stream=PARTNERED, mirroring
-    the pattern used by _handle_partnership_accept() in partnership.py.
+    Creates a GraphNode with type=CONSENT using the consent/{wa_id}
+    pattern that matches the ConsentService lookups.
+
+    Args:
+        wa_id: The WA certificate ID (e.g., "wa-2026-04-01-337AE1")
     """
     from ciris_engine.logic.persistence import add_graph_node
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
@@ -214,7 +217,7 @@ def _create_founding_partnership(user_id: str) -> None:
     now = datetime.now(timezone.utc)
 
     partnered_status = ConsentStatus(
-        user_id=user_id,
+        user_id=wa_id,
         stream=ConsentStream.PARTNERED,
         categories=[
             ConsentCategory.INTERACTION,
@@ -228,11 +231,16 @@ def _create_founding_partnership(user_id: str) -> None:
         attribution_count=0,
     )
 
+    # ConsentService stores nodes as consent/{user_id} where user_id = wa_id
+    # The consent status API uses auth.user_id (bare wa_id from token)
+    node_id = f"consent/{wa_id}"
+
     node = GraphNode(
-        id=f"consent/{user_id}",
+        id=node_id,
         type=NodeType.CONSENT,
         scope=GraphScope.LOCAL,
         attributes={
+            "user_id": f"user/{wa_id}",
             "stream": (
                 partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream
             ),
@@ -252,7 +260,9 @@ def _create_founding_partnership(user_id: str) -> None:
 
     time_service = TimeService()
     add_graph_node(node, time_service, None)
-    logger.info(f"✅ Founding partnership created for setup user: {user_id}")
+    print(f"[SETUP_COMPLETE] ✅ Founding partnership created: {node_id} (PARTNERED)")
+    logger.info(f"✅ Founding partnership created for setup user: {node_id}")
+
 
 
 def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
@@ -377,15 +387,12 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
         # Create founding partnership for setup user — the user consented by
         # completing setup, the agent's consent is configured in its template
-        # Use canonical user ID: for OAuth users it's "provider:external_id", for local users it's the username
-        if setup.oauth_provider and setup.oauth_external_id:
-            canonical_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
-        else:
-            canonical_user_id = setup.admin_username
-        _create_founding_partnership(canonical_user_id)
+        # Use wa_id as the consent node ID (matches consent_user/{wa_id} pattern
+        # used by the consent status API and consent service)
+        _create_founding_partnership(wa_cert.wa_id)
 
-        # Store user preferences (language & location) in graph memory
-        _store_user_preferences(canonical_user_id, setup)
+        # Store user preferences keyed by wa_id for consistency
+        _store_user_preferences(wa_cert.wa_id, setup)
 
         # Ensure system WA exists
         await _ensure_system_wa(auth_service)
@@ -760,7 +767,15 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         logger.info(f"Using runtime audit database: {auth_db_path}")
 
         # Create users immediately (don't wait for restart)
-        await _create_setup_users(setup, auth_db_path)
+        print(f"[SETUP_COMPLETE] Calling _create_setup_users(username={setup.admin_username}, db={auth_db_path})")
+        try:
+            await _create_setup_users(setup, auth_db_path)
+            print("[SETUP_COMPLETE] _create_setup_users completed successfully")
+        except Exception as user_err:
+            print(f"[SETUP_COMPLETE] _create_setup_users FAILED: {user_err}")
+            import traceback
+            traceback.print_exc()
+            raise
 
         # Reload user cache in APIAuthService to pick up newly created users
         auth_service = getattr(request.app.state, "auth_service", None)

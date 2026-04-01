@@ -1325,7 +1325,7 @@ private fun LlmConfigurationStep(
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor()
-                        .testable("input_llm_provider"),
+                        .testableClickable("input_llm_provider") { providerExpanded = !providerExpanded },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = SetupColors.TextPrimary,
                         unfocusedTextColor = SetupColors.TextPrimary,
@@ -1425,7 +1425,7 @@ private fun LlmConfigurationStep(
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor()
-                            .testable("input_llm_model"),
+                            .testableClickable("input_llm_model") { modelExpanded = !modelExpanded },
                         trailingIcon = {
                             if (selectedModel?.cirisRecommended == true) {
                                 Text("★", color = SetupColors.Primary, fontSize = 16.sp)
@@ -2706,7 +2706,7 @@ private fun PreferencesStep(
                         onValueChange = { viewModel.searchLocations(it) },
                         label = { Text(localizedString("setup.prefs_city_label"), color = SetupColors.TextPrimary) },
                         placeholder = { Text(localizedString("setup.prefs_city_hint"), color = SetupColors.TextSecondary) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        modifier = Modifier.fillMaxWidth().menuAnchor().testable("input_location_search"),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = SetupColors.TextPrimary,
@@ -2770,7 +2770,10 @@ private fun PreferencesStep(
                                     viewModel.selectLocation(result)
                                     focusManager.clearFocus()
                                 },
-                                modifier = Modifier.background(Color.White)
+                                modifier = Modifier.background(Color.White).testableClickable("location_result_${result.displayName.lowercase().replace(" ", "_").replace(",", "").take(40)}") {
+                                    viewModel.selectLocation(result)
+                                    focusManager.clearFocus()
+                                }
                             )
                         }
                     }

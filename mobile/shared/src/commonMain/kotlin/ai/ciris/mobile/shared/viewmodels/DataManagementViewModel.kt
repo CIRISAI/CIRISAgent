@@ -204,12 +204,19 @@ class DataManagementViewModel(
                 // Invoke callback for any cleanup before restart
                 onSuccess()
 
-                // Small delay to let UI update
-                kotlinx.coroutines.delay(100)
+                // On desktop, resetSuccess triggers onResetSetup in CIRISApp
+                // which navigates to Startup → re-checks first-run → shows setup wizard.
+                // On mobile, we need a full process restart.
+                if (!ai.ciris.mobile.shared.platform.isDesktop()) {
+                    // Small delay to let UI update
+                    kotlinx.coroutines.delay(100)
 
-                // Restart the app completely
-                logInfo(method, "Triggering app restart...")
-                AppRestarter.restartApp()
+                    // Restart the app completely
+                    logInfo(method, "Triggering app restart...")
+                    AppRestarter.restartApp()
+                } else {
+                    logInfo(method, "Desktop: skipping process restart, UI state flow handles navigation")
+                }
 
             } catch (e: Exception) {
                 logError(method, "Failed to reset: ${e.message}")
@@ -262,12 +269,13 @@ class DataManagementViewModel(
                 // Invoke callback for any cleanup before restart
                 onSuccess()
 
-                // Small delay to let UI update
-                kotlinx.coroutines.delay(100)
-
-                // Restart the app completely
-                logInfo(method, "Triggering app restart...")
-                AppRestarter.restartApp()
+                if (!ai.ciris.mobile.shared.platform.isDesktop()) {
+                    kotlinx.coroutines.delay(100)
+                    logInfo(method, "Triggering app restart...")
+                    AppRestarter.restartApp()
+                } else {
+                    logInfo(method, "Desktop: skipping process restart, UI state flow handles navigation")
+                }
 
             } catch (e: Exception) {
                 logError(method, "Failed to wipe signing key: ${e.message}")

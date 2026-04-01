@@ -2413,9 +2413,32 @@ fun CIRISApp(
                     },
                     onResetSetup = {
                         PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
-                        startupViewModel.retry()
-                        checkingFirstRun = false
-                        currentScreen = Screen.Startup
+                        if (ai.ciris.mobile.shared.platform.isDesktop()) {
+                            // Desktop: kill the Python server via HTTP then let startup relaunch it fresh
+                            PlatformLogger.i(TAG, "[Screen.DataManagement] Desktop: killing Python server via local-shutdown API")
+                            currentScreen = Screen.Startup
+                            checkingFirstRun = false
+                            coroutineScope.launch {
+                                try {
+                                    // Call the local-shutdown endpoint to kill the server process
+                                    apiClient.postLocalShutdown()
+                                    PlatformLogger.i(TAG, "[Screen.DataManagement] local-shutdown sent")
+                                } catch (e: Exception) {
+                                    PlatformLogger.e(TAG, "[Screen.DataManagement] local-shutdown error (expected): ${e.message}")
+                                }
+                                // Also call pythonRuntime.shutdown() to clear internal state
+                                pythonRuntime.shutdown()
+                                // Wait for server process to fully exit and port to free
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit...")
+                                kotlinx.coroutines.delay(3000)
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Triggering startup retry")
+                                startupViewModel.retry()
+                            }
+                        } else {
+                            startupViewModel.retry()
+                            checkingFirstRun = false
+                            currentScreen = Screen.Startup
+                        }
                     }
                 )
             }

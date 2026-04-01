@@ -63,17 +63,18 @@ def get_config_paths() -> list[Path]:
         logger.info(f"iOS mode: checking {ciris_home / '.env'}")
         return paths
 
-    # Development mode: check ./ciris/.env first, then cwd for backwards compat
-    if is_development_mode():
-        paths.append(Path.cwd() / "ciris" / ".env")
-        paths.append(Path.cwd() / ".env")  # Backwards compatibility
-
-    # User config directory (both modes) - ~/ciris/ NOT ~/.ciris/
-    # ~/.ciris/ is for secrets/keys only
-    # NOTE: We use Path.home() / "ciris" directly, NOT get_ciris_home()
-    # get_ciris_home() returns cwd in dev mode, which would duplicate the first path
+    # User config directory — the single canonical location for config
+    # Per XDG best practices: use a fixed, predictable path, not CWD
+    # ~/ciris/ for config, ~/.ciris/ for secrets/keys only
     user_ciris_dir = Path.home() / "ciris"
     paths.append(user_ciris_dir / ".env")
+
+    # Explicit override via CIRIS_CONFIG_DIR (for dev/testing)
+    config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")
+    if config_dir_override:
+        override_path = Path(config_dir_override) / ".env"
+        if override_path not in paths:
+            paths.insert(0, override_path)
 
     # System config (Unix/Linux only, both modes)
     system_config = Path("/etc/ciris/.env")
@@ -118,21 +119,21 @@ def is_first_run() -> bool:
         logger.info("CIRIS_FORCE_FIRST_RUN is set - forcing first-run mode")
         return True
 
-    # Quick check: If CIRIS_CONFIGURED env var is set, not first run
-    ciris_configured = os.environ.get("CIRIS_CONFIGURED")
-    logger.info(f"CIRIS_CONFIGURED env var: {ciris_configured}")
-    if ciris_configured:
-        logger.info("CIRIS_CONFIGURED is set - not first run")
-        return False
-
-    # Check all possible config locations
+    # Check config file existence as the primary signal
+    # The .env file is the source of truth — env vars can be stale
+    # (inherited from parent process after file deletion)
     config_paths = get_config_paths()
     logger.info(f"Checking config paths: {[str(p) for p in config_paths]}")
     for path in config_paths:
         if path.exists() and path.is_file():
-            # Found a config file - not first run
             logger.info(f"Found config file at {path} - NOT first run")
             return False
+
+    # No config file found — clear any stale CIRIS_CONFIGURED env var
+    # (may have been inherited from a parent process that loaded a now-deleted .env)
+    if os.environ.get("CIRIS_CONFIGURED"):
+        logger.info("CIRIS_CONFIGURED env var is set but no .env file found — clearing stale env var")
+        del os.environ["CIRIS_CONFIGURED"]
 
     logger.info("No config files found - IS first run")
     return True
@@ -273,13 +274,15 @@ def get_default_config_path() -> Path:
         logger.info(f"iOS mode: config path is {config_path}")
         return config_path
 
-    # Development mode - save in ./ciris/.env for consistency with production
-    if is_development_mode():
-        dev_ciris_dir = Path.cwd() / "ciris"
-        dev_ciris_dir.mkdir(parents=True, exist_ok=True)
-        return dev_ciris_dir / ".env"
+    # Explicit override via CIRIS_CONFIG_DIR
+    config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")
+    if config_dir_override:
+        override_dir = Path(config_dir_override)
+        override_dir.mkdir(parents=True, exist_ok=True)
+        return override_dir / ".env"
 
-    # Production/user install - save in ~/ciris/ (NOT ~/.ciris/)
+    # Default: ~/ciris/.env for all modes (dev, installed, desktop)
+    # Per XDG best practices: fixed path, not CWD
     # ~/.ciris/ is for secrets/keys only
     user_ciris_dir = Path.home() / "ciris"
     user_ciris_dir.mkdir(parents=True, exist_ok=True)

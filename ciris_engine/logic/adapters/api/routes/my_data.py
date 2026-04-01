@@ -175,10 +175,15 @@ def _get_agent_id(request: Request) -> Optional[str]:
     """Get the current agent ID from runtime.
 
     Checks multiple paths since identity may be populated at different stages.
+    The signing key (via CIRISVerify) is always available and provides a
+    deterministic agent identifier, so this function should never return None.
     """
     runtime = getattr(request.app.state, "runtime", None)
     if not runtime:
-        logger.debug("_get_agent_id: No runtime in app.state")
+        logger.error(
+            "_get_agent_id: runtime MISSING from app.state! "
+            f"app.state attrs: {[a for a in dir(request.app.state) if not a.startswith('_')]}"
+        )
         return None
 
     # Primary path: runtime.agent_identity.agent_id
@@ -186,34 +191,68 @@ def _get_agent_id(request: Request) -> Optional[str]:
     if identity and hasattr(identity, "agent_id"):
         agent_id = identity.agent_id
         if agent_id is not None:
+            logger.debug(f"_get_agent_id: Found via runtime.agent_identity: {agent_id}")
             return str(agent_id)
+        else:
+            logger.debug("_get_agent_id: runtime.agent_identity exists but agent_id is None")
+    else:
+        logger.debug(
+            f"_get_agent_id: runtime.agent_identity not available "
+            f"(identity={identity}, type={type(identity).__name__ if identity else 'None'})"
+        )
 
     # Fallback: identity_manager.agent_identity
     identity_mgr = getattr(runtime, "identity_manager", None)
     if identity_mgr:
         mgr_identity = getattr(identity_mgr, "agent_identity", None)
         if mgr_identity and hasattr(mgr_identity, "agent_id") and mgr_identity.agent_id:
+            logger.debug(f"_get_agent_id: Found via identity_manager: {mgr_identity.agent_id}")
             return str(mgr_identity.agent_id)
+        else:
+            logger.debug(
+                f"_get_agent_id: identity_manager exists but no agent_id "
+                f"(mgr_identity={mgr_identity is not None})"
+            )
 
     # Fallback: essential_config.agent_name (always set)
     essential = getattr(runtime, "essential_config", None)
     if essential:
         agent_name = getattr(essential, "agent_name", None)
         if agent_name:
-            logger.debug(f"_get_agent_id: Using essential_config.agent_name={agent_name}")
+            logger.info(f"_get_agent_id: Using essential_config.agent_name={agent_name}")
             return str(agent_name)
+        else:
+            logger.debug("_get_agent_id: essential_config exists but agent_name is None/empty")
+    else:
+        logger.debug("_get_agent_id: no essential_config on runtime")
 
     # Legacy fallback
     legacy = getattr(runtime, "agent_id", None)
     if legacy:
+        logger.debug(f"_get_agent_id: Using legacy runtime.agent_id={legacy}")
         return str(legacy)
 
-    logger.warning(
-        "_get_agent_id: Could not determine agent_id. "
+    # Signing key fallback: key_id is always available (deterministic from Ed25519 pubkey)
+    try:
+        from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+        unified_key = get_unified_signing_key()
+        if unified_key.has_key:
+            key_id = unified_key.key_id
+            logger.info(f"_get_agent_id: Using signing key key_id={key_id}")
+            return key_id
+        else:
+            logger.warning("_get_agent_id: Signing key exists but has_key=False")
+    except Exception as e:
+        logger.error(f"_get_agent_id: Signing key fallback FAILED: {e}", exc_info=True)
+
+    logger.error(
+        "_get_agent_id: ALL fallbacks exhausted! Could not determine agent_id. "
         f"runtime={type(runtime).__name__}, "
         f"has_identity={identity is not None}, "
         f"has_identity_mgr={identity_mgr is not None}, "
-        f"has_essential={essential is not None}"
+        f"has_essential={essential is not None}, "
+        f"runtime_attrs={[a for a in dir(runtime) if not a.startswith('_') and 'agent' in a.lower()]}"
     )
     return None
 
@@ -297,8 +336,13 @@ async def get_lens_identifier(
 
     This is a self-service endpoint — no admin approval needed.
     """
+    logger.info("[lens-identifier] Request received, resolving agent_id...")
     agent_id = _get_agent_id(request)
     if not agent_id:
+        logger.error(
+            "[lens-identifier] agent_id could not be resolved! "
+            "This should never happen — the signing key is always available."
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent identity not available. The agent may not be fully initialized.",

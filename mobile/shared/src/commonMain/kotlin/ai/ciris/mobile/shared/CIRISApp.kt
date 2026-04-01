@@ -335,12 +335,14 @@ fun CIRISApp(
     var previousLanguage by remember { mutableStateOf<String?>(null) }
     val currentLanguage by localizationManager.currentLanguage.collectAsState()
 
+    val hasExplicitLanguage by localizationManager.hasExplicitLanguageSelection.collectAsState()
+
     LaunchedEffect(currentLanguage, currentAccessToken) {
         // Only sync if:
         // 1. We have a valid token (user is authenticated)
         // 2. This is a real change (not initial load)
-        // 3. Localization is not still loading
-        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage) {
+        // 3. The language was explicitly selected by user (not temporary rotation)
+        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage && hasExplicitLanguage) {
             PlatformLogger.i(TAG, "Language changed from $previousLanguage to $currentLanguage, syncing to backend...")
             try {
                 val success = apiClient.updateUserLanguage(currentLanguage)

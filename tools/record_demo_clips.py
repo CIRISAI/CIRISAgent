@@ -344,6 +344,10 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     time.sleep(1)
     click("item_accord_metrics_consent")  # Toggle Accord metrics ON
     time.sleep(1)
+
+    # Scroll down slightly to reveal location traces toggle
+    test_api("POST", "/scroll", {"testTag": "item_accord_metrics_consent", "direction": "down", "amount": 200})
+    time.sleep(0.5)
     click("item_share_location_traces")   # Toggle location traces ON
     time.sleep(1)
 
@@ -357,18 +361,23 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     click("item_toggle_advanced_settings")
     time.sleep(1)
 
+    # Scroll down to reveal adapter toggles
+    test_api("POST", "/scroll", {"testTag": "item_toggle_advanced_settings", "direction": "down", "amount": 400})
+    time.sleep(1)
+
     # Enable navigation adapter
     click("adapter_toggle_navigation")
     time.sleep(0.8)
 
-    # Enable weather adapter (may need to scroll — test tag might not be visible)
-    # Try clicking it; if not found the scroll will help
-    result = test_api("POST", "/click", {"testTag": "adapter_toggle_weather"})
-    if not result.get("success"):
-        print("    weather adapter not visible, trying scroll area")
+    # Scroll more to reveal weather
+    test_api("POST", "/scroll", {"testTag": "adapter_toggle_navigation", "direction": "down", "amount": 300})
+    time.sleep(0.5)
+
+    # Enable weather adapter
+    click("adapter_toggle_weather")
     time.sleep(1)
 
-    time.sleep(3)                       # Hold for viewer to see all toggles
+    time.sleep(2)                       # Hold for viewer to see adapter cards
 
     click("btn_next")                   # Optional Features -> Account
     time.sleep(2)

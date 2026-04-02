@@ -46,6 +46,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -139,9 +140,28 @@ private fun ConfigValue.toDisplayString(): String {
  * All methods include comprehensive error logging for debugging.
  */
 class CIRISApiClient(
-    val baseUrl: String = "http://127.0.0.1:8080",
+    baseUrl: String = "http://127.0.0.1:8080",
     private var accessToken: String? = null
 ) : CIRISApiClientProtocol {
+
+    /**
+     * Current effective base URL - can be updated dynamically.
+     * Note: Some generated API methods may still use the original URL until
+     * a new CIRISApiClient instance is created.
+     */
+    var baseUrl: String = baseUrl
+        private set
+
+    /**
+     * Update the base URL for API calls.
+     * This updates the URL used for direct HTTP calls immediately.
+     * For full effect on all API methods, the client should be recreated.
+     */
+    fun updateBaseUrl(newUrl: String) {
+        val method = "updateBaseUrl"
+        logInfo(method, "Updating baseUrl from $baseUrl to $newUrl")
+        baseUrl = newUrl
+    }
 
     /**
      * Get current access token (for SSE client)
@@ -473,38 +493,64 @@ class CIRISApiClient(
     }
 
     // System Status (from /v1/system/health)
+    // Uses direct HTTP to support dynamic baseUrl changes
     override suspend fun getSystemStatus(): SystemStatus {
         val method = "getSystemStatus"
-        logDebug(method, "Fetching system health")
+        logDebug(method, "Fetching system health from $baseUrl")
+
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
 
         return try {
-            val response = systemApi.getSystemHealthV1SystemHealthGet()
-            logDebug(method, "Response: status=${response.status}")
+            val response = client.get("$baseUrl/v1/system/health") {
+                authHeader()?.let { header("Authorization", it) }
+            }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Health check failed: ${response.status}")
+            }
 
+            val body = response.bodyAsText()
+            logDebug(method, "Response body: ${body.take(200)}...")
+
+            // Parse JSON response
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject
+
+            val status = data?.get("status")?.jsonPrimitive?.contentOrNull ?: "unknown"
+            val cognitiveState = data?.get("cognitive_state")?.jsonPrimitive?.contentOrNull
+
+            // Parse services for counts
             var healthyCount = 0
             var totalCount = 0
-            for ((_, info) in data.services) {
-                val svcHealthy = info["healthy"] ?: 0
-                val svcAvailable = info["available"] ?: 0
+            data?.get("services")?.jsonObject?.forEach { (_, info) ->
+                val svcInfo = info.jsonObject
+                val svcHealthy = svcInfo["healthy"]?.jsonPrimitive?.intOrNull ?: 0
+                val svcAvailable = svcInfo["available"]?.jsonPrimitive?.intOrNull ?: 0
                 healthyCount += svcHealthy
                 totalCount += svcAvailable
             }
 
-            logDebug(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
+            logDebug(method, "System status: $status, cognitive_state: $cognitiveState, services: $healthyCount/$totalCount")
 
             SystemStatus(
-                status = data.status,
-                cognitive_state = data.cognitiveState,
+                status = status,
+                cognitive_state = cognitiveState,
                 services_online = healthyCount,
                 services_total = totalCount,
                 services = emptyMap()
             )
         } catch (e: Exception) {
-            logException(method, e)
+            logException(method, e, "url=$baseUrl")
             throw e
+        } finally {
+            client.close()
         }
     }
 

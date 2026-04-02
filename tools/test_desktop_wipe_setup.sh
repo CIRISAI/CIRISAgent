@@ -31,7 +31,10 @@ echo "[1/8] Killing existing processes..."
 for pid in $(lsof -i :8080 -P -t 2>/dev/null); do kill -9 "$pid" 2>/dev/null || true; done
 for pid in $(lsof -i :8091 -P -t 2>/dev/null); do kill -9 "$pid" 2>/dev/null || true; done
 pkill -9 -f "java.*CIRIS-macos" 2>/dev/null || true
-sleep 3
+pkill -9 -f "java.*CIRIS-linux" 2>/dev/null || true
+pkill -9 -f "python.*main.py.*api" 2>/dev/null || true
+pkill -9 -f "python.*ciris_engine" 2>/dev/null || true
+sleep 5
 # Wait for ports to free
 for i in $(seq 1 15); do
     if ! lsof -i :8080 -P 2>/dev/null | grep -q LISTEN && ! lsof -i :8091 -P 2>/dev/null | grep -q LISTEN; then
@@ -45,12 +48,18 @@ done
 echo "[2/8] Setting up initial state (clean)..."
 # Preserve signing key, wipe data for clean start
 SIGNING_KEY_BACKUP="/tmp/agent_signing.key.bak"
+# Detect platform and set paths
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    CIRIS_DATA_DIR="/Users/macmini/CIRISAgent"
+else
+    CIRIS_DATA_DIR="$HOME/CIRISAgent"
+fi
 cp ~/ciris/agent_signing.key "$SIGNING_KEY_BACKUP" 2>/dev/null || true
-rm -rf ~/ciris/data /Users/macmini/CIRISAgent/data
-rm -f /Users/macmini/CIRISAgent/ciris_engine.db /Users/macmini/CIRISAgent/ciris_audit.db /Users/macmini/CIRISAgent/secrets.db
-mkdir -p ~/ciris/data /Users/macmini/CIRISAgent/data
+rm -rf ~/ciris/data "$CIRIS_DATA_DIR/data"
+rm -f "$CIRIS_DATA_DIR/ciris_engine.db" "$CIRIS_DATA_DIR/ciris_audit.db" "$CIRIS_DATA_DIR/secrets.db"
+mkdir -p ~/ciris/data "$CIRIS_DATA_DIR/data"
 cp "$SIGNING_KEY_BACKUP" ~/ciris/agent_signing.key 2>/dev/null || true
-cp "$SIGNING_KEY_BACKUP" /Users/macmini/CIRISAgent/data/agent_signing.key 2>/dev/null || true
+cp "$SIGNING_KEY_BACKUP" "$CIRIS_DATA_DIR/data/agent_signing.key" 2>/dev/null || true
 OPENROUTER_KEY_VALUE=$(cat ~/.openrouter_key)
 cat > ~/ciris/.env << ENVEOF
 CIRIS_CONFIGURED="true"
@@ -61,7 +70,7 @@ CIRIS_OPENAI_MODEL_NAME="mistralai/mistral-small-2603"
 ENVEOF
 
 echo "[3/8] Launching CIRIS desktop (test mode)..."
-find /Users/macmini/CIRISAgent/ciris_engine -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$CIRIS_DATA_DIR/ciris_engine" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 unset CIRIS_MOCK_LLM 2>/dev/null || true
 # Export LLM config (CIRIS_ prefix matches setup wizard .env format)
 export CIRIS_OPENAI_API_KEY="$OPENROUTER_KEY"

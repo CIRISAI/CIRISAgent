@@ -40,6 +40,7 @@ import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LogsViewModel
 import ai.ciris.mobile.shared.viewmodels.MemoryViewModel
 import ai.ciris.mobile.shared.viewmodels.RuntimeViewModel
+import ai.ciris.mobile.shared.viewmodels.ServerConnectionViewModel
 import ai.ciris.mobile.shared.viewmodels.ServicesViewModel
 import ai.ciris.mobile.shared.viewmodels.SessionsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
@@ -543,6 +544,9 @@ fun CIRISApp(
     }
     val servicesViewModel: ServicesViewModel = viewModel {
         ServicesViewModel(apiClient)
+    }
+    val serverConnectionViewModel: ServerConnectionViewModel = viewModel {
+        ServerConnectionViewModel(apiClient, pythonRuntime, secureStorage)
     }
     val auditViewModel: AuditViewModel = viewModel {
         AuditViewModel(apiClient)
@@ -1337,8 +1341,8 @@ fun CIRISApp(
                             currentScreen = Screen.Billing
                         },
                         onOpenSystem = {
-                            platformLog(TAG, "[INFO] Opening System page from Local status")
-                            currentScreen = Screen.System
+                            platformLog(TAG, "[INFO] Opening Server Connection page from Local status badge")
+                            currentScreen = Screen.ServerConnection
                         },
                         onOpenSettings = {
                             platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
@@ -2193,6 +2197,14 @@ fun CIRISApp(
                 )
             }
 
+            Screen.ServerConnection -> {
+                PlatformLogger.d(TAG, "[Screen.ServerConnection] Rendering server connection screen")
+                ServerConnectionScreen(
+                    viewModel = serverConnectionViewModel,
+                    onBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Runtime -> {
                 val runtimeData by runtimeViewModel.runtimeData.collectAsState()
                 val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
@@ -2441,8 +2453,9 @@ fun CIRISApp(
                                 // Also call pythonRuntime.shutdown() to clear internal state
                                 pythonRuntime.shutdown()
                                 // Wait for server process to fully exit and port to free
-                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit...")
-                                kotlinx.coroutines.delay(3000)
+                                // On Linux, TCP TIME_WAIT can hold the port for a while
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit and port to free...")
+                                kotlinx.coroutines.delay(6000)
                                 PlatformLogger.i(TAG, "[Screen.DataManagement] Triggering startup retry")
                                 startupViewModel.retry()
                             }
@@ -2894,6 +2907,7 @@ private sealed class Screen {
     object Tools : Screen()
     object DataManagement : Screen()
     object Help : Screen()
+    object ServerConnection : Screen()
 }
 
 /**

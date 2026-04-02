@@ -575,10 +575,10 @@ private fun EnhancedStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Connection status - tappable to System screen
+                // Connection status - tappable to Server Connection screen
                 Row(
                     modifier = Modifier
-                        .clickable(onClick = onLocalClick)
+                        .testableClickable("btn_connection_status") { onLocalClick() }
                         .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)

@@ -1397,7 +1397,9 @@
         "tickets_status_failed": "Неудача",
         "tickets_status_pending": "Ожидает",
         "tickets_status_progress": "В работе",
-        "setup_include_location": "Включить мой город в трассировки (помогает региональному анализу)"
+        "setup_include_location": "Включить мой город в трассировки (помогает региональному анализу)",
+        "login_error_invalid_credentials": "Неверное имя пользователя или пароль. Попробуйте ещё раз.",
+        "login_error_connection": "Не удаётся подключиться к серверу. Проверьте соединение."
     },
     "prompts": {
         "dma": {

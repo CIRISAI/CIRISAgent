@@ -1466,7 +1466,9 @@
         "tickets_status_completed": "Completed",
         "tickets_status_failed": "Failed",
         "tickets_status_pending": "Pending",
-        "tickets_status_progress": "In Progress"
+        "tickets_status_progress": "In Progress",
+        "login_error_invalid_credentials": "Invalid username or password. Please try again.",
+        "login_error_connection": "Cannot connect to server. Please check your connection."
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

@@ -1397,7 +1397,9 @@
         "data_wipe_key_funds_lost": "¡Si tienes CUALQUIER fondo en tu billetera, serán inaccesibles permanentemente!",
         "data_wipe_key_button": "Borrar Clave de Firma",
         "data_wiping": "Borrando...",
-        "setup_include_location": "Incluir mi ciudad en los rastreos (ayuda al análisis regional)"
+        "setup_include_location": "Incluir mi ciudad en los rastreos (ayuda al análisis regional)",
+        "login_error_invalid_credentials": "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
+        "login_error_connection": "No se puede conectar al servidor. Verifica tu conexión."
     },
     "prompts": {
         "dma": {

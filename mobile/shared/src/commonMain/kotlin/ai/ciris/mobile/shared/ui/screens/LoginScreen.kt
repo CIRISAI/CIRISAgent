@@ -101,10 +101,10 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
             ) {
-                // CIRIS Signet
+                // CIRIS Signet — sized to not overlap language selector
                 CIRISSignet(
                     tintColor = LoginColors.White,
-                    modifier = Modifier.size(100.dp)
+                    modifier = Modifier.size(72.dp).padding(top = 8.dp)
                 )
 
                 // App name
@@ -343,10 +343,20 @@ private fun LocalLoginForm(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(280.dp)
     ) {
-        // Error message
+        // Error message — show user-friendly text, not raw exceptions
         if (errorMessage != null) {
+            val displayError = when {
+                errorMessage.contains("Invalid credentials", ignoreCase = true) ||
+                errorMessage.contains("LoginResponse", ignoreCase = true) ||
+                errorMessage.contains("missing at path", ignoreCase = true) ->
+                    localizedString("mobile.login_error_invalid_credentials")
+                errorMessage.contains("timeout", ignoreCase = true) ||
+                errorMessage.contains("connect", ignoreCase = true) ->
+                    localizedString("mobile.login_error_connection")
+                else -> errorMessage.take(100)
+            }
             Text(
-                text = errorMessage,
+                text = displayError,
                 color = LoginColors.Error,
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,

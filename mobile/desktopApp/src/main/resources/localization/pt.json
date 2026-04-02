@@ -1397,7 +1397,9 @@
         "tickets_status_failed": "Falhou",
         "tickets_status_pending": "Pendente",
         "tickets_status_progress": "Em Andamento",
-        "setup_include_location": "Incluir minha cidade nos rastreamentos (ajuda na análise regional)"
+        "setup_include_location": "Incluir minha cidade nos rastreamentos (ajuda na análise regional)",
+        "login_error_invalid_credentials": "Nome de usuário ou senha inválidos. Tente novamente.",
+        "login_error_connection": "Não é possível conectar ao servidor. Verifique sua conexão."
     },
     "prompts": {
         "dma": {

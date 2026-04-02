@@ -1398,7 +1398,9 @@
         "tickets_status_pending": "लंबित",
         "tickets_status_progress": "प्रगति में",
         "setup_include_location": "ट्रेस में मेरा शहर शामिल करें (क्षेत्रीय विश्लेषण में मदद करता है)",
-        "login_first_run_welcome": "स्वागत है! चुनें कि आप अपना AI सहायक कैसे सेट अप करना चाहते हैं।"
+        "login_first_run_welcome": "स्वागत है! चुनें कि आप अपना AI सहायक कैसे सेट अप करना चाहते हैं।",
+        "login_error_invalid_credentials": "अमान्य उपयोगकर्ता नाम या पासवर्ड। कृपया पुनः प्रयास करें।",
+        "login_error_connection": "सर्वर से कनेक्ट नहीं हो सकता। कृपया अपना कनेक्शन जांचें।"
     },
     "prompts": {
         "dma": {

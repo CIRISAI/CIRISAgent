@@ -1397,7 +1397,9 @@
         "settings_verify_description": "[EN] CIRISVerify provides cryptographic identity and attestation",
         "settings_verify_running": "[EN] Verify Running",
         "settings_verify_status_unknown": "[EN] Verify Status Unknown",
-        "setup_include_location": "Includi la mia città nei tracciamenti (aiuta l'analisi regionale)"
+        "setup_include_location": "Includi la mia città nei tracciamenti (aiuta l'analisi regionale)",
+        "login_error_invalid_credentials": "Nome utente o password non validi. Riprova.",
+        "login_error_connection": "Impossibile connettersi al server. Controlla la connessione."
     },
     "prompts": {
         "dma": {

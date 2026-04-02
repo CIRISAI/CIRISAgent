@@ -115,4 +115,4 @@ actual fun startTestAutomationServer() {
  * Fallback version if context not initialized.
  * Keep in sync with mobile/androidApp/build.gradle versionName.
  */
-private const val ANDROID_VERSION_FALLBACK = "2.3.1"
+private const val ANDROID_VERSION_FALLBACK = "2.3.2"

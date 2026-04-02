@@ -57,4 +57,4 @@ actual fun startTestAutomationServer() {
  * Fallback version if JAR manifest is unavailable.
  * Keep in sync with mobile/androidApp/build.gradle versionName.
  */
-private const val DESKTOP_VERSION_FALLBACK = "2.3.1"
+private const val DESKTOP_VERSION_FALLBACK = "2.3.2"

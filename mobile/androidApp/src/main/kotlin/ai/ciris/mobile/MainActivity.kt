@@ -20,6 +20,7 @@ import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
 import ai.ciris.mobile.shared.platform.initUrlOpener
 import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
+import ai.ciris.mobile.shared.testing.AndroidTestAutomationServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import android.content.Intent
@@ -101,6 +102,9 @@ class MainActivity : ComponentActivity() {
         // Initialize localization resource loader with app context
         LocalizationResourceLoader.init(applicationContext)
         Log.i(TAG, "Localization resource loader initialized")
+
+        // Start test automation server if CIRIS_TEST_MODE=true
+        AndroidTestAutomationServer.startIfEnabled()
 
         // Initialize Google Sign-In
         initGoogleSignIn()
@@ -460,6 +464,8 @@ class MainActivity : ComponentActivity() {
         if (::billingManager.isInitialized) {
             billingManager.endConnection()
         }
+        // Stop test automation server
+        AndroidTestAutomationServer.stop()
     }
 }
 

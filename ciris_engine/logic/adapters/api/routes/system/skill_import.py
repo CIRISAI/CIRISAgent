@@ -55,6 +55,34 @@ class SkillImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SecurityFindingResponse(BaseModel):
+    """A single security finding."""
+
+    severity: str = Field(..., description="critical, high, medium, low, or info")
+    category: str = Field(..., description="Type of issue")
+    title: str = Field(..., description="Short plain English title")
+    description: str = Field(..., description="What we found")
+    evidence: Optional[str] = Field(None, description="The triggering text")
+    recommendation: str = Field("", description="What to do")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SecurityReportResponse(BaseModel):
+    """Security scan results for a skill."""
+
+    total_findings: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+    safe_to_import: bool = True
+    summary: str = ""
+    findings: List[SecurityFindingResponse] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SkillPreviewResponse(BaseModel):
     """Preview of what will be imported before committing."""
 
@@ -68,6 +96,7 @@ class SkillPreviewResponse(BaseModel):
     has_supporting_files: bool = Field(False, description="Whether supporting files are included")
     source_url: Optional[str] = Field(None, description="Source URL")
     instructions_preview: str = Field("", description="First 500 chars of skill instructions")
+    security: Optional[SecurityReportResponse] = Field(None, description="Security scan results")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -139,12 +168,38 @@ def _parse_skill_from_request(req: SkillImportRequest) -> ParsedSkill:
 
 
 def _build_preview(skill: ParsedSkill, module_name: str) -> SkillPreviewResponse:
-    """Build a preview response from a parsed skill."""
+    """Build a preview response from a parsed skill, including security scan."""
+    from ciris_engine.logic.services.skill_import.scanner import SkillSecurityScanner
+
     env_vars: List[str] = []
     binaries: List[str] = []
     if skill.metadata and skill.metadata.requires:
         env_vars = skill.metadata.requires.env
         binaries = skill.metadata.requires.bins
+
+    # Run security scan
+    scanner = SkillSecurityScanner()
+    report = scanner.scan(skill)
+    security = SecurityReportResponse(
+        total_findings=report.total_findings,
+        critical_count=report.critical_count,
+        high_count=report.high_count,
+        medium_count=report.medium_count,
+        low_count=report.low_count,
+        safe_to_import=report.safe_to_import,
+        summary=report.summary,
+        findings=[
+            SecurityFindingResponse(
+                severity=f.severity.value,
+                category=f.category,
+                title=f.title,
+                description=f.description,
+                evidence=f.evidence,
+                recommendation=f.recommendation,
+            )
+            for f in report.findings
+        ],
+    )
 
     return SkillPreviewResponse(
         name=skill.name,
@@ -157,6 +212,7 @@ def _build_preview(skill: ParsedSkill, module_name: str) -> SkillPreviewResponse
         has_supporting_files=bool(skill.supporting_files),
         source_url=skill.source_url,
         instructions_preview=skill.instructions[:500] if skill.instructions else "",
+        security=security,
     )
 
 
@@ -249,6 +305,24 @@ async def import_skill(
     except Exception as e:
         logger.error(f"Error parsing skill: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to parse skill: {e}")
+
+    # Security scan - block skills with critical findings
+    from ciris_engine.logic.services.skill_import.scanner import SkillSecurityScanner
+
+    scanner = SkillSecurityScanner()
+    security_report = scanner.scan(skill)
+    if not security_report.safe_to_import:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": security_report.summary,
+                "findings": [
+                    {"severity": f.severity.value, "title": f.title, "description": f.description}
+                    for f in security_report.findings
+                    if f.severity.value in ("critical", "high")
+                ],
+            },
+        )
 
     # Convert to adapter
     output_dir = Path(body.output_dir) if body.output_dir else None

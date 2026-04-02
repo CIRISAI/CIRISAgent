@@ -61,7 +61,7 @@ CLIP_FILES = {
     1: "demo1_wipe_data.mov",
     2: "demo2_first_run_wizard.mov",
     3: "demo3_opt_in_traces_location.mov",
-    4: "demo4_setup_home_assistant.mov",
+    4: "demo4_account_finish.mov",
     5: "demo5_attestation_5of5.mov",
     6: "demo6_attestation_3of5.mov",
     7: "demo7_adapter_panel.mov",
@@ -282,8 +282,8 @@ def record_demo_1_wipe_data(output_dir: Path):
 
 def record_demo_2_first_run_wizard(output_dir: Path):
     """
-    Demo 2 -- First Run Wizard (~12s)
-    Show the welcome screen and navigate through LLM config.
+    Demo 2 -- First Run Wizard (~18s)
+    Welcome → Preferences (Schaumburg) → LLM Config (OpenRouter).
     Assumes we arrived at Setup from Demo 1 (wipe).
     """
     print("\n=== DEMO 2: First Run Wizard ===")
@@ -295,16 +295,33 @@ def record_demo_2_first_run_wizard(output_dir: Path):
         wait_for("btn_next", 30000)
     time.sleep(1)
 
-    output = output_dir / CLIP_FILES[2]
-    proc = start_recording(12000, output)
+    # Read OpenRouter key
+    key_path = Path.home() / ".openrouter_key"
+    openrouter_key = key_path.read_text().strip() if key_path.exists() else ""
 
-    time.sleep(3)                       # Hold on Welcome screen
-    click("btn_next")                   # Advance: Welcome -> LLM Configuration
-    time.sleep(1.5)                     # Wait for transition
-    time.sleep(2)                       # Hold on LLM config step
-    click("btn_use_free_ai")            # Select "Use Free AI" (CIRIS Proxy)
-    time.sleep(1)                       # Wait for selection to register
-    click("btn_next")                   # Advance: LLM Config -> Optional Features
+    output = output_dir / CLIP_FILES[2]
+    proc = start_recording(18000, output)
+
+    time.sleep(2)                       # Hold on Welcome screen
+    click("btn_next")                   # Welcome -> Preferences
+    time.sleep(1.5)
+
+    # Set location: Schaumburg
+    input_text("input_location_search", "Schaumburg")
+    time.sleep(2)
+    click("btn_next")                   # Preferences -> LLM Config
+    time.sleep(1.5)
+
+    # LLM Config: OpenRouter
+    click("input_llm_provider")         # Open provider dropdown
+    time.sleep(0.5)
+    click("menu_provider_openrouter")   # Select OpenRouter
+    time.sleep(0.5)
+    input_text("input_api_key", openrouter_key)
+    time.sleep(0.5)
+    input_text("input_llm_model_text", "mistralai/mistral-small-2603")
+    time.sleep(1.5)                     # Hold for viewer to see config
+    click("btn_next")                   # LLM Config -> Optional Features
     time.sleep(2)                       # Hold on Optional Features
 
     wait_for_recording(proc)
@@ -313,33 +330,48 @@ def record_demo_2_first_run_wizard(output_dir: Path):
 
 def record_demo_3_opt_in_traces(output_dir: Path):
     """
-    Demo 3 -- Opt-In Traces + Add Location (~15s)
-    On the Optional Features step, enable Accord metrics consent,
-    enable share location in traces, and type "Chicago" as location.
+    Demo 3 -- Opt-In Features + Email (~20s)
+    Enable traces, toggle navigation + weather adapters, enter email,
+    scroll to show adapter cards.
     """
-    print("\n=== DEMO 3: Opt-In Traces + Location (Chicago) ===")
+    print("\n=== DEMO 3: Opt-In Features ===")
 
-    # Should be on Optional Features step from Demo 2
     time.sleep(0.5)
 
     output = output_dir / CLIP_FILES[3]
-    proc = start_recording(15000, output)
+    proc = start_recording(20000, output)
 
-    time.sleep(1)                       # Establish context
-    click("item_accord_metrics_consent")  # Toggle Accord metrics consent ON
-    time.sleep(1.5)                     # Hold for viewer
-    click("item_share_location_traces") # Toggle share location in traces ON
-    time.sleep(1.5)                     # Hold for viewer to see toggle
-
-    # Type Chicago in location search
-    click("input_location_search")      # Focus the location field
-    time.sleep(0.3)
-    input_text("input_location_search", "Chicago")
-    time.sleep(2)                       # Wait for typeahead results
-    # Click the first result -- tag is dynamic based on display name
-    click("location_result_chicago_il_us")
     time.sleep(1)
-    time.sleep(3)                       # Hold for viewer to see selection
+    click("item_accord_metrics_consent")  # Toggle Accord metrics ON
+    time.sleep(1)
+    click("item_share_location_traces")   # Toggle location traces ON
+    time.sleep(1)
+
+    # Toggle public API services to show email field
+    click("item_public_api_services")
+    time.sleep(0.5)
+    input_text("input_public_api_email", "eric@ciris.ai")
+    time.sleep(1)
+
+    # Toggle advanced settings to show adapter toggles
+    click("item_toggle_advanced_settings")
+    time.sleep(1)
+
+    # Enable navigation adapter
+    click("adapter_toggle_navigation")
+    time.sleep(0.8)
+
+    # Enable weather adapter (may need to scroll — test tag might not be visible)
+    # Try clicking it; if not found the scroll will help
+    result = test_api("POST", "/click", {"testTag": "adapter_toggle_weather"})
+    if not result.get("success"):
+        print("    weather adapter not visible, trying scroll area")
+    time.sleep(1)
+
+    time.sleep(3)                       # Hold for viewer to see all toggles
+
+    click("btn_next")                   # Optional Features -> Account
+    time.sleep(2)
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -347,35 +379,21 @@ def record_demo_3_opt_in_traces(output_dir: Path):
 
 def record_demo_4_setup_home_assistant(output_dir: Path):
     """
-    Demo 4 -- Set Up Home Assistant Adapter (~15s)
-    Still on Optional Features step. Toggle HA adapter on, click configure,
-    step through the adapter wizard.
+    Demo 4 -- Account Creation + Finish (~12s)
+    Set credentials emoore/ciristest1 and complete setup.
     """
-    print("\n=== DEMO 4: Set Up Home Assistant ===")
+    print("\n=== DEMO 4: Account + Finish Setup ===")
 
     output = output_dir / CLIP_FILES[4]
-    proc = start_recording(15000, output)
+    proc = start_recording(12000, output)
 
-    time.sleep(1)                       # Establish context
-    # Toggle advanced settings to see adapter toggles
-    click("item_toggle_advanced_settings")
-    time.sleep(1)                       # Wait for section to expand
-    click("adapter_toggle_home_assistant")  # Toggle Home Assistant ON
-    time.sleep(1)                       # Wait for configure button to appear
-    click("btn_configure_home_assistant")   # Open adapter wizard dialog
-    time.sleep(1.5)                     # Wait for wizard dialog to open
-
-    # In the wizard: enter HA URL
-    wait_for("input_manual_url", 5000)
-    input_text("input_manual_url", "http://homeassistant.local:8123")
-    time.sleep(0.5)
-    click("btn_submit_manual_url")      # Submit the URL
-    time.sleep(2)                       # Wait for connection attempt
-
-    # Complete the wizard
     time.sleep(1)
-    click("btn_wizard_complete")        # Finish wizard
-    time.sleep(3)                       # Hold for viewer to see configured state
+    input_text("input_username", "emoore")
+    time.sleep(0.5)
+    input_text("input_password", "ciristest1")
+    time.sleep(1.5)                     # Hold for viewer to see credentials
+    click("btn_next")                   # Finish Setup
+    time.sleep(6)                       # Wait for setup completion + agent start
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")

@@ -135,8 +135,8 @@ click "btn_next" && sleep 1
 
 # Step 5: Account
 echo "  Creating account: humanuser"
-input_text "input_username" "humanuser"
-input_text "input_password" "humanpassword"
+input_text "input_username" "emoore"
+input_text "input_password" "ciristest1"
 screenshot "/tmp/e2e_account.png"
 
 # Step 6: Finish Setup
@@ -167,7 +167,7 @@ fi
 echo "  Checking consent status..."
 TOKEN=$(curl -s -X POST $BACKEND/v1/auth/login \
     -H "Content-Type: application/json" \
-    -d '{"username":"humanuser","password":"humanpassword"}' 2>/dev/null | \
+    -d '{"username":"emoore","password":"ciristest1"}' 2>/dev/null | \
     python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token','FAIL'))")
 
 CONSENT=$(curl -s $BACKEND/v1/consent/status -H "Authorization: Bearer $TOKEN" 2>/dev/null)

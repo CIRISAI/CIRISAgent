@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-04-02
+
+### Added
+
+- **Ambient Signet Animation** - Login screen displays animated signet with subtle glow effect
+
+### Fixed
+
+- **FFI Library Loading** - Check pip package location first before system paths; prevents loading wrong-platform binaries
+- **Cross-Platform FFI Safety** - Permanent fix to prevent loading .so on macOS or .dylib on Linux
+- **Login Error Display** - Fixed error message visibility and signet/language selector overlap
+- **Static Analysis** - Refactored `get_package_root()` to use `__file__` traversal instead of importing `ciris_engine`, eliminating SonarCloud circular dependency false positive
+- **TSDB Test Parallel Safety** - Added `xdist_group` marker to prevent parallel execution conflicts when patching `get_db_connection`
+- **Mypy Optional Deps** - Added cv2 and numpy to ignored imports in mypy.ini (optional dependencies)
+- **Localization Sync** - Synced all 16 language files to Android assets and desktop resources
+- **iOS Build** - Bumped to build 215, fixed stale release framework
+
 ## [2.3.2] - 2026-04-01
 
 ### Added

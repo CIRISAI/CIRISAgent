@@ -10,6 +10,14 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -101,10 +109,36 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
             ) {
-                // CIRIS Signet — sized to not overlap language selector
+                // CIRIS Signet — slow rotation + gentle pulse for ambient motion
+                val infiniteTransition = rememberInfiniteTransition(label = "signet")
+                val rotation by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 8000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "signet_rotation"
+                )
+                val scale by infiniteTransition.animateFloat(
+                    initialValue = 0.96f,
+                    targetValue = 1.04f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 3000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "signet_pulse"
+                )
                 CIRISSignet(
                     tintColor = LoginColors.White,
-                    modifier = Modifier.size(72.dp).padding(top = 8.dp)
+                    modifier = Modifier
+                        .size(72.dp)
+                        .padding(top = 8.dp)
+                        .graphicsLayer {
+                            rotationZ = rotation
+                            scaleX = scale
+                            scaleY = scale
+                        }
                 )
 
                 // App name

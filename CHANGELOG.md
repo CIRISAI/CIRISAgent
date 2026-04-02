@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wizard select step accepts "skip" for optional steps (cameras)
 - Desktop wipe: server restart via local-shutdown API, repo root data dir detection
 - `PythonRuntime.desktop`: empty cognitive_state treated as healthy, not stuck
+- Robust CIRIS_HOME detection for Android/iOS (multi-strategy path probing, fixes settings persistence)
+- Duplicate user message deduplication window widened to 30 seconds
 
 ## [2.3.1] - 2026-03-30
 

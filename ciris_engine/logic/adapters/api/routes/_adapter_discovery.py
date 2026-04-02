@@ -233,12 +233,18 @@ def parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str)
     interactive_config = manifest_data.get("interactive_config")
     has_interactive_config = bool(interactive_config and isinstance(interactive_config, dict))
 
+    # Extract homepage and emoji from module info or metadata
+    homepage = module_info.get("homepage")
+    emoji = metadata.get("openclaw_emoji") if isinstance(metadata, dict) else None
+
     return ModuleTypeInfo(
         module_id=module_id,
         name=module_info.get("name", module_id),
         version=module_info.get("version", "1.0.0"),
         description=module_info.get("description", ""),
         author=module_info.get("author", "Unknown"),
+        homepage=homepage,
+        emoji=emoji,
         module_source="modular",
         service_types=service_types,
         capabilities=manifest_data.get("capabilities", []),

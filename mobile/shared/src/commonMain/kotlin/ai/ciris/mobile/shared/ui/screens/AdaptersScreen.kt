@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh as RefreshIcon
@@ -58,6 +59,7 @@ fun AdaptersScreen(
     onToggleExpanded: (String) -> Unit,
     onEditConfig: (String) -> Unit,
     onAddAdapter: () -> Unit,
+    onImportSkill: () -> Unit = {},
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -80,6 +82,15 @@ fun AdaptersScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = onImportSkill,
+                        modifier = Modifier.testableClickable("btn_import_skill") { onImportSkill() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Download,
+                            contentDescription = "Import Skill"
+                        )
+                    }
                     IconButton(
                         onClick = onRefresh,
                         enabled = !isLoading,

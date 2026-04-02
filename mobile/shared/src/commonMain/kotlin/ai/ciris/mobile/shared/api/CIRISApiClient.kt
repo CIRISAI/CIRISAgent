@@ -5574,6 +5574,222 @@ data class ScheduledTaskData(
         "6" -> "Saturday"
         else -> day
     }
+
+    // ===== Skill Import API =====
+
+    /**
+     * Preview an OpenClaw skill import without committing.
+     */
+    suspend fun previewSkillImport(skillMdContent: String, sourceUrl: String? = null): ai.ciris.mobile.shared.models.SkillPreviewData {
+        val method = "previewSkillImport"
+        val url = "$baseUrl/v1/system/adapters/import-skill/preview"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+                sourceUrl?.let { put("source_url", JsonPrimitive(it)) }
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Preview failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            ai.ciris.mobile.shared.models.SkillPreviewData(
+                name = obj["name"]?.jsonPrimitive?.content ?: "",
+                description = obj["description"]?.jsonPrimitive?.content ?: "",
+                version = obj["version"]?.jsonPrimitive?.content ?: "",
+                moduleName = obj["module_name"]?.jsonPrimitive?.content ?: "",
+                tools = obj["tools"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                requiredEnvVars = obj["required_env_vars"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                requiredBinaries = obj["required_binaries"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                hasSupportingFiles = obj["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                sourceUrl = obj["source_url"]?.jsonPrimitive?.contentOrNull,
+                instructionsPreview = obj["instructions_preview"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Import an OpenClaw skill as a CIRIS adapter.
+     */
+    suspend fun importSkill(skillMdContent: String, sourceUrl: String? = null, autoLoad: Boolean = true): ai.ciris.mobile.shared.models.SkillImportResult {
+        val method = "importSkill"
+        val url = "$baseUrl/v1/system/adapters/import-skill"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+                sourceUrl?.let { put("source_url", JsonPrimitive(it)) }
+                put("auto_load", JsonPrimitive(autoLoad))
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Import failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            // Parse preview sub-object if present
+            val previewObj = obj["preview"]?.jsonObject
+            val preview = previewObj?.let {
+                ai.ciris.mobile.shared.models.SkillPreviewData(
+                    name = it["name"]?.jsonPrimitive?.content ?: "",
+                    description = it["description"]?.jsonPrimitive?.content ?: "",
+                    version = it["version"]?.jsonPrimitive?.content ?: "",
+                    moduleName = it["module_name"]?.jsonPrimitive?.content ?: "",
+                    tools = it["tools"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredEnvVars = it["required_env_vars"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredBinaries = it["required_binaries"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    hasSupportingFiles = it["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                    sourceUrl = it["source_url"]?.jsonPrimitive?.contentOrNull,
+                    instructionsPreview = it["instructions_preview"]?.jsonPrimitive?.content ?: ""
+                )
+            }
+
+            ai.ciris.mobile.shared.models.SkillImportResult(
+                success = obj["success"]?.jsonPrimitive?.boolean ?: false,
+                moduleName = obj["module_name"]?.jsonPrimitive?.content ?: "",
+                adapterPath = obj["adapter_path"]?.jsonPrimitive?.content ?: "",
+                toolsCreated = obj["tools_created"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                message = obj["message"]?.jsonPrimitive?.content ?: "",
+                autoLoaded = obj["auto_loaded"]?.jsonPrimitive?.boolean ?: false,
+                preview = preview
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * List all previously imported skills.
+     */
+    suspend fun listImportedSkills(): List<ai.ciris.mobile.shared.models.ImportedSkillData> {
+        val method = "listImportedSkills"
+        val url = "$baseUrl/v1/system/adapters/imported-skills"
+        val auth = authHeader()
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val response: HttpResponse = client.get(url) {
+                auth?.let { headers { append("Authorization", it) } }
+            }
+
+            if (response.status.value !in 200..299) {
+                client.close()
+                throw Exception("Failed to list imported skills: ${response.status}")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+            val skills = obj["skills"]?.jsonArray?.map { skillJson ->
+                val s = skillJson.jsonObject
+                ai.ciris.mobile.shared.models.ImportedSkillData(
+                    moduleName = s["module_name"]?.jsonPrimitive?.content ?: "",
+                    originalSkillName = s["original_skill_name"]?.jsonPrimitive?.content ?: "",
+                    version = s["version"]?.jsonPrimitive?.content ?: "",
+                    description = s["description"]?.jsonPrimitive?.content ?: "",
+                    adapterPath = s["adapter_path"]?.jsonPrimitive?.content ?: "",
+                    sourceUrl = s["source_url"]?.jsonPrimitive?.contentOrNull
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Found ${skills.size} imported skills")
+            skills
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Delete a previously imported skill.
+     */
+    suspend fun deleteImportedSkill(moduleName: String): Boolean {
+        val method = "deleteImportedSkill"
+        val url = "$baseUrl/v1/system/adapters/imported-skills/$moduleName"
+        val auth = authHeader()
+        logInfo(method, "DELETE $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val response: HttpResponse = client.delete(url) {
+                auth?.let { headers { append("Authorization", it) } }
+            }
+            client.close()
+            response.status.value in 200..299
+        } catch (e: Exception) {
+            logException(method, e)
+            false
+        }
+    }
 }
 
 @Serializable

@@ -70,7 +70,7 @@ response_format: |
   - الرد باللغة المفضلة للمستخدم (تحقق من ملف تعريف المستخدم).
   - جميع قيم المحتوى (reasoning، rationale، speak_content، إلخ) يجب أن تكون بلغة المستخدم.
   - مفاتيح JSON يجب أن تبقى باللغة الإنجليزية (على سبيل المثال، "selected_action"، "reasoning"، "tool_parameters").
-  - مثال: {{"selected_action": "SPEAK", "speak_content": "مرحبا!", "rationale": "رد المستخدم بالعربية""}} - محتوى عربي، مفاتيح إنجليزية.
+  - مثال: {{"selected_action": "SPEAK", "speak_content": "مرحبا!", "rationale": "رد المستخدم بالعربية"}} - محتوى عربي، مفاتيح إنجليزية.
 
 context_integration: |
   الفكرة المراد تقييمها: {original_thought_content}

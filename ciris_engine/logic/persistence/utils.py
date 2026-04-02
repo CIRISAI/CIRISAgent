@@ -170,10 +170,12 @@ def map_row_to_thought(row: Any) -> Thought:
         try:
             action_json = row_dict["final_action_json"]
             action_data = action_json if isinstance(action_json, dict) else json.loads(action_json)
-            # Only set final_action if it's a non-empty dict with required fields
-            if isinstance(action_data, dict) and action_data:
+            # Only set final_action if it's a valid FinalAction dict (has required keys)
+            # Error objects like {"error": "..."} should be skipped silently
+            if isinstance(action_data, dict) and "action_type" in action_data:
                 row_dict["final_action"] = FinalAction.model_validate(action_data)
             else:
+                # Not a FinalAction format (e.g., error object) - skip silently
                 row_dict["final_action"] = None
         except Exception:
             logger.warning(f"Failed to decode final_action_json for thought {row_dict.get('thought_id')}")

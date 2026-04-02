@@ -123,7 +123,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
   - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском""}} - Russian content, English keys.
+  - Example: {{"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском"}} - Russian content, English keys.
 
   ВАЖНО:
   - Используйте схему параметров выше для определения требуемых параметров инструмента

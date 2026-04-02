@@ -25,7 +25,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
   - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt""}} - German content, English keys.
+  - Example: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"}} - German content, English keys.
 
   Ihre Antwort MUSS ein einzelnes JSON-Objekt sein, das dem bereitgestellten Schema entspricht, mit folgenden Schlüsseln:
   - "plausibility_score": Ein Float zwischen 0.0 (höchst implausibel) und 1.0 (höchst plausibel). **Dieser Score MUSS die reale physikalische Plausibilität und die unmittelbaren, unvermeidbaren Konsequenzen von Interaktionen zwischen genannten Elementen (wie Eis, das auf einer heißen Pfanne schmilzt) stark berücksichtigen, es sei denn, es wird ein expliziter und spezifischer idealisierter Kontext für diese Elemente im Gedanken bereitgestellt. Ein niedriger Score sollte gegeben werden, wenn offensichtliche Physik ohne eine solche explizite Idealisierung ignoriert wird.**

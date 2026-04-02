@@ -86,6 +86,46 @@ metadata:
 Legacy instructions here.
 """
 
+FULL_FRONTMATTER_SKILL = """\
+---
+name: full-fields
+description: Tests all frontmatter fields
+version: 2.0.0
+homepage: https://example.com/full
+user-invocable: false
+disable-model-invocation: true
+command-dispatch: tool
+command-tool: mytool
+command-arg-mode: raw
+metadata:
+  openclaw:
+    requires:
+      env:
+        - API_KEY
+      bins:
+        - curl
+      anyBins:
+        - bat
+        - cat
+      config:
+        - myconfig.yaml
+    primaryEnv: API_KEY
+    homepage: https://metadata-homepage.com
+    emoji: "🔧"
+    os:
+      - linux
+    always: true
+    skillKey: custom-key
+    install:
+      - kind: brew
+        formula: curl
+        bins:
+          - curl
+---
+
+Full frontmatter instructions.
+"""
+
 NO_FRONTMATTER = """\
 This is just plain markdown with no frontmatter.
 It should fail because no name is provided.
@@ -182,6 +222,39 @@ class TestParseSkillMd:
         skill = parser.parse_skill_md(FULL_SKILL)
         assert skill.raw_frontmatter["name"] == "todoist-cli"
         assert "metadata" in skill.raw_frontmatter
+
+    def test_all_frontmatter_fields(self, parser: OpenClawSkillParser):
+        """Verify every OpenClaw frontmatter field is parsed."""
+        skill = parser.parse_skill_md(FULL_FRONTMATTER_SKILL)
+        # Top-level frontmatter
+        assert skill.name == "full-fields"
+        assert skill.description == "Tests all frontmatter fields"
+        assert skill.version == "2.0.0"
+        assert skill.homepage == "https://example.com/full"  # top-level wins
+        assert skill.user_invocable is False
+        assert skill.disable_model_invocation is True
+        assert skill.command_dispatch == "tool"
+        assert skill.command_tool == "mytool"
+        assert skill.command_arg_mode == "raw"
+
+    def test_homepage_fallback_to_metadata(self, parser: OpenClawSkillParser):
+        """When top-level homepage is absent, fall back to metadata.homepage."""
+        skill = parser.parse_skill_md(FULL_SKILL)
+        # FULL_SKILL has no top-level homepage but has metadata.openclaw.homepage
+        assert skill.homepage == "https://github.com/example/todoist-cli"
+
+    def test_all_metadata_fields(self, parser: OpenClawSkillParser):
+        """Verify every metadata.openclaw field is parsed."""
+        skill = parser.parse_skill_md(FULL_FRONTMATTER_SKILL)
+        assert skill.metadata is not None
+        assert skill.metadata.primary_env == "API_KEY"
+        assert skill.metadata.emoji == "🔧"
+        assert skill.metadata.os == ["linux"]
+        assert skill.metadata.always is True
+        assert skill.metadata.skill_key == "custom-key"
+        assert skill.metadata.requires is not None
+        assert skill.metadata.requires.any_bins == ["bat", "cat"]
+        assert skill.metadata.requires.config == ["myconfig.yaml"]
 
 
 # ============================================================================

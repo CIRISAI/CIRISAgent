@@ -310,3 +310,110 @@ class TestFieldConsumption:
             # Services reference the supporting dir
             services = (path / "services.py").read_text()
             assert "_SUPPORTING_DIR" in services
+
+    def test_os_restrictions_consumed(self, full_skill: ParsedSkill):
+        """metadata.os -> manifest platform_requirements, ToolRequirements.platforms."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(full_skill)
+            manifest = json.loads((path / "manifest.json").read_text())
+            assert manifest["platform_requirements"] == ["linux", "darwin"]
+            services = (path / "services.py").read_text()
+            assert "'linux'" in services
+            assert "'darwin'" in services
+
+    def test_any_bins_consumed(self, full_skill: ParsedSkill):
+        """requires.anyBins -> ToolRequirements.any_binaries."""
+        # full_skill doesn't have anyBins, create one that does
+        skill_md = """\
+---
+name: anybins-test
+description: Test anyBins
+metadata:
+  openclaw:
+    requires:
+      anyBins:
+        - bat
+        - cat
+---
+Test."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            assert "any_binaries" in services
+            assert "'bat'" in services
+            assert "'cat'" in services
+
+    def test_config_requirements_consumed(self, full_skill: ParsedSkill):
+        """requires.config -> ToolRequirements.config_keys."""
+        skill_md = """\
+---
+name: config-test
+description: Test config
+metadata:
+  openclaw:
+    requires:
+      config:
+        - myapp.yaml
+---
+Test."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            assert "ConfigRequirement" in services
+            assert "'myapp.yaml'" in services
+
+    def test_metadata_fields_in_manifest(self, full_skill: ParsedSkill):
+        """always, skill_key, emoji, command_* -> manifest metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(full_skill)
+            manifest = json.loads((path / "manifest.json").read_text())
+            meta = manifest["metadata"]
+            # These are stored for reference/UI display
+            assert "openclaw_always" in meta
+            assert "openclaw_skill_key" in meta
+            assert "openclaw_emoji" in meta
+
+    def test_disable_model_invocation_consumed(self):
+        """disable-model-invocation -> context_enrichment=False on info tool."""
+        skill_md = """\
+---
+name: no-prompt-skill
+description: Should not inject into model
+disable-model-invocation: true
+---
+Instructions here."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            # The info tool should have context_enrichment=False
+            assert "context_enrichment=False" in services
+
+    def test_homepage_toplevel_consumed(self):
+        """Top-level homepage -> manifest module.homepage, tool documentation."""
+        skill_md = """\
+---
+name: homepage-test
+description: Has top-level homepage
+homepage: https://example.com/my-skill
+---
+Test."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            manifest = json.loads((path / "manifest.json").read_text())
+            assert manifest["module"]["homepage"] == "https://example.com/my-skill"
+            services = (path / "services.py").read_text()
+            assert "https://example.com/my-skill" in services

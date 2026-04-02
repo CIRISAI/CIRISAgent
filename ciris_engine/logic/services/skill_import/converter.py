@@ -47,19 +47,38 @@ def _map_install_kind(kind: str) -> str:
 
 
 def _build_install_steps(specs: List[SkillInstallSpec]) -> List[Dict[str, Any]]:
-    """Convert OpenClaw install specs to CIRIS InstallStep dicts."""
+    """Convert OpenClaw install specs to CIRIS InstallStep dicts.
+
+    Maps all OpenClaw install fields to CIRIS InstallStep fields.
+    For 'download' kind specs, the URL is stored in the 'url' field
+    and a manual command is generated.
+    """
     steps = []
     for i, spec in enumerate(specs):
+        label = getattr(spec, "label", None) or f"Install via {spec.kind}"
+        step_id = getattr(spec, "id", None) or f"install_{i}"
         step: Dict[str, Any] = {
-            "id": f"install_{i}",
+            "id": step_id,
             "kind": _map_install_kind(spec.kind),
-            "label": f"Install via {spec.kind}",
+            "label": label,
             "provides_binaries": spec.bins,
         }
         if spec.formula:
             step["formula"] = spec.formula
         if spec.package:
             step["package"] = spec.package
+        # Handle download-type specs: url, archive, stripComponents, targetDir
+        url = getattr(spec, "url", None)
+        if url:
+            step["url"] = url
+            # Build a manual command for download specs
+            archive = getattr(spec, "archive", None)
+            target_dir = getattr(spec, "targetDir", None) or getattr(spec, "target_dir", None)
+            strip = getattr(spec, "stripComponents", None) or getattr(spec, "strip_components", None)
+            if archive and target_dir:
+                strip_flag = f" --strip-components={strip}" if strip else ""
+                step["command"] = f"curl -L {url} | tar xz{strip_flag} -C {target_dir}"
+                step["kind"] = "manual"
         steps.append(step)
     return steps
 
@@ -128,12 +147,18 @@ class SkillToAdapterConverter:
                     "required": True,
                 }
 
-        manifest = {
+        # Map OpenClaw OS names to CIRIS platform requirement strings
+        platform_requirements: Optional[List[str]] = None
+        if skill.metadata and skill.metadata.os:
+            platform_requirements = skill.metadata.os  # e.g., ["linux", "darwin"]
+
+        manifest: Dict[str, Any] = {
             "module": {
                 "name": module_name,
                 "version": skill.version,
                 "description": skill.description or f"Imported OpenClaw skill: {skill.name}",
                 "author": "OpenClaw Import",
+                "homepage": skill.homepage,
                 "auto_load": True,
                 "opt_in_required": False,
                 "requires_consent": False,
@@ -152,8 +177,26 @@ class SkillToAdapterConverter:
                 "imported_from": "openclaw",
                 "original_skill_name": skill.name,
                 "source_url": skill.source_url,
+                "openclaw_always": skill.metadata.always if skill.metadata else False,
+                "openclaw_skill_key": skill.metadata.skill_key if skill.metadata else None,
+                "openclaw_emoji": skill.metadata.emoji if skill.metadata else None,
+                "disable_model_invocation": skill.disable_model_invocation,
+                "command_dispatch": skill.command_dispatch,
+                "command_tool": skill.command_tool,
+                "command_arg_mode": skill.command_arg_mode,
             },
         }
+
+        # Add CLI dependencies from required binaries
+        cli_deps: List[str] = []
+        if skill.metadata and skill.metadata.requires:
+            cli_deps.extend(skill.metadata.requires.bins)
+        if cli_deps:
+            manifest["cli_dependencies"] = cli_deps
+
+        # Add platform requirements if OS restrictions exist
+        if platform_requirements:
+            manifest["platform_requirements"] = platform_requirements
 
         # Remove None values
         manifest = {k: v for k, v in manifest.items() if v is not None}
@@ -248,16 +291,22 @@ class SkillToAdapterConverter:
 
     def _write_services(self, adapter_dir: Path, module_name: str, skill: ParsedSkill) -> None:
         """Generate services.py with a ToolService that exposes the skill."""
-        # Build requirements block
+        # Build requirements block with all OpenClaw requirement types
         requirements_code = "None"
         if skill.metadata and skill.metadata.requires:
             req = skill.metadata.requires
             bin_list = repr(req.bins) if req.bins else "[]"
+            any_bin_list = repr(req.any_bins) if req.any_bins else "[]"
             env_list = repr(req.env) if req.env else "[]"
+            config_list = repr(req.config) if req.config else "[]"
+            platforms_list = repr(skill.metadata.os) if skill.metadata.os else "[]"
             requirements_code = textwrap.dedent(f"""\
                 ToolRequirements(
                         binaries=[BinaryRequirement(name=b) for b in {bin_list}],
+                        any_binaries=[BinaryRequirement(name=b) for b in {any_bin_list}],
                         env_vars=[EnvVarRequirement(name=e) for e in {env_list}],
+                        config_keys=[ConfigRequirement(key=c) for c in {config_list}],
+                        platforms={platforms_list},
                     )""")
 
         # Build install steps
@@ -284,6 +333,7 @@ class SkillToAdapterConverter:
 
             from ciris_engine.schemas.adapters.tools import (
                 BinaryRequirement,
+                ConfigRequirement,
                 EnvVarRequirement,
                 InstallStep,
                 ToolDocumentation,
@@ -337,7 +387,7 @@ class SkillToAdapterConverter:
                         documentation=ToolDocumentation(
                             quick_start=f"Imported OpenClaw skill: {skill.name}",
                             detailed_instructions=SKILL_INSTRUCTIONS,
-                            homepage={repr(skill.metadata.homepage if skill.metadata else None)},
+                            homepage={repr(skill.homepage)},
                         ),
                     ),
                     "skill:{skill.name}:info": ToolInfo(
@@ -349,7 +399,7 @@ class SkillToAdapterConverter:
                             required=[],
                         ),
                         category="imported_skill",
-                        context_enrichment=True,
+                        context_enrichment={not skill.disable_model_invocation},
                         context_enrichment_params={{}},
                         tags=["imported", "openclaw", "info"],
                     ),

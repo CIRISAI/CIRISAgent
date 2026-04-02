@@ -69,9 +69,12 @@ class ParsedSkill(BaseModel):
     source_url: Optional[str] = Field(None, description="Source URL if imported from ClawHub")
 
     # Additional frontmatter fields from OpenClaw
+    homepage: Optional[str] = Field(None, description="Top-level homepage URL (fallback if not in metadata)")
     user_invocable: bool = Field(True, description="Whether skill is user-invocable")
+    disable_model_invocation: bool = Field(False, description="If true, exclude from model prompt")
     command_dispatch: Optional[str] = Field(None, description="Dispatch mode (e.g., 'tool')")
     command_tool: Optional[str] = Field(None, description="Tool name for direct dispatch")
+    command_arg_mode: Optional[str] = Field(None, description="Arg mode (e.g., 'raw')")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -165,6 +168,11 @@ class OpenClawSkillParser:
         version = raw_frontmatter.get("version", "1.0.0")
         metadata = _extract_metadata(raw_frontmatter)
 
+        # Resolve homepage: top-level frontmatter takes priority, then metadata
+        homepage = raw_frontmatter.get("homepage")
+        if not homepage and metadata and metadata.homepage:
+            homepage = metadata.homepage
+
         return ParsedSkill(
             name=name,
             description=description,
@@ -173,9 +181,12 @@ class OpenClawSkillParser:
             instructions=instructions,
             raw_frontmatter=raw_frontmatter,
             source_url=source_url,
+            homepage=homepage,
             user_invocable=raw_frontmatter.get("user-invocable", True),
+            disable_model_invocation=raw_frontmatter.get("disable-model-invocation", False),
             command_dispatch=raw_frontmatter.get("command-dispatch"),
             command_tool=raw_frontmatter.get("command-tool"),
+            command_arg_mode=raw_frontmatter.get("command-arg-mode"),
         )
 
     def parse_directory(self, skill_dir: Path, source_url: Optional[str] = None) -> ParsedSkill:

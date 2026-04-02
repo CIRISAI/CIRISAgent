@@ -445,6 +445,33 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Request the Python server to shut down via /v1/system/local-shutdown.
+     * Used after factory reset on desktop to force a clean server restart.
+     * The connection will likely fail/timeout since the server is dying — that's expected.
+     */
+    suspend fun postLocalShutdown() {
+        val method = "postLocalShutdown"
+        logInfo(method, "Sending local-shutdown request to $baseUrl/v1/system/local-shutdown")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 3000
+                connectTimeoutMillis = 2000
+            }
+        }
+        try {
+            client.post("$baseUrl/v1/system/local-shutdown") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+        } catch (e: Exception) {
+            // Expected — server dies before responding
+            logInfo(method, "Server shutdown (expected error): ${e.message}")
+        } finally {
+            client.close()
+        }
+    }
+
     // System Status (from /v1/system/health)
     override suspend fun getSystemStatus(): SystemStatus {
         val method = "getSystemStatus"

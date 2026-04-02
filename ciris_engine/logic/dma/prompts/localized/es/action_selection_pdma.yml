@@ -63,7 +63,7 @@ language_rules: |
   - Responde en el idioma preferido del usuario (verifica el perfil del usuario).
   - TODOS los valores de contenido (reasoning, rationale, speak_content, etc.) deben estar en el idioma del usuario.
   - Las claves JSON DEBEN permanecer en inglés (por ejemplo, "selected_action", "reasoning", "tool_parameters").
-  - Ejemplo: {{"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español""}} - contenido en español, claves en inglés.
+  - Ejemplo: {{"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español"}} - contenido en español, claves en inglés.
 final_ponder_advisory: '
 
   ASESOR IMPORTANTE DE INTENTO FINAL (La Profundidad de Pensamiento para el PRÓXIMO intento sería {current_thought_depth_plus_1}/{max_rounds}):

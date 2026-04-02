@@ -77,3 +77,7 @@ actual fun getAppBuildNumber(): String {
     val bundle = NSBundle.mainBundle
     return bundle.objectForInfoDictionaryKey("CFBundleVersion") as? String ?: "0"
 }
+
+actual fun startTestAutomationServer() {
+    ai.ciris.mobile.shared.testing.IOSTestAutomationServer.startIfEnabled()
+}

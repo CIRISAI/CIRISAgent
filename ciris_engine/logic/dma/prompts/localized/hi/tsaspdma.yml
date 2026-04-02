@@ -131,7 +131,7 @@ language_rules: |
   - उपयोगकर्ता की पसंदीदा भाषा में जवाब दें (उपयोगकर्ता प्रोफ़ाइल जांचें)।
   - सभी सामग्री मान (reasoning, rationale, speak_content, आदि) उपयोगकर्ता की भाषा में होने चाहिए।
   - JSON कुंजियां अंग्रेजी में रहनी चाहिए (उदा., "selected_action", "reasoning", "tool_parameters")।
-  - उदाहरण: {{"selected_action": "SPEAK", "speak_content": "नमस्ते!", "rationale": "उपयोगकर्ता ने हिंदी में अभिवादन किया""}} - हिंदी सामग्री, अंग्रेजी कुंजियां।
+  - उदाहरण: {{"selected_action": "SPEAK", "speak_content": "नमस्ते!", "rationale": "उपयोगकर्ता ने हिंदी में अभिवादन किया"}} - हिंदी सामग्री, अंग्रेजी कुंजियां।
 
 # Tool correction mode section (used when ASPDMA selected non-existent tool)
 tool_correction_section: |

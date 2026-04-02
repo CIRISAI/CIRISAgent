@@ -717,10 +717,18 @@ class X402Provider(WalletProvider):
         )
 
         # Create initial UserOperation (without gas estimates)
+        # FIXME: P1 - Smart account deployment issue
+        # The current implementation assumes self._evm_address is an already-deployed
+        # ERC-4337 smart account, but it's actually just an EOA derived from CIRISVerify.
+        # For new users, bundlers will reject with "account not deployed" because:
+        #   1. sender should be the counterfactual smart account address (from factory)
+        #   2. init_code should contain factory + init calldata for first deployment
+        # Fix requires: smart account factory integration, address computation, and
+        # tracking deployment state. See issue: CIRISAI/CIRISAgent#656
         user_op = UserOperation(
             sender=self._evm_address,
             nonce=hex(nonce),
-            init_code="0x",  # Account already deployed
+            init_code="0x",  # FIXME: Need init_code for undeployed accounts
             call_data="0x" + call_data.hex(),
             call_gas_limit=hex(200000),  # Initial estimate
             verification_gas_limit=hex(100000),

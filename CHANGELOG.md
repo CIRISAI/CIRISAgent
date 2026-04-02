@@ -5,6 +5,42 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-04-01
+
+### Added
+
+- **Cross-Platform Test Automation** - HTTP server (Desktop: Ktor CIO, iOS: POSIX sockets) on port 8091
+- **Shared Test Logic** - Test handler models and state in `commonMain` for all KMP targets
+- **Desktop Automation** - `/screenshot` endpoint (java.awt.Robot), `/mouse-click` for dropdowns
+- **Testable UI Elements** - `testableClickable` on provider/model dropdowns and login buttons
+- **Demo Recording** - SwiftCapture integration (`tools/record_demo_clips.py`)
+- **Desktop E2E Test** - Wipe-to-setup test script (`tools/test_desktop_wipe_setup.sh`)
+- **CIRIS Signet** - Login screen displays signet icon instead of plain "C" text
+- **First-Run Welcome** - Localized welcome message for 16 languages
+- **Desktop Restart API** - `postLocalShutdown()` for server restart after wipe
+
+### Fixed
+
+- **Factory Reset Keys** - Preserves signing keys (prevents CIRISVerify FFI crash on restart)
+- **Founding Partnership** - Uses `consent/{wa_id}` matching ConsentService lookups
+- **First Run Detection** - Checks `.env` contents for `CIRIS_CONFIGURED`, not just file existence
+- **CIRISVerify FFI** - Platform-aware suffix ordering (.dylib before .so on macOS)
+- **Config Path** - Standardized to `~/ciris/.env`, removed CWD-based path check
+- **Stale Env Vars** - `CIRIS_CONFIGURED` cleared when `.env` is deleted
+- **Language Rotation** - No longer triggers API sync or pipeline label recomposition
+- **Env Var Prefix** - `CIRIS_` prefix supported by LLM service, main.py, service_initializer
+- **Wizard Skip** - Select step accepts "skip" for optional steps (cameras)
+- **Desktop Wipe** - Server restart via local-shutdown API, repo root data dir detection
+- **Python Runtime** - Empty cognitive_state treated as healthy, not stuck
+- **CIRIS_HOME Detection** - Multi-strategy path probing for Android/iOS (fixes settings persistence)
+- **Message Dedup** - Duplicate user message deduplication window widened to 30 seconds
+- **Location Parsing** - Fixed parsing order to match setup serialization (Country, Region, City)
+- **Coordinate Parsing** - Added error handling for malformed latitude/longitude env values
+
+### Known Issues
+
+- **Wallet Paymaster** - ERC-4337 paymaster sends require deployed smart account; new users may see "account not deployed" errors until smart account factory integration is added (#656)
+
 ## [2.3.1] - 2026-03-30
 
 ### Added

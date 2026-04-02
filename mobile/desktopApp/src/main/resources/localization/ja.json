@@ -1675,5 +1675,6 @@
     "wa_reject": "拒否",
     "wa_resolve": "解決",
     "wa_service_status": "サービスステータス",
-    "wa_status": "ステータス"
+    "wa_status": "ステータス",
+    "login_first_run_welcome": "ようこそ！AIアシスタントのセットアップ方法を選択してください。"
 }

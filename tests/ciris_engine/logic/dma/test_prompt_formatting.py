@@ -87,20 +87,23 @@ class TestPromptBraceEscaping:
         )
 
     def test_no_mismatched_double_braces(self, all_prompt_files: list[Path]) -> None:
-        """Ensure double braces are balanced (not {"..""}} pattern)."""
-        # This pattern catches malformed escaping like {"key": "value""}}
-        malformed_pattern = re.compile(r'"\}\}')  # ""}} at end without matching {{ at start
+        """Ensure double braces are balanced (not {"..""}} pattern).
 
+        Catches malformed patterns like:
+        - {{"key": "value""}} - extra quote before closing braces
+        - This produces invalid JSON and can cause format string errors
+        """
         errors = []
         for prompt_file in all_prompt_files:
             content = prompt_file.read_text(encoding="utf-8")
 
-            # Check for lines with ""}} that don't have {{ before the JSON
             for i, line in enumerate(content.split("\n"), 1):
+                # Check for ""}} pattern which indicates an extra quote
+                # Only flag if the line doesn't have proper {{ escaping
                 if '""}}' in line and "{{" not in line:
                     errors.append(f"{prompt_file.name}:{i}: Malformed brace escaping: {line[:100]}...")
 
-        assert not errors, f"Found malformed brace escaping:\n" + "\n".join(errors)
+        assert not errors, f"Found malformed brace escaping (extra quotes before }}}}):\n" + "\n".join(errors)
 
     def test_yaml_files_parse_correctly(self, all_prompt_files: list[Path]) -> None:
         """Ensure all YAML prompt files are valid YAML.

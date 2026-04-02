@@ -1675,5 +1675,6 @@
     "wa_reject": "Ablehnen",
     "wa_resolve": "Auflösen",
     "wa_service_status": "Dienststatus",
-    "wa_status": "Status"
+    "wa_status": "Status",
+    "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten."
 }

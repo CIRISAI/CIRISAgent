@@ -82,6 +82,12 @@ kotlin {
                 // Ktor Android engine
                 implementation("io.ktor:ktor-client-okhttp:2.3.7")
 
+                // Ktor server for test automation (CIO works on Android)
+                implementation("io.ktor:ktor-server-core:2.3.7")
+                implementation("io.ktor:ktor-server-cio:2.3.7")
+                implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
+                implementation("io.ktor:ktor-server-status-pages:2.3.7")
+
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")
                 implementation("androidx.security:security-crypto:1.1.0-alpha06")

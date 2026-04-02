@@ -305,12 +305,30 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # Also check relative to this module
+        # Also check relative to this module (prefer platform-native suffix)
         module_dir = Path(__file__).parent
-        for suffix in [".so", ".dylib", ".dll"]:
+        platform_suffixes = {
+            "Darwin": [".dylib", ".so"],
+            "Linux": [".so", ".dylib"],
+            "Windows": [".dll"],
+        }
+        suffixes = platform_suffixes.get(system, [".so", ".dylib", ".dll"])
+        for suffix in suffixes:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate
+
+        # Check pip-installed ciris_verify package as final fallback
+        try:
+            import ciris_verify as cv_pkg
+            pkg_dir = Path(cv_pkg.__file__).parent
+            for suffix in suffixes:
+                candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
+                if candidate.exists():
+                    logger.info(f"[CIRISVerify] Using pip-installed library: {candidate}")
+                    return candidate
+        except (ImportError, AttributeError):
+            pass
 
         raise BinaryNotFoundError(f"Searched: {paths}")
 

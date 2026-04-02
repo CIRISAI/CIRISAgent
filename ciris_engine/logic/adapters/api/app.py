@@ -52,6 +52,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifecycle."""
     # Startup
     print("Starting CIRIS API...")
+    # Note: Founding partnership reconciliation is handled by config_migration.py
+    # during runtime initialization (PARTNERSHIP_MIGRATION step).
     yield
     # Shutdown
     print("Shutting down CIRIS API...")

@@ -92,19 +92,32 @@ def get_user_location() -> UserLocation:
     location_string = os.environ.get("CIRIS_USER_LOCATION", "")
     parts = [p.strip() for p in location_string.split(",")] if location_string else []
 
-    # Location string format varies by granularity:
+    # Location string format is written by setup as: Country, Region, City
+    # (from most general to most specific)
     # Country only: "United States"
-    # Region: "California, United States"
-    # City: "San Francisco, California, United States"
-    country = parts[-1] if parts else None
-    region = parts[-2] if len(parts) >= 2 else None
-    city = parts[-3] if len(parts) >= 3 else None
+    # Region: "United States, California"
+    # City: "United States, California, San Francisco"
+    country = parts[0] if parts else None
+    region = parts[1] if len(parts) >= 2 else None
+    city = parts[2] if len(parts) >= 3 else None
 
-    # Parse coordinates
+    # Parse coordinates with error handling for malformed values
     lat_str = os.environ.get("CIRIS_USER_LATITUDE", "")
     lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "")
-    latitude = float(lat_str) if lat_str else None
-    longitude = float(lon_str) if lon_str else None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    if lat_str:
+        try:
+            latitude = float(lat_str)
+        except ValueError:
+            logger.warning("Invalid CIRIS_USER_LATITUDE value: %s", lat_str)
+
+    if lon_str:
+        try:
+            longitude = float(lon_str)
+        except ValueError:
+            logger.warning("Invalid CIRIS_USER_LONGITUDE value: %s", lon_str)
 
     return UserLocation(
         location_string=location_string or None,

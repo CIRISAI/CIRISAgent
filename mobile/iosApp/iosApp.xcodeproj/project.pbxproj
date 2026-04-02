@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -22,6 +22,7 @@
 		8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = D64F1C20423DB4551C0FEBDD /* ja.json */; };
 		8F18BC76CCF0E61689FB9546 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = 187CA1BC456EC956C8DE7C3C /* it.json */; };
 		967D118D4C5509A7828AD513 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = 37019FD67F9DE2D57A74BA03 /* de.json */; };
+		9A3285D02F7B85FC005235E1 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A3285CF2F7B85FC005235E1 /* StoreKit.framework */; };
 		A5082A49E9C0871D19D9AE2D /* tr.json in Resources */ = {isa = PBXBuildFile; fileRef = F5AD539185FEAC35E1C4C4E4 /* tr.json */; };
 		AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B29C709AD6D0538972B327 /* DeviceCheck.framework */; };
 		AA864D37B687356222AD9D24 /* zh.json in Resources */ = {isa = PBXBuildFile; fileRef = 8620DD490569E31850E66411 /* zh.json */; };
@@ -69,10 +70,11 @@
 		5FD4253E3B2F5576887094CC /* AppAttestManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestManager.swift; sourceTree = "<group>"; };
 		6C6722442EC053DE062BB5B9 /* ar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ar.json; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
-		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8620DD490569E31850E66411 /* zh.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = zh.json; sourceTree = "<group>"; };
 		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
+		9A3285CF2F7B85FC005235E1 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
 		B01B283DC417F03B7803D5E3 /* ko.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ko.json; sourceTree = "<group>"; };
 		B57162E8FCBD1C507FA4F444 /* am.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = am.json; sourceTree = "<group>"; };
@@ -100,6 +102,7 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
+				9A3285D02F7B85FC005235E1 /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -131,6 +134,7 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				9A3285CF2F7B85FC005235E1 /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -215,7 +219,6 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
-						DevelopmentTeam = "${DEVELOPMENT_TEAM}";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -230,7 +233,6 @@
 			);
 			mainGroup = 38B69C3F79CD97858CF7B609;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -455,6 +457,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -499,6 +502,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",

@@ -65,7 +65,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
   - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "السلام علیکم!", "rationale": "صارف نے اردو میں سلام کیا""}} - Urdu content, English keys.
+  - Example: {{"selected_action": "SPEAK", "speak_content": "السلام علیکم!", "rationale": "صارف نے اردو میں سلام کیا"}} - Urdu content, English keys.
 
   آپ کا جواب فراہم کردہ schema کے مطابق ایک واحد JSON object ہونا ضروری ہے، مندرجہ ذیل keys کے ساتھ:
   - "k_eff": Float (>= 0) - مؤثر آزاد ذریعہ کی گنتی۔ فارمولا k/(1+ρ(k-1)) استعمال کریں۔ k_eff < 2 = نازک۔

@@ -316,19 +316,24 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
 
     backfilled = 0
     for wa in root_was:
-        user_id = wa.name
-        existing = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL)
-        if existing is not None:
-            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{user_id} already exists - skipping")
+        wa_id = wa.wa_id
+        # Check consent/{wa_id} (canonical) and consent/{name} (legacy)
+        existing_by_waid = get_graph_node(f"consent/{wa_id}", GraphScope.LOCAL)
+        existing_by_name = get_graph_node(f"consent/{wa.name}", GraphScope.LOCAL)
+        if existing_by_waid is not None:
+            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa_id} already exists - skipping")
+            continue
+        if existing_by_name is not None:
+            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa.name} (legacy) already exists - skipping")
             continue
 
         try:
             from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
 
-            _create_founding_partnership(user_id)
+            _create_founding_partnership(wa_id)
             backfilled += 1
         except Exception as e:
-            logger.error(f"[PARTNERSHIP_MIGRATION] Failed to create partnership for {user_id}: {e}")
+            logger.error(f"[PARTNERSHIP_MIGRATION] Failed to create partnership for {wa_id}: {e}")
 
     if backfilled:
         logger.info(f"[PARTNERSHIP_MIGRATION] Backfilled founding partnerships for {backfilled} ROOT user(s)")

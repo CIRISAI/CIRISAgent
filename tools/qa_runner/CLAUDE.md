@@ -160,6 +160,76 @@ See `modules/CLAUDE.md` for the full module inventory.
 | "Address already in use" | `lsof -ti:8080 \| xargs kill -9` |
 | Auth token expired | Runner auto-re-authenticates after logout/refresh tests |
 
+## Desktop UI E2E Testing
+
+In addition to API-level tests, CIRIS supports end-to-end desktop UI testing
+via the test automation HTTP server (port 8091). This is separate from the QA
+runner's API tests.
+
+**E2E test script:**
+```bash
+# Full wipe → setup wizard → verify consent/partnership/lens-identifier
+bash tools/test_desktop_wipe_setup.sh
+```
+
+**What the E2E test validates:**
+1. Clean launch (Login screen)
+2. Login with default admin
+3. Factory reset (wipe data, preserve signing keys)
+4. Server restart and first-run detection
+5. Setup wizard: location, LLM (OpenRouter), traces opt-in, account creation
+6. Founding partnership consent (PARTNERED stream)
+7. Lens-identifier endpoint (signing key based)
+8. .env configuration (no mock LLM, correct provider)
+
+**Home Assistant adapter setup (manual + scripted):**
+1. Navigate to Adapters → click + → select home_assistant
+2. mDNS discovery finds HA instances automatically
+3. OAuth via browser (emoore/ciristest1 for test HA)
+4. Feature selection (device control, automations, sensors, notifications)
+5. Camera selection (optional)
+6. Confirm → adapter loaded and running
+
+**Key tools:**
+- `tools/test_desktop_wipe_setup.sh` — Full desktop E2E test script
+- `tools/record_demo_clips.py` — SwiftCapture video recording + automation
+- Test automation API at `:8091` (all platforms when `CIRIS_TEST_MODE=true`)
+
+**Platform-specific automation:**
+
+| Platform | Test Server | Screenshots | Mouse Events | Notes |
+|----------|------------|-------------|--------------|-------|
+| Desktop | Ktor CIO `:8091` | java.awt.Robot | java.awt.Robot | Full automation |
+| iOS | POSIX sockets `:8091` | pymobiledevice3 | N/A | Via iproxy; 2s delay between inputs |
+| Android | TODO (Ktor CIO) | adb screencap | N/A | Currently use Espresso |
+
+**iOS E2E automation:**
+```bash
+# Launch with test mode
+xcrun devicectl device process launch -d $DEVICE_ID \
+  --terminate-existing \
+  --environment-variables '{"CIRIS_TEST_MODE":"true"}' ai.ciris.mobile
+
+# Port forward
+iproxy 18091 8091 -u $IDEVICE_ID &
+iproxy 18080 8080 -u $IDEVICE_ID &
+
+# Drive UI (same HTTP endpoints as desktop)
+curl http://127.0.0.1:18091/screen
+curl -X POST http://127.0.0.1:18091/click -d '{"testTag":"btn_local_login"}'
+
+# HA adapter: API-driven with OAuth callback forwarding
+# See mobile/CLAUDE.md for full iOS E2E workflow
+```
+
+**iOS-specific gotchas:**
+- `--terminate-existing` required to kill previous app instance
+- Text input needs 2s delay between fields (StateFlow propagation)
+- OAuth callbacks go to `127.0.0.1:8080` — forward via `iproxy 18080`
+- API adapter config uses nested `{"step_data":{...}}` format
+- `.env` must contain `CIRIS_CONFIGURED="true"` to not be first-run
+- `pymobiledevice3 tunneld` must be running for screenshots
+
 ## Reporting
 
 Test results are saved to `qa_reports/` with timestamps. Use `--json` for machine-readable output. The status tracker persists results across runs for the `--status` dashboard.

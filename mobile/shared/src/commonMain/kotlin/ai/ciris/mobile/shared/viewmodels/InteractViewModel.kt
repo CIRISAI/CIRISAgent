@@ -304,16 +304,19 @@ class InteractViewModel(
         logInfo(method, "Starting language observation for pipeline localization")
 
         languageObserverJob = viewModelScope.launch {
-            // Combine isLoading and currentLanguage to trigger on either change
+            // Combine isLoading, currentLanguage, and hasExplicitLanguageSelection
+            // Only update on: initial load completing OR explicit user language change
+            // Skip temporary rotation changes (login screen language cycling)
             kotlinx.coroutines.flow.combine(
                 localizationManager.isLoading,
-                localizationManager.currentLanguage
-            ) { isLoading, language ->
-                isLoading to language
-            }.collect { (isLoading, language) ->
-                if (!isLoading) {
-                    // Localization is ready, update pipeline labels
-                    logInfo(method, "Updating pipeline labels for language: $language")
+                localizationManager.currentLanguage,
+                localizationManager.hasExplicitLanguageSelection
+            ) { isLoading, language, isExplicit ->
+                Triple(isLoading, language, isExplicit)
+            }.collect { (isLoading, language, isExplicit) ->
+                if (!isLoading && (isExplicit || language == "en")) {
+                    // Update pipeline labels when: localization ready + (explicit selection OR English default)
+                    logInfo(method, "Updating pipeline labels for language: $language (explicit=$isExplicit)")
                     _pipelineState.value = _pipelineState.value.withLocalizedLabels { key ->
                         LocalizationHelper.getString("mobile.$key")
                     }
@@ -942,13 +945,15 @@ class InteractViewModel(
                         .distinctBy { msg ->
                             when (msg.type) {
                                 MessageType.USER -> {
-                                    // Dedupe USER messages by content + timestamp window (5 sec)
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 5000
+                                    // Dedupe USER messages by content + timestamp window (30 sec)
+                                    // Wide window because optimistic local add and server fetch
+                                    // can have different timestamps
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 30000
                                     "USER:${msg.text}:$timestampWindow"
                                 }
                                 MessageType.AGENT -> {
-                                    // Dedupe AGENT messages by content + timestamp window (10 sec)
-                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 10000
+                                    // Dedupe AGENT messages by content + timestamp window (30 sec)
+                                    val timestampWindow = msg.timestamp.toEpochMilliseconds() / 30000
                                     "AGENT:${msg.text}:$timestampWindow"
                                 }
                                 else -> msg.id // ACTION messages use ID

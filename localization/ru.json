@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "Неудача",
         "tickets_status_pending": "Ожидает",
         "tickets_status_progress": "В работе",
-        "setup_include_location": "Включить мой город в трассировки (помогает региональному анализу)"
+        "setup_include_location": "Включить мой город в трассировки (помогает региональному анализу)",
+        "login_first_run_welcome": "Добро пожаловать! Выберите, как настроить вашего ИИ-ассистента."
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "Отклонить",
     "wa_resolve": "Разрешить",
     "wa_service_status": "Статус сервиса",
-    "wa_status": "Статус"
+    "wa_status": "Статус",
+    "login_first_run_welcome": "Добро пожаловать! Выберите способ настройки вашего ИИ-ассистента."
 }

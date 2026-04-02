@@ -89,9 +89,10 @@ fun main() {
         // Track window position for test automation (screen-absolute coordinates)
         LaunchedEffect(Unit) {
             testServer?.let { server ->
-                // Get initial position
+                // Get initial position and set AWT window ref for screenshots
                 val frame = window
                 server.updateWindowPosition(frame.x, frame.y)
+                server.awtWindow = frame
 
                 // Track position changes
                 frame.addComponentListener(object : ComponentAdapter() {

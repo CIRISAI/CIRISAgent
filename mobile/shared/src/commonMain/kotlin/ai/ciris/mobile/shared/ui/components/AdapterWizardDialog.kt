@@ -1039,17 +1039,20 @@ private fun SelectStepContent(
             }
         }
 
+        val submitSelection = {
+            // Backend expects {"selection": "id1,id2,..."} for select steps
+            // For optional steps with no selection, send "skip" to advance
+            val selectedIds = fieldValues.filter { it.value == "true" }.keys.toList()
+            val selectionValue = if (selectedIds.isEmpty() && !step.required) "skip" else selectedIds.joinToString(",")
+            onSubmit(mapOf("selection" to selectionValue))
+        }
+
         Button(
-            onClick = {
-                // Backend expects {"selection": ["id1", "id2", ...]} for select steps
-                val selectedIds = fieldValues.filter { it.value == "true" }.keys.toList()
-                onSubmit(mapOf("selection" to selectedIds.joinToString(",")))
-            },
+            onClick = { submitSelection() },
             modifier = Modifier
                 .fillMaxWidth()
                 .testableClickable(if (isLastStep) "btn_wizard_complete" else "btn_wizard_next") {
-                    val selectedIds = fieldValues.filter { it.value == "true" }.keys.toList()
-                    onSubmit(mapOf("selection" to selectedIds.joinToString(",")))
+                    submitSelection()
                 },
             enabled = selectOptions.isNotEmpty()
         ) {

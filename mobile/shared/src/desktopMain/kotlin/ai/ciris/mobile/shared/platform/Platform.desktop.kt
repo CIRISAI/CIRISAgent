@@ -49,8 +49,12 @@ actual fun getAppVersion(): String {
  */
 actual fun getAppBuildNumber(): String = "0"
 
+actual fun startTestAutomationServer() {
+    // Desktop: no-op here — server is started from desktopApp/Main.kt
+}
+
 /**
  * Fallback version if JAR manifest is unavailable.
  * Keep in sync with mobile/androidApp/build.gradle versionName.
  */
-private const val DESKTOP_VERSION_FALLBACK = "2.3.1"
+private const val DESKTOP_VERSION_FALLBACK = "2.3.2"

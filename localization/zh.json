@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "失败",
         "tickets_status_pending": "待处理",
         "tickets_status_progress": "进行中",
-        "setup_include_location": "在跟踪中包含我的城市（有助于区域分析）"
+        "setup_include_location": "在跟踪中包含我的城市（有助于区域分析）",
+        "login_first_run_welcome": "欢迎！选择如何设置您的AI助手。"
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "拒绝",
     "wa_resolve": "解决",
     "wa_service_status": "服务状态",
-    "wa_status": "状态"
+    "wa_status": "状态",
+    "login_first_run_welcome": "欢迎！请选择如何设置您的AI助手。"
 }

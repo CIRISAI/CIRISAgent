@@ -874,9 +874,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         provider = _detect_provider_from_env()
         api_key = _get_api_key_for_provider(provider)
 
-        # Fall back to OPENAI_API_KEY for backward compatibility
+        # Fall back to CIRIS_OPENAI_API_KEY / OPENAI_API_KEY for backward compatibility
         if not api_key:
-            api_key = os.environ.get("OPENAI_API_KEY", "")
+            api_key = os.environ.get("CIRIS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
 
         if not api_key:
             logger.warning(f"No API key found for {provider.value} - LLM service will not be initialized")

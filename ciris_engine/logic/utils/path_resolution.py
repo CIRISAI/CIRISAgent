@@ -251,6 +251,108 @@ def _validate_ciris_home_env(platform_suffix: str = "") -> Optional[Path]:
         return None
 
 
+# Known Android package names for CIRIS mobile app
+_ANDROID_PACKAGE_NAMES = [
+    "ai.ciris.mobile.debug",  # Debug build
+    "ai.ciris.mobile",  # Release build
+]
+
+
+def _get_android_ciris_home() -> Path:
+    """Get CIRIS home directory on Android with robust path detection.
+
+    Uses multiple strategies to find the correct path:
+    1. CIRIS_HOME environment variable (if set and valid)
+    2. Detect from existing ciris directories in known Android app locations
+    3. Use Path.home() / "ciris" (Chaquopy sets HOME to app files dir)
+
+    Returns:
+        Path to CIRIS home directory on Android
+    """
+    # Strategy 1: Check CIRIS_HOME env var first
+    validated = _validate_ciris_home_env(" (Android)")
+    if validated:
+        logger.debug(f"Android CIRIS_HOME from env: {validated}")
+        return validated
+
+    # Strategy 2: Check known Android app data locations for existing ciris dirs
+    # This handles both /data/data/ and /data/user/0/ paths
+    for pkg in _ANDROID_PACKAGE_NAMES:
+        for base in ["/data/data", "/data/user/0"]:
+            candidate = Path(base) / pkg / "files" / "ciris"
+            if candidate.exists() and candidate.is_dir():
+                logger.info(f"Android: found existing CIRIS dir at {candidate}")
+                return candidate
+            # Also check if parent files dir exists (for first-run before ciris dir created)
+            files_dir = Path(base) / pkg / "files"
+            if files_dir.exists() and files_dir.is_dir():
+                ciris_dir = files_dir / "ciris"
+                logger.info(f"Android: using {ciris_dir} (files dir exists)")
+                return ciris_dir
+
+    # Strategy 3: Fallback to Path.home() / "ciris"
+    # Chaquopy sets HOME to /data/data/{pkg}/files, so this should work
+    home_based = Path.home() / "ciris"
+    logger.info(f"Android: falling back to Path.home()/ciris = {home_based}")
+
+    # Sanity check: warn if this doesn't look like an Android path
+    home_str = str(Path.home())
+    if not (home_str.startswith("/data/data/") or home_str.startswith("/data/user/")):
+        logger.warning(
+            f"Android detected but HOME={home_str} doesn't look like Android app dir. "
+            f"CIRIS_HOME should be set explicitly for reliable operation."
+        )
+
+    return home_based
+
+
+def _get_ios_ciris_home() -> Path:
+    """Get CIRIS home directory on iOS with robust path detection.
+
+    Uses multiple strategies to find the correct path:
+    1. CIRIS_HOME environment variable (if set and valid)
+    2. Detect from existing ciris directories in iOS app sandbox
+    3. Use Path.home() / "Documents" / "ciris" (iOS app sandbox)
+
+    Returns:
+        Path to CIRIS home directory on iOS
+    """
+    # Strategy 1: Check CIRIS_HOME env var first
+    validated = _validate_ciris_home_env(" (iOS)")
+    if validated:
+        logger.debug(f"iOS CIRIS_HOME from env: {validated}")
+        return validated
+
+    # Strategy 2: Check common iOS app sandbox locations
+    home = Path.home()
+
+    # iOS apps typically have Documents, Library, tmp directories
+    # We use Documents/ciris for user data
+    documents_ciris = home / "Documents" / "ciris"
+    if documents_ciris.exists() and documents_ciris.is_dir():
+        logger.info(f"iOS: found existing CIRIS dir at {documents_ciris}")
+        return documents_ciris
+
+    # Check if Documents dir exists (for first-run)
+    documents_dir = home / "Documents"
+    if documents_dir.exists() and documents_dir.is_dir():
+        logger.info(f"iOS: using {documents_ciris} (Documents dir exists)")
+        return documents_ciris
+
+    # Strategy 3: Fallback - just use Documents/ciris
+    logger.info(f"iOS: falling back to {documents_ciris}")
+
+    # Sanity check: warn if this doesn't look like an iOS path
+    home_str = str(home)
+    if not ("/var/mobile" in home_str or "CoreSimulator" in home_str):
+        logger.warning(
+            f"iOS detected but HOME={home_str} doesn't look like iOS app sandbox. "
+            f"CIRIS_HOME should be set explicitly for reliable operation."
+        )
+
+    return documents_ciris
+
+
 def get_ciris_home() -> Path:
     """Get the CIRIS home directory.
 
@@ -267,22 +369,13 @@ def get_ciris_home() -> Path:
     if is_managed():
         return Path("/app")
 
-    # Priority 2: Android mode - use app's files directory
+    # Priority 2: Android mode - use robust Android path detection
     if is_android():
-        validated = _validate_ciris_home_env(" (Android)")
-        if validated:
-            return validated
-        # Fallback: use Path.home()/ciris (Android Chaquopy sets HOME to /data/data/{pkg}/files)
-        # So this becomes /data/data/{pkg}/files/ciris
-        return Path.home() / "ciris"
+        return _get_android_ciris_home()
 
-    # Priority 2b: iOS mode - use app's Documents directory
+    # Priority 2b: iOS mode - use robust iOS path detection
     if is_ios():
-        validated = _validate_ciris_home_env(" (iOS)")
-        if validated:
-            return validated
-        # Fallback: use Documents/ciris (iOS app sandbox structure)
-        return Path.home() / "Documents" / "ciris"
+        return _get_ios_ciris_home()
 
     # Priority 3: Development mode - use current directory
     if is_development_mode():

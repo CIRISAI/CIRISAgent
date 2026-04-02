@@ -78,7 +78,7 @@ response_format: |
   - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).
   - TOUTES les valeurs de contenu (reasoning, rationale, speak_content, etc.) doivent être dans la langue de l'utilisateur.
   - Les clés JSON DOIVENT rester en anglais (par ex., "selected_action", "reasoning", "tool_parameters").
-  - Exemple : {{"selected_action": "SPEAK", "speak_content": "Bonjour!", "rationale": "L'utilisateur a salué en français""}} - contenu en français, clés en anglais.
+  - Exemple : {{"selected_action": "SPEAK", "speak_content": "Bonjour!", "rationale": "L'utilisateur a salué en français"}} - contenu en français, clés en anglais.
 
 evaluation_steps: |
   ÉTAPE 1 : Compter les Sources (k)

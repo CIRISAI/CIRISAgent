@@ -25,7 +25,7 @@ response_format: |
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
   - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili""}} - Swahili content, English keys.
+  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - Swahili content, English keys.
 
   Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
   - "plausibility_score": Desimali kati ya 0.0 (isiyowezekana sana) na 1.0 (inayowezekana sana). **Alama hii LAZIMA izingatie sana uwezekano wa kimwili wa ulimwengu halisi na matokeo ya papo hapo, yasiyoepukika ya mwingiliano kati ya vitu vilivyotajwa (kama barafu kuyeyuka kwenye kaango la moto), isipokuwa muktadha wa kimawazo maalum wa wazi unatolewa katika fikra kwa vitu hivyo. Alama ya chini inapaswa kutolewa ikiwa fizikia ya wazi inanyimwa bila kimawazo kama hicho cha wazi.**

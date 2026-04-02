@@ -304,6 +304,14 @@ fun CIRISApp(
     val coroutineScope = rememberCoroutineScope()
     val apiClient = remember { CIRISApiClient(baseUrl, accessToken) }
 
+    // Start test automation server on non-desktop platforms (desktop starts it in Main.kt)
+    LaunchedEffect(Unit) {
+        if (!ai.ciris.mobile.shared.platform.isDesktop() && TestAutomation.isEnabled()) {
+            PlatformLogger.i(TAG, "Test mode enabled on mobile — starting test automation server")
+            ai.ciris.mobile.shared.platform.startTestAutomationServer()
+        }
+    }
+
     // Initialize localization manager for runtime language switching
     val resourceLoader = remember { createLocalizationResourceLoader() }
     val localizationManager = remember {
@@ -335,12 +343,14 @@ fun CIRISApp(
     var previousLanguage by remember { mutableStateOf<String?>(null) }
     val currentLanguage by localizationManager.currentLanguage.collectAsState()
 
+    val hasExplicitLanguage by localizationManager.hasExplicitLanguageSelection.collectAsState()
+
     LaunchedEffect(currentLanguage, currentAccessToken) {
         // Only sync if:
         // 1. We have a valid token (user is authenticated)
         // 2. This is a real change (not initial load)
-        // 3. Localization is not still loading
-        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage) {
+        // 3. The language was explicitly selected by user (not temporary rotation)
+        if (currentAccessToken != null && previousLanguage != null && previousLanguage != currentLanguage && hasExplicitLanguage) {
             PlatformLogger.i(TAG, "Language changed from $previousLanguage to $currentLanguage, syncing to backend...")
             try {
                 val success = apiClient.updateUserLanguage(currentLanguage)
@@ -2413,9 +2423,32 @@ fun CIRISApp(
                     },
                     onResetSetup = {
                         PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
-                        startupViewModel.retry()
-                        checkingFirstRun = false
-                        currentScreen = Screen.Startup
+                        if (ai.ciris.mobile.shared.platform.isDesktop()) {
+                            // Desktop: kill the Python server via HTTP then let startup relaunch it fresh
+                            PlatformLogger.i(TAG, "[Screen.DataManagement] Desktop: killing Python server via local-shutdown API")
+                            currentScreen = Screen.Startup
+                            checkingFirstRun = false
+                            coroutineScope.launch {
+                                try {
+                                    // Call the local-shutdown endpoint to kill the server process
+                                    apiClient.postLocalShutdown()
+                                    PlatformLogger.i(TAG, "[Screen.DataManagement] local-shutdown sent")
+                                } catch (e: Exception) {
+                                    PlatformLogger.e(TAG, "[Screen.DataManagement] local-shutdown error (expected): ${e.message}")
+                                }
+                                // Also call pythonRuntime.shutdown() to clear internal state
+                                pythonRuntime.shutdown()
+                                // Wait for server process to fully exit and port to free
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit...")
+                                kotlinx.coroutines.delay(3000)
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Triggering startup retry")
+                                startupViewModel.retry()
+                            }
+                        } else {
+                            startupViewModel.retry()
+                            checkingFirstRun = false
+                            currentScreen = Screen.Startup
+                        }
                     }
                 )
             }

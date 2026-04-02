@@ -157,11 +157,111 @@ Button(
 ```
 
 This modifier:
-- **Desktop + test mode**: Tracks element position for automation
-- **Desktop + normal mode**: Applies `testTag` only
-- **Mobile**: Applies `testTag` only
+- **Desktop + test mode**: Tracks element position for automation via Ktor HTTP server
+- **iOS + test mode**: Tracks element position for automation via POSIX socket HTTP server
+- **Normal mode (all platforms)**: Applies `testTag` only
 
 **Full API documentation:** `desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
+
+### End-to-End UI Automation Workflow
+
+The test automation HTTP server runs on **all platforms** when `CIRIS_TEST_MODE=true`:
+- **Desktop**: Ktor CIO server (started from `Main.kt`) + java.awt.Robot for screenshots/mouse
+- **iOS**: POSIX socket server (started from `CIRISApp` LaunchedEffect) — same endpoints minus screenshot/mouse
+- **Android**: TODO (Ktor CIO planned, currently use Espresso)
+
+**Desktop E2E workflow:**
+```bash
+# 1. Launch with test mode
+CIRIS_TEST_MODE=true python3 -m ciris_engine.cli
+
+# 2. Wait for test server
+curl http://localhost:8091/health
+
+# 3. Drive UI via HTTP
+curl -X POST http://localhost:8091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
+curl -X POST http://localhost:8091/click -d '{"testTag":"btn_login_submit"}'
+curl http://localhost:8091/screen  # -> {"screen":"Interact"}
+
+# 4. Screenshots (desktop only - java.awt.Robot)
+curl -X POST http://localhost:8091/screenshot -d '{"path":"/tmp/screenshot.png"}'
+
+# 5. Mouse click (desktop only - for dropdowns, popups)
+curl -X POST http://localhost:8091/mouse-click -d '{"testTag":"input_llm_provider"}'
+
+# 6. Full E2E test script (wipe → setup wizard → verify)
+bash tools/test_desktop_wipe_setup.sh
+```
+
+**iOS E2E workflow:**
+```bash
+DEVICE_ID="A53DA92F-..."  # CoreDevice UUID
+IDEVICE_ID="00008110-..."  # idevice UUID
+
+# 1. Launch with test mode (env var set via devicectl)
+xcrun devicectl device process launch -d $DEVICE_ID \
+  --terminate-existing \
+  --environment-variables '{"CIRIS_TEST_MODE":"true"}' \
+  ai.ciris.mobile
+
+# 2. Port forward test server + API
+iproxy 18091 8091 -u $IDEVICE_ID &
+iproxy 18080 8080 -u $IDEVICE_ID &
+
+# 3. Drive UI (same endpoints as desktop)
+curl http://127.0.0.1:18091/health   # {"status":"ok","testMode":true}
+curl http://127.0.0.1:18091/screen   # {"screen":"Login"}
+curl -X POST http://127.0.0.1:18091/click -d '{"testTag":"btn_local_login"}'
+curl -X POST http://127.0.0.1:18091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
+
+# 4. Screenshots (via pymobiledevice3, not test server)
+python3 -m pymobiledevice3 developer dvt screenshot /tmp/ios_screen.png
+
+# 5. HA adapter setup (API-driven, OAuth via Chrome + iproxy callback)
+TOKEN=$(curl -s -X POST http://127.0.0.1:18080/v1/auth/login ...)
+curl -X POST http://127.0.0.1:18080/v1/system/adapters/home_assistant/configure/start ...
+# Discovery → select URL → OAuth in browser → forward callback via iproxy → features → complete
+```
+
+**Important iOS notes:**
+- Text input needs **2-second delay** between fields (StateFlow propagation)
+- `--terminate-existing` flag needed to force-kill previous app instance
+- OAuth callbacks redirect to `127.0.0.1:8080` — forward via `iproxy 18080 8080`
+- API step_data must be nested: `{"step_data":{"selected_url":"..."}}`
+- Screenshots use `pymobiledevice3` (requires `sudo tunneld` running)
+- `.env` must contain `CIRIS_CONFIGURED="true"` to NOT be first-run (file existence alone is not enough)
+
+**Shared endpoints (all platforms):**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/screen` | GET | Current screen name |
+| `/tree` | GET | All UI elements with positions |
+| `/click` | POST | Click by testTag (programmatic) |
+| `/input` | POST | Text input to element |
+| `/wait` | POST | Wait for element to appear |
+| `/element/{tag}` | GET | Get element info |
+
+**Desktop-only endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/mouse-click` | POST | Real AWT mouse click by testTag |
+| `/mouse-click-xy` | POST | Real AWT mouse click at coordinates |
+| `/screenshot` | GET/POST | Capture window via java.awt.Robot |
+| `/navigate` | POST | Navigate to screen |
+
+**Key test tags for common flows:**
+- Login: `input_username`, `input_password`, `btn_login_submit`, `btn_local_login`, `btn_apple_signin`
+- Navigation: `btn_adapters_menu`, `menu_adapters`, `btn_data_menu`, `menu_data_management`
+- Setup: `btn_next`, `btn_back`, `input_llm_provider`, `input_api_key`, `input_llm_model_text`
+- Dropdowns: `input_llm_provider` (testableClickable toggles expansion), `menu_provider_openrouter`
+- Trust: `btn_trust_shield`, `btn_trust_refresh`, `btn_trust_back`
+- Data: `btn_reset_account`, `btn_reset_confirm`
+- Chat: `input_message`, `btn_send`, `btn_attach`
+- Adapters: `btn_add_adapter`, `item_adapter_type_home_assistant`, `item_discovered_*`
+- Wizard: `btn_wizard_next`, `btn_wizard_complete`, `btn_wizard_dismiss`, `btn_oauth_sign_in`
 
 ## Build Targets
 

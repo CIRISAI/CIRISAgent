@@ -734,12 +734,13 @@ def main(
         # Handle first-run setup
         _handle_first_run(first_run, adapter_types_list, is_cli_mode)
 
-        # Check for API key (any supported provider)
+        # Check for API key (any supported provider, with CIRIS_ prefix support)
         has_api_key = any(
             [
-                get_env_var("OPENAI_API_KEY"),
-                get_env_var("ANTHROPIC_API_KEY"),
-                get_env_var("GOOGLE_API_KEY"),
+                get_env_var("CIRIS_OPENAI_API_KEY") or get_env_var("OPENAI_API_KEY"),
+                get_env_var("CIRIS_ANTHROPIC_API_KEY") or get_env_var("ANTHROPIC_API_KEY"),
+                get_env_var("CIRIS_GOOGLE_API_KEY") or get_env_var("GOOGLE_API_KEY"),
+                get_env_var("CIRIS_LLM_API_KEY"),
                 get_env_var("OPENROUTER_API_KEY"),
                 get_env_var("GROQ_API_KEY"),
                 get_env_var("TOGETHER_API_KEY"),

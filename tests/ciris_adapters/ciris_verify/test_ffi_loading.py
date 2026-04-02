@@ -16,18 +16,18 @@ def test_find_binary_prefers_pip_package():
         "pip check should come before system path check"
 
 
-def test_is_valid_binary_for_platform():
+def test_is_valid_binary_for_platform(tmp_path: Path):
     """Platform validation should reject wrong-platform binaries."""
     from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
 
     client = CIRISVerify.__new__(CIRISVerify)
 
     # ELF header (Linux)
-    elf_path = Path("/tmp/test_elf.bin")
+    elf_path = tmp_path / "test_elf.bin"
     elf_path.write_bytes(b"\x7fELF" + b"\x00" * 100)
 
     # Mach-O header (macOS arm64)
-    macho_path = Path("/tmp/test_macho.bin")
+    macho_path = tmp_path / "test_macho.bin"
     macho_path.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 100)
 
     if platform.system() == "Darwin":
@@ -36,6 +36,4 @@ def test_is_valid_binary_for_platform():
     elif platform.system() == "Linux":
         assert client._is_valid_binary_for_platform(elf_path, "Linux") is True
         assert client._is_valid_binary_for_platform(macho_path, "Linux") is False
-
-    elf_path.unlink(missing_ok=True)
-    macho_path.unlink(missing_ok=True)
+    # tmp_path fixture automatically cleans up after test

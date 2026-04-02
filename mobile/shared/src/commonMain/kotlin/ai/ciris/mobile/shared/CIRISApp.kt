@@ -2890,6 +2890,7 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+    object SkillImport : Screen()
     object DataManagement : Screen()
     object Help : Screen()
 }

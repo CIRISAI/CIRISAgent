@@ -1398,6 +1398,7 @@
         "tickets_status_pending": "Inasubiri",
         "tickets_status_progress": "Inafanya Kazi",
         "setup_include_location": "Jumuisha mji wangu katika traces (husaidia uchambuzi wa kikanda)",
+        "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI.",
         "login_error_invalid_credentials": "Jina la mtumiaji au nenosiri si sahihi. Tafadhali jaribu tena.",
         "login_error_connection": "Haiwezi kuunganisha na seva. Tafadhali angalia muunganisho wako."
     },

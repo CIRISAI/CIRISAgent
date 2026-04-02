@@ -90,6 +90,16 @@ object TestAutomationHandler {
         return TestAutomationState.getElement(testTag)
     }
 
+    fun handleScroll(request: ScrollRequest): ActionResponse {
+        TestAutomationState.requestScroll(request.testTag, request.direction, request.amount)
+        return ActionResponse(
+            success = true,
+            element = request.testTag,
+            action = "scroll",
+            text = "${request.direction}:${request.amount}"
+        )
+    }
+
     // Platform-independent time
     private fun currentTimeMs(): Long {
         return kotlinx.datetime.Clock.System.now().toEpochMilliseconds()

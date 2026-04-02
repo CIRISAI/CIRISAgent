@@ -2423,6 +2423,8 @@ fun CIRISApp(
                     },
                     onResetSetup = {
                         PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
+                        // Clear stale ViewModel state so old messages don't survive the wipe
+                        interactViewModel.resetState()
                         if (ai.ciris.mobile.shared.platform.isDesktop()) {
                             // Desktop: kill the Python server via HTTP then let startup relaunch it fresh
                             PlatformLogger.i(TAG, "[Screen.DataManagement] Desktop: killing Python server via local-shutdown API")

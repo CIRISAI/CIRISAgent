@@ -1398,6 +1398,7 @@
         "tickets_status_pending": "[EN] Pending",
         "tickets_status_progress": "[EN] In Progress",
         "setup_include_location": "میرے شہر کو traces میں شامل کریں (علاقائی تجزیہ میں مدد کرتا ہے)",
+        "login_first_run_welcome": "خوش آمدید! منتخب کریں کہ آپ اپنا AI اسسٹنٹ کیسے سیٹ اپ کرنا چاہتے ہیں۔",
         "login_error_invalid_credentials": "غلط صارف نام یا پاس ورڈ۔ براہ کرم دوبارہ کوشش کریں۔",
         "login_error_connection": "سرور سے رابطہ نہیں ہو سکا۔ براہ کرم اپنا کنکشن چیک کریں۔"
     },

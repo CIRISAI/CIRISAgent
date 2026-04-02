@@ -324,6 +324,34 @@ class TestAutomationServer(
                     ))
                 }
 
+                // Scroll - programmatic scroll on an element (uses Robot mouse wheel)
+                post("/scroll") {
+                    val body = call.receiveText()
+                    val json = kotlinx.serialization.json.Json.parseToJsonElement(body)
+                    val testTag = json.jsonObject["testTag"]?.jsonPrimitive?.content ?: ""
+                    val direction = json.jsonObject["direction"]?.jsonPrimitive?.content ?: "down"
+                    val amount = json.jsonObject["amount"]?.jsonPrimitive?.int ?: 300
+
+                    val element = elements[testTag]
+                    if (element != null) {
+                        // Move mouse to element center then scroll
+                        robot.mouseMove(element.centerX, element.centerY)
+                        Thread.sleep(50)
+                        val wheelAmount = if (direction == "up") -(amount / 30) else (amount / 30)
+                        robot.mouseWheel(wheelAmount)
+                    }
+
+                    // Also dispatch via shared handler for cross-platform state
+                    ai.ciris.mobile.shared.testing.TestAutomationState.requestScroll(testTag, direction, amount)
+
+                    call.respond(ai.ciris.mobile.shared.testing.ActionResponse(
+                        success = true,
+                        element = testTag,
+                        action = "scroll",
+                        text = "$direction:$amount"
+                    ))
+                }
+
                 // Inject a file attachment (bypasses native file picker for test automation)
                 post("/inject-file") {
                     val request = call.receive<InjectFileRequest>()

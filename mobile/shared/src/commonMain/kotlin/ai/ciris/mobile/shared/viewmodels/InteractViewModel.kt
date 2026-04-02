@@ -186,6 +186,29 @@ class InteractViewModel(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
+    /**
+     * Clear all cached state. Called during factory reset / wipe
+     * to prevent stale messages from appearing after restart.
+     */
+    fun resetState() {
+        val method = "resetState"
+        logInfo(method, "Clearing all ViewModel state for clean restart")
+        _messages.value = emptyList()
+        _inputText.value = ""
+        _isConnected.value = false
+        _agentStatus.value = "Initializing..."
+        _isSending.value = false
+        _isLoading.value = true
+        _authError.value = null
+        authErrorCount = 0
+        pollingStarted = false
+        isFirstLoad = true
+        pollingJob?.cancel()
+        pollingJob = null
+        sseJob?.cancel()
+        sseJob = null
+    }
+
     private val _inputText = MutableStateFlow("")
     val inputText: StateFlow<String> = _inputText.asStateFlow()
 

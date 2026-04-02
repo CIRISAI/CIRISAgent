@@ -44,6 +44,9 @@ data class WaitRequest(val testTag: String, val timeoutMs: Int? = 5000)
 data class ScreenshotRequest(val path: String, val format: String? = "png")
 
 @Serializable
+data class ScrollRequest(val testTag: String, val direction: String = "down", val amount: Int = 300)
+
+@Serializable
 data class ActionResponse(
     val success: Boolean,
     val element: String? = null,

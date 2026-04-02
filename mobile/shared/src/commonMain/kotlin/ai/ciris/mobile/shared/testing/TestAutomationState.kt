@@ -95,6 +95,18 @@ object TestAutomationState {
     fun clearFileInjectionRequest() {
         _fileInjectionRequests.value = null
     }
+
+    // Scroll requests
+    private val _scrollRequests = MutableStateFlow<ScrollRequest?>(null)
+    val scrollRequests: StateFlow<ScrollRequest?> = _scrollRequests
+
+    fun requestScroll(testTag: String, direction: String, amount: Int) {
+        _scrollRequests.value = ScrollRequest(testTag, direction, amount)
+    }
+
+    fun clearScrollRequest() {
+        _scrollRequests.value = null
+    }
 }
 
 // Re-use the TextInputRequest from platform package

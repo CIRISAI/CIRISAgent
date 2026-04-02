@@ -1397,7 +1397,9 @@
         "tickets_status_failed": "Başarısız",
         "tickets_status_pending": "Beklemede",
         "tickets_status_progress": "Devam Ediyor",
-        "setup_include_location": "İzlemelerde şehrimi dahil et (bölgesel analize yardımcı olur)"
+        "setup_include_location": "İzlemelerde şehrimi dahil et (bölgesel analize yardımcı olur)",
+        "login_error_invalid_credentials": "Geçersiz kullanıcı adı veya şifre. Lütfen tekrar deneyin.",
+        "login_error_connection": "Sunucuya bağlanılamıyor. Lütfen bağlantınızı kontrol edin."
     },
     "prompts": {
         "dma": {

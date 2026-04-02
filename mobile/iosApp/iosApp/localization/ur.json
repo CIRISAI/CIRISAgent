@@ -1397,7 +1397,9 @@
         "tickets_status_failed": "[EN] Failed",
         "tickets_status_pending": "[EN] Pending",
         "tickets_status_progress": "[EN] In Progress",
-        "setup_include_location": "میرے شہر کو traces میں شامل کریں (علاقائی تجزیہ میں مدد کرتا ہے)"
+        "setup_include_location": "میرے شہر کو traces میں شامل کریں (علاقائی تجزیہ میں مدد کرتا ہے)",
+        "login_error_invalid_credentials": "غلط صارف نام یا پاس ورڈ۔ براہ کرم دوبارہ کوشش کریں۔",
+        "login_error_connection": "سرور سے رابطہ نہیں ہو سکا۔ براہ کرم اپنا کنکشن چیک کریں۔"
     },
     "prompts": {
         "dma": {

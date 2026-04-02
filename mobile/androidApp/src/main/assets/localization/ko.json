@@ -1398,7 +1398,9 @@
         "tickets_status_pending": "대기 중",
         "tickets_status_progress": "진행 중",
         "setup_include_location": "추적에 내 도시 포함 (지역 분석에 도움)",
-        "login_first_run_welcome": "환영합니다! AI 어시스턴트 설정 방법을 선택하세요."
+        "login_first_run_welcome": "환영합니다! AI 어시스턴트 설정 방법을 선택하세요.",
+        "login_error_invalid_credentials": "잘못된 사용자 이름 또는 비밀번호입니다. 다시 시도해 주세요.",
+        "login_error_connection": "서버에 연결할 수 없습니다. 연결을 확인해 주세요."
     },
     "prompts": {
         "dma": {

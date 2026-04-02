@@ -154,3 +154,8 @@ ios/ios_gui_static/
 
 # Mobile temp files
 mobile/iosApp/zi*
+
+# Platform-specific FFI binaries (installed via pip, not tracked in repo)
+ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
+ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dylib
+ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll

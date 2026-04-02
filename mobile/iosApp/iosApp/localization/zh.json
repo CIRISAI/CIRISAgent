@@ -1397,7 +1397,9 @@
         "tickets_status_failed": "失败",
         "tickets_status_pending": "待处理",
         "tickets_status_progress": "进行中",
-        "setup_include_location": "在跟踪中包含我的城市（有助于区域分析）"
+        "setup_include_location": "在跟踪中包含我的城市（有助于区域分析）",
+        "login_error_invalid_credentials": "用户名或密码无效。请重试。",
+        "login_error_connection": "无法连接到服务器。请检查您的连接。"
     },
     "prompts": {
         "dma": {

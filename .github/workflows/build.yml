@@ -103,7 +103,8 @@ jobs:
           # --store-durations: Save durations to .test_durations (JSON dict)
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
-          pytest tests/ -n 4 \
+          # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
+          pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \

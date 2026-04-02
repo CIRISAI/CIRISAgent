@@ -1398,7 +1398,9 @@
         "tickets_status_failed": "فشل",
         "tickets_status_pending": "معلق",
         "tickets_status_progress": "قيد التنفيذ",
-        "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعدك الذكي."
+        "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعدك الذكي.",
+        "login_error_invalid_credentials": "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.",
+        "login_error_connection": "لا يمكن الاتصال بالخادم. يرجى التحقق من اتصالك."
     },
     "prompts": {
         "dma": {

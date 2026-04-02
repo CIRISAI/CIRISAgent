@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Optional imports for camera functionality
 try:
-    import cv2  # noqa: F401 # type: ignore
+    import cv2  # noqa: F401
     import numpy as np
 
     OPENCV_AVAILABLE = True

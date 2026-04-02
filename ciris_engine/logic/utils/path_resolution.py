@@ -441,9 +441,10 @@ def get_package_root() -> Path:
     Returns:
         Path to ciris_engine package directory
     """
-    import ciris_engine
-
-    return Path(ciris_engine.__file__).parent
+    # Use __file__ from this module to find package root
+    # Avoids importing ciris_engine which triggers static analysis warnings
+    # Path: logic/utils/path_resolution.py -> logic/utils -> logic -> ciris_engine
+    return Path(__file__).parent.parent.parent
 
 
 def ensure_ciris_home_env() -> Path:

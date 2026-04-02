@@ -1397,7 +1397,9 @@
         "tickets_status_completed": "ተጠናቋል",
         "tickets_status_failed": "አልተሳካም",
         "tickets_status_pending": "በመጠባበቅ ላይ",
-        "tickets_status_progress": "በሂደት ላይ"
+        "tickets_status_progress": "በሂደት ላይ",
+        "login_error_invalid_credentials": "ልክ ያልሆነ የተጠቃሚ ስም ወይም የይለፍ ቃል። እባክዎ እንደገና ይሞክሩ።",
+        "login_error_connection": "ከአገልጋይ ጋር መገናኘት አልተቻለም። እባክዎ ግንኙነትዎን ያረጋግጡ።"
     },
     "prompts": {
         "dma": {

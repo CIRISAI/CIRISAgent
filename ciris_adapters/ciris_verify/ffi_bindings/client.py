@@ -8,6 +8,7 @@ import asyncio
 import ctypes
 import hashlib
 import json
+import logging
 import os
 import platform
 import socket
@@ -296,41 +297,67 @@ class CIRISVerify:
                 "libciris_verify_ffi.so not found on Android. " "Ensure the native library is included in jniLibs."
             )
 
-        # Search default paths
         system = platform.system()
-        paths = DEFAULT_BINARY_PATHS.get(system, [])
-
-        for path_str in paths:
-            path = Path(path_str)
-            if path.exists():
-                return path
-
-        # Also check relative to this module (prefer platform-native suffix)
-        module_dir = Path(__file__).parent
         platform_suffixes = {
             "Darwin": [".dylib", ".so"],
             "Linux": [".so", ".dylib"],
             "Windows": [".dll"],
         }
         suffixes = platform_suffixes.get(system, [".so", ".dylib", ".dll"])
-        for suffix in suffixes:
-            candidate = module_dir / f"libciris_verify_ffi{suffix}"
-            if candidate.exists():
-                return candidate
 
-        # Check pip-installed ciris_verify package as final fallback
+        # 1. Check pip-installed ciris_verify package FIRST — always correct platform
         try:
             import ciris_verify as cv_pkg
             pkg_dir = Path(cv_pkg.__file__).parent
             for suffix in suffixes:
                 candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
                 if candidate.exists():
-                    logger.info(f"[CIRISVerify] Using pip-installed library: {candidate}")
+                    logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
                     return candidate
         except (ImportError, AttributeError):
             pass
 
-        raise BinaryNotFoundError(f"Searched: {paths}")
+        # 2. Check system paths
+        paths = DEFAULT_BINARY_PATHS.get(system, [])
+        for path_str in paths:
+            path = Path(path_str)
+            if path.exists():
+                return path
+
+        # 3. Check relative to this module — validate it's the right platform
+        #    Dev repos may contain binaries for other platforms (e.g., Linux .so on macOS)
+        module_dir = Path(__file__).parent
+        _log = logging.getLogger(__name__)
+        for suffix in suffixes:
+            candidate = module_dir / f"libciris_verify_ffi{suffix}"
+            if candidate.exists():
+                if self._is_valid_binary_for_platform(candidate, system):
+                    return candidate
+                else:
+                    _log.warning(f"[CIRISVerify] Skipping wrong-platform binary: {candidate}")
+
+        raise BinaryNotFoundError(
+            f"No valid library found for {system}. "
+            f"Searched: pip package, system paths ({paths}), module dir ({module_dir}). "
+            f"Install ciris-verify: pip install ciris-verify"
+        )
+
+    @staticmethod
+    def _is_valid_binary_for_platform(path: Path, system: str) -> bool:
+        """Check if a binary file matches the current platform."""
+        try:
+            with open(path, "rb") as f:
+                magic = f.read(4)
+            if system == "Darwin":
+                # Mach-O: CE FA ED FE (LE 64), CF FA ED FE (LE 32), CA FE BA BE (universal)
+                return magic in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
+            elif system == "Linux":
+                return magic == b"\x7fELF"
+            elif system == "Windows":
+                return magic[:2] == b"MZ"
+            return True  # Unknown platform, allow
+        except Exception:
+            return False
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""

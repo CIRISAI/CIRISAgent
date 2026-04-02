@@ -1,4 +1,9 @@
-"""Unit tests for TSDB consolidation cleanup logic."""
+"""Unit tests for TSDB consolidation cleanup logic.
+
+Note: These tests patch ciris_engine.logic.persistence.db.core.get_db_connection
+and must run serially to avoid interference between parallel test workers.
+The @pytest.mark.serial marker ensures they run in a dedicated xdist group.
+"""
 
 import json
 import sqlite3
@@ -9,6 +14,10 @@ import pytest
 
 from ciris_engine.logic.services.graph.tsdb_consolidation import TSDBConsolidationService
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
+
+# Mark all tests in this module to run serially (same xdist worker group)
+# This prevents parallel execution issues with the get_db_connection patch
+pytestmark = pytest.mark.xdist_group(name="tsdb_cleanup")
 
 
 @pytest.fixture

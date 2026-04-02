@@ -1398,7 +1398,9 @@
         "tickets_status_pending": "Ausstehend",
         "tickets_status_progress": "In Bearbeitung",
         "setup_include_location": "Meine Stadt in Traces einbeziehen (hilft bei regionaler Analyse)",
-        "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten."
+        "login_first_run_welcome": "Willkommen! Wählen Sie, wie Sie Ihren KI-Assistenten einrichten möchten.",
+        "login_error_invalid_credentials": "Ungültiger Benutzername oder Passwort. Bitte versuchen Sie es erneut.",
+        "login_error_connection": "Verbindung zum Server nicht möglich. Bitte überprüfen Sie Ihre Verbindung."
     },
     "prompts": {
         "dma": {

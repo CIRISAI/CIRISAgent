@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop wipe: server restart via local-shutdown API, repo root data dir detection
 - `PythonRuntime.desktop`: empty cognitive_state treated as healthy, not stuck
 
+## [2.3.1] - 2026-03-30
+
+### Added
+- Urdu language (16th), desktop scrollbars, location services, localization sync pre-commit hook
+
+### Fixed
+- Desktop scroll on Login/Startup/Telemetry, language selector click z-order, wallet attestation display
+
 ## [2.3.0] - 2026-03-28
 
 ### Added

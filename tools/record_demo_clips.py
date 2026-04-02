@@ -55,7 +55,7 @@ TEST_SERVER = "http://localhost:8091"
 API_SERVER = "http://localhost:8080"
 DEFAULT_OUTPUT_DIR = Path.home() / "demo_clips"
 SCAP_BINARY = Path(__file__).parent / "SwiftCapture" / ".build" / "release" / "SwiftCapture"
-CIRIS_APP_NAME = "MainKt"  # How ScreenCaptureKit sees the JVM app
+CIRIS_APP_NAME = "CIRIS Agent"  # Window title as seen by ScreenCaptureKit
 
 CLIP_FILES = {
     1: "demo1_wipe_data.mov",

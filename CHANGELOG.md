@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Python Runtime** - Empty cognitive_state treated as healthy, not stuck
 - **CIRIS_HOME Detection** - Multi-strategy path probing for Android/iOS (fixes settings persistence)
 - **Message Dedup** - Duplicate user message deduplication window widened to 30 seconds
+- **Location Parsing** - Fixed parsing order to match setup serialization (Country, Region, City)
+- **Coordinate Parsing** - Added error handling for malformed latitude/longitude env values
+
+### Known Issues
+
+- **Wallet Paymaster** - ERC-4337 paymaster sends require deployed smart account; new users may see "account not deployed" errors until smart account factory integration is added (#656)
 
 ## [2.3.1] - 2026-03-30
 

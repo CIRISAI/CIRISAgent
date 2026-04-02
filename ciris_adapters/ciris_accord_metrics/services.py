@@ -503,8 +503,18 @@ class AccordMetricsService:
         # Coordinates in ISO 6709 decimal degrees format
         lat_str = os.environ.get("CIRIS_USER_LATITUDE", "") if env_share_location else ""
         lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "") if env_share_location else ""
-        self._user_latitude: Optional[float] = float(lat_str) if lat_str else None
-        self._user_longitude: Optional[float] = float(lon_str) if lon_str else None
+        self._user_latitude: Optional[float] = None
+        self._user_longitude: Optional[float] = None
+        if lat_str:
+            try:
+                self._user_latitude = float(lat_str)
+            except ValueError:
+                logger.warning("Invalid CIRIS_USER_LATITUDE value: %s", lat_str)
+        if lon_str:
+            try:
+                self._user_longitude = float(lon_str)
+            except ValueError:
+                logger.warning("Invalid CIRIS_USER_LONGITUDE value: %s", lon_str)
         if self._share_location_in_traces and self._user_location:
             coords = f" ({self._user_latitude}, {self._user_longitude})" if self._user_latitude else ""
             logger.info(f"   Location sharing enabled: {self._user_location}{coords}")

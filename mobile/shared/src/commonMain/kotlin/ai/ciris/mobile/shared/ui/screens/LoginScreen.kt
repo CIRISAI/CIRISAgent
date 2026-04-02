@@ -170,7 +170,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
-                            .testable(if (isIOS()) "btn_apple_signin" else "btn_google_signin")
+                            .testableClickable(if (isIOS()) "btn_apple_signin" else "btn_google_signin") { onGoogleSignIn() }
                     ) {
                         Text(
                             text = signinProvider,
@@ -202,7 +202,9 @@ fun LoginScreen(
                         modifier = Modifier
                             .width(280.dp)
                             .height(56.dp)
-                            .testable("btn_local_login")
+                            .testableClickable("btn_local_login") {
+                                if (isFirstRun) onLocalLogin() else { showLoginForm = true }
+                            }
                     ) {
                         Text(
                             text = localLoginText,

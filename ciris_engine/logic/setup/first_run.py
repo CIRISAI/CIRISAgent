@@ -119,23 +119,28 @@ def is_first_run() -> bool:
         logger.info("CIRIS_FORCE_FIRST_RUN is set - forcing first-run mode")
         return True
 
-    # Check config file existence as the primary signal
-    # The .env file is the source of truth — env vars can be stale
-    # (inherited from parent process after file deletion)
+    # Check config files — a file must exist AND contain CIRIS_CONFIGURED="true"
+    # File existence alone is not sufficient (file may be a stub after failed wipe)
     config_paths = get_config_paths()
     logger.info(f"Checking config paths: {[str(p) for p in config_paths]}")
     for path in config_paths:
         if path.exists() and path.is_file():
-            logger.info(f"Found config file at {path} - NOT first run")
-            return False
+            try:
+                content = path.read_text()
+                if 'CIRIS_CONFIGURED' in content and 'true' in content.lower():
+                    logger.info(f"Found configured .env at {path} - NOT first run")
+                    return False
+                else:
+                    logger.info(f"Found .env at {path} but CIRIS_CONFIGURED not set - treating as first run")
+            except Exception as e:
+                logger.warning(f"Could not read {path}: {e}")
 
-    # No config file found — clear any stale CIRIS_CONFIGURED env var
-    # (may have been inherited from a parent process that loaded a now-deleted .env)
+    # No valid config found — clear any stale CIRIS_CONFIGURED env var
     if os.environ.get("CIRIS_CONFIGURED"):
-        logger.info("CIRIS_CONFIGURED env var is set but no .env file found — clearing stale env var")
+        logger.info("CIRIS_CONFIGURED env var is set but no valid .env found — clearing stale env var")
         del os.environ["CIRIS_CONFIGURED"]
 
-    logger.info("No config files found - IS first run")
+    logger.info("No valid config files found - IS first run")
     return True
 
 

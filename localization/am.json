@@ -1397,7 +1397,8 @@
         "tickets_status_completed": "ተጠናቋል",
         "tickets_status_failed": "አልተሳካም",
         "tickets_status_pending": "በመጠባበቅ ላይ",
-        "tickets_status_progress": "በሂደት ላይ"
+        "tickets_status_progress": "በሂደት ላይ",
+        "login_first_run_welcome": "እንኳን ደህና መጡ! የ AI ረዳትዎን እንዴት እንደሚያዋቅሩ ይምረጡ።"
     },
     "prompts": {
         "dma": {

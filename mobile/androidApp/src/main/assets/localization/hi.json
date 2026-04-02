@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "विफल",
         "tickets_status_pending": "लंबित",
         "tickets_status_progress": "प्रगति में",
-        "setup_include_location": "ट्रेस में मेरा शहर शामिल करें (क्षेत्रीय विश्लेषण में मदद करता है)"
+        "setup_include_location": "ट्रेस में मेरा शहर शामिल करें (क्षेत्रीय विश्लेषण में मदद करता है)",
+        "login_first_run_welcome": "स्वागत है! चुनें कि आप अपना AI सहायक कैसे सेट अप करना चाहते हैं।"
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "अस्वीकार करें",
     "wa_resolve": "समाधान करें",
     "wa_service_status": "सेवा स्थिति",
-    "wa_status": "स्थिति"
+    "wa_status": "स्थिति",
+    "login_first_run_welcome": "स्वागत है! अपने AI सहायक को कैसे सेट करना है, चुनें।"
 }

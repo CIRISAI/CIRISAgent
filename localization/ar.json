@@ -1397,7 +1397,8 @@
         "tickets_status_completed": "مكتمل",
         "tickets_status_failed": "فشل",
         "tickets_status_pending": "معلق",
-        "tickets_status_progress": "قيد التنفيذ"
+        "tickets_status_progress": "قيد التنفيذ",
+        "login_first_run_welcome": "مرحباً! اختر كيفية إعداد مساعدك الذكي."
     },
     "prompts": {
         "dma": {

@@ -51,12 +51,20 @@ def test_db():
 
 
 def _get_consent_node(db_path: str, user_id: str) -> dict | None:
-    """Read a consent graph node from the DB by user_id."""
+    """Read a consent graph node from the DB by user_id.
+
+    Args:
+        db_path: Path to the database
+        user_id: The user identifier (without 'wa-' prefix).
+                 Will look for consent/wa-{user_id} to match the
+                 actual node_id format used by _create_founding_partnership.
+    """
     with get_db_connection(db_path) as conn:
         cursor = conn.cursor()
+        # Consent nodes are stored as consent/wa-{name} where wa_id = "wa-{name}"
         cursor.execute(
             "SELECT * FROM graph_nodes WHERE node_id = ? AND scope = 'local'",
-            (f"consent/{user_id}",),
+            (f"consent/wa-{user_id}",),
         )
         row = cursor.fetchone()
         if row is None:
@@ -185,8 +193,9 @@ class TestMigrateFoundingPartnerships:
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
         from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
 
-        # Pre-create a consent node for alice
-        _create_founding_partnership("alice")
+        # Pre-create a consent node for alice (using full wa_id format)
+        # In production, WA certificates have wa_id = "wa-{name}"
+        _create_founding_partnership("wa-alice")
 
         original_node = _get_consent_node(test_db, "alice")
         assert original_node is not None
@@ -209,7 +218,8 @@ class TestMigrateFoundingPartnerships:
         from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
 
         # Alice already has a consent node (from setup wizard in 2.2.9)
-        _create_founding_partnership("alice")
+        # Use full wa_id format to match production behavior
+        _create_founding_partnership("wa-alice")
 
         # Bob is a pre-existing ROOT user from before 2.2.9
         runtime = _make_runtime(was=[_MockWA("alice"), _MockWA("bob")])
@@ -266,7 +276,8 @@ class TestMigrateFoundingPartnerships:
         def _fail_on_alice(user_id: str) -> None:
             nonlocal call_count
             call_count += 1
-            if user_id == "alice":
+            # wa_id format is "wa-{name}" so we check for "wa-alice"
+            if user_id == "wa-alice":
                 raise RuntimeError("Simulated failure for alice")
             # Call the real function for bob
             original_fn(user_id)

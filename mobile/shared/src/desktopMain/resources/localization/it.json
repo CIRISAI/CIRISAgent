@@ -1397,7 +1397,8 @@
         "settings_verify_description": "[EN] CIRISVerify provides cryptographic identity and attestation",
         "settings_verify_running": "[EN] Verify Running",
         "settings_verify_status_unknown": "[EN] Verify Status Unknown",
-        "setup_include_location": "Includi la mia città nei tracciamenti (aiuta l'analisi regionale)"
+        "setup_include_location": "Includi la mia città nei tracciamenti (aiuta l'analisi regionale)",
+        "login_first_run_welcome": "Benvenuto! Scegli come configurare il tuo assistente AI."
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "Rifiuta",
     "wa_resolve": "Risolvi",
     "wa_service_status": "Stato del Servizio",
-    "wa_status": "Stato"
+    "wa_status": "Stato",
+    "login_first_run_welcome": "Benvenuto! Scegli come configurare il tuo assistente IA."
 }

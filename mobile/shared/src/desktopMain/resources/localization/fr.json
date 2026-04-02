@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "[EN] Failed",
         "tickets_status_pending": "[EN] Pending",
         "tickets_status_progress": "[EN] In Progress",
-        "setup_include_location": "Inclure ma ville dans les traces (aide à l'analyse régionale)"
+        "setup_include_location": "Inclure ma ville dans les traces (aide à l'analyse régionale)",
+        "login_first_run_welcome": "Bienvenue ! Choisissez comment configurer votre assistant IA."
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "Rejeter",
     "wa_resolve": "Résoudre",
     "wa_service_status": "État du service",
-    "wa_status": "Statut"
+    "wa_status": "Statut",
+    "login_first_run_welcome": "Bienvenue ! Choisissez comment configurer votre assistant IA."
 }

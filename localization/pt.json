@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "Falhou",
         "tickets_status_pending": "Pendente",
         "tickets_status_progress": "Em Andamento",
-        "setup_include_location": "Incluir minha cidade nos rastreamentos (ajuda na análise regional)"
+        "setup_include_location": "Incluir minha cidade nos rastreamentos (ajuda na análise regional)",
+        "login_first_run_welcome": "Bem-vindo! Escolha como configurar seu assistente de IA."
     },
     "prompts": {
         "dma": {

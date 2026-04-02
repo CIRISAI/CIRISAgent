@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "Imeshindwa",
         "tickets_status_pending": "Inasubiri",
         "tickets_status_progress": "Inafanya Kazi",
-        "setup_include_location": "Jumuisha mji wangu katika traces (husaidia uchambuzi wa kikanda)"
+        "setup_include_location": "Jumuisha mji wangu katika traces (husaidia uchambuzi wa kikanda)",
+        "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
     },
     "prompts": {
         "dma": {
@@ -1675,5 +1676,6 @@
     "wa_reject": "Kataa",
     "wa_resolve": "Funga",
     "wa_service_status": "Hali ya Huduma",
-    "wa_status": "Hali"
+    "wa_status": "Hali",
+    "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
 }

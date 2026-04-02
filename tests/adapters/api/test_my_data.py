@@ -646,8 +646,16 @@ class TestGetAgentId:
         mock_request.app.state.runtime.essential_config = None
         mock_request.app.state.runtime.agent_id = None
 
-        result = _get_agent_id(mock_request)
-        assert result is None
+        # Mock the signing key fallback to prevent blocking and return no key
+        # Patch at the source module since it's imported inside the function
+        mock_key = MagicMock()
+        mock_key.has_key = False  # Simulate no signing key available
+        with patch(
+            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
+            return_value=mock_key,
+        ):
+            result = _get_agent_id(mock_request)
+            assert result is None
 
 
 class TestUpdateEnvConsent:

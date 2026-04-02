@@ -1397,7 +1397,8 @@
         "tickets_status_failed": "[EN] Failed",
         "tickets_status_pending": "[EN] Pending",
         "tickets_status_progress": "[EN] In Progress",
-        "setup_include_location": "میرے شہر کو traces میں شامل کریں (علاقائی تجزیہ میں مدد کرتا ہے)"
+        "setup_include_location": "میرے شہر کو traces میں شامل کریں (علاقائی تجزیہ میں مدد کرتا ہے)",
+        "login_first_run_welcome": "خوش آمدید! منتخب کریں کہ آپ اپنا AI اسسٹنٹ کیسے سیٹ اپ کرنا چاہتے ہیں۔"
     },
     "prompts": {
         "dma": {

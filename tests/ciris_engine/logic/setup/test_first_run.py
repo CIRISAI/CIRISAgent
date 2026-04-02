@@ -237,11 +237,15 @@ class TestConfigPaths:
     """Tests for config path detection."""
 
     def test_get_config_paths_priority(self, tmp_path, monkeypatch):
-        """Test config paths returned in correct priority order (development mode)."""
+        """Test config paths returned in correct priority order.
+
+        As of 2.3.2, config path is standardized to ~/ciris/.env regardless of
+        whether we're in a git repo. CWD-based paths were removed for consistency.
+        """
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
 
-        # Create .git directory to simulate development mode
+        # Create .git directory - should no longer affect path resolution
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
 
@@ -249,12 +253,10 @@ class TestConfigPaths:
 
         paths = get_config_paths()
 
-        # Should be: cwd/ciris/.env, cwd/.env (compat), ~/ciris/.env, possibly /etc/ciris/.env
+        # Should be: ~/ciris/.env (primary), possibly /etc/ciris/.env (system)
+        assert len(paths) >= 1
         assert paths[0].name == ".env"
-        assert paths[0] == tmp_path / "ciris" / ".env"  # Current directory ciris subdir
-        assert paths[1] == tmp_path / ".env"  # Backwards compatibility
-
-        assert paths[2].parts[-2:] == ("ciris", ".env")
+        assert paths[0] == tmp_path / "ciris" / ".env"  # ~/ciris/.env with mocked HOME
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
         """Test config paths in installed mode (no git repo)."""
@@ -272,7 +274,12 @@ class TestConfigPaths:
         assert paths[0].parts[-2:] == ("ciris", ".env")
 
     def test_get_default_config_path_git_repo(self, tmp_path, monkeypatch):
-        """Test default path is cwd/ciris/.env in git repo."""
+        """Test default path is ~/ciris/.env even in git repo.
+
+        As of 2.3.2, config path is standardized to ~/ciris/.env regardless of
+        whether we're in a git repo. CWD-based paths were removed for consistency.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -280,6 +287,7 @@ class TestConfigPaths:
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         path = get_default_config_path()
+        # Now always uses ~/ciris/.env regardless of git repo
         assert path == tmp_path / "ciris" / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):

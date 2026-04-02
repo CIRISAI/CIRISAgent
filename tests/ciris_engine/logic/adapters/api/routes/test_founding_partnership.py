@@ -274,7 +274,9 @@ class TestFoundingPartnershipInSetupFlow:
 
                 await _create_setup_users(setup, test_db)
 
-            mock_fp.assert_called_once_with("test_setup_user")
+            # _create_founding_partnership is called with wa_cert.wa_id, not username
+            # The mock returns wa_id = "wa-test-001"
+            mock_fp.assert_called_once_with("wa-test-001")
 
     @pytest.mark.asyncio
     async def test_setup_flow_creates_actual_node(self, test_db):
@@ -308,7 +310,8 @@ class TestFoundingPartnershipInSetupFlow:
             await _create_setup_users(setup, test_db)
 
         # Verify the node was actually persisted
-        node = _get_consent_node(test_db, "real_setup_user")
+        # The mock WA has wa_id = "wa-test-001", so node is at consent/wa-test-001
+        node = _get_consent_node(test_db, "wa-test-001")
         assert node is not None, "Setup flow should create founding partnership node"
         attrs = json.loads(node["attributes_json"])
         assert attrs["stream"] == "partnered"

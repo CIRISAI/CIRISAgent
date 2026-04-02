@@ -1,21 +1,25 @@
 package ai.ciris.mobile.shared.ui.components
 
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ImportedSkillData
 import ai.ciris.mobile.shared.models.SkillImportResult
 import ai.ciris.mobile.shared.models.SkillPreviewData
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel.ImportPhase
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,13 +31,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
+// ============================================================================
+// Skill Workshop Dialog - HyperCard-style card editor
+// Simple first, complex underneath. Every field has plain English.
+// ============================================================================
+
 /**
- * Dialog for importing OpenClaw skills as CIRIS adapters.
+ * The Skill Workshop: create or import skills through a card-based editor.
  *
- * Three-phase flow:
- * 1. PASTE: User pastes SKILL.md content + optional source URL
- * 2. PREVIEW: Shows parsed skill details for confirmation
- * 3. RESULT: Shows import success/failure
+ * Design philosophy (HyperCard meets the polyglot accord):
+ * - Simple mode: plain English labels, one thing at a time
+ * - Advanced mode: shows all fields, parameters, guidance
+ * - JSON mode: raw schema editing for power users
+ *
+ * "Keep the song singable for every voice not yet heard."
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,16 +81,16 @@ fun SkillImportDialog(
                         title = {
                             Text(
                                 when (phase) {
-                                    ImportPhase.PASTE -> "Import Skill"
-                                    ImportPhase.PREVIEW -> "Preview Import"
-                                    ImportPhase.RESULT -> "Import Result"
+                                    ImportPhase.PASTE -> localizedString("mobile.skill_import")
+                                    ImportPhase.PREVIEW -> localizedString("mobile.skill_import_review")
+                                    ImportPhase.RESULT -> localizedString("mobile.skill_build_success")
                                 }
                             )
                         },
                         navigationIcon = {
-                            if (phase == ImportPhase.PREVIEW) {
-                                IconButton(onClick = { /* go back to paste handled by VM */ }) {
-                                    Icon(Icons.Filled.ArrowBack, "Back")
+                            if (phase != ImportPhase.PASTE) {
+                                IconButton(onClick = onDismiss) {
+                                    Icon(Icons.Filled.ArrowBack, localizedString("mobile.common_back"))
                                 }
                             }
                         },
@@ -88,7 +99,7 @@ fun SkillImportDialog(
                                 onClick = onDismiss,
                                 modifier = Modifier.testableClickable("btn_skill_import_close") { onDismiss() }
                             ) {
-                                Icon(Icons.Filled.Close, "Close")
+                                Icon(Icons.Filled.Close, localizedString("mobile.common_close"))
                             }
                         }
                     )
@@ -98,7 +109,8 @@ fun SkillImportDialog(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
-                        .padding(16.dp),
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Error display
@@ -126,7 +138,7 @@ fun SkillImportDialog(
                             onSourceUrlChanged = onSourceUrlChanged,
                             onPreview = onPreview
                         )
-                        ImportPhase.PREVIEW -> PreviewContent(
+                        ImportPhase.PREVIEW -> PreviewAsCards(
                             preview = preview,
                             isLoading = isLoading,
                             onImport = onImport,
@@ -143,6 +155,10 @@ fun SkillImportDialog(
     }
 }
 
+// ============================================================================
+// Phase 1: Paste - Simple import flow
+// ============================================================================
+
 @Composable
 private fun PasteContent(
     content: String,
@@ -152,155 +168,206 @@ private fun PasteContent(
     onSourceUrlChanged: (String) -> Unit,
     onPreview: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    // Friendly intro
+    Text(
+        text = localizedString("mobile.skill_import_paste_hint"),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    // Warning card
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
     ) {
         Text(
-            text = "Paste an OpenClaw SKILL.md to import it as a CIRIS adapter.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = localizedString("mobile.skill_import_warning_untrusted"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.padding(12.dp)
         )
+    }
 
-        // SKILL.md content input
-        OutlinedTextField(
-            value = content,
-            onValueChange = onContentChanged,
-            label = { Text("SKILL.md Content") },
-            placeholder = {
-                Text(
-                    "---\nname: my-skill\ndescription: Does something\n---\n\nInstructions here...",
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .testable("input_skill_md"),
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            minLines = 10
-        )
+    // SKILL.md content input
+    OutlinedTextField(
+        value = content,
+        onValueChange = onContentChanged,
+        label = { Text(localizedString("mobile.skill_import_paste")) },
+        placeholder = {
+            Text(
+                "---\nname: my-skill\ndescription: Does something useful\n---\n\nTell the agent what to do...",
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 200.dp, max = 400.dp)
+            .testable("input_skill_md"),
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        minLines = 8
+    )
 
-        // Optional source URL
+    // Optional source URL - collapsible for simplicity
+    var showSource by remember { mutableStateOf(sourceUrl.isNotBlank()) }
+
+    if (!showSource) {
+        TextButton(
+            onClick = { showSource = true },
+            modifier = Modifier.testable("btn_show_source_url")
+        ) {
+            Text(localizedString("mobile.skill_import_source"))
+        }
+    }
+
+    AnimatedVisibility(visible = showSource) {
         OutlinedTextField(
             value = sourceUrl,
             onValueChange = onSourceUrlChanged,
-            label = { Text("Source URL (optional)") },
-            placeholder = { Text("https://clawhub.com/skills/my-skill") },
+            label = { Text(localizedString("mobile.skill_import_source")) },
+            placeholder = { Text(localizedString("mobile.skill_import_source_hint")) },
             modifier = Modifier
                 .fillMaxWidth()
                 .testable("input_skill_source_url"),
             singleLine = true
         )
+    }
 
-        // Preview button
-        Button(
-            onClick = onPreview,
-            enabled = content.isNotBlank() && !isLoading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testable("btn_skill_preview")
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Text("Preview Import")
+    // Analyze button
+    Button(
+        onClick = onPreview,
+        enabled = content.isNotBlank() && !isLoading,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testable("btn_skill_preview")
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(localizedString("mobile.skill_import_analyzing"))
+        } else {
+            Text(localizedString("mobile.skill_import_analyze"))
         }
     }
 }
 
+// ============================================================================
+// Phase 2: Preview as Cards - Show what we found, simple first
+// ============================================================================
+
 @Composable
-private fun PreviewContent(
+private fun PreviewAsCards(
     preview: SkillPreviewData?,
     isLoading: Boolean,
     onImport: () -> Unit,
     onDismiss: () -> Unit
 ) {
     if (preview == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    // Review hint
+    Text(
+        text = localizedString("mobile.skill_import_review_hint"),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    // Card 1: Identity (always visible)
+    WorkshopCard(
+        title = localizedString("mobile.skill_card_identity"),
+        hint = localizedString("mobile.skill_card_identity_hint"),
+        emoji = "🏷️",
+        initiallyExpanded = true
     ) {
-        // Skill info card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = preview.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "v${preview.version}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = preview.description,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
+        SimpleField(localizedString("mobile.skill_field_name"), preview.name)
+        SimpleField(localizedString("mobile.skill_field_desc"), preview.description)
+        SimpleField(localizedString("mobile.skill_field_version"), "v${preview.version}")
+        SimpleField(localizedString("mobile.skill_field_name_hint"), preview.moduleName)
+    }
 
-        // Module name
-        DetailRow("Adapter Module", preview.moduleName)
-
-        // Tools
+    // Card 2: Tools (always visible)
+    WorkshopCard(
+        title = localizedString("mobile.skill_card_tools"),
+        hint = localizedString("mobile.skill_card_tools_hint"),
+        emoji = "🔧",
+        initiallyExpanded = true
+    ) {
         if (preview.tools.isNotEmpty()) {
-            Text("Tools", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             preview.tools.forEach { tool ->
                 SuggestionChip(
                     onClick = {},
-                    label = { Text(tool, style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(tool, style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.padding(end = 4.dp)
                 )
             }
+        } else {
+            Text(
+                "No tools defined",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
 
-        // Requirements
-        if (preview.requiredEnvVars.isNotEmpty()) {
-            Text("Required Environment Variables", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            preview.requiredEnvVars.forEach { env ->
+    // Card 3: Requirements (collapsed by default - only if present)
+    if (preview.requiredEnvVars.isNotEmpty() || preview.requiredBinaries.isNotEmpty()) {
+        WorkshopCard(
+            title = localizedString("mobile.skill_card_requires"),
+            hint = localizedString("mobile.skill_card_requires_hint"),
+            emoji = "📦",
+            initiallyExpanded = false
+        ) {
+            if (preview.requiredEnvVars.isNotEmpty()) {
                 Text(
-                    text = env,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace
+                    localizedString("mobile.skill_req_env"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
                 )
+                preview.requiredEnvVars.forEach { env ->
+                    Text(
+                        text = env,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
             }
-        }
-
-        if (preview.requiredBinaries.isNotEmpty()) {
-            Text("Required Binaries", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            preview.requiredBinaries.forEach { bin ->
+            if (preview.requiredBinaries.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = bin,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace
+                    localizedString("mobile.skill_req_bins"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
                 )
+                preview.requiredBinaries.forEach { bin ->
+                    Text(
+                        text = bin,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
             }
         }
+    }
 
-        // Instructions preview
-        if (preview.instructionsPreview.isNotBlank()) {
-            Text("Instructions Preview", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    // Card 4: Instructions preview (collapsed - for review)
+    if (preview.instructionsPreview.isNotBlank()) {
+        WorkshopCard(
+            title = localizedString("mobile.skill_card_instruct"),
+            hint = localizedString("mobile.skill_card_instruct_hint"),
+            emoji = "📝",
+            initiallyExpanded = false
+        ) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -311,45 +378,68 @@ private fun PreviewContent(
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(12.dp),
-                    maxLines = 10,
+                    maxLines = 15,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
+    }
 
-        Spacer(Modifier.height(8.dp))
+    // Card 5: Safety (collapsed - auto-set for imports)
+    WorkshopCard(
+        title = localizedString("mobile.skill_card_behavior"),
+        hint = localizedString("mobile.skill_card_behavior_hint"),
+        emoji = "🛡️",
+        initiallyExpanded = false
+    ) {
+        SimpleField(
+            localizedString("mobile.skill_behavior_approval"),
+            "Yes — imported skills always ask permission first"
+        )
+        SimpleField(
+            localizedString("mobile.skill_behavior_confidence"),
+            "70% — agent needs to be fairly sure"
+        )
+    }
 
-        // Action buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    Spacer(Modifier.height(8.dp))
+
+    // Action buttons
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f)
         ) {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Cancel")
-            }
-            Button(
-                onClick = onImport,
-                enabled = !isLoading,
-                modifier = Modifier
-                    .weight(1f)
-                    .testable("btn_skill_import_confirm")
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text("Import Skill")
+            Text(localizedString("mobile.skill_import_edit_first"))
+        }
+        Button(
+            onClick = onImport,
+            enabled = !isLoading,
+            modifier = Modifier
+                .weight(1f)
+                .testable("btn_skill_import_confirm")
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(localizedString("mobile.skill_building"))
+            } else {
+                Text(localizedString("mobile.skill_import_approve"))
             }
         }
     }
 }
+
+// ============================================================================
+// Phase 3: Result
+// ============================================================================
 
 @Composable
 private fun ResultContent(
@@ -358,74 +448,145 @@ private fun ResultContent(
 ) {
     if (result == null) return
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(32.dp))
+    Spacer(Modifier.height(16.dp))
 
-        // Success/failure icon
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = if (result.success)
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.errorContainer
-            ),
-            modifier = Modifier.fillMaxWidth()
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (result.success)
+                MaterialTheme.colorScheme.primaryContainer
+            else
+                MaterialTheme.colorScheme.errorContainer
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Text(
+                text = if (result.success)
+                    localizedString("mobile.skill_import_success")
+                else
+                    localizedString("mobile.skill_build_failed"),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = result.message,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+
+    if (result.success && result.toolsCreated.isNotEmpty()) {
+        WorkshopCard(
+            title = localizedString("mobile.skill_card_tools"),
+            hint = localizedString("mobile.skill_build_success_hint"),
+            emoji = "🔧",
+            initiallyExpanded = true
+        ) {
+            result.toolsCreated.forEach { tool ->
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text(tool) }
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.weight(1f))
+
+    Button(
+        onClick = onDismiss,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testable("btn_skill_import_done")
+    ) {
+        Text(localizedString("mobile.common_close"))
+    }
+}
+
+// ============================================================================
+// Workshop Card - The core UI component (HyperCard inspired)
+// Collapsible card with title, hint, emoji. Shows content on expand.
+// ============================================================================
+
+@Composable
+fun WorkshopCard(
+    title: String,
+    hint: String,
+    emoji: String,
+    initiallyExpanded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header - always visible, clickable to expand/collapse
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testableClickable("card_${title.lowercase().replace(" ", "_")}") {
+                        expanded = !expanded
+                    }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (result.success) "Import Successful" else "Import Failed",
+                    text = emoji,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    modifier = Modifier.padding(end = 12.dp)
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = result.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (result.success)
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    else
-                        MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-
-        if (result.success) {
-            DetailRow("Module", result.moduleName)
-            DetailRow("Auto-loaded", if (result.autoLoaded) "Yes" else "No (restart to activate)")
-
-            if (result.toolsCreated.isNotEmpty()) {
-                Text("Tools Created", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                result.toolsCreated.forEach { tool ->
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(tool) }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                Icon(
+                    Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        }
 
-        Spacer(Modifier.weight(1f))
-
-        Button(
-            onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testable("btn_skill_import_done")
-        ) {
-            Text("Done")
+            // Content - animated expand/collapse
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    content = content
+                )
+            }
         }
     }
 }
 
+// ============================================================================
+// Simple field - Label: Value display
+// ============================================================================
+
 @Composable
-private fun DetailRow(label: String, value: String) {
+private fun SimpleField(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -433,19 +594,21 @@ private fun DetailRow(label: String, value: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.4f)
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            fontFamily = FontFamily.Monospace
+            modifier = Modifier.weight(0.6f)
         )
     }
 }
 
-/**
- * Card for displaying an imported skill in the list.
- */
+// ============================================================================
+// Imported Skill Card - for the "My Skills" list
+// ============================================================================
+
 @Composable
 fun ImportedSkillCard(
     skill: ImportedSkillData,
@@ -482,10 +645,6 @@ fun ImportedSkillCard(
                         onClick = {},
                         label = { Text("v${skill.version}", style = MaterialTheme.typography.labelSmall) }
                     )
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(skill.moduleName, style = MaterialTheme.typography.labelSmall) }
-                    )
                 }
             }
 
@@ -495,7 +654,7 @@ fun ImportedSkillCard(
             ) {
                 Icon(
                     Icons.Filled.Delete,
-                    contentDescription = "Remove skill",
+                    contentDescription = localizedString("mobile.skill_delete_title"),
                     tint = MaterialTheme.colorScheme.error
                 )
             }

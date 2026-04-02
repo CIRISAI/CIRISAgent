@@ -106,6 +106,11 @@ actual fun getAppBuildNumber(): String {
     }
 }
 
+actual fun startTestAutomationServer() {
+    // TODO: Android test automation server (Ktor CIO)
+    // For now, no-op — Android uses adb + Espresso for UI testing
+}
+
 /**
  * Fallback version if context not initialized.
  * Keep in sync with mobile/androidApp/build.gradle versionName.

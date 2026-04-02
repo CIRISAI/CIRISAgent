@@ -304,6 +304,14 @@ fun CIRISApp(
     val coroutineScope = rememberCoroutineScope()
     val apiClient = remember { CIRISApiClient(baseUrl, accessToken) }
 
+    // Start test automation server on non-desktop platforms (desktop starts it in Main.kt)
+    LaunchedEffect(Unit) {
+        if (!ai.ciris.mobile.shared.platform.isDesktop() && TestAutomation.isEnabled()) {
+            PlatformLogger.i(TAG, "Test mode enabled on mobile — starting test automation server")
+            ai.ciris.mobile.shared.platform.startTestAutomationServer()
+        }
+    }
+
     // Initialize localization manager for runtime language switching
     val resourceLoader = remember { createLocalizationResourceLoader() }
     val localizationManager = remember {

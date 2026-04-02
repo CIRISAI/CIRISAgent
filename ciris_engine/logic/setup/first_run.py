@@ -24,14 +24,15 @@ def get_config_paths() -> list[Path]:
           1. /app/.env (manager-provided config)
         - Android mode:
           1. CIRIS_HOME/.env (app's files directory)
-        - Development mode (git repo):
-          1. Current directory .env (development/local override)
+        - iOS mode:
+          1. CIRIS_HOME/.env (app's files directory)
+        - Desktop/Server mode (all other cases):
+          1. CIRIS_CONFIG_DIR/.env (if env var set - for dev/testing)
           2. ~/ciris/.env (user-specific config)
           3. /etc/ciris/.env (system-wide config, Linux/Unix)
-        - Installed mode (pip install):
-          1. ~/ciris/.env (user-specific config)
-          2. /etc/ciris/.env (system-wide config, Linux/Unix)
 
+        Note: As of 2.3.2, CWD-based path detection was removed for consistency.
+        Use CIRIS_CONFIG_DIR environment variable for explicit dev/test override.
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
     from ciris_engine.logic.utils.path_resolution import (

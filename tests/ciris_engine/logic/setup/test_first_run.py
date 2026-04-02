@@ -1,6 +1,7 @@
 """Tests for first-run detection and setup wizard."""
 
 import base64
+import os
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -22,23 +23,61 @@ class TestFirstRunDetection:
 
         assert is_first_run() is True
 
-    def test_is_first_run_with_env_var(self, monkeypatch):
-        """Test not first run when CIRIS_CONFIGURED env var set."""
+    def test_is_first_run_with_env_var_only(self, tmp_path, monkeypatch):
+        """Test first run IS detected when only CIRIS_CONFIGURED env var set.
+
+        As of 2.3.2, the env var alone is NOT sufficient - a valid .env file
+        with CIRIS_CONFIGURED=true is required. The env var is cleared if no
+        valid file exists (stale env var handling).
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("CIRIS_CONFIGURED", "true")
+        # Ensure no .env files exist
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
 
         from ciris_engine.logic.setup.first_run import is_first_run
 
-        assert is_first_run() is False
+        # Should be first run because no valid .env file exists
+        assert is_first_run() is True
+        # Stale env var should be cleared
+        assert os.environ.get("CIRIS_CONFIGURED") is None
 
-    def test_is_first_run_with_cwd_env(self, tmp_path, monkeypatch):
-        """Test not first run when .env exists in current directory (development mode)."""
+    def test_is_first_run_cwd_env_not_auto_detected(self, tmp_path, monkeypatch):
+        """Test that CWD .env is NOT auto-detected (2.3.2 behavior change).
+
+        As of 2.3.2, CWD-based path detection was removed for consistency.
+        Use CIRIS_CONFIG_DIR environment variable for explicit override instead.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
         # Create .git directory to simulate development mode
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
 
+        # Create .env in CWD - this should NOT be auto-detected
         env_file = tmp_path / ".env"
         env_file.write_text("CIRIS_CONFIGURED=true")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
+
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # CWD .env is NOT auto-detected - this IS first run
+        assert is_first_run() is True
+
+    def test_is_first_run_with_config_dir_override(self, tmp_path, monkeypatch):
+        """Test not first run when CIRIS_CONFIG_DIR points to valid config.
+
+        CIRIS_CONFIG_DIR is the explicit override for development/testing.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        config_dir = tmp_path / "custom_config"
+        config_dir.mkdir()
+        env_file = config_dir / ".env"
+        env_file.write_text("CIRIS_CONFIGURED=true")
+
+        monkeypatch.setenv("CIRIS_CONFIG_DIR", str(config_dir))
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
 
         from ciris_engine.logic.setup.first_run import is_first_run

@@ -1675,5 +1675,6 @@
     "wa_reject": "拒绝",
     "wa_resolve": "解决",
     "wa_service_status": "服务状态",
-    "wa_status": "状态"
+    "wa_status": "状态",
+    "login_first_run_welcome": "欢迎！请选择如何设置您的AI助手。"
 }

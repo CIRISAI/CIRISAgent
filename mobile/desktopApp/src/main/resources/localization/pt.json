@@ -1675,5 +1675,6 @@
     "wa_reject": "Rejeitar",
     "wa_resolve": "Resolver",
     "wa_service_status": "Status do Serviço",
-    "wa_status": "Status"
+    "wa_status": "Status",
+    "login_first_run_welcome": "Bem-vindo! Escolha como configurar seu assistente de IA."
 }

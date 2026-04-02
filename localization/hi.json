@@ -1675,5 +1675,6 @@
     "wa_reject": "अस्वीकार करें",
     "wa_resolve": "समाधान करें",
     "wa_service_status": "सेवा स्थिति",
-    "wa_status": "स्थिति"
+    "wa_status": "स्थिति",
+    "login_first_run_welcome": "स्वागत है! अपने AI सहायक को कैसे सेट करना है, चुनें।"
 }

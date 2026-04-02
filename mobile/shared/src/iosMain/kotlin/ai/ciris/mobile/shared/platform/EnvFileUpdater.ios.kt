@@ -340,12 +340,29 @@ actual class EnvFileUpdater {
 
         return try {
             val fileManager = NSFileManager.defaultManager
+            val preservePatterns = listOf("agent_signing", "agent_manifest")
 
-            // Only delete the data directory (databases, audit logs, etc.)
+            // Selectively delete data directory contents, preserving signing keys
             val dataPath = "$home/data"
             if (fileManager.fileExistsAtPath(dataPath)) {
-                val deleted = fileManager.removeItemAtPath(dataPath, null)
-                println("[$TAG] Data directory ${if (deleted) "deleted" else "NOT deleted"}: $dataPath")
+                @Suppress("UNCHECKED_CAST")
+                val contents = fileManager.contentsOfDirectoryAtPath(dataPath, null) as? List<String>
+                var deletedCount = 0
+                var preservedCount = 0
+                if (contents != null) {
+                    for (item in contents) {
+                        val shouldPreserve = preservePatterns.any { item.startsWith(it) }
+                        if (shouldPreserve) {
+                            preservedCount++
+                            println("[$TAG] Preserved: $item")
+                        } else {
+                            val itemPath = "$dataPath/$item"
+                            fileManager.removeItemAtPath(itemPath, null)
+                            deletedCount++
+                        }
+                    }
+                }
+                println("[$TAG] Data directory cleaned: $dataPath (deleted=$deletedCount, preserved=$preservedCount)")
             } else {
                 println("[$TAG] Data directory does not exist")
             }

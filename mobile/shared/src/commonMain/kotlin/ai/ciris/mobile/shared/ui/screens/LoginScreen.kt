@@ -8,6 +8,7 @@ import ai.ciris.mobile.shared.platform.isDesktop
 import ai.ciris.mobile.shared.platform.isIOS
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
+import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.clickable
@@ -100,12 +101,10 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
             ) {
-                // Logo "C"
-                Text(
-                    text = "C",
-                    color = LoginColors.White,
-                    fontSize = 96.sp,
-                    fontWeight = FontWeight.Light
+                // CIRIS Signet
+                CIRISSignet(
+                    tintColor = LoginColors.White,
+                    modifier = Modifier.size(100.dp)
                 )
 
                 // App name
@@ -117,12 +116,13 @@ fun LoginScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
 
-                // Tagline
+                // Tagline — show first-run welcome or returning user tagline
                 Text(
-                    text = loginTagline,
+                    text = if (isFirstRun) localizedString("mobile.login_first_run_welcome") else loginTagline,
                     color = LoginColors.White.copy(alpha = 0.8f),
                     fontSize = 16.sp,
-                    modifier = Modifier.padding(top = 4.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp).width(280.dp)
                 )
 
                 Spacer(modifier = Modifier.height(48.dp))

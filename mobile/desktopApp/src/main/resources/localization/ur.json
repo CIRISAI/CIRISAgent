@@ -1675,5 +1675,6 @@
     "wa_reject": "مسترد کریں",
     "wa_resolve": "[EN] Resolve",
     "wa_service_status": "[EN] Service Status",
-    "wa_status": "[EN] Status"
+    "wa_status": "[EN] Status",
+    "login_first_run_welcome": "خوش آمدید! اپنے AI اسسٹنٹ کو سیٹ اپ کرنے کا طریقہ منتخب کریں۔"
 }

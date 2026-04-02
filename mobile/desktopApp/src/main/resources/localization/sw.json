@@ -1675,5 +1675,6 @@
     "wa_reject": "Kataa",
     "wa_resolve": "Funga",
     "wa_service_status": "Hali ya Huduma",
-    "wa_status": "Hali"
+    "wa_status": "Hali",
+    "login_first_run_welcome": "Karibu! Chagua jinsi ya kusanidi msaidizi wako wa AI."
 }

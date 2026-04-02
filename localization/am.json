@@ -1675,5 +1675,6 @@
     "wa_reject": "ውድቅ አድርግ",
     "wa_resolve": "ፍታ",
     "wa_service_status": "የአገልግሎት ሁኔታ",
-    "wa_status": "ሁኔታ"
+    "wa_status": "ሁኔታ",
+    "login_first_run_welcome": "እንኳን ደህና መጡ! የAI ረዳትዎን እንዴት ማቀናበር እንደሚፈልጉ ይምረጡ።"
 }

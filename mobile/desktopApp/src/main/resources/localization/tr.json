@@ -1675,5 +1675,6 @@
     "wa_reject": "Reddet",
     "wa_resolve": "Çöz",
     "wa_service_status": "Hizmet Durumu",
-    "wa_status": "Durum"
+    "wa_status": "Durum",
+    "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kuracağınızı seçin."
 }

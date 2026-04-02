@@ -324,14 +324,40 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # 3. Check relative to this module (may be wrong platform in dev repos)
+        # 3. Check relative to this module — validate it's the right platform
+        #    Dev repos may contain binaries for other platforms (e.g., Linux .so on macOS)
         module_dir = Path(__file__).parent
+        _log = logging.getLogger(__name__)
         for suffix in suffixes:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
-                return candidate
+                if self._is_valid_binary_for_platform(candidate, system):
+                    return candidate
+                else:
+                    _log.warning(f"[CIRISVerify] Skipping wrong-platform binary: {candidate}")
 
-        raise BinaryNotFoundError(f"Searched: {paths}")
+        raise BinaryNotFoundError(
+            f"No valid library found for {system}. "
+            f"Searched: pip package, system paths ({paths}), module dir ({module_dir}). "
+            f"Install ciris-verify: pip install ciris-verify"
+        )
+
+    @staticmethod
+    def _is_valid_binary_for_platform(path: Path, system: str) -> bool:
+        """Check if a binary file matches the current platform."""
+        try:
+            with open(path, "rb") as f:
+                magic = f.read(4)
+            if system == "Darwin":
+                # Mach-O: CE FA ED FE (LE 64), CF FA ED FE (LE 32), CA FE BA BE (universal)
+                return magic in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
+            elif system == "Linux":
+                return magic == b"\x7fELF"
+            elif system == "Windows":
+                return magic[:2] == b"MZ"
+            return True  # Unknown platform, allow
+        except Exception:
+            return False
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""

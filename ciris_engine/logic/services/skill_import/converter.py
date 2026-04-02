@@ -83,6 +83,38 @@ def _build_install_steps(specs: List[SkillInstallSpec]) -> List[Dict[str, Any]]:
     return steps
 
 
+def _generate_alias_code(skill: ParsedSkill) -> str:
+    """Generate Python code lines for registering tool aliases.
+
+    Registers aliases for:
+    - skillKey (OpenClaw invocation override)
+    - command_tool (direct dispatch tool name)
+    - bare skill name (e.g., "todoist-cli" -> "skill:todoist-cli")
+    """
+    lines = []
+    canonical = f"skill:{skill.name}"
+    registered: set[str] = set()
+
+    # skillKey alias (e.g., "todoist" -> "skill:todoist-cli")
+    if skill.metadata and skill.metadata.skill_key:
+        key = skill.metadata.skill_key
+        if key != skill.name and key not in registered:
+            lines.append(f'                        tool_bus.register_tool_alias("{key}", "{canonical}")')
+            registered.add(key)
+
+    # command_tool alias (e.g., "todoist" -> "skill:todoist-cli")
+    if skill.command_tool:
+        tool = skill.command_tool
+        if tool != skill.name and tool not in registered:
+            lines.append(f'                        tool_bus.register_tool_alias("{tool}", "{canonical}")')
+            registered.add(tool)
+
+    # Always register bare name as alias (e.g., "todoist-cli" -> "skill:todoist-cli")
+    lines.append(f'                        tool_bus.register_tool_alias("{skill.name}", "{canonical}")')
+
+    return "\n".join(lines) if lines else "                        pass"
+
+
 class SkillToAdapterConverter:
     """Converts parsed OpenClaw skills to CIRIS adapter directories."""
 
@@ -253,7 +285,23 @@ class SkillToAdapterConverter:
                 async def start(self) -> None:
                     await self.tool_service.start()
                     self._running = True
+                    self._register_tool_aliases()
                     logger.info("Imported skill adapter '{skill.name}' started")
+
+                def _register_tool_aliases(self) -> None:
+                    """Register tool aliases from OpenClaw skillKey if available."""
+                    try:
+                        bus_manager = getattr(self.runtime, "bus_manager", None)
+                        if not bus_manager:
+                            bus_manager = getattr(self.context, "bus_manager", None)
+                        if not bus_manager:
+                            return
+                        tool_bus = getattr(bus_manager, "tool_bus", None)
+                        if not tool_bus or not hasattr(tool_bus, "register_tool_alias"):
+                            return
+{_generate_alias_code(skill)}
+                    except Exception as e:
+                        logger.debug(f"Could not register tool aliases: {{e}}")
 
                 async def stop(self) -> None:
                     self._running = False
@@ -381,8 +429,10 @@ class SkillToAdapterConverter:
                         ),
                         category="imported_skill",
                         when_to_use={repr(skill.description or f"When you need to use the {skill.name} skill")},
+                        context_enrichment={bool(skill.metadata and skill.metadata.always)},
+                        context_enrichment_params={{"input": "status"}} if {bool(skill.metadata and skill.metadata.always)} else None,
                         requirements={requirements_code},
-                        tags=["imported", "openclaw", {repr(skill.name)}],
+                        tags={repr(self._build_tags(skill))},
                         version={repr(skill.version)},
                         documentation=ToolDocumentation(
                             quick_start=f"Imported OpenClaw skill: {skill.name}",
@@ -502,6 +552,21 @@ class SkillToAdapterConverter:
                     return tool_name in self.TOOL_DEFINITIONS
         ''')
         (adapter_dir / "services.py").write_text(content, encoding="utf-8")
+
+    def _build_tags(self, skill: ParsedSkill) -> List[str]:
+        """Build tags list for the imported skill tool.
+
+        Maps OpenClaw fields to CIRIS tags:
+        - Always includes: imported, openclaw, {skill.name}
+        - user_invocable=False -> adds 'internal' tag (hidden from UI tool list)
+        - command_dispatch='tool' -> adds 'direct_dispatch' tag
+        """
+        tags = ["imported", "openclaw", skill.name]
+        if not skill.user_invocable:
+            tags.append("internal")
+        if skill.command_dispatch == "tool":
+            tags.append("direct_dispatch")
+        return tags
 
     def _write_original_skill(self, adapter_dir: Path, skill: ParsedSkill) -> None:
         """Write the original SKILL.md for reference."""

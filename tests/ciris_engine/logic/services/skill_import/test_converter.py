@@ -417,3 +417,118 @@ Test."""
             assert manifest["module"]["homepage"] == "https://example.com/my-skill"
             services = (path / "services.py").read_text()
             assert "https://example.com/my-skill" in services
+
+    def test_always_enables_context_enrichment_on_main_tool(self):
+        """always=True -> context_enrichment=True on the main skill tool."""
+        skill_md = """\
+---
+name: always-active
+description: Should always be in context
+metadata:
+  openclaw:
+    always: true
+---
+Always active instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            # Main tool should have context_enrichment=True
+            assert "context_enrichment=True" in services
+
+    def test_always_false_no_context_enrichment_on_main_tool(self):
+        """always=False -> context_enrichment=False on the main skill tool."""
+        skill_md = """\
+---
+name: not-always
+description: Not always active
+metadata:
+  openclaw:
+    always: false
+---
+Instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            # Main tool should have context_enrichment=False
+            assert "context_enrichment=False" in services
+
+    def test_skill_key_generates_alias_registration(self):
+        """skillKey -> register_tool_alias in adapter startup."""
+        skill_md = """\
+---
+name: todoist-cli
+description: Task manager
+metadata:
+  openclaw:
+    skillKey: todoist
+---
+Instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            adapter_code = (path / "adapter.py").read_text()
+            # Should register skillKey as alias
+            assert 'register_tool_alias("todoist", "skill:todoist-cli")' in adapter_code
+            # Should also register bare name as alias
+            assert 'register_tool_alias("todoist-cli", "skill:todoist-cli")' in adapter_code
+
+    def test_command_tool_generates_alias_registration(self):
+        """command-tool -> register_tool_alias in adapter startup."""
+        skill_md = """\
+---
+name: my-skill
+description: Skill with command tool
+command-dispatch: tool
+command-tool: mycommand
+---
+Instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            adapter_code = (path / "adapter.py").read_text()
+            assert 'register_tool_alias("mycommand", "skill:my-skill")' in adapter_code
+
+    def test_user_invocable_false_adds_internal_tag(self):
+        """user-invocable=False -> 'internal' tag on tool."""
+        skill_md = """\
+---
+name: hidden-skill
+description: Should be internal
+user-invocable: false
+---
+Instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            assert "'internal'" in services
+
+    def test_command_dispatch_tool_adds_tag(self):
+        """command-dispatch=tool -> 'direct_dispatch' tag."""
+        skill_md = """\
+---
+name: dispatch-skill
+description: Has direct dispatch
+command-dispatch: tool
+command-tool: dispatch
+---
+Instructions."""
+        parser = OpenClawSkillParser()
+        skill = parser.parse_skill_md(skill_md)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            converter = SkillToAdapterConverter(output_dir=Path(tmpdir))
+            path = converter.convert(skill)
+            services = (path / "services.py").read_text()
+            assert "'direct_dispatch'" in services

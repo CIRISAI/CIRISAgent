@@ -5,6 +5,32 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-04-01
+
+### Added
+- Cross-platform test automation HTTP server (Desktop: Ktor CIO, iOS: POSIX sockets) on port 8091
+- Shared test handler logic, models, and state in `commonMain` for all KMP targets
+- `/screenshot` endpoint (desktop, java.awt.Robot), `/mouse-click` for dropdowns
+- `testableClickable` on provider/model dropdowns and login buttons for automation
+- SwiftCapture integration for demo video recording (`tools/record_demo_clips.py`)
+- Desktop E2E test script (`tools/test_desktop_wipe_setup.sh`)
+- CIRIS signet on login screen replacing plain "C" text
+- First-run welcome message localized to 16 languages
+- `postLocalShutdown()` API for desktop server restart after wipe
+
+### Fixed
+- Factory reset preserves signing keys (prevents CIRISVerify FFI crash on restart)
+- Founding partnership uses `consent/{wa_id}` matching ConsentService lookups
+- `is_first_run()` checks `.env` contents for `CIRIS_CONFIGURED`, not just file existence
+- CIRISVerify FFI: platform-aware suffix ordering (.dylib before .so on macOS)
+- `.env` location standardized to `~/ciris/.env`, removed CWD check
+- Stale `CIRIS_CONFIGURED` env var cleared when `.env` is deleted
+- Language rotation no longer triggers API sync or pipeline label recomposition
+- `CIRIS_` prefix env vars supported by LLM service, main.py, service_initializer
+- Wizard select step accepts "skip" for optional steps (cameras)
+- Desktop wipe: server restart via local-shutdown API, repo root data dir detection
+- `PythonRuntime.desktop`: empty cognitive_state treated as healthy, not stuck
+
 ## [2.3.0] - 2026-03-28
 
 ### Added

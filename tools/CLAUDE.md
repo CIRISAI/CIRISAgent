@@ -42,6 +42,8 @@ Development, QA, security, and operational tooling for the CIRIS platform.
 | `ios_screenshot.swift` | Swift tool for iOS device screenshots |
 | `py310_compat_checker.py` | Scan for Python 3.11+ features that break 3.10 compat |
 | `screenshot.py` | Capture desktop app screenshots |
+| `record_demo_clips.py` | SwiftCapture video recording + test automation for demo clips |
+| `test_desktop_wipe_setup.sh` | Desktop E2E: wipe → setup wizard → HA adapter → verify |
 | `test_setup_ui.py` | Playwright-based setup wizard UI test |
 | `update_ciris_verify.py` | Update CIRISVerify binaries and Python bindings for Android/iOS |
 
@@ -64,9 +66,20 @@ python3 -m tools.qa_runner auth agent  # Specific modules
 # Version bump (ALWAYS after significant changes)
 python3 tools/dev/bump_version.py patch|minor|major
 
+# Desktop E2E (wipe → setup wizard → HA adapter → verify)
+bash tools/test_desktop_wipe_setup.sh
+
 # Desktop app testing
 python3 -m tools.qa_runner.modules.web_ui desktop
-python3 -m tools.qa_runner.modules.web_ui.desktop_test status
+
+# iOS E2E (via test automation server + iproxy)
+xcrun devicectl device process launch -d $DEVICE_ID \
+  --terminate-existing --environment-variables '{"CIRIS_TEST_MODE":"true"}' ai.ciris.mobile
+iproxy 18091 8091 -u $IDEVICE_ID &
+curl http://127.0.0.1:18091/health  # Test automation on iOS
+
+# Demo clip recording (SwiftCapture + test automation)
+python3 tools/record_demo_clips.py --launch --login -o ~/demo_clips/
 
 # Mobile log pull
 python3 -m tools.qa_runner.modules.mobile pull-logs

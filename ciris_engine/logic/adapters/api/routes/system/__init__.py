@@ -18,7 +18,7 @@ that imports `from ...routes.system import router`.
 
 from fastapi import APIRouter
 
-from . import adapter_config, adapters, health, runtime, services, shutdown, skill_import, tools
+from . import adapter_config, adapters, health, runtime, services, shutdown, skill_builder, skill_import, tools
 
 # Create the main router with the system prefix and tags
 router = APIRouter(prefix="/system", tags=["system"])
@@ -44,6 +44,9 @@ router.include_router(adapter_config.router)
 
 # Skill import: /system/adapters/import-skill, /system/adapters/imported-skills
 router.include_router(skill_import.router)
+
+# Skill builder: /system/skills/* (HyperCard-style card builder)
+router.include_router(skill_builder.router)
 
 # Tools: /system/tools
 router.include_router(tools.router)

@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Builder Install Card** - User-authored install instructions carried through to ParsedSkill
 - **Port Race Condition** - Increased startup delay from 3s to 6s to prevent desktop app connecting before server ready
 - **Mypy Type Error** - Fixed `range` to `list[int]` conversion in scanner
+- **ReDoS Vulnerability** - Replaced regex with string-based YAML frontmatter extraction in skill parser
+- **Path Traversal Security** - Added pre-validation (null bytes, length limits) and portable temp directory handling
+- **CI Test Stability** - Added shell-level timeout and pytest markers to prevent worker hangs
+- **API Documentation** - Added `responses` parameter to skill builder routes for proper OpenAPI docs
 
 ## [2.3.3] - 2026-04-02
 

@@ -314,9 +314,9 @@ class SkillSecurityScanner:
         findings = []
 
         # Get declared binaries
-        declared_bins = set()
+        declared_bins: set[str] = set()
         if skill.metadata and skill.metadata.requires:
-            declared_bins = set(b.lower() for b in skill.metadata.requires.bins)
+            declared_bins = {b.lower() for b in skill.metadata.requires.bins}
 
         for pattern, tool_type in _NETWORK_PATTERNS:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -371,7 +371,6 @@ class SkillSecurityScanner:
     def _check_metadata_consistency(self, skill: ParsedSkill) -> List[SkillSecurityFinding]:
         """Check for inconsistencies between metadata and content."""
         findings = []
-        instructions = (skill.instructions or "").lower()
 
         # Check if instructions reference env vars not declared in requires
         env_pattern = re.findall(r'[A-Z][A-Z0-9_]{3,}(?:_KEY|_TOKEN|_SECRET|_PASSWORD|_API)', skill.instructions or "")

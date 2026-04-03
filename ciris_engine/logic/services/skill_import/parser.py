@@ -79,8 +79,44 @@ class ParsedSkill(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-# Regex for YAML frontmatter: starts with ---, ends with ---
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?\n)---\s*\n?(.*)", re.DOTALL)
+# Max input size to prevent DoS (1MB should be plenty for skill files)
+_MAX_SKILL_SIZE = 1024 * 1024
+
+
+def _extract_frontmatter(content: str) -> tuple[str, str]:
+    """Extract YAML frontmatter and body from content.
+
+    Uses string operations instead of regex to avoid ReDoS vulnerabilities.
+    Returns (frontmatter_str, body_str). If no frontmatter, returns ("", content).
+    """
+    # Size limit to prevent DoS
+    if len(content) > _MAX_SKILL_SIZE:
+        raise ValueError(f"Skill content exceeds maximum size of {_MAX_SKILL_SIZE} bytes")
+
+    # Must start with ---
+    if not content.startswith("---"):
+        return "", content.strip()
+
+    # Find the end of the first line (the opening ---)
+    first_newline = content.find("\n")
+    if first_newline == -1:
+        return "", content.strip()
+
+    # Find the closing --- (must be on its own line)
+    rest = content[first_newline + 1:]
+    closing_idx = -1
+    for i, line in enumerate(rest.split("\n")):
+        if line.strip() == "---":
+            # Calculate position in rest string
+            closing_idx = sum(len(l) + 1 for l in rest.split("\n")[:i])
+            break
+
+    if closing_idx == -1:
+        return "", content.strip()
+
+    frontmatter = rest[:closing_idx].rstrip("\n")
+    body = rest[closing_idx:].lstrip("-").lstrip("\n")
+    return frontmatter, body.strip()
 
 # Accepted metadata namespace keys (in priority order)
 _METADATA_NAMESPACES = ["openclaw", "clawdbot", "clawdis"]
@@ -140,14 +176,8 @@ class OpenClawSkillParser:
         Raises:
             ValueError: If the content is invalid or missing required fields
         """
-        match = _FRONTMATTER_RE.match(content)
-        if match:
-            frontmatter_str = match.group(1)
-            instructions = match.group(2).strip()
-        else:
-            # No frontmatter - treat entire content as instructions
-            frontmatter_str = ""
-            instructions = content.strip()
+        # Extract frontmatter using safe string operations (no regex ReDoS risk)
+        frontmatter_str, instructions = _extract_frontmatter(content)
 
         # Parse YAML frontmatter
         raw_frontmatter: Dict[str, Any] = {}

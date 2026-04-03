@@ -9,6 +9,7 @@ Supports importing from:
 
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -167,11 +168,11 @@ def _validate_local_path(local_path: str) -> Path:
     # Now resolve to get the canonical absolute path
     resolved = Path(normalized).resolve()
 
-    # Define allowed base directories
+    # Define allowed base directories (using tempfile for platform-safe temp dir)
     allowed_bases = [
         Path.home(),
         Path.cwd(),
-        Path("/tmp"),
+        Path(tempfile.gettempdir()),
     ]
 
     # Check if resolved path is within any allowed base

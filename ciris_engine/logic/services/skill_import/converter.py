@@ -368,9 +368,6 @@ class SkillToAdapterConverter:
         # Escape the instructions for embedding as a Python string
         escaped_instructions = skill.instructions.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
-        # Build platform list
-        platforms = skill.metadata.os if skill.metadata and skill.metadata.os else []
-
         content = textwrap.dedent(f'''\
             """Tool service for imported OpenClaw skill: {skill.name}."""
 

@@ -10,6 +10,7 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
+import ai.ciris.mobile.shared.viewmodels.ConnectionStatus
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -19,9 +20,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
@@ -69,6 +72,8 @@ fun LoginScreen(
     onPrivacyPolicy: () -> Unit = {
         PlatformLogger.i("LoginScreen", "[onPrivacyPolicy] Privacy policy link clicked - opening https://ciris.ai/privacy")
     },
+    onServerSettings: () -> Unit = {},
+    connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED,
     isLoading: Boolean = false,
     statusMessage: String? = null,
     errorMessage: String? = null,
@@ -320,6 +325,17 @@ fun LoginScreen(
                 compact = false,
                 centered = true
             )
+
+            // Connection status badge (top-right, desktop only)
+            if (isDesktopMode) {
+                ConnectionStatusBadge(
+                    connectionStatus = connectionStatus,
+                    onClick = onServerSettings,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 24.dp, end = 16.dp)
+                )
+            }
         }
     }
 }
@@ -505,5 +521,59 @@ private fun LocalLoginForm(
             fontSize = 12.sp,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+/**
+ * Connection status badge for the login screen.
+ * Shows the current connection status and allows clicking to open server settings.
+ */
+@Composable
+private fun ConnectionStatusBadge(
+    connectionStatus: ConnectionStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val statusColor = when (connectionStatus) {
+        ConnectionStatus.CONNECTED_LOCAL -> Color(0xFF10B981) // Green
+        ConnectionStatus.CONNECTED_REMOTE -> Color(0xFF3B82F6) // Blue
+        ConnectionStatus.CONNECTING -> Color(0xFFF59E0B) // Amber
+        ConnectionStatus.DISCONNECTED, ConnectionStatus.ERROR -> Color(0xFFEF4444) // Red
+    }
+
+    val statusText = when (connectionStatus) {
+        ConnectionStatus.CONNECTED_LOCAL,
+        ConnectionStatus.CONNECTED_REMOTE -> localizedString("mobile.server_status_connected")
+        ConnectionStatus.CONNECTING -> localizedString("mobile.server_status_connecting")
+        ConnectionStatus.DISCONNECTED,
+        ConnectionStatus.ERROR -> localizedString("mobile.server_status_disconnected")
+    }
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier.testable("btn_server_status"),
+        shape = RoundedCornerShape(16.dp),
+        color = LoginColors.White.copy(alpha = 0.15f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(statusColor, CircleShape)
+            )
+
+            // Status text
+            Text(
+                text = statusText,
+                color = LoginColors.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }

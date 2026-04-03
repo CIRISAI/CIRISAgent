@@ -1158,6 +1158,8 @@ fun CIRISApp(
                             }
                         }
                     },
+                    onServerSettings = { currentScreen = Screen.ServerConnection },
+                    connectionStatus = serverConnectionViewModel.connectionStatus.collectAsState().value,
                     isLoading = isLoginLoading,
                     statusMessage = loginStatusMessage,
                     errorMessage = loginErrorMessage,

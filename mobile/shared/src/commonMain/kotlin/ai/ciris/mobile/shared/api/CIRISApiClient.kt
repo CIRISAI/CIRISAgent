@@ -154,13 +154,104 @@ class CIRISApiClient(
 
     /**
      * Update the base URL for API calls.
-     * This updates the URL used for direct HTTP calls immediately.
-     * For full effect on all API methods, the client should be recreated.
+     * This updates the URL used for direct HTTP calls and recreates all SDK API instances.
      */
     fun updateBaseUrl(newUrl: String) {
         val method = "updateBaseUrl"
         logInfo(method, "Updating baseUrl from $baseUrl to $newUrl")
         baseUrl = newUrl
+        // Recreate all SDK API instances with the new URL
+        recreateApiInstances()
+    }
+
+    /**
+     * Recreate all SDK API instances with the current baseUrl.
+     * Called after updateBaseUrl() to ensure all API objects use the new URL.
+     */
+    private fun recreateApiInstances() {
+        val method = "recreateApiInstances"
+        logInfo(method, "Recreating SDK API instances with baseUrl=$baseUrl")
+
+        agentApi = AgentApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        authApi = AuthenticationApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        setupApi = SetupApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        systemApi = SystemApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        telemetryApi = TelemetryApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        billingApi = BillingApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        wiseAuthorityApi = WiseAuthorityApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        configApi = ConfigApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        consentApi = ConsentApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        auditApi = AuditApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        memoryApi = MemoryApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        usersApi = UsersApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        ticketsApi = TicketsApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+
+        logInfo(method, "All SDK API instances recreated successfully")
     }
 
     /**
@@ -240,92 +331,92 @@ class CIRISApiClient(
         }
     }
 
-    // Generated API instances
-    private val agentApi = AgentApi(
+    // Generated API instances (var to allow recreation when baseUrl changes)
+    private var agentApi = AgentApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val authApi = AuthenticationApi(
+    private var authApi = AuthenticationApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val setupApi = SetupApi(
+    private var setupApi = SetupApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val systemApi = SystemApi(
+    private var systemApi = SystemApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val telemetryApi = TelemetryApi(
+    private var telemetryApi = TelemetryApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val billingApi = BillingApi(
+    private var billingApi = BillingApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val wiseAuthorityApi = WiseAuthorityApi(
+    private var wiseAuthorityApi = WiseAuthorityApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val configApi = ConfigApi(
+    private var configApi = ConfigApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val consentApi = ConsentApi(
+    private var consentApi = ConsentApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val auditApi = AuditApi(
+    private var auditApi = AuditApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val memoryApi = MemoryApi(
+    private var memoryApi = MemoryApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val usersApi = UsersApi(
+    private var usersApi = UsersApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val ticketsApi = TicketsApi(
+    private var ticketsApi = TicketsApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,

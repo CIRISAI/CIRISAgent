@@ -105,8 +105,8 @@ jobs:
           # --reruns=2: Rerun failed/crashed tests up to 2 times
           # -n 4: 4 parallel workers within each shard
           # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
-          # timeout 900: Force-kill after 15 minutes to prevent xdist worker hangs
-          timeout --signal=SIGTERM --kill-after=30 900 \
+          # timeout 1200: Force-kill after 20 minutes to allow for xdist cleanup
+          timeout --signal=SIGTERM --kill-after=30 1200 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \

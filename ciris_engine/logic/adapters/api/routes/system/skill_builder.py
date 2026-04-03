@@ -121,7 +121,7 @@ async def get_cards(auth: AuthAdminDep) -> Dict[str, Any]:
     return get_all_card_schemas()
 
 
-@router.get("/skills/cards/{card_id}")
+@router.get("/skills/cards/{card_id}", responses={404: {"description": "Card not found"}})
 async def get_card(card_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
     """Get the JSON Schema for a single card."""
     try:
@@ -135,7 +135,11 @@ async def get_card(card_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
 # ============================================================================
 
 
-@router.post("/skills/drafts", status_code=201)
+@router.post(
+    "/skills/drafts",
+    status_code=201,
+    responses={400: {"description": "Invalid input"}, 500: {"description": "Server error"}},
+)
 async def create_draft(
     auth: AuthAdminDep,
     body: Annotated[CreateDraftRequest, Body()] = CreateDraftRequest(),
@@ -170,7 +174,7 @@ async def list_drafts(auth: AuthAdminDep) -> Dict[str, Any]:
     }
 
 
-@router.get("/skills/drafts/{draft_id}")
+@router.get("/skills/drafts/{draft_id}", responses={404: {"description": "Draft not found"}})
 async def get_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
     """Get a specific draft."""
     draft = _builder.load_draft(draft_id)
@@ -179,7 +183,10 @@ async def get_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
     return {"draft": draft.model_dump()}
 
 
-@router.put("/skills/drafts/{draft_id}")
+@router.put(
+    "/skills/drafts/{draft_id}",
+    responses={404: {"description": "Draft not found"}, 400: {"description": "Validation errors"}},
+)
 async def update_draft(
     draft_id: str,
     auth: AuthAdminDep,
@@ -213,7 +220,10 @@ async def update_draft(
     return {"draft": draft.model_dump()}
 
 
-@router.put("/skills/drafts/{draft_id}/cards/{card_id}")
+@router.put(
+    "/skills/drafts/{draft_id}/cards/{card_id}",
+    responses={404: {"description": "Draft or card not found"}, 400: {"description": "Validation errors"}},
+)
 async def update_card(
     draft_id: str,
     card_id: str,
@@ -246,7 +256,7 @@ async def update_card(
     return {"card_id": card_id, "data": getattr(draft, card_id).model_dump()}
 
 
-@router.delete("/skills/drafts/{draft_id}")
+@router.delete("/skills/drafts/{draft_id}", responses={404: {"description": "Draft not found"}})
 async def delete_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
     """Delete a draft."""
     if _builder.delete_draft(draft_id):
@@ -259,7 +269,9 @@ async def delete_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
 # ============================================================================
 
 
-@router.post("/skills/drafts/{draft_id}/validate")
+@router.post(
+    "/skills/drafts/{draft_id}/validate", responses={404: {"description": "Draft not found"}}
+)
 async def validate_draft(draft_id: str, auth: AuthAdminDep) -> ValidationResult:
     """Validate a draft for completeness before building."""
     draft = _builder.load_draft(draft_id)
@@ -270,7 +282,9 @@ async def validate_draft(draft_id: str, auth: AuthAdminDep) -> ValidationResult:
     return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 
-@router.post("/skills/drafts/{draft_id}/build")
+@router.post(
+    "/skills/drafts/{draft_id}/build", responses={404: {"description": "Draft not found"}}
+)
 async def build_adapter(
     draft_id: str,
     request: Request,

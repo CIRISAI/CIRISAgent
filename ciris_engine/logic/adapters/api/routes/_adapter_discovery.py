@@ -514,11 +514,56 @@ async def discover_services_via_entry_points(
     return adapters
 
 
+async def discover_user_adapters(
+    filter_by_platform: bool = True,
+    skip_adapters: Optional[set[str]] = None,
+) -> List[ModuleTypeInfo]:
+    """Discover user-imported adapters from ~/ciris/adapters/.
+
+    Args:
+        filter_by_platform: Whether to filter by platform requirements
+        skip_adapters: Set of adapter IDs to explicitly skip
+
+    Returns:
+        List of ModuleTypeInfo for discovered user adapters
+    """
+    user_adapters_dir = Path.home() / "ciris" / "adapters"
+    if not user_adapters_dir.exists():
+        return []
+
+    adapters: List[ModuleTypeInfo] = []
+    logger.debug(f"[ADAPTER_DISCOVERY] Scanning user adapters: {user_adapters_dir}")
+
+    for item in user_adapters_dir.iterdir():
+        if not item.is_dir() or item.name.startswith("_"):
+            continue
+
+        manifest_path = item / MANIFEST_FILENAME
+        manifest_data = await read_manifest_async(manifest_path)
+        if not manifest_data:
+            continue
+
+        if should_filter_adapter(manifest_data, filter_by_platform, skip_adapters):
+            continue
+
+        module_info = parse_manifest_to_module_info(manifest_data, item.name)
+        # Mark as user-imported adapter
+        module_info.module_source = "user"
+        adapters.append(module_info)
+        logger.debug(f"[ADAPTER_DISCOVERY] User adapter {item.name}: OK")
+
+    logger.debug(f"[ADAPTER_DISCOVERY] User adapters discovered: {len(adapters)}")
+    return adapters
+
+
 async def discover_adapters(
     filter_by_platform: bool = True,
     skip_adapters: Optional[set[str]] = None,
 ) -> List[ModuleTypeInfo]:
     """Discover all available modular adapters.
+
+    Scans both built-in adapters (ciris_adapters/) and user-imported
+    adapters (~/ciris/adapters/).
 
     Args:
         filter_by_platform: Whether to filter by platform requirements
@@ -527,23 +572,37 @@ async def discover_adapters(
     Returns:
         List of ModuleTypeInfo for discovered adapters
     """
+    adapters: List[ModuleTypeInfo] = []
+
+    # Discover built-in adapters from ciris_adapters/
     try:
         import ciris_adapters
 
-        if not hasattr(ciris_adapters, "__path__"):
-            return await discover_services_via_entry_points(filter_by_platform, skip_adapters)
-
-        services_base = Path(ciris_adapters.__path__[0])
-
-        try:
-            return await discover_services_from_directory(services_base, filter_by_platform, skip_adapters)
-        except OSError as e:
-            logger.debug(f"iterdir failed ({e}), falling back to entry points")
-            return await discover_services_via_entry_points(filter_by_platform, skip_adapters)
+        if hasattr(ciris_adapters, "__path__"):
+            services_base = Path(ciris_adapters.__path__[0])
+            try:
+                builtin = await discover_services_from_directory(
+                    services_base, filter_by_platform, skip_adapters
+                )
+                adapters.extend(builtin)
+            except OSError as e:
+                logger.debug(f"iterdir failed ({e}), falling back to entry points")
+                builtin = await discover_services_via_entry_points(filter_by_platform, skip_adapters)
+                adapters.extend(builtin)
+        else:
+            builtin = await discover_services_via_entry_points(filter_by_platform, skip_adapters)
+            adapters.extend(builtin)
 
     except ImportError as e:
         logger.debug(f"ciris_adapters not available: {e}")
-        return await discover_services_via_entry_points(filter_by_platform, skip_adapters)
+        builtin = await discover_services_via_entry_points(filter_by_platform, skip_adapters)
+        adapters.extend(builtin)
+
+    # Discover user-imported adapters from ~/ciris/adapters/
+    user_adapters = await discover_user_adapters(filter_by_platform, skip_adapters)
+    adapters.extend(user_adapters)
+
+    return adapters
 
 
 def get_cli_dependency_status(adapter: ModuleTypeInfo) -> Tuple[List[str], List[str], bool]:

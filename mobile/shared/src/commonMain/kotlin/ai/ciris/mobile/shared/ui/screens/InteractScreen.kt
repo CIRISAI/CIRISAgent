@@ -68,6 +68,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.zIndex
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -1123,7 +1126,7 @@ private fun EmptyStateView(
             text = localizedString("mobile.interact_welcome_title"),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (transparentBackground) Color.White else Color(0xFF1F2937),
+            color = if (transparentBackground) Color(0xFF1F2937) else Color(0xFF1F2937),  // Dark text for readability
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -1131,7 +1134,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_subtitle"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color.White.copy(alpha = 0.7f) else Color(0xFF6B7280),
+            color = if (transparentBackground) Color(0xFF4B5563) else Color(0xFF6B7280),  // Darker gray for readability
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -1139,7 +1142,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_hint"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color(0xFF7DD3FC) else Color(0xFF419CA0),  // Lighter cyan on dark
+            color = if (transparentBackground) Color(0xFF0E7490) else Color(0xFF419CA0),  // Darker cyan for readability
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -1807,8 +1810,12 @@ private fun ChatInputBarWithBubbles(
                         },
                     placeholder = { Text(localizedString("mobile.interact_input_placeholder"), color = theme.inputPlaceholder) },
                     enabled = enabled,
-                    singleLine = false,
-                    maxLines = 3,
+                    singleLine = true,  // Single line so Enter sends
+                    maxLines = 1,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = { if (enabled && hasContent) onSend() }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = theme.inputText,
                         unfocusedTextColor = theme.inputText,

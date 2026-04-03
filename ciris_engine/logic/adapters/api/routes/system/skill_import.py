@@ -46,7 +46,7 @@ class SkillImportRequest(BaseModel):
         None, description="Local filesystem path to a skill directory or SKILL.md file"
     )
     output_dir: Optional[str] = Field(
-        None, description="Override output directory (default: ~/.ciris/adapters/)"
+        None, description="Override output directory (default: ~/ciris/adapters/)"
     )
     auto_load: bool = Field(
         True, description="Whether to automatically load the adapter after import"
@@ -293,7 +293,7 @@ async def import_skill(
     Parses the SKILL.md content, generates a full CIRIS adapter directory,
     and optionally loads it into the running runtime.
 
-    The adapter is created in ~/.ciris/adapters/ by default, which is
+    The adapter is created in ~/ciris/adapters/ by default, which is
     automatically discovered by the AdapterDiscoveryService.
 
     Requires ADMIN role.
@@ -374,7 +374,7 @@ async def list_imported_skills(
     """
     import json
 
-    user_adapters_dir = Path.home() / ".ciris" / "adapters"
+    user_adapters_dir = Path.home() / "ciris" / "adapters"
     skills: List[ImportedSkillInfo] = []
 
     if not user_adapters_dir.exists():
@@ -426,14 +426,14 @@ async def delete_imported_skill(
 ) -> Dict[str, Any]:
     """Delete a previously imported skill adapter.
 
-    Removes the adapter directory from ~/.ciris/adapters/.
+    Removes the adapter directory from ~/ciris/adapters/.
     If the adapter is currently loaded, it will be unloaded first.
 
     Requires ADMIN role.
     """
     import shutil
 
-    user_adapters_dir = Path.home() / ".ciris" / "adapters"
+    user_adapters_dir = Path.home() / "ciris" / "adapters"
     adapter_dir = user_adapters_dir / module_name
 
     if not adapter_dir.exists() or not module_name.startswith("imported_"):

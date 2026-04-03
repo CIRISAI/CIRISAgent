@@ -3,7 +3,7 @@
 Transforms a parsed OpenClaw skill into a CIRIS adapter directory
 that can be loaded by the AdapterDiscoveryService.
 
-Generated adapters are placed in ~/.ciris/adapters/ (user-installed path)
+Generated adapters are placed in ~/ciris/adapters/ (user-installed path)
 so they're automatically discovered on next startup.
 """
 
@@ -19,7 +19,7 @@ from .parser import ParsedSkill, SkillInstallSpec
 logger = logging.getLogger(__name__)
 
 # Default user adapter directory
-_USER_ADAPTERS_DIR = Path.home() / ".ciris" / "adapters"
+_USER_ADAPTERS_DIR = Path.home() / "ciris" / "adapters"
 
 
 def _sanitize_module_name(skill_name: str) -> str:

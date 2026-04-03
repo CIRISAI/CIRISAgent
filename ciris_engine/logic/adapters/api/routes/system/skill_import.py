@@ -297,7 +297,7 @@ async def _try_auto_load(request: Request, module_name: str) -> bool:
 async def preview_skill_import(
     request: Request,
     auth: AuthAdminDep,
-    body: Annotated[SkillImportRequest, Body(...)],
+    body: Annotated[SkillImportRequest, Body()],
 ) -> SkillPreviewResponse:
     """Preview what an imported skill will look like before committing.
 
@@ -333,7 +333,7 @@ async def preview_skill_import(
 async def import_skill(
     request: Request,
     auth: AuthAdminDep,
-    body: Annotated[SkillImportRequest, Body(...)],
+    body: Annotated[SkillImportRequest, Body()],
 ) -> SkillImportResponse:
     """Import an OpenClaw skill as a CIRIS adapter.
 

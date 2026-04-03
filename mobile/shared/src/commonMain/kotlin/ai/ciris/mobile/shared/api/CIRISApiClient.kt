@@ -5460,121 +5460,6 @@ class CIRISApiClient(
         }
     }
 
-    override fun close() {
-    logInfo("close", "Closing CIRISApiClient")
-    }
-}
-
-// ===== Scheduler Data Models =====
-
-@Serializable
-data class ScheduledTasksApiResponse(
-    val data: ScheduledTasksListData? = null
-)
-
-@Serializable
-data class SchedulerStatsApiResponse(
-    val data: SchedulerStatsData? = null
-)
-
-@Serializable
-data class ScheduledTaskApiResponse(
-    val data: ScheduledTaskData? = null
-)
-
-@Serializable
-data class ScheduledTasksListData(
-    val tasks: List<ScheduledTaskData> = emptyList(),
-    val total: Int = 0,
-    @SerialName("active_count")
-    val activeCount: Int = 0,
-    @SerialName("recurring_count")
-    val recurringCount: Int = 0
-)
-
-@Serializable
-data class ScheduledTaskData(
-    @SerialName("task_id")
-    val taskId: String,
-    val name: String,
-    @SerialName("goal_description")
-    val goalDescription: String,
-    val status: String,
-    @SerialName("defer_until")
-    val deferUntil: String? = null,
-    @SerialName("schedule_cron")
-    val scheduleCron: String? = null,
-    @SerialName("created_at")
-    val createdAt: String,
-    @SerialName("last_triggered_at")
-    val lastTriggeredAt: String? = null,
-    @SerialName("deferral_count")
-    val deferralCount: Int = 0,
-    @SerialName("is_recurring")
-    val isRecurring: Boolean = false
-) {
-    /**
-     * Human-friendly display of schedule.
-     */
-    val scheduleDisplay: String
-        get() = when {
-            scheduleCron != null -> cronToHumanReadable(scheduleCron)
-            deferUntil != null -> "One-time: $deferUntil"
-            else -> "No schedule"
-        }
-
-    /**
-     * Human-friendly status display.
-     */
-    val statusDisplay: String
-        get() = when (status.uppercase()) {
-            "PENDING" -> "Scheduled"
-            "ACTIVE" -> "Active"
-            "COMPLETE" -> "Completed"
-            "FAILED" -> "Failed"
-            "CANCELLED" -> "Cancelled"
-            else -> status
-        }
-
-    private fun cronToHumanReadable(cron: String): String {
-        // Simple cron parsing for common patterns
-        val parts = cron.split(" ")
-        if (parts.size < 5) return cron
-
-        val minute = parts[0]
-        val hour = parts[1]
-        val dayOfMonth = parts[2]
-        val month = parts[3]
-        val dayOfWeek = parts[4]
-
-        return when {
-            // Daily at specific time
-            minute != "*" && hour != "*" && dayOfMonth == "*" && month == "*" && dayOfWeek == "*" ->
-                "Daily at $hour:${minute.padStart(2, '0')}"
-            // Weekly on specific day
-            minute != "*" && hour != "*" && dayOfWeek != "*" ->
-                "Weekly on ${dayOfWeekName(dayOfWeek)} at $hour:${minute.padStart(2, '0')}"
-            // Every N minutes
-            minute.startsWith("*/") && hour == "*" ->
-                "Every ${minute.removePrefix("*/")} minutes"
-            // Every N hours
-            minute == "0" && hour.startsWith("*/") ->
-                "Every ${hour.removePrefix("*/")} hours"
-            else -> cron
-        }
-    }
-
-    private fun dayOfWeekName(day: String): String = when (day) {
-        "0", "7" -> "Sunday"
-        "1" -> "Monday"
-        "2" -> "Tuesday"
-        "3" -> "Wednesday"
-        "4" -> "Thursday"
-        "5" -> "Friday"
-        "6" -> "Saturday"
-        else -> day
-    }
-
     // ===== Skill Import API =====
 
     /**
@@ -5789,6 +5674,121 @@ data class ScheduledTaskData(
             logException(method, e)
             false
         }
+    }
+
+    override fun close() {
+    logInfo("close", "Closing CIRISApiClient")
+    }
+}
+
+// ===== Scheduler Data Models =====
+
+@Serializable
+data class ScheduledTasksApiResponse(
+    val data: ScheduledTasksListData? = null
+)
+
+@Serializable
+data class SchedulerStatsApiResponse(
+    val data: SchedulerStatsData? = null
+)
+
+@Serializable
+data class ScheduledTaskApiResponse(
+    val data: ScheduledTaskData? = null
+)
+
+@Serializable
+data class ScheduledTasksListData(
+    val tasks: List<ScheduledTaskData> = emptyList(),
+    val total: Int = 0,
+    @SerialName("active_count")
+    val activeCount: Int = 0,
+    @SerialName("recurring_count")
+    val recurringCount: Int = 0
+)
+
+@Serializable
+data class ScheduledTaskData(
+    @SerialName("task_id")
+    val taskId: String,
+    val name: String,
+    @SerialName("goal_description")
+    val goalDescription: String,
+    val status: String,
+    @SerialName("defer_until")
+    val deferUntil: String? = null,
+    @SerialName("schedule_cron")
+    val scheduleCron: String? = null,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("last_triggered_at")
+    val lastTriggeredAt: String? = null,
+    @SerialName("deferral_count")
+    val deferralCount: Int = 0,
+    @SerialName("is_recurring")
+    val isRecurring: Boolean = false
+) {
+    /**
+     * Human-friendly display of schedule.
+     */
+    val scheduleDisplay: String
+        get() = when {
+            scheduleCron != null -> cronToHumanReadable(scheduleCron)
+            deferUntil != null -> "One-time: $deferUntil"
+            else -> "No schedule"
+        }
+
+    /**
+     * Human-friendly status display.
+     */
+    val statusDisplay: String
+        get() = when (status.uppercase()) {
+            "PENDING" -> "Scheduled"
+            "ACTIVE" -> "Active"
+            "COMPLETE" -> "Completed"
+            "FAILED" -> "Failed"
+            "CANCELLED" -> "Cancelled"
+            else -> status
+        }
+
+    private fun cronToHumanReadable(cron: String): String {
+        // Simple cron parsing for common patterns
+        val parts = cron.split(" ")
+        if (parts.size < 5) return cron
+
+        val minute = parts[0]
+        val hour = parts[1]
+        val dayOfMonth = parts[2]
+        val month = parts[3]
+        val dayOfWeek = parts[4]
+
+        return when {
+            // Daily at specific time
+            minute != "*" && hour != "*" && dayOfMonth == "*" && month == "*" && dayOfWeek == "*" ->
+                "Daily at $hour:${minute.padStart(2, '0')}"
+            // Weekly on specific day
+            minute != "*" && hour != "*" && dayOfWeek != "*" ->
+                "Weekly on ${dayOfWeekName(dayOfWeek)} at $hour:${minute.padStart(2, '0')}"
+            // Every N minutes
+            minute.startsWith("*/") && hour == "*" ->
+                "Every ${minute.removePrefix("*/")} minutes"
+            // Every N hours
+            minute == "0" && hour.startsWith("*/") ->
+                "Every ${hour.removePrefix("*/")} hours"
+            else -> cron
+        }
+    }
+
+    private fun dayOfWeekName(day: String): String = when (day) {
+        "0", "7" -> "Sunday"
+        "1" -> "Monday"
+        "2" -> "Tuesday"
+        "3" -> "Wednesday"
+        "4" -> "Thursday"
+        "5" -> "Friday"
+        "6" -> "Saturday"
+        else -> day
     }
 }
 

@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ImportedSkillData
 import ai.ciris.mobile.shared.models.SkillImportResult
 import ai.ciris.mobile.shared.models.SkillPreviewData
+import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel.ImportPhase
@@ -15,11 +16,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,6 +67,33 @@ fun SkillImportDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Observe text input requests for test automation
+    val textInputRequest by TestAutomation.textInputRequests.collectAsState()
+
+    // Handle incoming text input requests
+    LaunchedEffect(textInputRequest) {
+        textInputRequest?.let { request ->
+            when (request.testTag) {
+                "input_skill_md" -> {
+                    if (request.clearFirst) {
+                        onContentChanged(request.text)
+                    } else {
+                        onContentChanged(skillMdContent + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+                "input_skill_source_url" -> {
+                    if (request.clearFirst) {
+                        onSourceUrlChanged(request.text)
+                    } else {
+                        onSourceUrlChanged(sourceUrl + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
+            }
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -495,7 +526,7 @@ private fun ResultContent(
         }
     }
 
-    Spacer(Modifier.weight(1f))
+    Spacer(Modifier.height(24.dp))
 
     Button(
         onClick = onDismiss,
@@ -557,7 +588,7 @@ fun WorkshopCard(
                     )
                 }
                 Icon(
-                    Icons.Filled.ExpandMore,
+                    Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

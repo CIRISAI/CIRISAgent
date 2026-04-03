@@ -352,6 +352,101 @@ class TestAutomationServer(
                     ))
                 }
 
+                // Act and View - combined action + tree fetch in one call
+                // Reduces 3 API calls (action + sleep + tree) to 1
+                post("/act") {
+                    val request = call.receive<ai.ciris.mobile.shared.testing.ActAndViewRequest>()
+
+                    // 1. Perform the action
+                    val actionResult: ai.ciris.mobile.shared.testing.ActionResponse = when (request.action.lowercase()) {
+                        "click" -> {
+                            val element = elements[request.testTag]
+                            if (element == null) {
+                                ai.ciris.mobile.shared.testing.ActionResponse(
+                                    success = false,
+                                    error = "Element not found: ${request.testTag}"
+                                )
+                            } else {
+                                val clicked = TestAutomation.triggerClick(request.testTag)
+                                if (clicked) {
+                                    ai.ciris.mobile.shared.testing.ActionResponse(
+                                        success = true,
+                                        element = request.testTag,
+                                        action = "click",
+                                        coordinates = "${element.centerX},${element.centerY}"
+                                    )
+                                } else {
+                                    // Fallback to mouse click
+                                    performMouseClick(element.centerX, element.centerY)
+                                    ai.ciris.mobile.shared.testing.ActionResponse(
+                                        success = true,
+                                        element = request.testTag,
+                                        action = "mouse-click",
+                                        coordinates = "${element.centerX},${element.centerY}"
+                                    )
+                                }
+                            }
+                        }
+                        "input" -> {
+                            val element = elements[request.testTag]
+                            if (element == null) {
+                                ai.ciris.mobile.shared.testing.ActionResponse(
+                                    success = false,
+                                    error = "Element not found: ${request.testTag}"
+                                )
+                            } else {
+                                TestAutomation.requestTextInput(request.testTag, request.text ?: "", request.clearFirst)
+                                ai.ciris.mobile.shared.testing.ActionResponse(
+                                    success = true,
+                                    element = request.testTag,
+                                    action = "input",
+                                    text = request.text
+                                )
+                            }
+                        }
+                        else -> ai.ciris.mobile.shared.testing.ActionResponse(
+                            success = false,
+                            error = "Unknown action: ${request.action}"
+                        )
+                    }
+
+                    // 2. Wait for UI to settle
+                    if (request.waitMs > 0) {
+                        delay(request.waitMs.toLong())
+                    }
+
+                    // 3. Get filtered elements
+                    val allElements = elements.values.toList()
+                    val filterPatterns = request.filterTags
+                    val filteredElements = if (filterPatterns.isNullOrEmpty()) {
+                        allElements
+                    } else {
+                        allElements.filter { element ->
+                            filterPatterns.any { pattern ->
+                                element.testTag.contains(pattern, ignoreCase = true)
+                            }
+                        }
+                    }
+
+                    call.respond(ai.ciris.mobile.shared.testing.ActAndViewResponse(
+                        actionResult = actionResult,
+                        screen = currentScreen,
+                        elements = filteredElements.map { e ->
+                            ai.ciris.mobile.shared.testing.ElementInfo(
+                                testTag = e.testTag,
+                                x = e.x,
+                                y = e.y,
+                                width = e.width,
+                                height = e.height,
+                                text = e.text,
+                                centerX = e.centerX,
+                                centerY = e.centerY
+                            )
+                        },
+                        elementCount = filteredElements.size
+                    ))
+                }
+
                 // Inject a file attachment (bypasses native file picker for test automation)
                 post("/inject-file") {
                     val request = call.receive<InjectFileRequest>()

@@ -56,3 +56,26 @@ data class ActionResponse(
     val screen: String? = null,
     val error: String? = null
 )
+
+/**
+ * Combined action + view request.
+ * Performs an action, waits, then returns the updated UI state.
+ * Reduces 3 API calls to 1.
+ */
+@Serializable
+data class ActAndViewRequest(
+    val action: String,                    // "click", "input", "wait"
+    val testTag: String,                   // Target element
+    val text: String? = null,              // For input action
+    val clearFirst: Boolean = true,        // For input action
+    val waitMs: Int = 500,                 // Wait after action before reading tree
+    val filterTags: List<String>? = null   // Only return elements matching these patterns (substring match)
+)
+
+@Serializable
+data class ActAndViewResponse(
+    val actionResult: ActionResponse,
+    val screen: String,
+    val elements: List<ElementInfo>,
+    val elementCount: Int
+)

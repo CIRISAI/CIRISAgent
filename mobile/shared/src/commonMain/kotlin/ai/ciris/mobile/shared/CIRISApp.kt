@@ -29,6 +29,7 @@ import ai.ciris.mobile.shared.localization.createLocalizationResourceLoader
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
+import ai.ciris.mobile.shared.ui.components.SkillImportDialog
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.AuditViewModel
@@ -55,6 +56,7 @@ import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
+import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
@@ -547,6 +549,9 @@ fun CIRISApp(
     }
     val serverConnectionViewModel: ServerConnectionViewModel = viewModel {
         ServerConnectionViewModel(apiClient, pythonRuntime, secureStorage)
+    }
+    val skillImportViewModel: SkillImportViewModel = viewModel {
+        SkillImportViewModel(apiClient)
     }
     val auditViewModel: AuditViewModel = viewModel {
         AuditViewModel(apiClient)
@@ -1676,6 +1681,10 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] User triggered refresh")
                         adaptersViewModel.refresh()
                     },
+                    onImportSkill = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Import skill requested")
+                        currentScreen = Screen.SkillImport
+                    },
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Navigating back to Interact")
                         currentScreen = Screen.Interact
@@ -2485,6 +2494,42 @@ fun CIRISApp(
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Wallet] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.SkillImport -> {
+                // Collect SkillImportViewModel state
+                val importPhase by skillImportViewModel.importPhase.collectAsState()
+                val skillMdContent by skillImportViewModel.skillMdContent.collectAsState()
+                val sourceUrl by skillImportViewModel.sourceUrl.collectAsState()
+                val preview by skillImportViewModel.preview.collectAsState()
+                val importResult by skillImportViewModel.importResult.collectAsState()
+                val isSkillLoading by skillImportViewModel.isLoading.collectAsState()
+                val skillError by skillImportViewModel.error.collectAsState()
+
+                // Initialize dialog state when entering screen
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i("CIRISApp", "[Screen.SkillImport] Opening skill import")
+                    skillImportViewModel.openImportDialog()
+                }
+
+                SkillImportDialog(
+                    phase = importPhase,
+                    skillMdContent = skillMdContent,
+                    sourceUrl = sourceUrl,
+                    preview = preview,
+                    importResult = importResult,
+                    isLoading = isSkillLoading,
+                    error = skillError,
+                    onContentChanged = { skillImportViewModel.updateSkillMdContent(it) },
+                    onSourceUrlChanged = { skillImportViewModel.updateSourceUrl(it) },
+                    onPreview = { skillImportViewModel.previewSkill() },
+                    onImport = { skillImportViewModel.importSkill() },
+                    onDismiss = {
+                        PlatformLogger.i("CIRISApp", "[Screen.SkillImport] Closing skill import")
+                        skillImportViewModel.closeImportDialog()
+                        currentScreen = Screen.Adapters
                     }
                 )
             }

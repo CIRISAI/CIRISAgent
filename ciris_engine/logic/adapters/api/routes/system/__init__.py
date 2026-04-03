@@ -36,14 +36,16 @@ router.include_router(services.router)
 # Shutdown: /system/shutdown, /system/local-shutdown
 router.include_router(shutdown.router)
 
-# Adapter management: /system/adapters/*
-router.include_router(adapters.router)
+# Skill import: /system/adapters/import-skill, /system/adapters/imported-skills
+# NOTE: Must be registered BEFORE adapters.router to avoid {adapter_type} wildcard matching
+router.include_router(skill_import.router)
 
 # Adapter configuration workflow: /system/adapters/{type}/configure/*, /system/adapters/configure/*
 router.include_router(adapter_config.router)
 
-# Skill import: /system/adapters/import-skill, /system/adapters/imported-skills
-router.include_router(skill_import.router)
+# Adapter management: /system/adapters/*
+# NOTE: This router has /adapters/{adapter_type} which must come AFTER static routes
+router.include_router(adapters.router)
 
 # Skill builder: /system/skills/* (HyperCard-style card builder)
 router.include_router(skill_builder.router)

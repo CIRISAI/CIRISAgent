@@ -155,7 +155,7 @@ class SkillToAdapterConverter:
         self._write_manifest(adapter_dir, module_name, skill)
         self._write_init(adapter_dir, module_name)
         self._write_adapter(adapter_dir, module_name, skill)
-        self._write_services(adapter_dir, module_name, skill)
+        self._write_services(adapter_dir, skill)
         self._write_original_skill(adapter_dir, skill)
         self._write_supporting_files(adapter_dir, skill)
 
@@ -337,7 +337,7 @@ class SkillToAdapterConverter:
         ''')
         (adapter_dir / "adapter.py").write_text(content, encoding="utf-8")
 
-    def _write_services(self, adapter_dir: Path, module_name: str, skill: ParsedSkill) -> None:
+    def _write_services(self, adapter_dir: Path, skill: ParsedSkill) -> None:
         """Generate services.py with a ToolService that exposes the skill."""
         # Build requirements block with all OpenClaw requirement types
         # NOTE: Indentation here must match where it's inserted in the template (line ~434)

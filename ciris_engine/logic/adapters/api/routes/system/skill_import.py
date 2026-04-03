@@ -8,6 +8,7 @@ Supports importing from:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -152,8 +153,19 @@ def _validate_local_path(local_path: str) -> Path:
 
     Raises ValueError if the path is outside allowed directories or invalid.
     """
-    # Resolve to absolute path (eliminates .. sequences)
-    resolved = Path(local_path).resolve()
+    # Pre-validation: reject obviously malicious input before constructing Path
+    if not local_path or not isinstance(local_path, str):
+        raise ValueError("Path must be a non-empty string")
+    if "\x00" in local_path:
+        raise ValueError("Path contains null bytes")
+    if len(local_path) > 4096:
+        raise ValueError("Path exceeds maximum length")
+
+    # Normalize and resolve to absolute path
+    # Use os.path.normpath first to handle .. without filesystem access
+    normalized = os.path.normpath(local_path)
+    # Now resolve to get the canonical absolute path
+    resolved = Path(normalized).resolve()
 
     # Define allowed base directories
     allowed_bases = [

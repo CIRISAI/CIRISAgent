@@ -12,6 +12,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+# Mark all tests in this module with a short timeout to prevent CI hangs
+pytestmark = pytest.mark.timeout(30)
+
+
 class TestHE300BenchmarkConfig:
     """Tests for HE-300 benchmark mode configuration in server.py."""
 

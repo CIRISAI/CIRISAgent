@@ -59,7 +59,8 @@ object TestAutomationHandler {
         val element = TestAutomationState.getElement(request.testTag)
             ?: return ActionResponse(success = false, error = "Element not found: ${request.testTag}")
 
-        TestAutomationState.requestTextInput(request.testTag, request.text, request.clearFirst)
+        // Use platform TestAutomation (not TestAutomationState) - dialogs observe the platform flow
+        ai.ciris.mobile.shared.platform.TestAutomation.requestTextInput(request.testTag, request.text, request.clearFirst)
 
         return ActionResponse(
             success = true,

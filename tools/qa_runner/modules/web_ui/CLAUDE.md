@@ -87,10 +87,31 @@ TestableModifier.kt        (Compose Modifier extensions)
 | `/tree` | GET | All visible elements with position, size, text |
 | `/screen` | GET | Current screen name |
 | `/element/{tag}` | GET | Single element info by testTag |
+| `/act` | POST | **Combined action + view** (preferred for automation) |
 | `/click` | POST | Click element: `{"testTag": "btn_send"}` |
 | `/input` | POST | Input text: `{"testTag": "input_message", "text": "hello", "clearFirst": true}` |
 | `/wait` | POST | Wait for element: `{"testTag": "btn_login", "timeoutMs": 5000}` |
 | `/navigate` | POST | Navigate to screen: `{"screen": "Settings"}` |
+
+### The `/act` Endpoint (Preferred for Automation)
+
+Combines action + wait + tree into one call. Reduces 3 HTTP requests to 1:
+
+```bash
+# Click and get resulting UI state with filtered elements
+curl -X POST http://localhost:8091/act \
+  -H "Content-Type: application/json" \
+  -d '{
+    "testTag": "btn_skill_workshop",
+    "action": "click",
+    "waitMs": 500,
+    "filterTags": ["skill", "import"]
+  }'
+```
+
+**Request:** `{"action": "click|input|wait", "testTag": "...", "text": "...", "clearFirst": true, "waitMs": 500, "filterTags": ["..."]}`
+
+**Response:** `{"actionResult": {...}, "screen": "SkillImport", "elements": [...], "elementCount": 5}`
 
 ### testable() vs testableClickable()
 
@@ -110,7 +131,17 @@ status = await helper.status()          # {"screen": "Interact", "elements": [..
 element = await helper.get_element("btn_send")  # ElementInfo or None
 visible = await helper.is_element_visible("btn_send")
 
-# Actions
+# Combined action + view (PREFERRED - reduces 3 calls to 1)
+result = await helper.act("btn_login_submit", "click", wait_ms=1000)
+print(f"Now on: {result['screen']}, elements: {result['elementCount']}")
+
+result = await helper.act(
+    "input_skill_md", "input",
+    text="---\nname: My Skill\n---",
+    filter_tags=["skill", "preview"]
+)
+
+# Individual actions (use act() instead when possible)
 await helper.click("btn_send")
 await helper.input_text("input_message", "hello", clear_first=True)
 

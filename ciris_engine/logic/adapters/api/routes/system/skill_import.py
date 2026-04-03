@@ -141,6 +141,54 @@ class ImportedSkillsListResponse(BaseModel):
 # Helper Functions
 # ============================================================================
 
+
+def _validate_local_path(local_path: str) -> Path:
+    """Validate and sanitize a local path to prevent path traversal attacks.
+
+    Only allows paths within:
+    - User's home directory
+    - Current working directory
+    - /tmp directory
+
+    Raises ValueError if the path is outside allowed directories or invalid.
+    """
+    # Resolve to absolute path (eliminates .. sequences)
+    resolved = Path(local_path).resolve()
+
+    # Define allowed base directories
+    allowed_bases = [
+        Path.home(),
+        Path.cwd(),
+        Path("/tmp"),
+    ]
+
+    # Check if resolved path is within any allowed base
+    is_allowed = False
+    for base in allowed_bases:
+        try:
+            resolved.relative_to(base)
+            is_allowed = True
+            break
+        except ValueError:
+            continue
+
+    if not is_allowed:
+        raise ValueError(
+            f"Path '{local_path}' is outside allowed directories. "
+            f"Local imports are restricted to your home directory, "
+            f"current working directory, or /tmp."
+        )
+
+    # Block access to sensitive directories even within home
+    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"]
+    path_str = str(resolved).lower()
+    for pattern in sensitive_patterns:
+        if pattern in path_str:
+            raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
+
+    return resolved
+
+
 def _parse_skill_from_request(req: SkillImportRequest) -> ParsedSkill:
     """Parse a skill from the request, handling all input modes."""
     parser = OpenClawSkillParser()
@@ -149,7 +197,8 @@ def _parse_skill_from_request(req: SkillImportRequest) -> ParsedSkill:
         return parser.parse_skill_md(req.skill_md_content, source_url=req.source_url)
 
     if req.local_path:
-        path = Path(req.local_path)
+        # Validate path to prevent traversal attacks
+        path = _validate_local_path(req.local_path)
         if path.is_dir():
             return parser.parse_directory(path, source_url=req.source_url)
         elif path.is_file():
@@ -240,7 +289,6 @@ async def _try_auto_load(request: Request, module_name: str) -> bool:
 
 @router.post(
     "/adapters/import-skill/preview",
-    response_model=SkillPreviewResponse,
     responses={
         400: {"description": "Invalid skill content"},
         500: {"description": "Server error"},
@@ -249,7 +297,7 @@ async def _try_auto_load(request: Request, module_name: str) -> bool:
 async def preview_skill_import(
     request: Request,
     auth: AuthAdminDep,
-    body: SkillImportRequest = Body(...),
+    body: Annotated[SkillImportRequest, Body(...)],
 ) -> SkillPreviewResponse:
     """Preview what an imported skill will look like before committing.
 
@@ -276,7 +324,6 @@ async def preview_skill_import(
 
 @router.post(
     "/adapters/import-skill",
-    response_model=SkillImportResponse,
     responses={
         400: {"description": "Invalid skill content"},
         409: {"description": "Skill already imported"},
@@ -286,7 +333,7 @@ async def preview_skill_import(
 async def import_skill(
     request: Request,
     auth: AuthAdminDep,
-    body: SkillImportRequest = Body(...),
+    body: Annotated[SkillImportRequest, Body(...)],
 ) -> SkillImportResponse:
     """Import an OpenClaw skill as a CIRIS adapter.
 
@@ -358,7 +405,6 @@ async def import_skill(
 
 @router.get(
     "/adapters/imported-skills",
-    response_model=ImportedSkillsListResponse,
     responses={500: {"description": "Server error"}},
 )
 async def list_imported_skills(

@@ -138,7 +138,7 @@ async def get_card(card_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
 @router.post("/skills/drafts", status_code=201)
 async def create_draft(
     auth: AuthAdminDep,
-    body: CreateDraftRequest = Body(default=CreateDraftRequest()),
+    body: Annotated[CreateDraftRequest, Body(default=CreateDraftRequest())],
 ) -> Dict[str, Any]:
     """Create a new skill draft.
 
@@ -183,7 +183,7 @@ async def get_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
 async def update_draft(
     draft_id: str,
     auth: AuthAdminDep,
-    body: UpdateDraftRequest = Body(...),
+    body: Annotated[UpdateDraftRequest, Body(...)],
 ) -> Dict[str, Any]:
     """Update a draft with new card data.
 
@@ -218,7 +218,7 @@ async def update_card(
     draft_id: str,
     card_id: str,
     auth: AuthAdminDep,
-    body: UpdateCardRequest = Body(...),
+    body: Annotated[UpdateCardRequest, Body(...)],
 ) -> Dict[str, Any]:
     """Update a single card in a draft.
 

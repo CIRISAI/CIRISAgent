@@ -440,7 +440,15 @@ class SkillBuilder:
             homepage=draft.identity.homepage,
             os=draft.requires.platforms,
             skill_key=None,
-            install=[],
+            install=[
+                SkillInstallSpec(
+                    kind=step.kind,
+                    formula=step.formula,
+                    package=step.package,
+                    bins=step.provides_binaries,
+                )
+                for step in draft.install.steps
+            ],
         )
 
         parsed = ParsedSkill(

@@ -439,6 +439,7 @@ class SkillToAdapterConverter:
                             detailed_instructions=SKILL_INSTRUCTIONS,
                             homepage={repr(skill.homepage)},
                         ),
+                        install_steps=[InstallStep(**s) for s in {install_steps_code}],
                     ),
                     "skill:{skill.name}:info": ToolInfo(
                         name="skill:{skill.name}:info",
@@ -587,5 +588,7 @@ class SkillToAdapterConverter:
         supporting_dir.mkdir(exist_ok=True)
 
         for rel_path, content in skill.supporting_files.items():
-            target = supporting_dir / Path(rel_path).name  # Flatten to single directory
+            # Preserve directory structure within supporting/
+            target = supporting_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")

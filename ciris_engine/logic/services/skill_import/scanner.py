@@ -435,7 +435,7 @@ def _simple_edit_distance(a: str, b: str) -> int:
     """Simple Levenshtein distance for typosquat detection."""
     if len(a) > len(b):
         a, b = b, a
-    distances = range(len(a) + 1)
+    distances: list[int] = list(range(len(a) + 1))
     for i2, c2 in enumerate(b):
         new_distances = [i2 + 1]
         for i1, c1 in enumerate(a):

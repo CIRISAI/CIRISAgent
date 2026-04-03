@@ -200,8 +200,9 @@ class TestSkillToAdapterConverter:
 
             supporting_dir = adapter_path / "supporting"
             assert supporting_dir.exists()
-            assert (supporting_dir / "docs.md").read_text() == "# Docs\nContent here"
-            assert (supporting_dir / "run.sh").read_text() == "#!/bin/bash\necho hi"
+            # Directory structure is preserved (not flattened)
+            assert (supporting_dir / "references" / "docs.md").read_text() == "# Docs\nContent here"
+            assert (supporting_dir / "scripts" / "run.sh").read_text() == "#!/bin/bash\necho hi"
 
     def test_idempotent_overwrite(self, full_skill: ParsedSkill):
         """Converting the same skill twice should overwrite cleanly."""

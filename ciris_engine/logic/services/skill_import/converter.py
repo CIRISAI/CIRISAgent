@@ -340,6 +340,7 @@ class SkillToAdapterConverter:
     def _write_services(self, adapter_dir: Path, module_name: str, skill: ParsedSkill) -> None:
         """Generate services.py with a ToolService that exposes the skill."""
         # Build requirements block with all OpenClaw requirement types
+        # NOTE: Indentation here must match where it's inserted in the template (line ~434)
         requirements_code = "None"
         if skill.metadata and skill.metadata.requires:
             req = skill.metadata.requires
@@ -348,14 +349,15 @@ class SkillToAdapterConverter:
             env_list = repr(req.env) if req.env else "[]"
             config_list = repr(req.config) if req.config else "[]"
             platforms_list = repr(skill.metadata.os) if skill.metadata.os else "[]"
-            requirements_code = textwrap.dedent(f"""\
-                ToolRequirements(
-                        binaries=[BinaryRequirement(name=b) for b in {bin_list}],
-                        any_binaries=[BinaryRequirement(name=b) for b in {any_bin_list}],
-                        env_vars=[EnvVarRequirement(name=e) for e in {env_list}],
-                        config_keys=[ConfigRequirement(key=c) for c in {config_list}],
-                        platforms={platforms_list},
-                    )""")
+            requirements_code = (
+                f"ToolRequirements(\n"
+                f"                            binaries=[BinaryRequirement(name=b) for b in {bin_list}],\n"
+                f"                            any_binaries=[BinaryRequirement(name=b) for b in {any_bin_list}],\n"
+                f"                            env_vars=[EnvVarRequirement(name=e) for e in {env_list}],\n"
+                f"                            config_keys=[ConfigRequirement(key=c) for c in {config_list}],\n"
+                f"                            platforms={platforms_list},\n"
+                f"                        )"
+            )
 
         # Build install steps
         install_steps_code = "[]"
@@ -510,13 +512,15 @@ class SkillToAdapterConverter:
                     user_input = parameters.get("input", "")
                     extra_args = parameters.get("args", {{}})
 
-                    # Gather supporting files
+                    # Gather supporting files (recursively)
                     supporting_contents: Dict[str, str] = {{}}
                     if _SUPPORTING_DIR.exists():
-                        for f in _SUPPORTING_DIR.iterdir():
+                        for f in _SUPPORTING_DIR.rglob("*"):
                             if f.is_file():
                                 try:
-                                    supporting_contents[f.name] = f.read_text(encoding="utf-8")
+                                    # Use relative path from supporting dir as key
+                                    rel_path = f.relative_to(_SUPPORTING_DIR)
+                                    supporting_contents[str(rel_path)] = f.read_text(encoding="utf-8")
                                 except (UnicodeDecodeError, OSError):
                                     pass
 

@@ -318,3 +318,17 @@ curl -X POST http://127.0.0.1:18080/v1/system/adapters/home_assistant/configure/
 # Desktop JAR (Windows/macOS/Linux)
 ./gradlew :desktopApp:packageDistributionForCurrentOS
 ```
+
+## Device Preferences
+
+**IMPORTANT**: When multiple Android devices are connected, always prefer the **older/lower-versioned device** for testing. This ensures compatibility with a wider range of devices.
+
+**Primary test device**: `330016f5b40463cd` (older Samsung without StrongBox - good for testing hardware security fallbacks)
+
+```bash
+# Install to specific device when multiple are connected
+~/Android/Sdk/platform-tools/adb -s 330016f5b40463cd install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
+# List connected devices
+~/Android/Sdk/platform-tools/adb devices
+```

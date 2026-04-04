@@ -258,9 +258,9 @@ class X402Provider(WalletProvider):
         """
         # Try build-time secret first (Android release builds)
         try:
-            from ._build_secrets import get_arka_api_key
+            from ._build_secrets import get_arka_api_key  # type: ignore[import-not-found]
 
-            key = get_arka_api_key()
+            key: Optional[str] = get_arka_api_key()
             if key:
                 logger.debug("[X402] Using build-time Arka API key")
                 return key

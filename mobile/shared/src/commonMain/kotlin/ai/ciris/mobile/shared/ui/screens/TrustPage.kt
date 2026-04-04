@@ -1453,26 +1453,34 @@ private fun L2Content(
 
     // Hardware Security Module - TPM, Secure Enclave, or Android Keystore
     val isIosPlatform = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
-        status.hardwareType?.contains("IOS", ignoreCase = true) == true
-    val hasHwEncryption = status.hardwareBacked &&
-        status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+        status.hardwareType?.contains("Ios", ignoreCase = true) == true
+    val isMacPlatform = status.platformOs?.lowercase() == "darwin" ||
+        status.hardwareType?.contains("MacOs", ignoreCase = true) == true
+    val isAppleSE = isIosPlatform || isMacPlatform
+    val hasHwEncryption = status.hardwareBacked && (
+        status.keyStorageMode?.contains("HW", ignoreCase = true) == true ||
+        status.keyStorageMode?.contains("Secure Enclave", ignoreCase = true) == true ||
+        status.keyStorageMode?.contains("Keychain", ignoreCase = true) == true ||
+        status.keyStorageMode?.contains("Keystore", ignoreCase = true) == true ||
+        status.keyStorageMode?.contains("TPM", ignoreCase = true) == true
+    )
     val keystoreLabel = when {
         isTpm -> "TPM 2.0"
-        isIosPlatform -> "Secure Enclave"
+        isAppleSE -> "Secure Enclave"
         else -> "Hardware Keystore"
     }
     val keystoreValue = when {
         isTpm && status.hardwareBacked -> status.hardwareType?.replace("_", " ") ?: "TPM Hardware"
         hasHwEncryption -> status.keyStorageMode ?: "Hardware-backed"
-        isIosPlatform && status.hardwareBacked -> "iOS Secure Enclave (Software Key)"
-        status.hardwareBacked -> "Android Keystore (Software)"
+        isAppleSE && status.hardwareBacked -> "Apple SE (ECIES)"
+        status.hardwareBacked -> "Hardware-backed (${status.keyStorageMode ?: "unknown"})"
         else -> "Software fallback"
     }
     DetailRow(
         label = keystoreLabel,
         value = keystoreValue,
-        ok = if (isTpm) status.hardwareBacked else hasHwEncryption,
-        pending = !isTpm && status.hardwareBacked && !hasHwEncryption  // Yellow if Keystore but no HW encryption
+        ok = status.hardwareBacked && (hasHwEncryption || isTpm || isAppleSE),
+        pending = status.hardwareBacked && !hasHwEncryption && !isTpm && !isAppleSE
     )
 
     // Device/Platform Attestation: TPM Quote (desktop), App Attest (iOS), or Play Integrity (Android)

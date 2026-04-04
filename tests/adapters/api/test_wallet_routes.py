@@ -4,22 +4,21 @@ Tests for wallet API routes.
 Tests paymaster configuration, status endpoints, and wallet functionality.
 """
 
-import pytest
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ciris_engine.logic.adapters.api.dependencies.auth import require_admin
 from ciris_engine.logic.adapters.api.routes.wallet import (
-    router,
-    WalletStatusResponse,
     PaymasterKeyRequest,
     PaymasterKeyResponse,
+    WalletStatusResponse,
     _get_wallet_provider_from_app,
+    router,
 )
-from ciris_engine.logic.adapters.api.dependencies.auth import require_admin
-
 
 # ==============================================================================
 # Fixtures
@@ -248,10 +247,7 @@ class TestPaymasterKeyConfiguration:
         app.dependency_overrides[require_admin] = lambda: MagicMock()
         client = TestClient(app)
 
-        response = client.post(
-            "/v1/wallet/paymaster/configure",
-            json={"api_key": "etherspot_LAyjUvxq9vtBR41sHsEzBJ"}
-        )
+        response = client.post("/v1/wallet/paymaster/configure", json={"api_key": "etherspot_LAyjUvxq9vtBR41sHsEzBJ"})
 
         assert response.status_code == 200
         data = response.json()
@@ -261,10 +257,7 @@ class TestPaymasterKeyConfiguration:
 
     def test_configure_paymaster_key_empty(self, client):
         """Test configuration with empty key."""
-        response = client.post(
-            "/v1/wallet/paymaster/configure",
-            json={"api_key": ""}
-        )
+        response = client.post("/v1/wallet/paymaster/configure", json={"api_key": ""})
 
         assert response.status_code == 200
         data = response.json()
@@ -273,10 +266,7 @@ class TestPaymasterKeyConfiguration:
 
     def test_configure_paymaster_key_whitespace_only(self, client):
         """Test configuration with whitespace-only key."""
-        response = client.post(
-            "/v1/wallet/paymaster/configure",
-            json={"api_key": "   "}
-        )
+        response = client.post("/v1/wallet/paymaster/configure", json={"api_key": "   "})
 
         assert response.status_code == 200
         data = response.json()
@@ -287,10 +277,7 @@ class TestPaymasterKeyConfiguration:
         """Test configuration with non-Etherspot format key (should still work with warning)."""
         mock_provider.paymaster_config.enabled = True
 
-        response = client.post(
-            "/v1/wallet/paymaster/configure",
-            json={"api_key": "some_other_api_key_format_123"}
-        )
+        response = client.post("/v1/wallet/paymaster/configure", json={"api_key": "some_other_api_key_format_123"})
 
         # Should still succeed - we allow non-standard formats
         assert response.status_code == 200

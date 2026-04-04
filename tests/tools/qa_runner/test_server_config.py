@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # Mark all tests in this module with a short timeout to prevent CI hangs
 pytestmark = pytest.mark.timeout(30)
 

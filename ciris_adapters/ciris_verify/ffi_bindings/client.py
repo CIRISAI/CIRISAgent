@@ -308,6 +308,7 @@ class CIRISVerify:
         # 1. Check pip-installed ciris_verify package FIRST — always correct platform
         try:
             import ciris_verify as cv_pkg
+
             pkg_dir = Path(cv_pkg.__file__).parent
             for suffix in suffixes:
                 candidate = pkg_dir / f"libciris_verify_ffi{suffix}"

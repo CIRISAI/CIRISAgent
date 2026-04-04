@@ -220,17 +220,13 @@ class ArkaClient:
             response = await client.post(url, json=payload, headers=headers)
 
             if response.status_code != 200:
-                raise PaymasterError(
-                    f"Arka request failed: {response.status_code} - {response.text}"
-                )
+                raise PaymasterError(f"Arka request failed: {response.status_code} - {response.text}")
 
             result = response.json()
 
             if "error" in result:
                 error = result["error"]
-                raise PaymasterError(
-                    f"Arka sponsorship failed: {error.get('message', error)}"
-                )
+                raise PaymasterError(f"Arka sponsorship failed: {error.get('message', error)}")
 
             data = result.get("result", {})
             logger.info(f"[Arka] Sponsorship approved for sender={user_op.sender}")
@@ -315,17 +311,13 @@ class BundlerClient:
             )
 
             if response.status_code != 200:
-                raise BundlerError(
-                    f"Bundler request failed: {response.status_code} - {response.text}"
-                )
+                raise BundlerError(f"Bundler request failed: {response.status_code} - {response.text}")
 
             result = response.json()
 
             if "error" in result:
                 error = result["error"]
-                raise BundlerError(
-                    f"Bundler RPC error: {error.get('message', error)}"
-                )
+                raise BundlerError(f"Bundler RPC error: {error.get('message', error)}")
 
             return result.get("result")
 
@@ -444,17 +436,13 @@ class BundlerClient:
             receipt = await self.get_user_operation_receipt(user_op_hash)
             if receipt is not None:
                 if not receipt.success:
-                    raise BundlerError(
-                        f"UserOperation failed on-chain: {user_op_hash}"
-                    )
+                    raise BundlerError(f"UserOperation failed on-chain: {user_op_hash}")
                 return receipt
 
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
 
-        raise BundlerError(
-            f"Timeout waiting for UserOperation receipt: {user_op_hash}"
-        )
+        raise BundlerError(f"Timeout waiting for UserOperation receipt: {user_op_hash}")
 
 
 # =============================================================================

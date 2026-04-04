@@ -233,9 +233,7 @@ class SkillToAdapterConverter:
         # Remove None values
         manifest = {k: v for k, v in manifest.items() if v is not None}
 
-        (adapter_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
+        (adapter_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     def _write_init(self, adapter_dir: Path, module_name: str) -> None:
         """Generate __init__.py."""
@@ -244,7 +242,8 @@ class SkillToAdapterConverter:
 
     def _write_adapter(self, adapter_dir: Path, module_name: str, skill: ParsedSkill) -> None:
         """Generate adapter.py implementing BaseAdapterProtocol."""
-        content = textwrap.dedent(f'''\
+        content = textwrap.dedent(
+            f'''\
             """Adapter for imported OpenClaw skill: {skill.name}."""
 
             import asyncio
@@ -334,7 +333,8 @@ class SkillToAdapterConverter:
 
 
             Adapter = ImportedSkillAdapter
-        ''')
+        '''
+        )
         (adapter_dir / "adapter.py").write_text(content, encoding="utf-8")
 
     def _write_services(self, adapter_dir: Path, skill: ParsedSkill) -> None:
@@ -368,7 +368,8 @@ class SkillToAdapterConverter:
         # Escape the instructions for embedding as a Python string
         escaped_instructions = skill.instructions.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
-        content = textwrap.dedent(f'''\
+        content = textwrap.dedent(
+            f'''\
             """Tool service for imported OpenClaw skill: {skill.name}."""
 
             import logging
@@ -552,7 +553,8 @@ class SkillToAdapterConverter:
 
                 async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
                     return tool_name in self.TOOL_DEFINITIONS
-        ''')
+        '''
+        )
         (adapter_dir / "services.py").write_text(content, encoding="utf-8")
 
     def _build_tags(self, skill: ParsedSkill) -> List[str]:

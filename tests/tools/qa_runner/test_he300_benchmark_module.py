@@ -10,7 +10,6 @@ import pytest
 from tools.qa_runner.config import QAConfig, QAModule
 from tools.qa_runner.modules.he300_benchmark_tests import HE300BenchmarkModule
 
-
 # Mark all tests in this module with a short timeout to prevent CI hangs
 pytestmark = pytest.mark.timeout(30)
 

@@ -182,9 +182,7 @@ class ChainClient:
 
         # ERC-4337 contracts
         self.entrypoint: str = ENTRYPOINT_V06
-        self.account_factory: str = SIMPLE_ACCOUNT_FACTORY.get(
-            network, SIMPLE_ACCOUNT_FACTORY["base-mainnet"]
-        )
+        self.account_factory: str = SIMPLE_ACCOUNT_FACTORY.get(network, SIMPLE_ACCOUNT_FACTORY["base-mainnet"])
 
         logger.info(f"ChainClient initialized for {network} (chain_id={self.chain_id})")
 
@@ -714,8 +712,7 @@ class ChainClient:
             max_fee = base_fee * 2 + priority_fee
 
             logger.debug(
-                f"[ChainClient] Fee data: baseFee={base_fee}, "
-                f"maxFee={max_fee}, priorityFee={priority_fee}"
+                f"[ChainClient] Fee data: baseFee={base_fee}, " f"maxFee={max_fee}, priorityFee={priority_fee}"
             )
             return max_fee, priority_fee
         except Exception as e:

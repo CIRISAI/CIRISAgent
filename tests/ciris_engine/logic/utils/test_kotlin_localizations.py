@@ -20,10 +20,10 @@ PATTERNS = [
 
 # Keys to ignore (dynamic keys with variable interpolation)
 IGNORED_KEY_PATTERNS = [
-    r'\$',  # Contains variable interpolation like $key
-    r'^api_key_',  # Dynamic API key storage
-    r'^memory_key$',  # Internal memory key
-    r'^memory_service$',  # Internal service name
+    r"\$",  # Contains variable interpolation like $key
+    r"^api_key_",  # Dynamic API key storage
+    r"^memory_key$",  # Internal memory key
+    r"^memory_service$",  # Internal service name
 ]
 
 
@@ -103,9 +103,7 @@ class TestKotlinLocalizations:
 
         return all_keys
 
-    def test_all_kotlin_keys_exist_in_localization(
-        self, localization_keys: set[str], kotlin_keys: set[str]
-    ) -> None:
+    def test_all_kotlin_keys_exist_in_localization(self, localization_keys: set[str], kotlin_keys: set[str]) -> None:
         """Verify all Kotlin localization keys exist in en.json."""
         missing_keys = kotlin_keys - localization_keys
 
@@ -163,8 +161,7 @@ class TestKotlinLocalizations:
         """Sanity check that we have a reasonable number of keys."""
         # Should have at least 1000 keys for a full app
         assert len(localization_keys) >= 1000, (
-            f"Only {len(localization_keys)} localization keys found. "
-            "This seems low - check if en.json is complete."
+            f"Only {len(localization_keys)} localization keys found. " "This seems low - check if en.json is complete."
         )
 
     def test_all_languages_have_mobile_section(self, project_root: Path) -> None:
@@ -180,6 +177,4 @@ class TestKotlinLocalizations:
             with open(json_file) as f:
                 data = json.load(f)
 
-            assert "mobile" in data, (
-                f"{json_file.name} is missing 'mobile' section"
-            )
+            assert "mobile" in data, f"{json_file.name} is missing 'mobile' section"

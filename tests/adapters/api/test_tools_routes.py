@@ -23,9 +23,7 @@ class TestToolBalanceEndpoints:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
-    def test_get_tool_balance_without_google_token_returns_401(
-        self, mock_token, client, auth_headers
-    ):
+    def test_get_tool_balance_without_google_token_returns_401(self, mock_token, client, auth_headers):
         """Test that balance endpoint without Google token returns 401."""
         mock_token.return_value = None  # Explicitly no token
         response = client.get("/v1/api/tools/balance/web_search", headers=auth_headers)
@@ -191,9 +189,7 @@ class TestToolCreditCheckEndpoint:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
-    def test_check_credit_without_google_token_returns_401(
-        self, mock_token, client, auth_headers
-    ):
+    def test_check_credit_without_google_token_returns_401(self, mock_token, client, auth_headers):
         """Test that credit check without Google token returns 401."""
         mock_token.return_value = None  # Explicitly no token
         response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)

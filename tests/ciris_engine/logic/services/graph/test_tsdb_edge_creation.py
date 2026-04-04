@@ -1250,9 +1250,7 @@ class TestDailyConsolidationEdgeCreation:
 
         # Create temporal edges
         edges_created = edge_manager.create_temporal_edges(current_node, previous_node.id)
-        assert (
-            edges_created == 3
-        )  # TEMPORAL_NEXT to self, TEMPORAL_NEXT from prev to current, TEMPORAL_PREV to prev
+        assert edges_created == 3  # TEMPORAL_NEXT to self, TEMPORAL_NEXT from prev to current, TEMPORAL_PREV to prev
 
         # Verify edges were created correctly
         cursor.execute(

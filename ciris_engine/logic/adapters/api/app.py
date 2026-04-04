@@ -214,6 +214,11 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     Returns:
         Configured FastAPI application
     """
+    from ciris_engine.logic.runtime.startup_logging import set_api_status
+
+    print("[STARTUP] Creating API application...")
+    set_api_status("creating_api")
+
     # Determine root_path for reverse proxy support
     root_path = ""
     if adapter_config and hasattr(adapter_config, "proxy_path") and adapter_config.proxy_path:
@@ -249,14 +254,20 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         return response
 
     # Configure middleware
+    print("[STARTUP] Configuring middleware...")
+    set_api_status("configuring_middleware")
     _configure_cors(app, adapter_config)
     _configure_rate_limiting(app, adapter_config)
 
     # Initialize app state with runtime and service placeholders
     if runtime:
+        print("[STARTUP] Initializing runtime state...")
+        set_api_status("initializing_runtime")
         _initialize_app_state(app, runtime)
 
     # Mount v1 API routes
+    print("[STARTUP] Registering API routes...")
+    set_api_status("registering_routes")
     v1_routers = [
         setup.router,
         agent.router,
@@ -291,9 +302,14 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # Mount emergency routes at root level (no /v1 prefix)
     app.include_router(emergency.router)
 
+    print("[STARTUP] Routes registered successfully")
+    set_api_status("routes_registered")
+
     # Mount GUI static assets (MUST be LAST for proper route priority)
     _mount_gui_assets(app)
 
+    print("[STARTUP] API application ready")
+    set_api_status("api_ready")
     return app
 
 

@@ -37,10 +37,10 @@ class Severity(str, Enum):
     """Finding severity levels."""
 
     CRITICAL = "critical"  # Immediate danger - do not install
-    HIGH = "high"          # Likely malicious - review carefully
-    MEDIUM = "medium"      # Suspicious pattern - investigate
-    LOW = "low"            # Minor concern - be aware
-    INFO = "info"          # Informational - no action needed
+    HIGH = "high"  # Likely malicious - review carefully
+    MEDIUM = "medium"  # Suspicious pattern - investigate
+    LOW = "low"  # Minor concern - be aware
+    INFO = "info"  # Informational - no action needed
 
 
 class SkillSecurityFinding(BaseModel):
@@ -149,18 +149,31 @@ _OBFUSCATION_PATTERNS = [
 
 # Known typosquatted skill names (from ClawHavoc campaign)
 _KNOWN_TYPOSQUATS = {
-    "githob-integration", "github-intergration", "github-integartion",
-    "web-serach", "web-seach", "websearch-pro",
-    "google-searh", "gooogle-search",
-    "slack-intergration", "slak-integration",
-    "docker-managment", "dockerr-manager",
+    "githob-integration",
+    "github-intergration",
+    "github-integartion",
+    "web-serach",
+    "web-seach",
+    "websearch-pro",
+    "google-searh",
+    "gooogle-search",
+    "slack-intergration",
+    "slak-integration",
+    "docker-managment",
+    "dockerr-manager",
 }
 
 # Popular legitimate skill names (for typosquat detection)
 _POPULAR_SKILLS = {
-    "github-integration", "web-search", "google-search",
-    "slack-integration", "docker-manager", "aws-cli",
-    "kubernetes", "terraform", "ansible",
+    "github-integration",
+    "web-search",
+    "google-search",
+    "slack-integration",
+    "docker-manager",
+    "aws-cli",
+    "kubernetes",
+    "terraform",
+    "ansible",
 }
 
 
@@ -225,14 +238,16 @@ class SkillSecurityScanner:
         for pattern, description in _PROMPT_INJECTION_PATTERNS:
             match = re.search(pattern, lower, re.IGNORECASE)
             if match:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.CRITICAL,
-                    category="prompt_injection",
-                    title="Prompt injection detected",
-                    description=f"This skill tries to manipulate the agent's behavior: {description}",
-                    evidence=match.group(0)[:100],
-                    recommendation="Do NOT import this skill. It contains instructions designed to bypass safety controls.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.CRITICAL,
+                        category="prompt_injection",
+                        title="Prompt injection detected",
+                        description=f"This skill tries to manipulate the agent's behavior: {description}",
+                        evidence=match.group(0)[:100],
+                        recommendation="Do NOT import this skill. It contains instructions designed to bypass safety controls.",
+                    )
+                )
 
         return findings
 
@@ -244,14 +259,16 @@ class SkillSecurityScanner:
         for pattern, description in _CREDENTIAL_PATTERNS:
             match = re.search(pattern, lower, re.IGNORECASE)
             if match:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.HIGH,
-                    category="credential_access",
-                    title="Accesses sensitive data",
-                    description=f"This skill accesses sensitive files on your device: {description}",
-                    evidence=match.group(0)[:100],
-                    recommendation="Review carefully. This skill may be trying to steal passwords or keys.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.HIGH,
+                        category="credential_access",
+                        title="Accesses sensitive data",
+                        description=f"This skill accesses sensitive files on your device: {description}",
+                        evidence=match.group(0)[:100],
+                        recommendation="Review carefully. This skill may be trying to steal passwords or keys.",
+                    )
+                )
 
         return findings
 
@@ -262,14 +279,16 @@ class SkillSecurityScanner:
         for pattern, description in _BACKDOOR_PATTERNS:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.CRITICAL,
-                    category="backdoor",
-                    title="Backdoor or reverse shell detected",
-                    description=f"This skill tries to open a connection back to an attacker: {description}",
-                    evidence=match.group(0)[:100],
-                    recommendation="Do NOT import. This is a known malware pattern from the ClawHub security crisis.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.CRITICAL,
+                        category="backdoor",
+                        title="Backdoor or reverse shell detected",
+                        description=f"This skill tries to open a connection back to an attacker: {description}",
+                        evidence=match.group(0)[:100],
+                        recommendation="Do NOT import. This is a known malware pattern from the ClawHub security crisis.",
+                    )
+                )
 
         return findings
 
@@ -280,14 +299,16 @@ class SkillSecurityScanner:
         for pattern, description in _CRYPTOMINER_PATTERNS:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.CRITICAL,
-                    category="cryptominer",
-                    title="Cryptocurrency miner detected",
-                    description=f"This skill installs or runs a cryptocurrency miner: {description}",
-                    evidence=match.group(0)[:100],
-                    recommendation="Do NOT import. This skill will use your device to mine cryptocurrency.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.CRITICAL,
+                        category="cryptominer",
+                        title="Cryptocurrency miner detected",
+                        description=f"This skill installs or runs a cryptocurrency miner: {description}",
+                        evidence=match.group(0)[:100],
+                        recommendation="Do NOT import. This skill will use your device to mine cryptocurrency.",
+                    )
+                )
 
         return findings
 
@@ -298,14 +319,16 @@ class SkillSecurityScanner:
         for pattern, description in _OBFUSCATION_PATTERNS:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.MEDIUM,
-                    category="obfuscation",
-                    title="Hidden or obfuscated code",
-                    description=f"This skill contains code that's hard to read on purpose: {description}",
-                    evidence=match.group(0)[:100],
-                    recommendation="Legitimate skills don't hide their code. Review with caution.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.MEDIUM,
+                        category="obfuscation",
+                        title="Hidden or obfuscated code",
+                        description=f"This skill contains code that's hard to read on purpose: {description}",
+                        evidence=match.group(0)[:100],
+                        recommendation="Legitimate skills don't hide their code. Review with caution.",
+                    )
+                )
 
         return findings
 
@@ -323,14 +346,16 @@ class SkillSecurityScanner:
             if match:
                 tool_name = match.group(0).split("(")[0].strip().lower()
                 if tool_name not in declared_bins and tool_type == "network_tool":
-                    findings.append(SkillSecurityFinding(
-                        severity=Severity.MEDIUM,
-                        category="undeclared_network",
-                        title="Uses internet without declaring it",
-                        description=f"This skill uses '{match.group(0)}' to access the internet but doesn't list it in requirements.",
-                        evidence=match.group(0)[:100],
-                        recommendation="The skill should declare all programs it uses. This could be an oversight or intentional hiding.",
-                    ))
+                    findings.append(
+                        SkillSecurityFinding(
+                            severity=Severity.MEDIUM,
+                            category="undeclared_network",
+                            title="Uses internet without declaring it",
+                            description=f"This skill uses '{match.group(0)}' to access the internet but doesn't list it in requirements.",
+                            evidence=match.group(0)[:100],
+                            recommendation="The skill should declare all programs it uses. This could be an oversight or intentional hiding.",
+                        )
+                    )
 
         return findings
 
@@ -341,14 +366,16 @@ class SkillSecurityScanner:
 
         # Direct known typosquats
         if name_lower in _KNOWN_TYPOSQUATS:
-            findings.append(SkillSecurityFinding(
-                severity=Severity.CRITICAL,
-                category="typosquatting",
-                title="Known fake skill name",
-                description=f"The name '{skill_name}' is a known typosquat from the ClawHub malware campaign.",
-                evidence=skill_name,
-                recommendation="Do NOT import. This name was used in the ClawHavoc malware campaign.",
-            ))
+            findings.append(
+                SkillSecurityFinding(
+                    severity=Severity.CRITICAL,
+                    category="typosquatting",
+                    title="Known fake skill name",
+                    description=f"The name '{skill_name}' is a known typosquat from the ClawHub malware campaign.",
+                    evidence=skill_name,
+                    recommendation="Do NOT import. This name was used in the ClawHavoc malware campaign.",
+                )
+            )
             return findings
 
         # Levenshtein-like check against popular names
@@ -357,14 +384,16 @@ class SkillSecurityScanner:
                 continue
             distance = _simple_edit_distance(name_lower, popular)
             if 0 < distance <= 2 and len(name_lower) > 3:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.HIGH,
-                    category="typosquatting",
-                    title="Name very similar to a popular skill",
-                    description=f"The name '{skill_name}' is very similar to the popular skill '{popular}'. This could be a typosquat attack.",
-                    evidence=f"{skill_name} ≈ {popular}",
-                    recommendation="Verify this is the real skill, not an imitation. Check the source URL.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.HIGH,
+                        category="typosquatting",
+                        title="Name very similar to a popular skill",
+                        description=f"The name '{skill_name}' is very similar to the popular skill '{popular}'. This could be a typosquat attack.",
+                        evidence=f"{skill_name} ≈ {popular}",
+                        recommendation="Verify this is the real skill, not an imitation. Check the source URL.",
+                    )
+                )
 
         return findings
 
@@ -373,31 +402,35 @@ class SkillSecurityScanner:
         findings = []
 
         # Check if instructions reference env vars not declared in requires
-        env_pattern = re.findall(r'[A-Z][A-Z0-9_]{3,}(?:_KEY|_TOKEN|_SECRET|_PASSWORD|_API)', skill.instructions or "")
+        env_pattern = re.findall(r"[A-Z][A-Z0-9_]{3,}(?:_KEY|_TOKEN|_SECRET|_PASSWORD|_API)", skill.instructions or "")
         declared_env = set()
         if skill.metadata and skill.metadata.requires:
             declared_env = set(skill.metadata.requires.env)
 
         for env_ref in env_pattern:
             if env_ref not in declared_env:
-                findings.append(SkillSecurityFinding(
-                    severity=Severity.LOW,
-                    category="metadata_inconsistency",
-                    title="Uses a secret not listed in requirements",
-                    description=f"The instructions mention '{env_ref}' but it's not listed as a required environment variable.",
-                    evidence=env_ref,
-                    recommendation="The skill should declare all secrets it uses. This may be an oversight.",
-                ))
+                findings.append(
+                    SkillSecurityFinding(
+                        severity=Severity.LOW,
+                        category="metadata_inconsistency",
+                        title="Uses a secret not listed in requirements",
+                        description=f"The instructions mention '{env_ref}' but it's not listed as a required environment variable.",
+                        evidence=env_ref,
+                        recommendation="The skill should declare all secrets it uses. This may be an oversight.",
+                    )
+                )
 
         # Check for suspiciously short description with long instructions
         if len(skill.description or "") < 10 and len(skill.instructions or "") > 500:
-            findings.append(SkillSecurityFinding(
-                severity=Severity.LOW,
-                category="metadata_inconsistency",
-                title="Very short description with long instructions",
-                description="The skill has almost no description but very long instructions. Legitimate skills usually describe what they do.",
-                recommendation="Check that the instructions match what you expect.",
-            ))
+            findings.append(
+                SkillSecurityFinding(
+                    severity=Severity.LOW,
+                    category="metadata_inconsistency",
+                    title="Very short description with long instructions",
+                    description="The skill has almost no description but very long instructions. Legitimate skills usually describe what they do.",
+                    recommendation="Check that the instructions match what you expect.",
+                )
+            )
 
         return findings
 
@@ -419,15 +452,9 @@ class SkillSecurityScanner:
             )
 
         if report.medium_count > 0:
-            return (
-                f"Caution: Found {report.medium_count} suspicious pattern(s). "
-                "Probably safe but worth reviewing."
-            )
+            return f"Caution: Found {report.medium_count} suspicious pattern(s). " "Probably safe but worth reviewing."
 
-        return (
-            f"Found {report.total_findings} minor note(s). "
-            "No significant concerns."
-        )
+        return f"Found {report.total_findings} minor note(s). " "No significant concerns."
 
 
 def _simple_edit_distance(a: str, b: str) -> int:

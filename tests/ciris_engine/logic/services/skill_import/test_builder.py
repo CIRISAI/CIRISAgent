@@ -20,7 +20,6 @@ from ciris_engine.logic.services.skill_import.builder import (
     get_card_schema,
 )
 
-
 OPENCLAW_SKILL = """\
 ---
 name: todoist-cli
@@ -219,9 +218,7 @@ class TestValidation:
         draft = builder.create_draft()
         draft.identity.name = "my-skill"
         draft.identity.description = "Does things"
-        draft.tools.tools = [
-            ToolCard(name="my-tool", description="Does a thing")
-        ]
+        draft.tools.tools = [ToolCard(name="my-tool", description="Does a thing")]
         errors = builder.validate_draft(draft)
         assert errors == []
 
@@ -235,16 +232,12 @@ class TestValidation:
 
     def test_validate_card_data(self, builder: SkillBuilder):
         # Valid identity card
-        errors = builder.validate_card("identity", {
-            "name": "test", "description": "test", "version": "1.0.0"
-        })
+        errors = builder.validate_card("identity", {"name": "test", "description": "test", "version": "1.0.0"})
         assert errors == []
 
     def test_validate_card_rejects_bad_data(self, builder: SkillBuilder):
         # Extra fields not allowed
-        errors = builder.validate_card("identity", {
-            "name": "test", "unknown_field": True
-        })
+        errors = builder.validate_card("identity", {"name": "test", "unknown_field": True})
         assert len(errors) > 0
 
 

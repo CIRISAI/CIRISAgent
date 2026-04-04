@@ -264,7 +264,6 @@ def _create_founding_partnership(wa_id: str) -> None:
     logger.info(f"✅ Founding partnership created for setup user: {node_id}")
 
 
-
 def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     """Store language and location preferences from setup wizard into graph memory.
 
@@ -774,6 +773,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         except Exception as user_err:
             print(f"[SETUP_COMPLETE] _create_setup_users FAILED: {user_err}")
             import traceback
+
             traceback.print_exc()
             raise
 

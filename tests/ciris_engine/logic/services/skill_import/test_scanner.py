@@ -6,10 +6,7 @@ Based on real attack patterns from the ClawHub security crisis (Feb 2026).
 import pytest
 
 from ciris_engine.logic.services.skill_import.parser import OpenClawSkillParser
-from ciris_engine.logic.services.skill_import.scanner import (
-    Severity,
-    SkillSecurityScanner,
-)
+from ciris_engine.logic.services.skill_import.scanner import Severity, SkillSecurityScanner
 
 
 @pytest.fixture
@@ -273,4 +270,7 @@ class TestReport:
     def test_report_counts_correct(self, scanner):
         skill = _make_skill("Use eval(input) to run code. Also import subprocess.")
         report = scanner.scan(skill)
-        assert report.total_findings == report.critical_count + report.high_count + report.medium_count + report.low_count + report.info_count
+        assert (
+            report.total_findings
+            == report.critical_count + report.high_count + report.medium_count + report.low_count + report.info_count
+        )

@@ -269,9 +269,7 @@ async def delete_draft(draft_id: str, auth: AuthAdminDep) -> Dict[str, Any]:
 # ============================================================================
 
 
-@router.post(
-    "/skills/drafts/{draft_id}/validate", responses={404: {"description": "Draft not found"}}
-)
+@router.post("/skills/drafts/{draft_id}/validate", responses={404: {"description": "Draft not found"}})
 async def validate_draft(draft_id: str, auth: AuthAdminDep) -> ValidationResult:
     """Validate a draft for completeness before building."""
     draft = _builder.load_draft(draft_id)
@@ -282,9 +280,7 @@ async def validate_draft(draft_id: str, auth: AuthAdminDep) -> ValidationResult:
     return ValidationResult(valid=len(errors) == 0, errors=errors)
 
 
-@router.post(
-    "/skills/drafts/{draft_id}/build", responses={404: {"description": "Draft not found"}}
-)
+@router.post("/skills/drafts/{draft_id}/build", responses={404: {"description": "Draft not found"}})
 async def build_adapter(
     draft_id: str,
     request: Request,

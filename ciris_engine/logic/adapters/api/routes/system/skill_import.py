@@ -38,21 +38,11 @@ AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
 class SkillImportRequest(BaseModel):
     """Request to import an OpenClaw skill."""
 
-    skill_md_content: Optional[str] = Field(
-        None, description="Raw SKILL.md content to import (paste from clipboard)"
-    )
-    source_url: Optional[str] = Field(
-        None, description="ClawHub or GitHub URL to fetch the skill from"
-    )
-    local_path: Optional[str] = Field(
-        None, description="Local filesystem path to a skill directory or SKILL.md file"
-    )
-    output_dir: Optional[str] = Field(
-        None, description="Override output directory (default: ~/ciris/adapters/)"
-    )
-    auto_load: bool = Field(
-        True, description="Whether to automatically load the adapter after import"
-    )
+    skill_md_content: Optional[str] = Field(None, description="Raw SKILL.md content to import (paste from clipboard)")
+    source_url: Optional[str] = Field(None, description="ClawHub or GitHub URL to fetch the skill from")
+    local_path: Optional[str] = Field(None, description="Local filesystem path to a skill directory or SKILL.md file")
+    output_dir: Optional[str] = Field(None, description="Override output directory (default: ~/ciris/adapters/)")
+    auto_load: bool = Field(True, description="Whether to automatically load the adapter after import")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -328,6 +318,7 @@ async def preview_skill_import(
         raise HTTPException(status_code=500, detail=f"Failed to parse skill: {e}")
 
     import re
+
     sanitized = re.sub(r"[^a-z0-9_]", "_", skill.name.lower())
     sanitized = re.sub(r"_+", "_", sanitized).strip("_")
     module_name = f"imported_{sanitized}"

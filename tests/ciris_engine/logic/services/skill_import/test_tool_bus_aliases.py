@@ -1,7 +1,8 @@
 """Tests for ToolBus tool alias support."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ciris_engine.logic.buses.tool_bus import ToolBus
 

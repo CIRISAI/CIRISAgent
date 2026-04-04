@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-
 # Mark all tests in this module with a timeout to prevent worker crashes
 pytestmark = pytest.mark.timeout(30)
 

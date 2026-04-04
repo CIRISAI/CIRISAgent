@@ -15,7 +15,6 @@ from ciris_engine.logic.services.skill_import.parser import (
     SkillRequirements,
 )
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -158,8 +157,8 @@ class TestSkillToAdapterConverter:
             content = (adapter_path / "services.py").read_text()
 
             # Tool definitions
-            assert 'skill:todoist-cli' in content
-            assert 'skill:todoist-cli:info' in content
+            assert "skill:todoist-cli" in content
+            assert "skill:todoist-cli:info" in content
 
             # Instructions preserved
             assert "You are a task management assistant" in content

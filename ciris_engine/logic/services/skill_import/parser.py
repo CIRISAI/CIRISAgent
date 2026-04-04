@@ -103,7 +103,7 @@ def _extract_frontmatter(content: str) -> tuple[str, str]:
         return "", content.strip()
 
     # Find the closing --- (must be on its own line)
-    rest = content[first_newline + 1:]
+    rest = content[first_newline + 1 :]
     closing_idx = -1
     for i, line in enumerate(rest.split("\n")):
         if line.strip() == "---":
@@ -117,6 +117,7 @@ def _extract_frontmatter(content: str) -> tuple[str, str]:
     frontmatter = rest[:closing_idx].rstrip("\n")
     body = rest[closing_idx:].lstrip("-").lstrip("\n")
     return frontmatter, body.strip()
+
 
 # Accepted metadata namespace keys (in priority order)
 _METADATA_NAMESPACES = ["openclaw", "clawdbot", "clawdis"]
@@ -250,8 +251,18 @@ class OpenClawSkillParser:
         # Collect supporting text files
         supporting: Dict[str, str] = {}
         _TEXT_EXTENSIONS = {
-            ".md", ".txt", ".json", ".yaml", ".yml", ".toml",
-            ".js", ".ts", ".py", ".sh", ".bash", ".svg",
+            ".md",
+            ".txt",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".js",
+            ".ts",
+            ".py",
+            ".sh",
+            ".bash",
+            ".svg",
         }
         for path in skill_dir.rglob("*"):
             if path == skill_md_path:

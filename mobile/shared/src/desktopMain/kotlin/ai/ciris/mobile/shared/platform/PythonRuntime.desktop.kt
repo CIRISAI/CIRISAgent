@@ -25,8 +25,21 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     private var _serverStarted = false
     private var _outputLineCallback: ((String) -> Unit)? = null
 
-    // Track last reported service count to emit only new service lines
-    private var _lastReportedServiceCount = 0
+    // Shared startup status poller
+    private val _startupPoller by lazy {
+        StartupStatusPoller(_serverUrl) { url ->
+            try {
+                val response = httpClient.get(url)
+                if (response.status == HttpStatusCode.OK) {
+                    response.bodyAsText()
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     // Server process we launched (null if server was already running)
     private var _serverProcess: Process? = null
@@ -336,40 +349,16 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     /**
      * Poll /v1/system/startup-status and emit synthetic console output lines
      * for any newly started services since the last poll.
+     * Uses shared StartupStatusPoller for cross-platform consistency.
      */
     private suspend fun pollStartupStatus() {
         val callback = _outputLineCallback ?: return
-
-        try {
-            val response = httpClient.get("$_serverUrl/v1/system/startup-status")
-            if (response.status != HttpStatusCode.OK) return
-
-            val body = response.bodyAsText()
-
-            // Parse services_online count
-            val onlineMatch = Regex(""""services_online"\s*:\s*(\d+)""").find(body)
-            val totalMatch = Regex(""""services_total"\s*:\s*(\d+)""").find(body)
-            val online = onlineMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-            val total = totalMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-
-            // Parse service_names array
-            val namesMatch = Regex(""""service_names"\s*:\s*\[([^\]]*)\]""").find(body)
-            val serviceNames = namesMatch?.groupValues?.get(1)
-                ?.split(",")
-                ?.map { it.trim().trim('"') }
-                ?.filter { it.isNotEmpty() }
-                ?: emptyList()
-
-            // Emit [SERVICE n/total] lines for newly started services
-            if (online > _lastReportedServiceCount) {
-                for (i in (_lastReportedServiceCount + 1)..online) {
-                    val name = serviceNames.getOrElse(i - 1) { "Service$i" }
-                    callback("[SERVICE $i/$total] $name STARTED")
-                }
-                _lastReportedServiceCount = online
-            }
-        } catch (_: Exception) {
-            // Server not ready yet — ignore
+        val result = _startupPoller.poll { line ->
+            println("[PythonRuntime.desktop] $line")
+            callback(line)
+        }
+        if (result != null) {
+            println("[PythonRuntime.desktop] Poll: services=${result.servicesOnline}/${result.servicesTotal}, apiHistory=${result.apiStatusHistory.size}")
         }
     }
 }

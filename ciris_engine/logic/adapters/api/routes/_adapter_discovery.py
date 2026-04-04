@@ -581,9 +581,7 @@ async def discover_adapters(
         if hasattr(ciris_adapters, "__path__"):
             services_base = Path(ciris_adapters.__path__[0])
             try:
-                builtin = await discover_services_from_directory(
-                    services_base, filter_by_platform, skip_adapters
-                )
+                builtin = await discover_services_from_directory(services_base, filter_by_platform, skip_adapters)
                 adapters.extend(builtin)
             except OSError as e:
                 logger.debug(f"iterdir failed ({e}), falling back to entry points")

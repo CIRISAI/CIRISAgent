@@ -49,11 +49,10 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
-
 
 # --- Configuration ---
 
@@ -66,6 +65,7 @@ CIRIS_WINDOW_CLASS = "CIRIS"  # Window class for X11 matching
 
 # Detect platform
 PLATFORM = platform.system()  # "Linux", "Darwin", "Windows"
+
 
 # Clip files - extension depends on platform
 def get_clip_files() -> dict[int, str]:
@@ -81,6 +81,7 @@ def get_clip_files() -> dict[int, str]:
         7: f"demo7_adapter_panel{ext}",
         8: f"demo8_lamp_chat{ext}",
     }
+
 
 CLIP_FILES = get_clip_files()
 
@@ -105,11 +106,16 @@ def start_recording_macos(duration_ms: int, output: Path) -> subprocess.Popen:
     """
     cmd = [
         str(SCAP_BINARY),
-        "--app", CIRIS_APP_NAME,
-        "--duration", str(duration_ms),
-        "--output", str(output),
-        "--fps", "30",
-        "--quality", "high",
+        "--app",
+        CIRIS_APP_NAME,
+        "--duration",
+        str(duration_ms),
+        "--output",
+        str(output),
+        "--fps",
+        "30",
+        "--quality",
+        "high",
         "--show-cursor",
         "--force",  # Overwrite without prompting
     ]
@@ -250,15 +256,24 @@ def start_recording_linux(duration_ms: int, output: Path) -> Optional[subprocess
     cmd = [
         "ffmpeg",
         "-y",  # Overwrite output
-        "-video_size", f"{w}x{h}",
-        "-framerate", "30",
-        "-f", "x11grab",
-        "-i", f"{display}+{x},{y}",
-        "-t", str(duration_s),
-        "-c:v", "libx264",
-        "-preset", "ultrafast",  # Fast encoding for real-time
-        "-crf", "18",  # High quality
-        "-pix_fmt", "yuv420p",  # Compatibility
+        "-video_size",
+        f"{w}x{h}",
+        "-framerate",
+        "30",
+        "-f",
+        "x11grab",
+        "-i",
+        f"{display}+{x},{y}",
+        "-t",
+        str(duration_s),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",  # Fast encoding for real-time
+        "-crf",
+        "18",  # High quality
+        "-pix_fmt",
+        "yuv420p",  # Compatibility
         str(output),
     ]
 
@@ -454,17 +469,17 @@ def record_demo_1_wipe_data(output_dir: Path):
     output = output_dir / CLIP_FILES[1]
     proc = start_recording(15000, output)
 
-    time.sleep(1)                       # Establish context on Interact screen
-    click("btn_data_menu")              # Open Data dropdown menu
-    time.sleep(0.5)                     # Menu animation
-    click("menu_data_management")       # Navigate to Data Management
-    time.sleep(1.5)                     # Wait for screen load
-    time.sleep(2)                       # Hold for viewer to see screen
-    click("btn_reset_account")          # Click "Reset Account"
-    time.sleep(1)                       # Wait for confirmation dialog
-    time.sleep(2)                       # Hold so viewer reads dialog
-    click("btn_reset_confirm")          # Confirm reset
-    time.sleep(4)                       # Wait for reset animation
+    time.sleep(1)  # Establish context on Interact screen
+    click("btn_data_menu")  # Open Data dropdown menu
+    time.sleep(0.5)  # Menu animation
+    click("menu_data_management")  # Navigate to Data Management
+    time.sleep(1.5)  # Wait for screen load
+    time.sleep(2)  # Hold for viewer to see screen
+    click("btn_reset_account")  # Click "Reset Account"
+    time.sleep(1)  # Wait for confirmation dialog
+    time.sleep(2)  # Hold so viewer reads dialog
+    click("btn_reset_confirm")  # Confirm reset
+    time.sleep(4)  # Wait for reset animation
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -505,27 +520,27 @@ def record_demo_2_first_run_wizard(output_dir: Path):
     output = output_dir / CLIP_FILES[2]
     proc = start_recording(18000, output)
 
-    time.sleep(2)                       # Hold on Welcome screen
-    click("btn_next")                   # Welcome -> Preferences
+    time.sleep(2)  # Hold on Welcome screen
+    click("btn_next")  # Welcome -> Preferences
     time.sleep(1.5)
 
     # Set location: Schaumburg
     input_text("input_location_search", "Schaumburg")
     time.sleep(2)
-    click("btn_next")                   # Preferences -> LLM Config
+    click("btn_next")  # Preferences -> LLM Config
     time.sleep(1.5)
 
     # LLM Config: OpenRouter
-    click("input_llm_provider")         # Open provider dropdown
+    click("input_llm_provider")  # Open provider dropdown
     time.sleep(0.5)
-    click("menu_provider_openrouter")   # Select OpenRouter
+    click("menu_provider_openrouter")  # Select OpenRouter
     time.sleep(0.5)
     input_text("input_api_key", openrouter_key)
     time.sleep(0.5)
     input_text("input_llm_model_text", "mistralai/mistral-small-2603")
-    time.sleep(1.5)                     # Hold for viewer to see config
-    click("btn_next")                   # LLM Config -> Optional Features
-    time.sleep(2)                       # Hold on Optional Features
+    time.sleep(1.5)  # Hold for viewer to see config
+    click("btn_next")  # LLM Config -> Optional Features
+    time.sleep(2)  # Hold on Optional Features
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -551,7 +566,7 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     # Scroll down slightly to reveal location traces toggle
     test_api("POST", "/scroll", {"testTag": "item_accord_metrics_consent", "direction": "down", "amount": 200})
     time.sleep(0.5)
-    click("item_share_location_traces")   # Toggle location traces ON
+    click("item_share_location_traces")  # Toggle location traces ON
     time.sleep(1)
 
     # Toggle public API services to show email field
@@ -580,9 +595,9 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     click("adapter_toggle_weather")
     time.sleep(1)
 
-    time.sleep(2)                       # Hold for viewer to see adapter cards
+    time.sleep(2)  # Hold for viewer to see adapter cards
 
-    click("btn_next")                   # Optional Features -> Account
+    click("btn_next")  # Optional Features -> Account
     time.sleep(2)
 
     wait_for_recording(proc)
@@ -603,9 +618,9 @@ def record_demo_4_setup_home_assistant(output_dir: Path):
     input_text("input_username", "emoore")
     time.sleep(0.5)
     input_text("input_password", "ciristest1")
-    time.sleep(1.5)                     # Hold for viewer to see credentials
-    click("btn_next")                   # Finish Setup
-    time.sleep(6)                       # Wait for setup completion + agent start
+    time.sleep(1.5)  # Hold for viewer to see credentials
+    click("btn_next")  # Finish Setup
+    time.sleep(6)  # Wait for setup completion + agent start
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -782,13 +797,15 @@ Examples:
     )
 
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR})",
     )
     parser.add_argument(
-        "--clip", "-c",
+        "--clip",
+        "-c",
         type=int,
         action="append",
         choices=list(range(1, 9)),

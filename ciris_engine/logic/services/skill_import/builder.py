@@ -74,9 +74,7 @@ class ToolCard(BaseModel):
 
     name: str = Field("", description="Tool name (e.g. 'search', 'create-task')")
     description: str = Field("", description="What does this tool do?")
-    parameters: List[ToolParameter] = Field(
-        default_factory=list, description="Tool parameters"
-    )
+    parameters: List[ToolParameter] = Field(default_factory=list, description="Tool parameters")
     when_to_use: Optional[str] = Field(None, description="When should the agent use this tool?")
     category: str = Field("general", description="Tool category")
     cost: float = Field(0.0, description="Cost to execute (0 = free)")
@@ -105,9 +103,13 @@ class ToolsCard(BaseModel):
 class RequiresCard(BaseModel):
     """Card 3: Runtime requirements."""
 
-    env_vars: List[str] = Field(default_factory=list, description="Required environment variables (e.g. 'TODOIST_API_KEY')")
+    env_vars: List[str] = Field(
+        default_factory=list, description="Required environment variables (e.g. 'TODOIST_API_KEY')"
+    )
     binaries: List[str] = Field(default_factory=list, description="Required CLI binaries (e.g. 'curl', 'jq')")
-    platforms: List[str] = Field(default_factory=list, description="Supported platforms (empty = all). Options: linux, darwin, win32")
+    platforms: List[str] = Field(
+        default_factory=list, description="Supported platforms (empty = all). Options: linux, darwin, win32"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -119,7 +121,7 @@ class InstructCard(BaseModel):
         "",
         description="What should the agent do with this skill? "
         "Write clear step-by-step instructions. "
-        "This is the 'brain' of the skill - it tells the AI how to behave."
+        "This is the 'brain' of the skill - it tells the AI how to behave.",
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
@@ -131,23 +133,22 @@ class BehaviorCard(BaseModel):
     requires_approval: bool = Field(
         True,
         description="Require human approval before executing? "
-        "Recommended for skills that modify data or cost money."
+        "Recommended for skills that modify data or cost money.",
     )
     min_confidence: float = Field(
         0.7,
         ge=0.0,
         le=1.0,
         description="Minimum confidence (0-1) before the agent will use this skill. "
-        "Higher = agent must be more sure this is the right tool."
+        "Higher = agent must be more sure this is the right tool.",
     )
     always_active: bool = Field(
         False,
         description="Always inject this skill's context into the agent's prompt? "
-        "Use for skills that provide situational awareness."
+        "Use for skills that provide situational awareness.",
     )
     ethical_considerations: Optional[str] = Field(
-        None,
-        description="Any ethical concerns the agent should consider before using this skill?"
+        None, description="Any ethical concerns the agent should consider before using this skill?"
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
@@ -156,10 +157,7 @@ class BehaviorCard(BaseModel):
 class InstallCard(BaseModel):
     """Card 6: Installation steps for dependencies."""
 
-    steps: List[InstallStep] = Field(
-        default_factory=list,
-        description="How to install missing dependencies"
-    )
+    steps: List[InstallStep] = Field(default_factory=list, description="How to install missing dependencies")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -193,12 +191,42 @@ class SkillDraft(BaseModel):
 
 # Card metadata for the UI
 CARD_DEFINITIONS = [
-    {"id": "identity", "title": "Identity", "subtitle": "Name & describe your skill", "emoji": "🏷️", "schema_class": "IdentityCard"},
+    {
+        "id": "identity",
+        "title": "Identity",
+        "subtitle": "Name & describe your skill",
+        "emoji": "🏷️",
+        "schema_class": "IdentityCard",
+    },
     {"id": "tools", "title": "Tools", "subtitle": "What can it do?", "emoji": "🔧", "schema_class": "ToolsCard"},
-    {"id": "requires", "title": "Requirements", "subtitle": "What does it need?", "emoji": "📦", "schema_class": "RequiresCard"},
-    {"id": "instruct", "title": "Instructions", "subtitle": "How should the agent behave?", "emoji": "📝", "schema_class": "InstructCard"},
-    {"id": "behavior", "title": "Behavior", "subtitle": "Safety & approval settings", "emoji": "🛡️", "schema_class": "BehaviorCard"},
-    {"id": "install", "title": "Install", "subtitle": "Dependency installation", "emoji": "⚙️", "schema_class": "InstallCard"},
+    {
+        "id": "requires",
+        "title": "Requirements",
+        "subtitle": "What does it need?",
+        "emoji": "📦",
+        "schema_class": "RequiresCard",
+    },
+    {
+        "id": "instruct",
+        "title": "Instructions",
+        "subtitle": "How should the agent behave?",
+        "emoji": "📝",
+        "schema_class": "InstructCard",
+    },
+    {
+        "id": "behavior",
+        "title": "Behavior",
+        "subtitle": "Safety & approval settings",
+        "emoji": "🛡️",
+        "schema_class": "BehaviorCard",
+    },
+    {
+        "id": "install",
+        "title": "Install",
+        "subtitle": "Dependency installation",
+        "emoji": "⚙️",
+        "schema_class": "InstallCard",
+    },
 ]
 
 _CARD_CLASSES: Dict[str, type[BaseModel]] = {
@@ -235,10 +263,12 @@ def get_all_card_schemas() -> Dict[str, Any]:
     for card_def in CARD_DEFINITIONS:
         card_id = card_def["id"]
         schema = get_card_schema(card_id)
-        cards.append({
-            **card_def,
-            "schema": schema,
-        })
+        cards.append(
+            {
+                **card_def,
+                "schema": schema,
+            }
+        )
     return {"cards": cards, "draft_schema": SkillDraft.model_json_schema()}
 
 
@@ -288,15 +318,17 @@ class SkillBuilder:
 
         # Build tool cards from the skill
         tool_cards: List[ToolCard] = []
-        tool_cards.append(ToolCard(
-            name=parsed.name,
-            description=parsed.description or f"Execute the {parsed.name} skill",
-            parameters=[
-                ToolParameter(name="input", type="string", description="Input to pass to the skill", required=True),
-                ToolParameter(name="args", type="object", description="Additional arguments", required=False),
-            ],
-            when_to_use=parsed.description,
-        ))
+        tool_cards.append(
+            ToolCard(
+                name=parsed.name,
+                description=parsed.description or f"Execute the {parsed.name} skill",
+                parameters=[
+                    ToolParameter(name="input", type="string", description="Input to pass to the skill", required=True),
+                    ToolParameter(name="args", type="object", description="Additional arguments", required=False),
+                ],
+                when_to_use=parsed.description,
+            )
+        )
 
         tools = ToolsCard(tools=tool_cards)
 
@@ -321,6 +353,7 @@ class SkillBuilder:
         install = InstallCard()
         if parsed.metadata and parsed.metadata.install:
             from .converter import _build_install_steps
+
             step_dicts = _build_install_steps(parsed.metadata.install)
             install.steps = [InstallStep(**s) for s in step_dicts]
 
@@ -421,7 +454,7 @@ class SkillBuilder:
         generates all the adapter files.
         """
         from .converter import SkillToAdapterConverter
-        from .parser import ParsedSkill, SkillMetadata, SkillRequirements, SkillInstallSpec
+        from .parser import ParsedSkill, SkillInstallSpec, SkillMetadata, SkillRequirements
 
         # Validate first
         errors = self.validate_draft(draft)
@@ -430,10 +463,14 @@ class SkillBuilder:
 
         # Convert draft cards back to ParsedSkill for the converter
         metadata = SkillMetadata(
-            requires=SkillRequirements(
-                env=draft.requires.env_vars,
-                bins=draft.requires.binaries,
-            ) if (draft.requires.env_vars or draft.requires.binaries) else None,
+            requires=(
+                SkillRequirements(
+                    env=draft.requires.env_vars,
+                    bins=draft.requires.binaries,
+                )
+                if (draft.requires.env_vars or draft.requires.binaries)
+                else None
+            ),
             primary_env=draft.requires.env_vars[0] if draft.requires.env_vars else None,
             always=draft.behavior.always_active,
             emoji=draft.identity.emoji,
@@ -488,8 +525,7 @@ class SkillBuilder:
         if "ToolDMAGuidance" not in content:
             content = content.replace(
                 "from ciris_engine.schemas.adapters.tools import (",
-                "from ciris_engine.schemas.adapters.tools import (\n"
-                "    ToolDMAGuidance,",
+                "from ciris_engine.schemas.adapters.tools import (\n" "    ToolDMAGuidance,",
             )
 
         # Add dma_guidance to the main tool definition

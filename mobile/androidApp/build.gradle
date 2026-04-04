@@ -114,6 +114,8 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        // Enable desugaring for java.time APIs on Android < 26
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -405,6 +407,9 @@ Tag: cp310-cp310-android_24_armeabi_v7a
 }
 
 dependencies {
+    // Core library desugaring for java.time on Android < 26
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+
     implementation project(":shared")
 
     // Compose

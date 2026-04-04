@@ -197,7 +197,9 @@ def _search_locations_impl(
 @router.get("/location-search")
 async def search_locations(
     q: Annotated[str, Query(..., min_length=2, max_length=100, description="Search query (city name or partial)")],
-    country: Annotated[Optional[str], Query(max_length=2, description="Filter by country code (ISO 3166-1 alpha-2)")] = None,
+    country: Annotated[
+        Optional[str], Query(max_length=2, description="Filter by country code (ISO 3166-1 alpha-2)")
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=50, description="Maximum number of results")] = 10,
 ) -> LocationSearchResponse:
     """Search for cities by name.

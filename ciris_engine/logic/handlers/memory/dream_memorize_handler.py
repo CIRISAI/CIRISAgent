@@ -19,13 +19,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
-from ciris_engine.schemas.services.graph_core import (
-    GraphEdge,
-    GraphEdgeAttributes,
-    GraphNode,
-    GraphScope,
-    NodeType,
-)
+from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttributes, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
 
 logger = logging.getLogger(__name__)
@@ -52,9 +46,7 @@ class DreamMemorizeHandler(BaseActionHandler):
 
         # Validate parameters as DreamConsolidationParams
         try:
-            params = self._validate_and_convert_params(
-                result.action_parameters, DreamConsolidationParams
-            )
+            params = self._validate_and_convert_params(result.action_parameters, DreamConsolidationParams)
         except Exception as e:
             await self._handle_error(HandlerActionType.MEMORIZE, dispatch_context, thought_id, e)
             return self.complete_thought_and_create_followup(
@@ -123,9 +115,7 @@ class DreamMemorizeHandler(BaseActionHandler):
             status=ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED,
         )
 
-    async def _create_connects_edge(
-        self, params: DreamConsolidationParams, _thought_id: str
-    ) -> bool:
+    async def _create_connects_edge(self, params: DreamConsolidationParams, _thought_id: str) -> bool:
         """Create CONNECTS edge between two memories."""
         try:
             edge = GraphEdge(
@@ -146,9 +136,7 @@ class DreamMemorizeHandler(BaseActionHandler):
             )
 
             if result.status == MemoryOpStatus.OK:
-                logger.info(
-                    f"[DREAM] Created CONNECTS edge: {params.connect_from_id} → {params.connect_to_id}"
-                )
+                logger.info(f"[DREAM] Created CONNECTS edge: {params.connect_from_id} → {params.connect_to_id}")
                 return True
             else:
                 logger.warning(f"[DREAM] CONNECTS edge failed: {result.reason}")
@@ -218,9 +206,7 @@ class DreamMemorizeHandler(BaseActionHandler):
             logger.error(f"[DREAM] Error creating IMPLIES edge: {e}")
             return False, None
 
-    async def _create_aspires_to_edge(
-        self, params: DreamConsolidationParams, thought_id: str
-    ) -> bool:
+    async def _create_aspires_to_edge(self, params: DreamConsolidationParams, thought_id: str) -> bool:
         """Create aspiration node and ASPIRES_TO edge."""
         try:
             # Create or find aspiration node

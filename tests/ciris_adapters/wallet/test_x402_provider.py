@@ -4,14 +4,15 @@ Tests for x402 wallet provider.
 Tests paymaster fallback, Arka key retrieval, and spending authority.
 """
 
-import pytest
 from decimal import Decimal
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from ciris_adapters.wallet.providers.paymaster_client import BundlerError, PaymasterError
 
 # Test imports - avoid importing the full provider to prevent hanging
 from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
-from ciris_adapters.wallet.providers.paymaster_client import PaymasterError, BundlerError
-
 
 # ==============================================================================
 # Spending Authority Tests
@@ -137,7 +138,7 @@ class TestArkaApiKeyRetrieval:
 
     def test_build_secrets_import(self):
         """Test that build secrets are attempted first."""
-        with patch.dict('sys.modules', {}):
+        with patch.dict("sys.modules", {}):
             # When _build_secrets doesn't exist, key should come from config
             # This tests the import fallback logic
             from ciris_adapters.wallet.providers.x402_provider import X402Provider
@@ -203,9 +204,7 @@ class TestProviderRequirements:
     def test_spending_authority_with_degraded_trust(self):
         """Test spending authority with degraded hardware trust."""
         authority = SpendingAuthority.from_attestation(
-            attestation_level=5,
-            hardware_trust_degraded=True,
-            trust_degradation_reason="Test reason"
+            attestation_level=5, hardware_trust_degraded=True, trust_degradation_reason="Test reason"
         )
 
         assert authority.hardware_trust_degraded is True

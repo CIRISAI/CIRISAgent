@@ -110,10 +110,17 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
             ) {
+                // Language selector - first element, inside Column to avoid overlap
+                LanguageSelector(
+                    modifier = Modifier.testable("login_language_selector"),
+                    compact = false,
+                    centered = true
+                )
+
                 // CIRIS Signet — slow rotation + gentle pulse for ambient motion
                 val infiniteTransition = rememberInfiniteTransition(label = "signet")
                 val rotation by infiniteTransition.animateFloat(
@@ -137,8 +144,7 @@ fun LoginScreen(
                 CIRISSignet(
                     tintColor = LoginColors.White,
                     modifier = Modifier
-                        .size(72.dp)
-                        .padding(top = 8.dp)
+                        .size(56.dp)
                         .graphicsLayer {
                             rotationZ = rotation
                             scaleX = scale
@@ -150,21 +156,20 @@ fun LoginScreen(
                 Text(
                     text = loginTitle,
                     color = LoginColors.White,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
                 )
 
                 // Tagline — show first-run welcome or returning user tagline
                 Text(
                     text = if (isFirstRun) localizedString("mobile.login_first_run_welcome") else loginTagline,
                     color = LoginColors.White.copy(alpha = 0.8f),
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp).width(280.dp)
+                    modifier = Modifier.width(280.dp)
                 )
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 if (isLoading) {
                     // Progress indicator
@@ -205,20 +210,20 @@ fun LoginScreen(
                             containerColor = LoginColors.White,
                             contentColor = LoginColors.Primary
                         ),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(24.dp),
                         modifier = Modifier
                             .width(280.dp)
-                            .height(56.dp)
+                            .height(48.dp)
                             .testableClickable(if (isIOS()) "btn_apple_signin" else "btn_google_signin") { onGoogleSignIn() }
                     ) {
                         Text(
                             text = signinProvider,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Local Login button (outlined)
                     OutlinedButton(
@@ -237,39 +242,39 @@ fun LoginScreen(
                         border = ButtonDefaults.outlinedButtonBorder.copy(
                             brush = androidx.compose.ui.graphics.SolidColor(LoginColors.White)
                         ),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(24.dp),
                         modifier = Modifier
                             .width(280.dp)
-                            .height(56.dp)
+                            .height(48.dp)
                             .testableClickable("btn_local_login") {
                                 if (isFirstRun) onLocalLogin() else { showLoginForm = true }
                             }
                     ) {
                         Text(
                             text = localLoginText,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Info text
+                    // Info text - compact for small screens
                     Text(
                         text = hostedInfo,
                         color = LoginColors.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         textAlign = TextAlign.Center,
-                        lineHeight = 18.sp,
+                        lineHeight = 15.sp,
                         modifier = Modifier.width(280.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Marketing checkbox
+                    // Marketing checkbox - compact layout for small screens
                     Row(
                         modifier = Modifier.width(280.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         Checkbox(
                             checked = marketingOptIn,
@@ -278,13 +283,15 @@ fun LoginScreen(
                                 checkedColor = LoginColors.White,
                                 uncheckedColor = LoginColors.White.copy(alpha = 0.8f),
                                 checkmarkColor = LoginColors.Primary
-                            )
+                            ),
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = marketingText,
                             color = LoginColors.White.copy(alpha = 0.8f),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 4.dp)
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                            modifier = Modifier.padding(start = 8.dp, top = 2.dp)
                         )
                     }
 
@@ -302,29 +309,17 @@ fun LoginScreen(
                             }
                             .testable("btn_privacy_policy")
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Footer - inside Column so it scrolls with content (no overlap on small screens)
+                    Text(
+                        text = footerText,
+                        color = LoginColors.White.copy(alpha = 0.6f),
+                        fontSize = 11.sp
+                    )
                 }
             }
-
-            // Footer
-            Text(
-                text = footerText,
-                color = LoginColors.White.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-            )
-
-            // Language selector - prominent, centered at top (rendered last for z-order)
-            // This changes BOTH the interface AND agent reasoning language
-            LanguageSelector(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 24.dp)
-                    .testable("login_language_selector"),
-                compact = false,
-                centered = true
-            )
 
             // Connection status badge (top-right, desktop only)
             if (isDesktopMode) {

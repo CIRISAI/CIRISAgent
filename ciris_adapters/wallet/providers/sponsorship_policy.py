@@ -81,14 +81,10 @@ class SponsorshipPolicy:
         self.config = config or SponsorshipPolicyConfig()
 
         # Normalize contract addresses to lowercase
-        self._allowed_contracts = {
-            addr.lower() for addr in self.config.allowed_contracts
-        }
+        self._allowed_contracts = {addr.lower() for addr in self.config.allowed_contracts}
 
         # Normalize function selectors to lowercase
-        self._allowed_functions = {
-            fn.lower() for fn in self.config.allowed_functions
-        }
+        self._allowed_functions = {fn.lower() for fn in self.config.allowed_functions}
 
         # Budget tracking (in-memory, resets on restart)
         # Production should persist to database

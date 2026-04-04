@@ -1,11 +1,11 @@
 """Tests for OpenClaw SKILL.md parser."""
 
-import pytest
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from ciris_engine.logic.services.skill_import.parser import OpenClawSkillParser, ParsedSkill
-
 
 # ============================================================================
 # Fixtures
@@ -212,10 +212,7 @@ class TestParseSkillMd:
             parser.parse_skill_md(NO_FRONTMATTER)
 
     def test_source_url_preserved(self, parser: OpenClawSkillParser):
-        skill = parser.parse_skill_md(
-            MINIMAL_SKILL,
-            source_url="https://clawhub.com/skills/my-tool"
-        )
+        skill = parser.parse_skill_md(MINIMAL_SKILL, source_url="https://clawhub.com/skills/my-tool")
         assert skill.source_url == "https://clawhub.com/skills/my-tool"
 
     def test_raw_frontmatter_preserved(self, parser: OpenClawSkillParser):

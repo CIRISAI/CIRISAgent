@@ -73,8 +73,7 @@ class NavigationToolService:
             self._user_lon = user_location.longitude
             self._user_location_string = user_location.location_string
             logger.info(
-                f"User location available: {user_location.location_string} "
-                f"({self._user_lat}, {self._user_lon})"
+                f"User location available: {user_location.location_string} " f"({self._user_lat}, {self._user_lon})"
             )
 
         # Tool definitions
@@ -492,9 +491,7 @@ Multiple rapid requests will be automatically throttled.
             correlation_id=correlation_id,
         )
 
-    async def _execute_route_from_me(
-        self, parameters: Dict[str, Any], correlation_id: str
-    ) -> ToolExecutionResult:
+    async def _execute_route_from_me(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute route_from_me tool - routes from user's location to destination."""
         if self._user_lat is None or self._user_lon is None:
             return ToolExecutionResult(

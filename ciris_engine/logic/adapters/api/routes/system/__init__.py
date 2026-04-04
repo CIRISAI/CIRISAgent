@@ -53,14 +53,6 @@ router.include_router(skill_builder.router)
 # Tools: /system/tools
 router.include_router(tools.router)
 
-# Re-export schemas for backward compatibility
-from .skill_import import (
-    ImportedSkillInfo,
-    ImportedSkillsListResponse,
-    SkillImportRequest,
-    SkillImportResponse,
-    SkillPreviewResponse,
-)
 from .schemas import (
     AdapterActionRequest,
     ConfigStepInfo,
@@ -87,6 +79,15 @@ from .schemas import (
     SystemHealthResponse,
     SystemTimeResponse,
     ToolInfoResponse,
+)
+
+# Re-export schemas for backward compatibility
+from .skill_import import (
+    ImportedSkillInfo,
+    ImportedSkillsListResponse,
+    SkillImportRequest,
+    SkillImportResponse,
+    SkillPreviewResponse,
 )
 
 __all__ = [

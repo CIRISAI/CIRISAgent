@@ -21,12 +21,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Set
 
-
 # Supported languages (excluding manifest.json)
-SUPPORTED_LANGUAGES = [
-    "am", "ar", "de", "en", "es", "fr", "hi", "it",
-    "ja", "ko", "pt", "ru", "sw", "tr", "ur", "zh"
-]
+SUPPORTED_LANGUAGES = ["am", "ar", "de", "en", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "ur", "zh"]
 
 
 def load_language_keys(localization_dir: Path) -> Dict[str, Set[str]]:

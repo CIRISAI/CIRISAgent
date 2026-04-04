@@ -117,7 +117,8 @@ class SettingsViewModel(
         "xai" to "xAI (Grok)",
         "azure" to "Azure OpenAI",
         "local" to "Local (Ollama)",
-        "other" to "Other (OpenAI-compatible)"
+        "openai_compatible" to "OpenAI Compatible",
+        "other" to "Other"
     )
 
     // Available models per provider

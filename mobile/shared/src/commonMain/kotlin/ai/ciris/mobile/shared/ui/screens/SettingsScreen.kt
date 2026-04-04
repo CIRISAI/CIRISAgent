@@ -662,8 +662,8 @@ private fun ByokConfigSection(
         }
     }
 
-    // Base URL (for "other" provider)
-    if (llmProvider == "other" || llmProvider == "local") {
+    // Base URL (for local/custom providers)
+    if (llmProvider == "other" || llmProvider == "local" || llmProvider == "openai_compatible") {
         OutlinedTextField(
             value = llmBaseUrl,
             onValueChange = {
@@ -682,7 +682,7 @@ private fun ByokConfigSection(
         )
     }
 
-    // API Key (not required for local)
+    // API Key (optional for local and openai_compatible)
     if (llmProvider != "local") {
         OutlinedTextField(
             value = if (isEditing || showApiKey) apiKey else apiKeyMasked,

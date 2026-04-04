@@ -325,7 +325,6 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-<<<<<<< HEAD
         # 3. Check relative to this module — validate it's the right platform
         #    Dev repos may contain binaries for other platforms (e.g., Linux .so on macOS)
         module_dir = Path(__file__).parent
@@ -351,25 +350,14 @@ class CIRISVerify:
             with open(path, "rb") as f:
                 magic = f.read(4)
             if system == "Darwin":
-                # Mach-O: CE FA ED FE (LE 64), CF FA ED FE (LE 32), CA FE BA BE (universal)
                 return magic in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
             elif system == "Linux":
                 return magic == b"\x7fELF"
             elif system == "Windows":
                 return magic[:2] == b"MZ"
-            return True  # Unknown platform, allow
+            return True
         except Exception:
             return False
-=======
-        # 3. Check relative to this module (may be wrong platform in dev repos)
-        module_dir = Path(__file__).parent
-        for suffix in suffixes:
-            candidate = module_dir / f"libciris_verify_ffi{suffix}"
-            if candidate.exists():
-                return candidate
-
-        raise BinaryNotFoundError(f"Searched: {paths}")
->>>>>>> 5da326f46 (Fix FFI library loading: check pip package first, fix missing import)
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""

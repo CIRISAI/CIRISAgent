@@ -292,6 +292,7 @@ class TestMultiOccurrenceOldActiveTaskCleanup:
         assert retrieved_default is None
 
 
+@pytest.mark.timeout(60)  # Fail fast if cleanup takes >60s
 class TestSharedWakeupTaskIsolation:
     """Test that shared wakeup tasks are properly isolated and cleaned."""
 

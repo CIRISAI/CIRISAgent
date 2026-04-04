@@ -1031,10 +1031,14 @@ private fun TierCardsSection(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // L1: Binary & Self-Verification
         // Check if keystore is software-only (no hardware encryption)
-        // Key is hardware-backed if: hardware_backed=true AND key_storage_mode contains "HW"
-        // attestation_proof.hardware_type refers to Ed25519 signing, not storage encryption
-        val hasHardwareStorage = status.hardwareBacked &&
-            status.keyStorageMode?.contains("HW", ignoreCase = true) == true
+        // Key is hardware-backed if: hardware_backed=true AND key_storage_mode is HW/SE/Keychain
+        val hasHardwareStorage = status.hardwareBacked && (
+            status.keyStorageMode?.contains("HW", ignoreCase = true) == true ||
+            status.keyStorageMode?.contains("Secure Enclave", ignoreCase = true) == true ||
+            status.keyStorageMode?.contains("Keychain", ignoreCase = true) == true ||
+            status.keyStorageMode?.contains("Keystore", ignoreCase = true) == true ||
+            status.keyStorageMode?.contains("TPM", ignoreCase = true) == true
+        )
         val isSoftwareKeystore = !hasHardwareStorage
         ExpandableTierCard(
             level = 1,

@@ -488,18 +488,28 @@ async def get_wallet_status(
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not parse transaction: {e}")
 
-        # Get paymaster status
+        # Get paymaster status (check both Coinbase and Arka paymasters)
         paymaster_enabled = False
         paymaster_key_configured = False
-        paymaster_config = getattr(provider, "paymaster_config", None)
-        if paymaster_config:
-            paymaster_enabled = getattr(paymaster_config, "enabled", False)
-            # Check if key is configured (via _get_arka_api_key method or config)
-            if hasattr(provider, "_get_arka_api_key"):
-                key = provider._get_arka_api_key()
-                paymaster_key_configured = key is not None and len(key) > 0
-            elif paymaster_config.arka_api_key:
-                paymaster_key_configured = True
+
+        # Check for Coinbase Paymaster first (preferred)
+        coinbase_paymaster = getattr(provider, "_coinbase_paymaster", None)
+        if coinbase_paymaster is not None:
+            paymaster_enabled = True
+            paymaster_key_configured = True  # Coinbase uses embedded URL, no separate key needed
+            logger.debug("[WALLET_STATUS] Coinbase Paymaster is active")
+
+        # Fall back to Arka paymaster
+        if not paymaster_enabled:
+            paymaster_config = getattr(provider, "paymaster_config", None)
+            if paymaster_config:
+                paymaster_enabled = getattr(paymaster_config, "enabled", False)
+                # Check if key is configured (via _get_arka_api_key method or config)
+                if hasattr(provider, "_get_arka_api_key"):
+                    key = provider._get_arka_api_key()
+                    paymaster_key_configured = key is not None and len(key) > 0
+                elif paymaster_config.arka_api_key:
+                    paymaster_key_configured = True
 
         logger.info(
             f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}, paymaster={paymaster_enabled}"

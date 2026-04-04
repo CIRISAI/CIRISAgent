@@ -49,6 +49,10 @@ from tools.qa_runner.modules.mobile.device_helper import DeviceHelper, Platform,
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
 from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
 
+# Preferred Android device serial - older Samsung without StrongBox, good for testing
+# hardware security fallbacks. When multiple devices are connected, prefer this one.
+PREFERRED_ANDROID_DEVICE = "330016f5b40463cd"
+
 # ========== Screen Registry ==========
 # Extensible registry of app screens and how to navigate to them
 # Format: screen_name -> (menu_text, content_desc, description)
@@ -290,10 +294,17 @@ def pull_logs_command(args) -> int:
                 print(f"  Available: {[d.serial for d in connected]}")
                 return 1
         else:
-            device = connected[0]
-            if len(connected) > 1:
-                print(f"[INFO] Multiple devices found, using: {device.serial}")
-                print(f"  Use -d to specify: {[d.serial for d in connected]}")
+            # Prefer PREFERRED_ANDROID_DEVICE if available (older device for broader compat testing)
+            preferred = next((d for d in connected if d.serial == PREFERRED_ANDROID_DEVICE), None)
+            if preferred:
+                device = preferred
+                if len(connected) > 1:
+                    print(f"[INFO] Multiple devices found, using preferred: {device.serial}")
+            else:
+                device = connected[0]
+                if len(connected) > 1:
+                    print(f"[INFO] Multiple devices found, using: {device.serial}")
+                    print(f"  Use -d to specify: {[d.serial for d in connected]}")
 
         print(f"[INFO] Android Device: {device.serial} ({device.model or 'unknown model'})")
 
@@ -349,9 +360,16 @@ def go_screen_command(args) -> int:
             print(f"  Available: {[d.serial for d in connected]}")
             return 1
     else:
-        device = connected[0]
-        if len(connected) > 1:
-            print(f"[INFO] Multiple devices found, using: {device.serial}")
+        # Prefer PREFERRED_ANDROID_DEVICE if available (older device for broader compat testing)
+        preferred = next((d for d in connected if d.serial == PREFERRED_ANDROID_DEVICE), None)
+        if preferred:
+            device = preferred
+            if len(connected) > 1:
+                print(f"[INFO] Multiple devices found, using preferred: {device.serial}")
+        else:
+            device = connected[0]
+            if len(connected) > 1:
+                print(f"[INFO] Multiple devices found, using: {device.serial}")
 
     print(f"[INFO] Device: {device.serial} ({device.model or 'unknown model'})")
 
@@ -582,9 +600,17 @@ def build_command(args) -> int:
                 if not connected:
                     print("[WARN] No Android devices connected, skipping install")
                 else:
-                    device = connected[0]
                     if args.device:
-                        device = next((d for d in connected if d.serial == args.device), device)
+                        device = next((d for d in connected if d.serial == args.device), connected[0])
+                    else:
+                        # Prefer PREFERRED_ANDROID_DEVICE if available (older device for broader compat testing)
+                        preferred = next((d for d in connected if d.serial == PREFERRED_ANDROID_DEVICE), None)
+                        device = preferred if preferred else connected[0]
+                        if len(connected) > 1:
+                            if preferred:
+                                print(f"[INFO] Multiple devices, using preferred: {device.serial}")
+                            else:
+                                print(f"[INFO] Multiple devices, using: {device.serial}")
 
                     print(f"[INFO] Installing to {device.serial}...")
                     adb._run_adb(["install", "-r", str(apk_path)])

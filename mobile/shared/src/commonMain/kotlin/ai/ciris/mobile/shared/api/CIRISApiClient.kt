@@ -2751,6 +2751,8 @@ class CIRISApiClient(
                 ethBalance = json["eth_balance"]?.jsonPrimitive?.contentOrNull ?: "0.00",
                 needsGas = json["needs_gas"]?.jsonPrimitive?.boolean ?: true,
                 address = json["address"]?.jsonPrimitive?.contentOrNull,
+                paymasterEnabled = json["paymaster_enabled"]?.jsonPrimitive?.boolean ?: false,
+                paymasterKeyConfigured = json["paymaster_key_configured"]?.jsonPrimitive?.boolean ?: false,
                 isReceiveOnly = json["is_receive_only"]?.jsonPrimitive?.boolean ?: true,
                 attestationLevel = json["attestation_level"]?.jsonPrimitive?.int ?: 0,
                 maxTransactionLimit = json["max_transaction_limit"]?.jsonPrimitive?.contentOrNull ?: "0.00",

@@ -91,6 +91,10 @@ android/.web-build/
 android/.web-build/
 *.apk
 *.aab
+*.ipa
+*.xcarchive
+DerivedData/
+*.dSYM
 
 # Large media files from GUI static assets
 **/videos/

@@ -212,8 +212,9 @@ class PaymasterConfig(BaseModel):
     """
     Configuration for ERC-4337 paymaster gas sponsorship.
 
-    Uses Etherspot Arka (MIT licensed, self-hostable) for gas sponsorship.
-    This eliminates the need for users to hold ETH for gas fees.
+    Supports two providers:
+    - Coinbase Paymaster (recommended for compliance)
+    - Etherspot Arka (MIT licensed, self-hostable)
 
     Regulatory Note: Gas sponsorship is infrastructure expense, not money transmission.
     See FSD/WALLET_REGULATORY_COMPLIANCE.md Section 10.
@@ -223,6 +224,28 @@ class PaymasterConfig(BaseModel):
         default=True,
         description="Enable paymaster for gasless transactions",
     )
+
+    # Provider selection: "coinbase" or "arka"
+    provider: str = Field(
+        default="coinbase",
+        description="Paymaster provider: 'coinbase' (recommended) or 'arka'",
+    )
+
+    # Coinbase Paymaster settings
+    coinbase_api_key_name: Optional[str] = Field(
+        None,
+        description="Coinbase CDP API key name",
+    )
+    coinbase_api_key_secret: Optional[SecretStr] = Field(
+        None,
+        description="Coinbase CDP API key secret",
+    )
+    coinbase_base_url: str = Field(
+        default="https://api.developer.coinbase.com/rpc/v1/base",
+        description="Coinbase RPC endpoint for Base",
+    )
+
+    # Arka Paymaster settings (fallback)
     arka_url: str = Field(
         default="https://arka.etherspot.io",
         description="Arka paymaster service URL (or self-hosted instance)",
@@ -231,6 +254,8 @@ class PaymasterConfig(BaseModel):
         None,
         description="Arka API key for sponsorship (optional for self-hosted)",
     )
+
+    # Common settings
     bundler_url: str = Field(
         default="https://bundler.etherspot.io/8453",
         description="ERC-4337 bundler URL for Base (chain ID 8453)",
@@ -246,6 +271,54 @@ class PaymasterConfig(BaseModel):
     max_priority_fee_gwei: int = Field(
         default=2,
         description="Maximum priority fee in gwei",
+    )
+
+
+# =============================================================================
+# Commons Credits Gas Sponsorship Policy
+# =============================================================================
+
+
+class GasSponsorshipPolicyConfig(BaseModel):
+    """
+    Configuration for Commons Credits gas sponsorship policy.
+
+    No-KYC approach using economic controls:
+    1. USDC transfers only (contract + function allowlist)
+    2. Minimum $1.00 value (sybil resistance)
+    3. Global monthly budget cap
+
+    See FSD/COMMONS_CREDITS.md for full specification.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable Commons Credits gas sponsorship",
+    )
+
+    # Contract allowlist - only these tokens get sponsored
+    allowed_contracts: list[str] = Field(
+        default=["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],  # USDC on Base
+        description="Token contracts eligible for sponsored transfers",
+    )
+
+    # Function allowlist - only these ERC-20 functions get sponsored
+    # transfer(address,uint256) = 0xa9059cbb
+    allowed_functions: list[str] = Field(
+        default=["0xa9059cbb"],  # transfer(address,uint256)
+        description="Function selectors eligible for sponsorship (4-byte hex)",
+    )
+
+    # Minimum transfer value ($1 prevents dust/spam attacks)
+    min_transfer_usd: Decimal = Field(
+        default=Decimal("1.00"),
+        description="Minimum transfer value for sponsorship eligibility",
+    )
+
+    # Global monthly budget (caps total exposure, no KYC needed)
+    monthly_budget_usd: Decimal = Field(
+        default=Decimal("500.00"),
+        description="Global monthly gas sponsorship budget in USD",
     )
 
 

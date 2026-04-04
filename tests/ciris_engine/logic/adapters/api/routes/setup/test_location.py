@@ -10,14 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ciris_engine.logic.adapters.api.routes.setup.location import (
+    GEO_DB_PATH,
     CountriesResponse,
     CountryInfo,
     LocationResult,
     LocationSearchResponse,
-    GEO_DB_PATH,
     _get_db_connection,
-    list_countries,
     _search_locations_impl,
+    list_countries,
 )
 
 
@@ -124,9 +124,10 @@ class TestLocationSearch:
 
     def test_search_locations_missing_database(self) -> None:
         """Test graceful handling when database is missing."""
-        with patch.object(Path, 'exists', return_value=False):
+        with patch.object(Path, "exists", return_value=False):
             # Import fresh to get patched version
             from ciris_engine.logic.adapters.api.routes.setup.location import _search_locations_impl as search_fn
+
             result = search_fn(q="Test")
 
             assert result.count == 0
@@ -200,8 +201,9 @@ class TestCountriesList:
     @pytest.mark.asyncio
     async def test_list_countries_missing_database(self) -> None:
         """Test graceful handling when database is missing."""
-        with patch.object(Path, 'exists', return_value=False):
+        with patch.object(Path, "exists", return_value=False):
             from ciris_engine.logic.adapters.api.routes.setup.location import list_countries as list_fn
+
             result = await list_fn()
 
             assert result.count == 0
@@ -236,9 +238,7 @@ class TestDatabaseConnection:
         cursor = conn.cursor()
 
         # Check FTS table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='cities_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cities_fts'")
         result = cursor.fetchone()
         assert result is not None
         assert result[0] == "cities_fts"
@@ -254,9 +254,7 @@ class TestDatabaseConnection:
         cursor = conn.cursor()
 
         # Get all tables
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = {row[0] for row in cursor.fetchall()}
 
         assert "cities" in tables

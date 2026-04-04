@@ -1165,8 +1165,13 @@ class SetupViewModel : ViewModel() {
             provider = when (currentState.llmProvider) {
                 "OpenAI" -> "openai"
                 "Anthropic" -> "anthropic"
-                "Azure OpenAI" -> "other"
+                "Google AI" -> "google"
+                "OpenRouter" -> "openrouter"
+                "Groq" -> "groq"
+                "Together AI" -> "together"
                 "LocalAI" -> "local"
+                "OpenAI Compatible" -> "openai_compatible"
+                "Azure OpenAI" -> "other"
                 else -> "openai"
             },
             api_key = currentState.llmApiKey,
@@ -1311,6 +1316,7 @@ class SetupViewModel : ViewModel() {
                 "Together AI" -> "together"
                 "Azure OpenAI" -> "other"
                 "LocalAI", "Local LLM" -> "local"
+                "OpenAI Compatible" -> "openai_compatible"
                 else -> "openai"
             }
 

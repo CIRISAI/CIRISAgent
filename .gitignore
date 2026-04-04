@@ -8,6 +8,8 @@ __pycache__/
 *.pyo
 *.pyd
 *.db
+# Exception: cities.db is needed for location typeahead in pip installs
+!ciris_engine/data/geo/cities.db
 *.sqlite
 *.log
 logs/
@@ -23,6 +25,8 @@ data_archive/
 .env*
 # Critical security keys - NEVER commit these!
 .ciris_keys/
+# Build-time generated secrets (Android release)
+**/providers/_build_secrets.py
 
 # Coverage and CI reports
 coverage.xml
@@ -87,6 +91,10 @@ android/.web-build/
 android/.web-build/
 *.apk
 *.aab
+*.ipa
+*.xcarchive
+DerivedData/
+*.dSYM
 
 # Large media files from GUI static assets
 **/videos/

@@ -1223,9 +1223,7 @@ async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Di
     results = await _run_context_enrichment_tools(runtime, available_tools)
 
     cache.mark_startup_populated()
-    logger.info(
-        f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}"
-    )
+    logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}")
 
 
 # =============================================================================

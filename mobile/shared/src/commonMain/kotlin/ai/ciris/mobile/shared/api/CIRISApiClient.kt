@@ -46,6 +46,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -139,9 +140,119 @@ private fun ConfigValue.toDisplayString(): String {
  * All methods include comprehensive error logging for debugging.
  */
 class CIRISApiClient(
-    val baseUrl: String = "http://127.0.0.1:8080",
+    baseUrl: String = "http://127.0.0.1:8080",
     private var accessToken: String? = null
 ) : CIRISApiClientProtocol {
+
+    /**
+     * Current effective base URL - can be updated dynamically.
+     * Note: Some generated API methods may still use the original URL until
+     * a new CIRISApiClient instance is created.
+     */
+    var baseUrl: String = baseUrl
+        private set
+
+    /**
+     * Update the base URL for API calls.
+     * This updates the URL used for direct HTTP calls and recreates all SDK API instances.
+     */
+    fun updateBaseUrl(newUrl: String) {
+        val method = "updateBaseUrl"
+        logInfo(method, "Updating baseUrl from $baseUrl to $newUrl")
+        baseUrl = newUrl
+        // Recreate all SDK API instances with the new URL
+        recreateApiInstances()
+    }
+
+    /**
+     * Recreate all SDK API instances with the current baseUrl.
+     * Called after updateBaseUrl() to ensure all API objects use the new URL.
+     */
+    private fun recreateApiInstances() {
+        val method = "recreateApiInstances"
+        logInfo(method, "Recreating SDK API instances with baseUrl=$baseUrl")
+
+        agentApi = AgentApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        authApi = AuthenticationApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        setupApi = SetupApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        systemApi = SystemApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        telemetryApi = TelemetryApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        billingApi = BillingApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        wiseAuthorityApi = WiseAuthorityApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        configApi = ConfigApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        consentApi = ConsentApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        auditApi = AuditApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        memoryApi = MemoryApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        usersApi = UsersApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+        ticketsApi = TicketsApi(
+            baseUrl = baseUrl,
+            httpClientEngine = null,
+            httpClientConfig = httpClientConfig,
+            jsonSerializer = jsonConfig
+        )
+
+        logInfo(method, "All SDK API instances recreated successfully")
+    }
 
     /**
      * Get current access token (for SSE client)
@@ -220,92 +331,92 @@ class CIRISApiClient(
         }
     }
 
-    // Generated API instances
-    private val agentApi = AgentApi(
+    // Generated API instances (var to allow recreation when baseUrl changes)
+    private var agentApi = AgentApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val authApi = AuthenticationApi(
+    private var authApi = AuthenticationApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val setupApi = SetupApi(
+    private var setupApi = SetupApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val systemApi = SystemApi(
+    private var systemApi = SystemApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val telemetryApi = TelemetryApi(
+    private var telemetryApi = TelemetryApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val billingApi = BillingApi(
+    private var billingApi = BillingApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val wiseAuthorityApi = WiseAuthorityApi(
+    private var wiseAuthorityApi = WiseAuthorityApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val configApi = ConfigApi(
+    private var configApi = ConfigApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val consentApi = ConsentApi(
+    private var consentApi = ConsentApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val auditApi = AuditApi(
+    private var auditApi = AuditApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val memoryApi = MemoryApi(
+    private var memoryApi = MemoryApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val usersApi = UsersApi(
+    private var usersApi = UsersApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
         jsonSerializer = jsonConfig
     )
 
-    private val ticketsApi = TicketsApi(
+    private var ticketsApi = TicketsApi(
         baseUrl = baseUrl,
         httpClientEngine = null,
         httpClientConfig = httpClientConfig,
@@ -473,38 +584,64 @@ class CIRISApiClient(
     }
 
     // System Status (from /v1/system/health)
+    // Uses direct HTTP to support dynamic baseUrl changes
     override suspend fun getSystemStatus(): SystemStatus {
         val method = "getSystemStatus"
-        logDebug(method, "Fetching system health")
+        logDebug(method, "Fetching system health from $baseUrl")
+
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
 
         return try {
-            val response = systemApi.getSystemHealthV1SystemHealthGet()
-            logDebug(method, "Response: status=${response.status}")
+            val response = client.get("$baseUrl/v1/system/health") {
+                authHeader()?.let { header("Authorization", it) }
+            }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Health check failed: ${response.status}")
+            }
 
+            val body = response.bodyAsText()
+            logDebug(method, "Response body: ${body.take(200)}...")
+
+            // Parse JSON response
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject
+
+            val status = data?.get("status")?.jsonPrimitive?.contentOrNull ?: "unknown"
+            val cognitiveState = data?.get("cognitive_state")?.jsonPrimitive?.contentOrNull
+
+            // Parse services for counts
             var healthyCount = 0
             var totalCount = 0
-            for ((_, info) in data.services) {
-                val svcHealthy = info["healthy"] ?: 0
-                val svcAvailable = info["available"] ?: 0
+            data?.get("services")?.jsonObject?.forEach { (_, info) ->
+                val svcInfo = info.jsonObject
+                val svcHealthy = svcInfo["healthy"]?.jsonPrimitive?.intOrNull ?: 0
+                val svcAvailable = svcInfo["available"]?.jsonPrimitive?.intOrNull ?: 0
                 healthyCount += svcHealthy
                 totalCount += svcAvailable
             }
 
-            logDebug(method, "System status: ${data.status}, services: $healthyCount healthy / $totalCount total")
+            logDebug(method, "System status: $status, cognitive_state: $cognitiveState, services: $healthyCount/$totalCount")
 
             SystemStatus(
-                status = data.status,
-                cognitive_state = data.cognitiveState,
+                status = status,
+                cognitive_state = cognitiveState,
                 services_online = healthyCount,
                 services_total = totalCount,
                 services = emptyMap()
             )
         } catch (e: Exception) {
-            logException(method, e)
+            logException(method, e, "url=$baseUrl")
             throw e
+        } finally {
+            client.close()
         }
     }
 
@@ -5411,6 +5548,222 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             CountriesResponse(countries = emptyList(), count = 0)
+        }
+    }
+
+    // ===== Skill Import API =====
+
+    /**
+     * Preview an OpenClaw skill import without committing.
+     */
+    suspend fun previewSkillImport(skillMdContent: String, sourceUrl: String? = null): ai.ciris.mobile.shared.models.SkillPreviewData {
+        val method = "previewSkillImport"
+        val url = "$baseUrl/v1/system/adapters/import-skill/preview"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+                sourceUrl?.let { put("source_url", JsonPrimitive(it)) }
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Preview failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            ai.ciris.mobile.shared.models.SkillPreviewData(
+                name = obj["name"]?.jsonPrimitive?.content ?: "",
+                description = obj["description"]?.jsonPrimitive?.content ?: "",
+                version = obj["version"]?.jsonPrimitive?.content ?: "",
+                moduleName = obj["module_name"]?.jsonPrimitive?.content ?: "",
+                tools = obj["tools"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                requiredEnvVars = obj["required_env_vars"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                requiredBinaries = obj["required_binaries"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                hasSupportingFiles = obj["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                sourceUrl = obj["source_url"]?.jsonPrimitive?.contentOrNull,
+                instructionsPreview = obj["instructions_preview"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Import an OpenClaw skill as a CIRIS adapter.
+     */
+    suspend fun importSkill(skillMdContent: String, sourceUrl: String? = null, autoLoad: Boolean = true): ai.ciris.mobile.shared.models.SkillImportResult {
+        val method = "importSkill"
+        val url = "$baseUrl/v1/system/adapters/import-skill"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+                sourceUrl?.let { put("source_url", JsonPrimitive(it)) }
+                put("auto_load", JsonPrimitive(autoLoad))
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Import failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            // Parse preview sub-object if present
+            val previewObj = obj["preview"]?.jsonObject
+            val preview = previewObj?.let {
+                ai.ciris.mobile.shared.models.SkillPreviewData(
+                    name = it["name"]?.jsonPrimitive?.content ?: "",
+                    description = it["description"]?.jsonPrimitive?.content ?: "",
+                    version = it["version"]?.jsonPrimitive?.content ?: "",
+                    moduleName = it["module_name"]?.jsonPrimitive?.content ?: "",
+                    tools = it["tools"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredEnvVars = it["required_env_vars"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredBinaries = it["required_binaries"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    hasSupportingFiles = it["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                    sourceUrl = it["source_url"]?.jsonPrimitive?.contentOrNull,
+                    instructionsPreview = it["instructions_preview"]?.jsonPrimitive?.content ?: ""
+                )
+            }
+
+            ai.ciris.mobile.shared.models.SkillImportResult(
+                success = obj["success"]?.jsonPrimitive?.boolean ?: false,
+                moduleName = obj["module_name"]?.jsonPrimitive?.content ?: "",
+                adapterPath = obj["adapter_path"]?.jsonPrimitive?.content ?: "",
+                toolsCreated = obj["tools_created"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                message = obj["message"]?.jsonPrimitive?.content ?: "",
+                autoLoaded = obj["auto_loaded"]?.jsonPrimitive?.boolean ?: false,
+                preview = preview
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * List all previously imported skills.
+     */
+    suspend fun listImportedSkills(): List<ai.ciris.mobile.shared.models.ImportedSkillData> {
+        val method = "listImportedSkills"
+        val url = "$baseUrl/v1/system/adapters/imported-skills"
+        val auth = authHeader()
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val response: HttpResponse = client.get(url) {
+                auth?.let { headers { append("Authorization", it) } }
+            }
+
+            if (response.status.value !in 200..299) {
+                client.close()
+                throw Exception("Failed to list imported skills: ${response.status}")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+            val skills = obj["skills"]?.jsonArray?.map { skillJson ->
+                val s = skillJson.jsonObject
+                ai.ciris.mobile.shared.models.ImportedSkillData(
+                    moduleName = s["module_name"]?.jsonPrimitive?.content ?: "",
+                    originalSkillName = s["original_skill_name"]?.jsonPrimitive?.content ?: "",
+                    version = s["version"]?.jsonPrimitive?.content ?: "",
+                    description = s["description"]?.jsonPrimitive?.content ?: "",
+                    adapterPath = s["adapter_path"]?.jsonPrimitive?.content ?: "",
+                    sourceUrl = s["source_url"]?.jsonPrimitive?.contentOrNull
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Found ${skills.size} imported skills")
+            skills
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Delete a previously imported skill.
+     */
+    suspend fun deleteImportedSkill(moduleName: String): Boolean {
+        val method = "deleteImportedSkill"
+        val url = "$baseUrl/v1/system/adapters/imported-skills/$moduleName"
+        val auth = authHeader()
+        logInfo(method, "DELETE $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val response: HttpResponse = client.delete(url) {
+                auth?.let { headers { append("Authorization", it) } }
+            }
+            client.close()
+            response.status.value in 200..299
+        } catch (e: Exception) {
+            logException(method, e)
+            false
         }
     }
 

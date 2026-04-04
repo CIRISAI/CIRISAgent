@@ -138,3 +138,68 @@ class PaymentVerification(BaseModel):
     currency: Optional[str] = Field(None, description="Currency")
     timestamp: Optional[datetime] = Field(None, description="Payment timestamp")
     error: Optional[str] = Field(None, description="Error if verification failed")
+
+
+# =============================================================================
+# Gas Sponsorship Schemas (Commons Credits)
+# =============================================================================
+
+
+class SponsorshipEligibility(BaseModel):
+    """
+    Result of gas sponsorship eligibility check.
+
+    Part of the Commons Credits system - see FSD/COMMONS_CREDITS.md
+    """
+
+    eligible: bool = Field(..., description="Whether transaction qualifies for gas sponsorship")
+    reason: str = Field(..., description="Human-readable explanation")
+    budget_remaining_usd: Optional[Decimal] = Field(None, description="Remaining monthly sponsorship budget in USD")
+    estimated_gas_usd: Optional[Decimal] = Field(None, description="Estimated gas cost for this transaction")
+
+
+class SponsorshipPolicy(BaseModel):
+    """
+    Gas sponsorship policy configuration.
+
+    Rules (No KYC):
+    1. USDC transfers only (contract allowlist)
+    2. Minimum $1.00 value (economic sybil resistance)
+    3. Global monthly budget cap
+
+    See FSD/COMMONS_CREDITS.md for rationale.
+    """
+
+    # USDC on Base mainnet
+    USDC_BASE_ADDRESS: str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    USDC_DECIMALS: int = 6
+
+    min_transfer_usd: Decimal = Field(
+        default=Decimal("1.00"),
+        description="Minimum transfer value for sponsorship ($1 default)",
+    )
+    monthly_budget_usd: Decimal = Field(
+        default=Decimal("500.00"),
+        description="Global monthly gas sponsorship budget",
+    )
+    allowed_contracts: List[str] = Field(
+        default_factory=lambda: ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],
+        description="Token contracts eligible for sponsored transfers",
+    )
+
+    @property
+    def min_transfer_raw(self) -> int:
+        """Minimum transfer in raw USDC units (6 decimals)."""
+        return int(self.min_transfer_usd * Decimal(10**self.USDC_DECIMALS))
+
+
+class SponsorshipBudgetStatus(BaseModel):
+    """Current status of the gas sponsorship budget."""
+
+    month: str = Field(..., description="Current month (YYYY-MM)")
+    budget_usd: Decimal = Field(..., description="Total monthly budget")
+    spent_usd: Decimal = Field(..., description="Amount spent this month")
+    remaining_usd: Decimal = Field(..., description="Remaining budget")
+    utilization_percent: Decimal = Field(..., description="Budget utilization percentage")
+    transactions_sponsored: int = Field(..., description="Number of sponsored transactions")
+    is_exhausted: bool = Field(..., description="Whether budget is exhausted")

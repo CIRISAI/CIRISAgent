@@ -1398,6 +1398,7 @@
         "tickets_status_pending": "保留中",
         "tickets_status_progress": "進行中",
         "setup_include_location": "トレースに私の都市を含める（地域分析に役立ちます）",
+        "login_first_run_welcome": "ようこそ！AIアシスタントの設定方法を選択してください。",
         "login_error_invalid_credentials": "ユーザー名またはパスワードが無効です。もう一度お試しください。",
         "login_error_connection": "サーバーに接続できません。接続を確認してください。"
     },

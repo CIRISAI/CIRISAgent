@@ -931,10 +931,16 @@ class ApiPlatform(Service):
         else:
             logger.info("Telemetry export scheduler not started (services not available)")
 
+        from ciris_engine.logic.runtime.startup_logging import set_api_status
+
         # Wait for port to become available (handles TIME_WAIT from previous shutdown)
+        print(f"[STARTUP] Checking port {self.config.port} availability...")
+        set_api_status("checking_port")
         await self._wait_for_port_available()
 
         # Configure uvicorn
+        print(f"[STARTUP] Binding to port {self.config.port}...")
+        set_api_status("binding_port")
         config = uvicorn.Config(
             self.app,
             host=self.config.host,
@@ -989,6 +995,8 @@ class ApiPlatform(Service):
             print("\n" + "=" * 60 + "\n")
 
         # Wait a moment for server to start and check for immediate failures
+        print("[STARTUP] Starting server...")
+        set_api_status("starting_server")
         await asyncio.sleep(1)
 
         # Check if server task failed immediately
@@ -996,6 +1004,11 @@ class ApiPlatform(Service):
             error = getattr(self, "_startup_error", None)
             if error:
                 raise RuntimeError(f"API server failed to start: {error}")
+
+        print(f"[STARTUP] API server listening on port {self.config.port}")
+        set_api_status("server_listening")
+        print("[STARTUP] Server ready for connections")
+        set_api_status("server_ready")
 
     async def stop(self) -> None:
         """Stop the API server."""

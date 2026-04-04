@@ -3,13 +3,11 @@
 
 class CIRISVerifyError(Exception):
     """Base exception for all CIRISVerify errors."""
-
     pass
 
 
 class BinaryNotFoundError(CIRISVerifyError):
     """CIRISVerify binary not found at expected path."""
-
     def __init__(self, path: str):
         self.path = path
         super().__init__(f"CIRISVerify binary not found at: {path}")
@@ -21,30 +19,19 @@ class BinaryTamperedError(CIRISVerifyError):
     This is a CRITICAL security error. The binary may have been
     modified by an attacker. All operations should be halted.
     """
-
     def __init__(self, message: str = "Binary integrity check failed"):
         super().__init__(message)
 
 
 class VerificationFailedError(CIRISVerifyError):
     """License verification failed."""
-
-    def __init__(self, status_code_or_message: int | str, message: str | None = None):
-        # Support both: VerificationFailedError(code, message) and VerificationFailedError(message)
-        if message is None:
-            # Called with just message
-            self.status_code = -1
-            msg = str(status_code_or_message)
-        else:
-            # Called with status_code and message
-            self.status_code = int(status_code_or_message)
-            msg = message
-        super().__init__(f"Verification failed ({self.status_code}): {msg}")
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        super().__init__(f"Verification failed ({status_code}): {message}")
 
 
 class TimeoutError(CIRISVerifyError):
     """Operation timed out."""
-
     def __init__(self, operation: str, timeout_seconds: float):
         self.operation = operation
         self.timeout_seconds = timeout_seconds
@@ -53,7 +40,6 @@ class TimeoutError(CIRISVerifyError):
 
 class CommunicationError(CIRISVerifyError):
     """Error communicating with CIRISVerify binary."""
-
     def __init__(self, message: str, cause: Exception = None):
         self.cause = cause
         super().__init__(message)
@@ -83,7 +69,8 @@ class AttestationInProgressError(CIRISVerifyError):
                 else:
                     raise
     """
-
     def __init__(self, operation: str = "key operation"):
         self.operation = operation
-        super().__init__(f"Attestation in progress - {operation} blocked. Retry after ~500ms.")
+        super().__init__(
+            f"Attestation in progress - {operation} blocked. Retry after ~500ms."
+        )

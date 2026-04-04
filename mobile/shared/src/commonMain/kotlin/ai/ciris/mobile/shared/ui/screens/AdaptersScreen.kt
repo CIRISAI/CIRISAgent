@@ -58,11 +58,13 @@ fun AdaptersScreen(
     onToggleExpanded: (String) -> Unit,
     onEditConfig: (String) -> Unit,
     onAddAdapter: () -> Unit,
+    onImportSkill: () -> Unit = {},
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showRemoveDialog by remember { mutableStateOf<AdapterItem?>(null) }
+    var showAddMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -99,9 +101,9 @@ fun AdaptersScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onAddAdapter,
+                onClick = { showAddMenu = true },
                 containerColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.testableClickable("btn_add_adapter") { onAddAdapter() }
+                modifier = Modifier.testableClickable("btn_add_menu") { showAddMenu = true }
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -204,6 +206,107 @@ fun AdaptersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRemoveDialog = null }) {
+                    Text(localizedString("mobile.common_cancel"))
+                }
+            }
+        )
+    }
+
+    // Add menu dialog
+    if (showAddMenu) {
+        AlertDialog(
+            onDismissRequest = { showAddMenu = false },
+            title = { Text(localizedString("mobile.adapter_tap_add")) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Skill Workshop option
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_skill_workshop") {
+                                showAddMenu = false
+                                onImportSkill()
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Edit,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Column {
+                                Text(
+                                    text = localizedString("mobile.skill_workshop"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = localizedString("mobile.skill_workshop_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Add Adapter option
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_add_adapter") {
+                                showAddMenu = false
+                                onAddAdapter()
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Column {
+                                Text(
+                                    text = localizedString("mobile.adapter_add"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = localizedString("mobile.adapter_select_type"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddMenu = false },
+                    modifier = Modifier.testable("btn_add_menu_cancel")
+                ) {
                     Text(localizedString("mobile.common_cancel"))
                 }
             }

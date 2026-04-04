@@ -81,6 +81,8 @@ async def get_startup_status() -> SuccessResponse[StartupStatusResponse]:
     from ciris_engine.logic.runtime.startup_logging import (
         SERVICE_NAMES,
         TOTAL_CORE_SERVICES,
+        get_api_status,
+        get_api_status_history,
         get_current_phase,
         get_services_started,
     )
@@ -94,6 +96,8 @@ async def get_startup_status() -> SuccessResponse[StartupStatusResponse]:
             services_online=len(services_started),
             services_total=TOTAL_CORE_SERVICES,
             service_names=started_names,
+            api_status=get_api_status(),
+            api_status_history=get_api_status_history(),
         )
     )
 

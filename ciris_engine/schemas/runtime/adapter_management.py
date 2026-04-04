@@ -170,6 +170,8 @@ class ModuleTypeInfo(BaseModel):
     version: str = Field(..., description="Module version")
     description: str = Field(..., description="Module description")
     author: str = Field(..., description="Module author")
+    homepage: Optional[str] = Field(None, description="Module homepage or documentation URL")
+    emoji: Optional[str] = Field(None, description="Display emoji for UI (from imported skills)")
     module_source: str = Field(..., description="Source: 'core' for built-in or 'modular' for plugin")
     service_types: List[str] = Field(
         default_factory=list, description="Service types provided (e.g., TOOL, COMMUNICATION)"

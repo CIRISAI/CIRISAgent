@@ -120,6 +120,10 @@ class WalletStatusResponse(BaseModel):
     needs_gas: bool = Field(default=True, description="True if ETH balance is too low for transfers")
     address: Optional[str] = Field(default=None, description="Wallet address (EVM format)")
 
+    # Paymaster status (ERC-4337 gasless transactions)
+    paymaster_enabled: bool = Field(default=False, description="Whether paymaster is enabled in config")
+    paymaster_key_configured: bool = Field(default=False, description="Whether Arka API key is configured")
+
     # Attestation and limits
     is_receive_only: bool = Field(description="True if sending is disabled")
     attestation_level: int = Field(description="Current attestation level (0-5)")
@@ -324,6 +328,8 @@ async def get_wallet_status(
                 eth_balance="0.00",
                 needs_gas=True,
                 address=None,
+                paymaster_enabled=False,
+                paymaster_key_configured=False,
                 is_receive_only=True,
                 hardware_trust_degraded=False,
                 trust_degradation_reason=None,
@@ -482,8 +488,21 @@ async def get_wallet_status(
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not parse transaction: {e}")
 
+        # Get paymaster status
+        paymaster_enabled = False
+        paymaster_key_configured = False
+        paymaster_config = getattr(provider, "paymaster_config", None)
+        if paymaster_config:
+            paymaster_enabled = getattr(paymaster_config, "enabled", False)
+            # Check if key is configured (via _get_arka_api_key method or config)
+            if hasattr(provider, "_get_arka_api_key"):
+                key = provider._get_arka_api_key()
+                paymaster_key_configured = key is not None and len(key) > 0
+            elif paymaster_config.arka_api_key:
+                paymaster_key_configured = True
+
         logger.info(
-            f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}"
+            f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}, paymaster={paymaster_enabled}"
         )
 
         return WalletStatusResponse(
@@ -495,6 +514,8 @@ async def get_wallet_status(
             eth_balance=eth_balance,
             needs_gas=needs_gas,
             address=address,
+            paymaster_enabled=paymaster_enabled,
+            paymaster_key_configured=paymaster_key_configured,
             is_receive_only=is_receive_only,
             attestation_level=attestation_level,
             max_transaction_limit=max_tx,
@@ -895,4 +916,166 @@ async def check_duplicate_transaction(
             is_duplicate=False,
             window_seconds=300,
             warning=f"Could not check for duplicates: {str(e)}",
+        )
+
+
+class PaymasterKeyRequest(BaseModel):
+    """Request to set Arka paymaster API key."""
+
+    api_key: str = Field(description="Etherspot Arka API key")
+
+
+class PaymasterKeyResponse(BaseModel):
+    """Response for paymaster key operations."""
+
+    success: bool
+    key_configured: bool = Field(description="Whether a key is now configured")
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/paymaster/configure")
+async def configure_paymaster_key(
+    key_request: PaymasterKeyRequest,
+    request: Request,
+    auth: AuthAdminDep,
+) -> PaymasterKeyResponse:
+    """
+    Configure the Arka paymaster API key for gasless transactions.
+
+    This key enables ERC-4337 sponsored transactions so users don't need ETH for gas.
+    The key is stored securely and used for all subsequent transactions.
+    """
+    logger.info("[WALLET_PAYMASTER] Configuring paymaster key")
+
+    try:
+        # Validate key format (Etherspot keys start with specific prefixes)
+        api_key = key_request.api_key.strip()
+        if not api_key:
+            return PaymasterKeyResponse(
+                success=False,
+                key_configured=False,
+                error="API key cannot be empty",
+            )
+
+        # Basic validation - Etherspot keys have a specific format
+        if not api_key.startswith("etherspot_"):
+            logger.warning("[WALLET_PAYMASTER] Key doesn't match expected format")
+            # Still allow it, but warn
+            pass
+
+        # Store in secrets service
+        runtime = getattr(request.app.state, "runtime", None)
+        if not runtime:
+            return PaymasterKeyResponse(
+                success=False,
+                key_configured=False,
+                error="Runtime not available",
+            )
+
+        # Store the key using secrets tool service
+        secrets_tool = getattr(runtime, "secrets_tool_service", None)
+        if secrets_tool:
+            await secrets_tool.set_secret("arka_api_key", api_key, category="wallet")
+            logger.info("[WALLET_PAYMASTER] Key stored via secrets tool service")
+        else:
+            # Fallback: try to store in config
+            logger.warning("[WALLET_PAYMASTER] Secrets tool not available, trying config fallback")
+
+            # Update the provider's paymaster config directly
+            provider = _get_wallet_provider_from_app(request)
+            if provider and hasattr(provider, "paymaster_config"):
+                from pydantic import SecretStr
+
+                provider.paymaster_config.arka_api_key = SecretStr(api_key)
+
+                # Reinitialize Arka client with new key
+                if hasattr(provider, "_arka_client") and provider._arka_client:
+                    chain_id = provider._chain_client.chain_id
+                    from ciris_adapters.wallet.providers.paymaster_client import ArkaClient
+
+                    provider._arka_client = ArkaClient(
+                        arka_url=provider.paymaster_config.arka_url,
+                        api_key=api_key,
+                        chain_id=chain_id,
+                    )
+                logger.info("[WALLET_PAYMASTER] Key stored in provider config")
+            else:
+                return PaymasterKeyResponse(
+                    success=False,
+                    key_configured=False,
+                    error="No storage mechanism available for paymaster key",
+                )
+
+        return PaymasterKeyResponse(
+            success=True,
+            key_configured=True,
+            message="Paymaster key configured successfully. Gasless transfers are now enabled.",
+        )
+
+    except Exception as e:
+        logger.error(f"[WALLET_PAYMASTER] Error configuring key: {e}", exc_info=True)
+        return PaymasterKeyResponse(
+            success=False,
+            key_configured=False,
+            error=f"Failed to configure paymaster key: {str(e)}",
+        )
+
+
+@router.get("/paymaster/status")
+async def get_paymaster_status(
+    request: Request,
+    auth: AuthAdminDep,
+) -> PaymasterKeyResponse:
+    """
+    Get the current paymaster configuration status.
+
+    Returns whether a paymaster key is configured without exposing the key itself.
+    """
+    logger.info("[WALLET_PAYMASTER] Checking paymaster status")
+
+    try:
+        provider = _get_wallet_provider_from_app(request)
+
+        if not provider:
+            return PaymasterKeyResponse(
+                success=True,
+                key_configured=False,
+                message="Wallet provider not available",
+            )
+
+        # Check if key is configured
+        key_configured = False
+        if hasattr(provider, "_get_arka_api_key"):
+            key = provider._get_arka_api_key()
+            key_configured = key is not None and len(key) > 0
+        elif hasattr(provider, "paymaster_config") and provider.paymaster_config:
+            if provider.paymaster_config.arka_api_key:
+                key_configured = True
+
+        # Check if paymaster is enabled in config
+        paymaster_enabled = False
+        if hasattr(provider, "paymaster_config") and provider.paymaster_config:
+            paymaster_enabled = getattr(provider.paymaster_config, "enabled", False)
+
+        message = None
+        if paymaster_enabled and key_configured:
+            message = "Gasless transfers enabled"
+        elif paymaster_enabled and not key_configured:
+            message = "Paymaster enabled but no API key configured"
+        else:
+            message = "Paymaster not enabled - ETH required for gas"
+
+        return PaymasterKeyResponse(
+            success=True,
+            key_configured=key_configured,
+            message=message,
+        )
+
+    except Exception as e:
+        logger.error(f"[WALLET_PAYMASTER] Error checking status: {e}", exc_info=True)
+        return PaymasterKeyResponse(
+            success=False,
+            key_configured=False,
+            error=f"Failed to check paymaster status: {str(e)}",
         )

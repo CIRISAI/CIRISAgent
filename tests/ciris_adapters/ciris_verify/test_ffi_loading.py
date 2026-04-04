@@ -1,4 +1,5 @@
 """Test that CIRISVerify FFI binary loading finds the correct platform library."""
+
 import platform
 from pathlib import Path
 
@@ -7,13 +8,13 @@ import pytest
 
 def test_find_binary_prefers_pip_package():
     """The FFI client should check the pip-installed ciris_verify package first."""
+    import inspect
+
     from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
 
-    import inspect
     src = inspect.getsource(CIRISVerify._find_binary)
     assert "pip-installed" in src, "pip package check should be first in search order"
-    assert src.index("pip-installed") < src.index("system paths"), \
-        "pip check should come before system path check"
+    assert src.index("pip-installed") < src.index("system paths"), "pip check should come before system path check"
 
 
 def test_is_valid_binary_for_platform(tmp_path: Path):

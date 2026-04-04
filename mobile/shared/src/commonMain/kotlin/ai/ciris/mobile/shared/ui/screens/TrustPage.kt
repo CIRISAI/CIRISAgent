@@ -196,7 +196,7 @@ fun TrustPage(
 
                     // Learn more link
                     Text(
-                        text = localizedString("trust_learn_more"),
+                        text = localizedString("mobile.trust_learn_more"),
                         fontSize = 14.sp,
                         color = SemanticColors.Default.info,
                         textDecoration = TextDecoration.Underline,
@@ -246,7 +246,7 @@ private fun LoadingCard() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CircularProgressIndicator(color = SemanticColors.Default.success)
-            Text(localizedString("trust_running"), color = SemanticColors.Default.inactive)
+            Text(localizedString("mobile.trust_running"), color = SemanticColors.Default.inactive)
         }
     }
 }
@@ -262,7 +262,7 @@ private fun ErrorCard(error: String, onRetry: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = localizedString("trust_failed"),
+                text = localizedString("mobile.trust_failed"),
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.error
             )
@@ -329,7 +329,7 @@ private fun TrustSummaryCard(
             Text(text = "🛡", fontSize = 48.sp)
 
             Text(
-                text = localizedString("trust_level").replace("{level}", level.toString()),
+                text = localizedString("mobile.trust_level").replace("{level}", level.toString()),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = textColor
@@ -357,7 +357,7 @@ private fun TrustSummaryCard(
                         color = textColor.copy(alpha = 0.1f)
                     ) {
                         Text(
-                            text = localizedString("trust_agent_ver").replace("{version}", agentVer),
+                            text = localizedString("mobile.trust_agent_ver").replace("{version}", agentVer),
                             fontSize = 12.sp,
                             color = textColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -370,7 +370,7 @@ private fun TrustSummaryCard(
                         color = textColor.copy(alpha = 0.1f)
                     ) {
                         Text(
-                            text = localizedString("trust_verify_ver").replace("{version}", version),
+                            text = localizedString("mobile.trust_verify_ver").replace("{version}", version),
                             fontSize = 12.sp,
                             color = textColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -383,7 +383,7 @@ private fun TrustSummaryCard(
             // Timestamp badge showing when attestation was performed
             status.cachedAt?.let { timestamp ->
                 Text(
-                    text = localizedString("trust_last_ran").replace("{time}", formatAttestationTimestamp(timestamp)),
+                    text = localizedString("mobile.trust_last_ran").replace("{time}", formatAttestationTimestamp(timestamp)),
                     fontSize = 11.sp,
                     color = textColor.copy(alpha = 0.6f)
                 )
@@ -420,7 +420,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                 color = textColor.copy(alpha = 0.6f)
             )
             Text(
-                text = localizedString("trust_level_debug"),
+                text = localizedString("mobile.trust_level_debug"),
                 fontSize = 10.sp,
                 color = textColor.copy(alpha = 0.6f)
             )
@@ -444,7 +444,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                 ) {
                     // Description text explaining attestation levels
                     Text(
-                        text = localizedString("trust_level_explain"),
+                        text = localizedString("mobile.trust_level_explain"),
                         fontSize = 9.sp,
                         color = textColor.copy(alpha = 0.7f),
                         modifier = Modifier.padding(bottom = 4.dp)
@@ -491,7 +491,7 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
                     }
                     val match = calc == status.maxLevel
                     Text(
-                        text = localizedString("trust_calc_debug")
+                        text = localizedString("mobile.trust_calc_debug")
                             .replace("{calc}", calc.toString())
                             .replace("{api}", status.maxLevel.toString())
                             .replace("{pending}", status.levelPending.toString()),
@@ -549,13 +549,13 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = localizedString("trust_checks"),
+                text = localizedString("mobile.trust_checks"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
 
             Text(
-                text = localizedString("trust_checks_desc"),
+                text = localizedString("mobile.trust_checks_desc"),
                 fontSize = 12.sp,
                 color = Color(0xFF6B7280)
             )
@@ -643,13 +643,13 @@ private fun DeviceAttestationCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = localizedString("trust_device"),
+                text = localizedString("mobile.trust_device"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
 
             Text(
-                text = localizedString("trust_device_desc"),
+                text = localizedString("mobile.trust_device_desc"),
                 fontSize = 12.sp,
                 color = Color(0xFF6B7280)
             )
@@ -713,7 +713,7 @@ private fun DeviceAttestationCard(
                                 color = color
                             )
                             Text(
-                                text = localizedString("trust_play_integrity"),
+                                text = localizedString("mobile.trust_play_integrity"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = color
@@ -745,7 +745,7 @@ private fun DeviceAttestationCard(
                         }
 
                         Text(
-                            text = localizedString("trust_play_validates"),
+                            text = localizedString("mobile.trust_play_validates"),
                             fontSize = 11.sp,
                             color = Color(0xFF9CA3AF),
                             modifier = Modifier.padding(start = 22.dp)
@@ -772,14 +772,14 @@ private fun DeviceAttestationCard(
                                 color = Color(0xFF6B7280)
                             )
                             Text(
-                                text = localizedString("trust_app_attest"),
+                                text = localizedString("mobile.trust_app_attest"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF6B7280)
                             )
                         }
                         Text(
-                            text = localizedString("trust_app_attest_soon"),
+                            text = localizedString("mobile.trust_app_attest_soon"),
                             fontSize = 12.sp,
                             color = Color(0xFF9CA3AF),
                             modifier = Modifier.padding(start = 22.dp)
@@ -789,7 +789,7 @@ private fun DeviceAttestationCard(
                 else -> {
                     // Desktop/other - no device attestation available
                     Text(
-                        text = localizedString("trust_device_unavailable").replace("{platform}", status.platformOs ?: "this platform"),
+                        text = localizedString("mobile.trust_device_unavailable").replace("{platform}", status.platformOs ?: "this platform"),
                         fontSize = 12.sp,
                         color = Color(0xFF9CA3AF)
                     )
@@ -798,7 +798,7 @@ private fun DeviceAttestationCard(
 
             // Disclaimer
             Text(
-                text = localizedString("trust_device_independent"),
+                text = localizedString("mobile.trust_device_independent"),
                 fontSize = 11.sp,
                 color = Color(0xFF9CA3AF)
             )
@@ -942,7 +942,7 @@ private fun PlatformInfoCard(status: VerifyStatusResponse) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(localizedString("trust_platform"), fontWeight = FontWeight.Bold)
+            Text(localizedString("mobile.trust_platform"), fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 status.platformOs?.let {
                     Text("OS: $it", fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -965,12 +965,12 @@ private fun FileIntegrityCard(status: VerifyStatusResponse) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(localizedString("trust_file_integrity"), fontWeight = FontWeight.Bold)
+            Text(localizedString("mobile.trust_file_integrity"), fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(localizedString("trust_checked").replace("{count}", status.filesChecked.toString()), fontSize = 12.sp, color = Color(0xFF6B7280))
-                Text(localizedString("trust_passed").replace("{count}", (status.filesPassed ?: 0).toString()), fontSize = 12.sp, color = Color(0xFF059669))
+                Text(localizedString("mobile.trust_checked").replace("{count}", status.filesChecked.toString()), fontSize = 12.sp, color = Color(0xFF6B7280))
+                Text(localizedString("mobile.trust_passed").replace("{count}", (status.filesPassed ?: 0).toString()), fontSize = 12.sp, color = Color(0xFF059669))
                 if ((status.filesFailed ?: 0) > 0) {
-                    Text(localizedString("trust_failed_count").replace("{count}", status.filesFailed.toString()), fontSize = 12.sp, color = Color(0xFFDC2626))
+                    Text(localizedString("mobile.trust_failed_count").replace("{count}", status.filesFailed.toString()), fontSize = 12.sp, color = Color(0xFFDC2626))
                 }
             }
             status.integrityFailureReason?.let { reason ->
@@ -1368,7 +1368,7 @@ private fun L1Content(status: VerifyStatusResponse) {
     val failedFuncs = status.functionsFailedList ?: emptyList()
     if (failedFuncs.isNotEmpty()) {
         Text(
-            text = localizedString("trust_failed_functions"),
+            text = localizedString("mobile.trust_failed_functions"),
             fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFFDC2626),
@@ -2102,7 +2102,7 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
     // Show hint when at L4 and registry key not found - user can upgrade to L5
     if (status.maxLevel == 4 && keyStatus.contains("not_found", ignoreCase = true)) {
         Text(
-            text = localizedString("trust_wizard_hint"),
+            text = localizedString("mobile.trust_wizard_hint"),
             fontSize = 10.sp,
             color = Color(0xFF2563EB),
             fontStyle = FontStyle.Italic,
@@ -2126,7 +2126,7 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
         horizontalArrangement = Arrangement.End
     ) {
         Text(
-            text = localizedString("trust_copy_diagnostics"),
+            text = localizedString("mobile.trust_copy_diagnostics"),
             fontSize = 11.sp,
             color = Color(0xFF2563EB),
             modifier = Modifier
@@ -2248,7 +2248,7 @@ private fun ExplanationDropdown(
                 // What it does
                 Column {
                     Text(
-                        text = localizedString("trust_what_checks"),
+                        text = localizedString("mobile.trust_what_checks"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2264,7 +2264,7 @@ private fun ExplanationDropdown(
                 // Why it matters
                 Column {
                     Text(
-                        text = localizedString("trust_why_matters"),
+                        text = localizedString("mobile.trust_why_matters"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2280,7 +2280,7 @@ private fun ExplanationDropdown(
                 // How it works
                 Column {
                     Text(
-                        text = localizedString("trust_how_works"),
+                        text = localizedString("mobile.trust_how_works"),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E40AF)
@@ -2305,7 +2305,7 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = localizedString("trust_details"),
+                text = localizedString("mobile.trust_details"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
@@ -2581,7 +2581,7 @@ private fun DiagnosticsLogCard(
                         val hasContent = !diagnostics.isNullOrEmpty() && diagnostics != "null"
                         if (!hasContent) {
                             Text(
-                                text = localizedString("trust_no_diagnostics"),
+                                text = localizedString("mobile.trust_no_diagnostics"),
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFF9CA3AF)
@@ -2608,7 +2608,7 @@ private fun DiagnosticsLogCard(
                     }
                 }
                 Text(
-                    text = localizedString("trust_log_desc"),
+                    text = localizedString("mobile.trust_log_desc"),
                     fontSize = 10.sp,
                     color = Color(0xFF9CA3AF),
                     modifier = Modifier.padding(top = 4.dp)
@@ -2629,12 +2629,12 @@ private fun KeyStatusWarningCard(status: VerifyStatusResponse) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = localizedString("trust_key_inactive"),
+                text = localizedString("mobile.trust_key_inactive"),
                 fontWeight = FontWeight.Bold,
                 color = SemanticColors.Default.onWarning
             )
             Text(
-                text = localizedString("trust_key_status").replace("{status}", status.keyStatus),
+                text = localizedString("mobile.trust_key_status").replace("{status}", status.keyStatus),
                 fontSize = 12.sp,
                 color = SemanticColors.Default.warning
             )
@@ -2663,12 +2663,12 @@ private fun DisclaimerCard() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = localizedString("trust_verify_desc"),
+                text = localizedString("mobile.trust_verify_desc"),
                 fontSize = 12.sp,
                 color = SemanticColors.Default.onSuccess
             )
             Text(
-                text = localizedString("trust_verify_disclaimer"),
+                text = localizedString("mobile.trust_verify_disclaimer"),
                 fontSize = 11.sp,
                 color = SemanticColors.Default.inactive,
                 fontWeight = FontWeight.Normal

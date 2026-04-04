@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+# Mark all tests in this module with a timeout to prevent worker crashes
+pytestmark = pytest.mark.timeout(30)
+
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies

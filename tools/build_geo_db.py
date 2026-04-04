@@ -13,7 +13,6 @@ Creates ciris_engine/data/geo/cities.db with:
 import sqlite3
 from pathlib import Path
 
-
 GEO_DIR = Path(__file__).parent.parent / "ciris_engine" / "data" / "geo"
 DB_PATH = GEO_DIR / "cities.db"
 CITIES_FILE = GEO_DIR / "cities15000.txt"
@@ -31,7 +30,8 @@ def build_database() -> None:
     cursor = conn.cursor()
 
     # Create tables
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE countries (
             code TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -39,17 +39,21 @@ def build_database() -> None:
             currency_name TEXT,
             languages TEXT
         )
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE admin1 (
             code TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             country_code TEXT NOT NULL
         )
-    """)
+    """
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE cities (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
@@ -62,7 +66,8 @@ def build_database() -> None:
             timezone TEXT,
             FOREIGN KEY (country_code) REFERENCES countries(code)
         )
-    """)
+    """
+    )
 
     # Create indexes for fast search
     cursor.execute("CREATE INDEX idx_cities_name ON cities(name COLLATE NOCASE)")
@@ -145,20 +150,24 @@ def build_database() -> None:
 
     # Create FTS5 virtual table for fast text search
     print("Creating FTS5 search index...")
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE VIRTUAL TABLE cities_fts USING fts5(
             name,
             ascii_name,
             content='cities',
             content_rowid='id'
         )
-    """)
+    """
+    )
 
     # Populate FTS table
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO cities_fts(rowid, name, ascii_name)
         SELECT id, name, ascii_name FROM cities
-    """)
+    """
+    )
 
     conn.commit()
 

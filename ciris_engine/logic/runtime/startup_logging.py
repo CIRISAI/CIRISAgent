@@ -51,6 +51,10 @@ SERVICE_NAMES = [
 # Track which phase we're in for logging clarity
 _current_phase: str = "STARTUP"
 
+# Track API server startup status for UI progress
+_api_status: str = ""
+_api_status_history: list[str] = []
+
 
 def _set_service_phase(phase: str) -> None:
     """Set the current service initialization phase for logging."""
@@ -116,3 +120,21 @@ def get_current_phase() -> str:
 def get_services_started() -> set[int]:
     """Get the set of service numbers that have started."""
     return _services_started
+
+
+def set_api_status(status: str) -> None:
+    """Set the API server startup status for UI progress tracking."""
+    global _api_status, _api_status_history
+    _api_status = status
+    if status and status not in _api_status_history:
+        _api_status_history.append(status)
+
+
+def get_api_status() -> str:
+    """Get the current API server startup status."""
+    return _api_status
+
+
+def get_api_status_history() -> list[str]:
+    """Get the full history of API status phases."""
+    return _api_status_history.copy()

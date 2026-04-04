@@ -1398,6 +1398,7 @@
         "tickets_status_pending": "Beklemede",
         "tickets_status_progress": "Devam Ediyor",
         "setup_include_location": "İzlemelerde şehrimi dahil et (bölgesel analize yardımcı olur)",
+        "login_first_run_welcome": "Hoş geldiniz! Yapay zeka asistanınızı nasıl kurmak istediğinizi seçin.",
         "login_error_invalid_credentials": "Geçersiz kullanıcı adı veya şifre. Lütfen tekrar deneyin.",
         "login_error_connection": "Sunucuya bağlanılamıyor. Lütfen bağlantınızı kontrol edin."
     },

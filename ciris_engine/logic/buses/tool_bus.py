@@ -50,10 +50,37 @@ class ToolBus(BaseBus[ToolService]):
         self._errors_count = 0
         self._cached_tools_count = 0  # Updated by collect_telemetry when available
 
+        # Tool aliases: maps alias -> canonical tool name
+        # Enables imported skills to be invoked by their skillKey (e.g., "todoist" -> "skill:todoist-cli")
+        self._tool_aliases: Dict[str, str] = {}
+
+    def register_tool_alias(self, alias: str, canonical_name: str) -> None:
+        """Register a tool alias so the tool can be invoked by an alternative name.
+
+        Args:
+            alias: The alias name (e.g., "todoist")
+            canonical_name: The real tool name (e.g., "skill:todoist-cli")
+        """
+        self._tool_aliases[alias] = canonical_name
+        logger.info(f"Registered tool alias: '{alias}' -> '{canonical_name}'")
+
+    def resolve_tool_name(self, tool_name: str) -> str:
+        """Resolve a tool name through aliases.
+
+        Args:
+            tool_name: The requested tool name (may be an alias)
+
+        Returns:
+            The canonical tool name
+        """
+        return self._tool_aliases.get(tool_name, tool_name)
+
     async def execute_tool(
         self, tool_name: str, parameters: JSONDict, handler_name: str = "default"
     ) -> ToolExecutionResult:
         """Execute a tool and return the result"""
+        # Resolve aliases before lookup
+        tool_name = self.resolve_tool_name(tool_name)
         logger.debug(f"execute_tool called with tool_name={tool_name}, parameters={parameters}")
 
         # Step 1: Get ALL tool services to find which ones support this tool
@@ -283,6 +310,8 @@ class ToolBus(BaseBus[ToolService]):
         Searches ALL registered tool services to find the tool info,
         similar to how execute_tool searches for tools.
         """
+        # Resolve aliases
+        tool_name = self.resolve_tool_name(tool_name)
         # Collect all tool services
         try:
             all_services = self._collect_tool_services()

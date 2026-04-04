@@ -8,7 +8,8 @@ This directory contains a SQLite database of world cities for the location typea
 - Size: ~6MB
 - Includes FTS5 full-text search index for fast typeahead
 
-**Note:** The database is NOT committed to git. Regenerate it using:
+The database is committed to git so it's included in pip installs.
+To regenerate from fresh GeoNames data:
 
 ```bash
 python -m tools.build_geo_db

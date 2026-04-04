@@ -136,6 +136,7 @@ setup(
             "localized/*.json",  # Backend localization files (copied from /localization/)
             "localized/*.txt",  # Localized ACCORD text files
             "localized/*.md",  # Localized comprehensive guides
+            "geo/cities.db",  # GeoNames cities database for location typeahead
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data

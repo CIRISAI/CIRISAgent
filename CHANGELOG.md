@@ -5,6 +5,35 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-04-02
+
+### Added
+
+- **OpenClaw Skill Import** - Import OpenClaw SKILL.md files as CIRIS adapters
+  - Parse and convert full skill definitions (metadata, requirements, instructions, install steps)
+  - Security scanner with 8 attack categories (prompt injection, credential theft, backdoors, cryptominers, typosquatting, obfuscation, undeclared network, metadata inconsistency)
+  - HyperCard-style skill builder with 6 card types (identity, tools, requires, instruct, behavior, install)
+  - Preview and validate skills before import
+  - Auto-load imported skills into runtime
+- **Server Connection Manager** - New screen accessible via Local/Offline badge
+  - View and manage local server state
+  - Restart backend if crashed (desktop)
+  - Connect to remote agents at custom URL:port
+- **Skill Workshop Localization** - 135 skill_* keys translated to all 16 languages
+- **Linux Demo Recording** - `record_demo_clips.py` now supports Linux with ffmpeg
+
+### Fixed
+
+- **Install Steps in ToolInfo** - Imported skills now include dependency installation guidance
+- **Supporting File Paths** - Preserve directory structure (no more collisions from same-named files)
+- **Builder Install Card** - User-authored install instructions carried through to ParsedSkill
+- **Port Race Condition** - Increased startup delay from 3s to 6s to prevent desktop app connecting before server ready
+- **Mypy Type Error** - Fixed `range` to `list[int]` conversion in scanner
+- **ReDoS Vulnerability** - Replaced regex with string-based YAML frontmatter extraction in skill parser
+- **Path Traversal Security** - Added pre-validation (null bytes, length limits) and portable temp directory handling
+- **CI Test Stability** - Added shell-level timeout and pytest markers to prevent worker hangs
+- **API Documentation** - Added `responses` parameter to skill builder routes for proper OpenAPI docs
+
 ## [2.3.3] - 2026-04-02
 
 ### Added

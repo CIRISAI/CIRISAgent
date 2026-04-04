@@ -308,6 +308,7 @@ class CIRISVerify:
         # 1. Check pip-installed ciris_verify package FIRST — always correct platform
         try:
             import ciris_verify as cv_pkg
+
             pkg_dir = Path(cv_pkg.__file__).parent
             for suffix in suffixes:
                 candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
@@ -324,6 +325,7 @@ class CIRISVerify:
             if path.exists():
                 return path
 
+<<<<<<< HEAD
         # 3. Check relative to this module — validate it's the right platform
         #    Dev repos may contain binaries for other platforms (e.g., Linux .so on macOS)
         module_dir = Path(__file__).parent
@@ -358,6 +360,16 @@ class CIRISVerify:
             return True  # Unknown platform, allow
         except Exception:
             return False
+=======
+        # 3. Check relative to this module (may be wrong platform in dev repos)
+        module_dir = Path(__file__).parent
+        for suffix in suffixes:
+            candidate = module_dir / f"libciris_verify_ffi{suffix}"
+            if candidate.exists():
+                return candidate
+
+        raise BinaryNotFoundError(f"Searched: {paths}")
+>>>>>>> 5da326f46 (Fix FFI library loading: check pip package first, fix missing import)
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""

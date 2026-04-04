@@ -110,7 +110,9 @@ class TestMinimalDreamProcessor:
         with patch("ciris_engine.logic.persistence.add_task"):
             with patch("ciris_engine.logic.persistence.add_thought"):
                 with patch("ciris_engine.logic.persistence.get_thoughts_by_task_id", return_value=[]):
-                    with patch("ciris_engine.logic.persistence.get_task_by_id", return_value=Mock(status=Mock(value="ACTIVE"))):
+                    with patch(
+                        "ciris_engine.logic.persistence.get_task_by_id", return_value=Mock(status=Mock(value="ACTIVE"))
+                    ):
                         result = await dream_processor.process(0)
 
                         assert isinstance(result, DreamResult)

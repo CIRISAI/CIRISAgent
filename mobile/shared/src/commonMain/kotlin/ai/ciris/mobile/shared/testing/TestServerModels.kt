@@ -44,6 +44,9 @@ data class WaitRequest(val testTag: String, val timeoutMs: Int? = 5000)
 data class ScreenshotRequest(val path: String, val format: String? = "png")
 
 @Serializable
+data class ScrollRequest(val testTag: String, val direction: String = "down", val amount: Int = 300)
+
+@Serializable
 data class ActionResponse(
     val success: Boolean,
     val element: String? = null,
@@ -52,4 +55,27 @@ data class ActionResponse(
     val text: String? = null,
     val screen: String? = null,
     val error: String? = null
+)
+
+/**
+ * Combined action + view request.
+ * Performs an action, waits, then returns the updated UI state.
+ * Reduces 3 API calls to 1.
+ */
+@Serializable
+data class ActAndViewRequest(
+    val action: String,                    // "click", "input", "wait"
+    val testTag: String,                   // Target element
+    val text: String? = null,              // For input action
+    val clearFirst: Boolean = true,        // For input action
+    val waitMs: Int = 500,                 // Wait after action before reading tree
+    val filterTags: List<String>? = null   // Only return elements matching these patterns (substring match)
+)
+
+@Serializable
+data class ActAndViewResponse(
+    val actionResult: ActionResponse,
+    val screen: String,
+    val elements: List<ElementInfo>,
+    val elementCount: Int
 )

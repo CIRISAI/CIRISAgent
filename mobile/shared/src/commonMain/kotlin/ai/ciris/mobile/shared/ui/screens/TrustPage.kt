@@ -1498,6 +1498,19 @@ private fun L2Content(
             DetailSubtext("• EK certificate retrieved")
             DetailSubtext("• Remote verification: not implemented")
         }
+    } else if (isMacPlatform) {
+        // macOS: App Store distribution provides attestation via codesigning + notarization
+        val isAppStoreDistributed = false // TODO: detect via bundle receipt or codesign entitlements
+        DetailRow(
+            label = "App Store Distribution",
+            value = if (isAppStoreDistributed) "Notarized" else "Development build (unsigned)",
+            ok = isAppStoreDistributed,
+            pending = !isAppStoreDistributed
+        )
+        if (!isAppStoreDistributed) {
+            DetailSubtext("• SE hardware available but entitlements require App Store distribution")
+            DetailSubtext("• Install from Mac App Store for full L2 attestation")
+        }
     } else {
         // Mobile attestation: App Attest (iOS) / Play Integrity (Android)
         val attestLabel = if (isIosPlatform) "App Attest" else "Play Integrity"

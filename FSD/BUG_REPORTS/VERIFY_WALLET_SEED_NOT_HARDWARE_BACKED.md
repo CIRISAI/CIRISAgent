@@ -34,9 +34,23 @@ CIRISVerify unified attestation should report:
 
 The wallet seed storage path in CIRISVerify explicitly uses `software-only secure storage` regardless of hardware capability. This appears to be a separate code path from the Ed25519 key storage.
 
+## Root Cause Found (v1.3.8 diagnostic)
+
+```
+signer_hw_backed=true, running_in_vm=true, hardware_backed=false, hardware_type=AndroidKeystore
+```
+
+**The VM/emulator detection is a FALSE POSITIVE!**
+
+- `signer_hw_backed=true` - Ed25519 key IS hardware-backed ✓
+- `running_in_vm=true` - Incorrectly detecting real device as VM ❌
+- `hardware_backed=false` - Forced to false due to VM detection
+
+The older Samsung SM-J700T is being incorrectly flagged as an emulator, which overrides the actual hardware-backed status.
+
 ## Affected Version
 
-CIRISVerify v1.3.7 (latest)
+CIRISVerify v1.3.8 (with diagnostic logging)
 
 ## Device Info
 

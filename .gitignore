@@ -8,6 +8,8 @@ __pycache__/
 *.pyo
 *.pyd
 *.db
+# Exception: cities.db is needed for location typeahead in pip installs
+!ciris_engine/data/geo/cities.db
 *.sqlite
 *.log
 logs/

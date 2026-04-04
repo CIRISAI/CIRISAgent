@@ -189,6 +189,14 @@ fun SetupScreen(
                     }
                     TestAutomation.clearTextInputRequest()
                 }
+                "input_llm_base_url" -> {
+                    if (request.clearFirst) {
+                        viewModel.setLlmBaseUrl(request.text)
+                    } else {
+                        viewModel.setLlmBaseUrl(state.llmBaseUrl + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
             }
         }
     }

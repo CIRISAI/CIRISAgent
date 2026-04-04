@@ -25,7 +25,7 @@ from typing import Any, Optional
 import httpx
 from pydantic import BaseModel, Field
 
-from .paymaster_client import SponsorshipResult, UserOperation
+from .paymaster_client import PaymasterError, SponsorshipResult, UserOperation
 
 logger = logging.getLogger(__name__)
 
@@ -280,12 +280,6 @@ class CoinbasePaymaster:
         gas_cost_usd = gas_cost_eth * eth_price_usd
 
         return gas_cost_usd.quantize(Decimal("0.0001"))
-
-
-class PaymasterError(Exception):
-    """Error from Coinbase Paymaster service."""
-
-    pass
 
 
 # =============================================================================

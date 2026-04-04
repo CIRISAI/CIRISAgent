@@ -162,8 +162,10 @@ class AndroidTestAutomationServer(private val port: Int = 8091) {
             }
 
             // Check system properties and environment
+            // Also check debug.CIRIS_TEST_MODE for adb setprop support
             val testMode = System.getenv("CIRIS_TEST_MODE")?.lowercase()
                 ?: System.getProperty("CIRIS_TEST_MODE")?.lowercase()
+                ?: System.getProperty("debug.CIRIS_TEST_MODE")?.lowercase()
             return testMode in listOf("true", "1", "yes")
         }
     }

@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.background
@@ -326,7 +327,7 @@ private fun WalletErrorCard(error: String, onRetry: () -> Unit) {
 @Composable
 private fun ExperimentalWarningCard() {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_experimental"),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))  // Amber/warning background
     ) {
         Row(
@@ -397,7 +398,7 @@ private fun PaymasterStatusCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_paymaster"),
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         Row(
@@ -419,7 +420,8 @@ private fun PaymasterStatusCard(
                     text = statusText,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = textColor
+                    color = textColor,
+                    modifier = Modifier.testable("txt_paymaster_status")
                 )
                 if (paymasterEnabled && keyConfigured) {
                     Text(
@@ -466,7 +468,7 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
     val showConversion = currentCurrencyInfo?.code != "USDC" && currentCurrencyInfo?.code != "USD"
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_balance"),
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         SelectionContainer {
@@ -559,7 +561,7 @@ private fun WalletAddressCard(address: String, network: String) {
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_address")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -582,6 +584,7 @@ private fun WalletAddressCard(address: String, network: String) {
                         clipboardManager.setText(AnnotatedString(address))
                         showCopied = true
                     },
+                    modifier = Modifier.testable("btn_copy_address"),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -596,7 +599,8 @@ private fun WalletAddressCard(address: String, network: String) {
                     text = address,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testable("txt_wallet_address")
                 )
             }
             SelectionContainer {
@@ -612,7 +616,7 @@ private fun WalletAddressCard(address: String, network: String) {
 
 @Composable
 private fun WalletLimitsCard(status: WalletStatusResponse) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_limits")) {
         SelectionContainer {
             Column(
                 modifier = Modifier
@@ -682,7 +686,7 @@ private fun HardwareTrustWarningCard(
     advisories: List<SecurityAdvisoryData> = emptyList()
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_trust_warning"),
         colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning)
     ) {
         SelectionContainer {
@@ -782,7 +786,7 @@ private fun HardwareTrustWarningCard(
 
 @Composable
 private fun SpendingProgressCard(spending: SpendingProgress) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_spending_progress")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -859,7 +863,7 @@ private fun SpendingProgressCard(spending: SpendingProgress) {
 
 @Composable
 private fun TransactionHistoryCard(transactions: List<TransactionSummary>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_transaction_history")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -999,7 +1003,7 @@ private fun WalletTransferCard(
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_transfer")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1024,7 +1028,7 @@ private fun WalletTransferCard(
                 onValueChange = { recipientAddress = it; transferError = null; transferSuccess = null },
                 label = { Text(localizedString("mobile.wallet_recipient")) },
                 placeholder = { Text("0x...") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_recipient_address"),
                 singleLine = true,
                 enabled = !isTransferring,
                 isError = addressValidation?.let { !it.valid || !it.checksumValid } ?: false,
@@ -1064,7 +1068,7 @@ private fun WalletTransferCard(
                 onValueChange = { amount = it; transferError = null; transferSuccess = null },
                 label = { Text(localizedString("mobile.wallet_amount", mapOf("currency" to currency))) },
                 placeholder = { Text("0.00") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_transfer_amount"),
                 singleLine = true,
                 enabled = !isTransferring,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -1105,7 +1109,7 @@ private fun WalletTransferCard(
                 onValueChange = { memo = it },
                 label = { Text(localizedString("mobile.wallet_memo")) },
                 placeholder = { Text(localizedString("mobile.wallet_memo_placeholder")) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_transfer_memo"),
                 singleLine = true,
                 enabled = !isTransferring
             )
@@ -1195,7 +1199,7 @@ private fun WalletTransferCard(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("btn_send_transfer"),
                 enabled = !isTransferring && recipientAddress.isNotBlank() && amount.isNotBlank()
             ) {
                 if (isTransferring) {

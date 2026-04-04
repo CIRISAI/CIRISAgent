@@ -1211,24 +1211,31 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
 
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
     val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados") ||
-        status.hardwareType?.contains("IOS", ignoreCase = true) == true
-    // Check for TPM platform (Linux/Windows desktop with TPM 2.0)
+        status.hardwareType?.contains("Ios", ignoreCase = true) == true
+    val isAndroid = status.platformOs?.lowercase() == "android" ||
+        status.hardwareType?.contains("Android", ignoreCase = true) == true
+    val isMacOs = status.platformOs?.lowercase() == "darwin" ||
+        status.hardwareType?.contains("MacOs", ignoreCase = true) == true
     val isTpm = status.hardwareType?.contains("TPM", ignoreCase = true) == true ||
         status.attestationProofHardwareType?.contains("TPM", ignoreCase = true) == true
+    val isDesktop = isMacOs || isTpm || status.platformOs?.lowercase() in listOf("linux", "win32", "windows")
     val isSoftwareOnly = status.hardwareType?.contains("Software", ignoreCase = true) == true
     val hwOk = status.hardwareBacked && !isSoftwareOnly
 
-    // Device attestation: TPM (desktop), App Attest (iOS), or Play Integrity (Android)
+    // Device attestation varies by platform
     val attestOk = when {
-        isTpm -> hwOk  // TPM attestation is implicit when hardware-backed with TPM
+        isTpm -> hwOk
+        isDesktop -> hwOk  // Desktop SE/TPM attestation is implicit when hardware-backed
         else -> (deviceResult as? DeviceAttestationResult.Success)?.verified == true || status.playIntegrityOk
     }
 
     val passed = listOf(hwOk, attestOk).count { it }
     val attestLabel = when {
         isTpm -> "TPM"
+        isMacOs -> "SE"
         isIos -> "Attest"
-        else -> "Play"
+        isAndroid -> "Play"
+        else -> "Device"
     }
     return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
 }

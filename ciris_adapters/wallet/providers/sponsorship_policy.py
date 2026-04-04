@@ -35,6 +35,13 @@ class SponsorshipPolicyConfig(BaseModel):
         description="Token contracts eligible for sponsored transfers (lowercase)",
     )
 
+    # Function allowlist - ERC-20 transfer by default
+    # transfer(address,uint256) = 0xa9059cbb
+    allowed_functions: list[str] = Field(
+        default=["0xa9059cbb"],
+        description="Function selectors eligible for sponsorship (4-byte hex, lowercase)",
+    )
+
     # Minimum transfer value
     min_transfer_usd: Decimal = Field(
         default=Decimal("1.00"),
@@ -78,6 +85,11 @@ class SponsorshipPolicy:
             addr.lower() for addr in self.config.allowed_contracts
         }
 
+        # Normalize function selectors to lowercase
+        self._allowed_functions = {
+            fn.lower() for fn in self.config.allowed_functions
+        }
+
         # Budget tracking (in-memory, resets on restart)
         # Production should persist to database
         self._month_key: Optional[str] = None
@@ -93,6 +105,7 @@ class SponsorshipPolicy:
         self,
         token_address: str,
         amount_raw: int,
+        function_selector: Optional[str] = None,
         estimated_gas_usd: Optional[Decimal] = None,
     ) -> SponsorshipEligibility:
         """
@@ -101,6 +114,7 @@ class SponsorshipPolicy:
         Args:
             token_address: ERC-20 token contract address
             amount_raw: Transfer amount in raw token units
+            function_selector: 4-byte function selector (e.g., "0xa9059cbb" for transfer)
             estimated_gas_usd: Estimated gas cost in USD (for budget check)
 
         Returns:
@@ -112,11 +126,18 @@ class SponsorshipPolicy:
                 reason="Gas sponsorship is disabled",
             )
 
-        # Rule 1: Contract allowlist
+        # Rule 1a: Contract allowlist
         if token_address.lower() not in self._allowed_contracts:
             return SponsorshipEligibility(
                 eligible=False,
                 reason="Only USDC transfers are eligible for gas sponsorship",
+            )
+
+        # Rule 1b: Function allowlist (if provided)
+        if function_selector and function_selector.lower() not in self._allowed_functions:
+            return SponsorshipEligibility(
+                eligible=False,
+                reason="Only transfer() calls are eligible for gas sponsorship",
             )
 
         # Rule 2: Minimum transfer value

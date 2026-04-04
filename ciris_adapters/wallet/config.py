@@ -284,7 +284,7 @@ class GasSponsorshipPolicyConfig(BaseModel):
     Configuration for Commons Credits gas sponsorship policy.
 
     No-KYC approach using economic controls:
-    1. USDC transfers only (contract allowlist)
+    1. USDC transfers only (contract + function allowlist)
     2. Minimum $1.00 value (sybil resistance)
     3. Global monthly budget cap
 
@@ -300,6 +300,13 @@ class GasSponsorshipPolicyConfig(BaseModel):
     allowed_contracts: list[str] = Field(
         default=["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],  # USDC on Base
         description="Token contracts eligible for sponsored transfers",
+    )
+
+    # Function allowlist - only these ERC-20 functions get sponsored
+    # transfer(address,uint256) = 0xa9059cbb
+    allowed_functions: list[str] = Field(
+        default=["0xa9059cbb"],  # transfer(address,uint256)
+        description="Function selectors eligible for sponsorship (4-byte hex)",
     )
 
     # Minimum transfer value ($1 prevents dust/spam attacks)

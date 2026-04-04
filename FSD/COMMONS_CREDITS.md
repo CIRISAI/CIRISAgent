@@ -117,9 +117,14 @@ Grace analyzes traces for patterns indicative of community-strengthening activit
 | Rule | Value | Rationale |
 |------|-------|-----------|
 | **Contract Allowlist** | USDC on Base (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`) | Only sponsor stablecoin transfers |
-| **Function Allowlist** | `transfer(address,uint256)` | Standard ERC-20 transfer |
+| **Function Allowlist** | `transfer(address,uint256)` (`0xa9059cbb`) | Standard ERC-20 transfer only |
 | **Minimum Value** | ≥$1.00 USDC (1,000,000 units) | Economic sybil resistance |
 | **Global Monthly Budget** | $500/month (configurable) | Cap total exposure |
+
+**Why only `transfer()`?**
+- `approve()` + `transferFrom()` could enable complex DeFi interactions we don't want to subsidize
+- Direct transfers are the simple, auditable flow for Commons Credits spending
+- Merchants receiving x402 payments use `transfer()` under the hood
 
 ### 4.3 Attack Economics
 

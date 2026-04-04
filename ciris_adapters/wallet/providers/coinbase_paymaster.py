@@ -37,17 +37,24 @@ class CoinbasePaymasterConfig(BaseModel):
         default=False,
         description="Enable Coinbase Paymaster for gas sponsorship",
     )
+    # Full endpoint URL with API key (preferred - simpler)
+    # e.g., "https://api.developer.coinbase.com/rpc/v1/base/YOUR_API_KEY"
+    endpoint_url: Optional[str] = Field(
+        None,
+        description="Full Coinbase RPC endpoint URL with embedded API key",
+    )
+    # Alternative: separate base URL and credentials (for JWT auth)
     api_key_name: Optional[str] = Field(
         None,
-        description="Coinbase CDP API key name",
+        description="Coinbase CDP API key name (if not using endpoint_url)",
     )
     api_key_secret: Optional[str] = Field(
         None,
-        description="Coinbase CDP API key secret (keep secure!)",
+        description="Coinbase CDP API key secret (if not using endpoint_url)",
     )
     base_url: str = Field(
         default="https://api.developer.coinbase.com/rpc/v1/base",
-        description="Coinbase RPC endpoint for Base",
+        description="Coinbase RPC base URL (if not using endpoint_url)",
     )
     timeout: float = Field(
         default=30.0,
@@ -74,41 +81,74 @@ class CoinbasePaymaster:
             config: Coinbase CDP configuration
         """
         self.config = config
+        self._endpoint_url_override: Optional[str] = None
+
+        # Try to load build-time obfuscated URL (Android release builds)
+        self._load_build_time_secret()
+
         self._validate_config()
+
+    def _load_build_time_secret(self) -> None:
+        """Load Coinbase paymaster URL from build-time secrets if available."""
+        try:
+            from ._build_secrets import get_coinbase_paymaster_url  # type: ignore[import-not-found]
+
+            url: Optional[str] = get_coinbase_paymaster_url()
+            if url:
+                logger.debug("[CoinbasePaymaster] Using build-time endpoint URL")
+                self._endpoint_url_override = url
+        except ImportError:
+            pass  # Not an Android build, or secrets not generated
 
     def _validate_config(self) -> None:
         """Validate configuration."""
         if self.config.enabled:
-            if not self.config.api_key_name:
-                raise ValueError("Coinbase API key name required when enabled")
-            if not self.config.api_key_secret:
-                raise ValueError("Coinbase API key secret required when enabled")
+            # Need one of: build-time secret, endpoint_url, or credentials
+            has_build_secret = bool(self._endpoint_url_override)
+            has_endpoint = bool(self.config.endpoint_url)
+            has_credentials = bool(self.config.api_key_name and self.config.api_key_secret)
+            if not has_build_secret and not has_endpoint and not has_credentials:
+                raise ValueError(
+                    "Coinbase requires build-time secret, endpoint_url, or (api_key_name + api_key_secret)"
+                )
+
+    def _get_rpc_url(self) -> str:
+        """Get the RPC URL to use (build-time secret > config > default)."""
+        # Priority: build-time obfuscated > config endpoint_url > base_url
+        if self._endpoint_url_override:
+            return self._endpoint_url_override
+        if self.config.endpoint_url:
+            return self.config.endpoint_url
+        return self.config.base_url
 
     def _build_auth_headers(self, body: str) -> dict[str, str]:
         """
-        Build JWT authentication headers for Coinbase CDP.
+        Build authentication headers for Coinbase CDP.
 
-        Uses ES256 JWT signing as per CDP docs.
-        For simplicity, we use the API key directly in header.
-        Production should use proper JWT signing.
+        If using endpoint_url (with embedded API key), no auth headers needed.
+        If using separate credentials, uses HMAC signature.
         """
-        # Simple API key auth (CDP supports this for server-to-server)
+        headers = {"Content-Type": "application/json"}
+
+        # If using endpoint_url, API key is in URL - no extra headers
+        if self.config.endpoint_url:
+            return headers
+
+        # Otherwise, use HMAC auth
         timestamp = str(int(time.time()))
         message = f"{timestamp}.{body}"
 
-        # HMAC signature
         signature = hmac.new(
             self.config.api_key_secret.encode() if self.config.api_key_secret else b"",
             message.encode(),
             hashlib.sha256,
         ).hexdigest()
 
-        return {
-            "Content-Type": "application/json",
-            "X-CDP-API-Key": self.config.api_key_name or "",
-            "X-CDP-Timestamp": timestamp,
-            "X-CDP-Signature": signature,
-        }
+        headers["X-CDP-API-Key"] = self.config.api_key_name or ""
+        headers["X-CDP-Timestamp"] = timestamp
+        headers["X-CDP-Signature"] = signature
+
+        return headers
 
     async def sponsor(
         self,
@@ -149,6 +189,7 @@ class CoinbasePaymaster:
         }
 
         import json
+
         body = json.dumps(payload)
         headers = self._build_auth_headers(body)
 
@@ -156,15 +197,13 @@ class CoinbasePaymaster:
 
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             response = await client.post(
-                self.config.base_url,
+                self._get_rpc_url(),
                 content=body,
                 headers=headers,
             )
 
             if response.status_code != 200:
-                raise PaymasterError(
-                    f"Coinbase request failed: {response.status_code} - {response.text}"
-                )
+                raise PaymasterError(f"Coinbase request failed: {response.status_code} - {response.text}")
 
             result = response.json()
 
@@ -178,9 +217,7 @@ class CoinbasePaymaster:
             if not data.get("paymasterAndData"):
                 raise PaymasterError("Coinbase returned empty paymasterAndData")
 
-            logger.info(
-                f"[CoinbasePaymaster] Sponsorship approved for sender={user_op.sender}"
-            )
+            logger.info(f"[CoinbasePaymaster] Sponsorship approved for sender={user_op.sender}")
 
             return SponsorshipResult(
                 paymaster_and_data=data.get("paymasterAndData", "0x"),
@@ -247,6 +284,7 @@ class CoinbasePaymaster:
 
 class PaymasterError(Exception):
     """Error from Coinbase Paymaster service."""
+
     pass
 
 

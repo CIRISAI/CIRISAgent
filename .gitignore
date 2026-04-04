@@ -23,6 +23,8 @@ data_archive/
 .env*
 # Critical security keys - NEVER commit these!
 .ciris_keys/
+# Build-time generated secrets (Android release)
+**/providers/_build_secrets.py
 
 # Coverage and CI reports
 coverage.xml

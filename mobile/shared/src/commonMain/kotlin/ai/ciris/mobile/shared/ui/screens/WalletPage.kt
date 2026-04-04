@@ -101,6 +101,10 @@ data class WalletStatusResponse(
     val needsGas: Boolean = true,
     val address: String? = null,
 
+    // Paymaster status (ERC-4337 gasless transactions)
+    val paymasterEnabled: Boolean = false,
+    val paymasterKeyConfigured: Boolean = false,
+
     // Attestation and limits
     val isReceiveOnly: Boolean = false,
     val attestationLevel: Int = 0,
@@ -216,6 +220,16 @@ fun WalletPage(
                 walletStatus != null -> {
                     val status = walletStatus!!
 
+                    // Experimental warning card - always show first
+                    ExperimentalWarningCard()
+
+                    // Paymaster status card
+                    PaymasterStatusCard(
+                        paymasterEnabled = status.paymasterEnabled,
+                        keyConfigured = status.paymasterKeyConfigured,
+                        needsGas = status.needsGas
+                    )
+
                     // Balance card
                     WalletBalanceCard(status = status)
 
@@ -308,6 +322,125 @@ private fun WalletErrorCard(error: String, onRetry: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun ExperimentalWarningCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))  // Amber/warning background
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = "⚠️",
+                fontSize = 24.sp
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = localizedString("mobile.wallet_experimental_title"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color(0xFF856404)  // Dark amber text
+                )
+                Text(
+                    text = localizedString("mobile.wallet_experimental_warning"),
+                    fontSize = 13.sp,
+                    color = Color(0xFF856404).copy(alpha = 0.9f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymasterStatusCard(
+    paymasterEnabled: Boolean,
+    keyConfigured: Boolean,
+    needsGas: Boolean
+) {
+    // Determine status
+    val (icon, statusText, bgColor, textColor) = when {
+        paymasterEnabled && keyConfigured -> {
+            // Gasless transfers enabled
+            Quadruple(
+                "⛽✓",
+                localizedString("mobile.wallet_paymaster_active"),
+                SemanticColors.Default.surfaceSuccess,
+                SemanticColors.Default.onSuccess
+            )
+        }
+        paymasterEnabled && !keyConfigured -> {
+            // Paymaster enabled but no key - show warning
+            Quadruple(
+                "⛽⚠",
+                localizedString("mobile.wallet_paymaster_key_missing"),
+                SemanticColors.Default.surfaceWarning,
+                SemanticColors.Default.onWarning
+            )
+        }
+        else -> {
+            // Paymaster not enabled - needs ETH for gas
+            Quadruple(
+                "⛽",
+                localizedString("mobile.wallet_paymaster_inactive"),
+                Color(0xFFF5F5F5),
+                MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = bgColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = icon,
+                fontSize = 18.sp
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = statusText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor
+                )
+                if (paymasterEnabled && keyConfigured) {
+                    Text(
+                        text = localizedString("mobile.wallet_paymaster_key_set"),
+                        fontSize = 11.sp,
+                        color = textColor.copy(alpha = 0.8f)
+                    )
+                } else if (needsGas && !keyConfigured) {
+                    Text(
+                        text = localizedString("mobile.wallet_gas_required"),
+                        fontSize = 11.sp,
+                        color = textColor.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Helper data class for Quadruple since Kotlin doesn't have one
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 private fun WalletBalanceCard(status: WalletStatusResponse) {

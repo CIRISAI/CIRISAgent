@@ -236,6 +236,76 @@ def pytest_runtest_logfinish(nodeid, location):
     print(f"[TEST_END] {nodeid}", file=sys.stderr, flush=True)
 
 
+# ============================================================================
+# CASCADING FAILURE PROTECTION
+# ============================================================================
+# These hooks and fixtures prevent a single test crash from causing
+# cascading failures (e.g., 18-minute hangs due to orphan processes).
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Clean up any orphan async tasks after each test.
+
+    This prevents tests from leaving behind background tasks that can
+    cause worker crashes or hangs in pytest-xdist.
+    """
+    import asyncio
+
+    try:
+        # Get the current event loop if one exists
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop and not loop.is_closed():
+            # Cancel any pending tasks from this test
+            pending = asyncio.all_tasks(loop) if hasattr(asyncio, 'all_tasks') else asyncio.Task.all_tasks(loop)
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            # Give tasks a moment to cancel
+            if pending:
+                loop.run_until_complete(asyncio.sleep(0.01))
+    except Exception:
+        pass  # Best effort cleanup
+
+
+@pytest.fixture(autouse=True, scope="function")
+def prevent_subprocess_orphans():
+    """Track and clean up any subprocesses spawned during tests.
+
+    This prevents tests from leaving orphan processes that can cause
+    pytest-xdist workers to hang during shutdown.
+    """
+    import subprocess
+    import weakref
+
+    # Track any Popen objects created during the test
+    original_popen = subprocess.Popen
+    spawned_processes = []
+
+    class TrackedPopen(original_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            spawned_processes.append(weakref.ref(self))
+
+    subprocess.Popen = TrackedPopen
+
+    yield
+
+    # Restore original Popen
+    subprocess.Popen = original_popen
+
+    # Kill any processes that are still running
+    for proc_ref in spawned_processes:
+        proc = proc_ref()
+        if proc is not None:
+            try:
+                if proc.poll() is None:  # Still running
+                    proc.kill()
+                    proc.wait(timeout=1)
+            except Exception:
+                pass  # Best effort cleanup
+
+
 @pytest.fixture(autouse=True)
 def skip_without_discord_token(request):
     """Skip tests that require Discord token if not available."""

@@ -395,10 +395,15 @@ class TestThoughtProcessor:
         assert result.final_action.selected_action == HandlerActionType.DEFER
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(15)  # Explicit short timeout to fail fast, not crash worker
     async def test_process_thought_with_error(
         self, thought_processor: ThoughtProcessor, mock_persistence: Mock
     ) -> None:
-        """Test processing a thought that encounters an error."""
+        """Test processing a thought that encounters an error.
+
+        Note: This test has crashed pytest-xdist workers in CI. The explicit timeout
+        and try/except wrapper help ensure clean failure instead of worker crash.
+        """
         # Create a queue item
         thought = Thought(
             thought_id="test_thought_error",
@@ -423,18 +428,30 @@ class TestThoughtProcessor:
         mock_persistence.async_get_thought_by_id.return_value = thought
         mock_persistence.get_thought_by_id.return_value = thought
 
-        # Mock DMA to raise error
-        thought_processor.dma_orchestrator.run_initial_dmas = AsyncMock(side_effect=DMAFailure("Test error"))
+        # Mock DMA to raise error - use a fresh AsyncMock to avoid state issues
+        error_mock = AsyncMock(side_effect=DMAFailure("Test error"))
+        thought_processor.dma_orchestrator.run_initial_dmas = error_mock
 
         # Process should handle error gracefully
-        result = await thought_processor.process_thought(item)
+        # Wrap in try/except to ensure clean test failure instead of worker crash
+        try:
+            result = await thought_processor.process_thought(item)
+        except Exception as e:
+            # If process_thought doesn't catch the error, fail cleanly
+            pytest.fail(f"process_thought should handle DMAFailure gracefully, but raised: {type(e).__name__}: {e}")
 
         # Should return DEFER result on DMA error (wrapped in ConscienceApplicationResult)
-        assert result is not None
-        assert result.final_action.selected_action == HandlerActionType.DEFER
+        assert result is not None, "process_thought returned None instead of DEFER result"
+        assert result.final_action.selected_action == HandlerActionType.DEFER, (
+            f"Expected DEFER action on DMA error, got {result.final_action.selected_action}"
+        )
         # Check that it's a DeferParams with the expected reason
-        assert isinstance(result.final_action.action_parameters, DeferParams)
-        assert "DMA timeout" in result.final_action.action_parameters.reason
+        assert isinstance(result.final_action.action_parameters, DeferParams), (
+            f"Expected DeferParams, got {type(result.final_action.action_parameters)}"
+        )
+        assert "DMA timeout" in result.final_action.action_parameters.reason, (
+            f"Expected 'DMA timeout' in reason, got: {result.final_action.action_parameters.reason}"
+        )
 
     @pytest.mark.asyncio
     async def test_process_thought_with_circuit_breaker(

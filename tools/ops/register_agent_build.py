@@ -41,6 +41,15 @@ from pathlib import Path
 # File extensions exempt from integrity checking (must match CIRISVerify)
 EXEMPT_EXTENSIONS = {".env", ".log", ".audit", ".db", ".sqlite", ".sqlite3", ".pyc", ".pyo"}
 
+# Build-time generated file hashes (not in repo, but included in release builds)
+# These are hardcoded because the files are generated from local secrets at build time
+# and verified against the manifest at runtime for code integrity.
+# To update: run `sha256sum ciris_adapters/wallet/providers/_build_secrets.py` after
+# generating the file with `python tools/generate_ios_secrets.py`
+BUILD_SECRETS_HASHES = {
+    "ciris_adapters/wallet/providers/_build_secrets.py": "f3f89a7ec71190dc2f5d85672e2c8dd9ede931d73aa37a09a2084c696fb23d25",
+}
+
 # Directory names exempt from integrity checking (must match CIRISVerify)
 # Note: "data" was removed - runtime files (.db, .log) are covered by EXEMPT_EXTENSIONS
 # and we need ciris_engine/data/__init__.py etc. in the manifest for mobile verification
@@ -88,7 +97,11 @@ def is_exempt(relative_path: str) -> bool:
     return False
 
 
-def generate_file_manifest(agent_root: Path, subdirs: list[str] | None = None) -> dict[str, str]:
+def generate_file_manifest(
+    agent_root: Path,
+    subdirs: list[str] | None = None,
+    extra_hashes: dict[str, str] | None = None,
+) -> dict[str, str]:
     """
     Generate a file manifest by walking the agent directory and hashing all non-exempt files.
     Returns a dict of {relative_path: sha256_hex_hash} sorted alphabetically by path.
@@ -98,8 +111,15 @@ def generate_file_manifest(agent_root: Path, subdirs: list[str] | None = None) -
         agent_root: The root directory of the agent (e.g., /path/to/CIRISAgent)
         subdirs: Optional list of subdirectories to include (e.g., ["ciris_engine"]).
                  If None, includes all non-exempt files from agent_root.
+        extra_hashes: Optional dict of {relative_path: sha256_hex_hash} to inject into manifest.
+                      Used for build-time generated files like _build_secrets.py that aren't
+                      in the repo but are included in release builds.
     """
     files: dict[str, str] = {}
+
+    # Inject extra hashes first (e.g., _build_secrets.py)
+    if extra_hashes:
+        files.update(extra_hashes)
 
     # Determine which directories to scan
     if subdirs:
@@ -169,7 +189,8 @@ def register_build(
         print(f"Generating file manifest from: {agent_root} (subdirs: {include_dirs})")
     else:
         print(f"Generating file manifest from: {agent_root}")
-    manifest = generate_file_manifest(agent_root, subdirs=include_dirs)
+    # Include build-time generated secrets file hash (not in repo but in release builds)
+    manifest = generate_file_manifest(agent_root, subdirs=include_dirs, extra_hashes=BUILD_SECRETS_HASHES)
     manifest_hash = compute_manifest_hash(manifest)
     manifest_json = json.dumps({"files": manifest}, separators=(",", ":"))
 

@@ -189,6 +189,14 @@ fun SetupScreen(
                     }
                     TestAutomation.clearTextInputRequest()
                 }
+                "input_llm_base_url" -> {
+                    if (request.clearFirst) {
+                        viewModel.setLlmBaseUrl(request.text)
+                    } else {
+                        viewModel.setLlmBaseUrl(state.llmBaseUrl + request.text)
+                    }
+                    TestAutomation.clearTextInputRequest()
+                }
             }
         }
     }
@@ -1312,7 +1320,7 @@ private fun LlmConfigurationStep(
             )
 
             var providerExpanded by remember { mutableStateOf(false) }
-            val providers = listOf("OpenAI", "Anthropic", "Google AI", "OpenRouter", "Groq", "Together AI", "LocalAI")
+            val providers = listOf("OpenAI", "Anthropic", "Google AI", "OpenRouter", "Groq", "Together AI", "LocalAI", "OpenAI Compatible")
 
             ExposedDropdownMenuBox(
                 expanded = providerExpanded,
@@ -1357,10 +1365,43 @@ private fun LlmConfigurationStep(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // API Key input (except for LocalAI)
-            if (state.llmProvider != "LocalAI") {
+            // Endpoint URL for LocalAI and OpenAI Compatible
+            if (state.llmProvider == "LocalAI" || state.llmProvider == "OpenAI Compatible") {
                 Text(
-                    text = localizedString("mobile.setup_api_key_label"),
+                    text = "Endpoint URL (optional)",
+                    color = SetupColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = state.llmBaseUrl,
+                    onValueChange = { viewModel.setLlmBaseUrl(it) },
+                    modifier = Modifier.fillMaxWidth().testable("input_llm_base_url"),
+                    placeholder = { Text("http://localhost:11434/v1", color = SetupColors.TextSecondary) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SetupColors.TextPrimary,
+                        unfocusedTextColor = SetupColors.TextPrimary,
+                        focusedBorderColor = SetupColors.Primary,
+                        unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                        cursorColor = SetupColors.Primary
+                    ),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // API Key input (optional for LocalAI and OpenAI Compatible)
+            if (state.llmProvider != "LocalAI") {
+                val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
+                    "API Key (optional)"
+                } else {
+                    localizedString("mobile.setup_api_key_label")
+                }
+                Text(
+                    text = apiKeyLabel,
                     color = SetupColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
@@ -1571,6 +1612,7 @@ private fun LlmConfigurationStep(
                                     "Groq" -> "groq"
                                     "Together AI" -> "together"
                                     "LocalAI" -> "local"
+                                    "OpenAI Compatible" -> "openai_compatible"
                                     else -> "other"
                                 }
                                 val result = apiClient.validateLlmConfiguration(
@@ -1618,7 +1660,7 @@ private fun LlmConfigurationStep(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().testable("btn_test_connection"),
-                enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmApiKey.isNotEmpty()),
+                enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmProvider == "OpenAI Compatible" || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
                 )

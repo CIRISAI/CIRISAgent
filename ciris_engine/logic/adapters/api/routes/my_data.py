@@ -210,8 +210,7 @@ def _get_agent_id(request: Request) -> Optional[str]:
             return str(mgr_identity.agent_id)
         else:
             logger.debug(
-                f"_get_agent_id: identity_manager exists but no agent_id "
-                f"(mgr_identity={mgr_identity is not None})"
+                f"_get_agent_id: identity_manager exists but no agent_id (mgr_identity={mgr_identity is not None})"
             )
 
     # Fallback: essential_config.agent_name (always set)

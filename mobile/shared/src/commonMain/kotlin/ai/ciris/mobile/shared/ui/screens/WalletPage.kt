@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.foundation.background
@@ -100,6 +101,10 @@ data class WalletStatusResponse(
     val ethBalance: String = "0.00",
     val needsGas: Boolean = true,
     val address: String? = null,
+
+    // Paymaster status (ERC-4337 gasless transactions)
+    val paymasterEnabled: Boolean = false,
+    val paymasterKeyConfigured: Boolean = false,
 
     // Attestation and limits
     val isReceiveOnly: Boolean = false,
@@ -216,6 +221,16 @@ fun WalletPage(
                 walletStatus != null -> {
                     val status = walletStatus!!
 
+                    // Experimental warning card - always show first
+                    ExperimentalWarningCard()
+
+                    // Paymaster status card
+                    PaymasterStatusCard(
+                        paymasterEnabled = status.paymasterEnabled,
+                        keyConfigured = status.paymasterKeyConfigured,
+                        needsGas = status.needsGas
+                    )
+
                     // Balance card
                     WalletBalanceCard(status = status)
 
@@ -310,6 +325,126 @@ private fun WalletErrorCard(error: String, onRetry: () -> Unit) {
 }
 
 @Composable
+private fun ExperimentalWarningCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_experimental"),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))  // Amber/warning background
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = "⚠️",
+                fontSize = 24.sp
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = localizedString("mobile.wallet_experimental_title"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color(0xFF856404)  // Dark amber text
+                )
+                Text(
+                    text = localizedString("mobile.wallet_experimental_warning"),
+                    fontSize = 13.sp,
+                    color = Color(0xFF856404).copy(alpha = 0.9f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymasterStatusCard(
+    paymasterEnabled: Boolean,
+    keyConfigured: Boolean,
+    needsGas: Boolean
+) {
+    // Determine status
+    val (icon, statusText, bgColor, textColor) = when {
+        paymasterEnabled && keyConfigured -> {
+            // Gasless transfers enabled
+            Quadruple(
+                "⛽✓",
+                localizedString("mobile.wallet_paymaster_active"),
+                SemanticColors.Default.surfaceSuccess,
+                SemanticColors.Default.onSuccess
+            )
+        }
+        paymasterEnabled && !keyConfigured -> {
+            // Paymaster enabled but no key - show warning
+            Quadruple(
+                "⛽⚠",
+                localizedString("mobile.wallet_paymaster_key_missing"),
+                SemanticColors.Default.surfaceWarning,
+                SemanticColors.Default.onWarning
+            )
+        }
+        else -> {
+            // Paymaster not enabled - needs ETH for gas
+            Quadruple(
+                "⛽",
+                localizedString("mobile.wallet_paymaster_inactive"),
+                Color(0xFFF5F5F5),
+                MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_paymaster"),
+        colors = CardDefaults.cardColors(containerColor = bgColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = icon,
+                fontSize = 18.sp
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = statusText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor,
+                    modifier = Modifier.testable("txt_paymaster_status")
+                )
+                if (paymasterEnabled && keyConfigured) {
+                    Text(
+                        text = localizedString("mobile.wallet_paymaster_key_set"),
+                        fontSize = 11.sp,
+                        color = textColor.copy(alpha = 0.8f)
+                    )
+                } else if (needsGas && !keyConfigured) {
+                    Text(
+                        text = localizedString("mobile.wallet_gas_required"),
+                        fontSize = 11.sp,
+                        color = textColor.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Helper data class for Quadruple since Kotlin doesn't have one
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+@Composable
 private fun WalletBalanceCard(status: WalletStatusResponse) {
     // Get currency manager for conversion
     val currencyManager = LocalCurrency.current
@@ -333,7 +468,7 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
     val showConversion = currentCurrencyInfo?.code != "USDC" && currentCurrencyInfo?.code != "USD"
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_wallet_balance"),
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         SelectionContainer {
@@ -426,7 +561,7 @@ private fun WalletAddressCard(address: String, network: String) {
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_address")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -449,6 +584,7 @@ private fun WalletAddressCard(address: String, network: String) {
                         clipboardManager.setText(AnnotatedString(address))
                         showCopied = true
                     },
+                    modifier = Modifier.testable("btn_copy_address"),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -463,7 +599,8 @@ private fun WalletAddressCard(address: String, network: String) {
                     text = address,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testable("txt_wallet_address")
                 )
             }
             SelectionContainer {
@@ -479,7 +616,7 @@ private fun WalletAddressCard(address: String, network: String) {
 
 @Composable
 private fun WalletLimitsCard(status: WalletStatusResponse) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_limits")) {
         SelectionContainer {
             Column(
                 modifier = Modifier
@@ -549,7 +686,7 @@ private fun HardwareTrustWarningCard(
     advisories: List<SecurityAdvisoryData> = emptyList()
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testable("card_trust_warning"),
         colors = CardDefaults.cardColors(containerColor = SemanticColors.Default.surfaceWarning)
     ) {
         SelectionContainer {
@@ -649,7 +786,7 @@ private fun HardwareTrustWarningCard(
 
 @Composable
 private fun SpendingProgressCard(spending: SpendingProgress) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_spending_progress")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -726,7 +863,7 @@ private fun SpendingProgressCard(spending: SpendingProgress) {
 
 @Composable
 private fun TransactionHistoryCard(transactions: List<TransactionSummary>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_transaction_history")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -866,7 +1003,7 @@ private fun WalletTransferCard(
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().testable("card_wallet_transfer")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -891,7 +1028,7 @@ private fun WalletTransferCard(
                 onValueChange = { recipientAddress = it; transferError = null; transferSuccess = null },
                 label = { Text(localizedString("mobile.wallet_recipient")) },
                 placeholder = { Text("0x...") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_recipient_address"),
                 singleLine = true,
                 enabled = !isTransferring,
                 isError = addressValidation?.let { !it.valid || !it.checksumValid } ?: false,
@@ -931,7 +1068,7 @@ private fun WalletTransferCard(
                 onValueChange = { amount = it; transferError = null; transferSuccess = null },
                 label = { Text(localizedString("mobile.wallet_amount", mapOf("currency" to currency))) },
                 placeholder = { Text("0.00") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_transfer_amount"),
                 singleLine = true,
                 enabled = !isTransferring,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -972,7 +1109,7 @@ private fun WalletTransferCard(
                 onValueChange = { memo = it },
                 label = { Text(localizedString("mobile.wallet_memo")) },
                 placeholder = { Text(localizedString("mobile.wallet_memo_placeholder")) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("input_transfer_memo"),
                 singleLine = true,
                 enabled = !isTransferring
             )
@@ -1062,7 +1199,7 @@ private fun WalletTransferCard(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testable("btn_send_transfer"),
                 enabled = !isTransferring && recipientAddress.isNotBlank() && amount.isNotBlank()
             ) {
                 if (isTransferring) {

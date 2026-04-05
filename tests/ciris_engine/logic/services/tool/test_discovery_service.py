@@ -112,7 +112,7 @@ class TestAdapterDiscoveryService:
 
         # Should include standard paths + extra
         assert Path("ciris_adapters") in paths
-        assert Path.home() / ".ciris" / "adapters" in paths
+        assert Path.home() / "ciris" / "adapters" in paths
         assert Path(".ciris") / "adapters" in paths
         assert Path("/custom") in paths
 

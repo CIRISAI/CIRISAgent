@@ -128,7 +128,7 @@ def is_first_run() -> bool:
         if path.exists() and path.is_file():
             try:
                 content = path.read_text()
-                if 'CIRIS_CONFIGURED' in content and 'true' in content.lower():
+                if "CIRIS_CONFIGURED" in content and "true" in content.lower():
                     logger.info(f"Found configured .env at {path} - NOT first run")
                     return False
                 else:

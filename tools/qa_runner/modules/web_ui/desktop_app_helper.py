@@ -268,6 +268,69 @@ class DesktopAppHelper:
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
         return True
 
+    async def act(
+        self,
+        test_tag: str,
+        action: str,
+        text: Optional[str] = None,
+        clear_first: bool = True,
+        wait_ms: int = 500,
+        filter_tags: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Combined action + view endpoint. Performs action, waits, returns UI state.
+
+        This is the preferred method for automation as it reduces 3 HTTP calls to 1.
+
+        Args:
+            test_tag: Target element's testTag
+            action: "click", "input", or "wait"
+            text: Text to input (for "input" action)
+            clear_first: Clear existing text before input (default: True)
+            wait_ms: Milliseconds to wait after action before reading tree (default: 500)
+            filter_tags: Optional list of substrings to filter returned elements
+
+        Returns:
+            Dict with actionResult, screen, elements, elementCount
+
+        Example:
+            result = await helper.act("btn_login_submit", "click", wait_ms=1000)
+            print(f"Now on screen: {result['screen']}")
+
+            result = await helper.act(
+                "input_skill_md", "input",
+                text="---\\nname: My Skill\\n---",
+                filter_tags=["skill", "preview"]
+            )
+        """
+        if not self._client:
+            raise RuntimeError("Not connected. Call start() first.")
+
+        payload: Dict[str, Any] = {
+            "testTag": test_tag,
+            "action": action,
+            "waitMs": wait_ms,
+        }
+        if text is not None:
+            payload["text"] = text
+        payload["clearFirst"] = clear_first
+        if filter_tags:
+            payload["filterTags"] = filter_tags
+
+        response = await self._client.post("/act", json=payload)
+        data = response.json()
+
+        # Update current screen from response
+        self._current_screen = data.get("screen", "unknown")
+
+        # Check if action succeeded
+        action_result = data.get("actionResult", {})
+        if not action_result.get("success", False):
+            error = action_result.get("error", "unknown error")
+            raise RuntimeError(f"Act '{action}' on '{test_tag}' failed: {error}")
+
+        return data
+
     async def wait_for_screen(self, screen_name: str, timeout: Optional[int] = None) -> bool:
         """
         Wait for a specific screen to be displayed.

@@ -4,7 +4,9 @@ CIRIS 2.3 Demo Clip Recorder
 
 Records demo clips for the CIRIS 2.3 YouTube video using:
 - Desktop test mode automation (HTTP API at localhost:8091)
-- SwiftCapture (ScreenCaptureKit CLI) for high-quality video recording
+- Platform-specific video recording:
+  - macOS: SwiftCapture (ScreenCaptureKit CLI)
+  - Linux: ffmpeg with x11grab + xdotool for window detection
 - In-process /screenshot endpoint for verification screenshots
 
 Usage:
@@ -22,7 +24,8 @@ Usage:
 
 Prerequisites:
     - CIRIS desktop app running with CIRIS_TEST_MODE=true
-    - SwiftCapture built: tools/SwiftCapture/.build/release/SwiftCapture
+    - macOS: SwiftCapture built: tools/SwiftCapture/.build/release/SwiftCapture
+    - Linux: ffmpeg and xdotool installed (apt install ffmpeg xdotool)
     - Logged in to the app (Interact screen visible) for clips 5-8
     - For Demo 8: Home Assistant adapter connected
 
@@ -40,14 +43,16 @@ Demo clips:
 import argparse
 import json
 import os
+import platform
+import re
+import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Optional
-
+from typing import Optional, Tuple
 
 # --- Configuration ---
 
@@ -56,24 +61,36 @@ API_SERVER = "http://localhost:8080"
 DEFAULT_OUTPUT_DIR = Path.home() / "demo_clips"
 SCAP_BINARY = Path(__file__).parent / "SwiftCapture" / ".build" / "release" / "SwiftCapture"
 CIRIS_APP_NAME = "CIRIS Agent"  # Window title as seen by ScreenCaptureKit
+CIRIS_WINDOW_CLASS = "CIRIS"  # Window class for X11 matching
 
-CLIP_FILES = {
-    1: "demo1_wipe_data.mov",
-    2: "demo2_first_run_wizard.mov",
-    3: "demo3_opt_in_traces_location.mov",
-    4: "demo4_account_finish.mov",
-    5: "demo5_attestation_5of5.mov",
-    6: "demo6_attestation_3of5.mov",
-    7: "demo7_adapter_panel.mov",
-    8: "demo8_lamp_chat.mov",
-}
+# Detect platform
+PLATFORM = platform.system()  # "Linux", "Darwin", "Windows"
 
 
-# --- SwiftCapture Video Recording ---
+# Clip files - extension depends on platform
+def get_clip_files() -> dict[int, str]:
+    """Get clip filenames with platform-appropriate extension."""
+    ext = ".mp4" if PLATFORM == "Linux" else ".mov"
+    return {
+        1: f"demo1_wipe_data{ext}",
+        2: f"demo2_first_run_wizard{ext}",
+        3: f"demo3_opt_in_traces_location{ext}",
+        4: f"demo4_account_finish{ext}",
+        5: f"demo5_attestation_5of5{ext}",
+        6: f"demo6_attestation_3of5{ext}",
+        7: f"demo7_adapter_panel{ext}",
+        8: f"demo8_lamp_chat{ext}",
+    }
+
+
+CLIP_FILES = get_clip_files()
+
+
+# --- SwiftCapture Video Recording (macOS) ---
 
 
 def check_swiftcapture() -> bool:
-    """Verify SwiftCapture binary exists."""
+    """Verify SwiftCapture binary exists (macOS only)."""
     if SCAP_BINARY.exists():
         print(f"  SwiftCapture: {SCAP_BINARY}")
         return True
@@ -82,18 +99,23 @@ def check_swiftcapture() -> bool:
     return False
 
 
-def start_recording(duration_ms: int, output: Path) -> subprocess.Popen:
+def start_recording_macos(duration_ms: int, output: Path) -> subprocess.Popen:
     """
     Start recording the CIRIS app window using SwiftCapture (ScreenCaptureKit).
     Returns Popen handle. Recording auto-stops after duration_ms milliseconds.
     """
     cmd = [
         str(SCAP_BINARY),
-        "--app", CIRIS_APP_NAME,
-        "--duration", str(duration_ms),
-        "--output", str(output),
-        "--fps", "30",
-        "--quality", "high",
+        "--app",
+        CIRIS_APP_NAME,
+        "--duration",
+        str(duration_ms),
+        "--output",
+        str(output),
+        "--fps",
+        "30",
+        "--quality",
+        "high",
         "--show-cursor",
         "--force",  # Overwrite without prompting
     ]
@@ -104,8 +126,204 @@ def start_recording(duration_ms: int, output: Path) -> subprocess.Popen:
     return proc
 
 
-def wait_for_recording(proc: subprocess.Popen, timeout: int = 60) -> bool:
+# --- Linux Video Recording (ffmpeg + x11grab) ---
+
+
+def check_linux_tools() -> bool:
+    """Verify ffmpeg and xdotool are installed (Linux only)."""
+    missing = []
+
+    if not shutil.which("ffmpeg"):
+        missing.append("ffmpeg")
+    if not shutil.which("xdotool"):
+        missing.append("xdotool")
+    if not shutil.which("xwininfo"):
+        missing.append("x11-utils (xwininfo)")
+
+    if missing:
+        print(f"ERROR: Missing Linux tools: {', '.join(missing)}", file=sys.stderr)
+        print("  Install: sudo apt install ffmpeg xdotool x11-utils", file=sys.stderr)
+        return False
+
+    print(f"  ffmpeg: {shutil.which('ffmpeg')}")
+    print(f"  xdotool: {shutil.which('xdotool')}")
+    return True
+
+
+def find_window_geometry() -> Optional[Tuple[int, int, int, int]]:
+    """
+    Find the CIRIS window geometry using xdotool + xwininfo.
+    Returns (x, y, width, height) or None if not found.
+    """
+    # Try multiple window name patterns
+    patterns = [
+        CIRIS_APP_NAME,
+        "CIRIS",
+        "ciris",
+        "CIRIS Agent",
+    ]
+
+    window_id = None
+    for pattern in patterns:
+        try:
+            result = subprocess.run(
+                ["xdotool", "search", "--name", pattern],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                # Take the first matching window
+                window_id = result.stdout.strip().split("\n")[0]
+                break
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+
+    if not window_id:
+        # Try by class name
+        try:
+            result = subprocess.run(
+                ["xdotool", "search", "--class", CIRIS_WINDOW_CLASS],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                window_id = result.stdout.strip().split("\n")[0]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+    if not window_id:
+        print("  ERROR: Could not find CIRIS window", file=sys.stderr)
+        return None
+
+    # Get window geometry using xwininfo
+    try:
+        result = subprocess.run(
+            ["xwininfo", "-id", window_id],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            print(f"  ERROR: xwininfo failed: {result.stderr}", file=sys.stderr)
+            return None
+
+        output = result.stdout
+
+        # Parse xwininfo output
+        x_match = re.search(r"Absolute upper-left X:\s+(\d+)", output)
+        y_match = re.search(r"Absolute upper-left Y:\s+(\d+)", output)
+        w_match = re.search(r"Width:\s+(\d+)", output)
+        h_match = re.search(r"Height:\s+(\d+)", output)
+
+        if not all([x_match, y_match, w_match, h_match]):
+            print("  ERROR: Could not parse window geometry", file=sys.stderr)
+            return None
+
+        x = int(x_match.group(1))
+        y = int(y_match.group(1))
+        w = int(w_match.group(1))
+        h = int(h_match.group(1))
+
+        # Ensure dimensions are even (required for many video codecs)
+        w = w if w % 2 == 0 else w - 1
+        h = h if h % 2 == 0 else h - 1
+
+        print(f"  Window: {window_id} at {x},{y} size {w}x{h}")
+        return (x, y, w, h)
+
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        print(f"  ERROR: xwininfo error: {e}", file=sys.stderr)
+        return None
+
+
+def start_recording_linux(duration_ms: int, output: Path) -> Optional[subprocess.Popen]:
+    """
+    Start recording the CIRIS app window using ffmpeg x11grab.
+    Returns Popen handle or None if window not found.
+    """
+    geometry = find_window_geometry()
+    if not geometry:
+        return None
+
+    x, y, w, h = geometry
+    duration_s = duration_ms / 1000
+
+    # Get display from environment
+    display = os.environ.get("DISPLAY", ":0")
+
+    cmd = [
+        "ffmpeg",
+        "-y",  # Overwrite output
+        "-video_size",
+        f"{w}x{h}",
+        "-framerate",
+        "30",
+        "-f",
+        "x11grab",
+        "-i",
+        f"{display}+{x},{y}",
+        "-t",
+        str(duration_s),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",  # Fast encoding for real-time
+        "-crf",
+        "18",  # High quality
+        "-pix_fmt",
+        "yuv420p",  # Compatibility
+        str(output),
+    ]
+
+    print(f"  Recording: {output.name} ({duration_s:.0f}s)")
+
+    # Run ffmpeg with suppressed output
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    # Brief pause to let ffmpeg initialize
+    time.sleep(0.5)
+    return proc
+
+
+# --- Platform-agnostic Recording Interface ---
+
+
+def check_recording_tools() -> bool:
+    """Check that platform-appropriate recording tools are available."""
+    if PLATFORM == "Darwin":
+        return check_swiftcapture()
+    elif PLATFORM == "Linux":
+        return check_linux_tools()
+    else:
+        print(f"ERROR: Unsupported platform: {PLATFORM}", file=sys.stderr)
+        print("  Supported: macOS (Darwin), Linux", file=sys.stderr)
+        return False
+
+
+def start_recording(duration_ms: int, output: Path) -> Optional[subprocess.Popen]:
+    """
+    Start recording the CIRIS app window using platform-appropriate tool.
+    Returns Popen handle or None on failure.
+    """
+    if PLATFORM == "Darwin":
+        return start_recording_macos(duration_ms, output)
+    elif PLATFORM == "Linux":
+        return start_recording_linux(duration_ms, output)
+    else:
+        print(f"  ERROR: Recording not supported on {PLATFORM}", file=sys.stderr)
+        return None
+
+
+def wait_for_recording(proc: Optional[subprocess.Popen], timeout: int = 60) -> bool:
     """Wait for a recording process to complete."""
+    if proc is None:
+        return False
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
         if proc.returncode != 0:
@@ -251,17 +469,17 @@ def record_demo_1_wipe_data(output_dir: Path):
     output = output_dir / CLIP_FILES[1]
     proc = start_recording(15000, output)
 
-    time.sleep(1)                       # Establish context on Interact screen
-    click("btn_data_menu")              # Open Data dropdown menu
-    time.sleep(0.5)                     # Menu animation
-    click("menu_data_management")       # Navigate to Data Management
-    time.sleep(1.5)                     # Wait for screen load
-    time.sleep(2)                       # Hold for viewer to see screen
-    click("btn_reset_account")          # Click "Reset Account"
-    time.sleep(1)                       # Wait for confirmation dialog
-    time.sleep(2)                       # Hold so viewer reads dialog
-    click("btn_reset_confirm")          # Confirm reset
-    time.sleep(4)                       # Wait for reset animation
+    time.sleep(1)  # Establish context on Interact screen
+    click("btn_data_menu")  # Open Data dropdown menu
+    time.sleep(0.5)  # Menu animation
+    click("menu_data_management")  # Navigate to Data Management
+    time.sleep(1.5)  # Wait for screen load
+    time.sleep(2)  # Hold for viewer to see screen
+    click("btn_reset_account")  # Click "Reset Account"
+    time.sleep(1)  # Wait for confirmation dialog
+    time.sleep(2)  # Hold so viewer reads dialog
+    click("btn_reset_confirm")  # Confirm reset
+    time.sleep(4)  # Wait for reset animation
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -302,27 +520,27 @@ def record_demo_2_first_run_wizard(output_dir: Path):
     output = output_dir / CLIP_FILES[2]
     proc = start_recording(18000, output)
 
-    time.sleep(2)                       # Hold on Welcome screen
-    click("btn_next")                   # Welcome -> Preferences
+    time.sleep(2)  # Hold on Welcome screen
+    click("btn_next")  # Welcome -> Preferences
     time.sleep(1.5)
 
     # Set location: Schaumburg
     input_text("input_location_search", "Schaumburg")
     time.sleep(2)
-    click("btn_next")                   # Preferences -> LLM Config
+    click("btn_next")  # Preferences -> LLM Config
     time.sleep(1.5)
 
     # LLM Config: OpenRouter
-    click("input_llm_provider")         # Open provider dropdown
+    click("input_llm_provider")  # Open provider dropdown
     time.sleep(0.5)
-    click("menu_provider_openrouter")   # Select OpenRouter
+    click("menu_provider_openrouter")  # Select OpenRouter
     time.sleep(0.5)
     input_text("input_api_key", openrouter_key)
     time.sleep(0.5)
     input_text("input_llm_model_text", "mistralai/mistral-small-2603")
-    time.sleep(1.5)                     # Hold for viewer to see config
-    click("btn_next")                   # LLM Config -> Optional Features
-    time.sleep(2)                       # Hold on Optional Features
+    time.sleep(1.5)  # Hold for viewer to see config
+    click("btn_next")  # LLM Config -> Optional Features
+    time.sleep(2)  # Hold on Optional Features
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -344,7 +562,11 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     time.sleep(1)
     click("item_accord_metrics_consent")  # Toggle Accord metrics ON
     time.sleep(1)
-    click("item_share_location_traces")   # Toggle location traces ON
+
+    # Scroll down slightly to reveal location traces toggle
+    test_api("POST", "/scroll", {"testTag": "item_accord_metrics_consent", "direction": "down", "amount": 200})
+    time.sleep(0.5)
+    click("item_share_location_traces")  # Toggle location traces ON
     time.sleep(1)
 
     # Toggle public API services to show email field
@@ -357,20 +579,25 @@ def record_demo_3_opt_in_traces(output_dir: Path):
     click("item_toggle_advanced_settings")
     time.sleep(1)
 
+    # Scroll down to reveal adapter toggles
+    test_api("POST", "/scroll", {"testTag": "item_toggle_advanced_settings", "direction": "down", "amount": 400})
+    time.sleep(1)
+
     # Enable navigation adapter
     click("adapter_toggle_navigation")
     time.sleep(0.8)
 
-    # Enable weather adapter (may need to scroll — test tag might not be visible)
-    # Try clicking it; if not found the scroll will help
-    result = test_api("POST", "/click", {"testTag": "adapter_toggle_weather"})
-    if not result.get("success"):
-        print("    weather adapter not visible, trying scroll area")
+    # Scroll more to reveal weather
+    test_api("POST", "/scroll", {"testTag": "adapter_toggle_navigation", "direction": "down", "amount": 300})
+    time.sleep(0.5)
+
+    # Enable weather adapter
+    click("adapter_toggle_weather")
     time.sleep(1)
 
-    time.sleep(3)                       # Hold for viewer to see all toggles
+    time.sleep(2)  # Hold for viewer to see adapter cards
 
-    click("btn_next")                   # Optional Features -> Account
+    click("btn_next")  # Optional Features -> Account
     time.sleep(2)
 
     wait_for_recording(proc)
@@ -391,9 +618,9 @@ def record_demo_4_setup_home_assistant(output_dir: Path):
     input_text("input_username", "emoore")
     time.sleep(0.5)
     input_text("input_password", "ciristest1")
-    time.sleep(1.5)                     # Hold for viewer to see credentials
-    click("btn_next")                   # Finish Setup
-    time.sleep(6)                       # Wait for setup completion + agent start
+    time.sleep(1.5)  # Hold for viewer to see credentials
+    click("btn_next")  # Finish Setup
+    time.sleep(6)  # Wait for setup completion + agent start
 
     wait_for_recording(proc)
     print(f"  Saved: {output}")
@@ -570,13 +797,15 @@ Examples:
     )
 
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR})",
     )
     parser.add_argument(
-        "--clip", "-c",
+        "--clip",
+        "-c",
         type=int,
         action="append",
         choices=list(range(1, 9)),
@@ -600,16 +829,39 @@ Examples:
     parser.add_argument(
         "--list-apps",
         action="store_true",
-        help="List apps visible to SwiftCapture and exit.",
+        help="List recordable windows/apps and exit.",
+    )
+    parser.add_argument(
+        "--list-windows",
+        action="store_true",
+        help="(Linux) List all X11 windows with IDs and exit.",
     )
 
     args = parser.parse_args()
 
-    # List apps mode
+    # List apps/windows mode
     if args.list_apps:
-        if not check_swiftcapture():
+        if PLATFORM == "Darwin":
+            if not check_swiftcapture():
+                sys.exit(1)
+            subprocess.run([str(SCAP_BINARY), "--app-list"])
+        elif PLATFORM == "Linux":
+            print("Searching for CIRIS windows...")
+            geometry = find_window_geometry()
+            if geometry:
+                x, y, w, h = geometry
+                print(f"  Found: CIRIS window at ({x}, {y}) size {w}x{h}")
+            else:
+                print("  No CIRIS window found. Is the app running?")
+                print("\n  Tip: Use --list-windows to see all X11 windows")
+        return
+
+    if args.list_windows:
+        if PLATFORM != "Linux":
+            print("--list-windows is only available on Linux")
             sys.exit(1)
-        subprocess.run([str(SCAP_BINARY), "--app-list"])
+        print("X11 windows (via xdotool):")
+        subprocess.run(["xdotool", "search", "--name", ".", "getwindowname", "%@"], shell=False)
         return
 
     # Screenshot mode
@@ -619,8 +871,9 @@ Examples:
         take_screenshot(args.screenshot)
         return
 
-    # Check SwiftCapture
-    if not check_swiftcapture():
+    # Check recording tools (platform-specific)
+    print(f"Platform: {PLATFORM}")
+    if not check_recording_tools():
         sys.exit(1)
 
     # Create output directory
@@ -649,8 +902,11 @@ Examples:
     clips_to_record = args.clip if args.clip else list(range(1, 9))
 
     print(f"\nRecording clips: {clips_to_record}")
-    print(f"Video: SwiftCapture ({SCAP_BINARY.name})")
-    print(f"App: {CIRIS_APP_NAME}")
+    if PLATFORM == "Darwin":
+        print(f"Video: SwiftCapture ({SCAP_BINARY.name})")
+    else:
+        print(f"Video: ffmpeg x11grab")
+    print(f"Window: {CIRIS_APP_NAME}")
     print("=" * 50)
 
     # Record clips

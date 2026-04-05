@@ -18,7 +18,7 @@ that imports `from ...routes.system import router`.
 
 from fastapi import APIRouter
 
-from . import adapter_config, adapters, health, runtime, services, shutdown, tools
+from . import adapter_config, adapters, health, runtime, services, shutdown, skill_builder, skill_import, tools
 
 # Create the main router with the system prefix and tags
 router = APIRouter(prefix="/system", tags=["system"])
@@ -36,16 +36,23 @@ router.include_router(services.router)
 # Shutdown: /system/shutdown, /system/local-shutdown
 router.include_router(shutdown.router)
 
-# Adapter management: /system/adapters/*
-router.include_router(adapters.router)
+# Skill import: /system/adapters/import-skill, /system/adapters/imported-skills
+# NOTE: Must be registered BEFORE adapters.router to avoid {adapter_type} wildcard matching
+router.include_router(skill_import.router)
 
 # Adapter configuration workflow: /system/adapters/{type}/configure/*, /system/adapters/configure/*
 router.include_router(adapter_config.router)
 
+# Adapter management: /system/adapters/*
+# NOTE: This router has /adapters/{adapter_type} which must come AFTER static routes
+router.include_router(adapters.router)
+
+# Skill builder: /system/skills/* (HyperCard-style card builder)
+router.include_router(skill_builder.router)
+
 # Tools: /system/tools
 router.include_router(tools.router)
 
-# Re-export schemas for backward compatibility
 from .schemas import (
     AdapterActionRequest,
     ConfigStepInfo,
@@ -72,6 +79,15 @@ from .schemas import (
     SystemHealthResponse,
     SystemTimeResponse,
     ToolInfoResponse,
+)
+
+# Re-export schemas for backward compatibility
+from .skill_import import (
+    ImportedSkillInfo,
+    ImportedSkillsListResponse,
+    SkillImportRequest,
+    SkillImportResponse,
+    SkillPreviewResponse,
 )
 
 __all__ = [
@@ -103,4 +119,10 @@ __all__ = [
     "SystemHealthResponse",
     "SystemTimeResponse",
     "ToolInfoResponse",
+    # Skill import schemas
+    "ImportedSkillInfo",
+    "ImportedSkillsListResponse",
+    "SkillImportRequest",
+    "SkillImportResponse",
+    "SkillPreviewResponse",
 ]

@@ -216,6 +216,103 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "needs_socket_cleanup: mark test as needing socket cleanup delay")
 
 
+# =============================================================================
+# Test Start/End Markers for Debugging Hanging Tests
+# =============================================================================
+# These hooks print markers that can be grep'd to find tests that started but
+# never finished (hanging tests). Look for [TEST_START] without matching [TEST_END].
+
+
+def pytest_runtest_logstart(nodeid, location):
+    """Print marker when test starts - helps identify hanging tests in CI logs."""
+    import sys
+    # Flush to ensure marker appears immediately in CI logs
+    print(f"\n[TEST_START] {nodeid}", file=sys.stderr, flush=True)
+
+
+def pytest_runtest_logfinish(nodeid, location):
+    """Print marker when test finishes - pair with TEST_START to find hangs."""
+    import sys
+    print(f"[TEST_END] {nodeid}", file=sys.stderr, flush=True)
+
+
+# ============================================================================
+# CASCADING FAILURE PROTECTION
+# ============================================================================
+# These hooks and fixtures prevent a single test crash from causing
+# cascading failures (e.g., 18-minute hangs due to orphan processes).
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Clean up any orphan async tasks after each test.
+
+    This prevents tests from leaving behind background tasks that can
+    cause worker crashes or hangs in pytest-xdist.
+    """
+    import asyncio
+
+    try:
+        # Get the running event loop if one exists (avoids deprecation warning)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - try to get the current loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = None
+            except RuntimeError:
+                loop = None
+
+        if loop and not loop.is_closed():
+            # Cancel any pending tasks from this test
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+    except Exception:
+        pass  # Best effort cleanup
+
+
+@pytest.fixture(autouse=True, scope="function")
+def prevent_subprocess_orphans():
+    """Track and clean up any subprocesses spawned during tests.
+
+    This prevents tests from leaving orphan processes that can cause
+    pytest-xdist workers to hang during shutdown.
+    """
+    import subprocess
+    import weakref
+
+    # Track any Popen objects created during the test
+    original_popen = subprocess.Popen
+    spawned_processes = []
+
+    class TrackedPopen(original_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            spawned_processes.append(weakref.ref(self))
+
+    subprocess.Popen = TrackedPopen
+
+    yield
+
+    # Restore original Popen
+    subprocess.Popen = original_popen
+
+    # Kill any processes that are still running
+    for proc_ref in spawned_processes:
+        proc = proc_ref()
+        if proc is not None:
+            try:
+                if proc.poll() is None:  # Still running
+                    proc.kill()
+                    proc.wait(timeout=1)
+            except Exception:
+                pass  # Best effort cleanup
+
+
 @pytest.fixture(autouse=True)
 def skip_without_discord_token(request):
     """Skip tests that require Discord token if not available."""

@@ -58,6 +58,10 @@ class StartupViewModel(
     private val _consolidatorStatus = MutableStateFlow<String?>(null)
     val consolidatorStatus: StateFlow<String?> = _consolidatorStatus.asStateFlow()
 
+    // Server startup status (API initialization phases)
+    private val _serverStartupStatus = MutableStateFlow<String?>(null)
+    val serverStartupStatus: StateFlow<String?> = _serverStartupStatus.asStateFlow()
+
     // Flag to keep timer running even after phase == READY (for CIRISApp backend polling)
     private val _keepTimerAlive = MutableStateFlow(false)
     val keepTimerAlive: StateFlow<Boolean> = _keepTimerAlive.asStateFlow()
@@ -156,6 +160,7 @@ class StartupViewModel(
         val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
         val fatalPattern = Regex("""\[FATAL(?:_EXIT)?\]\s*(.+)""")
         val consolidatorPattern = Regex("""\[CONSOLIDATOR\]\s*(.+)""")
+        val startupPattern = Regex("""\[STARTUP\]\s*(.+)""")
         pythonRuntime.setOutputLineCallback { line ->
             // Check for FATAL errors first - these indicate unrecoverable startup failures
             fatalPattern.find(line)?.let { match ->
@@ -200,6 +205,42 @@ class StartupViewModel(
                         _consolidatorStatus.value = null
                     }
                 }
+                return@setOutputLineCallback
+            }
+            // Check for server startup progress (from API polling or stdout)
+            startupPattern.find(line)?.let { match ->
+                val status = match.groupValues[1].trim()
+                PlatformLogger.i(TAG, "[STARTUP][SERVER] $status")
+                _serverStartupStatus.value = status
+                // Map to localized status messages (handle both API snake_case and stdout text)
+                val localizedStatus = when {
+                    // API snake_case status values
+                    status == "creating_api" -> LocalizationHelper.getString("mobile.startup_creating_api")
+                    status == "configuring_middleware" -> LocalizationHelper.getString("mobile.startup_configuring")
+                    status == "initializing_runtime" -> LocalizationHelper.getString("mobile.startup_initializing_runtime")
+                    status == "registering_routes" -> LocalizationHelper.getString("mobile.startup_registering_routes")
+                    status == "routes_registered" -> LocalizationHelper.getString("mobile.startup_routes_ready")
+                    status == "api_ready" -> LocalizationHelper.getString("mobile.startup_api_ready")
+                    status == "checking_port" -> LocalizationHelper.getString("mobile.startup_checking_port")
+                    status == "binding_port" -> LocalizationHelper.getString("mobile.startup_binding_port")
+                    status == "starting_server" -> LocalizationHelper.getString("mobile.startup_starting_server")
+                    status == "server_listening" -> LocalizationHelper.getString("mobile.startup_server_listening")
+                    status == "server_ready" -> LocalizationHelper.getString("mobile.startup_server_ready")
+                    // Stdout text patterns (fallback)
+                    status.contains("Creating API") -> LocalizationHelper.getString("mobile.startup_creating_api")
+                    status.contains("Configuring middleware") -> LocalizationHelper.getString("mobile.startup_configuring")
+                    status.contains("Initializing runtime") -> LocalizationHelper.getString("mobile.startup_initializing_runtime")
+                    status.contains("Registering API routes") -> LocalizationHelper.getString("mobile.startup_registering_routes")
+                    status.contains("Routes registered") -> LocalizationHelper.getString("mobile.startup_routes_ready")
+                    status.contains("API application ready") -> LocalizationHelper.getString("mobile.startup_api_ready")
+                    status.contains("Checking port") -> LocalizationHelper.getString("mobile.startup_checking_port")
+                    status.contains("Binding to port") -> LocalizationHelper.getString("mobile.startup_binding_port")
+                    status.contains("Starting server") -> LocalizationHelper.getString("mobile.startup_starting_server")
+                    status.contains("listening on port") -> LocalizationHelper.getString("mobile.startup_server_listening")
+                    status.contains("ready for connections") -> LocalizationHelper.getString("mobile.startup_server_ready")
+                    else -> status
+                }
+                _statusMessage.value = localizedStatus
             }
         }
 

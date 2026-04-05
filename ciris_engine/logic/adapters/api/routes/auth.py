@@ -2187,6 +2187,11 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
         _trigger_background_attestation(infra_auth_service, force_refresh=True)
         return _build_attestation_response("in_progress")
 
+    def _detect_platform_os() -> str:
+        """Fallback platform detection when verify doesn't provide platform_os."""
+        import sys
+        return sys.platform  # 'darwin', 'linux', 'win32', etc.
+
     # Check for cached attestation (allow stale data while refresh runs in background)
     cached = infra_auth_service.get_cached_attestation(allow_stale=True)
 
@@ -2208,6 +2213,7 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
             "version": cached.version,
             "agent_version": cached.agent_version,
             "hardware_type": cached.hardware_type,
+            "platform_os": cached.platform_os or _detect_platform_os(),
             "key_status": cached.key_status,
             "key_id": cached.key_id,
             "attestation_status": cached.attestation_status,

@@ -148,8 +148,8 @@ def create_env_file(
         # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
         data_dir = str(get_ciris_home())
     else:
-        # Use ~/ciris for desktop - more portable
-        data_dir = "~/ciris/data"
+        # Use absolute expanded path - Rust FFI treats "~" as literal
+        data_dir = str(Path.home() / "ciris" / "data")
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")

@@ -2,7 +2,7 @@
 
 Extends the base AdapterLoader to scan multiple directories:
 1. ciris_adapters/         - Built-in adapters
-2. ~/.ciris/adapters/      - User-installed adapters
+2. ~/ciris/adapters/       - User-installed adapters
 3. .ciris/adapters/        - Workspace-local adapters
 4. CIRIS_EXTRA_ADAPTERS    - Additional paths from env var
 
@@ -42,7 +42,7 @@ class AdapterDiscoveryService:
     Discovery paths (in priority order):
     1. ciris_adapters/ relative to ciris_engine (works on Android)
     2. ciris_adapters/ relative to cwd (works on desktop)
-    3. ~/.ciris/adapters/      - User-installed adapters
+    3. ~/ciris/adapters/       - User-installed adapters
     4. .ciris/adapters/        - Workspace-local adapters
     5. CIRIS_EXTRA_ADAPTERS    - Colon-separated additional paths
     """
@@ -53,7 +53,7 @@ class AdapterDiscoveryService:
     DISCOVERY_PATHS = [
         Path(__file__).parent.parent.parent.parent / "ciris_adapters",  # Relative to ciris_engine (Android)
         Path("ciris_adapters"),  # Built-in (desktop)
-        Path.home() / ".ciris" / "adapters",  # User
+        Path.home() / "ciris" / "adapters",  # User
         Path(".ciris") / "adapters",  # Workspace
     ]
 

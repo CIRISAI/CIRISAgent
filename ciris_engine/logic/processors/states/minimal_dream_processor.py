@@ -30,12 +30,7 @@ from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.enums import (
-    HandlerActionType,
-    TaskStatus,
-    ThoughtStatus,
-    ThoughtType,
-)
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, Thought
 
 if TYPE_CHECKING:
@@ -163,8 +158,7 @@ class MinimalDreamProcessor(BaseProcessor):
             )
             # Filter to pending/processing thoughts
             pending_thoughts = [
-                t for t in all_thoughts
-                if t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]
+                t for t in all_thoughts if t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]
             ]
 
             for thought in pending_thoughts[:5]:  # Process up to 5 per round
@@ -350,10 +344,7 @@ class MinimalDreamProcessor(BaseProcessor):
             self.current_session.task_id,
             self.agent_occurrence_id,
         )
-        pending_count = sum(
-            1 for t in all_thoughts
-            if t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]
-        )
+        pending_count = sum(1 for t in all_thoughts if t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING])
 
         # Dream complete when no more pending thoughts
         return pending_count == 0
@@ -377,8 +368,7 @@ class MinimalDreamProcessor(BaseProcessor):
 
         # Announce exit
         await self._announce(
-            f"Reflection complete. Wove {self.current_session.edges_created} connections. "
-            "Returning to work."
+            f"Reflection complete. Wove {self.current_session.edges_created} connections. " "Returning to work."
         )
 
         # Record session to memory
@@ -403,10 +393,10 @@ class MinimalDreamProcessor(BaseProcessor):
                 "edges_created": self.current_session.edges_created,
                 "thoughts_processed": self.current_session.thoughts_processed,
                 "duration_seconds": (
-                    self.current_session.completed_at - self.current_session.start_time
-                ).total_seconds()
-                if self.current_session.completed_at
-                else 0,
+                    (self.current_session.completed_at - self.current_session.start_time).total_seconds()
+                    if self.current_session.completed_at
+                    else 0
+                ),
                 "exit_reason": self.current_session.exit_reason,
                 "created_by": "MinimalDreamProcessor",
                 "tags": ["dream", "consolidation", "journal"],
@@ -537,9 +527,7 @@ class MinimalDreamProcessor(BaseProcessor):
                 "status": "active",
                 "edges_created": self.current_session.edges_created,
                 "thoughts_processed": self.current_session.thoughts_processed,
-                "duration_seconds": (
-                    self.time_service.now() - self.current_session.start_time
-                ).total_seconds(),
+                "duration_seconds": (self.time_service.now() - self.current_session.start_time).total_seconds(),
             }
         elif self.dream_metrics:
             return {

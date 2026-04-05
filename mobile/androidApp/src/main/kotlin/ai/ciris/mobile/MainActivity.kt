@@ -401,10 +401,22 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun startLogcatReader() = withContext(Dispatchers.IO) {
         try {
-            PythonRuntime.resetServiceCount()
+            // Kill any existing logcat reader and get a new generation ID
+            // This ensures stale readers from activity recreation don't corrupt state
+            val generation = PythonRuntime.prepareNewLogcatReader()
             PythonRuntime.resetPrepCount()
+            Log.i(TAG, "Starting logcat reader (generation $generation)")
 
-            val process = Runtime.getRuntime().exec("logcat -v raw python.stdout:I python.stderr:W *:S")
+            // Use -T 1 to only read entries from NOW (not buffered history)
+            // This ensures incremental progress tracking instead of reading all at once
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "raw", "-T", "1", "python.stdout:I", "python.stderr:W", "*:S"))
+
+            // Register process and check if still valid
+            if (!PythonRuntime.registerLogcatProcess(process, generation)) {
+                Log.w(TAG, "Logcat reader cancelled before starting (generation changed)")
+                return@withContext
+            }
+
             val reader = process.inputStream.bufferedReader()
 
             // Pattern for service startup: [SERVICE 1/22] ... STARTED
@@ -415,6 +427,13 @@ class MainActivity : ComponentActivity() {
             val verifyPattern = Regex("""VERIFY""")
 
             while (true) {
+                // Check if this reader is still valid (newer one may have started)
+                if (!PythonRuntime.isLogcatGenerationValid(generation)) {
+                    Log.i(TAG, "Logcat reader stopping (generation $generation is stale)")
+                    process.destroy()
+                    break
+                }
+
                 val line = reader.readLine() ?: break
                 if (line.isNotBlank()) {
                     // Check for service startup

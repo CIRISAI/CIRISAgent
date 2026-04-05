@@ -153,7 +153,7 @@ def _module_info_to_adapter_config(module_info: "ModuleTypeInfo") -> AdapterConf
         config_fields = ["wizard"]  # Placeholder indicating wizard-based config
     else:
         # Check for required configuration parameters
-        for param in (module_info.configuration_schema or []):
+        for param in module_info.configuration_schema or []:
             if param.required:
                 config_fields.append(param.name)
 

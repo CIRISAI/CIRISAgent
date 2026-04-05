@@ -116,6 +116,48 @@ The server runs on `http://localhost:8091` by default:
 | `/input` | POST | Input text to element |
 | `/wait` | POST | Wait for element to appear |
 | `/element/{tag}` | GET | Get specific element info |
+| `/act` | POST | **Combined action + view** (preferred for automation) |
+
+### The `/act` Endpoint (Preferred)
+
+The `/act` endpoint combines action + wait + tree into a single call, reducing 3 HTTP requests to 1:
+
+```bash
+# Click and get resulting UI state
+curl -X POST http://localhost:8091/act \
+  -H "Content-Type: application/json" \
+  -d '{"testTag": "menu_adapters", "action": "click", "waitMs": 1000}'
+
+# Input text and get filtered elements
+curl -X POST http://localhost:8091/act \
+  -H "Content-Type: application/json" \
+  -d '{
+    "testTag": "input_skill_md",
+    "action": "input",
+    "text": "---\nname: My Skill\n---",
+    "clearFirst": true,
+    "waitMs": 500,
+    "filterTags": ["skill", "preview", "import"]
+  }'
+```
+
+**Request fields:**
+- `action`: "click", "input", or "wait"
+- `testTag`: Target element's testTag
+- `text`: Text to input (for "input" action)
+- `clearFirst`: Clear existing text before input (default: true)
+- `waitMs`: Milliseconds to wait after action before reading tree (default: 500)
+- `filterTags`: Optional list of substrings to filter returned elements
+
+**Response:**
+```json
+{
+  "actionResult": {"success": true, "element": "menu_adapters", "action": "click"},
+  "screen": "Adapters",
+  "elements": [{"testTag": "btn_add_menu", "x": 100, "y": 200, ...}],
+  "elementCount": 15
+}
+```
 
 ### Example: Automated Login
 
@@ -238,6 +280,7 @@ curl -X POST http://127.0.0.1:18080/v1/system/adapters/home_assistant/configure/
 | `/health` | GET | Health check |
 | `/screen` | GET | Current screen name |
 | `/tree` | GET | All UI elements with positions |
+| `/act` | POST | **Combined action + view** (preferred) |
 | `/click` | POST | Click by testTag (programmatic) |
 | `/input` | POST | Text input to element |
 | `/wait` | POST | Wait for element to appear |
@@ -274,4 +317,18 @@ curl -X POST http://127.0.0.1:18080/v1/system/adapters/home_assistant/configure/
 
 # Desktop JAR (Windows/macOS/Linux)
 ./gradlew :desktopApp:packageDistributionForCurrentOS
+```
+
+## Device Preferences
+
+**IMPORTANT**: When multiple Android devices are connected, always prefer the **older/lower-versioned device** for testing. This ensures compatibility with a wider range of devices.
+
+**Primary test device**: `330016f5b40463cd` (older Samsung without StrongBox - good for testing hardware security fallbacks)
+
+```bash
+# Install to specific device when multiple are connected
+~/Android/Sdk/platform-tools/adb -s 330016f5b40463cd install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
+# List connected devices
+~/Android/Sdk/platform-tools/adb devices
 ```

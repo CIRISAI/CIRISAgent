@@ -29,6 +29,7 @@ import ai.ciris.mobile.shared.localization.createLocalizationResourceLoader
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
+import ai.ciris.mobile.shared.ui.components.SkillImportDialog
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.AuditViewModel
@@ -40,6 +41,7 @@ import ai.ciris.mobile.shared.viewmodels.InteractViewModel
 import ai.ciris.mobile.shared.viewmodels.LogsViewModel
 import ai.ciris.mobile.shared.viewmodels.MemoryViewModel
 import ai.ciris.mobile.shared.viewmodels.RuntimeViewModel
+import ai.ciris.mobile.shared.viewmodels.ServerConnectionViewModel
 import ai.ciris.mobile.shared.viewmodels.ServicesViewModel
 import ai.ciris.mobile.shared.viewmodels.SessionsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
@@ -54,6 +56,7 @@ import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
+import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
@@ -543,6 +546,12 @@ fun CIRISApp(
     }
     val servicesViewModel: ServicesViewModel = viewModel {
         ServicesViewModel(apiClient)
+    }
+    val serverConnectionViewModel: ServerConnectionViewModel = viewModel {
+        ServerConnectionViewModel(apiClient, pythonRuntime, secureStorage)
+    }
+    val skillImportViewModel: SkillImportViewModel = viewModel {
+        SkillImportViewModel(apiClient)
     }
     val auditViewModel: AuditViewModel = viewModel {
         AuditViewModel(apiClient)
@@ -1149,6 +1158,8 @@ fun CIRISApp(
                             }
                         }
                     },
+                    onServerSettings = { currentScreen = Screen.ServerConnection },
+                    connectionStatus = serverConnectionViewModel.connectionStatus.collectAsState().value,
                     isLoading = isLoginLoading,
                     statusMessage = loginStatusMessage,
                     errorMessage = loginErrorMessage,
@@ -1299,6 +1310,13 @@ fun CIRISApp(
                             onSchedulerClick = { currentScreen = Screen.Scheduler },
                             onToolsClick = { currentScreen = Screen.Tools },
                             onHelpClick = { currentScreen = Screen.Help },
+                            onLogoutClick = {
+                                PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
+                                settingsViewModel.logout {
+                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
+                                    currentScreen = Screen.Startup
+                                }
+                            },
                             darkMode = isDarkMode,
                             // Theme picker
                             colorTheme = colorTheme,
@@ -1337,8 +1355,8 @@ fun CIRISApp(
                             currentScreen = Screen.Billing
                         },
                         onOpenSystem = {
-                            platformLog(TAG, "[INFO] Opening System page from Local status")
-                            currentScreen = Screen.System
+                            platformLog(TAG, "[INFO] Opening Server Connection page from Local status badge")
+                            currentScreen = Screen.ServerConnection
                         },
                         onOpenSettings = {
                             platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
@@ -1671,6 +1689,10 @@ fun CIRISApp(
                     onRefresh = {
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] User triggered refresh")
                         adaptersViewModel.refresh()
+                    },
+                    onImportSkill = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Import skill requested")
+                        currentScreen = Screen.SkillImport
                     },
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Navigating back to Interact")
@@ -2193,6 +2215,14 @@ fun CIRISApp(
                 )
             }
 
+            Screen.ServerConnection -> {
+                PlatformLogger.d(TAG, "[Screen.ServerConnection] Rendering server connection screen")
+                ServerConnectionScreen(
+                    viewModel = serverConnectionViewModel,
+                    onBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Runtime -> {
                 val runtimeData by runtimeViewModel.runtimeData.collectAsState()
                 val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
@@ -2423,6 +2453,8 @@ fun CIRISApp(
                     },
                     onResetSetup = {
                         PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
+                        // Clear stale ViewModel state so old messages don't survive the wipe
+                        interactViewModel.resetState()
                         if (ai.ciris.mobile.shared.platform.isDesktop()) {
                             // Desktop: kill the Python server via HTTP then let startup relaunch it fresh
                             PlatformLogger.i(TAG, "[Screen.DataManagement] Desktop: killing Python server via local-shutdown API")
@@ -2439,8 +2471,9 @@ fun CIRISApp(
                                 // Also call pythonRuntime.shutdown() to clear internal state
                                 pythonRuntime.shutdown()
                                 // Wait for server process to fully exit and port to free
-                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit...")
-                                kotlinx.coroutines.delay(3000)
+                                // On Linux, TCP TIME_WAIT can hold the port for a while
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Waiting for server to exit and port to free...")
+                                kotlinx.coroutines.delay(6000)
                                 PlatformLogger.i(TAG, "[Screen.DataManagement] Triggering startup retry")
                                 startupViewModel.retry()
                             }
@@ -2470,6 +2503,42 @@ fun CIRISApp(
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Wallet] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.SkillImport -> {
+                // Collect SkillImportViewModel state
+                val importPhase by skillImportViewModel.importPhase.collectAsState()
+                val skillMdContent by skillImportViewModel.skillMdContent.collectAsState()
+                val sourceUrl by skillImportViewModel.sourceUrl.collectAsState()
+                val preview by skillImportViewModel.preview.collectAsState()
+                val importResult by skillImportViewModel.importResult.collectAsState()
+                val isSkillLoading by skillImportViewModel.isLoading.collectAsState()
+                val skillError by skillImportViewModel.error.collectAsState()
+
+                // Initialize dialog state when entering screen
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i("CIRISApp", "[Screen.SkillImport] Opening skill import")
+                    skillImportViewModel.openImportDialog()
+                }
+
+                SkillImportDialog(
+                    phase = importPhase,
+                    skillMdContent = skillMdContent,
+                    sourceUrl = sourceUrl,
+                    preview = preview,
+                    importResult = importResult,
+                    isLoading = isSkillLoading,
+                    error = skillError,
+                    onContentChanged = { skillImportViewModel.updateSkillMdContent(it) },
+                    onSourceUrlChanged = { skillImportViewModel.updateSourceUrl(it) },
+                    onPreview = { skillImportViewModel.previewSkill() },
+                    onImport = { skillImportViewModel.importSkill() },
+                    onDismiss = {
+                        PlatformLogger.i("CIRISApp", "[Screen.SkillImport] Closing skill import")
+                        skillImportViewModel.closeImportDialog()
+                        currentScreen = Screen.Adapters
                     }
                 )
             }
@@ -2525,7 +2594,7 @@ private suspend fun checkFirstRunStatus(
  * - Advanced: Telemetry, Services, Logs, System, Runtime, Users, Tickets, Scheduler
  */
 private enum class NavCategory {
-    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED
+    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED, ACCOUNT
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2551,6 +2620,7 @@ private fun CIRISTopBar(
     onSchedulerClick: () -> Unit = {},
     onToolsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {},
     darkMode: Boolean = false,
     // Theme picker
     colorTheme: ColorTheme = ColorTheme.DEFAULT,
@@ -2852,6 +2922,33 @@ private fun CIRISTopBar(
                     )
                 }
             }
+
+            // Account menu (person icon with logout)
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT },
+                    modifier = Modifier.testableClickable("btn_account_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Account",
+                        tint = if (activeCategory == NavCategory.ACCOUNT) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.ACCOUNT,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(localizedString("mobile.settings_logout")) },
+                        onClick = { activeCategory = NavCategory.NONE; onLogoutClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_logout") { activeCategory = NavCategory.NONE; onLogoutClick() }
+                    )
+                }
+            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor,
@@ -2890,8 +2987,10 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+    object SkillImport : Screen()
     object DataManagement : Screen()
     object Help : Screen()
+    object ServerConnection : Screen()
 }
 
 /**

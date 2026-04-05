@@ -47,12 +47,69 @@ actual class SecureStorage actual constructor() {
         return String(cipher.doFinal(encrypted), Charsets.UTF_8)
     }
 
+    private val envFile: File by lazy {
+        File(System.getenv("CIRIS_HOME") ?: "${System.getProperty("user.home")}/ciris", ".env")
+    }
+
+    private fun readEnvVars(): MutableMap<String, String> {
+        val envVars = mutableMapOf<String, String>()
+        if (envFile.exists()) {
+            envFile.readLines().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                    val (k, v) = trimmed.split("=", limit = 2)
+                    envVars[k.trim()] = v.trim().removeSurrounding("\"")
+                }
+            }
+        }
+        return envVars
+    }
+
+    private fun getEnvKeyName(provider: String): String = when (provider.lowercase()) {
+        "openrouter" -> "OPENAI_API_KEY"  // OpenRouter uses OPENAI_API_KEY with custom base URL
+        "openai" -> "OPENAI_API_KEY"
+        "anthropic" -> "ANTHROPIC_API_KEY"
+        else -> "OPENAI_API_KEY"
+    }
+
     actual suspend fun saveApiKey(key: String, value: String): Result<Unit> = runCatching {
+        // Save to Java Preferences (cache)
         prefs.put("apikey_$key", encrypt(value))
         prefs.flush()
+
+        // Save to .env file (source of truth)
+        val envKeyName = getEnvKeyName(key)
+        val envVars = readEnvVars()
+        envVars[envKeyName] = value
+
+        // Rebuild .env file preserving comments and order
+        val lines = if (envFile.exists()) envFile.readLines().toMutableList() else mutableListOf()
+        var found = false
+        for (i in lines.indices) {
+            val trimmed = lines[i].trim()
+            if (trimmed.startsWith("$envKeyName=")) {
+                lines[i] = "$envKeyName=\"$value\""
+                found = true
+                break
+            }
+        }
+        if (!found) {
+            lines.add("$envKeyName=\"$value\"")
+        }
+        envFile.parentFile?.mkdirs()
+        envFile.writeText(lines.joinToString("\n"))
     }
 
     actual suspend fun getApiKey(key: String): Result<String?> = runCatching {
+        // Read from .env file (source of truth)
+        val envVars = readEnvVars()
+        val envKeyName = getEnvKeyName(key)
+        val envValue = envVars[envKeyName]
+        if (!envValue.isNullOrEmpty()) {
+            return@runCatching envValue
+        }
+
+        // Fall back to Java Preferences (legacy/cache)
         prefs.get("apikey_$key", null)?.let { decrypt(it) }
     }
 

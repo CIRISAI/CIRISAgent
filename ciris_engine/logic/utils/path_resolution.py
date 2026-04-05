@@ -505,8 +505,10 @@ def ensure_ciris_home_env() -> Path:
 
     # Set CIRIS_DATA_DIR for CIRISVerify compatibility
     # CIRISVerify reads this for key storage path
+    # ALWAYS override — stale values from previous installs (iOS container UUID changes),
+    # unexpanded "~/ciris/data", or .env files can all cause mismatches
     data_dir = ciris_home / "data"
-    os.environ.setdefault("CIRIS_DATA_DIR", str(data_dir))
+    os.environ["CIRIS_DATA_DIR"] = str(data_dir)
 
     # Create home directory if it doesn't exist (with appropriate permissions)
     try:

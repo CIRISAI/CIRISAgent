@@ -98,8 +98,10 @@ class TelemetryExportScheduler:
             self._scheduler_task.cancel()
             try:
                 await self._scheduler_task
-            except asyncio.CancelledError:
-                pass  # Expected: we cancelled our own task, not externally cancelled
+            except asyncio.CancelledError:  # noqa: ASYNC910
+                # Expected: we just cancelled this child task above.
+                # Do NOT re-raise - this is OUR cancellation, not external.
+                pass
 
         if self._client:
             await self._client.aclose()
@@ -109,20 +111,16 @@ class TelemetryExportScheduler:
 
     async def _scheduler_loop(self) -> None:
         """Main scheduler loop - checks destinations and pushes when due."""
-        cancelled = False
         while self._running:
             try:
                 await self._check_and_push()
                 await asyncio.sleep(self._check_interval)
             except asyncio.CancelledError:
-                cancelled = True
-                break
+                logger.debug("Export scheduler loop cancelled")
+                raise  # Re-raise per asyncio contract
             except Exception as e:
                 logger.error(f"Error in export scheduler loop: {e}")
                 await asyncio.sleep(self._check_interval)
-        # Re-raise CancelledError per asyncio contract after cleanup/exit
-        if cancelled:
-            raise asyncio.CancelledError()
 
     async def _check_and_push(self) -> None:
         """Check all destinations and push to those that are due."""

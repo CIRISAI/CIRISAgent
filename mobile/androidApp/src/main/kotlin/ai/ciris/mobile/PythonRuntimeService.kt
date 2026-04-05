@@ -175,6 +175,23 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
             return
         }
 
+        // SmartStartup: Check for orphan server from previous instance
+        if (isOrphanServerRunning()) {
+            Log.i(TAG, "[SmartStartup] Detected orphan server - sending shutdown signal")
+            shutdownOrphanServer()
+            // Wait for orphan to die
+            var waitedMs = 0
+            while (waitedMs < 10000 && isOrphanServerRunning()) {
+                Thread.sleep(500)
+                waitedMs += 500
+            }
+            if (isOrphanServerRunning()) {
+                Log.w(TAG, "[SmartStartup] Orphan server still running after 10s - proceeding anyway")
+            } else {
+                Log.i(TAG, "[SmartStartup] Orphan server shut down after ${waitedMs}ms")
+            }
+        }
+
         try {
             val py = Python.getInstance()
             val mobileMain = py.getModule("mobile_main")
@@ -185,6 +202,45 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start CIRIS server", e)
             throw e
+        }
+    }
+
+    /**
+     * Check if an orphan server from a previous instance is running.
+     */
+    private fun isOrphanServerRunning(): Boolean {
+        return try {
+            val url = java.net.URL("http://localhost:8080/v1/system/health")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 1000
+            connection.readTimeout = 1000
+            connection.requestMethod = "GET"
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Send shutdown signal to orphan server via local-shutdown endpoint.
+     */
+    private fun shutdownOrphanServer() {
+        try {
+            val url = java.net.URL("http://localhost:8080/v1/system/local-shutdown")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 3000
+            connection.readTimeout = 5000
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.bufferedWriter().use { it.write("{}") }
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            Log.i(TAG, "[SmartStartup] local-shutdown response: $responseCode")
+        } catch (e: Exception) {
+            Log.w(TAG, "[SmartStartup] Failed to send shutdown: ${e.message}")
         }
     }
 

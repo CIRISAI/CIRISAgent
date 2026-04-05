@@ -216,6 +216,26 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "needs_socket_cleanup: mark test as needing socket cleanup delay")
 
 
+# =============================================================================
+# Test Start/End Markers for Debugging Hanging Tests
+# =============================================================================
+# These hooks print markers that can be grep'd to find tests that started but
+# never finished (hanging tests). Look for [TEST_START] without matching [TEST_END].
+
+
+def pytest_runtest_logstart(nodeid, location):
+    """Print marker when test starts - helps identify hanging tests in CI logs."""
+    import sys
+    # Flush to ensure marker appears immediately in CI logs
+    print(f"\n[TEST_START] {nodeid}", file=sys.stderr, flush=True)
+
+
+def pytest_runtest_logfinish(nodeid, location):
+    """Print marker when test finishes - pair with TEST_START to find hangs."""
+    import sys
+    print(f"[TEST_END] {nodeid}", file=sys.stderr, flush=True)
+
+
 @pytest.fixture(autouse=True)
 def skip_without_discord_token(request):
     """Skip tests that require Discord token if not available."""

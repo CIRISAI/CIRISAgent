@@ -253,17 +253,24 @@ def pytest_runtest_teardown(item, nextitem):
     import asyncio
 
     try:
-        # Get the current event loop if one exists
-        loop = asyncio.get_event_loop_policy().get_event_loop()
+        # Get the running event loop if one exists (avoids deprecation warning)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - try to get the current loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = None
+            except RuntimeError:
+                loop = None
+
         if loop and not loop.is_closed():
             # Cancel any pending tasks from this test
-            pending = asyncio.all_tasks(loop) if hasattr(asyncio, 'all_tasks') else asyncio.Task.all_tasks(loop)
+            pending = asyncio.all_tasks(loop)
             for task in pending:
                 if not task.done():
                     task.cancel()
-            # Give tasks a moment to cancel
-            if pending:
-                loop.run_until_complete(asyncio.sleep(0.01))
     except Exception:
         pass  # Best effort cleanup
 

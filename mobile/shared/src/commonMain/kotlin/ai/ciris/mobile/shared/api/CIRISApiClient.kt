@@ -529,6 +529,12 @@ class CIRISApiClient(
             val response = agentApi.getHistoryV1AgentHistoryGet(limit, null, authHeaderValue)
             logDebug(method, "Response: status=${response.status}")
 
+            // Check for auth errors before parsing body (OpenAPI client may not declare 401)
+            val statusCode = response.response.status.value
+            if (statusCode == 401 || statusCode == 403) {
+                throw RuntimeException("API error: HTTP $statusCode ${response.response.status.description}")
+            }
+
             val body = response.body()
             val data = body.`data` ?: throw RuntimeException("API returned null data")
             val messages = data.messages.map { msg ->

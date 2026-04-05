@@ -8,7 +8,7 @@ Provides endpoints for wallet status and transfers:
 - GET /v1/wallet/transactions - Get transaction history
 - POST /v1/wallet/swap-for-gas - Swap USDC for ETH gas
 
-All endpoints require ADMIN authentication.
+Read endpoints require any authentication, write endpoints require ADMIN.
 All sends/transfers/receives are audited via the audit service with spam prevention.
 """
 
@@ -20,7 +20,7 @@ from typing import Annotated, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ..dependencies.auth import AuthContext, require_admin
+from ..dependencies.auth import AuthContext, get_auth_context, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,9 @@ def _get_wallet_audit_helper(request: Request) -> Any:
         return None
 
 
-# Type alias for admin authentication dependency
-AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
+# Type aliases for authentication dependencies
+AuthDep = Annotated[AuthContext, Depends(get_auth_context)]  # Any authenticated user
+AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]  # Admin only
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -299,7 +300,7 @@ def _get_spending_authority(provider: Any) -> Any:
 @router.get("/status")
 async def get_wallet_status(
     request: Request,
-    auth: AuthAdminDep,
+    auth: AuthDep,
 ) -> WalletStatusResponse:
     """
     Get wallet status including address, balance, spending limits, and tracking.
@@ -693,7 +694,7 @@ async def transfer_usdc(
 async def validate_address(
     validation_request: AddressValidationRequest,
     request: Request,
-    auth: AuthAdminDep,
+    auth: AuthDep,
 ) -> AddressValidationResponse:
     """
     Validate an EVM address with EIP-55 checksum verification.
@@ -774,7 +775,7 @@ async def validate_address(
 @router.get("/transactions")
 async def get_transactions(
     request: Request,
-    auth: AuthAdminDep,
+    auth: AuthDep,
     limit: int = 50,
     offset: int = 0,
 ) -> TransactionHistoryResponse:
@@ -1035,7 +1036,7 @@ async def configure_paymaster_key(
 @router.get("/paymaster/status")
 async def get_paymaster_status(
     request: Request,
-    auth: AuthAdminDep,
+    auth: AuthDep,
 ) -> PaymasterKeyResponse:
     """
     Get the current paymaster configuration status.

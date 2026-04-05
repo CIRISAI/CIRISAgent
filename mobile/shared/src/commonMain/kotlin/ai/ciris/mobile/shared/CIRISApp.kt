@@ -1310,6 +1310,13 @@ fun CIRISApp(
                             onSchedulerClick = { currentScreen = Screen.Scheduler },
                             onToolsClick = { currentScreen = Screen.Tools },
                             onHelpClick = { currentScreen = Screen.Help },
+                            onLogoutClick = {
+                                PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
+                                settingsViewModel.logout {
+                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
+                                    currentScreen = Screen.Startup
+                                }
+                            },
                             darkMode = isDarkMode,
                             // Theme picker
                             colorTheme = colorTheme,
@@ -2587,7 +2594,7 @@ private suspend fun checkFirstRunStatus(
  * - Advanced: Telemetry, Services, Logs, System, Runtime, Users, Tickets, Scheduler
  */
 private enum class NavCategory {
-    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED
+    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED, ACCOUNT
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2613,6 +2620,7 @@ private fun CIRISTopBar(
     onSchedulerClick: () -> Unit = {},
     onToolsClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {},
     darkMode: Boolean = false,
     // Theme picker
     colorTheme: ColorTheme = ColorTheme.DEFAULT,
@@ -2911,6 +2919,33 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
                         leadingIcon = { Icon(Icons.Default.Check, null) },
                         modifier = Modifier.testableClickable("menu_scheduler") { activeCategory = NavCategory.NONE; onSchedulerClick() }
+                    )
+                }
+            }
+
+            // Account menu (person icon with logout)
+            Box {
+                IconButton(
+                    onClick = { activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT },
+                    modifier = Modifier.testableClickable("btn_account_menu") {
+                        activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Account",
+                        tint = if (activeCategory == NavCategory.ACCOUNT) accentColor else contentColor
+                    )
+                }
+                DropdownMenu(
+                    expanded = activeCategory == NavCategory.ACCOUNT,
+                    onDismissRequest = { activeCategory = NavCategory.NONE }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(localizedString("mobile.settings_logout")) },
+                        onClick = { activeCategory = NavCategory.NONE; onLogoutClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_logout") { activeCategory = NavCategory.NONE; onLogoutClick() }
                     )
                 }
             }

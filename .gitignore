@@ -167,3 +167,7 @@ mobile/iosApp/zi*
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dylib
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll
+
+# Build-time generated secrets (API keys obfuscated at build, NOT committed)
+ciris_adapters/wallet/providers/_build_secrets.py
+mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py

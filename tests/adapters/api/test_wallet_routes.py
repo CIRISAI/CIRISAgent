@@ -39,6 +39,9 @@ def mock_provider():
     provider.config = MagicMock()
     provider.config.network = "base-mainnet"
 
+    # Explicitly set _coinbase_paymaster to None so tests check Arka paymaster
+    provider._coinbase_paymaster = None
+
     # Balance mock
     provider._balance = MagicMock()
     provider._balance.available = Decimal("100.00")

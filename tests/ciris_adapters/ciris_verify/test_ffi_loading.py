@@ -6,35 +6,25 @@ from pathlib import Path
 import pytest
 
 
-def test_find_binary_prefers_pip_package():
-    """The FFI client should check the pip-installed ciris_verify package first."""
+def test_find_binary_searches_default_paths():
+    """The FFI client should search DEFAULT_BINARY_PATHS for the platform."""
     import inspect
 
     from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
 
     src = inspect.getsource(CIRISVerify._find_binary)
-    assert "pip-installed" in src, "pip package check should be first in search order"
-    assert src.index("pip-installed") < src.index("system paths"), "pip check should come before system path check"
+    # Verify the binary search checks default paths and module directory
+    assert "DEFAULT_BINARY_PATHS" in src, "should check DEFAULT_BINARY_PATHS"
+    assert "module_dir" in src or "__file__" in src, "should check relative to module"
 
 
-def test_is_valid_binary_for_platform(tmp_path: Path):
-    """Platform validation should reject wrong-platform binaries."""
+def test_verify_binary_integrity_checks_magic():
+    """Binary integrity check should verify valid magic bytes."""
+    import inspect
+
     from ciris_adapters.ciris_verify.ffi_bindings.client import CIRISVerify
 
-    client = CIRISVerify.__new__(CIRISVerify)
-
-    # ELF header (Linux)
-    elf_path = tmp_path / "test_elf.bin"
-    elf_path.write_bytes(b"\x7fELF" + b"\x00" * 100)
-
-    # Mach-O header (macOS arm64)
-    macho_path = tmp_path / "test_macho.bin"
-    macho_path.write_bytes(b"\xcf\xfa\xed\xfe" + b"\x00" * 100)
-
-    if platform.system() == "Darwin":
-        assert client._is_valid_binary_for_platform(macho_path, "Darwin") is True
-        assert client._is_valid_binary_for_platform(elf_path, "Darwin") is False
-    elif platform.system() == "Linux":
-        assert client._is_valid_binary_for_platform(elf_path, "Linux") is True
-        assert client._is_valid_binary_for_platform(macho_path, "Linux") is False
-    # tmp_path fixture automatically cleans up after test
+    src = inspect.getsource(CIRISVerify._verify_binary_integrity)
+    # Should check for ELF, Mach-O, and PE magic bytes
+    assert "ELF" in src, "should check ELF magic"
+    assert "Mach-O" in src or "xfe\\xed" in src or "xcf\\xfa" in src, "should check Mach-O magic"

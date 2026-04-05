@@ -634,8 +634,13 @@ private fun DeviceAttestationCard(
     deviceAttestationResult: DeviceAttestationResult? = null,
     deviceAttestationLoading: Boolean = false
 ) {
-    val isAndroid = status.platformOs?.lowercase() == "android"
-    val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados", "macos")
+    // Check platformOs OR hardwareType for platform detection
+    // (CIRISVerify may report "linux" instead of "android" - workaround until fixed)
+    val isAndroid = status.platformOs?.lowercase() == "android" ||
+        status.hardwareType?.contains("Android", ignoreCase = true) == true
+    val isIos = status.platformOs?.lowercase() in listOf("ios", "ipados", "macos") ||
+        status.hardwareType?.contains("Ios", ignoreCase = true) == true ||
+        status.hardwareType?.contains("SecureEnclave", ignoreCase = true) == true
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(

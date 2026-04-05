@@ -23,6 +23,14 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         // Track unique services that have started
         private val startedServices = mutableSetOf<Int>()
 
+        // Track logcat reader process to kill on restart
+        @Volatile
+        private var logcatProcess: Process? = null
+
+        // Generation counter to detect stale logcat readers
+        @Volatile
+        private var logcatGeneration: Int = 0
+
         // Shared state for service count (updated by logcat reader)
         @Volatile
         var servicesOnline: Int = 0
@@ -81,6 +89,58 @@ actual class PythonRuntime : PythonRuntimeProtocol {
                 startedServices.clear()
                 servicesOnline = 0
             }
+        }
+
+        /**
+         * Kill any existing logcat reader and prepare for a new one.
+         * Returns the new generation ID that the caller should use to check for staleness.
+         */
+        fun prepareNewLogcatReader(): Int {
+            synchronized(startedServices) {
+                // Kill existing logcat process if running
+                logcatProcess?.let { process ->
+                    Log.d(TAG, "Killing existing logcat process")
+                    try {
+                        process.destroy()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to destroy logcat process: ${e.message}")
+                    }
+                    logcatProcess = null
+                }
+
+                // Increment generation to invalidate any stale readers
+                logcatGeneration++
+                Log.d(TAG, "New logcat generation: $logcatGeneration")
+
+                // Clear state
+                startedServices.clear()
+                servicesOnline = 0
+
+                return logcatGeneration
+            }
+        }
+
+        /**
+         * Register a logcat process and check if it's still valid.
+         * Returns false if the generation has changed (caller should stop).
+         */
+        fun registerLogcatProcess(process: Process, generation: Int): Boolean {
+            synchronized(startedServices) {
+                if (generation != logcatGeneration) {
+                    Log.d(TAG, "Stale logcat reader (gen $generation != current $logcatGeneration), stopping")
+                    process.destroy()
+                    return false
+                }
+                logcatProcess = process
+                return true
+            }
+        }
+
+        /**
+         * Check if a logcat reader generation is still valid.
+         */
+        fun isLogcatGenerationValid(generation: Int): Boolean {
+            return generation == logcatGeneration
         }
 
         /**
@@ -236,7 +296,9 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
-        // Return the cached values from logcat parsing
+        // Return cached values from logcat reader (updated by MainActivity.startLogcatReader)
+        // The logcat reader parses SERVICE messages and calls updateServiceCount()
+        Log.d(TAG, "[getServicesStatus] Returning cached: $servicesOnline/$totalServices")
         Result.success(servicesOnline to totalServices)
     }
 

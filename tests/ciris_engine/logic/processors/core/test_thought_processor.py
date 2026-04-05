@@ -256,7 +256,12 @@ class TestThoughtProcessor:
     @pytest.mark.asyncio
     @pytest.mark.flaky(reruns=2, reruns_delay=1)
     async def test_process_thought(self, thought_processor: ThoughtProcessor, mock_persistence: Mock) -> None:
-        """Test processing a thought."""
+        """Test processing a thought.
+
+        Note: Uses asyncio.wait_for for graceful timeout handling to prevent
+        pytest-xdist worker crashes.
+        """
+        import asyncio
         import logging
 
         logger = logging.getLogger(__name__)
@@ -289,9 +294,15 @@ class TestThoughtProcessor:
         mock_persistence.async_get_thought_by_id.return_value = thought
         logger.info(f"TEST: Set mock_persistence.async_get_thought_by_id.return_value to {thought.thought_id}")
 
-        # Process - the mocks are already set up in the fixture
+        # Process - use asyncio.wait_for for graceful async timeout
         logger.info("TEST: About to call thought_processor.process_thought")
-        result = await thought_processor.process_thought(item)
+        try:
+            result = await asyncio.wait_for(
+                thought_processor.process_thought(item),
+                timeout=10.0  # 10 second timeout for async operation
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("process_thought timed out after 10 seconds - possible async hang")
         logger.info(f"TEST: thought_processor.process_thought completed, result={'present' if result else 'None'}")
 
         assert result is not None
@@ -395,15 +406,16 @@ class TestThoughtProcessor:
         assert result.final_action.selected_action == HandlerActionType.DEFER
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(15)  # Explicit short timeout to fail fast, not crash worker
     async def test_process_thought_with_error(
         self, thought_processor: ThoughtProcessor, mock_persistence: Mock
     ) -> None:
         """Test processing a thought that encounters an error.
 
-        Note: This test has crashed pytest-xdist workers in CI. The explicit timeout
-        and try/except wrapper help ensure clean failure instead of worker crash.
+        Note: This test has crashed pytest-xdist workers in CI. We use asyncio.wait_for
+        instead of pytest-timeout to ensure graceful async cancellation.
         """
+        import asyncio
+
         # Create a queue item
         thought = Thought(
             thought_id="test_thought_error",
@@ -433,9 +445,14 @@ class TestThoughtProcessor:
         thought_processor.dma_orchestrator.run_initial_dmas = error_mock
 
         # Process should handle error gracefully
-        # Wrap in try/except to ensure clean test failure instead of worker crash
+        # Use asyncio.wait_for for graceful async timeout (not thread-based pytest-timeout)
         try:
-            result = await thought_processor.process_thought(item)
+            result = await asyncio.wait_for(
+                thought_processor.process_thought(item),
+                timeout=10.0  # 10 second timeout for async operation
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("process_thought timed out after 10 seconds - possible async hang")
         except Exception as e:
             # If process_thought doesn't catch the error, fail cleanly
             pytest.fail(f"process_thought should handle DMAFailure gracefully, but raised: {type(e).__name__}: {e}")

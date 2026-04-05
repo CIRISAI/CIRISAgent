@@ -262,6 +262,12 @@ class ToolInstaller:
                 )
 
         except asyncio.TimeoutError:
+            # Kill the orphaned subprocess to prevent resource leaks
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass  # Best effort cleanup
             return InstallResult(
                 success=False,
                 step_id=step.id,
@@ -276,6 +282,7 @@ class ToolInstaller:
 
     async def _verify_installation(self, verify_command: str) -> bool:
         """Run verification command and check success."""
+        proc = None
         try:
             proc = await asyncio.create_subprocess_shell(
                 verify_command,
@@ -285,6 +292,13 @@ class ToolInstaller:
             await asyncio.wait_for(proc.communicate(), timeout=30)
             return proc.returncode == 0
         except Exception:
+            # Kill orphaned subprocess on timeout or error
+            if proc is not None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass  # Best effort cleanup
             return False
 
     def _check_binaries(self, binaries: List[str]) -> List[str]:

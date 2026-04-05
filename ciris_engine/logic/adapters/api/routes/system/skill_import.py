@@ -143,8 +143,11 @@ def _validate_local_path(local_path: str) -> Path:
     - /tmp directory
 
     Raises ValueError if the path is outside allowed directories or invalid.
+
+    Security: Validates path string components BEFORE constructing Path objects
+    to prevent filesystem oracle attacks (SonarCloud S6549).
     """
-    # Pre-validation: reject obviously malicious input before constructing Path
+    # Step 1: Validate the raw string BEFORE any path operations
     if not local_path or not isinstance(local_path, str):
         raise ValueError("Path must be a non-empty string")
     if "\x00" in local_path:
@@ -152,20 +155,45 @@ def _validate_local_path(local_path: str) -> Path:
     if len(local_path) > 4096:
         raise ValueError("Path exceeds maximum length")
 
-    # Normalize and resolve to absolute path
-    # Use os.path.normpath first to handle .. without filesystem access
-    normalized = os.path.normpath(local_path)
-    # Now resolve to get the canonical absolute path
-    resolved = Path(normalized).resolve()
+    # Step 2: Check for dangerous patterns in the raw string before path construction
+    # This prevents the path traversal attack vector before we touch the filesystem
+    dangerous_patterns = [
+        "..",  # Parent directory traversal
+        "~",  # Home directory expansion (we handle this explicitly below)
+    ]
+    # Split by both forward and back slashes to handle all platforms
+    raw_parts = local_path.replace("\\", "/").split("/")
+    for part in raw_parts:
+        if part == "..":
+            raise ValueError("Path traversal using '..' is not allowed")
 
-    # Define allowed base directories (using tempfile for platform-safe temp dir)
+    # Step 3: Block sensitive directory patterns in raw input
+    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"]
+    path_lower = local_path.lower()
+    for pattern in sensitive_patterns:
+        if pattern in path_lower:
+            raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
+
+    # Step 4: Define allowed base directories (constructed from trusted sources, not user input)
     allowed_bases = [
         Path.home(),
         Path.cwd(),
         Path(tempfile.gettempdir()),
     ]
 
-    # Check if resolved path is within any allowed base
+    # Step 5: Handle tilde expansion explicitly (don't rely on Path to expand it)
+    if local_path.startswith("~"):
+        # Replace ~ with actual home directory (trusted source)
+        expanded = str(Path.home()) + local_path[1:]
+    else:
+        expanded = local_path
+
+    # Step 6: Now safe to construct Path - input has been validated
+    # Use normpath to collapse any remaining . references (single dot is safe)
+    normalized = os.path.normpath(expanded)
+    resolved = Path(normalized).resolve()
+
+    # Step 7: Final check - verify resolved path is within allowed directories
     is_allowed = False
     for base in allowed_bases:
         try:
@@ -181,13 +209,6 @@ def _validate_local_path(local_path: str) -> Path:
             f"Local imports are restricted to your home directory, "
             f"current working directory, or /tmp."
         )
-
-    # Block access to sensitive directories even within home
-    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"]
-    path_str = str(resolved).lower()
-    for pattern in sensitive_patterns:
-        if pattern in path_str:
-            raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
 
     return resolved
 

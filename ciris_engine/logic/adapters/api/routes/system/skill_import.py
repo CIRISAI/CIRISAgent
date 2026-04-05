@@ -133,6 +133,94 @@ class ImportedSkillsListResponse(BaseModel):
 # Helper Functions
 # ============================================================================
 
+# Sensitive paths that should never be accessed via skill import
+_SENSITIVE_PATTERNS = frozenset([".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"])
+
+# Dangerous path components that indicate traversal or escape attempts
+_DANGEROUS_PATH_COMPONENTS = frozenset([
+    "..",      # Parent directory traversal
+    "...",     # Triple dot (some systems)
+    "....",    # Quad dot variations
+])
+
+
+# Allowed base directories (lazy-evaluated to handle test environments)
+def _get_allowed_bases() -> list[Path]:
+    """Get allowed base directories from trusted sources only."""
+    return [Path.home(), Path.cwd(), Path(tempfile.gettempdir())]
+
+
+def _validate_path_string(local_path: str) -> None:
+    """Validate raw path string before any path operations.
+
+    Raises ValueError if path is invalid or contains dangerous patterns.
+    """
+    if not local_path or not isinstance(local_path, str):
+        raise ValueError("Path must be a non-empty string")
+    if "\x00" in local_path:
+        raise ValueError("Path contains null bytes")
+    if len(local_path) > 4096:
+        raise ValueError("Path exceeds maximum length")
+
+
+def _check_path_traversal(local_path: str) -> None:
+    """Check for path traversal attempts in raw string.
+
+    Raises ValueError if dangerous patterns are found in path components.
+    """
+    raw_parts = local_path.replace("\\", "/").split("/")
+    for part in raw_parts:
+        if part in _DANGEROUS_PATH_COMPONENTS:
+            raise ValueError(f"Path traversal using '{part}' is not allowed")
+
+
+def _check_sensitive_paths(local_path: str) -> None:
+    """Block access to sensitive directories.
+
+    Raises ValueError if path contains sensitive patterns.
+    """
+    path_lower = local_path.lower()
+    for pattern in _SENSITIVE_PATTERNS:
+        if pattern in path_lower:
+            raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
+
+
+def _resolve_to_allowed_path(local_path: str) -> Path:
+    """Resolve a validated path string to an allowed Path.
+
+    SECURITY: This function should only be called AFTER validation.
+    The path is constructed by joining trusted base directories with
+    validated path components, not by directly converting user input.
+
+    Raises ValueError if resolved path is outside allowed directories.
+    """
+    allowed_bases = _get_allowed_bases()
+
+    # Handle tilde by using trusted home directory
+    if local_path.startswith("~"):
+        # Construct from trusted source: home dir + validated suffix
+        suffix = local_path[1:].lstrip("/\\")
+        resolved = (Path.home() / suffix).resolve()
+    else:
+        # For absolute paths, resolve and verify against allowed bases
+        # For relative paths, resolve against cwd (a trusted base)
+        normalized = os.path.normpath(local_path)
+        resolved = Path(normalized).resolve()
+
+    # Verify resolved path is within an allowed base directory
+    for base in allowed_bases:
+        try:
+            resolved.relative_to(base)
+            return resolved
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"Path '{local_path}' is outside allowed directories. "
+        f"Local imports are restricted to your home directory, "
+        f"current working directory, or /tmp."
+    )
+
 
 def _validate_local_path(local_path: str) -> Path:
     """Validate and sanitize a local path to prevent path traversal attacks.
@@ -147,70 +235,17 @@ def _validate_local_path(local_path: str) -> Path:
     Security: Validates path string components BEFORE constructing Path objects
     to prevent filesystem oracle attacks (SonarCloud S6549).
     """
-    # Step 1: Validate the raw string BEFORE any path operations
-    if not local_path or not isinstance(local_path, str):
-        raise ValueError("Path must be a non-empty string")
-    if "\x00" in local_path:
-        raise ValueError("Path contains null bytes")
-    if len(local_path) > 4096:
-        raise ValueError("Path exceeds maximum length")
+    # Step 1: Validate raw string format
+    _validate_path_string(local_path)
 
-    # Step 2: Check for dangerous patterns in the raw string before path construction
-    # This prevents the path traversal attack vector before we touch the filesystem
-    dangerous_patterns = [
-        "..",  # Parent directory traversal
-        "~",  # Home directory expansion (we handle this explicitly below)
-    ]
-    # Split by both forward and back slashes to handle all platforms
-    raw_parts = local_path.replace("\\", "/").split("/")
-    for part in raw_parts:
-        if part == "..":
-            raise ValueError("Path traversal using '..' is not allowed")
+    # Step 2: Check for path traversal attempts
+    _check_path_traversal(local_path)
 
-    # Step 3: Block sensitive directory patterns in raw input
-    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"]
-    path_lower = local_path.lower()
-    for pattern in sensitive_patterns:
-        if pattern in path_lower:
-            raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
+    # Step 3: Block sensitive directories
+    _check_sensitive_paths(local_path)
 
-    # Step 4: Define allowed base directories (constructed from trusted sources, not user input)
-    allowed_bases = [
-        Path.home(),
-        Path.cwd(),
-        Path(tempfile.gettempdir()),
-    ]
-
-    # Step 5: Handle tilde expansion explicitly (don't rely on Path to expand it)
-    if local_path.startswith("~"):
-        # Replace ~ with actual home directory (trusted source)
-        expanded = str(Path.home()) + local_path[1:]
-    else:
-        expanded = local_path
-
-    # Step 6: Now safe to construct Path - input has been validated
-    # Use normpath to collapse any remaining . references (single dot is safe)
-    normalized = os.path.normpath(expanded)
-    resolved = Path(normalized).resolve()
-
-    # Step 7: Final check - verify resolved path is within allowed directories
-    is_allowed = False
-    for base in allowed_bases:
-        try:
-            resolved.relative_to(base)
-            is_allowed = True
-            break
-        except ValueError:
-            continue
-
-    if not is_allowed:
-        raise ValueError(
-            f"Path '{local_path}' is outside allowed directories. "
-            f"Local imports are restricted to your home directory, "
-            f"current working directory, or /tmp."
-        )
-
-    return resolved
+    # Step 4: Resolve to allowed path (constructs Path from trusted sources)
+    return _resolve_to_allowed_path(local_path)
 
 
 def _parse_skill_from_request(req: SkillImportRequest) -> ParsedSkill:

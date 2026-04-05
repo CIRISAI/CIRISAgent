@@ -505,8 +505,15 @@ def ensure_ciris_home_env() -> Path:
 
     # Set CIRIS_DATA_DIR for CIRISVerify compatibility
     # CIRISVerify reads this for key storage path
+    # ALWAYS override because .env may contain unexpanded "~/ciris/data" which
+    # Rust FFI treats as a literal path, creating dirs under CWD
     data_dir = ciris_home / "data"
-    os.environ.setdefault("CIRIS_DATA_DIR", str(data_dir))
+    existing_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if not existing_data_dir or "~" in existing_data_dir:
+        os.environ["CIRIS_DATA_DIR"] = str(data_dir)
+    else:
+        # Resolve existing value to absolute path
+        os.environ["CIRIS_DATA_DIR"] = str(Path(existing_data_dir).resolve())
 
     # Create home directory if it doesn't exist (with appropriate permissions)
     try:

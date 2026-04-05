@@ -261,13 +261,23 @@ class WalletAdapter(Service):
             verifier = get_verifier()
             logger.warning(f"[WALLET_INIT] Got verifier instance: {type(verifier).__name__}")
 
-            # Check if verifier has a key
+            # Check if verifier has a key (may need to wait for attestation to generate it)
             logger.warning("[WALLET_INIT] Checking has_key_sync()...")
             has_key = verifier.has_key_sync()
             logger.warning(f"[WALLET_INIT] has_key_sync={has_key}")
             if not has_key:
-                logger.error("[WALLET_INIT] FAILED: CIRISVerify has no key loaded - wallet unavailable")
-                return None, None
+                # Key may be generating during attestation — wait up to 15s
+                import time as _time
+
+                for attempt in range(15):
+                    _time.sleep(1)
+                    has_key = verifier.has_key_sync()
+                    if has_key:
+                        logger.warning(f"[WALLET_INIT] Key became available after {attempt + 1}s")
+                        break
+                if not has_key:
+                    logger.error("[WALLET_INIT] FAILED: CIRISVerify has no key loaded after 15s - wallet unavailable")
+                    return None, None
 
             # Check for wallet support (CIRISVerify 1.3.0+)
             has_wallet = getattr(verifier, "_has_wallet_support", False)

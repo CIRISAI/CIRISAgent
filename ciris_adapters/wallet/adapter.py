@@ -54,27 +54,18 @@ class WalletAdapter(Service):
         config: Optional[WalletAdapterConfig] = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize Wallet adapter."""
-        logger.warning("[WALLET_INIT] WalletAdapter.__init__ starting")
-
+        """Initialize Wallet adapter (lightweight — providers loaded in start())."""
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
         self.context = context
 
         # Load configuration
-        logger.warning("[WALLET_INIT] Loading config from environment")
         self.adapter_config = config or self._load_config_from_env()
-        logger.warning(
-            f"[WALLET_INIT] Config loaded with providers: {list(self.adapter_config.provider_configs.keys())}"
-        )
 
-        # Initialize providers
+        # Providers are initialized in start() after logging is configured
         self._providers: Dict[str, Any] = {}
-        logger.warning("[WALLET_INIT] Calling _init_providers()")
-        self._init_providers()
-        logger.warning(f"[WALLET_INIT] _init_providers() complete, loaded: {list(self._providers.keys())}")
 
-        # Create tool service
+        # Create tool service (will be updated with providers in start())
         self.tool_service = WalletToolService(
             config=self.adapter_config,
             providers=self._providers,
@@ -82,8 +73,6 @@ class WalletAdapter(Service):
 
         # Track adapter state
         self._running = False
-
-        logger.warning(f"[WALLET_INIT] WalletAdapter.__init__ complete with providers: {list(self._providers.keys())}")
 
     def _load_config_from_env(self) -> WalletAdapterConfig:
         """Load configuration from environment variables."""
@@ -354,16 +343,25 @@ class WalletAdapter(Service):
         return registrations
 
     async def start(self) -> None:
-        """Start the Wallet adapter."""
-        logger.info("Starting Wallet adapter")
+        """Start the Wallet adapter — initializes providers here (after logging is ready)."""
+        logger.info("[WALLET_INIT] Starting Wallet adapter")
+        logger.info(f"[WALLET_INIT] Config has providers: {list(self.adapter_config.provider_configs.keys())}")
+
+        # Initialize providers (deferred from __init__ so logging captures everything)
+        logger.info("[WALLET_INIT] Calling _init_providers()")
+        self._init_providers()
+        logger.info(f"[WALLET_INIT] _init_providers() complete, loaded: {list(self._providers.keys())}")
+
+        # Update tool service with loaded providers
+        self.tool_service._providers = self._providers
 
         await self.tool_service.start()
-        logger.info("WalletToolService started")
+        logger.info("[WALLET_INIT] WalletToolService started")
 
         self._register_balance_audit_callback()
 
         self._running = True
-        logger.info("Wallet adapter started")
+        logger.info(f"[WALLET_INIT] Wallet adapter started with providers: {list(self._providers.keys())}")
 
     def _register_balance_audit_callback(self) -> None:
         """Register callbacks to emit audit events when funds are received."""

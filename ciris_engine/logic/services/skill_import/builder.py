@@ -525,7 +525,7 @@ class SkillBuilder:
         if "ToolDMAGuidance" not in content:
             content = content.replace(
                 "from ciris_engine.schemas.adapters.tools import (",
-                "from ciris_engine.schemas.adapters.tools import (\n" "    ToolDMAGuidance,",
+                "from ciris_engine.schemas.adapters.tools import (\n    ToolDMAGuidance,",
             )
 
         # Add dma_guidance to the main tool definition

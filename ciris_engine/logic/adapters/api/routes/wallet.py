@@ -973,7 +973,6 @@ async def configure_paymaster_key(
         if not api_key.startswith("etherspot_"):
             logger.warning("[WALLET_PAYMASTER] Key doesn't match expected format")
             # Still allow it, but warn
-            pass
 
         # Store in secrets service
         runtime = getattr(request.app.state, "runtime", None)

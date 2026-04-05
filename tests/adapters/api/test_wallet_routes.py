@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ciris_engine.logic.adapters.api.dependencies.auth import require_admin
+from ciris_engine.logic.adapters.api.dependencies.auth import get_auth_context, require_admin
 from ciris_engine.logic.adapters.api.routes.wallet import (
     PaymasterKeyRequest,
     PaymasterKeyResponse,
@@ -115,6 +115,8 @@ def app_with_mock_provider(mock_provider):
 @pytest.fixture
 def client(app_with_mock_provider):
     """Test client with mocked auth."""
+    # Override both auth dependencies - some endpoints use get_auth_context, some use require_admin
+    app_with_mock_provider.dependency_overrides[get_auth_context] = lambda: MagicMock()
     app_with_mock_provider.dependency_overrides[require_admin] = lambda: MagicMock()
     return TestClient(app_with_mock_provider)
 
@@ -303,6 +305,8 @@ class TestNoWalletProvider:
         app.state.runtime = runtime
         app.state.authentication_service = None
 
+        # Override both auth dependencies
+        app.dependency_overrides[get_auth_context] = lambda: MagicMock()
         app.dependency_overrides[require_admin] = lambda: MagicMock()
 
         client = TestClient(app)
@@ -323,6 +327,8 @@ class TestNoWalletProvider:
         runtime.adapters = []
         app.state.runtime = runtime
 
+        # Override both auth dependencies
+        app.dependency_overrides[get_auth_context] = lambda: MagicMock()
         app.dependency_overrides[require_admin] = lambda: MagicMock()
 
         client = TestClient(app)

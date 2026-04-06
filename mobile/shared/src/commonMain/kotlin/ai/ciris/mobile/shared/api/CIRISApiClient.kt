@@ -5414,6 +5414,147 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Data Management API (Admin-protected) =====
+
+    /**
+     * Reset account data while PRESERVING signing key.
+     *
+     * This operation:
+     * - Deletes databases, logs, and cached data
+     * - Deletes .env configuration (triggers setup wizard)
+     * - PRESERVES the signing key (wallet access maintained)
+     *
+     * Requires ADMIN role.
+     *
+     * @param reason Optional reason for reset (for audit logging)
+     * @return ResetAccountResult with success/failure status
+     */
+    suspend fun resetAccount(reason: String = "User requested reset"): ResetAccountResult {
+        val method = "resetAccount"
+        logInfo(method, "Requesting account reset (preserving signing key)")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/system/data/reset-account") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("confirm", true)
+                    put("reason", reason)
+                })
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return ResetAccountResult(
+                    success = false,
+                    message = "API error: HTTP ${response.status}",
+                    signingKeyPreserved = false
+                )
+            }
+
+            val apiResponse: ResetAccountApiResponse = response.body()
+            logInfo(method, "Reset result: success=${apiResponse.success}, preserved=${apiResponse.data?.signingKeyPreserved}")
+
+            ResetAccountResult(
+                success = apiResponse.success ?: false,
+                message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
+                signingKeyPreserved = apiResponse.data?.signingKeyPreserved ?: true
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            ResetAccountResult(
+                success = false,
+                message = "Error: ${e.message}",
+                signingKeyPreserved = false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * DANGER: Wipe signing key and ALL data.
+     *
+     * WARNING: THIS ACTION IS IRREVERSIBLE!
+     *
+     * This operation:
+     * - DESTROYS the signing key (wallet access PERMANENTLY LOST)
+     * - Deletes ALL data (databases, logs, cache)
+     * - Deletes .env configuration
+     *
+     * Any funds in the wallet will be LOST FOREVER.
+     *
+     * Requires ADMIN role.
+     *
+     * @param reason Optional reason for wipe (for audit logging)
+     * @return WipeSigningKeyResult with success/failure status
+     */
+    suspend fun wipeSigningKey(reason: String = "User requested complete identity wipe"): WipeSigningKeyResult {
+        val method = "wipeSigningKey"
+        logWarn(method, "DANGER: Requesting signing key wipe - wallet access will be DESTROYED")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/system/data/wipe-signing-key") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("confirm", true)
+                    put("confirm_wallet_loss", true)
+                    put("reason", reason)
+                })
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return WipeSigningKeyResult(
+                    success = false,
+                    message = "API error: HTTP ${response.status}",
+                    walletAccessDestroyed = false
+                )
+            }
+
+            val apiResponse: WipeSigningKeyApiResponse = response.body()
+            logWarn(method, "Wipe result: success=${apiResponse.success}, walletDestroyed=${apiResponse.data?.walletAccessDestroyed}")
+
+            WipeSigningKeyResult(
+                success = apiResponse.success ?: false,
+                message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
+                walletAccessDestroyed = apiResponse.data?.walletAccessDestroyed ?: true
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            WipeSigningKeyResult(
+                success = false,
+                message = "Error: ${e.message}",
+                walletAccessDestroyed = false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     /**
      * Update the user's preferred language on the backend.
      * Call this when the user changes language in settings to sync with server.
@@ -6475,6 +6616,62 @@ data class AccordSettingsUpdateResult(
     val success: Boolean,
     val message: String,
     val changes: List<String>
+)
+
+// ===== Data Management API Models =====
+
+/**
+ * Result of reset account operation (preserves signing key).
+ */
+data class ResetAccountResult(
+    val success: Boolean,
+    val message: String,
+    val signingKeyPreserved: Boolean
+)
+
+/**
+ * API response for reset account.
+ */
+@Serializable
+data class ResetAccountApiResponse(
+    val success: Boolean? = null,
+    val message: String? = null,
+    val data: ResetAccountApiData? = null
+)
+
+@Serializable
+data class ResetAccountApiData(
+    val success: Boolean? = null,
+    val message: String? = null,
+    @SerialName("signing_key_preserved")
+    val signingKeyPreserved: Boolean? = null
+)
+
+/**
+ * Result of wipe signing key operation (DANGER: destroys wallet access).
+ */
+data class WipeSigningKeyResult(
+    val success: Boolean,
+    val message: String,
+    val walletAccessDestroyed: Boolean
+)
+
+/**
+ * API response for wipe signing key.
+ */
+@Serializable
+data class WipeSigningKeyApiResponse(
+    val success: Boolean? = null,
+    val message: String? = null,
+    val data: WipeSigningKeyApiData? = null
+)
+
+@Serializable
+data class WipeSigningKeyApiData(
+    val success: Boolean? = null,
+    val message: String? = null,
+    @SerialName("wallet_access_destroyed")
+    val walletAccessDestroyed: Boolean? = null
 )
 
 // ===== Location Search API Models =====

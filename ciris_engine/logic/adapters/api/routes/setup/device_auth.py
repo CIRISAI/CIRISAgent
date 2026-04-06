@@ -394,14 +394,19 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
     """
     import httpx
 
+    logger.info("[SELF-CUSTODY] === KEY REGISTRATION FLOW START ===")
+    logger.info("[SELF-CUSTODY] device_code=%s, portal_url=%s", device_code, portal_url)
+
     # Validate portal URL (SSRF protection)
     try:
         validated_portal_url = _validate_portal_url(portal_url)
+        logger.info("[SELF-CUSTODY] Validated portal URL: %s", validated_portal_url)
     except ValueError as e:
         logger.warning("[SELF-CUSTODY] Invalid portal URL: %s", e)
         return None
 
     # Step 1: Get public key from CIRISVerify
+    logger.info("[SELF-CUSTODY] Step 1: Getting public key from CIRISVerify...")
     key_result: List[Any] = [None, None]  # [public_key, error]
 
     def _get_public_key() -> None:
@@ -418,20 +423,26 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
         return None
 
     public_key_hex = public_key.hex()
-    logger.info(
-        "[SELF-CUSTODY] Got Ed25519 public key: %s...",
-        public_key_hex[:16],
-    )
+    # Compute fingerprint locally (SHA256 of public key) so we can verify it matches Portal
+    local_fingerprint = hashlib.sha256(public_key).hexdigest()
+
+    logger.info("[SELF-CUSTODY] PUBLIC KEY (full hex): %s", public_key_hex)
+    logger.info("[SELF-CUSTODY] LOCAL FINGERPRINT (SHA256): %s", local_fingerprint)
+    logger.info("[SELF-CUSTODY] Public key length: %d bytes", len(public_key))
 
     # Step 2: Generate agent_hash (for binding identity to build)
+    logger.info("[SELF-CUSTODY] Step 2: Generating agent_hash...")
     agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
     import ciris_engine
 
     agent_version = getattr(ciris_engine, "__version__", "0.0.0")
     agent_hash = hashlib.sha256(f"{agent_root}:{agent_version}".encode()).hexdigest()
+    logger.info("[SELF-CUSTODY] agent_root=%s, agent_version=%s", agent_root, agent_version)
+    logger.info("[SELF-CUSTODY] agent_hash=%s", agent_hash)
 
     # Step 3: Sign a registration message to prove we control the private key
     # Message format: "CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}"
+    logger.info("[SELF-CUSTODY] Step 3: Signing registration message...")
     registration_message = f"CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}".encode()
 
     sign_result: List[Any] = [None, None]  # [signature, error]
@@ -450,17 +461,24 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
         return None
 
     # Step 4: Call Portal /api/device/register-key
+    logger.info("[SELF-CUSTODY] Step 4: Calling Portal /api/device/register-key...")
+    register_url = f"{validated_portal_url}/api/device/register-key"
+    register_payload = {
+        "device_code": device_code,
+        "ed25519_public_key": public_key_hex,
+        "ed25519_signature": registration_signature.hex(),
+        "agent_hash": agent_hash,
+    }
+    logger.info("[SELF-CUSTODY] Register URL: %s", register_url)
+    logger.info("[SELF-CUSTODY] Register payload keys: %s", list(register_payload.keys()))
+    logger.info("[SELF-CUSTODY] ed25519_public_key being sent: %s", public_key_hex)
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            register_resp = await client.post(
-                f"{validated_portal_url}/api/device/register-key",
-                json={
-                    "device_code": device_code,
-                    "ed25519_public_key": public_key_hex,
-                    "ed25519_signature": registration_signature.hex(),
-                    "agent_hash": agent_hash,
-                },
-            )
+            register_resp = await client.post(register_url, json=register_payload)
+
+            logger.info("[SELF-CUSTODY] Portal response status: %d", register_resp.status_code)
+            logger.info("[SELF-CUSTODY] Portal response headers: %s", dict(register_resp.headers))
 
             if register_resp.status_code != 200:
                 body = (
@@ -470,18 +488,21 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
                 )
                 error_msg = body.get("error", f"HTTP {register_resp.status_code}")
                 logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", error_msg)
+                logger.warning("[SELF-CUSTODY] Full error response: %s", body)
                 return None
 
             register_data = register_resp.json()
+            logger.info("[SELF-CUSTODY] Portal register-key response: %s", register_data)
+
             key_id: str | None = register_data.get("key_id")
             activation_challenge_hex: str | None = register_data.get("activation_challenge")
             fingerprint = register_data.get("public_key_fingerprint")
 
-            logger.info(
-                "[SELF-CUSTODY] Key registered: key_id=%s, fingerprint=%s",
-                key_id,
-                fingerprint,
-            )
+            logger.info("[SELF-CUSTODY] === REGISTRATION RESULT ===")
+            logger.info("[SELF-CUSTODY] Portal returned key_id: %s", key_id)
+            logger.info("[SELF-CUSTODY] Portal returned fingerprint: %s", fingerprint)
+            logger.info("[SELF-CUSTODY] Local computed fingerprint: %s", local_fingerprint)
+            logger.info("[SELF-CUSTODY] Fingerprints MATCH: %s", fingerprint == local_fingerprint)
 
     except httpx.HTTPError as e:
         logger.warning("[SELF-CUSTODY] Failed to register key with Portal: %s", e)
@@ -489,9 +510,12 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
 
     if not key_id or not activation_challenge_hex:
         logger.warning("[SELF-CUSTODY] Portal did not return key_id or activation_challenge")
+        logger.warning("[SELF-CUSTODY] key_id=%s, activation_challenge_hex=%s", key_id, activation_challenge_hex)
         return None
 
     # Step 5: Sign the activation challenge
+    logger.info("[SELF-CUSTODY] Step 5: Signing activation challenge...")
+    logger.info("[SELF-CUSTODY] activation_challenge_hex: %s", activation_challenge_hex)
     activation_challenge = bytes.fromhex(activation_challenge_hex)
 
     def _sign_activation() -> None:
@@ -508,26 +532,35 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
         return None
 
     # Step 6: Call Portal /api/device/activate-key
+    logger.info("[SELF-CUSTODY] Step 6: Calling Portal /api/device/activate-key...")
+    activate_url = f"{validated_portal_url}/api/device/activate-key"
+    activate_payload = {
+        "device_code": device_code,
+        "key_id": key_id,
+        "activation_challenge": activation_challenge_hex,
+        "ed25519_signature": activation_signature.hex(),
+        "agent_hash": agent_hash,
+    }
+    logger.info("[SELF-CUSTODY] Activate URL: %s", activate_url)
+    logger.info("[SELF-CUSTODY] Activate payload: device_code=%s, key_id=%s", device_code, key_id)
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            activate_resp = await client.post(
-                f"{validated_portal_url}/api/device/activate-key",
-                json={
-                    "device_code": device_code,
-                    "key_id": key_id,
-                    "activation_challenge": activation_challenge_hex,
-                    "ed25519_signature": activation_signature.hex(),
-                    "agent_hash": agent_hash,
-                },
-            )
+            activate_resp = await client.post(activate_url, json=activate_payload)
+
+            logger.info("[SELF-CUSTODY] Activate response status: %d", activate_resp.status_code)
 
             if activate_resp.status_code == 200:
                 result_data = activate_resp.json()
+                logger.info("[SELF-CUSTODY] === KEY ACTIVATION SUCCESS ===")
+                logger.info("[SELF-CUSTODY] Activate response: %s", result_data)
                 logger.info(
                     "[SELF-CUSTODY] Key ACTIVATED: key_id=%s, message=%s",
                     result_data.get("key_id"),
                     result_data.get("message", "success"),
                 )
+                logger.info("[SELF-CUSTODY] === KEY REGISTRATION FLOW COMPLETE ===")
+                logger.info("[SELF-CUSTODY] FINAL FINGERPRINT: %s", local_fingerprint)
                 return key_id
             else:
                 body = (
@@ -537,6 +570,7 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
                 )
                 error_msg = body.get("error", f"HTTP {activate_resp.status_code}")
                 logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", error_msg)
+                logger.warning("[SELF-CUSTODY] Full activate error response: %s", body)
                 return None
 
     except httpx.HTTPError as e:

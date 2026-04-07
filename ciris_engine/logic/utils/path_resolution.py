@@ -716,16 +716,18 @@ def get_env_file_path() -> Optional[Path]:
 
     Platform-aware resolution:
     - Managed: /app/.env
+    - Android/iOS: CIRIS_HOME/.env (setup wizard creates it)
     - Development: CWD/.env
-    - Android/iOS: None (no .env file on mobile, use graph only)
     - Installed: CIRIS_HOME/.env or ~/ciris/.env
 
     Returns:
-        Path to .env file, or None if not applicable (mobile platforms)
+        Path to .env file, or None if file doesn't exist
     """
-    # Mobile platforms don't use .env files
+    # Mobile platforms: .env lives in CIRIS_HOME (app sandbox)
     if is_android() or is_ios():
-        return None
+        ciris_home = get_ciris_home()
+        env_path = ciris_home / _ENV_FILENAME
+        return env_path if env_path.exists() else None
 
     # Managed mode - hardcoded path
     if is_managed():

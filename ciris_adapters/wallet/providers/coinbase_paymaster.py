@@ -91,7 +91,7 @@ class CoinbasePaymaster:
     def _load_build_time_secret(self) -> None:
         """Load Coinbase paymaster URL from build-time secrets if available."""
         try:
-            from ._build_secrets import get_coinbase_paymaster_url
+            from ._build_secrets import get_coinbase_paymaster_url  # type: ignore[import-not-found]
 
             url: Optional[str] = get_coinbase_paymaster_url()
             if url:

@@ -59,8 +59,8 @@ class PonderHandler(BaseActionHandler):
         # If epistemic data is needed, it should be passed through proper typed fields
 
         current_thought_depth = thought.thought_depth
-        # Calculate actual follow-up depth (capped at 7 by create_follow_up_thought)
-        new_thought_depth = min(current_thought_depth + 1, 7)
+        # Calculate actual follow-up depth (no cap - ThoughtDepthGuardrail handles limits)
+        new_thought_depth = current_thought_depth + 1
 
         logger.info(
             f"Thought ID {thought.thought_id} pondering (current_depth={current_thought_depth}, "
@@ -111,31 +111,43 @@ class PonderHandler(BaseActionHandler):
                 current_round += f"  {i}. {q}\n"
 
         # Add thought-depth specific guidance
+        # Note: max_rounds (default 7) is enforced by ThoughtDepthGuardrail
+        max_rounds = self.max_rounds
+        clarity_hint = (
+            "If the task is unclear, ask for clarification. "
+            "There may be no task at all - just casual conversation."
+        )
         if thought_depth <= 3:
-            guidance = f'Task: "{task_context}"\n' "Continue making progress. Consider the conscience feedback above."
-        elif thought_depth <= 5:
+            guidance = (
+                f'Task: "{task_context}"\n'
+                f"Continue making progress. Consider the conscience feedback above.\n{clarity_hint}"
+            )
+        elif thought_depth <= max_rounds - 2:
             guidance = (
                 f'Task: "{task_context}"\n'
                 "You're deep into this task. Consider:\n"
                 "1) Is the task nearly complete?\n"
                 "2) Can you address the conscience concerns with a modified approach?\n"
-                f"3) You have {7 - thought_depth + 1} actions remaining."
+                f"3) You have {max_rounds - thought_depth + 1} actions remaining.\n"
+                f"4) {clarity_hint}"
             )
-        elif thought_depth == 6:
+        elif thought_depth == max_rounds - 1:
             guidance = (
                 f'Task: "{task_context}"\n'
                 "Approaching action limit. Consider:\n"
                 "1) Can you complete with one more action?\n"
                 "2) Is TASK_COMPLETE appropriate?\n"
-                "3) If you need more actions, someone can ask you to continue."
+                "3) If you need more actions, someone can ask you to continue.\n"
+                f"4) {clarity_hint}"
             )
-        else:  # thought_depth >= 7
+        else:  # thought_depth >= max_rounds
             guidance = (
                 f'Task: "{task_context}"\n'
                 "FINAL ACTION. You should either:\n"
                 "1) TASK_COMPLETE - If work is substantially complete\n"
                 "2) DEFER - Only for ethical dilemmas or permission issues (NOT technical errors)\n"
-                "Note: Someone can ask you to continue for 7 more actions."
+                f"3) {clarity_hint}\n"
+                f"Note: Someone can ask you to continue for {max_rounds} more actions."
             )
 
         # Combine all parts

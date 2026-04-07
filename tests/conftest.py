@@ -148,6 +148,57 @@ def cleanup_after_test(request):
 
 
 @pytest.fixture(autouse=True, scope="function")
+def clear_asyncio_module_state():
+    """
+    Clear module-level asyncio state to prevent cross-test contamination.
+
+    This fixes the "asyncio.Event/Queue object is bound to a different event loop" error
+    that occurs when pytest-xdist runs tests in parallel with different event loops.
+
+    Affected modules:
+    1. step_decorators:
+       - _paused_thoughts: Dict[str, asyncio.Event] - Events bound to specific event loops
+       - _single_step_mode: bool - Global flag for single-step debugging
+
+    2. step_streaming:
+       - reasoning_event_stream._subscribers: set[asyncio.Queue] - Queues bound to event loops
+       - reasoning_event_stream._sequence_number: int - Counter that should reset
+       - reasoning_event_stream._recent_events: list - Buffer that should clear
+
+    Without this cleanup, asyncio primitives created in one test's event loop persist
+    and cause RuntimeError when accessed from a different test's event loop.
+    """
+
+    def _clear_state():
+        # Clear step_decorators state
+        try:
+            from ciris_engine.logic.processors.core import step_decorators
+
+            step_decorators._paused_thoughts.clear()
+            step_decorators._single_step_mode = False
+        except ImportError:
+            pass  # Module not yet available during collection
+
+        # Clear step_streaming singleton state
+        try:
+            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
+            reasoning_event_stream._subscribers.clear()
+            reasoning_event_stream._sequence_number = 0
+            reasoning_event_stream._recent_events.clear()
+        except ImportError:
+            pass  # Module not yet available during collection
+
+    # Clear before test
+    _clear_state()
+
+    yield
+
+    # Clear after test to ensure clean state for next test
+    _clear_state()
+
+
+@pytest.fixture(autouse=True, scope="function")
 def isolate_test_env_vars():
     """
     Isolate environment variables that can cause test pollution.
@@ -253,24 +304,19 @@ def pytest_runtest_teardown(item, nextitem):
     import asyncio
 
     try:
-        # Get the running event loop if one exists (avoids deprecation warning)
+        # Only cancel tasks if there's a running event loop
+        # get_event_loop() without a running loop is deprecated in Python 3.10+
+        # and there are no tasks to cancel anyway if there's no loop
         try:
             loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop - try to get the current loop
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_closed():
-                    loop = None
-            except RuntimeError:
-                loop = None
-
-        if loop and not loop.is_closed():
             # Cancel any pending tasks from this test
             pending = asyncio.all_tasks(loop)
             for task in pending:
                 if not task.done():
                     task.cancel()
+        except RuntimeError:
+            # No running loop - nothing to clean up
+            pass
     except Exception:
         pass  # Best effort cleanup
 

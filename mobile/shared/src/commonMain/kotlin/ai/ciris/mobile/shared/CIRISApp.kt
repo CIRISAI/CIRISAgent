@@ -935,10 +935,11 @@ fun CIRISApp(
             Screen.Login -> {
                 platformLog(TAG, "[DEBUG][Screen.Login] Rendering login screen, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}, isFirstRun=$isFirstRun")
 
-                // On desktop during FIRST RUN ONLY, auto-trigger setup since OAuth is not available
-                // For existing users (isFirstRun=false), show the login screen to enter admin credentials
+                // During FIRST RUN, go to setup wizard
+                // Desktop: auto-trigger since no OAuth; iOS: show login first for auth
                 LaunchedEffect(googleSignInCallback, isFirstRun) {
-                    if (googleSignInCallback == null && isFirstRun == true) {
+                    if (isFirstRun == true && googleSignInCallback == null) {
+                        // Desktop: no OAuth, go directly to setup
                         platformLog(TAG, "[INFO][Screen.Login] Desktop first-run detected (no OAuth) - going to setup")
                         setupViewModel.setGoogleAuthState(
                             isAuth = false,
@@ -947,9 +948,12 @@ fun CIRISApp(
                             userId = null
                         )
                         currentScreen = Screen.Setup
+                    } else if (isFirstRun == true && googleSignInCallback != null) {
+                        // iOS/Android: first run with OAuth - show login so user can sign in,
+                        // then auth flow will detect first user and redirect to setup
+                        platformLog(TAG, "[INFO][Screen.Login] Mobile first-run - showing login for OAuth sign-in")
                     } else if (googleSignInCallback == null && isFirstRun == false) {
                         platformLog(TAG, "[INFO][Screen.Login] Desktop existing user - showing local login form")
-                        // Stay on login screen - user needs to enter admin credentials
                     }
                 }
 

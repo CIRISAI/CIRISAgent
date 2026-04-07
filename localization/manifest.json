@@ -193,7 +193,150 @@
       "added": "2026-04-07",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "partial",
+      "coverage_detail": "localization JSON only; missing ACCORD, comprehensive guide, DMA prompts, and glossary"
     }
+  },
+  "coverage_analysis": {
+    "updated": "2026-04-07",
+    "world_population_M": 8100,
+    "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
+    "current_coverage": {
+      "languages_count": 17,
+      "raw_speaker_sum_M": 5997,
+      "deduplicated_unique_people_M": 4900,
+      "gross_coverage_pct": 60.5,
+      "net_excl_top1pct_coverage_pct": 60.2,
+      "need_adjusted_coverage_pct": 77.1
+    },
+    "per_language_speakers_M": {
+      "en": 1450, "zh": 1120, "hi": 600, "es": 560,
+      "fr": 310, "ar": 310, "bn": 270, "pt": 260,
+      "ru": 255, "ur": 230, "de": 135, "ja": 125,
+      "sw": 100, "tr": 85, "ko": 82, "it": 68, "am": 57
+    }
+  },
+  "localization_roadmap": {
+    "updated": "2026-04-07",
+    "rationale": "Ranked by composite score: speaker count, need weight (inverse income + inverse digital access), and overlap with existing languages. Mission alignment per Meta-Goal M-1: prioritize populations most underserved by current AI ethical frameworks.",
+    "projected_coverage_after_all": {
+      "gross_coverage_pct": 72,
+      "need_adjusted_coverage_pct": 95
+    },
+    "tier_1_high_impact": [
+      {
+        "code": "id",
+        "name": "Indonesian",
+        "native_name": "Bahasa Indonesia",
+        "speakers_M": 200,
+        "need_weight": 3.0,
+        "incremental_new_people_M": 170,
+        "rationale": "World's 4th largest country, low overlap with existing languages, lower-middle income, growing digital population",
+        "direction": "ltr"
+      },
+      {
+        "code": "ha",
+        "name": "Hausa",
+        "native_name": "هَوُسَ",
+        "speakers_M": 80,
+        "need_weight": 5.0,
+        "incremental_new_people_M": 70,
+        "rationale": "West Africa's largest lingua franca (Nigeria, Niger, Ghana), very low income, very low digital access, zero current AI ethical framework coverage",
+        "direction": "ltr"
+      },
+      {
+        "code": "fa",
+        "name": "Persian",
+        "native_name": "فارسی",
+        "speakers_M": 110,
+        "need_weight": 3.0,
+        "incremental_new_people_M": 90,
+        "rationale": "Covers Iran + Afghanistan (Dari) + Tajikistan (Tajik); Afghanistan speakers among world's most underserved",
+        "direction": "rtl"
+      }
+    ],
+    "tier_2_medium_impact": [
+      {
+        "code": "vi",
+        "name": "Vietnamese",
+        "native_name": "Tiếng Việt",
+        "speakers_M": 85,
+        "need_weight": 3.0,
+        "incremental_new_people_M": 80,
+        "rationale": "100M population, lower-middle income, rapidly growing digital access, no overlap with existing languages"
+      },
+      {
+        "code": "pa",
+        "name": "Punjabi",
+        "native_name": "ਪੰਜਾਬੀ / پنجابی",
+        "speakers_M": 150,
+        "need_weight": 3.5,
+        "incremental_new_people_M": 60,
+        "rationale": "Large speaker base but high overlap with Hindi/Urdu; fills gap for Gurmukhi-script speakers in Indian Punjab"
+      },
+      {
+        "code": "te",
+        "name": "Telugu",
+        "native_name": "తెలుగు",
+        "speakers_M": 83,
+        "need_weight": 3.5,
+        "incremental_new_people_M": 70,
+        "rationale": "4th largest language in India, distinct Dravidian script, lower-middle income rural base"
+      },
+      {
+        "code": "ta",
+        "name": "Tamil",
+        "native_name": "தமிழ்",
+        "speakers_M": 85,
+        "need_weight": 3.0,
+        "incremental_new_people_M": 70,
+        "rationale": "Major Dravidian language across India, Sri Lanka, Singapore, Malaysia; deep literary tradition"
+      }
+    ],
+    "tier_3_completeness": [
+      {
+        "code": "mr",
+        "name": "Marathi",
+        "native_name": "मराठी",
+        "speakers_M": 83,
+        "need_weight": 3.0,
+        "incremental_new_people_M": 65
+      },
+      {
+        "code": "th",
+        "name": "Thai",
+        "native_name": "ไทย",
+        "speakers_M": 61,
+        "need_weight": 1.5,
+        "incremental_new_people_M": 55
+      },
+      {
+        "code": "yo",
+        "name": "Yoruba",
+        "native_name": "Yorùbá",
+        "speakers_M": 45,
+        "need_weight": 4.5,
+        "incremental_new_people_M": 40,
+        "rationale": "Nigeria's second major lingua franca; very high need, zero AI ethical coverage"
+      },
+      {
+        "code": "my",
+        "name": "Burmese",
+        "native_name": "မြန်မာဘာသာ",
+        "speakers_M": 43,
+        "need_weight": 4.5,
+        "incremental_new_people_M": 40,
+        "rationale": "Myanmar, extremely underserved, very low digital access"
+      },
+      {
+        "code": "uk",
+        "name": "Ukrainian",
+        "native_name": "Українська",
+        "speakers_M": 40,
+        "need_weight": 2.5,
+        "incremental_new_people_M": 25,
+        "rationale": "Distinct from Russian, conflict-affected population"
+      }
+    ]
   }
 }

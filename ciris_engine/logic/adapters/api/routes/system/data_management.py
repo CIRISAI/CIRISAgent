@@ -138,11 +138,13 @@ def _clear_data_directory(preserve_signing_key: bool = True) -> None:
     """
     data_dir = _get_data_directory()
     if not os.path.exists(data_dir):
-        logger.info(f"Data directory does not exist: {data_dir}")
+        logger.info("Data directory does not exist: %s", data_dir)
         return
 
     # Files to preserve during soft reset (signing key files)
-    preserve_patterns = {"signing_key", "agent_key", ".key"} if preserve_signing_key else set()
+    # CRITICAL: secrets.db contains the Ed25519 private key - MUST be preserved!
+    # Pattern matching: any of these strings in filename (lowercase) = preserve
+    preserve_patterns = {"signing_key", "agent_key", ".key", "secrets.db"} if preserve_signing_key else set()
 
     for item in os.listdir(data_dir):
         item_path = os.path.join(data_dir, item)

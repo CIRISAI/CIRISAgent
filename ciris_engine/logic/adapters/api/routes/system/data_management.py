@@ -18,6 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.utils.path_resolution import get_data_dir, get_env_file_path
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.audit.core import EventPayload
@@ -101,19 +102,32 @@ class WipeSigningKeyResponse(BaseModel):
 
 
 def _get_data_directory() -> str:
-    """Get the data directory path."""
-    # Check for CIRIS_DATA_DIR environment variable first
-    data_dir = os.environ.get("CIRIS_DATA_DIR")
-    if data_dir:
-        return data_dir
+    """Get the data directory path using runtime config helpers.
 
-    # Default to ./data relative to working directory
-    return os.path.join(os.getcwd(), "data")
+    Uses get_data_dir() from path_resolution which handles:
+    - CIRIS Manager mode (/app/data/)
+    - Android (app sandbox/ciris/data/)
+    - iOS (Documents/ciris/data/)
+    - Development mode (CWD/data/)
+    - Installed mode (~/ciris/data/ or CIRIS_HOME/data/)
+    """
+    return str(get_data_dir())
 
 
-def _get_env_file_path() -> str:
-    """Get the .env file path."""
-    return os.path.join(os.getcwd(), ".env")
+def _get_env_file_path_str() -> str:
+    """Get the .env file path using runtime config helpers.
+
+    Uses get_env_file_path() from path_resolution which handles:
+    - CIRIS Manager mode (/app/.env)
+    - Mobile platforms (returns None - no .env on mobile)
+    - Development mode (CWD/.env)
+    - Installed mode (~/ciris/.env or CIRIS_HOME/.env)
+    """
+    env_path = get_env_file_path()
+    if env_path is None:
+        # Mobile platforms don't use .env files
+        return ""
+    return str(env_path)
 
 
 def _clear_data_directory(preserve_signing_key: bool = True) -> None:
@@ -153,7 +167,10 @@ def _clear_data_directory(preserve_signing_key: bool = True) -> None:
 
 def _delete_env_file() -> None:
     """Delete the .env file to trigger setup wizard."""
-    env_path = _get_env_file_path()
+    env_path = _get_env_file_path_str()
+    if not env_path:
+        logger.info("No .env file on this platform (mobile)")
+        return
     if os.path.exists(env_path):
         os.remove(env_path)
         logger.info(f"Deleted .env file: {env_path}")

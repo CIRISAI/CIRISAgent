@@ -186,7 +186,9 @@ async def connect_node_status(device_code: str, portal_url: str) -> SuccessRespo
     token_url = f"{safe_base_url}/api/device/token"
     logger.info("[connect-node/status] ========== CALLING PORTAL TOKEN ENDPOINT ==========")
     logger.info("[connect-node/status] token_url: %s", token_url)
-    logger.info("[connect-node/status] device_code (full): %s", device_code)
+    # Redact device_code to prevent credential leakage in logs
+    code_preview = f"{device_code[:8]}...{device_code[-4:]}" if len(device_code) > 12 else "***"
+    logger.info("[connect-node/status] device_code: %s", code_preview)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             logger.info("[connect-node/status] Making POST request to Portal...")

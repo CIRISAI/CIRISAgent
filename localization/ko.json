@@ -201,6 +201,8 @@
         "deferral_continued": "연기에서 계속됨"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "이것은 개인 CIRIS 설치입니다. 소유자만 로그인할 수 있습니다. 소유자인 경우 설정 시 사용한 것과 동일한 계정을 사용하세요.",
+        "auth_personal_install_observer_blocked_title": "접근 거부됨",
         "adapter_not_available": "어댑터 관리자를 사용할 수 없습니다.",
         "audit_not_available": "감사 서비스를 사용할 수 없습니다.",
         "config_not_available": "설정 서비스를 사용할 수 없습니다.",

@@ -201,6 +201,8 @@
         "deferral_continued": "Продолжено из отложения"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "Это личная установка CIRIS. Только владелец может войти. Если вы владелец, используйте ту же учётную запись, которую использовали при настройке.",
+        "auth_personal_install_observer_blocked_title": "Доступ запрещён",
         "adapter_not_available": "Менеджер адаптеров недоступен",
         "audit_not_available": "Сервис аудита недоступен",
         "config_not_available": "Сервис конфигурации недоступен",

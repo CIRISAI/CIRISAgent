@@ -201,6 +201,8 @@
         "deferral_continued": "ከማስተላለፊያ ቀጥሏል"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "ይህ የግል CIRIS ጭነት ነው። ባለቤቱ ብቻ መግባት ይችላል። ባለቤቱ ከሆኑ፣ በማዋቀር ጊዜ የተጠቀሙበትን መለያ ይጠቀሙ።",
+        "auth_personal_install_observer_blocked_title": "ተከልክሏል",
         "adapter_not_available": "የማስተካከያ አስተዳዳሪ አይገኝም",
         "audit_not_available": "የኦዲት አገልግሎት አይገኝም",
         "config_not_available": "የማዋቀሪያ አገልግሎት አይገኝም",

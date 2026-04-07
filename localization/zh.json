@@ -201,6 +201,8 @@
         "deferral_continued": "从延迟继续"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "这是个人CIRIS安装。只有所有者可以登录。如果您是所有者,请使用您在设置时使用的同一帐户。",
+        "auth_personal_install_observer_blocked_title": "访问被拒绝",
         "adapter_not_available": "适配器管理器不可用",
         "audit_not_available": "审计服务不可用",
         "config_not_available": "配置服务不可用",

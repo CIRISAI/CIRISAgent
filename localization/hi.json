@@ -201,6 +201,8 @@
         "deferral_continued": "स्थगन से जारी रहा"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "यह एक व्यक्तिगत CIRIS इंस्टॉलेशन है। केवल मालिक ही साइन इन कर सकता है। यदि आप मालिक हैं, तो कृपया सेटअप के दौरान उपयोग किए गए उसी खाते का उपयोग करें।",
+        "auth_personal_install_observer_blocked_title": "पहुँच अस्वीकृत",
         "adapter_not_available": "एडॉप्टर प्रबंधक उपलब्ध नहीं",
         "audit_not_available": "ऑडिट सेवा उपलब्ध नहीं",
         "config_not_available": "कॉन्फ़िग सेवा उपलब्ध नहीं",

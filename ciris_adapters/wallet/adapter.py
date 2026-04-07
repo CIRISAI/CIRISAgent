@@ -266,6 +266,15 @@ class WalletAdapter(Service):
                 except Exception as key_err:
                     logger.warning(f"[WALLET_INIT] has_key_sync raised {type(key_err).__name__} (attempt {attempt + 1}): {key_err}")
                 _time.sleep(1)
+                # Re-check after sleep to catch keys that became available during wait
+                if attempt < 14:  # Skip re-check on last iteration (loop will exit anyway)
+                    continue
+                # Final check after last sleep
+                try:
+                    has_key = verifier.has_key_sync()
+                    logger.warning(f"[WALLET_INIT] has_key_sync={has_key} (final check after {attempt + 1}s)")
+                except Exception as final_err:
+                    logger.warning(f"[WALLET_INIT] has_key_sync raised {type(final_err).__name__} (final check): {final_err}")
             if not has_key:
                 logger.error("[WALLET_INIT] FAILED: CIRISVerify has no key loaded after 15s - wallet unavailable")
                 return None, None

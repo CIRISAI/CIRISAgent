@@ -101,9 +101,15 @@ except Exception as e:
     # Fall back to simple logging
     import logging
 
-    _log = logging.getLogger("ciris.kmp.main")
-    _log.setLevel(logging.DEBUG)
-    _log.addHandler(logging.StreamHandler(sys.stdout))
+    def init_logging(name: str) -> logging.Logger:
+        """Fallback init_logging when ios_logger fails to import."""
+        fallback_logger = logging.getLogger(name)
+        fallback_logger.setLevel(logging.DEBUG)
+        if not fallback_logger.handlers:
+            fallback_logger.addHandler(logging.StreamHandler(sys.stdout))
+        return fallback_logger
+
+    _log = init_logging("ciris.kmp.main")
 
     def log_phase(logger, phase, status="START", details=""):
         logger.info(f"PHASE: {phase} [{status}] {details}")

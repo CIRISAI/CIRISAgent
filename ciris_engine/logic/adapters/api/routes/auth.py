@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.adapters.api.services.auth_service import OAuthUser
 from ciris_engine.logic.adapters.api.services.oauth_security import validate_oauth_picture_url
+from ciris_engine.logic.utils.path_resolution import is_managed
 from ciris_engine.schemas.api.auth import (
     APIKeyCreateRequest,
     APIKeyInfo,
@@ -992,6 +993,32 @@ def _determine_user_role(
     return UserRole.OBSERVER
 
 
+def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[str]) -> None:
+    """Reject OBSERVER role OAuth logins on personal (desktop/mobile) installs.
+
+    Desktop and mobile installs are single-user partnership deployments.
+    Only the founding partner (setup user) should have access.
+    Observer accounts are for server deployments where multiple users
+    may need read-only access to the agent.
+
+    Raises:
+        HTTPException: If OBSERVER login attempted on non-managed install
+    """
+    if user_role == UserRole.OBSERVER and not is_managed():
+        masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "unknown"
+        logger.warning(
+            f"[AUTH] Rejecting OBSERVER login on personal install: {masked_email}"
+        )  # NOSONAR - email masked
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "auth_personal_install_observer_blocked",
+                "message": "This is a personal CIRIS installation. Only the owner can sign in. "
+                "If you are the owner, please use the same account you used during setup.",
+            },
+        )
+
+
 def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, picture: Optional[str]) -> None:
     """Store OAuth profile data if valid."""
     if not picture:
@@ -1293,6 +1320,9 @@ async def oauth_callback(
         # Determine user role (preserves existing role if user already exists)
         user_email = user_data["email"]
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
+
+        # Block observer logins on personal (desktop/mobile) installs
+        _reject_observer_on_personal_install(user_role, user_email)
 
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
@@ -1683,6 +1713,9 @@ async def native_google_token_exchange(
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.debug("[NativeAuth] Determined role: %s", user_role)
 
+        # Block observer logins on personal (desktop/mobile) installs
+        _reject_observer_on_personal_install(user_role, user_email)
+
         # Create or get OAuth user
         oauth_user = auth_service.create_oauth_user(
             provider="google",
@@ -1906,6 +1939,9 @@ async def native_apple_token_exchange(
         # Pass external_id to preserve existing user's role (don't demote on re-auth!)
         user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="apple")
         logger.info(f"[AppleNativeAuth] Determined role for {user_email}: {user_role}")
+
+        # Block observer logins on personal (desktop/mobile) installs
+        _reject_observer_on_personal_install(user_role, user_email)
 
         # Create or get OAuth user
         logger.info(f"[AppleNativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")

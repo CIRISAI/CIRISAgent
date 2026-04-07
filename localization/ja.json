@@ -201,6 +201,8 @@
         "deferral_continued": "延期から続行"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "これは個人用のCIRISインストールです。所有者のみがサインインできます。所有者の場合は、セットアップ時に使用したのと同じアカウントを使用してください。",
+        "auth_personal_install_observer_blocked_title": "アクセス拒否",
         "adapter_not_available": "アダプターマネージャーは利用できません",
         "audit_not_available": "監査サービスは利用できません",
         "config_not_available": "設定サービスは利用できません",

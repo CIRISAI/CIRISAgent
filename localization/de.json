@@ -201,6 +201,8 @@
         "deferral_continued": "Fortgesetzt von Aufschub"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "Dies ist eine persönliche CIRIS-Installation. Nur der Eigentümer kann sich anmelden. Wenn Sie der Eigentümer sind, verwenden Sie bitte das gleiche Konto, das Sie bei der Einrichtung verwendet haben.",
+        "auth_personal_install_observer_blocked_title": "Zugriff verweigert",
         "adapter_not_available": "Adapter-Manager nicht verfügbar",
         "audit_not_available": "Audit-Service nicht verfügbar",
         "config_not_available": "Konfigurationsdienst nicht verfügbar",

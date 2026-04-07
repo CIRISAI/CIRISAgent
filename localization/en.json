@@ -222,6 +222,8 @@
         "ponder_notes": "PONDER NOTES"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "This is a personal CIRIS installation. Only the owner can sign in. If you are the owner, please use the same account you used during setup.",
+        "auth_personal_install_observer_blocked_title": "Access Denied",
         "adapter_not_available": "Adapter manager not available",
         "audit_not_available": "Audit service not available",
         "config_not_available": "Config service not available",

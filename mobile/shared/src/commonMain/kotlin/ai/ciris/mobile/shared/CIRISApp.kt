@@ -2485,9 +2485,47 @@ fun CIRISApp(
                                 startupViewModel.retry()
                             }
                         } else {
-                            startupViewModel.retry()
-                            checkingFirstRun = false
-                            currentScreen = Screen.Startup
+                            // Mobile: server restarts in-process via watchdog.
+                            // Wait for server to shut down and come back with fresh config.
+                            currentAccessToken = null
+                            (apiClient as? ai.ciris.mobile.shared.api.CIRISApiClient)?.clearAccessToken()
+                            coroutineScope.launch {
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Mobile: waiting for server restart after reset...")
+
+                                // Wait for server to go down (max 10s)
+                                var downDetected = false
+                                for (i in 1..20) {
+                                    kotlinx.coroutines.delay(500)
+                                    try {
+                                        apiClient.getSystemStatus()
+                                    } catch (_: Exception) {
+                                        PlatformLogger.i(TAG, "[Screen.DataManagement] Server went down after ${i * 500}ms")
+                                        downDetected = true
+                                        break
+                                    }
+                                }
+                                if (!downDetected) {
+                                    PlatformLogger.w(TAG, "[Screen.DataManagement] Server didn't go down, proceeding anyway")
+                                }
+
+                                // Wait for server to come back (max 30s)
+                                for (i in 1..60) {
+                                    kotlinx.coroutines.delay(500)
+                                    try {
+                                        apiClient.getSystemStatus()
+                                        PlatformLogger.i(TAG, "[Screen.DataManagement] Server back up after ${i * 500}ms")
+                                        break
+                                    } catch (_: Exception) {
+                                        if (i % 10 == 0) {
+                                            PlatformLogger.d(TAG, "[Screen.DataManagement] Waiting for server... ${i * 500}ms")
+                                        }
+                                    }
+                                }
+
+                                startupViewModel.retry()
+                                checkingFirstRun = false
+                                currentScreen = Screen.Startup
+                            }
                         }
                     }
                 )

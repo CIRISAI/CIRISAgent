@@ -35,7 +35,7 @@ def keccak256(data: bytes) -> bytes:
     """
     # Try pysha3 first (has correct keccak_256)
     try:
-        import sha3
+        import sha3  # type: ignore[import-not-found]
 
         result = sha3.keccak_256(data).digest()
         return bytes(result)
@@ -53,7 +53,7 @@ def keccak256(data: bytes) -> bytes:
 
     # Last resort: try eth_hash if available (from eth-utils)
     try:
-        from eth_hash.auto import keccak as eth_keccak
+        from eth_hash.auto import keccak as eth_keccak  # type: ignore[import-not-found]
 
         result = eth_keccak(data)
         return bytes(result)

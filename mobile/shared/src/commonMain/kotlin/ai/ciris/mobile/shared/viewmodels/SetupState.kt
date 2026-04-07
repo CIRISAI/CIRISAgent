@@ -136,27 +136,27 @@ data class SupportedLanguage(
 
 /**
  * Available languages for selection in the PREFERENCES step.
- * Sorted by total number of speakers (native + second language) for user convenience.
+ * Sorted alphabetically by English name for consistent, culturally-neutral ordering.
  * Matches localization/manifest.json.
  */
 val SUPPORTED_LANGUAGES = listOf(
-    SupportedLanguage("en", "English", "English"),           // ~1.5B speakers
-    SupportedLanguage("zh", "中文", "Chinese"),              // ~1.1B speakers
-    SupportedLanguage("hi", "हिन्दी", "Hindi"),              // ~600M speakers
-    SupportedLanguage("es", "Español", "Spanish"),           // ~550M speakers
-    SupportedLanguage("fr", "Français", "French"),           // ~300M speakers
-    SupportedLanguage("ar", "العربية", "Arabic"),            // ~300M speakers
-    SupportedLanguage("bn", "বাংলা", "Bengali"),             // ~270M speakers
-    SupportedLanguage("pt", "Português", "Portuguese"),      // ~260M speakers
-    SupportedLanguage("ru", "Русский", "Russian"),           // ~250M speakers
-    SupportedLanguage("ja", "日本語", "Japanese"),           // ~125M speakers
-    SupportedLanguage("de", "Deutsch", "German"),            // ~100M speakers
-    SupportedLanguage("ko", "한국어", "Korean"),             // ~80M speakers
-    SupportedLanguage("tr", "Türkçe", "Turkish"),            // ~80M speakers
-    SupportedLanguage("it", "Italiano", "Italian"),          // ~65M speakers
-    SupportedLanguage("ur", "اردو", "Urdu"),                 // ~65M speakers
-    SupportedLanguage("sw", "Kiswahili", "Swahili"),         // ~100M speakers
-    SupportedLanguage("am", "አማርኛ", "Amharic")              // ~30M speakers
+    SupportedLanguage("am", "አማርኛ", "Amharic"),
+    SupportedLanguage("ar", "العربية", "Arabic"),
+    SupportedLanguage("bn", "বাংলা", "Bengali"),
+    SupportedLanguage("zh", "中文", "Chinese"),
+    SupportedLanguage("en", "English", "English"),
+    SupportedLanguage("fr", "Français", "French"),
+    SupportedLanguage("de", "Deutsch", "German"),
+    SupportedLanguage("hi", "हिन्दी", "Hindi"),
+    SupportedLanguage("it", "Italiano", "Italian"),
+    SupportedLanguage("ja", "日本語", "Japanese"),
+    SupportedLanguage("ko", "한국어", "Korean"),
+    SupportedLanguage("pt", "Português", "Portuguese"),
+    SupportedLanguage("ru", "Русский", "Russian"),
+    SupportedLanguage("es", "Español", "Spanish"),
+    SupportedLanguage("sw", "Kiswahili", "Swahili"),
+    SupportedLanguage("tr", "Türkçe", "Turkish"),
+    SupportedLanguage("ur", "اردو", "Urdu")
 )
 
 /**

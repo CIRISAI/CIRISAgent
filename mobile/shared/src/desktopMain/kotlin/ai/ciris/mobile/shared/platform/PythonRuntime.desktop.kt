@@ -5,13 +5,18 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withContext
+import java.io.BufferedReader
 
 /**
  * Desktop PythonRuntime implementation.
  *
  * Starts the CIRIS Python backend automatically if not already running,
- * then connects to the server and polls startup-status to drive the UI.
+ * then reads stdout to drive the UI with real service startup progress.
  *
  * The server URL can be configured via CIRIS_API_URL environment variable.
  */
@@ -25,24 +30,11 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     private var _serverStarted = false
     private var _outputLineCallback: ((String) -> Unit)? = null
 
-    // Shared startup status poller
-    private val _startupPoller by lazy {
-        StartupStatusPoller(_serverUrl) { url ->
-            try {
-                val response = httpClient.get(url)
-                if (response.status == HttpStatusCode.OK) {
-                    response.bodyAsText()
-                } else {
-                    null
-                }
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
     // Server process we launched (null if server was already running)
     private var _serverProcess: Process? = null
+
+    // Stdout reader coroutine scope
+    private val _readerScope = CoroutineScope(Dispatchers.IO)
 
     private val httpClient = HttpClient(CIO) {
         engine {
@@ -88,12 +80,9 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
 
         // Wait for server to become healthy
         repeat(120) { attempt ->
-            pollStartupStatus()
-
             val health = checkHealth()
             println("[PythonRuntime.desktop] Health check attempt $attempt: ${health.getOrNull()}")
             if (health.getOrNull() == true) {
-                pollStartupStatus()
                 println("[PythonRuntime.desktop] Server is healthy!")
                 _serverStarted = true
                 return@runCatching _serverUrl
@@ -198,6 +187,7 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     /**
      * Launch ciris-agent --adapter api as a subprocess.
      * Tries ciris-agent first (pip-installed), then falls back to python main.py.
+     * Captures stdout and forwards to the output callback for UI updates.
      */
     private fun launchServerProcess() {
         println("[PythonRuntime.desktop] Launching backend...")
@@ -210,10 +200,10 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
         if (cirisAgent != null) {
             println("[PythonRuntime.desktop] Found ciris-agent at: $cirisAgent")
             _serverProcess = ProcessBuilder(cirisAgent, "--adapter", "api", "--port", port)
-                .redirectErrorStream(true)
-                .inheritIO()
+                .redirectErrorStream(true)  // Merge stderr into stdout
                 .start()
             println("[PythonRuntime.desktop] Started ciris-agent (PID: ${_serverProcess?.pid()})")
+            startStdoutReader()
             return
         }
 
@@ -225,14 +215,38 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
             println("[PythonRuntime.desktop] Falling back to: $python ${mainPy.absolutePath}")
             _serverProcess = ProcessBuilder(python, mainPy.absolutePath, "--adapter", "api", "--port", port)
                 .directory(repoRoot)
-                .redirectErrorStream(true)
-                .inheritIO()
+                .redirectErrorStream(true)  // Merge stderr into stdout
                 .start()
             println("[PythonRuntime.desktop] Started python server (PID: ${_serverProcess?.pid()})")
+            startStdoutReader()
             return
         }
 
         println("[PythonRuntime.desktop] WARNING: Could not find ciris-agent or main.py - waiting for external server")
+    }
+
+    /**
+     * Start a coroutine to read stdout from the server process and forward to callback.
+     * This enables the UI to see real service startup messages.
+     */
+    private fun startStdoutReader() {
+        val process = _serverProcess ?: return
+
+        _readerScope.launch {
+            try {
+                val reader = process.inputStream.bufferedReader()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val l = line ?: continue
+                    // Always print to console for debugging
+                    println("[CIRIS] $l")
+                    // Forward to callback for UI processing
+                    _outputLineCallback?.invoke(l)
+                }
+            } catch (e: Exception) {
+                println("[PythonRuntime.desktop] Stdout reader stopped: ${e.message}")
+            }
+        }
     }
 
     private fun findExecutable(name: String): String? {
@@ -344,22 +358,6 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
 
     override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
         _outputLineCallback = callback
-    }
-
-    /**
-     * Poll /v1/system/startup-status and emit synthetic console output lines
-     * for any newly started services since the last poll.
-     * Uses shared StartupStatusPoller for cross-platform consistency.
-     */
-    private suspend fun pollStartupStatus() {
-        val callback = _outputLineCallback ?: return
-        val result = _startupPoller.poll { line ->
-            println("[PythonRuntime.desktop] $line")
-            callback(line)
-        }
-        if (result != null) {
-            println("[PythonRuntime.desktop] Poll: services=${result.servicesOnline}/${result.servicesTotal}, apiHistory=${result.apiStatusHistory.size}")
-        }
     }
 }
 

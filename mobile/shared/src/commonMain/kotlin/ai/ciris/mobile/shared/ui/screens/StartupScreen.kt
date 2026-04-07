@@ -62,6 +62,7 @@ fun StartupScreen(
     val phase by viewModel.phase.collectAsState()
     val servicesOnline by viewModel.servicesOnline.collectAsState()
     val totalServices by viewModel.totalServices.collectAsState()
+    val startedServiceSlots by viewModel.startedServiceSlots.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
@@ -125,8 +126,8 @@ fun StartupScreen(
     LaunchedEffect(verifyStepsCompleted) {
         PlatformLogger.i("StartupScreen", "[LIGHTS] Verify: $verifyStepsCompleted/${StartupViewModel.TOTAL_VERIFY_STEPS}")
     }
-    LaunchedEffect(servicesOnline) {
-        PlatformLogger.i("StartupScreen", "[LIGHTS] Services: $servicesOnline/$totalServices")
+    LaunchedEffect(servicesOnline, startedServiceSlots) {
+        PlatformLogger.i("StartupScreen", "[LIGHTS] Services: $servicesOnline/$totalServices, slots=${startedServiceSlots.sorted()}")
     }
     LaunchedEffect(phase) {
         PlatformLogger.i("StartupScreen", "[PHASE] $phase (${phase.displayName})")
@@ -267,9 +268,9 @@ fun StartupScreen(
                 )
             }
 
-            // Service lights grid (22 lights)
+            // Service lights grid (22 lights) - each light = specific service slot
             ServiceLightsGrid(
-                servicesOnline = servicesOnline,
+                startedServiceSlots = startedServiceSlots,
                 totalServices = totalServices,
                 hasError = hasError,
                 modifier = Modifier.padding(bottom = 32.dp)
@@ -519,11 +520,12 @@ private fun PrepLight(
 
 /**
  * Grid of 22 service lights (2 rows of 11)
- * Animates as services come online
+ * Each light represents a specific service SLOT (1-22)
+ * Lights turn on based on which slots have started, not sequentially
  */
 @Composable
 private fun ServiceLightsGrid(
-    servicesOnline: Int,
+    startedServiceSlots: Set<Int>,
     totalServices: Int,
     hasError: Boolean,
     modifier: Modifier = Modifier
@@ -533,27 +535,28 @@ private fun ServiceLightsGrid(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Row 1 (11 lights)
+        // Row 1: Service slots 1-11
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             repeat(11) { index ->
+                val slot = index + 1  // Slots are 1-indexed
                 ServiceLight(
-                    isOn = index < servicesOnline,
-                    hasError = hasError && index < servicesOnline
+                    isOn = slot in startedServiceSlots,
+                    hasError = hasError && slot in startedServiceSlots
                 )
             }
         }
 
-        // Row 2 (11 lights)
+        // Row 2: Service slots 12-22
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             repeat(11) { index ->
-                val lightIndex = index + 11
+                val slot = index + 12  // Slots 12-22
                 ServiceLight(
-                    isOn = lightIndex < servicesOnline,
-                    hasError = hasError && lightIndex < servicesOnline
+                    isOn = slot in startedServiceSlots,
+                    hasError = hasError && slot in startedServiceSlots
                 )
             }
         }

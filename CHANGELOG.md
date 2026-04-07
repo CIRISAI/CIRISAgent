@@ -5,6 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-04-06
+
+### Added
+
+- **Localized ACCORD for Action Selection** - ASPDMA and TSASPDMA now use single-language localized ACCORD text for clearer action guidance, while other DMAs continue using polyglot ACCORD for cross-cultural ethical depth
+- **English Localized ACCORD** - Created `accord_1.2b_en.txt` for English language action selection
+- **Self-Custody Messaging** - Updated all 16 language localization files with new self-custody key management strings (FSD-002)
+
+### Fixed
+
+- **Startup Animation** - Removed redundant StartupStatusPoller; startup lights now driven directly from Python console output parsing
+- **Self-Custody Registration** - Agent now signs Portal's `registration_challenge` instead of self-constructed message, fixing signature verification failures
+- **Language Preference Default** - Setup wizard now always saves `CIRIS_PREFERRED_LANGUAGE` to .env (defaults to "en" if not selected)
+- **Mypy Strict Mode** - Fixed type annotations in wallet provider build secrets (`List[int]` parameters)
+- **Test Stability** - Updated device auth tests to use proper hex registration challenges
+
 ## [2.3.4] - 2026-04-02
 
 ### Added

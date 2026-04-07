@@ -890,8 +890,42 @@ private fun NodeAuthStep(
             text = localizedString("mobile.setup_registering").replace("{url}", deviceAuth.nodeUrl),
             color = SetupColors.TextSecondary,
             fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // Self-custody explanation card
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.SuccessLight.copy(alpha = 0.3f),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "🔐",
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = localizedString("mobile.setup_node_self_custody_title"),
+                        color = SetupColors.SuccessDark,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = localizedString("mobile.setup_node_self_custody_desc"),
+                    color = SetupColors.TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
 
         when (deviceAuth.status) {
             DeviceAuthStatus.IDLE, DeviceAuthStatus.CONNECTING -> {
@@ -1033,17 +1067,30 @@ private fun NodeAuthStep(
 
                     Button(
                         onClick = {
+                            PlatformLogger.i("SetupScreen", "[ALL_DONE] ========== BUTTON CLICKED ==========")
+                            PlatformLogger.i("SetupScreen", "[ALL_DONE] Current deviceAuth status: ${viewModel.state.value.deviceAuth.status}")
+                            PlatformLogger.i("SetupScreen", "[ALL_DONE] deviceCode: ${viewModel.state.value.deviceAuth.deviceCode.take(16)}...")
+                            PlatformLogger.i("SetupScreen", "[ALL_DONE] portalUrl: ${viewModel.state.value.deviceAuth.portalUrl}")
                             isChecking = true
                             checkError = null
                             coroutineScope.launch {
                                 try {
+                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] Calling viewModel.pollNodeAuthStatus...")
                                     viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
-                                        apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] Poll lambda invoked: deviceCode=${deviceCode.take(16)}..., portalUrl=$portalUrl")
+                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] Calling apiClient.pollNodeAuthStatus...")
+                                        val result = apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
+                                        PlatformLogger.i("SetupScreen", "[ALL_DONE] API call returned: status=${result.status}, keyId=${result.keyId}, error=${result.error}")
+                                        result
                                     }
+                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] Poll complete, final status: ${viewModel.state.value.deviceAuth.status}")
                                 } catch (e: Exception) {
+                                    PlatformLogger.e("SetupScreen", "[ALL_DONE] Poll EXCEPTION: ${e.message}")
+                                    PlatformLogger.e("SetupScreen", "[ALL_DONE] Exception type: ${e::class.simpleName}")
                                     checkError = e.message ?: "Check failed"
                                 } finally {
                                     isChecking = false
+                                    PlatformLogger.i("SetupScreen", "[ALL_DONE] ========== BUTTON HANDLER COMPLETE ==========")
                                 }
                             }
                         },
@@ -1053,21 +1100,7 @@ private fun NodeAuthStep(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .testableClickable("btn_all_done") {
-                                isChecking = true
-                                checkError = null
-                                coroutineScope.launch {
-                                    try {
-                                        viewModel.pollNodeAuthStatus { deviceCode, portalUrl ->
-                                            apiClient.pollNodeAuthStatus(deviceCode, portalUrl)
-                                        }
-                                    } catch (e: Exception) {
-                                        checkError = e.message ?: "Check failed"
-                                    } finally {
-                                        isChecking = false
-                                    }
-                                }
-                            }
+                            .testable("btn_all_done")
                     ) {
                         Text(
                             localizedString("mobile.setup_node_all_done"),
@@ -1103,6 +1136,25 @@ private fun NodeAuthStep(
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+
+                        // Self-custody key bound indicator
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Text(
+                                text = "🔐",
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(end = 6.dp)
+                            )
+                            Text(
+                                text = localizedString("mobile.setup_node_key_bound"),
+                                color = SetupColors.SuccessText,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
                         deviceAuth.provisionedTemplate?.let {
                             Text(
                                 text = localizedString("mobile.setup_template").replace("{name}", it),

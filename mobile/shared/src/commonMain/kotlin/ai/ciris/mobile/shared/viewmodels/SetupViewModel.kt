@@ -1035,13 +1035,25 @@ class SetupViewModel : ViewModel() {
     suspend fun pollNodeAuthStatus(
         pollFunc: suspend (deviceCode: String, portalUrl: String) -> NodeAuthPollResult
     ) {
+        PlatformLogger.i(TAG, "[pollNodeAuthStatus] ========== ENTRY ==========")
         val auth = _state.value.deviceAuth
-        if (auth.status != DeviceAuthStatus.WAITING) return
+        PlatformLogger.i(TAG, "[pollNodeAuthStatus] Current status: ${auth.status}")
+        PlatformLogger.i(TAG, "[pollNodeAuthStatus] deviceCode: ${auth.deviceCode.take(16)}...")
+        PlatformLogger.i(TAG, "[pollNodeAuthStatus] portalUrl: ${auth.portalUrl}")
+
+        if (auth.status != DeviceAuthStatus.WAITING) {
+            PlatformLogger.w(TAG, "[pollNodeAuthStatus] Status is ${auth.status}, not WAITING - returning early!")
+            return
+        }
 
         try {
+            PlatformLogger.i(TAG, "[pollNodeAuthStatus] Invoking pollFunc...")
             val result = pollFunc(auth.deviceCode, auth.portalUrl)
+            PlatformLogger.i(TAG, "[pollNodeAuthStatus] pollFunc returned: status=${result.status}, keyId=${result.keyId}, error=${result.error}")
             when (result.status) {
-                "pending" -> { /* Keep polling */ }
+                "pending" -> {
+                    PlatformLogger.i(TAG, "pollNodeAuthStatus: status=pending, keep polling")
+                }
                 "complete" -> {
                     PlatformLogger.i(TAG, "pollNodeAuthStatus: COMPLETE - keyId=${result.keyId}, signingKeyB64=${result.signingKeyB64?.take(20)}...")
                     PlatformLogger.i(TAG, "pollNodeAuthStatus: template=${result.template}, adapters=${result.adapters}")
@@ -1061,6 +1073,7 @@ class SetupViewModel : ViewModel() {
                     )
                 }
                 else -> {
+                    PlatformLogger.w(TAG, "[pollNodeAuthStatus] Unknown/error status: ${result.status}, error: ${result.error}")
                     _state.value = _state.value.copy(
                         deviceAuth = auth.copy(
                             status = DeviceAuthStatus.ERROR,
@@ -1069,13 +1082,17 @@ class SetupViewModel : ViewModel() {
                     )
                 }
             }
+            PlatformLogger.i(TAG, "[pollNodeAuthStatus] ========== EXIT (success) ==========")
         } catch (e: Exception) {
+            PlatformLogger.e(TAG, "[pollNodeAuthStatus] EXCEPTION: ${e.message}")
+            PlatformLogger.e(TAG, "[pollNodeAuthStatus] Exception type: ${e::class.simpleName}")
             _state.value = _state.value.copy(
                 deviceAuth = auth.copy(
                     status = DeviceAuthStatus.ERROR,
                     error = e.message ?: "Polling failed"
                 )
             )
+            PlatformLogger.i(TAG, "[pollNodeAuthStatus] ========== EXIT (exception) ==========")
         }
     }
 

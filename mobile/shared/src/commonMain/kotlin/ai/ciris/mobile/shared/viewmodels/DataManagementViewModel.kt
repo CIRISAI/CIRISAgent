@@ -171,34 +171,35 @@ class DataManagementViewModel(
      * Reset account - wipe local data but PRESERVE signing key.
      * This allows wallet access to be retained after reset.
      *
-     * Deletes:
-     * - .env file (configuration)
-     * - data directory (databases, audit logs, memory graphs)
-     *
-     * Preserves:
-     * - Signing key (wallet access maintained)
+     * Now calls the admin-protected API endpoint which:
+     * - Validates admin role
+     * - Logs the operation for audit
+     * - Clears data directory (preserving signing key)
+     * - Deletes .env configuration
      *
      * @param onSuccess Callback before app restart
      */
     fun factoryReset(onSuccess: () -> Unit = {}) {
         val method = "factoryReset"
-        logInfo(method, "Reset account - clearing data but PRESERVING signing key")
+        logInfo(method, "Reset account - calling admin API (preserves signing key)")
 
         viewModelScope.launch {
             _isResetting.value = true
             _errorMessage.value = null
 
             try {
-                // Clear data directory (databases, audit logs, etc.) but PRESERVE signing key
-                logInfo(method, "Clearing data directory (preserving signing key for wallet access)...")
-                envFileUpdater.clearDataOnly().getOrThrow()
-                logInfo(method, "Data cleared, signing key preserved")
+                // Call the admin-protected API endpoint
+                logInfo(method, "Calling /v1/system/data/reset-account API...")
+                val result = apiClient.resetAccount(reason = "User requested reset from Data Management")
 
-                // Delete the .env file to trigger setup wizard
-                envFileUpdater.deleteEnvFile().getOrThrow()
-                logInfo(method, ".env file deleted")
+                if (!result.success) {
+                    logError(method, "API reset failed: ${result.message}")
+                    _errorMessage.value = result.message
+                    _isResetting.value = false
+                    return@launch
+                }
 
-                logInfo(method, "Reset complete - restarting app for setup wizard")
+                logInfo(method, "API reset succeeded, signingKeyPreserved=${result.signingKeyPreserved}")
                 _resetSuccess.value = true
 
                 // Invoke callback for any cleanup before restart
@@ -233,37 +234,36 @@ class DataManagementViewModel(
      * The signing key is used to derive the wallet address.
      * Without the key, any funds in the wallet are LOST FOREVER.
      *
-     * Only use this if:
-     * - User explicitly confirms they understand the risk
-     * - User has verified wallet balance is zero
-     * - User wants a completely fresh agent identity
-     *
-     * Deletes:
-     * - Signing key (encrypted file + keystore entry)
-     * - Data directory (databases, audit logs, memory graphs)
-     * - .env file (configuration)
+     * Now calls the admin-protected API endpoint which:
+     * - Validates admin role
+     * - Logs the operation with CRITICAL severity for audit
+     * - DESTROYS signing key (wallet access permanently lost)
+     * - Clears ALL data
+     * - Deletes .env configuration
      *
      * @param onSuccess Callback before app restart
      */
     fun wipeSigningKey(onSuccess: () -> Unit = {}) {
         val method = "wipeSigningKey"
-        logWarn(method, "DANGER: Wiping agent signing key - wallet access will be DESTROYED")
+        logWarn(method, "DANGER: Calling API to wipe signing key - wallet access will be DESTROYED")
 
         viewModelScope.launch {
             _isWipingSigningKey.value = true
             _errorMessage.value = null
 
             try {
-                // Clear signing key AND data directory
-                logWarn(method, "Clearing signing key and data directory...")
-                envFileUpdater.clearSigningKey().getOrThrow()
-                logWarn(method, "Signing key DESTROYED - wallet access lost")
+                // Call the admin-protected API endpoint
+                logWarn(method, "Calling /v1/system/data/wipe-signing-key API...")
+                val result = apiClient.wipeSigningKey(reason = "User requested complete identity wipe from Data Management")
 
-                // Delete the .env file
-                envFileUpdater.deleteEnvFile().getOrThrow()
-                logInfo(method, ".env file deleted")
+                if (!result.success) {
+                    logError(method, "API wipe failed: ${result.message}")
+                    _errorMessage.value = result.message
+                    _isWipingSigningKey.value = false
+                    return@launch
+                }
 
-                logInfo(method, "Complete wipe finished - restarting app for setup wizard")
+                logWarn(method, "API wipe succeeded, walletAccessDestroyed=${result.walletAccessDestroyed}")
                 _wipeSigningKeySuccess.value = true
 
                 // Invoke callback for any cleanup before restart

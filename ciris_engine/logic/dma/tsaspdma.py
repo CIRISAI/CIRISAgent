@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import get_accord_text
+from ciris_engine.logic.utils import get_localized_accord_text
 from ciris_engine.protocols.dma.tsaspdma import TSASPDMAProtocol
 from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolDocumentation, ToolInfo
@@ -341,9 +341,9 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """
         messages: List[JSONDict] = []
 
-        # Add accord based on mode (centralized in get_accord_text)
-        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        accord_text = get_accord_text(accord_mode)
+        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
+        # Uses the prompt_loader's language which was synced from user context
+        accord_text = get_localized_accord_text(self.prompt_loader.language)
         if accord_text:
             messages.append({"role": "system", "content": accord_text})
 
@@ -623,9 +623,8 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """Create prompt messages for TSASPDMA correction mode."""
         messages: List[JSONDict] = []
 
-        # Add accord (centralized in get_accord_text)
-        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
-        accord_text = get_accord_text(accord_mode)
+        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
+        accord_text = get_localized_accord_text(self.prompt_loader.language)
         if accord_text:
             messages.append({"role": "system", "content": accord_text})
 

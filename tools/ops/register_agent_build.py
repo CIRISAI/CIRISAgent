@@ -47,7 +47,7 @@ EXEMPT_EXTENSIONS = {".env", ".log", ".audit", ".db", ".sqlite", ".sqlite3", ".p
 # To update: run `sha256sum ciris_adapters/wallet/providers/_build_secrets.py` after
 # generating the file with `python tools/generate_ios_secrets.py`
 BUILD_SECRETS_HASHES = {
-    "ciris_adapters/wallet/providers/_build_secrets.py": "f3f89a7ec71190dc2f5d85672e2c8dd9ede931d73aa37a09a2084c696fb23d25",
+    "ciris_adapters/wallet/providers/_build_secrets.py": "45bf41f0408206b39f04257d456e9d346efcb20799c89b694e6149518dd2fb6b",
 }
 
 # Directory names exempt from integrity checking (must match CIRISVerify)

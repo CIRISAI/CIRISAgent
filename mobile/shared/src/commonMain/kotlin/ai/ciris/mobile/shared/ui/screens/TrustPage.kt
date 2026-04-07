@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -2135,6 +2136,40 @@ private fun L5Content(status: VerifyStatusResponse, onCopyDiagnostics: () -> Uni
         ok = keyOk,
         pending = keyStatus == "not_checked"
     )
+
+    // Show full fingerprint when registry key check fails or for debugging
+    status.ed25519Fingerprint?.let { fingerprint ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, top = 4.dp, bottom = 4.dp)
+                .background(Color(0x10000000), shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                .padding(8.dp)
+        ) {
+            Text(
+                text = "Ed25519 Fingerprint (SHA-256):",
+                fontSize = 10.sp,
+                color = Color.Gray,
+                fontWeight = FontWeight.Medium
+            )
+            SelectionContainer {
+                Text(
+                    text = fingerprint,
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (keyOk) SemanticColors.Default.success else SemanticColors.Default.error,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Text(
+                text = "This hash is checked against registry.ciris.ai",
+                fontSize = 8.sp,
+                color = Color.Gray,
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
 
     // Show hint when at L4 and registry key not found - user can upgrade to L5
     if (status.maxLevel == 4 && keyStatus.contains("not_found", ignoreCase = true)) {

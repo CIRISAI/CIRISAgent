@@ -1419,7 +1419,12 @@ class CIRISApiClient(
      */
     suspend fun pollNodeAuthStatus(deviceCode: String, portalUrl: String): NodeAuthPollResult {
         val method = "pollNodeAuthStatus"
-        logDebug(method, "Polling device auth status")
+        logInfo(method, "========== POLL START ==========")
+        logInfo(method, "deviceCode: ${deviceCode.take(16)}...")
+        logInfo(method, "portalUrl: $portalUrl")
+        logInfo(method, "baseUrl: $baseUrl")
+        val fullUrl = "$baseUrl/v1/setup/connect-node/status"
+        logInfo(method, "Full URL: $fullUrl")
 
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
@@ -1430,33 +1435,45 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/setup/connect-node/status") {
+            logInfo(method, "Making HTTP GET request...")
+            val response = client.get(fullUrl) {
                 parameter("device_code", deviceCode)
                 parameter("portal_url", portalUrl)
             }
+            logInfo(method, "HTTP response received: status=${response.status}")
 
             if (response.status != HttpStatusCode.OK) {
+                logException(method, Exception("Poll failed: HTTP ${response.status}"))
                 throw Exception("Poll failed: HTTP ${response.status}")
             }
 
-            val body = response.body<JsonObject>()
+            val bodyText = response.bodyAsText()
+            logInfo(method, "Response body (first 500 chars): ${bodyText.take(500)}")
+
+            val body = Json.parseToJsonElement(bodyText).jsonObject
             val data = body["data"] as? JsonObject
-                ?: throw Exception("Invalid response format")
+                ?: throw Exception("Invalid response format - no 'data' field")
 
             val status = (data["status"] as? JsonPrimitive)?.content ?: "error"
+            val keyId = (data["key_id"] as? JsonPrimitive)?.content
+            val error = (data["error"] as? JsonPrimitive)?.content
+            logInfo(method, "Parsed response: status=$status, keyId=$keyId, error=$error")
 
-            NodeAuthPollResult(
+            val result = NodeAuthPollResult(
                 status = status,
                 template = (data["template"] as? JsonPrimitive)?.content,
                 adapters = null, // TODO: Parse adapters list from JSON array. MVP: null.
                 orgId = (data["org_id"] as? JsonPrimitive)?.content,
                 signingKeyB64 = (data["signing_key_b64"] as? JsonPrimitive)?.content,
-                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                keyId = keyId,
                 stewardshipTier = (data["stewardship_tier"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                error = (data["error"] as? JsonPrimitive)?.content
+                error = error
             )
+            logInfo(method, "========== POLL END (returning result) ==========")
+            result
         } catch (e: Exception) {
             logException(method, e)
+            logInfo(method, "========== POLL END (exception: ${e.message}) ==========")
             throw e
         } finally {
             client.close()
@@ -5414,6 +5431,151 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Data Management API (Admin-protected) =====
+
+    /**
+     * Reset account data while PRESERVING signing key.
+     *
+     * This operation:
+     * - Deletes databases, logs, and cached data
+     * - Deletes .env configuration (triggers setup wizard)
+     * - PRESERVES the signing key (wallet access maintained)
+     *
+     * Requires ADMIN role.
+     *
+     * @param reason Optional reason for reset (for audit logging)
+     * @return ResetAccountResult with success/failure status
+     */
+    suspend fun resetAccount(reason: String = "User requested reset"): ResetAccountResult {
+        val method = "resetAccount"
+        logInfo(method, "Requesting account reset (preserving signing key)")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/system/data/reset-account") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("confirm", true)
+                    put("reason", reason)
+                })
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return ResetAccountResult(
+                    success = false,
+                    message = "API error: HTTP ${response.status}",
+                    signingKeyPreserved = false
+                )
+            }
+
+            val apiResponse: ResetAccountApiResponse = response.body()
+            // Note: SuccessResponse wrapper doesn't have top-level success - it's in data
+            val dataSuccess = apiResponse.data?.success ?: false
+            logInfo(method, "Reset result: success=$dataSuccess, preserved=${apiResponse.data?.signingKeyPreserved}")
+
+            ResetAccountResult(
+                success = dataSuccess,
+                message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
+                signingKeyPreserved = apiResponse.data?.signingKeyPreserved ?: true
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            ResetAccountResult(
+                success = false,
+                message = "Error: ${e.message}",
+                signingKeyPreserved = false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * DANGER: Wipe signing key and ALL data.
+     *
+     * WARNING: THIS ACTION IS IRREVERSIBLE!
+     *
+     * This operation:
+     * - DESTROYS the signing key (wallet access PERMANENTLY LOST)
+     * - Deletes ALL data (databases, logs, cache)
+     * - Deletes .env configuration
+     *
+     * Any funds in the wallet will be LOST FOREVER.
+     *
+     * Requires ADMIN role.
+     *
+     * @param reason Optional reason for wipe (for audit logging)
+     * @return WipeSigningKeyResult with success/failure status
+     */
+    suspend fun wipeSigningKey(reason: String = "User requested complete identity wipe"): WipeSigningKeyResult {
+        val method = "wipeSigningKey"
+        logWarn(method, "DANGER: Requesting signing key wipe - wallet access will be DESTROYED")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.post("$baseUrl/v1/system/data/wipe-signing-key") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("confirm", true)
+                    put("confirm_wallet_loss", true)
+                    put("reason", reason)
+                })
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success status: ${response.status}, body=$errorBody")
+                return WipeSigningKeyResult(
+                    success = false,
+                    message = "API error: HTTP ${response.status}",
+                    walletAccessDestroyed = false
+                )
+            }
+
+            val apiResponse: WipeSigningKeyApiResponse = response.body()
+            // Note: SuccessResponse wrapper doesn't have top-level success - it's in data
+            val dataSuccess = apiResponse.data?.success ?: false
+            logWarn(method, "Wipe result: success=$dataSuccess, walletDestroyed=${apiResponse.data?.walletAccessDestroyed}")
+
+            WipeSigningKeyResult(
+                success = dataSuccess,
+                message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
+                walletAccessDestroyed = apiResponse.data?.walletAccessDestroyed ?: true
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            WipeSigningKeyResult(
+                success = false,
+                message = "Error: ${e.message}",
+                walletAccessDestroyed = false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     /**
      * Update the user's preferred language on the backend.
      * Call this when the user changes language in settings to sync with server.
@@ -6475,6 +6637,62 @@ data class AccordSettingsUpdateResult(
     val success: Boolean,
     val message: String,
     val changes: List<String>
+)
+
+// ===== Data Management API Models =====
+
+/**
+ * Result of reset account operation (preserves signing key).
+ */
+data class ResetAccountResult(
+    val success: Boolean,
+    val message: String,
+    val signingKeyPreserved: Boolean
+)
+
+/**
+ * API response for reset account.
+ */
+@Serializable
+data class ResetAccountApiResponse(
+    val success: Boolean? = null,
+    val message: String? = null,
+    val data: ResetAccountApiData? = null
+)
+
+@Serializable
+data class ResetAccountApiData(
+    val success: Boolean? = null,
+    val message: String? = null,
+    @SerialName("signing_key_preserved")
+    val signingKeyPreserved: Boolean? = null
+)
+
+/**
+ * Result of wipe signing key operation (DANGER: destroys wallet access).
+ */
+data class WipeSigningKeyResult(
+    val success: Boolean,
+    val message: String,
+    val walletAccessDestroyed: Boolean
+)
+
+/**
+ * API response for wipe signing key.
+ */
+@Serializable
+data class WipeSigningKeyApiResponse(
+    val success: Boolean? = null,
+    val message: String? = null,
+    val data: WipeSigningKeyApiData? = null
+)
+
+@Serializable
+data class WipeSigningKeyApiData(
+    val success: Boolean? = null,
+    val message: String? = null,
+    @SerialName("wallet_access_destroyed")
+    val walletAccessDestroyed: Boolean? = null
 )
 
 // ===== Location Search API Models =====

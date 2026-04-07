@@ -91,9 +91,10 @@ class StartupViewModel(
      * Call this once when app launches
      */
     fun startCIRIS() {
-        PlatformLogger.i(TAG, "[STARTUP] startCIRIS() called - beginning startup sequence")
-        PlatformLogger.i(TAG, "[STARTUP] TOTAL_PREP_STEPS=$TOTAL_PREP_STEPS, TOTAL_VERIFY_STEPS=$TOTAL_VERIFY_STEPS")
         startTime = Clock.System.now().toEpochMilliseconds()
+        PlatformLogger.w(TAG, "[STARTUP][0ms] === startCIRIS() CALLED ===")
+        PlatformLogger.w(TAG, "[STARTUP][0ms] TOTAL_PREP_STEPS=$TOTAL_PREP_STEPS, TOTAL_VERIFY_STEPS=$TOTAL_VERIFY_STEPS, TOTAL_SERVICES=${_totalServices.value}")
+        PlatformLogger.w(TAG, "[STARTUP][0ms] Initial state: prep=${_prepStepsCompleted.value}, verify=${_verifyStepsCompleted.value}, services=${_servicesOnline.value}, slots=${_startedServiceSlots.value}")
 
         viewModelScope.launch {
             // Start elapsed time timer
@@ -132,17 +133,19 @@ class StartupViewModel(
      * Step 1: Initialize Python interpreter
      */
     private suspend fun initializePython() {
-        PlatformLogger.i(TAG, "[STARTUP] Step 1: initializePython()")
+        val ts = Clock.System.now().toEpochMilliseconds() - startTime
+        PlatformLogger.w(TAG, "[STARTUP][PYTHON][${ts}ms] === Step 1: initializePython() ===")
         _phase.value = StartupPhase.LOADING_RUNTIME
         _statusMessage.value = LocalizationHelper.getString("mobile.status_starting_python")
 
         val result = pythonRuntime.initialize(pythonHomePath)
+        val ts2 = Clock.System.now().toEpochMilliseconds() - startTime
         if (result.isFailure) {
-            PlatformLogger.e(TAG, "[STARTUP] Python init FAILED: ${result.exceptionOrNull()?.message}")
+            PlatformLogger.e(TAG, "[STARTUP][PYTHON][${ts2}ms] Python init FAILED: ${result.exceptionOrNull()?.message}")
             throw result.exceptionOrNull() ?: Exception("Failed to initialize Python")
         }
 
-        PlatformLogger.i(TAG, "[STARTUP] Step 1 complete: Python initialized")
+        PlatformLogger.w(TAG, "[STARTUP][PYTHON][${ts2}ms] Step 1 complete: Python initialized (took ${ts2-ts}ms)")
         _statusMessage.value = "Python ready"
     }
 
@@ -152,16 +155,26 @@ class StartupViewModel(
      * While waiting, polls startup-status to drive service light animations.
      */
     private suspend fun startFastAPIServer() {
+        val ts = Clock.System.now().toEpochMilliseconds() - startTime
+        PlatformLogger.w(TAG, "[STARTUP][SERVER][${ts}ms] === Step 2: startFastAPIServer() ===")
         _phase.value = StartupPhase.STARTING_SERVER
         _statusMessage.value = LocalizationHelper.getString("mobile.status_connecting_ciris")
 
         // Wire output callback to parse service startup lines
+        PlatformLogger.w(TAG, "[STARTUP][CALLBACK][${ts}ms] === WIRING OUTPUT CALLBACK ===")
         val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\S+) STARTED""")
         val prepPattern = Regex("""\[(\d+)/(\d+)\]""")
         val fatalPattern = Regex("""\[FATAL(?:_EXIT)?\]\s*(.+)""")
         val consolidatorPattern = Regex("""\[CONSOLIDATOR\]\s*(.+)""")
         val startupPattern = Regex("""\[STARTUP\]\s*(.+)""")
+        var callbackLineCount = 0
         pythonRuntime.setOutputLineCallback { line ->
+            callbackLineCount++
+            val lineTs = Clock.System.now().toEpochMilliseconds() - startTime
+            // Log every line received through callback (first 50, then every 10th)
+            if (callbackLineCount <= 50 || callbackLineCount % 10 == 0) {
+                PlatformLogger.d(TAG, "[STARTUP][CALLBACK][${lineTs}ms] Line #$callbackLineCount: ${line.take(100)}")
+            }
             // Check for FATAL errors first - these indicate unrecoverable startup failures
             fatalPattern.find(line)?.let { match ->
                 val errorMsg = match.groupValues[1].trim()
@@ -174,6 +187,8 @@ class StartupViewModel(
             servicePattern.find(line)?.let { match ->
                 val num = match.groupValues[1].toIntOrNull() ?: return@let
                 val total = match.groupValues[2].toIntOrNull() ?: return@let
+                val svcName = match.groupValues[3]
+                PlatformLogger.i(TAG, "[STARTUP][CALLBACK][${lineTs}ms] !!! SERVICE MATCH: slot=$num/$total name=$svcName !!!")
                 _totalServices.value = total
                 onServiceStarted(num)
                 return@setOutputLineCallback
@@ -276,13 +291,18 @@ class StartupViewModel(
 
         // Server is healthy — verify/prep completed before server was available
         // Mark them done only if they weren't already driven by console output
+        val ts2 = Clock.System.now().toEpochMilliseconds() - startTime
+        PlatformLogger.w(TAG, "[STARTUP][SERVER][${ts2}ms] Server healthy, checking fallback states...")
+        PlatformLogger.w(TAG, "[STARTUP][SERVER][${ts2}ms] verify=${_verifyStepsCompleted.value}, prep=${_prepStepsCompleted.value}, services=${_servicesOnline.value}, slots=${_startedServiceSlots.value.size}")
         if (_verifyStepsCompleted.value == 0) {
+            PlatformLogger.w(TAG, "[STARTUP][SERVER][${ts2}ms] !!! FALLBACK: verify was 0, setting to $TOTAL_VERIFY_STEPS !!!")
             _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
         }
         if (_prepStepsCompleted.value == 0) {
+            PlatformLogger.w(TAG, "[STARTUP][SERVER][${ts2}ms] !!! FALLBACK: prep was 0, setting to $TOTAL_PREP_STEPS !!!")
             _prepStepsCompleted.value = TOTAL_PREP_STEPS
         }
-        PlatformLogger.i(TAG, "[STARTUP] Server healthy - verify=${_verifyStepsCompleted.value}, prep=${_prepStepsCompleted.value}, services=${_servicesOnline.value}")
+        PlatformLogger.i(TAG, "[STARTUP][SERVER][${ts2}ms] Final state - verify=${_verifyStepsCompleted.value}, prep=${_prepStepsCompleted.value}, services=${_servicesOnline.value}")
         _statusMessage.value = "Connected to CIRIS"
     }
 
@@ -292,9 +312,13 @@ class StartupViewModel(
      * In normal mode, all 22 services start
      */
     private suspend fun waitForServices() {
+        val ts = Clock.System.now().toEpochMilliseconds() - startTime
+        PlatformLogger.w(TAG, "[STARTUP][WAIT][${ts}ms] === waitForServices() CALLED ===")
+        PlatformLogger.w(TAG, "[STARTUP][WAIT][${ts}ms] Current state: services=${_servicesOnline.value}/${_totalServices.value}, slots=${_startedServiceSlots.value}")
+
         // If services were already fully loaded during startFastAPIServer() polling, skip waiting
         if (_servicesOnline.value >= _totalServices.value && _servicesOnline.value > 0) {
-            PlatformLogger.i(TAG, "[STARTUP] All ${_servicesOnline.value} services already loaded, skipping wait")
+            PlatformLogger.i(TAG, "[STARTUP][WAIT][${ts}ms] All ${_servicesOnline.value} services already loaded, skipping wait")
             showReadyAndComplete()
             return
         }
@@ -345,6 +369,7 @@ class StartupViewModel(
 
                     // First-run mode - 10 minimal services ready
                     if (online >= 10 && healthyCount >= 3) {
+                        _consolidatorStatus.value = null  // Clear before completing
                         _phase.value = StartupPhase.READY
                         _statusMessage.value = "Setup required"
                         return
@@ -375,18 +400,35 @@ class StartupViewModel(
      * Populates all lights to show successful connection
      */
     private suspend fun showReadyAndComplete() {
+        val ts = Clock.System.now().toEpochMilliseconds() - startTime
+        PlatformLogger.w(TAG, "[STARTUP][READY][${ts}ms] === showReadyAndComplete() CALLED ===")
+        PlatformLogger.w(TAG, "[STARTUP][READY][${ts}ms] BEFORE: prep=${_prepStepsCompleted.value}/$TOTAL_PREP_STEPS, verify=${_verifyStepsCompleted.value}/$TOTAL_VERIFY_STEPS, services=${_servicesOnline.value}/${_totalServices.value}")
+        PlatformLogger.w(TAG, "[STARTUP][READY][${ts}ms] BEFORE: startedSlots=${_startedServiceSlots.value}")
+
         // Ensure all lights are populated for visual feedback
         _prepStepsCompleted.value = TOTAL_PREP_STEPS
         _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
         if (_servicesOnline.value == 0) {
             // If telemetry not available (requires auth), show all services as ready
+            PlatformLogger.w(TAG, "[STARTUP][READY][${ts}ms] !!! FALLBACK: servicesOnline was 0, setting to $_totalServices.value (ALL LIGHTS AT ONCE) !!!")
             _servicesOnline.value = _totalServices.value
+            // Also populate the slots set for consistency
+            _startedServiceSlots.value = (1.._totalServices.value).toSet()
+        }
+
+        PlatformLogger.w(TAG, "[STARTUP][READY][${ts}ms] AFTER: services=${_servicesOnline.value}, slots=${_startedServiceSlots.value.size}")
+
+        // Clear consolidator status - startup is complete regardless of consolidation result
+        if (_consolidatorStatus.value != null) {
+            PlatformLogger.i(TAG, "[STARTUP][READY][${ts}ms] Clearing consolidator status: ${_consolidatorStatus.value}")
+            _consolidatorStatus.value = null
         }
 
         _statusMessage.value = "Agent Runtime Ready!"
-        PlatformLogger.i(TAG, "[STARTUP] Agent Runtime Ready! - displaying for 1.2s")
+        PlatformLogger.i(TAG, "[STARTUP][READY][${ts}ms] Displaying 'Agent Runtime Ready!' for 1.2s")
         delay(1200) // Brief pause to show ready state BEFORE transitioning
         _phase.value = StartupPhase.READY
+        PlatformLogger.i(TAG, "[STARTUP][READY][${ts}ms + 1200] Phase set to READY")
     }
 
     /**
@@ -537,29 +579,38 @@ class StartupViewModel(
         }
     }
 
+    // Track which service SLOTS have started (for slot-based light display)
+    private val _startedServiceSlots = MutableStateFlow<Set<Int>>(emptySet())
+    val startedServiceSlots: StateFlow<Set<Int>> = _startedServiceSlots.asStateFlow()
+
     /**
      * Called when a service starts
      */
     fun onServiceStarted(serviceNum: Int) {
+        val ts = Clock.System.now().toEpochMilliseconds() - startTime
         if (serviceNum < 1 || serviceNum > _totalServices.value) {
-            PlatformLogger.w(TAG, "[STARTUP][SERVICE] Invalid service num: $serviceNum (expected 1-${_totalServices.value})")
+            PlatformLogger.w(TAG, "[STARTUP][SERVICE][${ts}ms] Invalid service num: $serviceNum (expected 1-${_totalServices.value})")
             return
         }
 
         // Set phase to LOADING_SERVICES on first service
         if (_servicesOnline.value == 0) {
-            PlatformLogger.i(TAG, "[STARTUP][SERVICE] Starting services phase")
+            PlatformLogger.i(TAG, "[STARTUP][SERVICE][${ts}ms] === FIRST SERVICE - Starting services phase ===")
             setPhase(StartupPhase.LOADING_SERVICES)
         }
 
-        _servicesOnline.value = serviceNum
-        _statusMessage.value = "Starting services... $serviceNum/${_totalServices.value}"
-        PlatformLogger.i(TAG, "[STARTUP][SERVICE] Service $serviceNum/${_totalServices.value} started")
+        // Track slot in set (for slot-based UI)
+        val oldSlots = _startedServiceSlots.value
+        _startedServiceSlots.value = oldSlots + serviceNum
+        _servicesOnline.value = _startedServiceSlots.value.size
+
+        _statusMessage.value = "Starting services... ${_servicesOnline.value}/${_totalServices.value}"
+        PlatformLogger.i(TAG, "[STARTUP][SERVICE][${ts}ms] Slot $serviceNum started, total=${_servicesOnline.value}/${_totalServices.value}, slots=${_startedServiceSlots.value}")
 
         // When all services are ready, update status but don't set READY phase directly.
         // waitForServices() handles the READY transition with proper delay.
-        if (serviceNum >= _totalServices.value) {
-            PlatformLogger.i(TAG, "[STARTUP][SERVICE] All ${_totalServices.value} services started")
+        if (_servicesOnline.value >= _totalServices.value) {
+            PlatformLogger.i(TAG, "[STARTUP][SERVICE][${ts}ms] === ALL ${_totalServices.value} SERVICES STARTED ===")
             _statusMessage.value = "All ${_totalServices.value} services ready"
         }
     }
@@ -594,8 +645,10 @@ class StartupViewModel(
      * Retry startup after error
      */
     fun retry() {
+        PlatformLogger.w(TAG, "[STARTUP] === RETRY CALLED - Resetting all state ===")
         _errorMessage.value = null
         _servicesOnline.value = 0
+        _startedServiceSlots.value = emptySet()
         _elapsedSeconds.value = 0
         _prepStepsCompleted.value = 0
         _verifyStepsCompleted.value = 0

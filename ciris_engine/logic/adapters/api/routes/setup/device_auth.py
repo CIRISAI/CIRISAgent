@@ -377,22 +377,169 @@ def _sign_with_verifier(message: bytes) -> tuple[Optional[bytes], Optional[Excep
         return None, e
 
 
-async def _register_self_custody_key(device_code: str, portal_url: str) -> Optional[str]:
+def _redact_device_code(device_code: str) -> str:
+    """Redact device_code for safe logging (shows first 8 + last 4 chars)."""
+    if len(device_code) > 12:
+        return f"{device_code[:8]}...{device_code[-4:]}"
+    return "***"
+
+
+def _redact_challenge(challenge: Optional[str]) -> str:
+    """Redact challenge for safe logging (shows first 16 chars)."""
+    if challenge and len(challenge) > 16:
+        return f"{challenge[:16]}..."
+    return "None" if not challenge else "***"
+
+
+def _get_public_key_on_large_stack() -> tuple[Optional[bytes], Optional[Exception]]:
+    """Get public key from CIRISVerify on large stack thread."""
+    key_result: List[Any] = [None, None]
+
+    def _get_key() -> None:
+        pub, err = _get_public_key_from_verifier()
+        key_result[0] = pub
+        key_result[1] = err
+
+    _run_on_large_stack(_get_key, timeout=15)
+    return key_result[0], key_result[1]
+
+
+def _sign_challenge_on_large_stack(challenge_bytes: bytes) -> tuple[Optional[bytes], Optional[Exception]]:
+    """Sign challenge using CIRISVerify on large stack thread."""
+    sign_result: List[Any] = [None, None]
+
+    def _sign() -> None:
+        sig, err = _sign_with_verifier(challenge_bytes)
+        sign_result[0] = sig
+        sign_result[1] = err
+
+    _run_on_large_stack(_sign, timeout=15)
+    return sign_result[0], sign_result[1]
+
+
+def _generate_agent_hash() -> tuple[str, str, str]:
+    """Generate agent_hash for binding identity to build.
+
+    Returns:
+        (agent_hash, agent_root, agent_version)
+    """
+    import ciris_engine
+
+    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
+    agent_version = getattr(ciris_engine, "__version__", "0.0.0")
+    agent_hash = hashlib.sha256(f"{agent_root}:{agent_version}".encode()).hexdigest()
+    return agent_hash, agent_root, agent_version
+
+
+async def _call_portal_register_key(
+    portal_url: str, device_code: str, public_key_hex: str, signature_hex: str, agent_hash: str
+) -> Optional[tuple[str, str]]:
+    """Call Portal /api/device/register-key endpoint.
+
+    Returns:
+        (key_id, activation_challenge_hex) on success, None on failure
+    """
+    import httpx
+
+    register_url = f"{portal_url}/api/device/register-key"
+    register_payload = {
+        "device_code": device_code,
+        "ed25519_public_key": public_key_hex,
+        "ed25519_signature": signature_hex,
+        "agent_hash": agent_hash,
+    }
+    logger.info("[SELF-CUSTODY] Register URL: %s", register_url)
+    logger.info("[SELF-CUSTODY] Register payload keys: %s", list(register_payload.keys()))
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(register_url, json=register_payload)
+            logger.info("[SELF-CUSTODY] Portal response status: %d", resp.status_code)
+
+            if resp.status_code != 200:
+                body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", body.get("error", f"HTTP {resp.status_code}"))
+                return None
+
+            data = resp.json()
+            key_id = data.get("key_id")
+            activation_challenge = data.get("activation_challenge")
+            fingerprint = data.get("public_key_fingerprint")
+            logger.info("[SELF-CUSTODY] Portal returned key_id: %s, fingerprint: %s", key_id, fingerprint)
+
+            if not key_id or not activation_challenge:
+                logger.warning("[SELF-CUSTODY] Portal did not return key_id or activation_challenge")
+                return None
+            return key_id, activation_challenge
+
+    except httpx.HTTPError as e:
+        logger.warning("[SELF-CUSTODY] Failed to register key with Portal: %s", e)
+        return None
+
+
+async def _call_portal_activate_key(
+    portal_url: str, device_code: str, key_id: str, activation_challenge_hex: str, signature_hex: str, agent_hash: str
+) -> bool:
+    """Call Portal /api/device/activate-key endpoint.
+
+    Returns:
+        True on success, False on failure
+    """
+    import httpx
+
+    activate_url = f"{portal_url}/api/device/activate-key"
+    activate_payload = {
+        "device_code": device_code,
+        "key_id": key_id,
+        "activation_challenge": activation_challenge_hex,
+        "ed25519_signature": signature_hex,
+        "agent_hash": agent_hash,
+    }
+    logger.info("[SELF-CUSTODY] Activate URL: %s", activate_url)
+    logger.info("[SELF-CUSTODY] Activate payload: key_id=%s", key_id)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(activate_url, json=activate_payload)
+            logger.info("[SELF-CUSTODY] Activate response status: %d", resp.status_code)
+
+            if resp.status_code == 200:
+                result_data = resp.json()
+                logger.info("[SELF-CUSTODY] Key ACTIVATED: key_id=%s", result_data.get("key_id"))
+                return True
+
+            body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", body.get("error", f"HTTP {resp.status_code}"))
+            return False
+
+    except httpx.HTTPError as e:
+        logger.warning("[SELF-CUSTODY] Failed to activate key with Portal: %s", e)
+        return False
+
+
+async def _register_self_custody_key(
+    device_code: str, portal_url: str, registration_challenge: Optional[str] = None
+) -> Optional[str]:
     """Self-Custody Key Registration (FSD-002).
 
     After device auth completes, the agent:
     1. Gets its Ed25519 PUBLIC key from CIRISVerify
-    2. Signs a registration message to prove possession
+    2. Signs the registration_challenge from Portal to prove key possession
     3. Calls Portal /api/device/register-key to register the public key
     4. Signs the activation_challenge from Portal
     5. Calls Portal /api/device/activate-key to activate
 
     The PRIVATE key NEVER leaves the agent. Portal only sees the public key.
 
+    Args:
+        device_code: Device code from Portal authorization
+        portal_url: Portal URL for API calls
+        registration_challenge: Hex-encoded challenge from Portal's /api/device/token response
+
     Returns:
         key_id on success, None on failure
     """
-    import httpx
+    logger.info("[SELF-CUSTODY] Key registration flow starting")
 
     # Validate portal URL (SSRF protection)
     try:
@@ -402,146 +549,63 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
         return None
 
     # Step 1: Get public key from CIRISVerify
-    key_result: List[Any] = [None, None]  # [public_key, error]
-
-    def _get_public_key() -> None:
-        pub, err = _get_public_key_from_verifier()
-        key_result[0] = pub
-        key_result[1] = err
-
-    _run_on_large_stack(_get_public_key, timeout=15)
-
-    public_key, error = key_result
+    logger.info("[SELF-CUSTODY] Step 1: Getting public key from CIRISVerify...")
+    public_key, error = _get_public_key_on_large_stack()
     if error is not None or public_key is None:
-        error_msg = str(error) if error else "Failed to get public key"
-        logger.warning("[SELF-CUSTODY] Key registration skipped: %s", error_msg)
+        logger.warning("[SELF-CUSTODY] Key registration skipped: %s", str(error) if error else "Failed to get public key")
         return None
 
     public_key_hex = public_key.hex()
-    logger.info(
-        "[SELF-CUSTODY] Got Ed25519 public key: %s...",
-        public_key_hex[:16],
-    )
+    local_fingerprint = hashlib.sha256(public_key).hexdigest()
+    logger.info("[SELF-CUSTODY] Public key fingerprint: %s", local_fingerprint)
 
-    # Step 2: Generate agent_hash (for binding identity to build)
-    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
-    import ciris_engine
+    # Step 2: Generate agent_hash
+    agent_hash, _, agent_version = _generate_agent_hash()
+    logger.info("[SELF-CUSTODY] agent_version=%s", agent_version)
 
-    agent_version = getattr(ciris_engine, "__version__", "0.0.0")
-    agent_hash = hashlib.sha256(f"{agent_root}:{agent_version}".encode()).hexdigest()
+    # Step 3: Sign the registration challenge
+    if not registration_challenge:
+        logger.warning("[SELF-CUSTODY] No registration_challenge provided by Portal")
+        return None
 
-    # Step 3: Sign a registration message to prove we control the private key
-    # Message format: "CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}"
-    registration_message = f"CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}".encode()
+    try:
+        challenge_bytes = bytes.fromhex(registration_challenge)
+    except ValueError as e:
+        logger.warning("[SELF-CUSTODY] Invalid registration_challenge hex: %s", e)
+        return None
 
-    sign_result: List[Any] = [None, None]  # [signature, error]
-
-    def _sign_registration() -> None:
-        sig, err = _sign_with_verifier(registration_message)
-        sign_result[0] = sig
-        sign_result[1] = err
-
-    _run_on_large_stack(_sign_registration, timeout=15)
-
-    registration_signature, sign_error = sign_result
+    registration_signature, sign_error = _sign_challenge_on_large_stack(challenge_bytes)
     if sign_error is not None or registration_signature is None:
-        error_msg = str(sign_error) if sign_error else "Failed to sign registration"
-        logger.warning("[SELF-CUSTODY] Registration signing failed: %s", error_msg)
+        logger.warning("[SELF-CUSTODY] Registration signing failed: %s", str(sign_error) if sign_error else "Failed to sign")
         return None
 
     # Step 4: Call Portal /api/device/register-key
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            register_resp = await client.post(
-                f"{validated_portal_url}/api/device/register-key",
-                json={
-                    "device_code": device_code,
-                    "ed25519_public_key": public_key_hex,
-                    "ed25519_signature": registration_signature.hex(),
-                    "agent_hash": agent_hash,
-                },
-            )
-
-            if register_resp.status_code != 200:
-                body = (
-                    register_resp.json()
-                    if register_resp.headers.get("content-type", "").startswith("application/json")
-                    else {}
-                )
-                error_msg = body.get("error", f"HTTP {register_resp.status_code}")
-                logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", error_msg)
-                return None
-
-            register_data = register_resp.json()
-            key_id: str | None = register_data.get("key_id")
-            activation_challenge_hex: str | None = register_data.get("activation_challenge")
-            fingerprint = register_data.get("public_key_fingerprint")
-
-            logger.info(
-                "[SELF-CUSTODY] Key registered: key_id=%s, fingerprint=%s",
-                key_id,
-                fingerprint,
-            )
-
-    except httpx.HTTPError as e:
-        logger.warning("[SELF-CUSTODY] Failed to register key with Portal: %s", e)
+    register_result = await _call_portal_register_key(
+        validated_portal_url, device_code, public_key_hex, registration_signature.hex(), agent_hash
+    )
+    if not register_result:
         return None
 
-    if not key_id or not activation_challenge_hex:
-        logger.warning("[SELF-CUSTODY] Portal did not return key_id or activation_challenge")
-        return None
+    key_id, activation_challenge_hex = register_result
 
     # Step 5: Sign the activation challenge
     activation_challenge = bytes.fromhex(activation_challenge_hex)
-
-    def _sign_activation() -> None:
-        sig, err = _sign_with_verifier(activation_challenge)
-        sign_result[0] = sig
-        sign_result[1] = err
-
-    _run_on_large_stack(_sign_activation, timeout=15)
-
-    activation_signature, sign_error = sign_result
+    activation_signature, sign_error = _sign_challenge_on_large_stack(activation_challenge)
     if sign_error is not None or activation_signature is None:
-        error_msg = str(sign_error) if sign_error else "Failed to sign activation challenge"
-        logger.warning("[SELF-CUSTODY] Activation signing failed: %s", error_msg)
+        logger.warning("[SELF-CUSTODY] Activation signing failed: %s", str(sign_error) if sign_error else "Failed to sign")
         return None
 
     # Step 6: Call Portal /api/device/activate-key
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            activate_resp = await client.post(
-                f"{validated_portal_url}/api/device/activate-key",
-                json={
-                    "device_code": device_code,
-                    "key_id": key_id,
-                    "activation_challenge": activation_challenge_hex,
-                    "ed25519_signature": activation_signature.hex(),
-                    "agent_hash": agent_hash,
-                },
-            )
+    success = await _call_portal_activate_key(
+        validated_portal_url, device_code, key_id, activation_challenge_hex, activation_signature.hex(), agent_hash
+    )
 
-            if activate_resp.status_code == 200:
-                result_data = activate_resp.json()
-                logger.info(
-                    "[SELF-CUSTODY] Key ACTIVATED: key_id=%s, message=%s",
-                    result_data.get("key_id"),
-                    result_data.get("message", "success"),
-                )
-                return key_id
-            else:
-                body = (
-                    activate_resp.json()
-                    if activate_resp.headers.get("content-type", "").startswith("application/json")
-                    else {}
-                )
-                error_msg = body.get("error", f"HTTP {activate_resp.status_code}")
-                logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", error_msg)
-                return None
+    if success:
+        logger.info("[SELF-CUSTODY] === KEY REGISTRATION FLOW COMPLETE ===")
+        logger.info("[SELF-CUSTODY] FINAL FINGERPRINT: %s", local_fingerprint)
+        return key_id
 
-    except httpx.HTTPError as e:
-        logger.warning("[SELF-CUSTODY] Failed to activate key with Portal: %s", e)
-        return None
+    return None
 
 
 # ============================================================================

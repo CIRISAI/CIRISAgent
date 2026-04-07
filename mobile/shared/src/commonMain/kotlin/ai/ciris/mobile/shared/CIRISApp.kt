@@ -85,6 +85,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -2594,7 +2595,7 @@ private suspend fun checkFirstRunStatus(
  * - Advanced: Telemetry, Services, Logs, System, Runtime, Users, Tickets, Scheduler
  */
 private enum class NavCategory {
-    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED, ACCOUNT
+    NONE, ADAPTERS, CONFIG, DATA, GOVERNANCE, ADVANCED
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2815,7 +2816,7 @@ private fun CIRISTopBar(
                 }
             }
 
-            // Category 4: Governance
+            // Category 4: Account & Governance (person icon with users, deferrals, logout)
             Box {
                 IconButton(
                     onClick = { activeCategory = if (activeCategory == NavCategory.GOVERNANCE) NavCategory.NONE else NavCategory.GOVERNANCE },
@@ -2825,7 +2826,7 @@ private fun CIRISTopBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Person,
-                        contentDescription = "Governance",
+                        contentDescription = "Account",
                         tint = if (activeCategory == NavCategory.GOVERNANCE) accentColor else contentColor
                     )
                 }
@@ -2850,6 +2851,13 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
                         leadingIcon = { Icon(Icons.Default.Person, null) },
                         modifier = Modifier.testableClickable("menu_users") { activeCategory = NavCategory.NONE; onUsersClick() }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    DropdownMenuItem(
+                        text = { Text(localizedString("mobile.settings_logout")) },
+                        onClick = { activeCategory = NavCategory.NONE; onLogoutClick() },
+                        leadingIcon = { Icon(Icons.Default.ExitToApp, null) },
+                        modifier = Modifier.testableClickable("menu_logout") { activeCategory = NavCategory.NONE; onLogoutClick() }
                     )
                 }
             }
@@ -2923,32 +2931,6 @@ private fun CIRISTopBar(
                 }
             }
 
-            // Account menu (person icon with logout)
-            Box {
-                IconButton(
-                    onClick = { activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT },
-                    modifier = Modifier.testableClickable("btn_account_menu") {
-                        activeCategory = if (activeCategory == NavCategory.ACCOUNT) NavCategory.NONE else NavCategory.ACCOUNT
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Account",
-                        tint = if (activeCategory == NavCategory.ACCOUNT) accentColor else contentColor
-                    )
-                }
-                DropdownMenu(
-                    expanded = activeCategory == NavCategory.ACCOUNT,
-                    onDismissRequest = { activeCategory = NavCategory.NONE }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(localizedString("mobile.settings_logout")) },
-                        onClick = { activeCategory = NavCategory.NONE; onLogoutClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
-                        modifier = Modifier.testableClickable("menu_logout") { activeCategory = NavCategory.NONE; onLogoutClick() }
-                    )
-                }
-            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor,

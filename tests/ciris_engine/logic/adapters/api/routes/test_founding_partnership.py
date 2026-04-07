@@ -236,6 +236,36 @@ class TestCreateFoundingPartnership:
         assert attrs["impact_score"] == 0.0
         assert attrs["attribution_count"] == 0
 
+    def test_oauth_user_uses_oauth_id_for_consent_node(self, test_db):
+        """OAuth users should have consent node keyed by OAuth external ID."""
+        from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+        _create_founding_partnership("wa-test-123", "google:987654321")
+
+        # Consent node should be at the OAuth ID, not the WA ID
+        node = _get_consent_node(test_db, "google:987654321")
+        assert node is not None, "Consent node should be keyed by OAuth ID"
+        assert node["node_id"] == "consent/google:987654321"
+
+        # WA ID should be stored in attributes for auditing
+        attrs = json.loads(node["attributes_json"])
+        assert attrs["linked_wa_id"] == "wa-test-123"
+        assert attrs["user_id"] == "user/google:987654321"
+
+    def test_non_oauth_user_uses_wa_id_for_consent_node(self, test_db):
+        """Non-OAuth (password) users should have consent node keyed by WA ID."""
+        from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+        _create_founding_partnership("wa-password-user", None)
+
+        node = _get_consent_node(test_db, "wa-password-user")
+        assert node is not None, "Consent node should be keyed by WA ID for non-OAuth users"
+        assert node["node_id"] == "consent/wa-password-user"
+
+        attrs = json.loads(node["attributes_json"])
+        assert attrs["linked_wa_id"] == "wa-password-user"
+        assert attrs["user_id"] == "user/wa-password-user"
+
 
 class TestFoundingPartnershipInSetupFlow:
     """Integration-style tests verifying the partnership is created during setup."""
@@ -274,9 +304,9 @@ class TestFoundingPartnershipInSetupFlow:
 
                 await _create_setup_users(setup, test_db)
 
-            # _create_founding_partnership is called with wa_cert.wa_id, not username
-            # The mock returns wa_id = "wa-test-001"
-            mock_fp.assert_called_once_with("wa-test-001")
+            # _create_founding_partnership is called with (wa_id, oauth_user_id)
+            # The mock returns wa_id = "wa-test-001", and no OAuth creds means oauth_user_id=None
+            mock_fp.assert_called_once_with("wa-test-001", None)
 
     @pytest.mark.asyncio
     async def test_setup_flow_creates_actual_node(self, test_db):

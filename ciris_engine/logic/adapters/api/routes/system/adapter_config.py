@@ -2,20 +2,27 @@
 Adapter configuration workflow endpoints.
 
 Provides interactive configuration workflow for adapters including OAuth callbacks.
+
+These endpoints support both post-setup (admin auth required) and first-run setup
+(no auth required) modes via the require_setup_or_admin / require_setup_or_observer
+dependencies.
 """
 
 import html
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 
+from ciris_engine.logic.setup.first_run import is_first_run
+from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from ...dependencies.auth import AuthContext, require_admin, require_observer
+from ...dependencies.auth import AuthContext, get_auth_context, get_auth_service
 from .._common import RESPONSES_ADAPTER_CONFIG, RESPONSES_ADAPTER_CONFIG_SESSION
 from .helpers import get_adapter_config_service
 from .schemas import (
@@ -28,6 +35,61 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Setup-aware auth dependencies
+# ============================================================================
+
+
+def _create_setup_auth_context() -> AuthContext:
+    """Create a synthetic auth context for first-run setup mode."""
+    return AuthContext(
+        user_id="setup_wizard",
+        role=UserRole.ADMIN,
+        permissions=ROLE_PERMISSIONS.get(UserRole.ADMIN, set()),
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
+async def require_setup_or_admin(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> AuthContext:
+    """Allow access during first-run setup OR require admin auth.
+
+    During first-run setup, returns a synthetic setup auth context.
+    After setup, delegates to normal admin authentication.
+    """
+    if is_first_run():
+        return _create_setup_auth_context()
+
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if not auth.role.has_permission(UserRole.ADMIN):
+        raise HTTPException(
+            status_code=403,
+            detail="Requires ADMIN role",
+        )
+    return auth
+
+
+async def require_setup_or_observer(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> AuthContext:
+    """Allow access during first-run setup OR require observer auth."""
+    if is_first_run():
+        return _create_setup_auth_context()
+
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if not auth.role.has_permission(UserRole.OBSERVER):
+        raise HTTPException(
+            status_code=403,
+            detail="Requires OBSERVER role",
+        )
+    return auth
 
 
 def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
@@ -129,7 +191,7 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
 async def start_adapter_configuration(
     adapter_type: str,
     request: Request,
-    auth: Annotated[AuthContext, Depends(require_admin)],
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
 ) -> SuccessResponse[ConfigurationSessionResponse]:
     """
     Start interactive configuration session for an adapter.
@@ -137,7 +199,7 @@ async def start_adapter_configuration(
     Creates a new configuration session and returns the session ID along with
     information about the first step in the workflow.
 
-    Requires ADMIN role.
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -184,7 +246,7 @@ async def start_adapter_configuration(
 async def get_configuration_status(
     session_id: str,
     request: Request,
-    auth: Annotated[AuthContext, Depends(require_observer)],
+    auth: Annotated[AuthContext, Depends(require_setup_or_observer)],
 ) -> SuccessResponse[ConfigurationStatusResponse]:
     """
     Get current status of a configuration session.
@@ -192,7 +254,7 @@ async def get_configuration_status(
     Returns complete session state including current step, collected configuration,
     and session status.
 
-    Requires OBSERVER role.
+    Requires OBSERVER role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -237,7 +299,7 @@ async def execute_configuration_step(
     session_id: str,
     request: Request,
     body: StepExecutionRequest,
-    auth: Annotated[AuthContext, Depends(require_admin)],
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
 ) -> SuccessResponse[StepExecutionResponse]:
     """
     Execute the current configuration step.
@@ -245,7 +307,7 @@ async def execute_configuration_step(
     The body contains step-specific data such as user selections, input values,
     or OAuth callback data. The step type determines what data is expected.
 
-    Requires ADMIN role.
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -504,7 +566,7 @@ async def oauth_deeplink_callback(
 async def complete_configuration(
     session_id: str,
     request: Request,
-    auth: Annotated[AuthContext, Depends(require_admin)],
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
     body: ConfigurationCompleteRequest = ConfigurationCompleteRequest(),
 ) -> SuccessResponse[ConfigurationCompleteResponse]:
     """
@@ -517,7 +579,7 @@ async def complete_configuration(
     on startup, allowing the adapter to be automatically configured when the
     system restarts.
 
-    Requires ADMIN role.
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         adapter_config_service = get_adapter_config_service(request)

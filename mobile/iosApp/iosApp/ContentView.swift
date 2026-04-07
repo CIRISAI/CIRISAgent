@@ -105,12 +105,30 @@ struct ContentView: View {
             reconnectFailed = false
         }
 
-        // Wait for the server to resume - this calls ensureServerRunning which waits up to 30s
-        let success = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = PythonBridge.ensureServerRunning()
-                continuation.resume(returning: result)
+        // Wait for the server to resume with a hard 20s timeout
+        // ensureServerRunning polls for ~12s, but add safety margin
+        let success: Bool
+        do {
+            success = try await withThrowingTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let result = PythonBridge.ensureServerRunning()
+                            continuation.resume(returning: result)
+                        }
+                    }
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 20_000_000_000) // 20s hard timeout
+                    return false
+                }
+                // Return whichever finishes first
+                let result = try await group.next() ?? false
+                group.cancelAll()
+                return result
             }
+        } catch {
+            success = false
         }
 
         await MainActor.run {

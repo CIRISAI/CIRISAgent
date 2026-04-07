@@ -201,6 +201,8 @@
         "deferral_continued": "Imeendelea kutoka kuahirisha"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "Hii ni usanidi wa kibinafsi wa CIRIS. Mmiliki peke yake ndiye anayeweza kuingia. Ikiwa wewe ni mmiliki, tafadhali tumia akaunti ile ile uliyotumia wakati wa usanidi.",
+        "auth_personal_install_observer_blocked_title": "Ufikiaji umezuiliwa",
         "adapter_not_available": "Meneja wa adapter haupatikani",
         "audit_not_available": "Huduma ya ukaguzi haipatikani",
         "config_not_available": "Huduma ya usanidi haipatikani",

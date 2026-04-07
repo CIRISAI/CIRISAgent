@@ -201,6 +201,8 @@
         "deferral_continued": "استمرار من التأجيل"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "هذا تثبيت CIRIS شخصي. يمكن للمالك فقط تسجيل الدخول. إذا كنت المالك، يرجى استخدام نفس الحساب الذي استخدمته أثناء الإعداد.",
+        "auth_personal_install_observer_blocked_title": "تم رفض الوصول",
         "adapter_not_available": "مدير المحول غير متاح",
         "audit_not_available": "خدمة المراجعة غير متاحة",
         "config_not_available": "خدمة الإعداد غير متاحة",

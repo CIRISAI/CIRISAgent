@@ -201,6 +201,8 @@
         "deferral_continued": "Continuado do adiamento"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "Esta é uma instalação CIRIS pessoal. Apenas o proprietário pode entrar. Se você é o proprietário, use a mesma conta que usou durante a configuração.",
+        "auth_personal_install_observer_blocked_title": "Acesso negado",
         "adapter_not_available": "Gerenciador de adaptador não disponível",
         "audit_not_available": "Serviço de auditoria não disponível",
         "config_not_available": "Serviço de configuração não disponível",

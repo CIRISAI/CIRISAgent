@@ -453,6 +453,16 @@ class CIRISApiClient(
     }
 
     /**
+     * Clear the in-memory access token. Call during logout to stop
+     * background polling from using the revoked token.
+     */
+    fun clearAccessToken() {
+        val method = "clearAccessToken"
+        logInfo(method, "Clearing in-memory access token")
+        accessToken = null
+    }
+
+    /**
      * Log current token state for debugging auth issues.
      * Call this when troubleshooting 401 errors.
      */

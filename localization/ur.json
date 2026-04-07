@@ -201,6 +201,8 @@
         "deferral_continued": "تاخیری سے جاری"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "یہ ایک ذاتی CIRIS تنصیب ہے۔ صرف مالک سائن ان کر سکتا ہے۔ اگر آپ مالک ہیں، تو براہ کرم وہی اکاؤنٹ استعمال کریں جو آپ نے سیٹ اپ کے دوران استعمال کیا تھا۔",
+        "auth_personal_install_observer_blocked_title": "رسائی منع ہے",
         "adapter_not_available": "ایڈاپٹر مینیجر دستیاب نہیں",
         "audit_not_available": "آڈٹ سروس دستیاب نہیں",
         "config_not_available": "ترتیب سروس دستیاب نہیں",

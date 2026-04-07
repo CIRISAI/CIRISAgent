@@ -201,6 +201,8 @@
         "deferral_continued": "Ertelemeden devam edildi"
     },
     "errors": {
+        "auth_personal_install_observer_blocked": "Bu kişisel bir CIRIS kurulumudur. Yalnızca sahibi giriş yapabilir. Sahibiyseniz, lütfen kurulum sırasında kullandığınız aynı hesabı kullanın.",
+        "auth_personal_install_observer_blocked_title": "Erişim reddedildi",
         "adapter_not_available": "Adaptör yöneticisi kullanılamıyor",
         "audit_not_available": "Denetim hizmeti kullanılamıyor",
         "config_not_available": "Yapılandırma hizmeti kullanılamıyor",

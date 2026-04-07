@@ -935,10 +935,11 @@ fun CIRISApp(
             Screen.Login -> {
                 platformLog(TAG, "[DEBUG][Screen.Login] Rendering login screen, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}, isFirstRun=$isFirstRun")
 
-                // On desktop during FIRST RUN ONLY, auto-trigger setup since OAuth is not available
-                // For existing users (isFirstRun=false), show the login screen to enter admin credentials
+                // During FIRST RUN, go to setup wizard
+                // Desktop: auto-trigger since no OAuth; iOS: show login first for auth
                 LaunchedEffect(googleSignInCallback, isFirstRun) {
-                    if (googleSignInCallback == null && isFirstRun == true) {
+                    if (isFirstRun == true && googleSignInCallback == null) {
+                        // Desktop: no OAuth, go directly to setup
                         platformLog(TAG, "[INFO][Screen.Login] Desktop first-run detected (no OAuth) - going to setup")
                         setupViewModel.setGoogleAuthState(
                             isAuth = false,
@@ -947,9 +948,12 @@ fun CIRISApp(
                             userId = null
                         )
                         currentScreen = Screen.Setup
+                    } else if (isFirstRun == true && googleSignInCallback != null) {
+                        // iOS/Android: first run with OAuth - show login so user can sign in,
+                        // then auth flow will detect first user and redirect to setup
+                        platformLog(TAG, "[INFO][Screen.Login] Mobile first-run - showing login for OAuth sign-in")
                     } else if (googleSignInCallback == null && isFirstRun == false) {
                         platformLog(TAG, "[INFO][Screen.Login] Desktop existing user - showing local login form")
-                        // Stay on login screen - user needs to enter admin credentials
                     }
                 }
 
@@ -1314,8 +1318,9 @@ fun CIRISApp(
                             onLogoutClick = {
                                 PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
                                 settingsViewModel.logout {
-                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
-                                    currentScreen = Screen.Startup
+                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                                    currentAccessToken = null
+                                    currentScreen = Screen.Login
                                 }
                             },
                             darkMode = isDarkMode,
@@ -1381,8 +1386,9 @@ fun CIRISApp(
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
                         settingsViewModel.logout {
-                            PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
-                            currentScreen = Screen.Startup
+                            PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                            currentAccessToken = null
+                            currentScreen = Screen.Login
                         }
                     },
                     onResetSetup = {
@@ -2479,9 +2485,47 @@ fun CIRISApp(
                                 startupViewModel.retry()
                             }
                         } else {
-                            startupViewModel.retry()
-                            checkingFirstRun = false
-                            currentScreen = Screen.Startup
+                            // Mobile: server restarts in-process via watchdog.
+                            // Wait for server to shut down and come back with fresh config.
+                            currentAccessToken = null
+                            (apiClient as? ai.ciris.mobile.shared.api.CIRISApiClient)?.clearAccessToken()
+                            coroutineScope.launch {
+                                PlatformLogger.i(TAG, "[Screen.DataManagement] Mobile: waiting for server restart after reset...")
+
+                                // Wait for server to go down (max 10s)
+                                var downDetected = false
+                                for (i in 1..20) {
+                                    kotlinx.coroutines.delay(500)
+                                    try {
+                                        apiClient.getSystemStatus()
+                                    } catch (_: Exception) {
+                                        PlatformLogger.i(TAG, "[Screen.DataManagement] Server went down after ${i * 500}ms")
+                                        downDetected = true
+                                        break
+                                    }
+                                }
+                                if (!downDetected) {
+                                    PlatformLogger.w(TAG, "[Screen.DataManagement] Server didn't go down, proceeding anyway")
+                                }
+
+                                // Wait for server to come back (max 30s)
+                                for (i in 1..60) {
+                                    kotlinx.coroutines.delay(500)
+                                    try {
+                                        apiClient.getSystemStatus()
+                                        PlatformLogger.i(TAG, "[Screen.DataManagement] Server back up after ${i * 500}ms")
+                                        break
+                                    } catch (_: Exception) {
+                                        if (i % 10 == 0) {
+                                            PlatformLogger.d(TAG, "[Screen.DataManagement] Waiting for server... ${i * 500}ms")
+                                        }
+                                    }
+                                }
+
+                                startupViewModel.retry()
+                                checkingFirstRun = false
+                                currentScreen = Screen.Startup
+                            }
                         }
                     }
                 )

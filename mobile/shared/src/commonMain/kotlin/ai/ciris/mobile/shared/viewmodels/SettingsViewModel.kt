@@ -542,7 +542,7 @@ class SettingsViewModel(
                 secureStorage.delete("user_id")
                 secureStorage.delete("user_email")
 
-                // Call logout API
+                // Call logout API (revokes token server-side)
                 logDebug(method, "Calling API logout")
                 try {
                     apiClient.logout()
@@ -550,6 +550,10 @@ class SettingsViewModel(
                 } catch (e: Exception) {
                     logWarn(method, "API logout failed (may already be logged out): ${e.message}")
                 }
+
+                // Clear in-memory token to stop background polling with revoked token
+                logDebug(method, "Clearing in-memory access token")
+                (apiClient as? ai.ciris.mobile.shared.api.CIRISApiClient)?.clearAccessToken()
 
                 logInfo(method, "Logout complete - invoking navigation callback")
                 onComplete()

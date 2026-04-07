@@ -125,7 +125,7 @@ enum class LocationGranularity {
 
 /**
  * Supported language for the PREFERENCES step.
- * Mirrors localization/manifest.json (15 languages).
+ * Mirrors localization/manifest.json (17 languages).
  * ISO 639-1 codes with native names for display.
  */
 data class SupportedLanguage(
@@ -136,12 +136,13 @@ data class SupportedLanguage(
 
 /**
  * Available languages for selection in the PREFERENCES step.
- * Sorted alphabetically by English name for consistent ordering.
+ * Sorted alphabetically by English name for consistent, culturally-neutral ordering.
  * Matches localization/manifest.json.
  */
 val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("am", "አማርኛ", "Amharic"),
     SupportedLanguage("ar", "العربية", "Arabic"),
+    SupportedLanguage("bn", "বাংলা", "Bengali"),
     SupportedLanguage("zh", "中文", "Chinese"),
     SupportedLanguage("en", "English", "English"),
     SupportedLanguage("fr", "Français", "French"),

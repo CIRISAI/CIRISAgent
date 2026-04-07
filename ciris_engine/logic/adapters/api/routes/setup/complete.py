@@ -194,7 +194,7 @@ async def _ensure_system_wa(auth_service: Any) -> None:
         logger.warning("⚠️ Could not create system WA - deferral handling may not work")
 
 
-def _create_founding_partnership(wa_id: str) -> None:
+def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None) -> None:
     """Create a default PARTNERED consent record for the setup user.
 
     The user who completes the setup wizard has explicitly consented by
@@ -203,11 +203,17 @@ def _create_founding_partnership(wa_id: str) -> None:
     ("Your growth supports mine").  This is configured consistency, not
     bypassed safeguards (see COGNITIVE_STATE_BEHAVIORS FSD).
 
-    Creates a GraphNode with type=CONSENT using the consent/{wa_id}
+    Creates a GraphNode with type=CONSENT using the consent/{user_id}
     pattern that matches the ConsentService lookups.
+
+    IMPORTANT: For OAuth users, we must use the OAuth external ID (e.g.,
+    "google:102773749033681671083") as the consent node ID, because that's
+    what the consent service looks up when the user authenticates.
 
     Args:
         wa_id: The WA certificate ID (e.g., "wa-2026-04-01-337AE1")
+        oauth_user_id: The OAuth external ID if available (e.g., "google:12345")
+                       This takes precedence over wa_id for consent node ID.
     """
     from ciris_engine.logic.persistence import add_graph_node
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
@@ -216,8 +222,13 @@ def _create_founding_partnership(wa_id: str) -> None:
 
     now = datetime.now(timezone.utc)
 
+    # Use OAuth user ID if available, otherwise fall back to WA ID
+    # This is critical: ConsentService looks up consent by the user_id from auth,
+    # which for OAuth users is the OAuth external ID (e.g., "google:12345")
+    consent_user_id = oauth_user_id if oauth_user_id else wa_id
+
     partnered_status = ConsentStatus(
-        user_id=wa_id,
+        user_id=consent_user_id,
         stream=ConsentStream.PARTNERED,
         categories=[
             ConsentCategory.INTERACTION,
@@ -231,16 +242,17 @@ def _create_founding_partnership(wa_id: str) -> None:
         attribution_count=0,
     )
 
-    # ConsentService stores nodes as consent/{user_id} where user_id = wa_id
-    # The consent status API uses auth.user_id (bare wa_id from token)
-    node_id = f"consent/{wa_id}"
+    # ConsentService stores nodes as consent/{user_id}
+    # For OAuth users, user_id is the OAuth external ID (e.g., "google:12345")
+    # For password users, user_id is the WA ID (e.g., "wa-2026-04-01-337AE1")
+    node_id = f"consent/{consent_user_id}"
 
     node = GraphNode(
         id=node_id,
         type=NodeType.CONSENT,
         scope=GraphScope.LOCAL,
         attributes={
-            "user_id": f"user/{wa_id}",
+            "user_id": f"user/{consent_user_id}",
             "stream": (
                 partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream
             ),
@@ -253,6 +265,7 @@ def _create_founding_partnership(wa_id: str) -> None:
             "partnership_approved": True,
             "approval_task_id": None,  # No task — founding partnership via setup wizard
             "founding_partnership": True,  # Distinguishes from bilateral consent flow
+            "linked_wa_id": wa_id,  # WA certificate that owns this consent
         },
         updated_by="setup_wizard",
         updated_at=now,
@@ -386,9 +399,12 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
         # Create founding partnership for setup user — the user consented by
         # completing setup, the agent's consent is configured in its template
-        # Use wa_id as the consent node ID (matches consent_user/{wa_id} pattern
-        # used by the consent status API and consent service)
-        _create_founding_partnership(wa_cert.wa_id)
+        # For OAuth users, use the OAuth external ID as the consent node ID
+        # (this is what ConsentService looks up when the user authenticates)
+        oauth_user_id = None
+        if setup.oauth_provider and setup.oauth_external_id:
+            oauth_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+        _create_founding_partnership(wa_cert.wa_id, oauth_user_id)
 
         # Store user preferences keyed by wa_id for consistency
         _store_user_preferences(wa_cert.wa_id, setup)

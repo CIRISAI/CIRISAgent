@@ -539,8 +539,7 @@ async def _register_self_custody_key(
     Returns:
         key_id on success, None on failure
     """
-    logger.info("[SELF-CUSTODY] === KEY REGISTRATION FLOW START ===")
-    logger.info("[SELF-CUSTODY] device_code=%s, challenge=%s", _redact_device_code(device_code), _redact_challenge(registration_challenge))
+    logger.info("[SELF-CUSTODY] Key registration flow starting")
 
     # Validate portal URL (SSRF protection)
     try:
@@ -561,8 +560,8 @@ async def _register_self_custody_key(
     logger.info("[SELF-CUSTODY] Public key fingerprint: %s", local_fingerprint)
 
     # Step 2: Generate agent_hash
-    agent_hash, agent_root, agent_version = _generate_agent_hash()
-    logger.info("[SELF-CUSTODY] agent_version=%s, agent_hash=%s", agent_version, agent_hash)
+    agent_hash, _, agent_version = _generate_agent_hash()
+    logger.info("[SELF-CUSTODY] agent_version=%s", agent_version)
 
     # Step 3: Sign the registration challenge
     if not registration_challenge:

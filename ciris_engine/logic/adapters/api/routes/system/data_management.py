@@ -212,9 +212,9 @@ async def reset_account(
             detail="Confirmation required: set confirm=true to proceed with reset",
         )
 
-    logger.warning(
-        f"RESET ACCOUNT requested by user={auth.user_id} role={auth.role.value}: {body.reason}"
-    )
+    # Sanitize user-controlled reason field for safe logging (truncate to prevent log injection)
+    safe_reason = body.reason[:100].replace("\n", " ").replace("\r", " ") if body.reason else "No reason"
+    logger.warning("RESET ACCOUNT requested by user=%s role=%s reason=%s", auth.user_id, auth.role.value, safe_reason)
 
     try:
         # Audit the operation
@@ -297,9 +297,9 @@ async def wipe_signing_key(
             detail="DANGER: You must set confirm_wallet_loss=true to acknowledge that ANY FUNDS IN YOUR WALLET WILL BE LOST FOREVER",
         )
 
-    logger.warning(
-        f"WIPE SIGNING KEY requested by user={auth.user_id} role={auth.role.value}: {body.reason}"
-    )
+    # Sanitize user-controlled reason field for safe logging (truncate to prevent log injection)
+    safe_reason = body.reason[:100].replace("\n", " ").replace("\r", " ") if body.reason else "No reason"
+    logger.warning("WIPE SIGNING KEY requested by user=%s role=%s reason=%s", auth.user_id, auth.role.value, safe_reason)
     logger.warning("THIS WILL PERMANENTLY DESTROY WALLET ACCESS!")
 
     try:

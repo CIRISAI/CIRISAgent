@@ -40,9 +40,20 @@ actual object AppRestarter {
         val written = content.writeToFile(signalPath, atomically = true, encoding = NSUTF8StringEncoding, error = null)
 
         if (written) {
-            NSLog("[AppRestarter.ios] .restart_signal written — Python runtime will restart")
+            NSLog("[AppRestarter.ios] .restart_signal written — checking if Python runtime is alive")
         } else {
             NSLog("[AppRestarter.ios] WARNING: Failed to write .restart_signal")
+        }
+
+        // Check if Python server is alive by looking for .server_ready file
+        // If missing, the runtime crashed and watchdog can't read the restart signal
+        val serverReadyPath = "$cirisDir/.server_ready"
+        val serverAlive = NSFileManager.defaultManager.fileExistsAtPath(serverReadyPath)
+        if (!serverAlive) {
+            NSLog("[AppRestarter.ios] Python server not ready — falling back to exit(0)")
+            platform.posix.exit(0)
+        } else {
+            NSLog("[AppRestarter.ios] Python server ready file exists — watchdog will handle restart")
         }
     }
 }

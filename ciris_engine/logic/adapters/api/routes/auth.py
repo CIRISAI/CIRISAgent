@@ -994,17 +994,23 @@ def _determine_user_role(
 
 
 def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[str]) -> None:
-    """Reject OBSERVER role OAuth logins on personal (desktop/mobile) installs.
+    """Reject OBSERVER role OAuth logins on mobile (Android/iOS) installs.
 
-    Desktop and mobile installs are single-user partnership deployments.
+    Mobile installs are single-user partnership deployments on personal devices.
     Only the founding partner (setup user) should have access.
-    Observer accounts are for server deployments where multiple users
+    Observer accounts are for server/desktop deployments where multiple users
     may need read-only access to the agent.
 
+    Note: This only applies to mobile platforms where we can reliably detect
+    "personal install". Desktop and standalone servers allow OBSERVER logins.
+
     Raises:
-        HTTPException: If OBSERVER login attempted on non-managed install
+        HTTPException: If OBSERVER login attempted on mobile platform
     """
-    if user_role == UserRole.OBSERVER and not is_managed():
+    from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+    is_mobile_platform = is_android() or is_ios()
+    if user_role == UserRole.OBSERVER and is_mobile_platform:
         masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "unknown"
         logger.warning(
             f"[AUTH] Rejecting OBSERVER login on personal install: {masked_email}"

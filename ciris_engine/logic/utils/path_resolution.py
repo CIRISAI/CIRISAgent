@@ -74,6 +74,7 @@ SUPPORTED_LANGUAGE_CODES = frozenset(
     {
         "am",  # Amharic
         "ar",  # Arabic
+        "bn",  # Bengali
         "de",  # German
         "en",  # English
         "es",  # Spanish

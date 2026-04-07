@@ -114,12 +114,11 @@ pytest tests/ciris_engine/logic/utils/test_localization_completeness.py -v -k "{
 
 ## Registering New Languages
 
-**CRITICAL**: After creating translation files, you MUST register the language in these 3 locations:
+**CRITICAL**: After creating translation files, you MUST register the language in these 2 locations:
 
 | File | Purpose |
 |------|---------|
-| `localization/manifest.json` | Backend language registry |
-| `ciris_engine/data/localized/manifest.json` | Package data registry (copy of above) |
+| `localization/manifest.json` | Backend language registry (single source of truth) |
 | `mobile/shared/.../viewmodels/SetupState.kt` | Mobile UI dropdown (`SUPPORTED_LANGUAGES` list) |
 
 ### manifest.json Entry Format

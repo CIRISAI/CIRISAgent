@@ -185,33 +185,29 @@ actual class PythonRuntime : PythonRuntimeProtocol {
         fun resetServerOwnership() {
             serverStartedByThisProcess = false
         }
+
+        // Static callback storage for logcat reader to forward lines to ViewModel
+        @Volatile
+        private var _outputLineCallback: ((String) -> Unit)? = null
+
+        /**
+         * Forward a line from logcat to the output callback.
+         * Called from MainActivity's logcat reader.
+         */
+        fun forwardLogLine(line: String) {
+            _outputLineCallback?.invoke(line)
+        }
+
+        /**
+         * Set the output line callback (called by StartupViewModel).
+         */
+        fun setOutputCallback(callback: ((String) -> Unit)?) {
+            _outputLineCallback = callback
+        }
     }
 
     private var pythonInitialized = false
     private var serverStarted = false
-    private var _outputLineCallback: ((String) -> Unit)? = null
-
-    // Shared startup status poller (lazy to avoid serverUrl init order issue)
-    private val _startupPoller by lazy { StartupStatusPoller(serverUrl) { url ->
-        try {
-            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.apply {
-                requestMethod = "GET"
-                connectTimeout = 2000
-                readTimeout = 2000
-            }
-            if (connection.responseCode == 200) {
-                val body = connection.inputStream.bufferedReader().readText()
-                connection.disconnect()
-                body
-            } else {
-                connection.disconnect()
-                null
-            }
-        } catch (_: Exception) {
-            null
-        }
-    } }
 
     // Server URL - must use localhost (not 127.0.0.1) for Same-Origin Policy
     actual override val serverUrl: String = "http://localhost:8080"
@@ -236,14 +232,12 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     actual override suspend fun startServer(): Result<String> = withContext(Dispatchers.IO) {
-        // Wait for server to become healthy, polling startup-status to drive UI lights
+        // Wait for server to become healthy
+        // Service status comes from logcat reader in MainActivity, forwarded via _outputLineCallback
         repeat(120) { attempt ->
-            pollStartupStatus()
-
             val health = checkHealth()
             Log.d(TAG, "[startServer] Health check attempt $attempt: ${health.getOrNull()}")
             if (health.getOrNull() == true) {
-                pollStartupStatus() // Final poll to catch any last updates
                 Log.i(TAG, "[startServer] Server is healthy after $attempt attempts")
                 serverStarted = true
                 return@withContext Result.success(serverUrl)
@@ -320,23 +314,8 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     }
 
     override fun setOutputLineCallback(callback: ((String) -> Unit)?) {
-        _outputLineCallback = callback
-    }
-
-    /**
-     * Poll /v1/system/startup-status and emit synthetic console output lines
-     * for any newly started services since the last poll.
-     * Uses shared StartupStatusPoller for cross-platform consistency.
-     */
-    private suspend fun pollStartupStatus() {
-        val callback = _outputLineCallback ?: return
-        val result = _startupPoller.poll { line ->
-            Log.d(TAG, "[STARTUP][POLL] $line")
-            callback(line)
-        }
-        if (result != null) {
-            Log.d(TAG, "[STARTUP][POLL] services=${result.servicesOnline}/${result.servicesTotal}, apiHistory=${result.apiStatusHistory.size}")
-        }
+        // Delegate to companion object for static access from logcat reader
+        setOutputCallback(callback)
     }
 
     /**

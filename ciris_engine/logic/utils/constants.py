@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Dict, Optional
 
 from ciris_engine.logic.config.env_utils import get_env_var
 from ciris_engine.logic.utils.path_resolution import is_android, is_ios
@@ -157,10 +158,13 @@ else:
 
 
 def get_accord_text(mode: str = "default") -> str:
-    """Get ACCORD text based on mode.
+    """Get POLYGLOT ACCORD text based on mode.
 
-    This is the SINGLE function all DMAs should use to get ACCORD text.
-    Centralizes ACCORD loading logic - change here, not in 6 DMA files.
+    This function returns the POLYGLOT accord (all languages woven together).
+    Use this for PDMA, CSDMA, IDMA, DSDMA - DMAs that benefit from cross-cultural ethical depth.
+
+    For ASPDMA and TSASPDMA (action selection), use get_localized_accord_text() instead
+    to get the user's preferred language version for clearer action selection guidance.
 
     Args:
         mode: 'default' or 'full' - uses global ACCORD_MODE setting
@@ -183,6 +187,91 @@ def get_accord_text(mode: str = "default") -> str:
         return ACCORD_TEXT
     # "none" or anything else
     return ""
+
+
+# Cache for localized accord texts to avoid repeated file reads
+_LOCALIZED_ACCORD_CACHE: Dict[str, str] = {}
+
+
+def _load_localized_accord_file(lang: str) -> str:
+    """Load a language-specific accord file.
+
+    Args:
+        lang: Language code (e.g., 'am', 'ar', 'de', 'en', etc.)
+
+    Returns:
+        Accord content as string, or empty string if not found
+    """
+    filename = f"accord_1.2b_{lang}.txt"
+    try:
+        try:
+            # Python 3.9+ - preferred method
+            from importlib.resources import files
+
+            # Localized accords are in ciris_engine/data/localized/
+            content = files("ciris_engine.data.localized").joinpath(filename).read_text(encoding="utf-8")
+            logger.debug(f"[ACCORD] Loaded localized {filename}: {len(content)} chars")
+            return content
+        except (ImportError, FileNotFoundError):
+            # Try alternate path or Python 3.7-3.8 fallback
+            try:
+                from importlib.resources import read_text
+
+                content = read_text("ciris_engine.data.localized", filename, encoding="utf-8")
+                logger.debug(f"[ACCORD] Loaded localized {filename}: {len(content)} chars (legacy import)")
+                return content
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.debug(f"[ACCORD] Could not load localized {filename}: {exc}")
+    return ""
+
+
+def get_localized_accord_text(lang: Optional[str] = None) -> str:
+    """Get LOCALIZED ACCORD text for a specific language.
+
+    This function returns a single-language accord file for clearer guidance
+    in action selection DMAs (ASPDMA, TSASPDMA).
+
+    For ethical reasoning DMAs (PDMA, CSDMA, IDMA, DSDMA), use get_accord_text()
+    to get the polyglot version with cross-cultural ethical depth.
+
+    Args:
+        lang: Language code (e.g., 'am', 'ar', 'de'). If None, uses
+              get_preferred_language() from the localization module.
+
+    Returns:
+        Localized ACCORD text string, or polyglot compressed if language not found
+    """
+    # Import here to avoid circular imports
+    from ciris_engine.logic.utils.localization import get_preferred_language
+
+    if lang is None:
+        lang = get_preferred_language()
+
+    # Check cache first
+    if lang in _LOCALIZED_ACCORD_CACHE:
+        return _LOCALIZED_ACCORD_CACHE[lang]
+
+    # Try to load localized version
+    localized_text = _load_localized_accord_file(lang)
+
+    if localized_text:
+        _LOCALIZED_ACCORD_CACHE[lang] = localized_text
+        logger.info(f"[ACCORD] Using localized accord for language: {lang}")
+        return localized_text
+
+    # Fall back to English localized, then polyglot compressed
+    if lang != "en":
+        en_text = _load_localized_accord_file("en")
+        if en_text:
+            logger.info(f"[ACCORD] Language '{lang}' not found, falling back to English localized")
+            _LOCALIZED_ACCORD_CACHE[lang] = en_text
+            return en_text
+
+    # Final fallback: polyglot compressed
+    logger.info(f"[ACCORD] No localized accord for '{lang}', using polyglot compressed")
+    return ACCORD_TEXT_COMPRESSED
 
 
 NEED_MEMORY_METATHOUGHT = "need_memory_metathought"

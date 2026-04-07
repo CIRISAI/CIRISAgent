@@ -323,10 +323,19 @@ curl -X POST http://127.0.0.1:18080/v1/system/adapters/home_assistant/configure/
 
 **IMPORTANT**: When multiple Android devices are connected, always prefer the **older/lower-versioned device** for testing. This ensures compatibility with a wider range of devices.
 
-**Primary test device**: `330016f5b40463cd` (older Samsung without StrongBox - good for testing hardware security fallbacks)
+**Primary test device**: `330016f5b40463cd` (older Samsung SM-J700T without StrongBox - good for testing hardware security fallbacks)
+
+**Samsung-specific bugs on this device:**
+- `run-as` is broken ("Could not set capabilities: Operation not permitted") - use `adb backup` instead for log extraction
+- `adb install` hangs if app is running - **ALWAYS force-stop before install**
 
 ```bash
+# ALWAYS force-stop before install on Samsung (prevents adb install hang)
+~/Android/Sdk/platform-tools/adb shell am force-stop ai.ciris.mobile.debug && \
+~/Android/Sdk/platform-tools/adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
 # Install to specific device when multiple are connected
+~/Android/Sdk/platform-tools/adb -s 330016f5b40463cd shell am force-stop ai.ciris.mobile.debug && \
 ~/Android/Sdk/platform-tools/adb -s 330016f5b40463cd install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 
 # List connected devices

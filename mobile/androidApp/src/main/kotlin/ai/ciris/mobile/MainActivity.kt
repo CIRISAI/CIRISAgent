@@ -436,6 +436,10 @@ class MainActivity : ComponentActivity() {
 
                 val line = reader.readLine() ?: break
                 if (line.isNotBlank()) {
+                    // Forward raw line through callback for ViewModel processing
+                    // This enables slot-based UI tracking in StartupViewModel
+                    PythonRuntime.forwardLogLine(line)
+
                     // Check for service startup
                     servicePattern.find(line)?.let { match ->
                         val serviceNum = match.groupValues[1].toIntOrNull() ?: 0

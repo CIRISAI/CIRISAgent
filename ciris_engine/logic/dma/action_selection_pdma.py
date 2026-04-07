@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import get_accord_text
+from ciris_engine.logic.utils.constants import get_localized_accord_text
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.actions.parameters import PonderParams
@@ -200,9 +200,26 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
     def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
-        """Build accord text with thought type metadata (uses polyglot ACCORD)."""
-        accord_mode = self.get_accord_mode()
-        accord_text = get_accord_text(accord_mode)
+        """Build accord text with thought type metadata (uses LOCALIZED ACCORD for ASPDMA).
+
+        ASPDMA uses the localized accord (single language) for clearer action selection guidance.
+        Other DMAs (PDMA, CSDMA, IDMA, DSDMA) use the polyglot accord for cross-cultural depth.
+        """
+        # ASPDMA uses localized accord - extracts user language from context if available
+        lang = None
+        if processing_context:
+            system_snapshot = _get_value(processing_context, "system_snapshot")
+            if system_snapshot:
+                user_profiles = _get_value(system_snapshot, "user_profiles")
+                if user_profiles and len(user_profiles) > 0:
+                    first_profile = user_profiles[0]
+                    lang = (
+                        first_profile.get("preferred_language")
+                        if isinstance(first_profile, dict)
+                        else getattr(first_profile, "preferred_language", None)
+                    )
+
+        accord_text = get_localized_accord_text(lang)
         if not accord_text:
             return ""
 

@@ -9,6 +9,7 @@ from .constants import (  # noqa:F401
     ENGINE_OVERVIEW_TEMPLATE,
     WA_USER_IDS,
     get_accord_text,
+    get_localized_accord_text,
 )
 from .graphql_context_provider import GraphQLClient, GraphQLContextProvider  # noqa:F401
 from .location_utils import (  # noqa:F401
@@ -26,6 +27,7 @@ __all__ = [
     "ACCORD_TEXT",
     "ACCORD_TEXT_COMPRESSED",
     "get_accord_text",
+    "get_localized_accord_text",
     "ENGINE_OVERVIEW_TEMPLATE",
     "WA_USER_IDS",
     "GraphQLClient",

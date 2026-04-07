@@ -377,17 +377,24 @@ def _sign_with_verifier(message: bytes) -> tuple[Optional[bytes], Optional[Excep
         return None, e
 
 
-async def _register_self_custody_key(device_code: str, portal_url: str) -> Optional[str]:
+async def _register_self_custody_key(
+    device_code: str, portal_url: str, registration_challenge: Optional[str] = None
+) -> Optional[str]:
     """Self-Custody Key Registration (FSD-002).
 
     After device auth completes, the agent:
     1. Gets its Ed25519 PUBLIC key from CIRISVerify
-    2. Signs a registration message to prove possession
+    2. Signs the registration_challenge from Portal to prove key possession
     3. Calls Portal /api/device/register-key to register the public key
     4. Signs the activation_challenge from Portal
     5. Calls Portal /api/device/activate-key to activate
 
     The PRIVATE key NEVER leaves the agent. Portal only sees the public key.
+
+    Args:
+        device_code: Device code from Portal authorization
+        portal_url: Portal URL for API calls
+        registration_challenge: Hex-encoded challenge from Portal's /api/device/token response
 
     Returns:
         key_id on success, None on failure
@@ -396,6 +403,7 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
 
     logger.info("[SELF-CUSTODY] === KEY REGISTRATION FLOW START ===")
     logger.info("[SELF-CUSTODY] device_code=%s, portal_url=%s", device_code, portal_url)
+    logger.info("[SELF-CUSTODY] registration_challenge: %s", registration_challenge[:32] + "..." if registration_challenge else "None")
 
     # Validate portal URL (SSRF protection)
     try:
@@ -440,15 +448,25 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
     logger.info("[SELF-CUSTODY] agent_root=%s, agent_version=%s", agent_root, agent_version)
     logger.info("[SELF-CUSTODY] agent_hash=%s", agent_hash)
 
-    # Step 3: Sign a registration message to prove we control the private key
-    # Message format: "CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}"
-    logger.info("[SELF-CUSTODY] Step 3: Signing registration message...")
-    registration_message = f"CIRIS_KEY_REGISTRATION:{device_code}:{public_key_hex}".encode()
+    # Step 3: Sign the registration challenge from Portal to prove we control the private key
+    logger.info("[SELF-CUSTODY] Step 3: Signing registration challenge...")
+
+    if not registration_challenge:
+        logger.warning("[SELF-CUSTODY] No registration_challenge provided by Portal - cannot register key")
+        return None
+
+    # Convert hex challenge to bytes for signing
+    try:
+        challenge_bytes = bytes.fromhex(registration_challenge)
+        logger.info("[SELF-CUSTODY] Challenge bytes length: %d", len(challenge_bytes))
+    except ValueError as e:
+        logger.warning("[SELF-CUSTODY] Invalid registration_challenge hex: %s", e)
+        return None
 
     sign_result: List[Any] = [None, None]  # [signature, error]
 
     def _sign_registration() -> None:
-        sig, err = _sign_with_verifier(registration_message)
+        sig, err = _sign_with_verifier(challenge_bytes)
         sign_result[0] = sig
         sign_result[1] = err
 
@@ -456,9 +474,11 @@ async def _register_self_custody_key(device_code: str, portal_url: str) -> Optio
 
     registration_signature, sign_error = sign_result
     if sign_error is not None or registration_signature is None:
-        error_msg = str(sign_error) if sign_error else "Failed to sign registration"
+        error_msg = str(sign_error) if sign_error else "Failed to sign registration challenge"
         logger.warning("[SELF-CUSTODY] Registration signing failed: %s", error_msg)
         return None
+
+    logger.info("[SELF-CUSTODY] Challenge signed successfully, signature length: %d bytes", len(registration_signature))
 
     # Step 4: Call Portal /api/device/register-key
     logger.info("[SELF-CUSTODY] Step 4: Calling Portal /api/device/register-key...")

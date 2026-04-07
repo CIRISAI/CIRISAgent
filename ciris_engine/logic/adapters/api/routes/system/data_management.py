@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.audit.core import EventPayload
 
 from ...dependencies.auth import require_admin
 
@@ -204,13 +205,12 @@ async def reset_account(
         if audit_service:
             await audit_service.log_event(
                 event_type="data_management.reset_account",
-                severity="high",
-                details={
-                    "user_id": auth.user_id,
-                    "role": auth.role.value,
-                    "reason": body.reason,
-                    "signing_key_preserved": True,
-                },
+                event_data=EventPayload(
+                    action="reset_account",
+                    user_id=auth.user_id,
+                    result=f"role={auth.role.value}, reason={body.reason}, signing_key_preserved=True",
+                    service_name="data_management",
+                ),
             )
 
         # Clear data directory (preserving signing key)
@@ -291,14 +291,12 @@ async def wipe_signing_key(
         if audit_service:
             await audit_service.log_event(
                 event_type="data_management.wipe_signing_key",
-                severity="critical",
-                details={
-                    "user_id": auth.user_id,
-                    "role": auth.role.value,
-                    "reason": body.reason,
-                    "wallet_access_destroyed": True,
-                    "warning": "IRREVERSIBLE - wallet funds lost forever",
-                },
+                event_data=EventPayload(
+                    action="wipe_signing_key",
+                    user_id=auth.user_id,
+                    result=f"role={auth.role.value}, reason={body.reason}, IRREVERSIBLE - wallet funds lost forever",
+                    service_name="data_management",
+                ),
             )
 
         # Clear ALL data including signing key

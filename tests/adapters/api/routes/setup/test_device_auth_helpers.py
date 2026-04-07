@@ -197,7 +197,9 @@ class TestRegisterSelfCustodyKey:
                 "ciris_engine.logic.adapters.api.routes.setup.device_auth._get_public_key_from_verifier",
                 return_value=(None, RuntimeError("CIRISVerify not available")),
             ):
-                result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+                result = await _register_self_custody_key(
+                    "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                )
 
         assert result is None
         assert "Key registration skipped" in caplog.text
@@ -234,7 +236,9 @@ class TestRegisterSelfCustodyKey:
                     "ciris_engine.logic.adapters.api.routes.setup.device_auth._sign_with_verifier",
                     return_value=(None, RuntimeError("Signing failed")),
                 ):
-                    result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+                    result = await _register_self_custody_key(
+                        "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                    )
 
         assert result is None
         assert "Registration signing failed" in caplog.text
@@ -289,7 +293,9 @@ class TestRegisterSelfCustodyKey:
                 ):
                     with patch("httpx.AsyncClient", return_value=mock_client_cm):
                         with caplog.at_level(logging.INFO):
-                            result = await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+                            result = await _register_self_custody_key(
+                                "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                            )
 
         assert result == "test-key-id"
         assert "Key ACTIVATED" in caplog.text
@@ -350,7 +356,9 @@ class TestSelfCustodySecurityInvariants:
                     return_value=(b"s" * 64, None),  # 64-byte signature
                 ):
                     with patch("httpx.AsyncClient", return_value=mock_client_cm):
-                        await _register_self_custody_key("device-code", "https://portal.ciris.ai")
+                        await _register_self_custody_key(
+                            "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                        )
 
         # Verify no private key fields in any request
         for req in captured_requests:

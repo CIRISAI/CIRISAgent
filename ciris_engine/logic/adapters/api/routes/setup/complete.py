@@ -561,10 +561,10 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
                 f.write(f"{key}={value}\n")
 
         # User preferences (language & location)
-        if setup.preferred_language or setup.location_country or setup.timezone or setup.share_location_in_traces:
-            f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
-        if setup.preferred_language:
-            f.write(f'CIRIS_PREFERRED_LANGUAGE="{setup.preferred_language}"\n')
+        # Always write language preference (defaults to English if not set)
+        f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
+        preferred_lang = setup.preferred_language or "en"
+        f.write(f'CIRIS_PREFERRED_LANGUAGE="{preferred_lang}"\n')
         if setup.location_country:
             location_parts = [setup.location_country]
             if setup.location_region:

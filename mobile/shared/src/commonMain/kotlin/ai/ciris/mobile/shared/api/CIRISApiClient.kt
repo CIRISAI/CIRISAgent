@@ -1419,7 +1419,12 @@ class CIRISApiClient(
      */
     suspend fun pollNodeAuthStatus(deviceCode: String, portalUrl: String): NodeAuthPollResult {
         val method = "pollNodeAuthStatus"
-        logDebug(method, "Polling device auth status")
+        logInfo(method, "========== POLL START ==========")
+        logInfo(method, "deviceCode: ${deviceCode.take(16)}...")
+        logInfo(method, "portalUrl: $portalUrl")
+        logInfo(method, "baseUrl: $baseUrl")
+        val fullUrl = "$baseUrl/v1/setup/connect-node/status"
+        logInfo(method, "Full URL: $fullUrl")
 
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
@@ -1430,33 +1435,45 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/setup/connect-node/status") {
+            logInfo(method, "Making HTTP GET request...")
+            val response = client.get(fullUrl) {
                 parameter("device_code", deviceCode)
                 parameter("portal_url", portalUrl)
             }
+            logInfo(method, "HTTP response received: status=${response.status}")
 
             if (response.status != HttpStatusCode.OK) {
+                logException(method, Exception("Poll failed: HTTP ${response.status}"))
                 throw Exception("Poll failed: HTTP ${response.status}")
             }
 
-            val body = response.body<JsonObject>()
+            val bodyText = response.bodyAsText()
+            logInfo(method, "Response body (first 500 chars): ${bodyText.take(500)}")
+
+            val body = Json.parseToJsonElement(bodyText).jsonObject
             val data = body["data"] as? JsonObject
-                ?: throw Exception("Invalid response format")
+                ?: throw Exception("Invalid response format - no 'data' field")
 
             val status = (data["status"] as? JsonPrimitive)?.content ?: "error"
+            val keyId = (data["key_id"] as? JsonPrimitive)?.content
+            val error = (data["error"] as? JsonPrimitive)?.content
+            logInfo(method, "Parsed response: status=$status, keyId=$keyId, error=$error")
 
-            NodeAuthPollResult(
+            val result = NodeAuthPollResult(
                 status = status,
                 template = (data["template"] as? JsonPrimitive)?.content,
                 adapters = null, // TODO: Parse adapters list from JSON array. MVP: null.
                 orgId = (data["org_id"] as? JsonPrimitive)?.content,
                 signingKeyB64 = (data["signing_key_b64"] as? JsonPrimitive)?.content,
-                keyId = (data["key_id"] as? JsonPrimitive)?.content,
+                keyId = keyId,
                 stewardshipTier = (data["stewardship_tier"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                error = (data["error"] as? JsonPrimitive)?.content
+                error = error
             )
+            logInfo(method, "========== POLL END (returning result) ==========")
+            result
         } catch (e: Exception) {
             logException(method, e)
+            logInfo(method, "========== POLL END (exception: ${e.message}) ==========")
             throw e
         } finally {
             client.close()
@@ -5464,10 +5481,12 @@ class CIRISApiClient(
             }
 
             val apiResponse: ResetAccountApiResponse = response.body()
-            logInfo(method, "Reset result: success=${apiResponse.success}, preserved=${apiResponse.data?.signingKeyPreserved}")
+            // Note: SuccessResponse wrapper doesn't have top-level success - it's in data
+            val dataSuccess = apiResponse.data?.success ?: false
+            logInfo(method, "Reset result: success=$dataSuccess, preserved=${apiResponse.data?.signingKeyPreserved}")
 
             ResetAccountResult(
-                success = apiResponse.success ?: false,
+                success = dataSuccess,
                 message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
                 signingKeyPreserved = apiResponse.data?.signingKeyPreserved ?: true
             )
@@ -5536,10 +5555,12 @@ class CIRISApiClient(
             }
 
             val apiResponse: WipeSigningKeyApiResponse = response.body()
-            logWarn(method, "Wipe result: success=${apiResponse.success}, walletDestroyed=${apiResponse.data?.walletAccessDestroyed}")
+            // Note: SuccessResponse wrapper doesn't have top-level success - it's in data
+            val dataSuccess = apiResponse.data?.success ?: false
+            logWarn(method, "Wipe result: success=$dataSuccess, walletDestroyed=${apiResponse.data?.walletAccessDestroyed}")
 
             WipeSigningKeyResult(
-                success = apiResponse.success ?: false,
+                success = dataSuccess,
                 message = apiResponse.data?.message ?: apiResponse.message ?: "Unknown response",
                 walletAccessDestroyed = apiResponse.data?.walletAccessDestroyed ?: true
             )

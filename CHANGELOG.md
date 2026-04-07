@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.7] - 2026-04-06
+
+### Fixed
+
+- **OAuth Founding Partnership** - Consent node for OAuth users now keyed by OAuth external ID (e.g., `google:123456`) instead of WA ID, matching ConsentService lookup pattern
+- **Logout Stuck Loop** - Fixed logout getting stuck in infinite loop with resume overlay timeout
+- **iOS Restart** - Fixed iOS restart when Python runtime is dead; graceful server shutdown on iOS restart signal
+- **Mobile Factory Reset** - Wait for server restart after mobile factory reset completes
+- **Mobile Env Path** - Fixed `get_env_file_path()` returning None on mobile platforms
+- **First-Run Detection** - Improved first-run detection logging on Login screen
+- **Wallet Attestation Retry** - Handle `AttestationInProgressError` in wallet key retry loop
+- **Mypy Cleanup** - Removed unused `type:ignore[import-not-found]` from wallet providers
+
+### Changed
+
+- **Developer Docs** - Added force-stop before APK install instruction in CLAUDE.md
+
 ## [2.3.6] - 2026-04-06
 
 ### Added

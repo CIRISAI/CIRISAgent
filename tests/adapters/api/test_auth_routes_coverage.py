@@ -609,6 +609,7 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
         ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
@@ -1624,6 +1625,7 @@ class TestMarketingOptInParsing:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch(
                 "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
                 ["scout.ciris.ai"],
@@ -2111,30 +2113,33 @@ class TestNativeGoogleTokenExchange:
         native_request = NativeTokenRequest(id_token="valid-id-token", provider="google")
         mock_fastapi_request = Mock()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._verify_google_id_token") as mock_verify:
-            with patch("ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"):
-                mock_verify.return_value = {
-                    "external_id": "google-123",
-                    "email": "native@example.com",
-                    "name": "Native User",
-                    "picture": None,
-                }
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._verify_google_id_token") as mock_verify,
+            patch("ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"),
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
+        ):
+            mock_verify.return_value = {
+                "external_id": "google-123",
+                "email": "native@example.com",
+                "name": "Native User",
+                "picture": None,
+            }
 
-                mock_auth_service = Mock()
-                mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
-                mock_oauth_user = Mock()
-                mock_oauth_user.user_id = "google:google-123"
-                mock_oauth_user.role = UserRole.OBSERVER
-                mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
-                mock_auth_service.get_user = Mock(return_value=None)
-                mock_auth_service.store_api_key = Mock()
-                mock_auth_service._oauth_users = {"existing": Mock()}  # Not first user
+            mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()  # Required for role determination
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "google:google-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+            mock_auth_service._oauth_users = {"existing": Mock()}  # Not first user
 
-                response = await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
+            response = await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
 
-                assert response.user_id == "google:google-123"
-                assert response.role == "OBSERVER"
-                assert response.email == "native@example.com"
+            assert response.user_id == "google:google-123"
+            assert response.role == "OBSERVER"
+            assert response.email == "native@example.com"
 
     @pytest.mark.asyncio
     async def test_native_google_token_exchange_unsupported_provider(self):

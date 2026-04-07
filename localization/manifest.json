@@ -184,6 +184,16 @@
       "status": "draft",
       "review_status": "needs_native_review",
       "coverage": "complete"
+    },
+    "bn": {
+      "name": "Bengali",
+      "native_name": "বাংলা",
+      "iso_639_1": "bn",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
     }
   }
 }

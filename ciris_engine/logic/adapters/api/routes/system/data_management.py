@@ -142,7 +142,11 @@ def _clear_data_directory(preserve_signing_key: bool = True) -> None:
         return
 
     # Files to preserve during soft reset (signing key files)
-    preserve_patterns = {"signing_key", "agent_key", ".key"} if preserve_signing_key else set()
+    # CIRISVerify stores Ed25519 keys in platform-specific formats:
+    # - Android/iOS/macOS: {alias}.ed25519.enc (HW-encrypted)
+    # - Linux/Windows TPM: {alias}.ed25519.tpm (TPM-wrapped)
+    # - FFI fallback: agent_signing.key (matches .key pattern)
+    preserve_patterns = {"signing_key", "agent_key", ".key", ".ed25519"} if preserve_signing_key else set()
 
     for item in os.listdir(data_dir):
         item_path = os.path.join(data_dir, item)

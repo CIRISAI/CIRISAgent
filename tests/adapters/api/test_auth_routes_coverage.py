@@ -552,6 +552,7 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch(
                 "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
                 ["scout.ciris.ai"],
@@ -654,6 +655,7 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
         ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
@@ -703,6 +705,7 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch(
                 "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
                 ["scout.ciris.ai"],
@@ -1013,6 +1016,7 @@ class TestBillingIntegration:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch(
                 "ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"
             ) as mock_billing_check,
@@ -1673,6 +1677,7 @@ class TestMarketingOptInParsing:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch(
                 "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
                 ["scout.ciris.ai"],
@@ -1722,6 +1727,7 @@ class TestOAuthCallbackProviders:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_github_oauth") as mock_oauth,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
         ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
@@ -1764,6 +1770,7 @@ class TestOAuthCallbackProviders:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_discord_oauth") as mock_oauth,
+            patch("ciris_engine.logic.adapters.api.routes.auth.is_managed", return_value=True),
             patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
         ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}

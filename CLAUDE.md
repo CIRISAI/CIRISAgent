@@ -517,11 +517,14 @@ python3 -m tools.qa_runner.modules.mobile --build full_flow
 # Build debug APK
 cd mobile && ./gradlew :androidApp:assembleDebug
 
-# Install to device
-adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+# IMPORTANT: Kill the app before reinstalling (required for Python runtime to reload)
+~/Android/Sdk/platform-tools/adb shell am force-stop ai.ciris.mobile.debug
 
-# Or use ADB from Android SDK
-~/Android/Sdk/platform-tools/adb install -r ...
+# Install to device
+~/Android/Sdk/platform-tools/adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
+# Launch the app
+~/Android/Sdk/platform-tools/adb shell am start -n ai.ciris.mobile.debug/ai.ciris.mobile.MainActivity
 ```
 
 ### Desktop UI Test Mode

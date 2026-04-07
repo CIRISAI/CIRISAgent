@@ -1314,8 +1314,9 @@ fun CIRISApp(
                             onLogoutClick = {
                                 PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
                                 settingsViewModel.logout {
-                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
-                                    currentScreen = Screen.Startup
+                                    PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                                    currentAccessToken = null
+                                    currentScreen = Screen.Login
                                 }
                             },
                             darkMode = isDarkMode,
@@ -1381,8 +1382,9 @@ fun CIRISApp(
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
                         settingsViewModel.logout {
-                            PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Startup")
-                            currentScreen = Screen.Startup
+                            PlatformLogger.i("CIRISApp", "[onLogout] Logout complete, navigating to Login")
+                            currentAccessToken = null
+                            currentScreen = Screen.Login
                         }
                     },
                     onResetSetup = {

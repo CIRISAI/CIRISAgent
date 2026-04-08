@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-04-07
+
+### Added
+
+- **Bengali Localization** - Full Bengali (bn) language support across all localization files and backend validation
+- **Language Coverage Analysis** - New `localization/CLAUDE.md` with expansion roadmap and coverage analysis
+- **Localization Manifest** - Enhanced `localization/manifest.json` with per-language metadata (speaker counts, regions, script info)
+
+### Fixed
+
+- **Observer Login Scope** - Changed observer login blocking to only apply on mobile platforms (Android/iOS), allowing OBSERVER OAuth logins on standalone API servers where read-only access is valid
+- **HA Adapter Wizard** - Fixed 401 error during first-time Home Assistant adapter setup by checking session auth before requiring token
+
+### Changed
+
+- **Build-Time Secrets Documentation** - Added guidance in CLAUDE.md about `# type: ignore[import-not-found]` comments for generated files
+
 ## [2.3.7] - 2026-04-06
 
 ### Fixed

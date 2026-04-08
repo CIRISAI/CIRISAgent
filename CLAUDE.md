@@ -190,6 +190,18 @@ grep -r "class.*YourThingHere" --include="*.py"
    - Minimal Dict[str, Any] usage remaining, none in critical code paths
    - Run mypy as part of CI/CD pipeline
 
+7. **Build-Time Generated Files**
+   - Some files are generated at build time and not present in the repo/CI
+   - These require `# type: ignore[import-not-found]` comments
+   - **DO NOT REMOVE** these comments even if mypy reports "unused-ignore" locally
+   - Examples:
+     - `ciris_adapters/wallet/providers/_build_secrets.py` - Contains API keys/URLs injected at build time
+   - Always add a comment explaining why the ignore is needed:
+     ```python
+     # _build_secrets is generated at build time, not present in CI/repo
+     from ._build_secrets import get_api_key  # type: ignore[import-not-found]
+     ```
+
 ## CRITICAL: OAuth Callback URL Format
 
 **PRODUCTION OAuth CALLBACK URL - DO NOT FORGET:**

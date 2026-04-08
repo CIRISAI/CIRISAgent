@@ -193,12 +193,11 @@
       "added": "2026-04-07",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "partial",
-      "coverage_detail": "localization JSON only; missing ACCORD, comprehensive guide, DMA prompts, and glossary"
+      "coverage": "complete"
     }
   },
   "coverage_analysis": {
-    "updated": "2026-04-07",
+    "updated": "2026-04-08",
     "world_population_M": 8100,
     "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
     "current_coverage": {

@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "کون سا متبادل طریقہ میرے اصولوں سے بہتر طریقے سے مطابقت رکھے گا؟",
         "ponder_forced_retry": "ضمیر کی دوبارہ کوشش کے بعد زبردستی غور",
         "override_rationale": "{conscience_name} کے ذریعے نقل: {action} پر دوبارہ غور کرنے کی ضرورت ہے",
-        "forced_ponder_rationale": "لوپ سے بچنے کے لیے ضمیر کی دوبارہ کوشش کے بعد زبردستی غور"
+        "forced_ponder_rationale": "لوپ سے بچنے کے لیے ضمیر کی دوبارہ کوشش کے بعد زبردستی غور",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "اس شراکت داری کے بارے میں",
     "consent_about_title": "شراکت داری کے بارے میں",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Paymaster Key ترتیب دیں",
         "wallet_paymaster_hint": "گیس کے بغیر USDC منتقلی فعال کرنے کے لیے اپنی Etherspot Arka API key درج کریں",
         "wallet_paymaster_key_label": "Arka API Key",
-        "wallet_paymaster_save": "Key محفوظ کریں"
+        "wallet_paymaster_save": "Key محفوظ کریں",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "[EN] Please select a mode",
     "setup_validation_username_required": "[EN] Username is required",
     "startup": {
-        "startup_retry": "[EN] Retry"
+        "startup_retry": "[EN] Retry",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "انجام دی جا رہی ہے...",
@@ -1775,7 +1789,10 @@
     "status_pending": "[EN] Pending",
     "system": {
         "system_cognitive_state": "[EN] Cognitive State",
-        "system_queue_depth": "[EN] Queue Depth"
+        "system_queue_depth": "[EN] Queue Depth",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "[EN] Task ID",
     "telemetry_online": "[EN] Online",

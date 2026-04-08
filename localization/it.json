@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "Quale approccio alternativo si allineerebbe meglio con i miei principi?",
         "ponder_forced_retry": "PONDER forzato dopo nuovo tentativo di coscienza",
         "override_rationale": "Sovrascritto da {conscience_name}: Necessita riconsiderare {action}",
-        "forced_ponder_rationale": "PONDER forzato dopo nuovo tentativo di coscienza per prevenire loop"
+        "forced_ponder_rationale": "PONDER forzato dopo nuovo tentativo di coscienza per prevenire loop",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Autorizza l'accesso ai tuoi dati tra servizi e gestisci le relazioni di fiducia",
     "consent_about_title": "Informazioni sul Consenso",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Configura Chiave Paymaster",
         "wallet_paymaster_hint": "Inserisci la tua chiave API Etherspot Arka per abilitare i trasferimenti USDC senza gas",
         "wallet_paymaster_key_label": "Chiave API Arka",
-        "wallet_paymaster_save": "Salva Chiave"
+        "wallet_paymaster_save": "Salva Chiave",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "Seleziona una modalità",
     "setup_validation_username_required": "Il nome utente è richiesto",
     "startup": {
-        "startup_retry": "[EN] Retry"
+        "startup_retry": "[EN] Retry",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "In esecuzione...",
@@ -1775,7 +1789,10 @@
     "status_pending": "In Attesa",
     "system": {
         "system_cognitive_state": "[EN] Cognitive State",
-        "system_queue_depth": "[EN] Queue Depth"
+        "system_queue_depth": "[EN] Queue Depth",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "[EN] Task ID",
     "telemetry_online": "Online",

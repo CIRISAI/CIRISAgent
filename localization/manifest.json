@@ -194,6 +194,39 @@
       "status": "draft",
       "review_status": "needs_native_review",
       "coverage": "complete"
+    },
+    "fa": {
+      "name": "Persian",
+      "native_name": "فارسی",
+      "iso_639_1": "fa",
+      "direction": "rtl",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "ha": {
+      "name": "Hausa",
+      "native_name": "هَوُسَ",
+      "iso_639_1": "ha",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "id": {
+      "name": "Indonesian",
+      "native_name": "Bahasa Indonesia",
+      "iso_639_1": "id",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
     }
   },
   "coverage_analysis": {
@@ -201,7 +234,7 @@
     "world_population_M": 8100,
     "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
     "current_coverage": {
-      "languages_count": 17,
+      "languages_count": 20,
       "raw_speaker_sum_M": 5997,
       "deduplicated_unique_people_M": 4900,
       "gross_coverage_pct": 60.5,

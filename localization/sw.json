@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "Ni mbinu gani mbadala ingeendana vizuri zaidi na kanuni zangu?",
         "ponder_forced_retry": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri",
         "override_rationale": "Imebatilishwa na {conscience_name}: Inahitaji kufikiria tena {action}",
-        "forced_ponder_rationale": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri ili kuzuia mizunguko"
+        "forced_ponder_rationale": "PONDER ya kulazimishwa baada ya kujaribu tena kwa dhamiri ili kuzuia mizunguko",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Jifunze jinsi idhini inavyofanya kazi katika CIRIS",
     "consent_about_title": "Kuhusu Idhini",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Sanidi Paymaster Key",
         "wallet_paymaster_hint": "Ingiza Etherspot Arka API key yako ili kuwezesha uhamishaji wa USDC bila gesi",
         "wallet_paymaster_key_label": "Arka API Key",
-        "wallet_paymaster_save": "Hifadhi Key"
+        "wallet_paymaster_save": "Hifadhi Key",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "Tafadhali chagua hali",
     "setup_validation_username_required": "Jina la mtumiaji linahitajika",
     "startup": {
-        "startup_retry": "Jaribu Tena Kuanzisha"
+        "startup_retry": "Jaribu Tena Kuanzisha",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "Inatekelezwa...",
@@ -1775,7 +1789,10 @@
     "status_pending": "Inasubiri",
     "system": {
         "system_cognitive_state": "Hali ya Kiakili",
-        "system_queue_depth": "Kina cha Foleni"
+        "system_queue_depth": "Kina cha Foleni",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "Kitambulisho cha Kazi",
     "telemetry_online": "Mtandaoni",

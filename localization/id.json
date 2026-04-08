@@ -1,7 +1,7 @@
 {
     "_meta": {
-        "language": "en",
-        "language_name": "English",
+        "language": "id",
+        "language_name": "Indonesian",
         "direction": "ltr"
     },
     "setup": {
@@ -499,8 +499,6 @@
         "interact_viz_select": "Choose action",
         "interact_viz_ethics": "Ethics check",
         "interact_viz_act": "Execute action",
-        "interact_viz_execute": "Execute",
-        "interact_viz_complete": "Complete",
         "interact_viz_memory": "Memory Graph",
         "interact_viz_local": "Local scope",
         "interact_viz_identity": "Identity scope",
@@ -1509,7 +1507,7 @@
         "tickets_status_failed": "Failed",
         "tickets_status_pending": "Pending",
         "tickets_status_progress": "In Progress",
-"login_error_invalid_credentials": "Invalid username or password. Please try again.",
+        "login_error_invalid_credentials": "Invalid username or password. Please try again.",
         "login_error_connection": "Cannot connect to server. Please check your connection.",
         "skill_workshop": "Skill Workshop",
         "skill_workshop_desc": "Create, import, and manage skills for your agent.",
@@ -1645,7 +1643,9 @@
         "skill_security_layer_2": "Dangerous skills are blocked automatically",
         "skill_security_layer_3": "Imported skills always ask permission before acting",
         "skill_security_layer_4": "Every action is reviewed by the agent's conscience",
-        "skill_security_layer_5": "Every action is signed and recorded for your safety"
+        "skill_security_layer_5": "Every action is signed and recorded for your safety",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

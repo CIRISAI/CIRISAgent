@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "¿Qué enfoque alternativo se alinearía mejor con mis principios?",
         "ponder_forced_retry": "PONDER forzado después de reintento de conciencia",
         "override_rationale": "Anulado por {conscience_name}: Necesito reconsiderar {action}",
-        "forced_ponder_rationale": "PONDER forzado después de reintento de conciencia para prevenir bucles"
+        "forced_ponder_rationale": "PONDER forzado después de reintento de conciencia para prevenir bucles",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Los streams de consentimiento te permiten controlar cómo CIRIS usa tus datos para ayudar a otros.",
     "consent_about_title": "Acerca de los streams de consentimiento",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Configurar Clave Paymaster",
         "wallet_paymaster_hint": "Ingrese su clave API de Etherspot Arka para habilitar transferencias USDC sin gas",
         "wallet_paymaster_key_label": "Clave API Arka",
-        "wallet_paymaster_save": "Guardar Clave"
+        "wallet_paymaster_save": "Guardar Clave",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "Por favor selecciona un modo",
     "setup_validation_username_required": "Se requiere nombre de usuario",
     "startup": {
-        "startup_retry": "Reintentar"
+        "startup_retry": "Reintentar",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "all_operational": "Todos los sistemas operativos",
@@ -1775,7 +1789,10 @@
     "status_pending": "Pendiente",
     "system": {
         "system_cognitive_state": "Estado cognitivo",
-        "system_queue_depth": "Profundidad de cola"
+        "system_queue_depth": "Profundidad de cola",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "ID de tarea",
     "telemetry_online": "En línea",

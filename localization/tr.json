@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "Hangi alternatif yaklaşım ilkelerimle daha iyi uyumlu olurdu?",
         "ponder_forced_retry": "Vicdan yeniden denemeden sonra zorla PONDER",
         "override_rationale": "{conscience_name} tarafından geçersiz kılındı: {action} yeniden değerlendirilmeli",
-        "forced_ponder_rationale": "Döngüleri önlemek için vicdan yeniden denemeden sonra zorla PONDER"
+        "forced_ponder_rationale": "Döngüleri önlemek için vicdan yeniden denemeden sonra zorla PONDER",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Bu akışın amacı ve nasıl yardımcı olduğu hakkında bilgi edinin",
     "consent_about_title": "Bu akış hakkında",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Paymaster Key'i Yapılandır",
         "wallet_paymaster_hint": "Gazsız USDC transferlerini etkinleştirmek için Etherspot Arka API anahtarınızı girin",
         "wallet_paymaster_key_label": "Arka API Anahtarı",
-        "wallet_paymaster_save": "Anahtarı Kaydet"
+        "wallet_paymaster_save": "Anahtarı Kaydet",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "Lütfen bir mod seçin",
     "setup_validation_username_required": "Kullanıcı adı gerekli",
     "startup": {
-        "startup_retry": "Tekrar Dene"
+        "startup_retry": "Tekrar Dene",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "Yürütülüyor...",
@@ -1775,7 +1789,10 @@
     "status_pending": "Beklemede",
     "system": {
         "system_cognitive_state": "Bilişsel Durum",
-        "system_queue_depth": "Kuyruk Derinliği"
+        "system_queue_depth": "Kuyruk Derinliği",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "Görev ID",
     "telemetry_online": "Çevrimiçi",

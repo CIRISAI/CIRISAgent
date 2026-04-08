@@ -25,6 +25,8 @@ from .prohibitions import (
     get_prohibition_severity,
 )
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
@@ -405,25 +407,36 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"SECURITY ALERT: Accord invocation handler error: {e}", exc_info=True)
             return False
 
-    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
+    def _validate_capability(
+        self, capability: Optional[str], agent_tier: int = 1
+    ) -> Optional[DomainDeferralRequired]:
         """
         Validate capability against prohibited domains with tier-based access.
+
+        For REQUIRES_SEPARATE_MODULE capabilities (MEDICAL, FINANCIAL, etc.),
+        returns a DomainDeferralRequired signal instead of raising. The caller
+        auto-constructs a DeferralContext with domain_hint and routes through
+        CIRISNode to a qualified licensed agent.
 
         Args:
             capability: The capability to validate
             agent_tier: Agent tier level (1-5, with 4-5 having stewardship)
 
+        Returns:
+            DomainDeferralRequired if the capability needs domain-specific routing,
+            None if the capability is allowed.
+
         Raises:
-            ValueError: If capability is prohibited for the agent's tier
+            ValueError: If capability is NEVER_ALLOWED or TIER_RESTRICTED
         """
         if not capability:
-            return
+            return None
 
         # Get the category of this capability
         category = get_capability_category(capability)
         if not category:
             # Not a prohibited capability
-            return
+            return None
 
         # Check if it's a community moderation capability
         if category.startswith("COMMUNITY_"):
@@ -435,17 +448,29 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     f"This capability is reserved for agents with stewardship responsibilities."
                 )
             # Tier 4-5 can use community moderation
-            return
+            return None
 
         # Get the severity of this prohibition
         severity = get_prohibition_severity(category)
 
         if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
-            # These require separate licensed systems
-            raise ValueError(
-                f"PROHIBITED: {category} capabilities blocked. "
-                f"Capability '{capability}' requires separate licensed system. "
-                f"Implementation must be in isolated repository with proper liability controls."
+            # Route to licensed handler via CIRISNode instead of raising
+            try:
+                domain = DomainCategory(category)
+            except ValueError:
+                domain = DomainCategory.MEDICAL  # Safe fallback
+
+            logger.info(
+                f"Domain deferral required: {category} capability '{capability}' "
+                f"will be routed to licensed handler via CIRISNode"
+            )
+            return DomainDeferralRequired(
+                category=domain,
+                capability=capability,
+                reason=(
+                    f"{category} capability '{capability}' requires licensed domain handler. "
+                    f"Routing to qualified agent via CIRISNode."
+                ),
             )
         elif severity == ProhibitionSeverity.NEVER_ALLOWED:
             # These are absolutely prohibited
@@ -455,6 +480,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 f"This capability cannot be implemented in any CIRIS system."
             )
         # TIER_RESTRICTED already handled above for community moderation
+        return None
 
     async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
         """Get services matching the request capability."""
@@ -555,7 +581,30 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # CRITICAL: Validate capability against comprehensive prohibitions
         if hasattr(request, "capability"):
-            self._validate_capability(request.capability, agent_tier)
+            deferral_signal = self._validate_capability(request.capability, agent_tier)
+            if deferral_signal is not None:
+                # Route to licensed domain handler via CIRISNode auto-deferral
+                deferral_context = DeferralContext(
+                    thought_id=f"domain_deferral_{id(request)}",
+                    task_id=f"domain_task_{id(request)}",
+                    reason=deferral_signal.reason,
+                    domain_hint=deferral_signal.category.value,
+                    metadata={
+                        "domain_category": deferral_signal.category.value,
+                        "capability": deferral_signal.capability,
+                        "domain_hint": deferral_signal.category.value,
+                    },
+                )
+                success = await self.send_deferral(deferral_context, "domain_auto_deferral")
+                return GuidanceResponse(
+                    reasoning=deferral_signal.reason,
+                    wa_id="wisebus_domain_deferral",
+                    signature="domain_auto_deferral",
+                    custom_guidance=(
+                        f"This request requires a licensed {deferral_signal.category.value} handler. "
+                        f"{'Deferral sent to CIRISNode for routing.' if success else 'No WA service available for routing.'}"
+                    ),
+                )
 
         # Get matching services
         services = await self._get_matching_services(request)

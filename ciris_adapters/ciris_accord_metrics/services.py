@@ -394,6 +394,12 @@ class AccordMetricsService:
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
+        # Commons Credits trace events (bilateral verified interactions)
+        "DEFERRAL_ROUTED": "deferral_routed",
+        "DEFERRAL_RECEIVED": "deferral_received",
+        "DEFERRAL_RESOLVED": "deferral_resolved",
+        "GRATITUDE_SIGNALED": "gratitude_signaled",
+        "CREDIT_GENERATED": "credit_generated",
     }
 
     def __init__(

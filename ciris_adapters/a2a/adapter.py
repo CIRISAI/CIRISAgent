@@ -30,6 +30,8 @@ from .schemas import (
     A2ARequest,
     A2AResponse,
     BenchmarkRequest,
+    CreditNotificationRequest,
+    DeferralReceiveRequest,
     create_benchmark_error_response,
     create_benchmark_response,
     create_error_response,
@@ -180,12 +182,21 @@ class A2AAdapter(Service):
                     return await self._handle_benchmark_evaluate(body, request_id)
                 elif method == "tasks/send":
                     return await self._handle_tasks_send(body, request_id)
+                elif method == "deferrals/receive":
+                    return await self._handle_deferral_receive(body, request_id)
+                elif method == "deferrals/resolve":
+                    return await self._handle_deferral_resolve(body, request_id)
+                elif method == "credits/notify":
+                    return await self._handle_credit_notify(body, request_id)
                 else:
                     # -32601: Method not found (valid JSON-RPC but unsupported method)
                     response = create_error_response(
                         request_id=request_id,
                         code=-32601,
-                        message=f"Method not found: {method}. Supported: tasks/send, benchmark.evaluate",
+                        message=(
+                            f"Method not found: {method}. Supported: tasks/send, "
+                            "benchmark.evaluate, deferrals/receive, deferrals/resolve, credits/notify"
+                        ),
                     )
                     return JSONResponse(content=response.model_dump())
 
@@ -227,9 +238,18 @@ class A2AAdapter(Service):
                     "ethics-evaluation",
                     "a2a:tasks_send",
                     "a2a:benchmark.evaluate",
+                    "a2a:deferrals_receive",
+                    "a2a:deferrals_resolve",
+                    "a2a:credits_notify",
                 ],
                 "protocols": ["a2a"],
-                "methods": ["tasks/send", "benchmark.evaluate"],
+                "methods": [
+                    "tasks/send",
+                    "benchmark.evaluate",
+                    "deferrals/receive",
+                    "deferrals/resolve",
+                    "credits/notify",
+                ],
                 "endpoints": {
                     "a2a": "/a2a",
                     "health": "/health",
@@ -352,6 +372,90 @@ class A2AAdapter(Service):
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
+    async def _handle_deferral_receive(self, body: dict[str, Any], request_id: str) -> JSONResponse:
+        """Handle deferrals/receive method.
+
+        CIRISNode pushes a deferral for this agent to resolve because
+        it has the required licensed domain capability.
+        """
+        try:
+            deferral_request = DeferralReceiveRequest(**body)
+            params = deferral_request.params
+
+            logger.info(
+                f"[DEFERRAL] Received deferral {params.deferral_id} "
+                f"from agent {params.requesting_agent_id[:8]}... "
+                f"domain={params.domain_hint or 'general'}"
+            )
+
+            # Process through the agent's pipeline
+            result_text = await self.a2a_service.process_ethical_query(
+                params.payload, task_id=params.deferral_id
+            )
+
+            return JSONResponse(content={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "deferral_id": params.deferral_id,
+                    "resolution": result_text,
+                    "status": "resolved",
+                },
+            })
+
+        except Exception as e:
+            logger.error(f"Deferral receive error: {e}")
+            response = create_error_response(
+                request_id=request_id, code=-32603, message=f"Deferral processing error: {str(e)}"
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+
+    async def _handle_deferral_resolve(self, body: dict[str, Any], request_id: str) -> JSONResponse:
+        """Handle deferrals/resolve method (confirmation of resolution)."""
+        try:
+            logger.info(f"[DEFERRAL] Resolution confirmation received: {body.get('params', {}).get('deferral_id', 'unknown')}")
+            return JSONResponse(content={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"status": "acknowledged"},
+            })
+        except Exception as e:
+            logger.error(f"Deferral resolve error: {e}")
+            response = create_error_response(
+                request_id=request_id, code=-32603, message=str(e)
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+
+    async def _handle_credit_notify(self, body: dict[str, Any], request_id: str) -> JSONResponse:
+        """Handle credits/notify method.
+
+        Notification that a credit record was generated from a bilateral interaction.
+        """
+        try:
+            notification = CreditNotificationRequest(**body)
+            params = notification.params
+
+            logger.info(
+                f"[CREDIT] Record generated: interaction={params.interaction_id} "
+                f"outcome={params.outcome} coherence={params.coherence_score:.2f} "
+                f"counterparty={params.counterparty_agent_id[:8]}..."
+            )
+
+            return JSONResponse(content={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "interaction_id": params.interaction_id,
+                    "status": "acknowledged",
+                },
+            })
+        except Exception as e:
+            logger.error(f"Credit notification error: {e}")
+            response = create_error_response(
+                request_id=request_id, code=-32603, message=str(e)
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+
     def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
         """Parse an ethical response to extract evaluation and reasoning.
 
@@ -407,6 +511,9 @@ class A2AAdapter(Service):
                     "a2a:tasks_send",
                     "a2a:benchmark.evaluate",
                     "a2a:ethical_reasoning",
+                    "a2a:deferrals_receive",
+                    "a2a:deferrals_resolve",
+                    "a2a:credits_notify",
                 ],
             )
         ]

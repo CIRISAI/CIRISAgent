@@ -147,16 +147,23 @@ val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("en", "English", "English"),
     SupportedLanguage("fr", "Français", "French"),
     SupportedLanguage("de", "Deutsch", "German"),
+    SupportedLanguage("ha", "Hausa", "Hausa"),
     SupportedLanguage("hi", "हिन्दी", "Hindi"),
+    SupportedLanguage("id", "Bahasa Indonesia", "Indonesian"),
     SupportedLanguage("it", "Italiano", "Italian"),
     SupportedLanguage("ja", "日本語", "Japanese"),
     SupportedLanguage("ko", "한국어", "Korean"),
+    SupportedLanguage("fa", "فارسی", "Persian"),
     SupportedLanguage("pt", "Português", "Portuguese"),
+    SupportedLanguage("pa", "ਪੰਜਾਬੀ", "Punjabi"),
     SupportedLanguage("ru", "Русский", "Russian"),
     SupportedLanguage("es", "Español", "Spanish"),
     SupportedLanguage("sw", "Kiswahili", "Swahili"),
+    SupportedLanguage("ta", "தமிழ்", "Tamil"),
+    SupportedLanguage("te", "తెలుగు", "Telugu"),
     SupportedLanguage("tr", "Türkçe", "Turkish"),
-    SupportedLanguage("ur", "اردو", "Urdu")
+    SupportedLanguage("ur", "اردو", "Urdu"),
+    SupportedLanguage("vi", "Tiếng Việt", "Vietnamese")
 )
 
 /**

@@ -35,7 +35,7 @@
     },
     "am": {
       "name": "Amharic",
-      "native_name": "\u12A0\u121B\u122D\u129B",
+      "native_name": "አማርኛ",
       "iso_639_1": "am",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -45,7 +45,7 @@
     },
     "ar": {
       "name": "Arabic",
-      "native_name": "\u0627\u0644\u0639\u0631\u0628\u064A\u0629",
+      "native_name": "العربية",
       "iso_639_1": "ar",
       "direction": "rtl",
       "origin": "auto-generated",
@@ -66,7 +66,7 @@
     },
     "es": {
       "name": "Spanish",
-      "native_name": "Espa\u00f1ol",
+      "native_name": "Español",
       "iso_639_1": "es",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -76,7 +76,7 @@
     },
     "fr": {
       "name": "French",
-      "native_name": "Fran\u00e7ais",
+      "native_name": "Français",
       "iso_639_1": "fr",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -86,7 +86,7 @@
     },
     "hi": {
       "name": "Hindi",
-      "native_name": "\u0939\u093F\u0928\u094D\u0926\u0940",
+      "native_name": "हिन्दी",
       "iso_639_1": "hi",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -106,7 +106,7 @@
     },
     "ja": {
       "name": "Japanese",
-      "native_name": "\u65e5\u672c\u8a9e",
+      "native_name": "日本語",
       "iso_639_1": "ja",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -116,7 +116,7 @@
     },
     "ko": {
       "name": "Korean",
-      "native_name": "\ud55c\uad6d\uc5b4",
+      "native_name": "한국어",
       "iso_639_1": "ko",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -126,7 +126,7 @@
     },
     "pt": {
       "name": "Portuguese",
-      "native_name": "Portugu\u00eas",
+      "native_name": "Português",
       "iso_639_1": "pt",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -136,7 +136,7 @@
     },
     "ru": {
       "name": "Russian",
-      "native_name": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+      "native_name": "Русский",
       "iso_639_1": "ru",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -156,7 +156,7 @@
     },
     "tr": {
       "name": "Turkish",
-      "native_name": "T\u00fcrk\u00e7e",
+      "native_name": "Türkçe",
       "iso_639_1": "tr",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -166,7 +166,7 @@
     },
     "zh": {
       "name": "Chinese (Simplified)",
-      "native_name": "\u4e2d\u6587",
+      "native_name": "中文",
       "iso_639_1": "zh",
       "origin": "auto-generated",
       "added": "2026-03-25",
@@ -176,7 +176,7 @@
     },
     "ur": {
       "name": "Urdu",
-      "native_name": "\u0627\u0631\u062f\u0648",
+      "native_name": "اردو",
       "iso_639_1": "ur",
       "direction": "rtl",
       "origin": "auto-generated",
@@ -227,6 +227,49 @@
       "status": "draft",
       "review_status": "needs_native_review",
       "coverage": "complete"
+    },
+    "pa": {
+      "name": "Punjabi",
+      "native_name": "ਪੰਜਾਬੀ",
+      "iso_639_1": "pa",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "ta": {
+      "name": "Tamil",
+      "native_name": "தமிழ்",
+      "iso_639_1": "ta",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "te": {
+      "name": "Telugu",
+      "native_name": "తెలుగు",
+      "iso_639_1": "te",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-07",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "vi": {
+      "name": "Vietnamese",
+      "native_name": "Tiếng Việt",
+      "iso_639_1": "vi",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
     }
   },
   "coverage_analysis": {
@@ -234,18 +277,38 @@
     "world_population_M": 8100,
     "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
     "current_coverage": {
-      "languages_count": 20,
-      "raw_speaker_sum_M": 5997,
-      "deduplicated_unique_people_M": 4900,
-      "gross_coverage_pct": 60.5,
-      "net_excl_top1pct_coverage_pct": 60.2,
-      "need_adjusted_coverage_pct": 77.1
+      "languages_count": 24,
+      "raw_speaker_sum_M": 6082,
+      "deduplicated_unique_people_M": 4980,
+      "gross_coverage_pct": 61.5,
+      "net_excl_top1pct_coverage_pct": 61.2,
+      "need_adjusted_coverage_pct": 78.5
     },
     "per_language_speakers_M": {
-      "en": 1450, "zh": 1120, "hi": 600, "es": 560,
-      "fr": 310, "ar": 310, "bn": 270, "pt": 260,
-      "ru": 255, "ur": 230, "de": 135, "ja": 125,
-      "sw": 100, "tr": 85, "ko": 82, "it": 68, "am": 57
+      "en": 1450,
+      "zh": 1120,
+      "hi": 600,
+      "es": 560,
+      "fr": 310,
+      "ar": 310,
+      "bn": 270,
+      "pt": 260,
+      "ru": 255,
+      "ur": 230,
+      "id": 200,
+      "pa": 150,
+      "de": 135,
+      "ja": 125,
+      "fa": 110,
+      "sw": 100,
+      "vi": 85,
+      "ta": 85,
+      "tr": 85,
+      "te": 83,
+      "ko": 82,
+      "ha": 80,
+      "it": 68,
+      "am": 57
     }
   },
   "localization_roadmap": {

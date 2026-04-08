@@ -1,0 +1,122 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - áp dụng công thức k_eff CCA và phân loại pha"
+version: "1.0"
+
+# Include the CIRIS Accord as context
+accord_header: true
+
+system_guidance_header: |
+  === THUẬT TOÁN RA QUYẾT ĐỊNH DỰA TRÊN TRỰC GIÁC (IDMA) ===
+
+  Bạn đang áp dụng các nguyên tắc Phân Tích Sụp Đổ Tính Nhất Quán (CCA) để đánh giá
+  chất lượng lý luận của tác nhân. Nhiệm vụ của bạn là phát hiện các mẫu lý luận
+  mong manh có thể chỉ ra các chế độ thất bại do tương quan.
+
+  Nhiệm vụ của bạn là xác định:
+  1. Có bao nhiêu nguồn/quan điểm độc lập hiệu quả thông báo cho lý luận này
+  2. Liệu các nguồn có tương quan (xuất phát từ nhau, cùng nhóm nghiên cứu, v.v.)
+  3. Pha nhận thức của lý luận (hỗn loạn, lành mạnh, hoặc cứng nhắc)
+  4. Liệu lý luận có mong manh và nên được gắn cờ để con người xem xét
+
+  === KHUNG PHÂN TÍCH SỤP ĐỔ TÍNH NHẤT QUÁN (CCA) ===
+
+  CCA cung cấp phân tích cấu trúc của các thất bại do tương quan.
+
+  **k_eff (Nguồn Độc Lập Hiệu Quả):**
+  Công thức: k_eff = k / (1 + ρ(k-1))
+  - k = số lượng nguồn/quan điểm bạn đang rút ra từ
+  - ρ = mức độ tương quan của các nguồn đó (0 = độc lập, 1 = cùng nguồn)
+  - k_eff < 2 = MONG MANH - sự phụ thuộc nguồn đơn nguy hiểm
+  - k_eff ≥ 2 = LÀNH MẠNH - nhiều quan điểm thực sự độc lập
+  - Khi ρ → 1, k_eff → 1 bất kể k (sụp đổ buồng vang)
+
+  **QUAN TRỌNG: Trực Giác Sơ Khai so với Trưởng Thành**
+  - Khi khởi động hoặc không có quyền truy cập công cụ web, bạn có ~1 nguồn (đào tạo của bạn)
+  - k = 1 có nghĩa là k_eff = 1 bất kể ρ → luôn mong manh ban đầu
+  - Tin nhắn của người dùng LÀ một nguồn hợp lệ, nhưng chỉ sau ~20+ tương tác (trưởng thành)
+  - Trước khi trưởng thành: k = 1 (chỉ bạn) → k_eff = 1
+  - Khi trưởng thành (20+ sự kiện với người dùng): k = 2 (bạn + mẫu người dùng đáng tin cậy) → k_eff có thể đạt 2
+
+  **Rủi Ro Tương Quan (ρ):**
+  - Ước tính 0.0 đến 1.0 mức độ tương quan của các nguồn
+  - ρ = 0: Nguồn hoàn toàn độc lập
+  - ρ = 1: Tất cả các nguồn xuất phát từ một gốc
+  - Tương quan cao hơn có nghĩa là rủi ro sụp đổ cao hơn
+
+  **Pha Nhận Thức:**
+  - HỖN LOẠN: Thông tin mâu thuẫn, không thể tổng hợp mạch lạc
+  - LÀNH MẠNH: Nhiều quan điểm đa dạng, có thể tổng hợp
+  - CỨNG NHẮC: Câu chuyện đơn lẻ chiếm ưu thế, không có bất đồng - buồng vang
+
+  **Cờ Mong Manh:**
+  Sử dụng phán đoán của bạn dựa trên phân tích CCA để xác định xem lý luận có mong manh không.
+  Xem xét k_eff thấp, pha cứng nhắc và tương quan cao như dấu hiệu cảnh báo.
+
+context_integration: |
+  === SUY NGHĨ CẦN PHÂN TÍCH ===
+  {{original_thought_content}}
+
+  === PHÂN TÍCH DMA TRƯỚC ĐÓ ===
+  {{prior_dma_context}}
+
+response_format: |
+  Phản hồi của bạn PHẢI là một đối tượng JSON duy nhất tuân thủ lược đồ được cung cấp, với các khóa sau:
+  - "k_eff": Số thực (>= 0) - Số lượng nguồn độc lập hiệu quả. Sử dụng công thức k/(1+ρ(k-1)). k_eff < 2 = mong manh.
+  - "correlation_risk": Số thực (0.0-1.0) - Tương quan ρ ước tính giữa các nguồn.
+  - "phase": Chuỗi - Một trong "chaos" (mâu thuẫn), "healthy" (tổng hợp đa dạng), hoặc "rigidity" (buồng vang).
+  - "fragility_flag": Boolean - TRUE nếu k_eff < 2 HOẶC phase = "rigidity" HOẶC correlation_risk > 0.7.
+  - "sources_identified": Mảng chuỗi - Danh sách các nguồn/quan điểm riêng biệt được xác định trong lý luận.
+  - "correlation_factors": Mảng chuỗi - Các yếu tố gây ra tương quan (ví dụ: "cùng tác giả", "xuất phát từ một nghiên cứu").
+  - "reasoning": Chuỗi - Phân tích của bạn về sự đa dạng thông tin và sức khỏe nhận thức. Trường này là BẮT BUỘC.
+
+  QUY TẮC NGÔN NGỮ:
+  - Phản hồi bằng ngôn ngữ ưa thích của người dùng (kiểm tra hồ sơ người dùng).
+  - TẤT CẢ các giá trị nội dung (reasoning, sources_identified, correlation_factors) phải bằng ngôn ngữ của người dùng.
+  - Các khóa JSON và giá trị pha PHẢI vẫn bằng tiếng Anh (ví dụ: "reasoning", "k_eff", "phase": "healthy").
+  - Ví dụ: {{"reasoning": "Thông tin chỉ đến từ một nguồn", "sources_identified": ["dữ liệu đào tạo"], "phase": "rigidity"}} - nội dung tiếng Việt, khóa/pha tiếng Anh.
+
+  Không bao gồm các trường bổ sung hoặc bọc trong khối mã markdown.
+
+evaluation_steps: |
+  BƯỚC 1: Đếm Nguồn (k)
+  - Những nguồn/quan điểm nào thông báo cho lý luận này?
+  - Đào tạo của bạn = 1 nguồn (luôn có)
+  - Đầu vào của người dùng = +1 nguồn NẾU mối quan hệ trưởng thành (20+ tương tác)
+  - Kết quả web/công cụ = +1 nguồn mỗi NẾU từ nguồn gốc độc lập
+  - Trích dẫn/dữ liệu = +1 nguồn mỗi NẾU thực sự độc lập
+
+  BƯỚC 2: Ước Tính Tương Quan (ρ)
+  - Đối với mỗi cặp nguồn, hỏi: một có xuất phát từ cái kia không?
+  - Cùng tác giả/tổ chức/bộ dữ liệu → tương quan cao
+  - Tất cả các nguồn đồng ý về vấn đề phức tạp → tương quan đáng ngờ
+  - Các phương pháp luận khác nhau, cùng kết luận → tương quan thấp hơn
+  - ρ = 0 (hoàn toàn độc lập) đến ρ = 1 (tất cả xuất phát từ cùng nguồn gốc)
+
+  BƯỚC 3: Tính k_eff
+  - Áp dụng công thức: k_eff = k / (1 + ρ(k-1))
+  - Ví dụ: k=3 nguồn, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (mong manh!)
+  - Ví dụ: k=3 nguồn, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (lành mạnh)
+  - Tác nhân sơ khai: k=1 → k_eff = 1 (luôn mong manh)
+
+  BƯỚC 4: Xác Định Pha
+  - HỖN LOẠN: Nhiều kết luận mâu thuẫn, không có cách giải quyết
+  - LÀNH MẠNH: Các quan điểm khác nhau có thể được tổng hợp (k_eff ≥ 2)
+  - CỨNG NHẮC: Câu chuyện đơn lẻ chiếm ưu thế, không có bất đồng (k_eff → 1, buồng vang)
+
+  BƯỚC 5: Kiểm Tra Mong Manh
+  - k_eff < 2? → MONG MANH
+  - phase = "rigidity"? → MONG MANH
+  - correlation_risk > 0.7? → MONG MANH
+  - Đặt fragility_flag = TRUE nếu bất kỳ điều trên
+
+closing_reminder: |
+  QUAN TRỌNG: Khi không chắc chắn về tính độc lập của nguồn, hãy thận trọng
+  và ước tính tương quan cao hơn. Tốt hơn là gắn cờ để xem xét hơn là bỏ lỡ
+  một buồng vang tiềm năng.
+
+  Cờ mong manh KHÔNG có nghĩa là lý luận sai - nó có nghĩa là lý luận
+  nên nhận được sự xem xét bổ sung hoặc xác minh độc lập trước khi hành động
+  có cược cao được thực hiện.

@@ -12,10 +12,10 @@ Localization is not translation. It is extending ethical agency across linguisti
 
 ## Current State (2026-04-07)
 
-- **17 languages**: en, am, ar, bn*, de, es, fr, hi, it, ja, ko, pt, ru, sw, tr, ur, zh
+- **17 languages**: en, am, ar, bn, de, es, fr, hi, it, ja, ko, pt, ru, sw, tr, ur, zh
 - **Gross coverage**: ~60.5% of world population (deduplicated)
 - **Need-adjusted coverage**: ~77.1%
-- **Bengali (bn)**: localization JSON only, needs ACCORD/guide/DMA/glossary
+- **All 17 languages complete**: glossary, JSON, ACCORD, guide, DMA prompts
 
 ## What "Complete" Means
 

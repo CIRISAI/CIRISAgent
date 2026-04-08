@@ -77,7 +77,7 @@ class TestLocalizationKeyCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_language_has_all_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has all keys from English."""
@@ -97,7 +97,7 @@ class TestLocalizationKeyCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["en", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["en", "ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_no_extra_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has no extra keys not in English."""
@@ -118,7 +118,7 @@ class TestLocalizationKeyCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["en", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["en", "ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_no_duplicate_keys(self, localization_dir: Path, lang_code: str):
         """Test that language files have no duplicate keys."""
@@ -147,7 +147,7 @@ class TestACCORDCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_accord_translation_complete(self, data_dir: Path, english_accord_lines: int, lang_code: str):
         """Test that ACCORD translation has similar line count to English."""
@@ -189,7 +189,7 @@ class TestGuideCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_guide_translation_exists(self, data_dir: Path, lang_code: str):
         """Test that Guide translation exists."""
@@ -200,7 +200,7 @@ class TestGuideCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_guide_translation_complete(self, data_dir: Path, english_guide_lines: int, lang_code: str):
         """Test that Guide translation has reasonable line count."""
@@ -237,7 +237,7 @@ class TestDMAPromptCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_dma_prompts_directory_exists(self, prompts_dir: Path, lang_code: str):
         """Test that localized DMA prompts directory exists."""
@@ -246,7 +246,7 @@ class TestDMAPromptCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_dma_prompts_complete(self, prompts_dir: Path, english_prompt_files: list, lang_code: str):
         """Test that all English prompt files exist in localized directory."""
@@ -274,7 +274,7 @@ class TestGlossaryCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_glossary_exists(self, glossary_dir: Path, lang_code: str):
         """Test that glossary exists for each language."""
@@ -283,7 +283,7 @@ class TestGlossaryCompleteness:
 
     @pytest.mark.parametrize(
         "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
+        ["ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
     )
     def test_glossary_has_content(self, glossary_dir: Path, lang_code: str):
         """Test that glossary has meaningful content."""

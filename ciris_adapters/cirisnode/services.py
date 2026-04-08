@@ -23,6 +23,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ciris_adapters.cirisnode.client import CIRISNodeClient
+from ciris_engine.schemas.services.agent_credits import (
+    CreditGenerationPolicy,
+    CreditRecord,
+    DualSignature,
+    InteractionOutcome,
+)
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 
 logger = logging.getLogger(__name__)
@@ -64,6 +70,12 @@ class CIRISNodeService:
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
+        # Commons Credits trace events
+        "DEFERRAL_ROUTED": "deferral_routed",
+        "DEFERRAL_RECEIVED": "deferral_received",
+        "DEFERRAL_RESOLVED": "deferral_resolved",
+        "GRATITUDE_SIGNALED": "gratitude_signaled",
+        "CREDIT_GENERATED": "credit_generated",
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
@@ -105,9 +117,15 @@ class CIRISNodeService:
 
         # Agent ID (set by adapter from runtime)
         self._agent_id_hash: Optional[str] = None
+        self._agent_id_raw: Optional[str] = None
 
         # Ed25519 trace signer (same unified key as audit + accord_metrics)
         self._signer = Ed25519TraceSigner()
+
+        # Credit generation state
+        self._credit_policy: Optional[CreditGenerationPolicy] = None
+        self._credit_records: List[CreditRecord] = []  # Local store of credit records
+        self._credit_records_count = 0
 
         # Metrics
         self._events_received = 0
@@ -116,6 +134,7 @@ class CIRISNodeService:
 
     def set_agent_id(self, agent_id: str) -> None:
         """Set and hash the agent ID for trace anonymization."""
+        self._agent_id_raw = agent_id
         self._agent_id_hash = hashlib.sha256(agent_id.encode()).hexdigest()[:16]
         logger.info(f"CIRISNodeService agent_id_hash set: {self._agent_id_hash}")
 
@@ -289,6 +308,7 @@ class CIRISNodeService:
             "pending_deferrals": len(self._pending_deferrals),
             "queue_size": len(self._event_queue),
             "trace_level": self._trace_level.value,
+            "credit_records_generated": self._credit_records_count,
         }
 
     # =========================================================================
@@ -345,6 +365,13 @@ class CIRISNodeService:
                     if status == "resolved":
                         decision = task.get("decision", "unknown")
                         comment = task.get("comment", "")
+                        resolving_agent_id = task.get("resolving_agent_id")
+                        resolving_trace_id = task.get("resolving_trace_id")
+                        node_attestation = task.get("node_attestation")
+                        node_attestation_key_id = task.get("node_attestation_key_id")
+                        coherence_score = float(task.get("coherence_score", 0.5))
+                        domain_hint = task.get("domain_hint")
+
                         logger.info(
                             f"WBD task {wbd_task_id} resolved: decision={decision}"
                             f"{f' comment={comment[:80]}' if comment else ''}"
@@ -360,7 +387,22 @@ class CIRISNodeService:
                             comment=comment,
                         )
 
-                        # Event 2: Reactivate the deferred task via WiseAuthorityService
+                        # Event 2: Generate credit record for bilateral interaction
+                        if resolving_agent_id:
+                            await self._generate_credit_record(
+                                thought_id=thought_id,
+                                agent_task_id=agent_task_id,
+                                wbd_task_id=wbd_task_id,
+                                resolving_agent_id=resolving_agent_id,
+                                resolving_trace_id=resolving_trace_id or f"wbd-{wbd_task_id}",
+                                node_attestation=node_attestation,
+                                node_attestation_key_id=node_attestation_key_id,
+                                coherence_score=coherence_score,
+                                domain_hint=domain_hint,
+                                decision=decision,
+                            )
+
+                        # Event 3: Reactivate the deferred task via WiseAuthorityService
                         await self._reactivate_deferred_task(
                             agent_task_id=agent_task_id,
                             thought_id=thought_id,
@@ -478,6 +520,166 @@ class CIRISNodeService:
 
         except Exception as e:
             logger.error(f"Failed to reactivate deferred task: {e}")
+
+    # =========================================================================
+    # Credit Record Generation
+    # =========================================================================
+
+    async def _generate_credit_record(
+        self,
+        thought_id: str,
+        agent_task_id: str,
+        wbd_task_id: str,
+        resolving_agent_id: str,
+        resolving_trace_id: str,
+        node_attestation: Optional[str],
+        node_attestation_key_id: Optional[str],
+        coherence_score: float,
+        domain_hint: Optional[str],
+        decision: str,
+    ) -> None:
+        """Generate a signed credit record for a bilateral verified interaction.
+
+        Credit records are NOT tokens — they're self-authenticating signed
+        attestations stored locally and replicated to CIRISLens.
+        """
+        timestamp = datetime.now(timezone.utc)
+        requesting_trace_id = f"trace-{thought_id}-{timestamp.strftime('%Y%m%d%H%M%S')}"
+
+        # Compute deterministic interaction ID from both trace IDs
+        interaction_id = CreditRecord.compute_interaction_id(
+            requesting_trace_id, resolving_trace_id
+        )
+
+        # Determine outcome from decision
+        if decision in ("approve", "approved", "resolved"):
+            outcome = InteractionOutcome.RESOLVED
+        elif decision in ("partial", "partially_resolved"):
+            outcome = InteractionOutcome.PARTIAL
+        else:
+            outcome = InteractionOutcome.UNRESOLVED
+
+        # Only generate records for resolved/partial interactions
+        if outcome == InteractionOutcome.UNRESOLVED:
+            logger.debug(f"Skipping credit record for unresolved interaction {wbd_task_id}")
+            return
+
+        # Parse domain category if present
+        domain_category = None
+        if domain_hint:
+            try:
+                from ciris_engine.schemas.services.agent_credits import DomainCategory
+                domain_category = DomainCategory(domain_hint)
+            except ValueError:
+                pass
+
+        # Sign the record with agent's Ed25519 key
+        requesting_signature = self._sign_credit_record(interaction_id, timestamp)
+        if not requesting_signature:
+            logger.warning("Could not sign credit record — no signing key available")
+            return
+
+        record = CreditRecord(
+            interaction_id=interaction_id,
+            requesting_agent_id=self._agent_id_hash or "unknown",
+            resolving_agent_id=resolving_agent_id,
+            requesting_trace_id=requesting_trace_id,
+            resolving_trace_id=resolving_trace_id,
+            outcome=outcome,
+            domain_category=domain_category,
+            coherence_score=coherence_score,
+            requesting_agent_signature=requesting_signature,
+            resolving_agent_signature=None,  # Resolving agent signs on their side
+            node_attestation=node_attestation,
+            node_attestation_key_id=node_attestation_key_id,
+            created_at=timestamp,
+            resolved_at=timestamp,
+        )
+
+        # Store locally
+        self._credit_records.append(record)
+        self._credit_records_count += 1
+
+        # Forward as ACCORD credit trace event
+        await self._send_credit_trace(record)
+
+        # Submit to CIRISNode for storage/replication
+        if self._client:
+            try:
+                await self._client.post_credit_record(record.model_dump(mode="json"))
+                logger.info(
+                    f"Credit record submitted: interaction={interaction_id} "
+                    f"outcome={outcome.value} coherence={coherence_score:.2f} "
+                    f"domain={domain_hint or 'general'}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to submit credit record to CIRISNode: {e}")
+
+    def _sign_credit_record(
+        self, interaction_id: str, timestamp: datetime
+    ) -> Optional[DualSignature]:
+        """Sign a credit record with the agent's Ed25519 key."""
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            unified_key = get_unified_signing_key()
+            # Sign the canonical interaction data
+            canonical = json.dumps(
+                {"interaction_id": interaction_id, "timestamp": timestamp.isoformat()},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            signature = unified_key.sign_base64(canonical)
+
+            return DualSignature(
+                ed25519_signature=signature,
+                ed25519_key_id=unified_key.key_id,
+                ml_dsa_65_signature=None,  # PQ signature when available
+                ml_dsa_65_key_id=None,
+            )
+        except Exception as e:
+            logger.warning(f"Could not sign credit record: {e}")
+            return None
+
+    async def _send_credit_trace(self, record: CreditRecord) -> None:
+        """Send a signed ACCORD trace for a credit generation event."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        credit_trace = CompleteTrace(
+            trace_id=f"credit-{record.interaction_id}-{timestamp}",
+            thought_id=f"credit_{record.interaction_id}",
+            task_id=record.requesting_trace_id,
+            agent_id_hash=self._agent_id_hash or "unknown",
+            started_at=timestamp,
+            completed_at=timestamp,
+        )
+
+        credit_trace.components.append(
+            TraceComponent(
+                component_type="credit_generated",
+                event_type="CREDIT_GENERATED",
+                timestamp=timestamp,
+                data={
+                    "interaction_id": record.interaction_id,
+                    "outcome": record.outcome.value,
+                    "coherence_score": record.coherence_score,
+                    "domain_category": record.domain_category.value if record.domain_category else None,
+                    "resolving_agent_id": record.resolving_agent_id,
+                    "trace_level": self._trace_level.value,
+                },
+            )
+        )
+
+        if not self._signer.sign_trace(credit_trace):
+            credit_trace.signature = ""
+            credit_trace.signature_key_id = ""
+
+        event_payload = {
+            "event_type": "credit_generated",
+            "trace": credit_trace.to_dict(),
+        }
+        await self._queue_event(event_payload)
+        logger.debug(f"Credit trace queued for interaction {record.interaction_id}")
 
     # =========================================================================
     # Trace Capture (from reasoning_event_stream)

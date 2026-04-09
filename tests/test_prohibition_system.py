@@ -103,12 +103,14 @@ class TestWiseBusProhibitions:
         return WiseBus(mock_registry, mock_time_service)
 
     def test_medical_capability_blocked(self, wise_bus):
-        """Test that medical capabilities are blocked."""
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL.*capabilities blocked"):
-            wise_bus._validate_capability("diagnosis", agent_tier=1)
+        """Test that medical capabilities are blocked (routed to deferral)."""
+        result = wise_bus._validate_capability("diagnosis", agent_tier=1)
+        assert result is not None, "Expected deferral for 'diagnosis'"
+        assert "MEDICAL" in str(result.category).upper()
 
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL.*capabilities blocked"):
-            wise_bus._validate_capability("treatment", agent_tier=3)
+        result = wise_bus._validate_capability("treatment", agent_tier=3)
+        assert result is not None, "Expected deferral for 'treatment'"
+        assert "MEDICAL" in str(result.category).upper()
 
     def test_weapons_capability_blocked(self, wise_bus):
         """Test that weapons capabilities are absolutely blocked."""
@@ -143,15 +145,20 @@ class TestWiseBusProhibitions:
 
     @pytest.mark.asyncio
     async def test_request_guidance_validates_capability(self, wise_bus):
-        """Test that request_guidance validates capabilities."""
+        """Test that request_guidance validates medical capabilities via deferral."""
         request = GuidanceRequest(
             context="Test request",
             capability="medical_diagnosis",
             options=["allow", "deny"],
         )
 
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL"):
-            await wise_bus.request_guidance(request, agent_tier=1)
+        response = await wise_bus.request_guidance(request, agent_tier=1)
+        assert response is not None
+        assert (
+            "deferral" in response.reasoning.lower()
+            or "licensed" in response.reasoning.lower()
+            or "routed" in response.reasoning.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_agent_tier_detection_default(self, wise_bus):

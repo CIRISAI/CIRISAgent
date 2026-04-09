@@ -1,6 +1,7 @@
 """Unit tests for CIRIS path resolution utility."""
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -270,6 +271,7 @@ class TestValidatePathSafety:
         result = validate_path_safety(home_path, "test")
         assert result == home_path.resolve()
 
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
     def test_rejects_etc_paths(self):
         """Should reject paths in /etc."""
         with pytest.raises(ValueError, match="forbidden system directory"):
@@ -306,6 +308,7 @@ class TestValidatePathSafety:
         assert result.is_absolute()
         assert result == (tmp_path / "data").resolve()
 
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
     def test_context_appears_in_error_message(self):
         """Error messages should include context parameter."""
         with pytest.raises(ValueError, match="CIRIS_HOME"):
@@ -315,6 +318,7 @@ class TestValidatePathSafety:
 class TestGetCirisHomeWithInvalidPath:
     """Test CIRIS home with invalid CIRIS_HOME env var."""
 
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
     def test_ignores_forbidden_ciris_home(self, tmp_path, monkeypatch):
         """Should ignore CIRIS_HOME pointing to forbidden directory."""
         monkeypatch.chdir(tmp_path)

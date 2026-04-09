@@ -1,7 +1,7 @@
 # Build Information
-Code Hash: db29e1412a2d
-Build Time: 2026-04-08T20:33:51.679798
-Git Commit: 131e67b8fc4acfadbba053356d73fbb360e5c881
+Code Hash: 92fca715fe66
+Build Time: 2026-04-08T21:26:15.135222
+Git Commit: 373cfd0de356fc189edd3f61ec7f148868912237
 Git Branch: release/2.4.1
 
 This hash is a SHA-256 of all Python source files in the repository.

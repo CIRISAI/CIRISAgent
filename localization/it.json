@@ -419,6 +419,7 @@
         "interact_clear": "Cancella",
         "interact_wallet_setup": "Configura",
         "interact_wallet_receive_only": "Ricezione",
+        "interact_wallet_loading": "Caricamento...",
         "interact_legend_title": "Emoji Azioni CIRIS",
         "interact_legend_processing": "Elaborazione",
         "interact_legend_processing_stages": "Fasi di Elaborazione",

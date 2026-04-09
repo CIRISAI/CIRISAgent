@@ -880,12 +880,14 @@ private fun WalletBadge(
 
     // Log wallet status for debugging
     LaunchedEffect(walletStatus) {
-        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}")
+        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}, isInitializing=${walletStatus.isInitializing}")
     }
 
+    val isInitializing = walletStatus.isInitializing
     val hasBalance = walletStatus.balance != "0.00" && walletStatus.balance != "0"
     val badgeColor = when {
-        walletStatus.isReceiveOnly -> theme.trustLevel4  // Receive-only (hardware degraded) - amber
+        isInitializing -> theme.trustLevel4               // Initializing - amber (waiting for CIRISVerify)
+        walletStatus.isReceiveOnly -> theme.trustLevel4   // Receive-only (hardware degraded) - amber
         hasBalance -> theme.trustLevel5                   // Has funds - green
         walletStatus.hasWallet -> theme.trustDefault      // Empty wallet - gray
         else -> theme.trustDefault                        // Not configured - gray
@@ -902,11 +904,20 @@ private fun WalletBadge(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            // Wallet emoji
-            Text(text = "💰", fontSize = 12.sp)
+            // Show spinner when initializing, otherwise wallet emoji
+            if (isInitializing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = badgeColor
+                )
+            } else {
+                Text(text = "💰", fontSize = 12.sp)
+            }
 
             // Balance or status text - convert to selected currency
             val displayText = when {
+                isInitializing -> localizedString("mobile.interact_wallet_loading")
                 !walletStatus.hasWallet -> localizedString("mobile.interact_wallet_setup")
                 walletStatus.isReceiveOnly -> localizedString("mobile.interact_wallet_receive_only")
                 hasBalance -> {
@@ -942,11 +953,15 @@ private fun TrustShield(
 ) {
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
+    val isPending = trustStatus.levelPending  // True when waiting for device attestation
+
+    // When pending, use amber to indicate "in progress" state
     val shieldColor = when {
-        level >= 5 -> theme.trustLevel5  // Identity Validated - green
-        level == 4 -> theme.trustLevel4  // Agent Validated - amber
-        level >= 1 -> theme.trustLevelLow  // Issues Detected (L1-3) - red
-        else -> theme.trustDefault        // Not started - gray
+        isPending -> theme.trustLevel4         // Attestation in progress - amber (provisional)
+        level >= 5 -> theme.trustLevel5        // Identity Validated - green
+        level == 4 -> theme.trustLevel4        // Agent Validated - amber
+        level >= 1 -> theme.trustLevelLow      // Issues Detected (L1-3) - red
+        else -> theme.trustDefault             // Not started - gray
     }
 
     Surface(
@@ -960,12 +975,21 @@ private fun TrustShield(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            // Shield emoji
-            Text(text = "🛡", fontSize = 12.sp)
+            if (isPending) {
+                // Show spinner when attestation is pending
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = shieldColor
+                )
+            } else {
+                // Shield emoji when stable
+                Text(text = "🛡", fontSize = 12.sp)
+            }
 
-            // Level text
+            // Level text - show provisional indicator when pending
             Text(
-                text = "$level/5",
+                text = if (isPending) "$level/5..." else "$level/5",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = shieldColor

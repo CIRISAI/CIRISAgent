@@ -336,7 +336,12 @@ class CIRISNodeService:
     # =========================================================================
 
     async def _register_public_key(self) -> None:
-        """Register agent's Ed25519 public key with CIRISNode."""
+        """Register agent's Ed25519 public key with CIRISNode.
+
+        CIRISNode returns supported_domains in the registration response,
+        indicating which domains this node is licensed to handle. The agent
+        updates its _supported_domains to match the server's authoritative list.
+        """
         if not self._client:
             return
 
@@ -351,10 +356,22 @@ class CIRISNodeService:
             payload = unified_key.get_registration_payload("CIRISNode oversight adapter")
 
             result = await self._client.register_public_key(payload)
-            logger.info(
-                f"Public key registered with CIRISNode: key_id={payload['key_id']} "
-                f"result={result.get('status', 'unknown')}"
-            )
+
+            # Update supported_domains from server response (authoritative)
+            server_domains = result.get("supported_domains", [])
+            if server_domains:
+                self._supported_domains = list(server_domains)
+                logger.info(
+                    f"Public key registered with CIRISNode: key_id={payload['key_id']} "
+                    f"status={result.get('status', 'unknown')} "
+                    f"supported_domains={server_domains}"
+                )
+            else:
+                logger.info(
+                    f"Public key registered with CIRISNode: key_id={payload['key_id']} "
+                    f"status={result.get('status', 'unknown')} "
+                    f"(no supported_domains in response, using config: {self._supported_domains})"
+                )
         except Exception as e:
             logger.warning(f"Could not register public key with CIRISNode: {e}")
 

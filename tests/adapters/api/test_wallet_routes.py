@@ -337,3 +337,106 @@ class TestNoWalletProvider:
         assert response.status_code == 200
         data = response.json()
         assert data["key_configured"] is False
+
+
+class TestWalletInitializationState:
+    """Tests for wallet initialization state (race condition prevention)."""
+
+    def test_status_returns_initializing_when_wallet_starting(self):
+        """Test wallet status returns is_initializing=True when wallet is starting up."""
+        app = FastAPI()
+        app.include_router(router, prefix="/v1")
+
+        # Runtime with wallet adapter that is initializing (no providers yet)
+        runtime = MagicMock()
+        wallet_adapter = MagicMock()
+        wallet_adapter._providers = {}  # Empty - providers not loaded yet
+        wallet_adapter._wallet_initializing = True  # Initialization in progress
+        wallet_adapter._wallet_initialized = False
+        # Set the class name so _get_wallet_adapter_from_app can find it
+        wallet_adapter.__class__.__name__ = "WalletAdapter"
+        runtime.adapters = [wallet_adapter]
+        app.state.runtime = runtime
+        app.state.authentication_service = None
+
+        # Override auth dependencies
+        app.dependency_overrides[get_auth_context] = lambda: MagicMock()
+        app.dependency_overrides[require_admin] = lambda: MagicMock()
+
+        client = TestClient(app)
+        response = client.get("/v1/wallet/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_wallet"] is False
+        assert data["is_initializing"] is True
+        assert data["provider"] == "initializing"
+
+    def test_status_returns_not_initializing_when_wallet_ready(self):
+        """Test wallet status returns is_initializing=False when wallet is ready."""
+        app = FastAPI()
+        app.include_router(router, prefix="/v1")
+
+        # Create mock provider
+        mock_provider = MagicMock()
+        mock_provider._evm_address = "0x1234567890abcdef1234567890abcdef12345678"
+        mock_provider.config = MagicMock()
+        mock_provider.config.network = "base-mainnet"
+        mock_provider._coinbase_paymaster = None
+        mock_provider._balance = MagicMock()
+        mock_provider._balance.available = Decimal("100.00")
+        mock_provider._balance.metadata = {"eth_balance": "0.001"}
+        mock_provider.paymaster_config = MagicMock()
+        mock_provider.paymaster_config.enabled = False
+        mock_provider._validator = None
+        mock_provider._chain_client = None
+        mock_provider._transactions = []
+
+        # Runtime with wallet adapter that has finished initializing
+        runtime = MagicMock()
+        wallet_adapter = MagicMock()
+        wallet_adapter._providers = {"x402": mock_provider}
+        wallet_adapter._wallet_initializing = False  # Initialization complete
+        wallet_adapter._wallet_initialized = True
+        # Set the class name so _get_wallet_adapter_from_app can find it
+        wallet_adapter.__class__.__name__ = "WalletAdapter"
+        runtime.adapters = [wallet_adapter]
+        app.state.runtime = runtime
+        app.state.authentication_service = None
+
+        # Override auth dependencies
+        app.dependency_overrides[get_auth_context] = lambda: MagicMock()
+        app.dependency_overrides[require_admin] = lambda: MagicMock()
+
+        client = TestClient(app)
+        response = client.get("/v1/wallet/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_wallet"] is True
+        assert data["is_initializing"] is False
+        assert data["provider"] == "x402"
+
+    def test_status_not_initializing_when_no_wallet_adapter(self):
+        """Test is_initializing=False when no wallet adapter exists (not configured)."""
+        app = FastAPI()
+        app.include_router(router, prefix="/v1")
+
+        # Runtime without any wallet adapter
+        runtime = MagicMock()
+        runtime.adapters = []  # No adapters at all
+        app.state.runtime = runtime
+        app.state.authentication_service = None
+
+        # Override auth dependencies
+        app.dependency_overrides[get_auth_context] = lambda: MagicMock()
+        app.dependency_overrides[require_admin] = lambda: MagicMock()
+
+        client = TestClient(app)
+        response = client.get("/v1/wallet/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_wallet"] is False
+        assert data["is_initializing"] is False
+        assert data["provider"] == "none"

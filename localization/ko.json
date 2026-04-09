@@ -505,6 +505,7 @@
         "interact_clear": "지우기",
         "interact_wallet_setup": "설정",
         "interact_wallet_receive_only": "수신",
+        "interact_wallet_loading": "로딩 중...",
         "interact_legend_title": "CIRIS 작업 이모지",
         "interact_legend_processing": "처리 중",
         "interact_legend_thought_start": "생각 시작",

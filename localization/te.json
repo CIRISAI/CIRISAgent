@@ -465,6 +465,7 @@
         "interact_clear": "క్లియర్",
         "interact_wallet_setup": "Setup",
         "interact_wallet_receive_only": "Recv",
+        "interact_wallet_loading": "లోడ్ అవుతోంది...",
         "interact_legend_title": "CIRIS Action Emojis",
         "interact_legend_processing": "ప్రాసెస్ చేస్తోంది",
         "interact_legend_thought_start": "Thought ప్రారంభించు",

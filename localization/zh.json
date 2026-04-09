@@ -429,6 +429,7 @@
         "interact_clear": "清除",
         "interact_wallet_setup": "设置",
         "interact_wallet_receive_only": "仅接收",
+        "interact_wallet_loading": "加载中...",
         "interact_legend_title": "CIRIS 动作表情符号",
         "interact_legend_processing": "处理中",
         "interact_legend_thought_start": "思考开始",

@@ -465,6 +465,7 @@
     "interact_clear": "Clear",
     "interact_wallet_setup": "Setup",
     "interact_wallet_receive_only": "Recv",
+    "interact_wallet_loading": "लोड होत आहे...",
     "interact_legend_title": "CIRIS कृतीion Emojis",
     "interact_legend_processing": "Processing",
     "interact_legend_thought_start": "Thought Start",

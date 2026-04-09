@@ -352,6 +352,7 @@
         "interact_clear": "صاف کریں",
         "interact_wallet_setup": "سیٹ اپ",
         "interact_wallet_receive_only": "صرف وصول",
+        "interact_wallet_loading": "لوڈ ہو رہا ہے...",
         "interact_legend_title": "CIRIS عمل کی علامات",
         "interact_legend_processing": "پروسیسنگ",
         "interact_legend_thought_start": "سوچ شروع",

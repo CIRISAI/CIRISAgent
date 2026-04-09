@@ -465,6 +465,7 @@
         "interact_clear": "Share",
         "interact_wallet_setup": "Saiti",
         "interact_wallet_receive_only": "Karɓa",
+        "interact_wallet_loading": "Ana ɗaukaka...",
         "interact_legend_title": "Alamomin Aiki na CIRIS",
         "interact_legend_processing": "Ana Sarrafa",
         "interact_legend_thought_start": "Fara Tunani",

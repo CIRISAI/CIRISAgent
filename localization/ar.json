@@ -419,6 +419,7 @@
         "interact_clear": "مسح",
         "interact_wallet_setup": "إعداد",
         "interact_wallet_receive_only": "استلام",
+        "interact_wallet_loading": "جاري التحميل...",
         "interact_legend_title": "رموز إجراءات CIRIS",
         "interact_legend_processing": "المعالجة",
         "interact_legend_thought_start": "بداية الفكرة",

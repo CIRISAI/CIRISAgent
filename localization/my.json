@@ -465,6 +465,7 @@
     "interact_clear": "Clear",
     "interact_wallet_setup": "Setup",
     "interact_wallet_receive_only": "Recv",
+    "interact_wallet_loading": "ဖွင့်နေသည်...",
     "interact_legend_title": "CIRIS လုပ်ဆောင်ion Emojis",
     "interact_legend_processing": "Processing",
     "interact_legend_thought_start": "Thought Start",

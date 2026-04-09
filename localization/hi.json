@@ -485,6 +485,7 @@
         "interact_clear": "साफ़ करें",
         "interact_wallet_setup": "सेटअप",
         "interact_wallet_receive_only": "प्राप्त करें",
+        "interact_wallet_loading": "लोड हो रहा है...",
         "interact_legend_title": "CIRIS एक्शन इमोजी",
         "interact_legend_processing": "प्रोसेसिंग",
         "interact_legend_thought_start": "विचार शुरुआत",

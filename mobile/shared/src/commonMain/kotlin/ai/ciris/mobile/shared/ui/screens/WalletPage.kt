@@ -94,6 +94,7 @@ data class SecurityAdvisoryData(
 data class WalletStatusResponse(
     // Core wallet info
     val hasWallet: Boolean = false,
+    val isInitializing: Boolean = false,  // True while wallet providers are starting up
     val provider: String = "x402",
     val network: String = "base-mainnet",
     val currency: String = "USDC",

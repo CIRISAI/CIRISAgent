@@ -65,6 +65,11 @@ class WalletAdapter(Service):
         # Providers are initialized in start() after logging is configured
         self._providers: Dict[str, Any] = {}
 
+        # Track wallet initialization state for race condition prevention
+        # Mobile may call /v1/wallet/status before _init_providers() completes
+        self._wallet_initializing = False
+        self._wallet_initialized = False
+
         # Create tool service (will be updated with providers in start())
         self.tool_service = WalletToolService(
             config=self.adapter_config,
@@ -331,6 +336,14 @@ class WalletAdapter(Service):
             logger.error(f"[WALLET_INIT] Traceback: {traceback.format_exc()}")
             return None, None
 
+    def is_wallet_ready(self) -> bool:
+        """Check if wallet initialization is complete and providers are loaded."""
+        return self._wallet_initialized and not self._wallet_initializing
+
+    def is_wallet_initializing(self) -> bool:
+        """Check if wallet is currently initializing (startup in progress)."""
+        return self._wallet_initializing
+
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter."""
         registrations = []
@@ -358,10 +371,17 @@ class WalletAdapter(Service):
         logger.info("[WALLET_INIT] Starting Wallet adapter")
         logger.info(f"[WALLET_INIT] Config has providers: {list(self.adapter_config.provider_configs.keys())}")
 
+        # Mark initialization in progress (prevents race with /v1/wallet/status)
+        self._wallet_initializing = True
+
         # Initialize providers (deferred from __init__ so logging captures everything)
         logger.info("[WALLET_INIT] Calling _init_providers()")
         self._init_providers()
         logger.info(f"[WALLET_INIT] _init_providers() complete, loaded: {list(self._providers.keys())}")
+
+        # Mark initialization complete
+        self._wallet_initializing = False
+        self._wallet_initialized = True
 
         # Update tool service with loaded providers
         self.tool_service._providers = self._providers

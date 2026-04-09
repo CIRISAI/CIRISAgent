@@ -419,6 +419,7 @@
         "interact_clear": "Löschen",
         "interact_wallet_setup": "Einrichten",
         "interact_wallet_receive_only": "Empf",
+        "interact_wallet_loading": "Lädt...",
         "interact_legend_title": "CIRIS Action-Emojis",
         "interact_legend_processing": "Verarbeitung",
         "interact_legend_thought_start": "Gedankenstart",

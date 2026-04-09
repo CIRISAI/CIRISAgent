@@ -423,6 +423,7 @@
         "interact_clear": "Temizle",
         "interact_wallet_setup": "Kurulum",
         "interact_wallet_receive_only": "Al",
+        "interact_wallet_loading": "Yükleniyor...",
         "interact_legend_title": "CIRIS Eylem Emojileri",
         "interact_legend_processing": "İşleniyor",
         "interact_legend_thought_start": "Düşünce Başlangıcı",

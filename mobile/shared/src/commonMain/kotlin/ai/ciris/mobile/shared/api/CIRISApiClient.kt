@@ -2777,6 +2777,7 @@ class CIRISApiClient(
 
             val walletStatus = ai.ciris.mobile.shared.ui.screens.WalletStatusResponse(
                 hasWallet = json["has_wallet"]?.jsonPrimitive?.boolean ?: false,
+                isInitializing = json["is_initializing"]?.jsonPrimitive?.boolean ?: false,
                 provider = json["provider"]?.jsonPrimitive?.contentOrNull ?: "x402",
                 network = json["network"]?.jsonPrimitive?.contentOrNull ?: "base-sepolia",
                 currency = json["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",

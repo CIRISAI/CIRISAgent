@@ -87,9 +87,9 @@ class A2AAdapter(Service):
             config_timeout = getattr(adapter_config, "timeout", default_timeout)
 
         # Environment variables override config (for AgentBeats/Docker)
-        self._host = os.environ.get("CIRIS_A2A_HOST", config_host)
-        self._port = int(os.environ.get("CIRIS_A2A_PORT", config_port))
-        self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT", config_timeout))
+        self._host = os.environ.get("CIRIS_A2A_HOST") or config_host
+        self._port = int(os.environ.get("CIRIS_A2A_PORT") or config_port)
+        self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT") or config_timeout)
 
         # Create A2A service with runtime for pipeline access
         self.a2a_service = A2AService(
@@ -389,19 +389,19 @@ class A2AAdapter(Service):
             )
 
             # Process through the agent's pipeline
-            result_text = await self.a2a_service.process_ethical_query(
-                params.payload, task_id=params.deferral_id
-            )
+            result_text = await self.a2a_service.process_ethical_query(params.payload, task_id=params.deferral_id)
 
-            return JSONResponse(content={
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "deferral_id": params.deferral_id,
-                    "resolution": result_text,
-                    "status": "resolved",
-                },
-            })
+            return JSONResponse(
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "deferral_id": params.deferral_id,
+                        "resolution": result_text,
+                        "status": "resolved",
+                    },
+                }
+            )
 
         except Exception as e:
             logger.error(f"Deferral receive error: {e}")
@@ -413,17 +413,19 @@ class A2AAdapter(Service):
     async def _handle_deferral_resolve(self, body: dict[str, Any], request_id: str) -> JSONResponse:
         """Handle deferrals/resolve method (confirmation of resolution)."""
         try:
-            logger.info(f"[DEFERRAL] Resolution confirmation received: {body.get('params', {}).get('deferral_id', 'unknown')}")
-            return JSONResponse(content={
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {"status": "acknowledged"},
-            })
+            logger.info(
+                f"[DEFERRAL] Resolution confirmation received: {body.get('params', {}).get('deferral_id', 'unknown')}"
+            )
+            return JSONResponse(
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"status": "acknowledged"},
+                }
+            )
         except Exception as e:
             logger.error(f"Deferral resolve error: {e}")
-            response = create_error_response(
-                request_id=request_id, code=-32603, message=str(e)
-            )
+            response = create_error_response(request_id=request_id, code=-32603, message=str(e))
             return JSONResponse(content=response.model_dump(), status_code=500)
 
     async def _handle_credit_notify(self, body: dict[str, Any], request_id: str) -> JSONResponse:
@@ -441,19 +443,19 @@ class A2AAdapter(Service):
                 f"counterparty={params.counterparty_agent_id[:8]}..."
             )
 
-            return JSONResponse(content={
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "interaction_id": params.interaction_id,
-                    "status": "acknowledged",
-                },
-            })
+            return JSONResponse(
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "interaction_id": params.interaction_id,
+                        "status": "acknowledged",
+                    },
+                }
+            )
         except Exception as e:
             logger.error(f"Credit notification error: {e}")
-            response = create_error_response(
-                request_id=request_id, code=-32603, message=str(e)
-            )
+            response = create_error_response(request_id=request_id, code=-32603, message=str(e))
             return JSONResponse(content=response.model_dump(), status_code=500)
 
     def _parse_ethical_response(self, response_text: str) -> tuple[str, str | None]:
@@ -535,7 +537,7 @@ class A2AAdapter(Service):
         # Start HTTP server
         config = uvicorn.Config(
             app=self.app,
-            host=self._host,
+            host=str(self._host),
             port=self._port,
             log_level="warning",
             access_log=False,  # Disable access logs for benchmark performance

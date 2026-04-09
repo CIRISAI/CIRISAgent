@@ -451,6 +451,164 @@ class TestWiseBusDomainFiltering:
         service_a.send_deferral.assert_called_once()
         service_b.send_deferral.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_service_without_get_capabilities_skipped(self) -> None:
+        """Services without get_capabilities method are skipped with warning."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        # Service without get_capabilities method
+        service_no_caps = MagicMock(spec=[])  # Empty spec = no methods
+        service_no_caps.send_deferral = AsyncMock(return_value="deferred")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [service_no_caps]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        context = DeferralContext(
+            thought_id="t1",
+            task_id="task1",
+            reason="Test",
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        # Should fail because no valid service found
+        assert result is False
+        service_no_caps.send_deferral.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_service_without_send_deferral_capability_skipped(self) -> None:
+        """Services without send_deferral in capabilities are skipped."""
+        from dataclasses import dataclass
+        from typing import List
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        @dataclass
+        class MockCapabilities:
+            actions: List[str]
+            scopes: List[str]
+
+        # Service with other capabilities but not send_deferral
+        service = MagicMock()
+        service.get_capabilities.return_value = MockCapabilities(
+            actions=["fetch_guidance"],  # No send_deferral
+            scopes=["oversight"],
+        )
+        service.send_deferral = AsyncMock(return_value="deferred")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [service]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        context = DeferralContext(
+            thought_id="t1",
+            task_id="task1",
+            reason="Test",
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        # Should fail because no service has send_deferral capability
+        assert result is False
+        service.send_deferral.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_services_support_domain_hint(self) -> None:
+        """Returns False when no services support the requested domain."""
+        from dataclasses import dataclass, field
+        from typing import List
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        @dataclass
+        class MockCapabilities:
+            actions: List[str]
+            scopes: List[str]
+            supported_domains: List[str] = field(default_factory=list)
+
+        # Service only supports FINANCIAL, not MEDICAL
+        service = MagicMock()
+        service.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+            supported_domains=["FINANCIAL"],
+        )
+        service.send_deferral = AsyncMock(return_value="deferred")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [service]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        # Request MEDICAL domain which no service supports
+        context = DeferralContext(
+            thought_id="t1",
+            task_id="task1",
+            reason="Medical consultation needed",
+            domain_hint="MEDICAL",
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        # Should fail because no service supports MEDICAL
+        assert result is False
+        service.send_deferral.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_defer_until_with_z_suffix(self) -> None:
+        """Defer until with Z suffix (ISO 8601) is parsed correctly."""
+        from dataclasses import dataclass, field
+        from typing import List
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        @dataclass
+        class MockCapabilities:
+            actions: List[str]
+            scopes: List[str]
+            supported_domains: List[str] = field(default_factory=list)
+
+        service = MagicMock()
+        service.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+        )
+        service.send_deferral = AsyncMock(return_value="deferred")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [service]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        # Use Z suffix format
+        context = DeferralContext(
+            thought_id="t1",
+            task_id="task1",
+            reason="Test with Z suffix",
+            defer_until="2026-04-10T12:00:00Z",
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        assert result is True
+        service.send_deferral.assert_called_once()
+
 
 # =========================================================================
 # Anti-Gaming Policy Tests

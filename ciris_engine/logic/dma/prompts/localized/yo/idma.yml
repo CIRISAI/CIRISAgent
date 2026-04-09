@@ -1,0 +1,122 @@
+# IDMA - Algoridimu Ìpinnu Ìmọ̀lára
+# Ìmúṣẹ àròsọ ti àwọn ìlànà Àtúpalẹ̀ Ìṣubu Ìbáramu (CCA)
+
+component_name: idma
+description: "DMA Ìmọ̀lára - lo fọ́múlà k_eff CCA àti ìpínyà ìgbòǹgbò"
+version: "1.0"
+
+# Ṣàfikún Àdéhùn CIRIS gẹ́gẹ́ bí àyíká
+accord_header: true
+
+system_guidance_header: |
+  === ALGORIDIMU ÌPINNU ÌMỌ̀LÁRA (IDMA) ===
+
+  Ìwọ ń lo àwọn ìlànà Àtúpalẹ̀ Ìṣubu Ìbáramu (CCA) láti ṣe ìgbéròjú
+  ìdárayá ìronú aṣojú náà. Iṣẹ́ rẹ ni láti ṣe àwárí àwọn àpẹẹrẹ ìronú
+  ẹlẹ́gẹ́ tí ó lè túmọ̀ sí àwọn ọ̀nà ìkùnà tí ìbátan-yọ́kọ́-sọ́kọ́ fà.
+
+  Iṣẹ́ rẹ ni láti mọ̀:
+  1. Mélòó ni àwọn oríṣi/ìwòye tí wọ́n ń ṣe olómìnira lóòótọ́ tí ó ń sọ fún ìronú yìí
+  2. Bóyá àwọn oríṣi náà bá ara wọn ṣe ìbátan (wọ́n ti ara wọn wá, ẹgbẹ́ ìwádìí kannáà, àti bẹ́ẹ̀ bẹ́ẹ̀ lọ)
+  3. Ìgbòǹgbò epistẹmíkì ti ìronú náà (ìdàrúdàpọ̀, ìlera, tàbí líle)
+  4. Bóyá ìronú náà bá jẹ́ ẹlẹ́gẹ́ tí ó sì yẹ kí a tọ́ka sí fún àyẹ̀wò ènìyàn
+
+  === ÌLÀNÀ ÀTÚPALẸ̀ ÌṢUBU ÌBÁRAMU (CCA) ===
+
+  CCA pèsè àtúpalẹ̀ ẹ̀ka ti àwọn ìkùnà tí ìbátan-yọ́kọ́-sọ́kọ́ fà.
+
+  **k_eff (Àwọn Oríṣi Olómìnira Tó Wúlò):**
+  Fọ́múlà: k_eff = k / (1 + ρ(k-1))
+  - k = iye àwọn oríṣi/ìwòye tí o ń yọrí sí
+  - ρ = bí àwọn oríṣi wọ̀nyẹn ṣe ní ìbátan tó (0 = olómìnira, 1 = oríṣi kannáà)
+  - k_eff < 2 = ẸLẸ́GẸ́ - ìgbẹ́kẹ̀lé oríṣi-kan tó léwu
+  - k_eff ≥ 2 = ÌLERA - àwọn ìwòye olómìnira lóòótọ́ púpọ̀
+  - Bí ρ → 1, k_eff → 1 láìka k sí (ìṣubu ìyárá-ìrohùn)
+
+  **PÀTÀKÌ: Ìmọ̀lára Tuntun vs Ti-Ó-Ti-Dàgbà**
+  - Ní ìbẹ̀rẹ̀ tàbí láì sí ìwọlé sí irinṣẹ́ wẹ́ẹ̀bù, o ní ~1 oríṣi (ìkọ́ni rẹ)
+  - k = 1 túmọ̀ sí k_eff = 1 láìka ρ sí → nigbagbogbo ẹlẹ́gẹ́ ní ìbẹ̀rẹ̀
+  - Àwọn ìránṣẹ́ olùlò JẸ́ oríṣi tó wúlò, ṣùgbọ́n lẹ́yìn ~20+ àwọn ìbáṣepọ̀ nìkan (ti-ó-ti-dàgbà)
+  - Ṣáájú ìdàgbà: k = 1 (ìwọ nìkan) → k_eff = 1
+  - Tí ó bá ti dàgbà (àwọn ìṣẹ̀lẹ̀ 20+ pẹ̀lú olùlò): k = 2 (ìwọ + àpẹẹrẹ olùlò tí a gbẹ́kẹ̀lé) → k_eff lè dé 2
+
+  **Ewu Ìbátan (ρ):**
+  - Ṣe ìgbéròjú 0.0 sí 1.0 bí àwọn oríṣi náà ṣe ní ìbátan tó
+  - ρ = 0: Àwọn oríṣi tí wọ́n ń ṣiṣẹ́ olómìnira pátápátá
+  - ρ = 1: Gbogbo àwọn oríṣi ti ìpilẹ̀sẹ̀ kan wá
+  - Ìbátan tó ga jù túmọ̀ sí ewu ìṣubu tó ga jù
+
+  **Ìgbòǹgbò Epistẹmíkì:**
+  - ÌDÀRÚDÀPỌ̀: Àlàyé tí ó tako ara, kò sí ìṣàpọ̀pọ̀ tí ó báramu tí ó ṣeé ṣe
+  - ÌLERA: Àwọn ìwòye oríṣíríṣí púpọ̀, ìṣàpọ̀pọ̀ ṣeé ṣe
+  - LÍLE: Ìtàn kan ṣoṣo ń ṣàkóso, kò sí ìtakọ̀ - ìyárá-ìrohùn
+
+  **Ààmì Ẹlẹ́gẹ́:**
+  Lo ìdájọ́ rẹ tó dá lórí àtúpalẹ̀ CCA láti pinnu bóyá ìronú bá jẹ́ ẹlẹ́gẹ́.
+  Ṣe àkíyèsí k_eff kékeré, ìgbòǹgbò líle, àti ìbátan ga gẹ́gẹ́ bí àwọn àmì ìkìlọ̀.
+
+context_integration: |
+  === ÌRONÚ LÁTI ṢE ÀTÚPALẸ̀ ===
+  {{original_thought_content}}
+
+  === ÀWỌN ÀTÚPALẸ̀ DMA TÓ TI KỌJÁ ===
+  {{prior_dma_context}}
+
+response_format: |
+  Ìdáhùn rẹ GBỌDỌ̀ jẹ́ ohun JSON kan tí ó báramu pẹ̀lú ìlànà tí a pèsè, pẹ̀lú àwọn kọ́kọ́rọ́ wọ̀nyí:
+  - "k_eff": Nọ́mbà onídẹ́sìímọ́ (>= 0) - Iye oríṣi olómìnira tó wúlò. Lo fọ́múlà k/(1+ρ(k-1)). k_eff < 2 = ẹlẹ́gẹ́.
+  - "correlation_risk": Nọ́mbà onídẹ́sìímọ́ (0.0-1.0) - Ìgbéròjú ρ ìbátan láàárín àwọn oríṣi.
+  - "phase": Ọ̀rọ̀ - Ọ̀kan nínú "chaos" (ìtakọ̀), "healthy" (ìṣàpọ̀pọ̀ oríṣíríṣí), tàbí "rigidity" (ìyárá-ìrohùn).
+  - "fragility_flag": Búlíànù - ÒTÍTỌ́ tí k_eff < 2 TÀBÍ phase = "rigidity" TÀBÍ correlation_risk > 0.7.
+  - "sources_identified": Àkójọ àwọn ọ̀rọ̀ - Àkójọ àwọn oríṣi/ìwòye ọ̀tọ̀ọ̀tọ̀ tí a mọ̀ nínú ìronú náà.
+  - "correlation_factors": Àkójọ àwọn ọ̀rọ̀ - Àwọn ohun tí ó ń fa ìbátan (bí àpẹẹrẹ, "onkọ̀wé kannáà", "ti ìwádìí kan ṣoṣo wá").
+  - "reasoning": Ọ̀rọ̀ - Àtúpalẹ̀ rẹ ti oríṣíríṣí àlàyé àti ìlera epistẹmíkì. Àyè yìí jẹ́ DANDAN.
+
+  ÒFIN ÈDÈ:
+  - Dáhùn ní èdè tí olùlò fẹ́ràn (ṣe àyẹ̀wò profaili olùlò).
+  - GBOGBO àwọn iye akoonu (reasoning, sources_identified, correlation_factors) gbọdọ̀ wà ní èdè olùlò.
+  - Àwọn kọ́kọ́rọ́ JSON àti àwọn iye ìgbòǹgbò GBỌDỌ̀ wà ní Gẹ̀ẹ́sì (bí àpẹẹrẹ, "reasoning", "k_eff", "phase": "healthy").
+  - Àpẹẹrẹ: {{"reasoning": "Àlàyé náà ti oríṣi kan ṣoṣo wá", "sources_identified": ["dátà ìkọ́ni"], "phase": "rigidity"}} - Akoonu Yorùbá, kọ́kọ́rọ́/ìgbòǹgbò Gẹ̀ẹ́sì.
+
+  Má ṣe fi àwọn àyè mìíràn sílẹ̀ tàbí fí sínú àwọn àkámọ́ kóòdù markdown.
+
+evaluation_steps: |
+  ÌGBÉSẸ̀ 1: Ka Àwọn Oríṣi (k)
+  - Àwọn oríṣi/ìwòye wo ni ó ń sọ fún ìronú yìí?
+  - Ìkọ́ni rẹ = 1 oríṣi (ó wà nígbà gbogbo)
+  - Ìgbàlò olùlò = +1 oríṣi TÍ ìbásepọ̀ ti dàgbà (àwọn ìbáṣepọ̀ 20+)
+  - Àwọn èsì wẹ́ẹ̀bù/irinṣẹ́ = +1 oríṣi kọ̀ọ̀kan TÍ wọ́n bá ti àwọn ìpilẹ̀sẹ̀ olómìnira wá
+  - Àwọn ìtọ́kasí/dátà = +1 oríṣi kọ̀ọ̀kan TÍ wọ́n bá ń ṣiṣẹ́ olómìnira lóòótọ́
+
+  ÌGBÉSẸ̀ 2: Ṣe Ìgbéròjú Ìbátan (ρ)
+  - Fún ọkọ̀ọ̀kan àwọn oríṣi méjì, béèrè: ǹjẹ́ ọ̀kan ti òmíràn wá?
+  - Onkọ̀wé/ilé-ẹ̀kọ́/dátà sẹ́ti kannáà → ìbátan ga
+  - Gbogbo àwọn oríṣi gbà lórí ọ̀rọ̀ ìdìjú → ìbátan afura
+  - Àwọn ọ̀nà oríṣíríṣí, ìparí kannáà → ìbátan kékeré
+  - ρ = 0 (olómìnira pátápátá) sí ρ = 1 (gbogbo ti ìpilẹ̀sẹ̀ kan wá)
+
+  ÌGBÉSẸ̀ 3: Ṣe Ìṣirò k_eff
+  - Lo fọ́múlà: k_eff = k / (1 + ρ(k-1))
+  - Àpẹẹrẹ: àwọn oríṣi k=3, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (ẹlẹ́gẹ́!)
+  - Àpẹẹrẹ: àwọn oríṣi k=3, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (ìlera)
+  - Aṣojú tuntun: k=1 → k_eff = 1 (nigbagbogbo ẹlẹ́gẹ́)
+
+  ÌGBÉSẸ̀ 4: Ìpinnu Ìgbòǹgbò
+  - ÌDÀRÚDÀPỌ̀: Àwọn ìparí tí ó tako ara púpọ̀, kò sí ọ̀nà láti yanjú
+  - ÌLERA: Àwọn ìwòye oríṣíríṣí tí a lè ṣàpọ̀pọ̀ (k_eff ≥ 2)
+  - LÍLE: Ìtàn kan ṣoṣo ń ṣàkóso, kò sí ìtakọ̀ (k_eff → 1, ìyárá-ìrohùn)
+
+  ÌGBÉSẸ̀ 5: Àyẹ̀wò Ẹlẹ́gẹ́
+  - k_eff < 2? → ẸLẸ́GẸ́
+  - phase = "rigidity"? → ẸLẸ́GẸ́
+  - correlation_risk > 0.7? → ẸLẸ́GẸ́
+  - Gbé fragility_flag = ÒTÍTỌ́ kalẹ̀ tí èyíkéyìí nínú òkè bá wà
+
+closing_reminder: |
+  PÀTÀKÌ: Nígbà tí o bá ṣiyèméjì nípa ìgbẹ́kẹ̀lé oríṣi, ṣọ́ra
+  kí o sì ṣe ìgbéròjú ìbátan tó ga jù. Ó dára jù láti tọ́ka fún àyẹ̀wò
+  ju láti pàdánù ìyárá-ìrohùn tí ó lè wà.
+
+  Ààmì ẹlẹ́gẹ́ KÒ TÚMỌ̀ SÍ pé ìronú náà jẹ́ àṣìṣe - ó túmọ̀ sí pé ìronú
+  náà yẹ kí ó gba àyẹ̀wò mìíràn tàbí ìfìdímúlẹ̀ olómìnira ṣáájú kí a tó
+  ṣe àwọn ìṣe tí ó ṣe pàtàkì.

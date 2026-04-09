@@ -258,7 +258,7 @@ Only for multi-provider services:
 
 ## Localization
 
-CIRIS supports 20 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
+CIRIS supports 29 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
 
 ### Supported Languages
 `am` (Amharic), `ar` (Arabic), `bn` (Bengali), `de` (German), `en` (English), `es` (Spanish), `fa` (Persian), `fr` (French), `ha` (Hausa), `hi` (Hindi), `id` (Indonesian), `it` (Italian), `ja` (Japanese), `ko` (Korean), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `tr` (Turkish), `ur` (Urdu), `zh` (Chinese)

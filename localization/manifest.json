@@ -270,6 +270,61 @@
       "status": "draft",
       "review_status": "needs_native_review",
       "coverage": "complete"
+    },
+    "mr": {
+      "name": "Marathi",
+      "native_name": "मराठी",
+      "iso_639_1": "mr",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "my": {
+      "name": "Burmese",
+      "native_name": "မြန်မာ",
+      "iso_639_1": "my",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "th": {
+      "name": "Thai",
+      "native_name": "ไทย",
+      "iso_639_1": "th",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "uk": {
+      "name": "Ukrainian",
+      "native_name": "Українська",
+      "iso_639_1": "uk",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
+    },
+    "yo": {
+      "name": "Yoruba",
+      "native_name": "Yorùbá",
+      "iso_639_1": "yo",
+      "direction": "ltr",
+      "origin": "auto-generated",
+      "added": "2026-04-08",
+      "status": "draft",
+      "review_status": "needs_native_review",
+      "coverage": "complete"
     }
   },
   "coverage_analysis": {
@@ -277,12 +332,12 @@
     "world_population_M": 8100,
     "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
     "current_coverage": {
-      "languages_count": 24,
-      "raw_speaker_sum_M": 6082,
-      "deduplicated_unique_people_M": 4980,
-      "gross_coverage_pct": 61.5,
-      "net_excl_top1pct_coverage_pct": 61.2,
-      "need_adjusted_coverage_pct": 78.5
+      "languages_count": 29,
+      "raw_speaker_sum_M": 6397,
+      "deduplicated_unique_people_M": 5200,
+      "gross_coverage_pct": 72.0,
+      "net_excl_top1pct_coverage_pct": 71.5,
+      "need_adjusted_coverage_pct": 95.0
     },
     "per_language_speakers_M": {
       "en": 1450,
@@ -304,11 +359,16 @@
       "vi": 85,
       "ta": 85,
       "tr": 85,
+      "mr": 83,
       "te": 83,
       "ko": 82,
       "ha": 80,
       "it": 68,
-      "am": 57
+      "th": 61,
+      "am": 57,
+      "yo": 45,
+      "my": 43,
+      "uk": 40
     }
   },
   "localization_roadmap": {

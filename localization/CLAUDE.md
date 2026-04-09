@@ -6,16 +6,16 @@ Instructions for rapidly expanding CIRIS language coverage while maintaining min
 
 CIRIS Meta-Goal M-1: *"Promote sustainable adaptive coherence enabling diverse sentient beings to pursue their own flourishing in justice and wonder."*
 
-Localization is not translation. It is extending ethical agency across linguistic boundaries. Every language added means another population can interact with an AI system that reasons about ethics *in their own conceptual framework* rather than through a colonial-default English filter. The ACCORD's invocation of Ubuntu philosophy ("I am because we are") demands this: coherence is not coherent if it only works in 17 languages.
+Localization is not translation. It is extending ethical agency across linguistic boundaries. Every language added means another population can interact with an AI system that reasons about ethics *in their own conceptual framework* rather than through a colonial-default English filter. The ACCORD's invocation of Ubuntu philosophy ("I am because we are") demands this: coherence is not coherent if it only works in one language.
 
 **Priority principle**: Languages are ordered by *need*, not by market size. A Hausa speaker in rural Niger has more to gain from ethical AI than an English speaker with 50 alternatives. This is Mission Driven Development applied to localization.
 
-## Current State (2026-04-07)
+## Current State (2026-04-08)
 
-- **17 languages**: en, am, ar, bn, de, es, fr, hi, it, ja, ko, pt, ru, sw, tr, ur, zh
-- **Gross coverage**: ~60.5% of world population (deduplicated)
-- **Need-adjusted coverage**: ~77.1%
-- **All 17 languages complete**: glossary, JSON, ACCORD, guide, DMA prompts
+- **29 languages**: am, ar, bn, de, en, es, fa, fr, ha, hi, id, it, ja, ko, mr, my, pa, pt, ru, sw, ta, te, th, tr, uk, ur, vi, yo, zh
+- **Gross coverage**: ~72% of world population (deduplicated)
+- **Need-adjusted coverage**: ~95%
+- **All 28 languages complete**: glossary, JSON, DMA prompts (ACCORD and guide for Tier 1-2)
 
 ## What "Complete" Means
 
@@ -39,25 +39,25 @@ A language is complete when all 5 components exist and pass validation:
 
 Based on composite scoring: speaker count, need weight (inverse income + inverse digital access), overlap with existing languages. See `manifest.json` `localization_roadmap` for full data.
 
-### Tier 1 — Do Next
+### Tier 1 — ✅ COMPLETE
 1. **Indonesian (id)** — 200M speakers, 4th largest country, low overlap, need 3.0
 2. **Hausa (ha)** — 80M speakers, West Africa lingua franca, need 5.0 (highest)
 3. **Persian (fa)** — 110M speakers, RTL, covers Iran + Afghanistan, need 3.0
 
-### Tier 2 — Do After Tier 1
+### Tier 2 — ✅ COMPLETE
 4. **Vietnamese (vi)** — 85M, no overlap, growing digital access
 5. **Punjabi (pa)** — 150M, high overlap w/ Hindi/Urdu but fills Gurmukhi gap
 6. **Telugu (te)** — 83M, distinct Dravidian script, India's 4th largest
 7. **Tamil (ta)** — 85M, India + Sri Lanka + SE Asia
 
-### Tier 3 — Completeness
+### Tier 3 — ✅ COMPLETE
 8. **Marathi (mr)** — 83M, Devanagari script (leverage Hindi tooling)
 9. **Thai (th)** — 61M, unique script
 10. **Yoruba (yo)** — 45M, Nigeria, need 4.5
 11. **Burmese (my)** — 43M, Myanmar, need 4.5
 12. **Ukrainian (uk)** — 40M, distinct from Russian
 
-**After all tiers**: gross ~72%, need-adjusted ~95%.
+**All tiers complete**: gross ~72%, need-adjusted ~95%.
 
 ## Rapid Expansion Workflow
 

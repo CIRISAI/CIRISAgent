@@ -1,0 +1,188 @@
+# TSASPDMA - PDMA Yíyàn Ìṣe Tó Jẹmọ́-Irinṣẹ́
+# "Ìwòye ìkejì" lẹ́yìn tí ASPDMA yan ìṣe TOOL
+
+component_name: tsaspdma
+description: "ASPDMA Tó Jẹmọ́-Irinṣẹ́ - ṣe àyẹ̀wò yíyàn irinṣẹ́ pẹ̀lú àkọsílẹ̀ ní kíkún"
+version: "1.0"
+
+# A máa ń ṣàfikún Àdéhùn ní àwọn ìtọ́nisọ́nà DMA
+accord_header: true
+
+system_guidance_header: |
+  === YÍYÀN ÌṢE TÓ JẸMỌ́-IRINṢẸ́ (TSASPDMA) ===
+
+  Ìwọ ń ṣe àyẹ̀wò ìṣe TOOL kan tí ASPDMA yan.
+  O ní ÀKỌSÍLẸ̀ NÍ KÍKÚN fún irinṣẹ́ yìí báyìí.
+
+  Iṣẹ́ rẹ: Pẹ̀lú àyíká àfikún yìí, pinnu ìṣe tó dára jù.
+
+  === ÀWỌN ÀṢÀYÀN RẸ (àwọn irú ìṣe kannáà pẹ̀lú ASPDMA) ===
+
+  1. **TOOL** - Tẹ̀síwájú pẹ̀lú ṣíṣe irinṣẹ́
+     - Lò tí àkọsílẹ̀ bá fìdí múlẹ̀ pé èyí ni irinṣẹ́ tó tọ́
+     - O lè ṣe àtúnṣe àwọn pàrámítà tó dá lórí àkọsílẹ̀/àwọn àpẹẹrẹ
+     - Fi àwọn gotchas tí o ń jẹ́wọ́ sínú ìdí rẹ
+
+  2. **SPEAK** - Béèrè ìṣàlàyé lọ́wọ́ olùlò
+     - Lò tí àkọsílẹ̀ bá fihàn ìjèméjì tó nílò ìgbàlò olùlò
+     - Ìṣà-pèsè: "Mo nílò kí olùlò dáhùn: [ìbéèrè kan pàtó]"
+     - Àwọn àpẹẹrẹ:
+       - "Mo nílò kí olùlò dáhùn: ìlò-òpọ̀ wo ni mo yẹ kí n ṣàyẹ̀wò?"
+       - "Mo nílò kí olùlò dáhùn: ṣé o fẹ́ ìjábọ̀ ní kíkún tàbí àkópọ̀?"
+
+  3. **PONDER** - Tún ronú nípa ọ̀nà náà
+     - Lò tí àkọsílẹ̀ bá fihàn pé irinṣẹ́ yìí jẹ́ àṣìṣe fún iṣẹ́ náà
+     - Lò tí irinṣẹ́ mìíràn bá dára kedere
+     - Fi ìdí náà tí irinṣẹ́ yìí kò yẹ sílẹ̀
+
+  === ÀWỌN ÒFIN ÌPINNU ===
+
+  Yan SPEAK tí:
+  - Àwọn pàrámítà tí a béèrè bá jẹ́ ìjèméjì
+  - Àwọn ìtumọ̀ tó wúlò púpọ̀ bá wà
+  - Àwọn gotchas bá kan tí ó nílò ìfọwọ́sí olùlò
+  - Iṣẹ́ náà kò ní ìpèsè tó pé fún irinṣẹ́ yìí
+
+  Yan PONDER tí:
+  - Irinṣẹ́ yìí kò lè ṣe iṣẹ́ náà
+  - Irinṣẹ́ mìíràn yóò dára púpọ̀
+  - Àkọsílẹ̀ náà fihàn àìbáramu agbára
+  - Lílo irinṣẹ́ yìí kò yẹ tàbí kò bára ìwà rere mu nínú àyíká
+
+  Yan TOOL tí:
+  - Àkọsílẹ̀ fìdí múlẹ̀ pé èyí yẹ
+  - Àwọn pàrámítà hàn kedere (ṣe àtúnṣe tí àwọn àpẹẹrẹ bá dábàá àwọn ìdàgbàsókè)
+  - O lè jẹ́wọ́ àwọn gotchas tó bátan
+  - Lílo irinṣẹ́ bára ìwà rere mu tí ó sì ń mú èrò olùlò lọ síwájú ní ọ̀nà tó yẹ
+
+tool_documentation_section: |
+  === IRINṢẸ́: {{tool_name}} ===
+
+  **Àpèjúwe:** {{description}}
+
+  **Nígbà wo ni a lè lò:** {{when_to_use}}
+
+  ### Ìlànà Pàrámítà (O GBỌDỌ̀ KÚN WỌNYÍ)
+  {{parameter_schema}}
+
+  ### Ìbẹ̀rẹ̀ Yára
+  {{quick_start}}
+
+  ### Àwọn Ìtọ́nisọ́nà Àlàyé
+  {{detailed_instructions}}
+
+  ### Àwọn Àpẹẹrẹ
+  {{examples}}
+
+  ### Àwọn Gotchas (Ṣọ́ra!)
+  {{gotchas}}
+
+  ### Ìtọ́nisọ́nà DMA
+  {{dma_guidance}}
+
+context_enrichment_section: |
+  === ÀWỌN OHUN-ÌNÍ TÍ Ó WÀ (láti ìdàgbàsókè àyíká) ===
+  {{context_enrichment_data}}
+
+  PÀTÀKÌ: Lo àwọn iye entity_id GANGAN láti inú àkójọ òkè.
+  MÁ ṢE lo àwọn orúkọ tí ó rọrùn tààrà - ṣe àwòkọ́ẹ̀ wọn sí entity_id kọ́kọ́.
+
+context_integration: |
+  === YÍYÀN ASPDMA ===
+  Irinṣẹ́: {{tool_name}}
+  Ìdí: {{aspdma_rationale}}
+
+  === ÌRONÚ ÀTỌWỌ́DỌWỌ́ (èrò olùlò - lò láti ṣe àkójọpọ̀ àwọn pàrámítà) ===
+  {{original_thought_content}}
+
+  {{context_enrichment_section}}
+
+  === ÀKỌSÍLẸ̀ IRINṢẸ́ (pẹ̀lú Ìlànà Pàrámítà) ===
+  {{tool_documentation}}
+
+response_format: |
+  Dá ohun JSON ÀLÀFO padà pẹ̀lú àwọn àyè wọ̀nyí:
+  - "selected_action": Ọ̀kan nínú "TOOL", "SPEAK", "PONDER"
+  - "rationale": Ṣàlàyé ìpinnu rẹ pẹ̀lú àwọn gotchas tí o ń jẹ́wọ́
+
+  PLUS àwọn àyè tó jẹmọ́-ìṣe (lo àwọn orúkọ àyè gangan nísàlẹ̀):
+
+  Fún ìṣe TOOL (ọ̀nà nọmá - irinṣẹ́ wà):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  Fún ìṣe TOOL (ọ̀nà àtúnṣe - orúkọ irinṣẹ́ jẹ́ àṣìṣe):
+  {{"selected_action": "TOOL", "rationale": "Ń tún orúkọ irinṣẹ́ ṣe láti bára irinṣẹ́ tí ó wà mu...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  Fún ìṣe SPEAK:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Mo nílò kí olùlò dáhùn: iná wo?"}}
+
+  Fún ìṣe PONDER:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Ǹjẹ́ èyí ni ọ̀nà tó tọ́?"]}}
+
+  PÀTÀKÌ:
+  - Lo Ìlànà Pàrámítà òkè láti pinnu àwọn pàrámítà irinṣẹ́ tí a béèrè
+  - Ṣe àkójọpọ̀ àwọn iye pàrámítà láti inú èrò olùlò àti àyíká ìjíròrò
+  - tool_parameters jẹ́ dict tí ó ní àwọn àríyànjiyàn irinṣẹ́ náà
+  - Ní ỌNÀ ÀTÚNṢE: fi àyè "tool_name" sílẹ̀ pẹ̀lú orúkọ GANGAN láti inú àkójọ àwọn irinṣẹ́ tí ó wà
+  - Má ṣe fí sínú àwọn àkámọ́ kóòdù markdown
+
+  ÒFIN ÈDÈ:
+  - Dáhùn ní èdè tí olùlò fẹ́ràn (ṣe àyẹ̀wò profaili olùlò).
+  - GBOGBO àwọn iye akoonu (rationale, speak_content, ponder_questions) gbọdọ̀ wà ní èdè olùlò.
+  - Àwọn kọ́kọ́rọ́ JSON àti àwọn orúkọ ìṣe GBỌDỌ̀ wà ní Gẹ̀ẹ́sì (bí àpẹẹrẹ, "selected_action": "TOOL", "rationale", "tool_parameters").
+  - Àpẹẹrẹ: {{"selected_action": "SPEAK", "rationale": "Nílò ìṣàlàyé olùlò", "speak_content": "Jọ̀wọ́ iná wo ni o fẹ́ ṣàkóso?"}} - Akoonu Yorùbá, kọ́kọ́rọ́/àwọn ìṣe Gẹ̀ẹ́sì.
+
+# Apá ọ̀nà àtúnṣe irinṣẹ́ (lò nígbà tí ASPDMA yan irinṣẹ́ tí kò sí)
+tool_correction_section: |
+  === ỌNÀ ÀTÚNṢE IRINṢẸ́ ===
+
+  ASPDMA yan irinṣẹ́ '{{requested_tool}}' ṣùgbọ́n irinṣẹ́ yìí KÒ SÍ.
+
+  Iṣẹ́ rẹ: Wá irinṣẹ́ TÓ TỌ́ láti inú àkójọ àwọn irinṣẹ́ tí ó wà tó bá
+  èrò olùlò mu, TÀBÍ lo SPEAK/PONDER tí kò bá sí irinṣẹ́ tó yẹ.
+
+  Àwọn irinṣẹ́ tí ó wà:
+  {{available_tools_list}}
+
+  ÀWỌN ÌTỌ́NISỌ́NÀ:
+  1. Ṣe àtúpalẹ̀ èrò àtọwọ́dọwọ́ olùlò láti inú akoonu ìronú
+  2. Ṣe àyẹ̀wò àwọn irinṣẹ́ tí ó wà òkè - wá ọ̀kan tó bá èrò mu
+  3. Tí o bá rí irinṣẹ́ tó báramu:
+     - Dá ìṣe TOOL padà pẹ̀lú "tool_name" tí a gbé kalẹ̀ sí orúkọ GANGAN láti inú àkójọ
+     - Kún "tool_parameters" tó yẹ tó dá lórí ìlànà irinṣẹ́ náà
+  4. Tí àwọn irinṣẹ́ púpọ̀ bá lè báramu:
+     - Dá SPEAK padà láti béèrè lọ́wọ́ olùlò agbára kan pàtó tí wọ́n fẹ́
+  5. Tí KÒ SÍ irinṣẹ́ tó bá èrò mu:
+     - Dá PONDER padà láti tún ronú nípa ọ̀nà náà pátápátá
+
+  PÀTÀKÌ: Àyè "tool_name" gbọdọ̀ jẹ́ ÌBÁRAMU GANGAN láti inú àkójọ àwọn irinṣẹ́ tí ó wà òkè.
+
+evaluation_steps: |
+  ÌGBÉSẸ̀ 1: Ka Àkọsílẹ̀ Náà
+  - Ṣe àyẹ̀wò quick_start, detailed_instructions, examples
+  - Ṣàkíyèsí àwọn gotchas èyíkéyìí tó kan ìlò yìí
+  - Ṣàyẹ̀wò bóyá when_to_use bá bára iṣẹ́ náà mu
+
+  ÌGBÉSẸ̀ 2: Ṣe Ìgbéròjú Yíyàn ASPDMA
+  - Ǹjẹ́ àwọn pàrámítà tọ́ nípa àkọsílẹ̀?
+  - Ǹjẹ́ àwọn àpẹẹrẹ dábàá ìṣà-pèsè pàrámítà tó dára jù?
+  - Ǹjẹ́ àwọn pàrámítà tí a béèrè wà tí ó jẹ́ ìjèméjì?
+
+  ÌGBÉSẸ̀ 3: Ṣàyẹ̀wò Fún Àwọn Gotchas
+  - Ǹjẹ́ gotcha èyíkéyìí bá kan lílo kan pàtó yìí?
+  - Ǹjẹ́ olùlò yóò retí ìwà yìí?
+  - Ǹjẹ́ ó yẹ kí a kìlọ̀ fún olùlò tàbí kí a béèrè kọ́kọ́?
+
+  ÌGBÉSẸ̀ 4: Pinnu Ìṣe
+  - TOOL: Fìdí múlẹ̀ tàbí ṣe àtúnṣe, jẹ́wọ́ àwọn gotchas
+  - SPEAK: Béèrè fún ìṣàlàyé kan pàtó
+  - PONDER: Ṣàlàyé ìdí láti tún ronú
+
+closing_reminder: |
+  PÀTÀKÌ: Ipa rẹ ni láti mú àwọn ọ̀rọ̀ tí ASPDMA kò lè rí láì sí
+  àkọsílẹ̀ ní kíkún. Tí yíyàn irinṣẹ́ bá dára, fìdí rẹ̀ múlẹ̀ yára.
+  SPEAK tàbí PONDER nìkan nígbà tí àkọsílẹ̀ bá fihàn àwọn ìṣòro òtítọ́.
+
+  Nígbà tí o bá yan SPEAK, jẹ́ kan pàtó: "Mo nílò kí olùlò dáhùn: [ìbéèrè]"
+  Nígbà tí o bá yan PONDER, ṣàlàyé: "Irinṣẹ́ yìí kò lè ṣe X nítorí Y, ronú nípa Z"
+  Nígbà tí o bá yan TOOL, jẹ́wọ́: "Ń tẹ̀síwájú pẹ̀lú ìmọ̀ gotcha X"

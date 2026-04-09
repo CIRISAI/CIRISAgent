@@ -125,7 +125,7 @@ enum class LocationGranularity {
 
 /**
  * Supported language for the PREFERENCES step.
- * Mirrors localization/manifest.json (17 languages).
+ * Mirrors localization/manifest.json (29 languages).
  * ISO 639-1 codes with native names for display.
  */
 data class SupportedLanguage(
@@ -143,6 +143,7 @@ val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("am", "አማርኛ", "Amharic"),
     SupportedLanguage("ar", "العربية", "Arabic"),
     SupportedLanguage("bn", "বাংলা", "Bengali"),
+    SupportedLanguage("my", "မြန်မာ", "Burmese"),
     SupportedLanguage("zh", "中文", "Chinese"),
     SupportedLanguage("en", "English", "English"),
     SupportedLanguage("fr", "Français", "French"),
@@ -153,6 +154,7 @@ val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("it", "Italiano", "Italian"),
     SupportedLanguage("ja", "日本語", "Japanese"),
     SupportedLanguage("ko", "한국어", "Korean"),
+    SupportedLanguage("mr", "मराठी", "Marathi"),
     SupportedLanguage("fa", "فارسی", "Persian"),
     SupportedLanguage("pt", "Português", "Portuguese"),
     SupportedLanguage("pa", "ਪੰਜਾਬੀ", "Punjabi"),
@@ -161,9 +163,12 @@ val SUPPORTED_LANGUAGES = listOf(
     SupportedLanguage("sw", "Kiswahili", "Swahili"),
     SupportedLanguage("ta", "தமிழ்", "Tamil"),
     SupportedLanguage("te", "తెలుగు", "Telugu"),
+    SupportedLanguage("th", "ไทย", "Thai"),
     SupportedLanguage("tr", "Türkçe", "Turkish"),
+    SupportedLanguage("uk", "Українська", "Ukrainian"),
     SupportedLanguage("ur", "اردو", "Urdu"),
-    SupportedLanguage("vi", "Tiếng Việt", "Vietnamese")
+    SupportedLanguage("vi", "Tiếng Việt", "Vietnamese"),
+    SupportedLanguage("yo", "Yorùbá", "Yoruba")
 )
 
 /**

@@ -199,9 +199,9 @@ cd mobile/iosApp && xcodebuild -scheme iosApp
 
 ## Localization
 
-CIRIS supports **17 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
+CIRIS supports **29 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
 
-**Supported Languages:** Amharic (am), Arabic (ar), Bengali (bn), Chinese (zh), English (en), French (fr), German (de), Hindi (hi), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Swahili (sw), Turkish (tr), Urdu (ur)
+**Supported Languages:** Amharic (am), Arabic (ar), Bengali (bn), Burmese (my), Chinese (zh), English (en), French (fr), German (de), Hausa (ha), Hindi (hi), Indonesian (id), Italian (it), Japanese (ja), Korean (ko), Marathi (mr), Persian (fa), Portuguese (pt), Punjabi (pa), Russian (ru), Spanish (es), Swahili (sw), Tamil (ta), Telugu (te), Thai (th), Turkish (tr), Ukrainian (uk), Urdu (ur), Vietnamese (vi), Yoruba (yo)
 
 **What's Localized:**
 - **ACCORD** - The complete ethical framework (~1150 lines per language)

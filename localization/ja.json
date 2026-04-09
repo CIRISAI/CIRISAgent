@@ -383,6 +383,7 @@
         "interact_disconnected": "切断",
         "interact_dismiss": "閉じる",
         "interact_hallucination_warning": "AIは幻覚を起こす可能性があります - 事実を確認してください",
+        "interact_pending_deferrals": "{count}件の保留中の延期がレビュー待ちです",
         "interact_welcome_title": "Allyへようこそ",
         "interact_welcome_subtitle": "あなたの成長をサポートするアシスタント",
         "interact_welcome_hint": "タスク、スケジュール、意思決定、ウェルビーイングについてAllyに相談するか、CIRISの仕組みを学びましょう！",

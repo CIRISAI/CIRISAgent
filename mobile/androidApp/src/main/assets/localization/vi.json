@@ -860,7 +860,6 @@
     "interact_file_count": "{count} tệp",
     "interact_files_count": "{count} tệp",
     "interact_hallucination_warning": "AI ảo tưởng - KIỂM TRA SỰ THẬT",
-    "interact_pending_deferrals": "{count} hoãn lại đang chờ xem xét",
     "interact_image_count": "{count} hình ảnh",
     "interact_images_count": "{count} hình ảnh",
     "interact_input_placeholder": "Nhập tin nhắn của bạn...",

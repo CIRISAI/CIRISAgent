@@ -422,6 +422,7 @@
         "interact_disconnected": "ተቋርጧል",
         "interact_dismiss": "ዝጋ",
         "interact_hallucination_warning": "AI ሊሳሳት ይችላል - እውነታዎችን ያረጋግጡ",
+        "interact_pending_deferrals": "{count} በመጠባበቅ ላይ ያለ ሽግግር(ሎች) ግምገማን በመጠበቅ ላይ",
         "interact_welcome_title": "ወደ Ally እንኳን በደህና መጡ",
         "interact_welcome_subtitle": "የግል እድገት ረዳትዎ",
         "interact_welcome_hint": "Ally ስራዎች፣ መርሃ ግብሮች፣ ውሳኔዎች ወይም ደህንነት ላይ እንዴት ሊረዳዎት እንደሚችል ይጠይቁ — ወይም CIRIS እንዴት እንደሚሰራ ይወቁ!",

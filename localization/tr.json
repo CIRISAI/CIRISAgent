@@ -383,6 +383,7 @@
         "interact_disconnected": "Bağlantı Kesildi",
         "interact_dismiss": "Kapat",
         "interact_hallucination_warning": "YAPAY ZEKA YANILSAMALAR YAŞAR - GERÇEKLERİ KONTROL EDİN",
+        "interact_pending_deferrals": "{count} bekleyen erteleme inceleme bekliyor",
         "interact_welcome_title": "Ally'ye Hoş Geldiniz",
         "interact_welcome_subtitle": "Kişisel gelişim asistanınız",
         "interact_welcome_hint": "Ally'ye görevler, planlama, kararlar veya sağlık konularında nasıl yardımcı olabileceğini sorun — veya CIRIS'in nasıl çalıştığını sorun!",

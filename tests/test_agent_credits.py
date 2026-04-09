@@ -339,6 +339,120 @@ class TestWiseBusValidateCapability:
 
 
 # =========================================================================
+# WiseBus Domain-Based Deferral Routing Tests
+# =========================================================================
+
+
+class TestWiseBusDomainFiltering:
+    """Test that WiseBus filters services by supported_domains when routing deferrals."""
+
+    @pytest.mark.asyncio
+    async def test_filters_services_by_domain(self) -> None:
+        """Services without the required domain should not receive deferrals."""
+        from dataclasses import dataclass, field
+        from typing import List
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        @dataclass
+        class MockCapabilities:
+            actions: List[str]
+            scopes: List[str]
+            supported_domains: List[str] = field(default_factory=list)
+
+        # Create mock services - one supports MEDICAL, one doesn't
+        medical_service = MagicMock()
+        medical_service.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+            supported_domains=["MEDICAL", "RESEARCH"],
+        )
+        medical_service.send_deferral = AsyncMock(return_value="deferred_123")
+
+        financial_service = MagicMock()
+        financial_service.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+            supported_domains=["FINANCIAL"],
+        )
+        financial_service.send_deferral = AsyncMock(return_value="deferred_456")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [medical_service, financial_service]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        # Send a MEDICAL deferral - should only go to medical_service
+        context = DeferralContext(
+            thought_id="t1",
+            task_id="task1",
+            reason="Medical consultation needed",
+            domain_hint="MEDICAL",
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        assert result is True
+        medical_service.send_deferral.assert_called_once()
+        financial_service.send_deferral.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_domain_hint_broadcasts_to_all(self) -> None:
+        """Without domain_hint, should broadcast to all services."""
+        from dataclasses import dataclass, field
+        from typing import List
+        from unittest.mock import AsyncMock, MagicMock
+
+        from ciris_engine.logic.buses.wise_bus import WiseBus
+        from ciris_engine.schemas.services.context import DeferralContext
+
+        @dataclass
+        class MockCapabilities:
+            actions: List[str]
+            scopes: List[str]
+            supported_domains: List[str] = field(default_factory=list)
+
+        service_a = MagicMock()
+        service_a.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+            supported_domains=["MEDICAL"],
+        )
+        service_a.send_deferral = AsyncMock(return_value="deferred_a")
+
+        service_b = MagicMock()
+        service_b.get_capabilities.return_value = MockCapabilities(
+            actions=["send_deferral"],
+            scopes=["oversight"],
+            supported_domains=["FINANCIAL"],
+        )
+        service_b.send_deferral = AsyncMock(return_value="deferred_b")
+
+        mock_registry = MagicMock()
+        mock_registry.get_services_by_type.return_value = [service_a, service_b]
+        mock_time = MagicMock()
+        mock_time.now.return_value = datetime.now(timezone.utc)
+
+        bus = WiseBus(service_registry=mock_registry, time_service=mock_time)
+
+        # Send deferral without domain_hint - should go to both
+        context = DeferralContext(
+            thought_id="t2",
+            task_id="task2",
+            reason="Human review needed",
+            domain_hint=None,  # No domain hint
+        )
+        result = await bus.send_deferral(context, "test_handler")
+
+        assert result is True
+        service_a.send_deferral.assert_called_once()
+        service_b.send_deferral.assert_called_once()
+
+
+# =========================================================================
 # Anti-Gaming Policy Tests
 # =========================================================================
 

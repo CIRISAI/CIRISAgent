@@ -383,6 +383,7 @@
         "interact_disconnected": "Disconnesso",
         "interact_dismiss": "Chiudi",
         "interact_hallucination_warning": "L'IA ALLUCI NA - VERIFICA I FATTI",
+        "interact_pending_deferrals": "{count} rinvio/i in attesa di revisione",
         "interact_welcome_title": "Benvenuto in Ally",
         "interact_welcome_subtitle": "Il tuo assistente personale per il benessere",
         "interact_welcome_hint": "Chiedi ad Ally come può aiutarti con compiti, pianificazione, decisioni o benessere — o chiedi come funziona CIRIS!",

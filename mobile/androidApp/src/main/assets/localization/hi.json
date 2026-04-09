@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "कौन सा वैकल्पिक दृष्टिकोण मेरे सिद्धांतों के साथ बेहतर तरीके से संरेखित होगा?",
         "ponder_forced_retry": "विवेक पुनः प्रयास के बाद मजबूर PONDER",
         "override_rationale": "{conscience_name} द्वारा ओवरराइड किया गया: {action} पर पुनर्विचार करने की आवश्यकता है",
-        "forced_ponder_rationale": "लूप को रोकने के लिए विवेक पुनः प्रयास के बाद मजबूर PONDER"
+        "forced_ponder_rationale": "लूप को रोकने के लिए विवेक पुनः प्रयास के बाद मजबूर PONDER",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "CIRIS में सहमति कैसे काम करती है, इसके बारे में जानें",
     "consent_about_title": "सहमति के बारे में",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Paymaster Key कॉन्फ़िगर करें",
         "wallet_paymaster_hint": "गैसलेस USDC ट्रांसफर सक्षम करने के लिए अपनी Etherspot Arka API key दर्ज करें",
         "wallet_paymaster_key_label": "Arka API Key",
-        "wallet_paymaster_save": "Key सहेजें"
+        "wallet_paymaster_save": "Key सहेजें",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "कृपया एक मोड चुनें",
     "setup_validation_username_required": "उपयोगकर्ता नाम आवश्यक है",
     "startup": {
-        "startup_retry": "पुनः प्रयास करें"
+        "startup_retry": "पुनः प्रयास करें",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "चल रहा है...",
@@ -1775,7 +1789,10 @@
     "status_pending": "लंबित",
     "system": {
         "system_cognitive_state": "संज्ञानात्मक स्थिति",
-        "system_queue_depth": "कतार गहराई"
+        "system_queue_depth": "कतार गहराई",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "कार्य आईडी",
     "telemetry_online": "ऑनलाइन",

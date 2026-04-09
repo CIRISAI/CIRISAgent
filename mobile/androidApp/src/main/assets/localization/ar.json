@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "ما النهج البديل الذي سيتماشى بشكل أفضل مع مبادئي؟",
         "ponder_forced_retry": "PONDER إجباري بعد إعادة محاولة الضمير",
         "override_rationale": "تم التجاوز بواسطة {conscience_name}: يجب إعادة النظر في {action}",
-        "forced_ponder_rationale": "PONDER إجباري بعد إعادة محاولة الضمير لمنع الحلقات"
+        "forced_ponder_rationale": "PONDER إجباري بعد إعادة محاولة الضمير لمنع الحلقات",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "تسمح تدفقات الموافقة للوكيل بتعلم مهارات جديدة من خلال تفاعلاتك",
     "consent_about_title": "حول تدفقات الموافقة",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "تكوين مفتاح Paymaster",
         "wallet_paymaster_hint": "أدخل مفتاح Etherspot Arka API لتمكين تحويلات USDC بدون غاز",
         "wallet_paymaster_key_label": "مفتاح Arka API",
-        "wallet_paymaster_save": "حفظ المفتاح"
+        "wallet_paymaster_save": "حفظ المفتاح",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "الرجاء اختيار وضع",
     "setup_validation_username_required": "اسم المستخدم مطلوب",
     "startup": {
-        "startup_retry": "إعادة المحاولة"
+        "startup_retry": "إعادة المحاولة",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "جارٍ التنفيذ...",
@@ -1775,7 +1789,10 @@
     "status_pending": "معلق",
     "system": {
         "system_cognitive_state": "الحالة الإدراكية",
-        "system_queue_depth": "عمق قائمة الانتظار"
+        "system_queue_depth": "عمق قائمة الانتظار",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "معرف المهمة",
     "telemetry_online": "متصل",

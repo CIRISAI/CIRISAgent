@@ -108,6 +108,7 @@ fun InteractScreen(
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenSessions: () -> Unit = {},  // Navigate to sessions screen
+    onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
@@ -142,6 +143,7 @@ fun InteractScreen(
     val walletStatus by viewModel.walletStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
+    val pendingDeferrals by viewModel.pendingDeferrals.collectAsState()
 
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
@@ -329,6 +331,15 @@ fun InteractScreen(
 
         // AI Warning banner (from fragment_interact.xml:65-76)
         AIWarningBanner(theme = theme)
+
+        // Pending deferrals banner - shows when there are human review requests waiting
+        if (pendingDeferrals > 0) {
+            PendingDeferralsBanner(
+                count = pendingDeferrals,
+                onClick = onOpenWiseAuthority,
+                theme = theme
+            )
+        }
 
         // Bubble Net - timeline of events (expandable)
         BubbleNet(
@@ -1095,6 +1106,49 @@ private fun AIWarningBanner(
         color = theme.warningText,
         textAlign = TextAlign.Center
     )
+}
+
+/**
+ * Pending deferrals banner - shows when there are human review requests waiting
+ * Tapping navigates to the Wise Authority screen to review and resolve deferrals
+ */
+@Composable
+private fun PendingDeferralsBanner(
+    count: Int,
+    onClick: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2563EB).copy(alpha = 0.15f))  // Blue tint
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "📋",
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = localizedString(
+                "mobile.interact_pending_deferrals",
+                mapOf("count" to count.toString())
+            ),
+            fontSize = 12.sp,
+            color = Color(0xFF2563EB),
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "→",
+            fontSize = 14.sp,
+            color = Color(0xFF2563EB)
+        )
+    }
 }
 
 /**

@@ -383,6 +383,7 @@
         "interact_disconnected": "Getrennt",
         "interact_dismiss": "Schließen",
         "interact_hallucination_warning": "KI KANN HALLUZINIEREN - FAKTEN PRÜFEN",
+        "interact_pending_deferrals": "{count} ausstehende Überweisungen warten auf Überprüfung",
         "interact_welcome_title": "Willkommen bei Ally",
         "interact_welcome_subtitle": "Ihr persönlicher Wachstumsassistent",
         "interact_welcome_hint": "Fragen Sie Ally, wie er bei Aufgaben, Terminen, Entscheidungen oder Wohlbefinden helfen kann — oder erfahren Sie, wie CIRIS funktioniert!",

@@ -141,15 +141,25 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         return self._agent_tier
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
-        """Send a deferral to ALL wise authority services (broadcast)"""
-        # Get ALL services with send_deferral capability
-        # Since we want to broadcast to all WA services, we need to get them all
+        """Send a deferral to wise authority services that support the domain.
+
+        If context.domain_hint is set (for domain-specific deferrals like MEDICAL,
+        FINANCIAL, etc.), only services that advertise support for that domain
+        will receive the deferral. This prevents unnecessary broadcasting and
+        ensures only qualified handlers receive domain-specific requests.
+
+        If no domain_hint is set, broadcasts to all services with send_deferral
+        capability (legacy behavior for human deferrals).
+        """
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
         logger.info(f"Found {len(all_wa_services)} total WiseAuthority services")
 
-        # Filter for services with send_deferral capability
+        # Extract domain_hint for filtering
+        domain_hint = context.domain_hint
+
+        # Filter for services with send_deferral capability AND matching domain
         services = []
         for service in all_wa_services:
             logger.debug(f"Checking service {service.__class__.__name__} for send_deferral capability")
@@ -157,14 +167,32 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             if hasattr(service, "get_capabilities"):
                 caps = service.get_capabilities()
                 logger.debug(f"Service {service.__class__.__name__} has capabilities: {caps.actions}")
-                if "send_deferral" in caps.actions:
-                    services.append(service)
-                    logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
+                if "send_deferral" not in caps.actions:
+                    continue
+
+                # Check domain support if domain_hint is specified
+                if domain_hint:
+                    supported_domains = getattr(caps, "supported_domains", [])
+                    if supported_domains and domain_hint not in supported_domains:
+                        logger.debug(
+                            f"Skipping service {service.__class__.__name__}: "
+                            f"domain '{domain_hint}' not in supported_domains {supported_domains}"
+                        )
+                        continue
+
+                services.append(service)
+                logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
             else:
                 logger.warning(f"Service {service.__class__.__name__} has no get_capabilities method")
 
         if not services:
-            logger.info(f"No wise authority service available for {handler_name}")
+            if domain_hint:
+                logger.warning(
+                    f"No wise authority service supports domain '{domain_hint}' for {handler_name}. "
+                    f"Ensure a service advertising this domain is registered (e.g., CIRISNode)."
+                )
+            else:
+                logger.info(f"No wise authority service available for {handler_name}")
             return False
 
         # Track if any service successfully received the deferral

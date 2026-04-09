@@ -383,6 +383,7 @@
         "interact_disconnected": "Déconnecté",
         "interact_dismiss": "Fermer",
         "interact_hallucination_warning": "L'IA PEUT HALLUCINER - VÉRIFIEZ LES FAITS",
+        "interact_pending_deferrals": "{count} report(s) en attente de révision",
         "interact_welcome_title": "Bienvenue sur Ally",
         "interact_welcome_subtitle": "Votre assistant personnel d'épanouissement",
         "interact_welcome_hint": "Demandez à Ally comment il peut vous aider pour les tâches, la planification, les décisions ou le bien-être — ou découvrez comment fonctionne CIRIS !",

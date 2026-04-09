@@ -127,6 +127,11 @@ class CIRISNodeService:
         self._credit_records: List[CreditRecord] = []  # Local store of credit records
         self._credit_records_count = 0
 
+        # Supported domains - configured per-node based on licensing/capabilities
+        # Empty list means general-purpose only (no specialized domains)
+        # Example: ["MEDICAL", "FINANCIAL"] for a node licensed for those domains
+        self._supported_domains: List[str] = list(self.config.get("supported_domains", []))
+
         # Metrics
         self._events_received = 0
         self._events_sent = 0
@@ -218,10 +223,25 @@ class CIRISNodeService:
     # =========================================================================
 
     def get_capabilities(self) -> SimpleCapabilities:
-        """Return capabilities for WiseBus discovery."""
+        """Return capabilities for WiseBus discovery.
+
+        CIRISNode declares only the specific domains it is licensed/configured
+        to handle. Each CIRISNode instance may specialize in different domains
+        (e.g., a medical node, a legal node, a financial+medical node).
+
+        The supported_domains config determines which domain_hint values this
+        node will receive deferrals for. WiseBus filters by domain_hint to
+        ensure only qualified handlers receive domain-specific requests.
+
+        NOTE FOR CIRISNode CHANGES:
+        - CIRISNode should return its supported_domains in registration response
+        - Portal/Registry should track which domains each node is licensed for
+        - This adapter reads supported_domains from config (set at registration)
+        """
         return SimpleCapabilities(
             actions=["send_deferral", "cirisnode_traces"],
             scopes=["cirisnode_oversight"],
+            supported_domains=self._supported_domains,
         )
 
     async def send_deferral(self, request: DeferralRequest) -> str:

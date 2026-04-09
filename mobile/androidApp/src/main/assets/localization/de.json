@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "Welcher alternative Ansatz würde besser mit meinen Prinzipien übereinstimmen?",
         "ponder_forced_retry": "Erzwungenes PONDER nach Gewissenswiederholung",
         "override_rationale": "Überschrieben durch {conscience_name}: {action} muss neu überdacht werden",
-        "forced_ponder_rationale": "Erzwungenes PONDER nach Gewissenswiederholung zur Vermeidung von Schleifen"
+        "forced_ponder_rationale": "Erzwungenes PONDER nach Gewissenswiederholung zur Vermeidung von Schleifen",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Sehen Sie, wie CIRIS Zustimmung, Datenschutz und gemeinsame Nutzung verwaltet",
     "consent_about_title": "Über Zustimmung",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Paymaster Key konfigurieren",
         "wallet_paymaster_hint": "Geben Sie Ihren Etherspot Arka API-Schlüssel ein, um gaslose USDC-Überweisungen zu aktivieren",
         "wallet_paymaster_key_label": "Arka API Key",
-        "wallet_paymaster_save": "Schlüssel speichern"
+        "wallet_paymaster_save": "Schlüssel speichern",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "Modus auswählen",
     "setup_validation_username_required": "Benutzername erforderlich",
     "startup": {
-        "startup_retry": "Wiederholen"
+        "startup_retry": "Wiederholen",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "Wird ausgeführt...",
@@ -1775,7 +1789,10 @@
     "status_pending": "Ausstehend",
     "system": {
         "system_cognitive_state": "Kognitiver Zustand",
-        "system_queue_depth": "Warteschlangentiefe"
+        "system_queue_depth": "Warteschlangentiefe",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "Aufgaben-ID",
     "telemetry_online": "Online",

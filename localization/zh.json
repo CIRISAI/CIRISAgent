@@ -393,6 +393,7 @@
         "interact_disconnected": "已断开",
         "interact_dismiss": "关闭",
         "interact_hallucination_warning": "AI 可能产生幻觉 - 请核实事实",
+        "interact_pending_deferrals": "{count} 个待处理的推迟等待审核",
         "interact_welcome_title": "欢迎使用 Ally",
         "interact_welcome_subtitle": "您的个人成长助手",
         "interact_welcome_hint": "询问 Ally 如何帮助您处理任务、日程、决策或生活——或者了解 CIRIS 如何工作！",

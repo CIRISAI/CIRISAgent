@@ -279,6 +279,10 @@ class InteractViewModel(
     private val _walletStatus = MutableStateFlow(WalletStatus())
     val walletStatus: StateFlow<WalletStatus> = _walletStatus.asStateFlow()
 
+    // Pending deferrals count for WA banner display
+    private val _pendingDeferrals = MutableStateFlow(0)
+    val pendingDeferrals: StateFlow<Int> = _pendingDeferrals.asStateFlow()
+
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
     val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
@@ -861,6 +865,18 @@ class InteractViewModel(
                 logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}, pending=${verifyStatus.levelPending}")
             } catch (e: Exception) {
                 logWarn(method, "Failed to fetch trust status: ${e.message}")
+            }
+
+            // Fetch pending deferrals count for WA banner
+            try {
+                val waStatus = apiClient.getWAStatus()
+                val prevCount = _pendingDeferrals.value
+                _pendingDeferrals.value = waStatus.pendingDeferrals
+                if (waStatus.pendingDeferrals != prevCount && waStatus.pendingDeferrals > 0) {
+                    logInfo(method, "Pending deferrals: ${waStatus.pendingDeferrals}")
+                }
+            } catch (e: Exception) {
+                logDebug(method, "Failed to fetch WA status: ${e.message}")
             }
         } catch (e: Exception) {
             logWarn(method, "Health polling error: ${e.message}")

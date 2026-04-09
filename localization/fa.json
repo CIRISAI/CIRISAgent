@@ -389,6 +389,7 @@
         "interact_disconnected": "غير متصل",
         "interact_dismiss": "إغلاق",
         "interact_hallucination_warning": "الذكاء الاصطناعي قد يهلوس - تحقق من الحقائق",
+        "interact_pending_deferrals": "{count} تعویق در انتظار بررسی",
         "interact_welcome_title": "مرحباً بك في Ally",
         "interact_welcome_subtitle": "مساعدك الشخصي للازدهار",
         "interact_welcome_hint": "اسأل Ally كيف يمكنه المساعدة في المهام والجداول والقرارات أو الرفاهية — أو اكتشف كيف يعمل CIRIS!",

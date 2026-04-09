@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "제 원칙과 더 잘 맞는 대안적 접근 방식은 무엇일까요?",
         "ponder_forced_retry": "양심 재시도 후 강제 PONDER",
         "override_rationale": "{conscience_name}에 의해 재정의됨: {action}을(를) 재고해야 함",
-        "forced_ponder_rationale": "루프 방지를 위한 양심 재시도 후 강제 PONDER"
+        "forced_ponder_rationale": "루프 방지를 위한 양심 재시도 후 강제 PONDER",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "CIRIS의 동의 작동 방식에 대해 알아보기",
     "consent_about_title": "동의 정보",
@@ -1575,7 +1582,9 @@
         "wallet_paymaster_configure": "Paymaster Key 구성",
         "wallet_paymaster_hint": "가스 없는 USDC 전송을 활성화하려면 Etherspot Arka API 키를 입력하세요",
         "wallet_paymaster_key_label": "Arka API 키",
-        "wallet_paymaster_save": "키 저장"
+        "wallet_paymaster_save": "키 저장",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1768,12 @@
     "setup_validation_select_mode": "모드를 선택하세요",
     "setup_validation_username_required": "사용자 이름이 필요합니다",
     "startup": {
-        "startup_retry": "재시도"
+        "startup_retry": "재시도",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "실행 중...",
@@ -1775,7 +1789,10 @@
     "status_pending": "대기 중",
     "system": {
         "system_cognitive_state": "인지 상태",
-        "system_queue_depth": "큐 깊이"
+        "system_queue_depth": "큐 깊이",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "작업 ID",
     "telemetry_online": "온라인",

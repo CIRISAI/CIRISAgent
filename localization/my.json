@@ -429,6 +429,7 @@
     "interact_disconnected": "Disconnected",
     "interact_dismiss": "Dismiss",
     "interact_hallucination_warning": "AI HALLUCINATES - CHECK Fလုပ်ဆောင်S",
+    "interact_pending_deferrals": "{count} စစ်ဆေးမှုကို စောင့်ဆိုင်းနေသော ရွှေ့ဆိုင်းမှု(များ)",
     "interact_welcome_title": "Welcome to Ally",
     "interact_welcome_subtitle": "Your personal thriving assistant",
     "interact_welcome_hint": "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS အလုပ်s!",

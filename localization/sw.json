@@ -383,6 +383,7 @@
         "interact_disconnected": "Imetenganishwa",
         "interact_dismiss": "Ondoa",
         "interact_hallucination_warning": "AI HUONA VISIVYOPO - KAGUA UKWELI",
+        "interact_pending_deferrals": "{count} ahirizi zinazosubiri mapitio",
         "interact_welcome_title": "Karibu kwa Ally",
         "interact_welcome_subtitle": "Msaidizi wako binafsi wa kustawi",
         "interact_welcome_hint": "Uliza Ally jinsi anavyoweza kusaidia na kazi, ratiba, maamuzi, au ustawi — au uliza jinsi CIRIS inavyofanya kazi!",

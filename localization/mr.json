@@ -429,6 +429,7 @@
     "interact_disconnected": "Disconnected",
     "interact_dismiss": "Dismiss",
     "interact_hallucination_warning": "AI HALLUCINATES - CHECK FकृतीS",
+    "interact_pending_deferrals": "{count} प्रलंबित स्थगन पुनरावलोकनाची प्रतीक्षा करीत आहे",
     "interact_welcome_title": "Welcome to Ally",
     "interact_welcome_subtitle": "Your personal thriving assistant",
     "interact_welcome_hint": "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS कार्यs!",

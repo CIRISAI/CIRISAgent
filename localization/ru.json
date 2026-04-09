@@ -383,6 +383,7 @@
         "interact_disconnected": "Отключено",
         "interact_dismiss": "Закрыть",
         "interact_hallucination_warning": "ИИ ГАЛЛЮЦИНИРУЕТ — ПРОВЕРЯЙТЕ ФАКТЫ",
+        "interact_pending_deferrals": "{count} ожидающих отсрочек в ожидании рассмотрения",
         "interact_welcome_title": "Добро пожаловать в Ally",
         "interact_welcome_subtitle": "Ваш личный помощник для процветания",
         "interact_welcome_hint": "Спросите Ally, как он может помочь с задачами, планированием, решениями или благополучием — или спросите, как работает CIRIS!",

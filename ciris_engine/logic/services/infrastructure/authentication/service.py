@@ -1704,11 +1704,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
     async def _migrate_wa_keys_to_verify(self) -> None:
-        """Migrate existing WA signing keys from file storage to CIRISVerify.
+        """Migrate existing WA signing keys to CIRISVerify.
 
-        This handles the transition from file-based key storage to TPM/Keystore
-        protected keys in CIRISVerify. Only migrates keys that exist on disk
-        but not yet in CIRISVerify.
+        This handles the transition to TPM/Keystore protected keys:
+        1. System WA: migrate from file if exists
+        2. User WAs (admin, etc.): rotate keys since old keys were discarded
+           (no prior signatures exist, so rotation is safe)
         """
         if not has_verifier():
             logger.debug("CIRISVerify not available - skipping key migration")
@@ -1717,15 +1718,34 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         try:
             verifier = get_verifier()
 
-            # Migrate System WA key if it exists on disk but not in CIRISVerify
+            # 1. Migrate System WA key if it exists on disk but not in CIRISVerify
             system_key_path = self.key_dir / "system_wa.key"
             if system_key_path.exists():
-                # Find the System WA to get its wa_id
                 system_wa = await self._get_system_wa()
                 if system_wa and not verifier.has_named_key(system_wa.wa_id):
                     private_key = system_key_path.read_bytes()
                     verifier.store_named_key(system_wa.wa_id, private_key)
                     logger.info(f"Migrated System WA key to CIRISVerify: {system_wa.wa_id}")
+
+            # 2. Auto-rotate keys for user WAs that don't have keys in CIRISVerify
+            # Since prior releases discarded private keys, nothing was ever signed,
+            # so we can safely generate new keys without breaking anything.
+            all_was = await self._list_all_was(active_only=True)
+            for wa in all_was:
+                # Skip System WA (handled above) and root (seed key)
+                if wa.name == "CIRIS System Authority" or wa.role.value == "root":
+                    continue
+
+                # Check if this WA already has a key in CIRISVerify
+                if not verifier.has_named_key(wa.wa_id):
+                    # Generate new keypair and store in CIRISVerify
+                    private_key, public_key = self.generate_keypair()
+                    verifier.store_named_key(wa.wa_id, private_key)
+
+                    # Update the public key in the database
+                    new_pubkey = self._encode_public_key(public_key)
+                    await self.update_wa(wa.wa_id, pubkey=new_pubkey)
+                    logger.info(f"Auto-rotated signing key for WA {wa.wa_id} ({wa.name})")
 
         except Exception as e:
             logger.warning(f"WA key migration failed (non-fatal): {e}")

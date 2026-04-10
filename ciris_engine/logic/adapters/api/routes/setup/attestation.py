@@ -661,7 +661,8 @@ async def report_play_integrity_failed(
             error_code=body.error_code,
             error_message=body.error_message,
         )
-        logger.info(f"[play-integrity] Reported failure: code={body.error_code}, msg={body.error_message}")
+        # Log error code only - error_message is user-controlled data
+        logger.info(f"[play-integrity] Reported failure: code={body.error_code}")
 
         # Invalidate cache and re-run attestation with device_attestation marked as failed
         auth_service = _get_auth_service(request)

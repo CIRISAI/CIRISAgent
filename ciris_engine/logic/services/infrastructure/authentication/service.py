@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 # Type variable for decorators
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Key file names
+SYSTEM_WA_KEY_FILENAME = "system_wa.key"
+
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
     """Infrastructure service for WA authentication and identity management."""
@@ -1301,7 +1304,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         private_key, public_key = self.generate_keypair()
 
         # Store the private key securely (file fallback)
-        system_key_path = self.key_dir / "system_wa.key"
+        system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
         system_key_path.write_bytes(private_key)
         system_key_path.chmod(0o600)
 
@@ -1405,7 +1408,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Fallback to file-based key for System WA
         if wa.name == "CIRIS System Authority":
-            key_path = self.key_dir / "system_wa.key"
+            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
             if not key_path.exists():
                 raise ValueError("System WA private key not found")
             private_key = key_path.read_bytes()
@@ -1448,7 +1451,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Fallback to file-based key for System WA
         if wa.name == "CIRIS System Authority":
-            key_path = self.key_dir / "system_wa.key"
+            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
             if not key_path.exists():
                 raise ValueError("System WA private key not found")
             private_key = key_path.read_bytes()
@@ -1719,7 +1722,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             verifier = get_verifier()
 
             # 1. Migrate System WA key if it exists on disk but not in CIRISVerify
-            system_key_path = self.key_dir / "system_wa.key"
+            system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
             if system_key_path.exists():
                 system_wa = await self._get_system_wa()
                 if system_wa and not verifier.has_named_key(system_wa.wa_id):

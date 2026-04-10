@@ -124,6 +124,7 @@ class ComponentBuilder:
             "thought_depth",
             ThoughtDepthGuardrail(time_service=time_service, max_depth=config.security.max_thought_depth),
             priority=4,
+            bypass_exemption=True,  # Must always run - enforces hard depth limit for safety
         )
 
         # ActionSequenceConscience - prevents repeated SPEAK without intervening actions

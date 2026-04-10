@@ -892,9 +892,11 @@ class InteractViewModel(
                     levelPending = verifyStatus.levelPending
                 )
 
-                // Log level change
+                // Log level change and refresh wallet status (badge color depends on trust level)
                 if (verifyStatus.maxLevel != previousLevel) {
                     logInfo("refreshTrustStatus", "Trust level changed: $previousLevel -> ${verifyStatus.maxLevel}")
+                    // Wallet spending authority changes with trust level - refresh to update badge color
+                    fetchWalletStatus()
                 }
 
                 // Restart fast polling if still pending and job isn't active

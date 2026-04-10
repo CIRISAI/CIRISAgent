@@ -467,12 +467,14 @@ async def get_wallet_status(
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not get spending progress: {e}")
 
-        # Get gas estimates from chain client
+        # Get gas estimates from chain client (with 2s timeout to prevent blocking)
         gas_estimate = None
         chain_client = getattr(provider, "_chain_client", None)
         if chain_client:
             try:
-                gas_price = await chain_client.get_gas_price()
+                import asyncio
+
+                gas_price = await asyncio.wait_for(chain_client.get_gas_price(), timeout=2.0)
                 gas_price_gwei = gas_price / 10**9
 
                 # Calculate costs (assume ETH ~ $2000 for estimate)
@@ -489,6 +491,8 @@ async def get_wallet_status(
                     usdc_transfer_cost_usd=f"{usdc_cost_usd:.4f}",
                     eth_price_usd=str(eth_price_usd),
                 )
+            except asyncio.TimeoutError:
+                logger.debug("[WALLET_STATUS] Gas price fetch timed out (2s)")
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not get gas estimates: {e}")
 

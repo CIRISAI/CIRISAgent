@@ -519,6 +519,20 @@ class CIRISVerify:
         except AttributeError:
             self._has_run_attestation_support = False
 
+        # ciris_verify_device_attestation_failed (optional - added in 1.5.3)
+        # Report device attestation failure (Play Integrity / App Attest token acquisition failed)
+        try:
+            self._lib.ciris_verify_device_attestation_failed.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # platform ("android" or "ios")
+                ctypes.c_int,                       # error_code
+                ctypes.c_char_p,                    # error_message (nullable)
+            ]
+            self._lib.ciris_verify_device_attestation_failed.restype = ctypes.c_int
+            self._has_device_attestation_failed_support = True
+        except AttributeError:
+            self._has_device_attestation_failed_support = False
+
         # ciris_verify_save_manifest_cache (optional - added in 1.2.0)
         # Save manifests with hardware signature for offline L1
         try:
@@ -1748,6 +1762,99 @@ class CIRISVerify:
         finally:
             if result_data.value:
                 self._lib.ciris_verify_free(result_data.value)
+
+    # ========================================================================
+    # Device Attestation Failure Reporting (v1.5.3)
+    # ========================================================================
+
+    @property
+    def has_device_attestation_failed_support(self) -> bool:
+        """Check if device_attestation_failed is available.
+
+        Returns:
+            True if the library supports device_attestation_failed (>= 1.5.3).
+        """
+        return getattr(self, "_has_device_attestation_failed_support", False)
+
+    def device_attestation_failed_sync(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Report device attestation failure (Play Integrity / App Attest).
+
+        Call this when Play Integrity token acquisition fails (Android) or
+        App Attest attestation fails (iOS) before reaching the verify endpoint.
+        This caches the failure so run_attestation returns level_pending=false.
+
+        Args:
+            platform: Platform identifier ("android" or "ios").
+            error_code: Platform-specific error code (e.g., -16 for Play Integrity).
+            error_message: Optional human-readable error description.
+
+        Raises:
+            RuntimeError: If device_attestation_failed is not available.
+            ValueError: If platform is not "android" or "ios".
+            VerificationFailedError: If the call fails.
+        """
+        if not self.has_device_attestation_failed_support:
+            raise RuntimeError(
+                "device_attestation_failed not available in this library version (requires >= 1.5.3)"
+            )
+
+        if platform not in ("android", "ios"):
+            raise ValueError("platform must be 'android' or 'ios'")
+
+        platform_bytes = platform.encode("utf-8")
+        error_msg_bytes = error_message.encode("utf-8") if error_message else None
+
+        ret = self._lib.ciris_verify_device_attestation_failed(
+            self._handle,
+            platform_bytes,
+            error_code,
+            error_msg_bytes,
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"device_attestation_failed failed with code {ret}"
+            )
+
+    async def device_attestation_failed(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Async version of device_attestation_failed_sync.
+
+        Args:
+            platform: Platform identifier ("android" or "ios").
+            error_code: Platform-specific error code.
+            error_message: Optional human-readable error description.
+            timeout: Operation timeout in seconds.
+
+        Raises:
+            RuntimeError: If device_attestation_failed is not available.
+            ValueError: If platform is not "android" or "ios".
+            VerificationFailedError: If the call fails.
+            TimeoutError: If operation times out.
+        """
+        timeout = timeout or self._timeout
+
+        def _run() -> None:
+            self.device_attestation_failed_sync(platform, error_code, error_message)
+
+        loop = asyncio.get_event_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(self._executor, _run),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise CIRISTimeoutError("device_attestation_failed", timeout)
 
     # ========================================================================
     # Manifest Cache - Offline L1 Verification
@@ -3236,6 +3343,32 @@ class MockCIRISVerify(CIRISVerify):
             "diagnostics": "[MOCK] Using MockCIRISVerify",
             "errors": [],
         }
+
+    @property
+    def has_device_attestation_failed_support(self) -> bool:
+        """Mock always supports device_attestation_failed."""
+        return True
+
+    def device_attestation_failed_sync(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Mock device_attestation_failed — no-op."""
+        if platform not in ("android", "ios"):
+            raise ValueError("platform must be 'android' or 'ios'")
+        # No-op in mock
+
+    async def device_attestation_failed(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Async mock device_attestation_failed — no-op."""
+        self.device_attestation_failed_sync(platform, error_code, error_message)
 
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""

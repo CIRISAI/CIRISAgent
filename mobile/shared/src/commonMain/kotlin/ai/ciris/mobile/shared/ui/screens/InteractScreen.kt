@@ -916,10 +916,10 @@ private fun WalletBadge(
             }
 
             // Balance or status text - convert to selected currency
+            // Note: Receive-only status is shown via amber color, not text - always show balance
             val displayText = when {
                 isInitializing -> localizedString("mobile.interact_wallet_loading")
                 !walletStatus.hasWallet -> localizedString("mobile.interact_wallet_setup")
-                walletStatus.isReceiveOnly -> localizedString("mobile.interact_wallet_receive_only")
                 hasBalance -> {
                     // Convert USDC balance to selected currency
                     val usdcAmount = walletStatus.balance.toDoubleOrNull() ?: 0.0

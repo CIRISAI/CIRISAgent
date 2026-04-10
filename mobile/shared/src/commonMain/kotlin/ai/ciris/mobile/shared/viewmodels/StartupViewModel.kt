@@ -86,6 +86,7 @@ class StartupViewModel(
             """VERIFY ATTESTATION COMPLETE: level=(\d+), valid=(true|false), checks=(\d+)/(\d+)"""
         )
         // New format (v1.5.x): Unified attestation complete, valid=false, level=1, level_pending=false, checks_passed=5, checks_total=6
+        // Read from CIRISVerify logcat tag (added to MainActivity logcat filter)
         private val UNIFIED_ATTESTATION_PATTERN = Regex(
             """Unified attestation complete, valid=(true|false), level=(\d+), level_pending=(true|false), checks_passed=(\d+), checks_total=(\d+)"""
         )
@@ -209,8 +210,8 @@ class StartupViewModel(
                     }
                 }
             }
-            // Forward verify messages
-            if (line.contains("VERIFY")) {
+            // Forward verify messages (VERIFY for legacy, Unified for v1.5.x)
+            if (line.contains("VERIFY") || line.contains("Unified attestation")) {
                 onVerifyLogMessage(line)
             }
             // Check for consolidator status

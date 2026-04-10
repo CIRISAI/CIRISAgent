@@ -2168,6 +2168,23 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}, "
                 f"instance={hex(id(self))}, cache_set={self._attestation_cache is not None}"
             )
+            # Print to stdout for mobile UI to parse (Kotlin StartupViewModel)
+            # Must contain "VERIFY" for Kotlin's line filter at StartupViewModel.kt:213
+            checks_passed = sum([
+                result.binary_ok,
+                result.function_integrity == "verified",
+                result.python_integrity_ok,
+                result.sources_ok,
+                result.audit_ok,
+            ])
+            import sys
+            msg = (
+                f"VERIFY Unified attestation complete, valid={str(result.valid).lower()}, "
+                f"level={result.max_level}, level_pending={str(result.level_pending).lower()}, "
+                f"checks_passed={checks_passed}, checks_total=5"
+            )
+            sys.stdout.write(f"{msg}\n")
+            sys.stdout.flush()
         except Exception as e:
             logger.error(f"[attestation] Startup attestation failed on instance={hex(id(self))}: {e}")
 

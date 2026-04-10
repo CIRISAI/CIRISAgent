@@ -5,9 +5,9 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y \
     curl \
     gcc \
-    python3-dev \
     libtss2-esys-3.0.2-0t64 \
     libtss2-tcti-device0t64 \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container

@@ -2174,12 +2174,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 result.binary_ok,
                 result.function_integrity == "verified",
                 result.python_integrity_ok,
-                result.sources_ok,
+                result.registry_ok,
                 result.audit_ok,
             ])
             import sys
+            is_valid = result.attestation_status == "verified"
             msg = (
-                f"VERIFY Unified attestation complete, valid={str(result.valid).lower()}, "
+                f"VERIFY Unified attestation complete, valid={str(is_valid).lower()}, "
                 f"level={result.max_level}, level_pending={str(result.level_pending).lower()}, "
                 f"checks_passed={checks_passed}, checks_total=5"
             )

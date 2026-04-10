@@ -878,7 +878,7 @@ class TestAuthenticationServiceErrorHandling:
 
     @pytest.mark.asyncio
     async def test_sign_task_no_private_key(self, auth_service):
-        """Test signing task when private key management not implemented."""
+        """Test signing task when no signing key available for WA."""
         # Create a regular WA (not system)
         wa = await auth_service.create_wa("Regular User", "user@test.com", ["read"], WARole.OBSERVER)
 
@@ -894,7 +894,7 @@ class TestAuthenticationServiceErrorHandling:
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        with pytest.raises(ValueError, match="Private key management not implemented"):
+        with pytest.raises(ValueError, match="No signing key available for WA"):
             await auth_service.sign_task(mock_task, wa.wa_id)
 
     @pytest.mark.asyncio

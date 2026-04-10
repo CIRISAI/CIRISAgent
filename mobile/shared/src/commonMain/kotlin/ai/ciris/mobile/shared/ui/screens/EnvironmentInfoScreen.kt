@@ -1,37 +1,36 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.EnrichmentCacheStatsData
-import ai.ciris.mobile.shared.api.LocationInfoData
+import ai.ciris.mobile.shared.api.EnvironmentGraphNodeData
+import ai.ciris.mobile.shared.api.ItemCategory
+import ai.ciris.mobile.shared.api.ItemCondition
 import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.viewmodels.EnvironmentInfoScreenState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Environment Info screen showing context from adapters.
+ * Environment Info screen - Shopping list style UI for environment items.
  *
- * Displays:
- * - User location from setup (for debugging lat/long issues)
- * - Context enrichment results from adapters (HA, weather, etc.)
- * - Cache statistics
+ * Features:
+ * - Category filter chips (Want/Need/Have/Can Borrow/Can Barter)
+ * - Item cards with quantity, condition, and community share toggle
+ * - Add new item dialog
+ * - Context enrichment section (expandable)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +38,17 @@ fun EnvironmentInfoScreen(
     state: EnvironmentInfoScreenState,
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
+    onCategorySelected: (String?) -> Unit,
+    onAddItem: () -> Unit,
+    onCreateItem: (name: String, category: String, quantity: Int, condition: String, notes: String?) -> Unit,
+    onDeleteItem: (String) -> Unit,
+    onDismissAddDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Environment Info") },
+                title = { Text("My Environment") },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -75,6 +79,14 @@ fun EnvironmentInfoScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddItem,
+                modifier = Modifier.testableClickable("btn_add_item") { onAddItem() }
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Add Item")
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -85,7 +97,7 @@ fun EnvironmentInfoScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Loading state
-            if (state.isLoading && state.location == null) {
+            if (state.isLoading && state.items.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(32.dp),
@@ -123,28 +135,36 @@ fun EnvironmentInfoScreen(
                 }
             }
 
-            // Location section
-            state.location?.let { location ->
-                item {
-                    LocationCard(location = location)
+            // Category filter chips
+            item {
+                CategoryFilterChips(
+                    selectedCategory = state.selectedCategory,
+                    categoryCounts = state.categoryCounts,
+                    onCategorySelected = onCategorySelected
+                )
+            }
+
+            // Items header with count
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (state.selectedCategory == null) {
+                            "All Items (${state.items.size})"
+                        } else {
+                            "${getCategoryDisplayName(state.selectedCategory)} (${state.filteredItems.size})"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
-            // Context Enrichment section
-            if (state.contextEnrichment.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Context Enrichment (${state.contextEnrichment.size} sources)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-
-                items(state.contextEnrichment.entries.toList()) { (key, value) ->
-                    EnrichmentCard(key = key, value = value.toString())
-                }
-            } else if (!state.isLoading) {
+            // Item cards
+            if (state.filteredItems.isEmpty() && !state.isLoading) {
                 item {
                     Card(
                         colors = CardDefaults.cardColors(
@@ -162,146 +182,368 @@ fun EnvironmentInfoScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "No context enrichment data available. This may indicate that adapters with context_enrichment tools are not loaded, or the agent hasn't processed any thoughts yet.",
+                                text = "No items yet. Tap + to add your first item.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
+            } else {
+                items(state.filteredItems) { item ->
+                    ItemCard(
+                        item = item,
+                        onDelete = { onDeleteItem(item.id) }
+                    )
+                }
             }
 
-            // Cache stats section
+            // Context Enrichment section
+            if (state.contextEnrichment.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Context Enrichment (${state.contextEnrichment.size} sources)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                items(state.contextEnrichment.entries.toList()) { (key, value) ->
+                    EnrichmentCard(key = key, value = value.toString())
+                }
+            }
+
+            // Cache stats
             state.cacheStats?.let { stats ->
                 item {
                     CacheStatsCard(stats = stats)
                 }
             }
 
-            // Timestamp
-            state.timestamp?.let { timestamp ->
-                item {
-                    Text(
-                        text = "Last updated: $timestamp",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+            // Community sharing note
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationCard(location: LocationInfoData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (location.hasCoordinates) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.errorContainer
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.LocationOn,
-                    contentDescription = null,
-                    tint = if (location.hasCoordinates) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.error
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Community sharing depends on community invitation system, coming soon.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
                     }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "User Location",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                // Status indicator
-                if (location.hasCoordinates) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Coordinates available",
-                        tint = Color(0xFF4CAF50)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Coordinates missing",
-                        tint = MaterialTheme.colorScheme.error
-                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Location details
-            LocationRow("Location", location.location ?: "Not set")
-            LocationRow("City", location.city ?: "Not set")
-            LocationRow("Region", location.region ?: "Not set")
-            LocationRow("Country", location.country ?: "Not set")
-            LocationRow("Timezone", location.timezone ?: "Not set")
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Divider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Coordinates (highlighted if missing)
-            LocationRow(
-                label = "Latitude",
-                value = location.latitude?.toString() ?: "MISSING - Weather/Nav won't work!",
-                isError = location.latitude == null
-            )
-            LocationRow(
-                label = "Longitude",
-                value = location.longitude?.toString() ?: "MISSING - Weather/Nav won't work!",
-                isError = location.longitude == null
-            )
-            location.iso6709?.let {
-                LocationRow("ISO 6709", it)
-            }
-
-            if (!location.hasCoordinates) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Tip: Re-run setup wizard and select a city from the location search to set coordinates.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
         }
+    }
+
+    // Add item dialog
+    if (state.showAddDialog) {
+        AddItemDialog(
+            isCreating = state.isCreating,
+            onDismiss = onDismissAddDialog,
+            onCreate = onCreateItem
+        )
     }
 }
 
 @Composable
-private fun LocationRow(
-    label: String,
-    value: String,
-    isError: Boolean = false
+private fun CategoryFilterChips(
+    selectedCategory: String?,
+    categoryCounts: Map<String, Int>,
+    onCategorySelected: (String?) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        // "All" chip
+        FilterChip(
+            selected = selectedCategory == null,
+            onClick = { onCategorySelected(null) },
+            label = { Text("All") }
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontFamily = FontFamily.Monospace,
-            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+
+        // Category chips
+        listOf("want", "need", "have", "can_borrow", "can_barter").forEach { category ->
+            val count = categoryCounts[category] ?: 0
+            FilterChip(
+                selected = selectedCategory == category,
+                onClick = { onCategorySelected(category) },
+                label = { Text("${getCategoryDisplayName(category)} ($count)") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ItemCard(
+    item: EnvironmentGraphNodeData,
+    onDelete: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Category badge
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(getCategoryDisplayName(item.category)) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = getCategoryColor(item.category)
+                            )
+                        )
+                        // Quantity
+                        if (item.quantity > 1) {
+                            Text(
+                                text = "x${item.quantity}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        // Condition
+                        Text(
+                            text = getConditionDisplayName(item.condition),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Actions
+                Row {
+                    // Community share toggle (grayed out)
+                    Switch(
+                        checked = item.communityShared,
+                        onCheckedChange = null,
+                        enabled = false,
+                        colors = SwitchDefaults.colors(
+                            disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                            disabledUncheckedThumbColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
+                        )
+                    )
+
+                    // Delete button
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
+            // Notes
+            item.notes?.let { notes ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Item") },
+            text = { Text("Are you sure you want to delete \"${item.name}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddItemDialog(
+    isCreating: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, category: String, quantity: Int, condition: String, notes: String?) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("have") }
+    var quantity by remember { mutableStateOf("1") }
+    var condition by remember { mutableStateOf("good") }
+    var notes by remember { mutableStateOf("") }
+    var expandedCategory by remember { mutableStateOf(false) }
+    var expandedCondition by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isCreating) onDismiss() },
+        title = { Text("Add Item") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Item Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Category dropdown
+                ExposedDropdownMenuBox(
+                    expanded = expandedCategory,
+                    onExpandedChange = { expandedCategory = it }
+                ) {
+                    OutlinedTextField(
+                        value = getCategoryDisplayName(category),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedCategory,
+                        onDismissRequest = { expandedCategory = false }
+                    ) {
+                        listOf("want", "need", "have", "can_borrow", "can_barter").forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(getCategoryDisplayName(cat)) },
+                                onClick = {
+                                    category = cat
+                                    expandedCategory = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = quantity,
+                        onValueChange = { quantity = it.filter { c -> c.isDigit() } },
+                        label = { Text("Qty") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Condition dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCondition,
+                        onExpandedChange = { expandedCondition = it },
+                        modifier = Modifier.weight(2f)
+                    ) {
+                        OutlinedTextField(
+                            value = getConditionDisplayName(condition),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Condition") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCondition) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCondition,
+                            onDismissRequest = { expandedCondition = false }
+                        ) {
+                            listOf("new", "good", "fair", "poor", "broken").forEach { cond ->
+                                DropdownMenuItem(
+                                    text = { Text(getConditionDisplayName(cond)) },
+                                    onClick = {
+                                        condition = cond
+                                        expandedCondition = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onCreate(
+                        name,
+                        category,
+                        quantity.toIntOrNull() ?: 1,
+                        condition,
+                        notes.takeIf { it.isNotBlank() }
+                    )
+                },
+                enabled = name.isNotBlank() && !isCreating
+            ) {
+                if (isCreating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Add")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isCreating
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -378,12 +620,6 @@ private fun CacheStatsCard(stats: EnrichmentCacheStatsData) {
                 StatItem("Misses", stats.misses.toString())
                 StatItem("Hit Rate", "${stats.hitRatePct}%")
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (stats.startupPopulated) "Cache populated at startup" else "Cache not yet populated",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -402,4 +638,32 @@ private fun StatItem(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+private fun getCategoryDisplayName(category: String): String = when (category) {
+    "want" -> "Want"
+    "need" -> "Need"
+    "have" -> "Have"
+    "can_borrow" -> "Can Borrow"
+    "can_barter" -> "Can Barter"
+    else -> category.replaceFirstChar { it.uppercase() }
+}
+
+private fun getConditionDisplayName(condition: String): String = when (condition) {
+    "new" -> "New"
+    "good" -> "Good"
+    "fair" -> "Fair"
+    "poor" -> "Poor"
+    "broken" -> "Broken"
+    else -> condition.replaceFirstChar { it.uppercase() }
+}
+
+@Composable
+private fun getCategoryColor(category: String) = when (category) {
+    "want" -> MaterialTheme.colorScheme.tertiaryContainer
+    "need" -> MaterialTheme.colorScheme.errorContainer
+    "have" -> MaterialTheme.colorScheme.primaryContainer
+    "can_borrow" -> MaterialTheme.colorScheme.secondaryContainer
+    "can_barter" -> MaterialTheme.colorScheme.surfaceVariant
+    else -> MaterialTheme.colorScheme.surfaceVariant
 }

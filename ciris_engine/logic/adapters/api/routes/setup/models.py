@@ -378,6 +378,15 @@ class SetupConfigResponse(BaseModel):
     # Application
     agent_port: int = Field(default=8080, description="Current agent port")
 
+    # User Location (from setup)
+    location_country: Optional[str] = Field(None, description="User's country")
+    location_region: Optional[str] = Field(None, description="User's region/state")
+    location_city: Optional[str] = Field(None, description="User's city")
+    location_latitude: Optional[float] = Field(None, description="Latitude in decimal degrees")
+    location_longitude: Optional[float] = Field(None, description="Longitude in decimal degrees")
+    timezone: Optional[str] = Field(None, description="IANA timezone")
+    has_coordinates: bool = Field(False, description="Whether lat/long are available")
+
 
 class CreateUserRequest(BaseModel):
     """Request to create initial admin user."""

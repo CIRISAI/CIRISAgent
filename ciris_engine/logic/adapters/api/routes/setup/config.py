@@ -302,6 +302,12 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     # Detect LLM provider using same logic as LLM service
     llm_provider = _detect_llm_provider(request)
 
+    # Get user location from environment
+    latitude_str = os.getenv("CIRIS_USER_LATITUDE")
+    longitude_str = os.getenv("CIRIS_USER_LONGITUDE")
+    latitude = float(latitude_str) if latitude_str else None
+    longitude = float(longitude_str) if longitude_str else None
+
     config = SetupConfigResponse(
         llm_provider=llm_provider,
         llm_base_url=os.getenv("OPENAI_API_BASE"),
@@ -313,6 +319,13 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
         template_id=template_id,
         enabled_adapters=os.getenv("CIRIS_ADAPTER", "api").split(","),
         agent_port=int(os.getenv("CIRIS_API_PORT", "8080")),
+        location_country=os.getenv("CIRIS_USER_COUNTRY"),
+        location_region=os.getenv("CIRIS_USER_REGION"),
+        location_city=os.getenv("CIRIS_USER_CITY"),
+        location_latitude=latitude,
+        location_longitude=longitude,
+        timezone=os.getenv("CIRIS_USER_TIMEZONE"),
+        has_coordinates=latitude is not None and longitude is not None,
     )
 
     return SuccessResponse(data=config)

@@ -2,7 +2,7 @@ package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.EnrichmentCacheStatsData
-import ai.ciris.mobile.shared.api.EnvironmentInfoResponse
+import ai.ciris.mobile.shared.api.EnvironmentGraphNodeData
 import ai.ciris.mobile.shared.api.LocationInfoData
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
@@ -18,21 +18,31 @@ import kotlinx.coroutines.launch
  */
 data class EnvironmentInfoScreenState(
     val location: LocationInfoData? = null,
+    val items: List<EnvironmentGraphNodeData> = emptyList(),
     val contextEnrichment: Map<String, Any> = emptyMap(),
     val cacheStats: EnrichmentCacheStatsData? = null,
-    val timestamp: String? = null,
+    val selectedCategory: String? = null, // null = all categories
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
-    val error: String? = null
-)
+    val isCreating: Boolean = false,
+    val error: String? = null,
+    val showAddDialog: Boolean = false
+) {
+    val filteredItems: List<EnvironmentGraphNodeData>
+        get() = if (selectedCategory == null) items
+                else items.filter { it.category == selectedCategory }
+
+    val categoryCounts: Map<String, Int>
+        get() = items.groupBy { it.category }.mapValues { it.value.size }
+}
 
 /**
  * ViewModel for the Environment Info screen.
  *
- * Shows context data from adapters including:
+ * Shows:
  * - User location from setup (lat/long, timezone, city)
+ * - Environment items (shopping list style with categories)
  * - Context enrichment results from adapters (weather, HA entities, etc.)
- * - Cache statistics for debugging
  */
 class EnvironmentInfoViewModel(
     private val apiClient: CIRISApiClient
@@ -77,22 +87,104 @@ class EnvironmentInfoViewModel(
             return
         }
         dataLoadStarted = true
-        loadEnvironmentInfo()
+        loadAll()
     }
 
     /**
-     * Refresh environment info.
+     * Refresh all data.
      */
     fun refresh() {
         val method = "refresh"
         logInfo(method, "Refreshing environment info")
         _state.update { it.copy(isRefreshing = true, error = null) }
-        loadEnvironmentInfo()
+        loadAll()
     }
 
-    private fun loadEnvironmentInfo() {
-        val method = "loadEnvironmentInfo"
-        logInfo(method, "Loading environment info from API")
+    /**
+     * Set selected category filter.
+     */
+    fun setCategory(category: String?) {
+        _state.update { it.copy(selectedCategory = category) }
+    }
+
+    /**
+     * Show/hide add item dialog.
+     */
+    fun showAddDialog(show: Boolean) {
+        _state.update { it.copy(showAddDialog = show) }
+    }
+
+    /**
+     * Create a new environment item.
+     */
+    fun createItem(
+        name: String,
+        category: String,
+        quantity: Int,
+        condition: String,
+        notes: String?
+    ) {
+        val method = "createItem"
+        logInfo(method, "Creating item: $name")
+
+        viewModelScope.launch {
+            _state.update { it.copy(isCreating = true) }
+            try {
+                val newItem = apiClient.createEnvironmentItem(
+                    name = name,
+                    category = category,
+                    quantity = quantity,
+                    condition = condition,
+                    notes = notes
+                )
+                _state.update {
+                    it.copy(
+                        items = it.items + newItem,
+                        isCreating = false,
+                        showAddDialog = false
+                    )
+                }
+                logInfo(method, "Item created: ${newItem.id}")
+            } catch (e: Exception) {
+                logError(method, "Failed to create item: ${e.message}")
+                _state.update {
+                    it.copy(
+                        isCreating = false,
+                        error = "Failed to create item: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Delete an environment item.
+     */
+    fun deleteItem(nodeId: String) {
+        val method = "deleteItem"
+        logInfo(method, "Deleting item: $nodeId")
+
+        viewModelScope.launch {
+            try {
+                val success = apiClient.deleteEnvironmentItem(nodeId)
+                if (success) {
+                    _state.update {
+                        it.copy(items = it.items.filter { item -> item.id != nodeId })
+                    }
+                    logInfo(method, "Item deleted: $nodeId")
+                } else {
+                    _state.update { it.copy(error = "Failed to delete item") }
+                }
+            } catch (e: Exception) {
+                logError(method, "Failed to delete item: ${e.message}")
+                _state.update { it.copy(error = "Failed to delete item: ${e.message}") }
+            }
+        }
+    }
+
+    private fun loadAll() {
+        val method = "loadAll"
+        logInfo(method, "Loading all environment data")
 
         viewModelScope.launch {
             try {
@@ -100,24 +192,37 @@ class EnvironmentInfoViewModel(
                     _state.update { it.copy(isLoading = true, error = null) }
                 }
 
-                val response = apiClient.getEnvironmentInfo()
+                // Load items from memory API
+                val items = try {
+                    apiClient.queryEnvironmentItems()
+                } catch (e: Exception) {
+                    logError(method, "Failed to load items: ${e.message}")
+                    emptyList()
+                }
 
-                logInfo(method, "Environment info loaded: hasCoordinates=${response.location.hasCoordinates}, " +
-                        "enrichmentCount=${response.contextEnrichment.size}")
+                // Load context enrichment
+                val (enrichment, stats) = try {
+                    val response = apiClient.getContextEnrichment()
+                    Pair(response.entries, response.stats)
+                } catch (e: Exception) {
+                    logError(method, "Failed to load context enrichment: ${e.message}")
+                    Pair(emptyMap<String, Any>(), null)
+                }
+
+                logInfo(method, "Loaded ${items.size} items, ${enrichment.size} enrichment entries")
 
                 _state.update {
                     it.copy(
-                        location = response.location,
-                        contextEnrichment = response.contextEnrichment,
-                        cacheStats = response.cacheStats,
-                        timestamp = response.timestamp,
+                        items = items,
+                        contextEnrichment = enrichment,
+                        cacheStats = stats,
                         isLoading = false,
                         isRefreshing = false,
                         error = null
                     )
                 }
             } catch (e: Exception) {
-                logError(method, "Error loading environment info: ${e.message}")
+                logError(method, "Error loading data: ${e.message}")
                 _state.update {
                     it.copy(
                         isLoading = false,

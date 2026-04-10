@@ -964,3 +964,47 @@ async def reload_adapter(
     except Exception as e:
         logger.error(f"Error reloading adapter: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Context Enrichment Cache
+# ============================================================================
+
+
+@router.get(
+    "/adapters/context-enrichment",
+    responses={500: {"description": "Failed to get context enrichment data"}},
+)
+async def get_context_enrichment_cache(
+    request: Request,
+    auth: Annotated[AuthContext, Depends(require_observer)],
+) -> SuccessResponse[Dict[str, Any]]:
+    """
+    Get context enrichment cache data from adapters.
+
+    Returns cached results from adapter tools that have context_enrichment=True,
+    along with cache statistics. This data is ephemeral and refreshed periodically.
+    """
+    from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+    try:
+        cache = get_enrichment_cache()
+        enrichment_data = cache.get_all_entries()
+        cache_stats = cache.stats
+
+        return SuccessResponse(
+            data={
+                "entries": enrichment_data,
+                "stats": {
+                    "entry_count": cache_stats.get("entries", 0),
+                    "hits": cache_stats.get("hits", 0),
+                    "misses": cache_stats.get("misses", 0),
+                    "hit_rate_pct": cache_stats.get("hit_rate_pct", 0.0),
+                    "startup_populated": cache_stats.get("startup_populated", False),
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting context enrichment cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

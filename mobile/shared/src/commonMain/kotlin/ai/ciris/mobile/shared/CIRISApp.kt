@@ -2474,7 +2474,26 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] User triggered refresh")
                         environmentInfoViewModel.refresh()
                     },
-                    onNavigateBack = { currentScreen = Screen.Interact }
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onCategorySelected = { category ->
+                        PlatformLogger.d("CIRISApp", "[Screen.EnvironmentInfo] Category selected: $category")
+                        environmentInfoViewModel.setCategory(category)
+                    },
+                    onAddItem = {
+                        PlatformLogger.d("CIRISApp", "[Screen.EnvironmentInfo] Add item clicked")
+                        environmentInfoViewModel.showAddDialog(true)
+                    },
+                    onCreateItem = { name, category, quantity, condition, notes ->
+                        PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] Creating item: $name")
+                        environmentInfoViewModel.createItem(name, category, quantity, condition, notes)
+                    },
+                    onDeleteItem = { nodeId ->
+                        PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] Deleting item: $nodeId")
+                        environmentInfoViewModel.deleteItem(nodeId)
+                    },
+                    onDismissAddDialog = {
+                        environmentInfoViewModel.showAddDialog(false)
+                    }
                 )
             }
 

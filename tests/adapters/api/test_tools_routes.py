@@ -357,8 +357,10 @@ class TestToolPurchaseEndpoint:
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_purchase_without_google_token_returns_401(self, client, auth_headers):
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    def test_purchase_without_google_token_returns_401(self, mock_token, client, auth_headers):
         """Test that purchase without Google token returns 401."""
+        mock_token.return_value = None  # Explicitly no token
         response = client.post(
             "/v1/api/tools/purchase",
             headers=auth_headers,

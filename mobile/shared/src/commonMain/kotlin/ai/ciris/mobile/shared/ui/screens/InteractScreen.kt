@@ -108,6 +108,7 @@ fun InteractScreen(
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenSessions: () -> Unit = {},  // Navigate to sessions screen
+    onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
@@ -142,6 +143,7 @@ fun InteractScreen(
     val walletStatus by viewModel.walletStatus.collectAsState()
     val attachedFiles by viewModel.attachedFiles.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
+    val pendingDeferrals by viewModel.pendingDeferrals.collectAsState()
 
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
@@ -329,6 +331,15 @@ fun InteractScreen(
 
         // AI Warning banner (from fragment_interact.xml:65-76)
         AIWarningBanner(theme = theme)
+
+        // Pending deferrals banner - shows when there are human review requests waiting
+        if (pendingDeferrals > 0) {
+            PendingDeferralsBanner(
+                count = pendingDeferrals,
+                onClick = onOpenWiseAuthority,
+                theme = theme
+            )
+        }
 
         // Bubble Net - timeline of events (expandable)
         BubbleNet(
@@ -869,12 +880,14 @@ private fun WalletBadge(
 
     // Log wallet status for debugging
     LaunchedEffect(walletStatus) {
-        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}")
+        PlatformLogger.d("WalletBadge", "WalletStatus: isLoaded=${walletStatus.isLoaded}, hasWallet=${walletStatus.hasWallet}, balance=${walletStatus.balance}, provider=${walletStatus.provider}, isReceiveOnly=${walletStatus.isReceiveOnly}, isInitializing=${walletStatus.isInitializing}")
     }
 
+    val isInitializing = walletStatus.isInitializing
     val hasBalance = walletStatus.balance != "0.00" && walletStatus.balance != "0"
     val badgeColor = when {
-        walletStatus.isReceiveOnly -> theme.trustLevel4  // Receive-only (hardware degraded) - amber
+        isInitializing -> theme.trustLevel4               // Initializing - amber (waiting for CIRISVerify)
+        walletStatus.isReceiveOnly -> theme.trustLevel4   // Receive-only (hardware degraded) - amber
         hasBalance -> theme.trustLevel5                   // Has funds - green
         walletStatus.hasWallet -> theme.trustDefault      // Empty wallet - gray
         else -> theme.trustDefault                        // Not configured - gray
@@ -891,13 +904,22 @@ private fun WalletBadge(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            // Wallet emoji
-            Text(text = "💰", fontSize = 12.sp)
+            // Show spinner when initializing, otherwise wallet emoji
+            if (isInitializing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = badgeColor
+                )
+            } else {
+                Text(text = "💰", fontSize = 12.sp)
+            }
 
             // Balance or status text - convert to selected currency
+            // Note: Receive-only status is shown via amber color, not text - always show balance
             val displayText = when {
+                isInitializing -> localizedString("mobile.interact_wallet_loading")
                 !walletStatus.hasWallet -> localizedString("mobile.interact_wallet_setup")
-                walletStatus.isReceiveOnly -> localizedString("mobile.interact_wallet_receive_only")
                 hasBalance -> {
                     // Convert USDC balance to selected currency
                     val usdcAmount = walletStatus.balance.toDoubleOrNull() ?: 0.0
@@ -931,11 +953,15 @@ private fun TrustShield(
 ) {
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
+    val isPending = trustStatus.levelPending  // True when waiting for device attestation
+
+    // When pending, use amber to indicate "in progress" state
     val shieldColor = when {
-        level >= 5 -> theme.trustLevel5  // Identity Validated - green
-        level == 4 -> theme.trustLevel4  // Agent Validated - amber
-        level >= 1 -> theme.trustLevelLow  // Issues Detected (L1-3) - red
-        else -> theme.trustDefault        // Not started - gray
+        isPending -> theme.trustLevel4         // Attestation in progress - amber (provisional)
+        level >= 5 -> theme.trustLevel5        // Identity Validated - green
+        level == 4 -> theme.trustLevel4        // Agent Validated - amber
+        level >= 1 -> theme.trustLevelLow      // Issues Detected (L1-3) - red
+        else -> theme.trustDefault             // Not started - gray
     }
 
     Surface(
@@ -949,12 +975,21 @@ private fun TrustShield(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            // Shield emoji
-            Text(text = "🛡", fontSize = 12.sp)
+            if (isPending) {
+                // Show spinner when attestation is pending
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = shieldColor
+                )
+            } else {
+                // Shield emoji when stable
+                Text(text = "🛡", fontSize = 12.sp)
+            }
 
-            // Level text
+            // Level text - show provisional indicator when pending
             Text(
-                text = "$level/5",
+                text = if (isPending) "$level/5..." else "$level/5",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = shieldColor
@@ -1095,6 +1130,49 @@ private fun AIWarningBanner(
         color = theme.warningText,
         textAlign = TextAlign.Center
     )
+}
+
+/**
+ * Pending deferrals banner - shows when there are human review requests waiting
+ * Tapping navigates to the Wise Authority screen to review and resolve deferrals
+ */
+@Composable
+private fun PendingDeferralsBanner(
+    count: Int,
+    onClick: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2563EB).copy(alpha = 0.15f))  // Blue tint
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "📋",
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = localizedString(
+                "mobile.interact_pending_deferrals",
+                mapOf("count" to count.toString())
+            ),
+            fontSize = 12.sp,
+            color = Color(0xFF2563EB),
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "→",
+            fontSize = 14.sp,
+            color = Color(0xFF2563EB)
+        )
+    }
 }
 
 /**

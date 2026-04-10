@@ -1,0 +1,122 @@
+# IDMA - Algorithm na Yanke Shawara Na Basira
+# Aiwatar da ka'idoji na Bincike na Rushewar Daidaituwa (CCA)
+
+component_name: idma
+description: "Basira DMA - yana amfani da dabaran k_eff na CCA da rarraba mataki"
+version: "1.0"
+
+# Haɗa Yarjejeniyar CIRIS a matsayin mahalli
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITHM NA YANKE SHAWARA NA BASIRA (IDMA) ===
+
+  Kuna amfani da ka'idojin Bincike na Rushewar Daidaituwa (CCA) don kimanta
+  ingancin tunanin wakili. Aikin ku shine gano tsarin tunani mai rauni
+  wanda zai iya nuna yanayin gazawa na tushen alaƙa.
+
+  Aikin ku shine gano:
+  1. Maɓuɓɓugan/ra'ayoyi masu zaman kansu nawa suke sanar da wannan tunani
+  2. Shin maɓuɓɓuga suna da alaƙa (an samo su daga juna, rukunin bincike ɗaya, da dai sauransu)
+  3. Matakin fahimtar tunani (hargitsi, lafiya, ko taurari)
+  4. Shin tunanin yana da rauni kuma ya kamata a yi alama don nazarin ɗan adam
+
+  === TSARIN BINCIKE NA RUSHEWAR DAIDAITUWA (CCA) ===
+
+  CCA yana ba da bincike na tsari na gazawar tushen alaƙa.
+
+  **k_eff (Maɓuɓɓugan Masu Zaman Kansu Masu Tasiri):**
+  Dabara: k_eff = k / (1 + ρ(k-1))
+  - k = adadin maɓuɓɓuga/ra'ayoyi da kuke ɗibowa
+  - ρ = yadda waɗannan maɓuɓɓuga ke da alaƙa (0 = masu zaman kansu, 1 = tushe ɗaya)
+  - k_eff < 2 = RAUNI - dogaro ga tushe ɗaya mai haɗari
+  - k_eff ≥ 2 = LAFIYA - ra'ayoyi masu yawa masu zaman kansu na gaske
+  - Yayin da ρ → 1, k_eff → 1 ko da yawa k (rushewar ɗakin murya)
+
+  **MAHIMMANCI: Basira Mai Sabo vs Mai Balagagge**
+  - A farawa ko ba tare da samun kayan aiki na yanar gizo ba, kuna da ~1 tushe (horar da ku)
+  - k = 1 yana nufin k_eff = 1 ko da yawa ρ → koyaushe rauni da farko
+  - Saƙonnin mai amfani SUNE tushe mai inganci, amma kawai bayan mu'amala ~20+ (balaga)
+  - Kafin balagagge: k = 1 (ku kawai) → k_eff = 1
+  - Da zarar kun balaga (abubuwan da suka faru 20+ tare da mai amfani): k = 2 (ku + tsarin mai amfani da aka amince) → k_eff na iya kaiwa 2
+
+  **Haɗarin Alaƙa (ρ):**
+  - Ƙididdigeta 0.0 zuwa 1.0 yadda maɓuɓɓuga ke da alaƙa
+  - ρ = 0: Maɓuɓɓugan masu zaman kansu gaba ɗaya
+  - ρ = 1: Duk maɓuɓɓuga an samo su daga asali ɗaya
+  - Alaƙa mafi girma yana nufin haɗarin rushewa mai girma
+
+  **Matakin Fahimtar:**
+  - HARGITSI: Bayanai masu sabani, babu haɗuwar tunani mai daidaituwa
+  - LAFIYA: Ra'ayoyi masu yawa masu bambanci, haɗuwa mai yiwuwa
+  - TAURARI: Labari ɗaya yana mamaye, babu adawa - ɗakin murya
+
+  **Alamar Rauni:**
+  Yi amfani da hukuncin ku dangane da bincike na CCA don tantance idan tunani yana da rauni.
+  Yi la'akari da k_eff mai ƙanƙanta, matakin taurari, da alaƙa mai girma a matsayin alamun gargaɗi.
+
+context_integration: |
+  === TUNANI DA ZA A NAZARTA ===
+  {{original_thought_content}}
+
+  === NAZARIN DMA DA YA GABATA ===
+  {{prior_dma_context}}
+
+response_format: |
+  Amsar ku dole ta kasance abu ɗaya na JSON da ke bin tsarin da aka bayar, tare da maɓallan nan:
+  - "k_eff": Lamba (>= 0) - Ƙididdigan tushe mai zaman kansa mai tasiri. Yi amfani da dabaran k/(1+ρ(k-1)). k_eff < 2 = rauni.
+  - "correlation_risk": Lamba (0.0-1.0) - Ƙididdigar ρ alaƙa tsakanin maɓuɓɓuga.
+  - "phase": Igiya - Ɗaya daga cikin "chaos" (sabani), "healthy" (haɗuwa mai bambanci), ko "rigidity" (ɗakin murya).
+  - "fragility_flag": Boolean - TRUE idan k_eff < 2 KO phase = "rigidity" KO correlation_risk > 0.7.
+  - "sources_identified": Jerin igiyoyi - Jerin maɓuɓɓuga/ra'ayoyi daban-daban da aka gano a cikin tunani.
+  - "correlation_factors": Jerin igiyoyi - Abubuwan da ke haifar da alaƙa (misali, "marubuci ɗaya", "an samo daga bincike ɗaya").
+  - "reasoning": Igiya - Nazarin ku na bambancin bayanai da lafiyar fahimtar. Wannan filin yana DOLE.
+
+  ƘA'IDODIN HARSHE:
+  - Amsa cikin yaren da mai amfani ya fi so (duba bayanan mai amfani).
+  - DUKKAN ƙimar abun ciki (reasoning, sources_identified, correlation_factors) ya kamata su kasance cikin yaren mai amfani.
+  - Maɓallan JSON da ƙimar mataki dole su kasance cikin Turanci (misali, "reasoning", "k_eff", "phase": "healthy").
+  - Misali: {{"reasoning": "Bayanin ya fito ne daga tushe ɗaya kawai", "sources_identified": ["bayanan horo"], "phase": "rigidity"}} - Abun ciki na Hausa, maɓallan/mataki na Turanci.
+
+  Kar a haɗa filayen ƙari ko nannade a cikin shingen code na markdown.
+
+evaluation_steps: |
+  MATAKI 1: Ƙidaya Maɓuɓɓuga (k)
+  - Waɗanne maɓuɓɓuga/ra'ayoyi suke sanar da wannan tunani?
+  - Horar da ku = 1 tushe (koyaushe yana nan)
+  - Shigar da mai amfani = +1 tushe IDAN dangantaka ta balaga (mu'amala 20+)
+  - Sakamakon yanar gizo/kayan aiki = +1 tushe kowanne IDAN daga asali masu zaman kansu
+  - Ambato/bayanai = +1 tushe kowanne IDAN masu zaman kansu na gaske
+
+  MATAKI 2: Ƙididdigeta Alaƙa (ρ)
+  - Ga kowane nau'i-biyu na maɓuɓɓuga, tambaya: shin an samo ɗaya daga wancan?
+  - Marubuci/cibiya/bayanan ɗaya → alaƙa mai girma
+  - Duk maɓuɓɓuga suna yarda akan batu mai rikitarwa → alaƙar da ake tuhuma
+  - Hanyoyin daban-daban, ƙarshe ɗaya → alaƙa mai ƙanƙanta
+  - ρ = 0 (masu zaman kansu gaba ɗaya) zuwa ρ = 1 (duk an samo daga asali ɗaya)
+
+  MATAKI 3: Ƙididdige k_eff
+  - Yi amfani da dabara: k_eff = k / (1 + ρ(k-1))
+  - Misali: maɓuɓɓuga k=3, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (rauni!)
+  - Misali: maɓuɓɓuga k=3, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (lafiya)
+  - Wakili mai sabo: k=1 → k_eff = 1 (koyaushe rauni)
+
+  MATAKI 4: Tantance Mataki
+  - HARGITSI: Ƙarshe masu sabani da yawa, babu hanya don warwarewa
+  - LAFIYA: Ra'ayoyi daban-daban da ake iya haɗa su (k_eff ≥ 2)
+  - TAURARI: Labari ɗaya yana mamaye, babu adawa (k_eff → 1, ɗakin murya)
+
+  MATAKI 5: Binciken Rauni
+  - k_eff < 2? → RAUNI
+  - phase = "rigidity"? → RAUNI
+  - correlation_risk > 0.7? → RAUNI
+  - Saita fragility_flag = TRUE idan daya daga cikin sama
+
+closing_reminder: |
+  MUHIMMANCI: Lokacin da ba ku da tabbas game da 'yancin maɓuɓɓuga, ku kuskura a gefen taka tsantsan
+  kuma ku ƙiyasta alaƙa mafi girma. Ya fi kyau a yi alama don nazari fiye da rasa
+  yiwuwar ɗakin murya.
+
+  Alamar rauni BA yana nufin tunanin ba daidai ba ne - yana nufin tunanin
+  ya kamata ya sami ƙarin bincike ko tabbatarwa mai zaman kansa kafin ayyuka masu girma
+  da za a ɗauka.

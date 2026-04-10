@@ -2,9 +2,12 @@ FROM python:3.12-slim
 
 # Install dependencies including build tools for psutil
 # Using --no-install-recommends to minimize attack surface
+# TPM2 TSS libraries required for CIRISVerify attestation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
+    libtss2-esys-3.0.2-0t64 \
+    libtss2-tcti-device0t64 \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 

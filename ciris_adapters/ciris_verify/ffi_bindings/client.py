@@ -519,6 +519,20 @@ class CIRISVerify:
         except AttributeError:
             self._has_run_attestation_support = False
 
+        # ciris_verify_device_attestation_failed (optional - added in 1.5.3)
+        # Report device attestation failure (Play Integrity / App Attest token acquisition failed)
+        try:
+            self._lib.ciris_verify_device_attestation_failed.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # platform ("android" or "ios")
+                ctypes.c_int,                       # error_code
+                ctypes.c_char_p,                    # error_message (nullable)
+            ]
+            self._lib.ciris_verify_device_attestation_failed.restype = ctypes.c_int
+            self._has_device_attestation_failed_support = True
+        except AttributeError:
+            self._has_device_attestation_failed_support = False
+
         # ciris_verify_save_manifest_cache (optional - added in 1.2.0)
         # Save manifests with hardware signature for offline L1
         try:
@@ -671,6 +685,67 @@ class CIRISVerify:
             self._has_wallet_support = True
         except AttributeError:
             self._has_wallet_support = False
+
+        # Named key storage functions (v1.5.0)
+        self._has_named_key_support = False
+        try:
+            # ciris_verify_store_named_key(handle, key_id, seed, seed_len) -> i32
+            self._lib.ciris_verify_store_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # seed
+                ctypes.c_size_t,  # seed_len
+            ]
+            self._lib.ciris_verify_store_named_key.restype = ctypes.c_int
+
+            # ciris_verify_sign_with_named_key(handle, key_id, data, data_len, sig_out, sig_len_out) -> i32
+            self._lib.ciris_verify_sign_with_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # data
+                ctypes.c_size_t,  # data_len
+                ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+            ]
+            self._lib.ciris_verify_sign_with_named_key.restype = ctypes.c_int
+
+            # ciris_verify_has_named_key(handle, key_id) -> i32
+            self._lib.ciris_verify_has_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+            ]
+            self._lib.ciris_verify_has_named_key.restype = ctypes.c_int
+
+            # ciris_verify_delete_named_key(handle, key_id) -> i32
+            self._lib.ciris_verify_delete_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+            ]
+            self._lib.ciris_verify_delete_named_key.restype = ctypes.c_int
+
+            # ciris_verify_get_named_key_public(handle, key_id, pk_out, pk_len_out) -> i32
+            self._lib.ciris_verify_get_named_key_public.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.POINTER(ctypes.c_void_p),  # pubkey_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # pubkey_len (out)
+            ]
+            self._lib.ciris_verify_get_named_key_public.restype = ctypes.c_int
+
+            # ciris_verify_list_named_keys(handle, json_out) -> i32
+            self._lib.ciris_verify_list_named_keys.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_char_p),  # json_out
+            ]
+            self._lib.ciris_verify_list_named_keys.restype = ctypes.c_int
+
+            # ciris_verify_free_string(str) -> void
+            self._lib.ciris_verify_free_string.argtypes = [ctypes.c_char_p]
+            self._lib.ciris_verify_free_string.restype = None
+
+            self._has_named_key_support = True
+        except AttributeError:
+            self._has_named_key_support = False
 
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
@@ -1689,6 +1764,99 @@ class CIRISVerify:
                 self._lib.ciris_verify_free(result_data.value)
 
     # ========================================================================
+    # Device Attestation Failure Reporting (v1.5.3)
+    # ========================================================================
+
+    @property
+    def has_device_attestation_failed_support(self) -> bool:
+        """Check if device_attestation_failed is available.
+
+        Returns:
+            True if the library supports device_attestation_failed (>= 1.5.3).
+        """
+        return getattr(self, "_has_device_attestation_failed_support", False)
+
+    def device_attestation_failed_sync(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Report device attestation failure (Play Integrity / App Attest).
+
+        Call this when Play Integrity token acquisition fails (Android) or
+        App Attest attestation fails (iOS) before reaching the verify endpoint.
+        This caches the failure so run_attestation returns level_pending=false.
+
+        Args:
+            platform: Platform identifier ("android" or "ios").
+            error_code: Platform-specific error code (e.g., -16 for Play Integrity).
+            error_message: Optional human-readable error description.
+
+        Raises:
+            RuntimeError: If device_attestation_failed is not available.
+            ValueError: If platform is not "android" or "ios".
+            VerificationFailedError: If the call fails.
+        """
+        if not self.has_device_attestation_failed_support:
+            raise RuntimeError(
+                "device_attestation_failed not available in this library version (requires >= 1.5.3)"
+            )
+
+        if platform not in ("android", "ios"):
+            raise ValueError("platform must be 'android' or 'ios'")
+
+        platform_bytes = platform.encode("utf-8")
+        error_msg_bytes = error_message.encode("utf-8") if error_message else None
+
+        ret = self._lib.ciris_verify_device_attestation_failed(
+            self._handle,
+            platform_bytes,
+            error_code,
+            error_msg_bytes,
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"device_attestation_failed failed with code {ret}"
+            )
+
+    async def device_attestation_failed(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Async version of device_attestation_failed_sync.
+
+        Args:
+            platform: Platform identifier ("android" or "ios").
+            error_code: Platform-specific error code.
+            error_message: Optional human-readable error description.
+            timeout: Operation timeout in seconds.
+
+        Raises:
+            RuntimeError: If device_attestation_failed is not available.
+            ValueError: If platform is not "android" or "ios".
+            VerificationFailedError: If the call fails.
+            TimeoutError: If operation times out.
+        """
+        timeout = timeout or self._timeout
+
+        def _run() -> None:
+            self.device_attestation_failed_sync(platform, error_code, error_message)
+
+        loop = asyncio.get_event_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(self._executor, _run),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise CIRISTimeoutError("device_attestation_failed", timeout)
+
+    # ========================================================================
     # Manifest Cache - Offline L1 Verification
     # ========================================================================
 
@@ -2672,6 +2840,216 @@ class CIRISVerify:
             if address_data:
                 self._lib.ciris_verify_free(address_data)
 
+    # =========================================================================
+    # NAMED KEY STORAGE (v1.5.0)
+    # =========================================================================
+
+    def store_named_key(self, key_id: str, seed: bytes) -> bool:
+        """Store a named Ed25519 key.
+
+        Keys are stored with hardware protection (TPM/Keystore/SecureEnclave)
+        when available.
+
+        Args:
+            key_id: Key identifier (e.g., "wa:0x1234...", "session:abc123").
+            seed: 32-byte Ed25519 seed.
+
+        Returns:
+            True if the key was stored successfully.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            ValueError: If seed is not 32 bytes.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+        if len(seed) != 32:
+            raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_store_named_key(
+            self._handle, key_id_bytes, seed, len(seed)
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("store_named_key")
+        return ret == 0
+
+    def sign_with_named_key(self, key_id: str, data: bytes) -> bytes:
+        """Sign data with a named Ed25519 key.
+
+        Args:
+            key_id: Key identifier.
+            data: Data to sign.
+
+        Returns:
+            64-byte Ed25519 signature.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            VerificationFailedError: If the key is not found or signing fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        sig_data = ctypes.c_void_p()
+        sig_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_sign_with_named_key(
+            self._handle,
+            key_id_bytes,
+            data,
+            len(data),
+            ctypes.byref(sig_data),
+            ctypes.byref(sig_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("sign_with_named_key")
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"sign_with_named_key failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(sig_data.value, sig_len.value)
+        finally:
+            if sig_data.value:
+                self._lib.ciris_verify_free(sig_data.value)
+
+    def has_named_key(self, key_id: str) -> bool:
+        """Check if a named key exists.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            True if the key exists, False otherwise.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_has_named_key(self._handle, key_id_bytes)
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("has_named_key")
+        return ret == 1
+
+    def delete_named_key(self, key_id: str) -> bool:
+        """Delete a named key.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            True if the key was deleted successfully.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_delete_named_key(self._handle, key_id_bytes)
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("delete_named_key")
+        return ret == 0
+
+    def get_named_key_public(self, key_id: str) -> bytes:
+        """Get the public key for a named Ed25519 key.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            32-byte Ed25519 public key.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            VerificationFailedError: If the key is not found.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        pk_data = ctypes.c_void_p()
+        pk_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_get_named_key_public(
+            self._handle,
+            key_id_bytes,
+            ctypes.byref(pk_data),
+            ctypes.byref(pk_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("get_named_key_public")
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"get_named_key_public failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(pk_data.value, pk_len.value)
+        finally:
+            if pk_data.value:
+                self._lib.ciris_verify_free(pk_data.value)
+
+    def list_named_keys(self) -> list:
+        """List all named keys.
+
+        Returns:
+            List of key identifiers.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            CommunicationError: If list retrieval fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        json_out = ctypes.c_char_p()
+        ret = self._lib.ciris_verify_list_named_keys(
+            self._handle, ctypes.byref(json_out)
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("list_named_keys")
+        if ret != 0:
+            raise CommunicationError(f"list_named_keys failed with code {ret}")
+
+        try:
+            json_str = json_out.value.decode("utf-8")
+            return json.loads(json_str)
+        finally:
+            if json_out.value:
+                self._lib.ciris_verify_free_string(json_out)
+
 
 class MockCIRISVerify(CIRISVerify):
     """Mock CIRISVerify client for testing without the actual binary.
@@ -2965,6 +3343,32 @@ class MockCIRISVerify(CIRISVerify):
             "diagnostics": "[MOCK] Using MockCIRISVerify",
             "errors": [],
         }
+
+    @property
+    def has_device_attestation_failed_support(self) -> bool:
+        """Mock always supports device_attestation_failed."""
+        return True
+
+    def device_attestation_failed_sync(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Mock device_attestation_failed — no-op."""
+        if platform not in ("android", "ios"):
+            raise ValueError("platform must be 'android' or 'ios'")
+        # No-op in mock
+
+    async def device_attestation_failed(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Async mock device_attestation_failed — no-op."""
+        self.device_attestation_failed_sync(platform, error_code, error_message)
 
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""

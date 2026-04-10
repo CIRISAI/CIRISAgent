@@ -430,6 +430,7 @@
         "interact_disconnected": "Disconnected",
         "interact_dismiss": "Dismiss",
         "interact_hallucination_warning": "AI HALLUCINATES - CHECK FACTS",
+        "interact_pending_deferrals": "{count}টি বিলম্বিত স্থগিতাদেশ পর্যালোচনার অপেক্ষায়",
         "interact_welcome_title": "Welcome to Ally",
         "interact_welcome_subtitle": "Your personal thriving assistant",
         "interact_welcome_hint": "Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS works!",
@@ -465,6 +466,7 @@
         "interact_clear": "Clear",
         "interact_wallet_setup": "Setup",
         "interact_wallet_receive_only": "Recv",
+        "interact_wallet_loading": "লোড হচ্ছে...",
         "interact_legend_title": "CIRIS Action Emojis",
         "interact_legend_processing": "Processing",
         "interact_legend_thought_start": "Thought Start",
@@ -1644,7 +1646,9 @@
         "skill_security_layer_2": "Dangerous skills are blocked automatically",
         "skill_security_layer_3": "Imported skills always ask permission before acting",
         "skill_security_layer_4": "Every action is reviewed by the agent's conscience",
-        "skill_security_layer_5": "Every action is signed and recorded for your safety"
+        "skill_security_layer_5": "Every action is signed and recorded for your safety",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",
@@ -1653,7 +1657,14 @@
         "ponder_alternative_approach": "What alternative approach would better align with my principles?",
         "ponder_forced_retry": "Forced PONDER after conscience retry",
         "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
-        "forced_ponder_rationale": "Forced PONDER after conscience retry to prevent loops"
+        "forced_ponder_rationale": "Forced PONDER after conscience retry to prevent loops",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "access_token": "Access Token",
     "description": "Description",
@@ -1849,11 +1860,19 @@
     "wa_service_status": "Service Status",
     "wa_status": "Status",
     "startup": {
-        "startup_retry": "Retry"
+        "startup_retry": "Retry",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "system": {
         "system_cognitive_state": "Cognitive State",
-        "system_queue_depth": "Queue Depth"
+        "system_queue_depth": "Queue Depth",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "login_first_run_welcome": "Welcome! Choose how to set up your AI assistant."
 }

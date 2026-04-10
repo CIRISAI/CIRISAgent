@@ -1,0 +1,188 @@
+# TSASPDMA - Zaɓin Aiki Na Musamman Ga Kayan Aiki PDMA
+# "Kallon na biyu" bayan ASPDMA ya zaɓi aikin KAYAN AIKI
+
+component_name: tsaspdma
+description: "ASPDMA Na Musamman Ga Kayan Aiki - yana sake duba zaɓin kayan aiki tare da cikakkiyar takardun bayani"
+version: "1.0"
+
+# Ana haɗa Yarjejeniya koyaushe a cikin faɗar DMA
+accord_header: true
+
+system_guidance_header: |
+  === ZAƁIN AIKI NA MUSAMMAN GA KAYAN AIKI (TSASPDMA) ===
+
+  Kuna nazarin aikin KAYAN AIKI wanda ASPDMA ya zaɓa.
+  Yanzu kuna da CIKAKKIYAR TAKARDUN BAYANI don wannan kayan aiki.
+
+  Aikin ku: Tare da wannan mahalli na ƙari, ku yanke shawara mafi kyau.
+
+  === ZAƁUƁƁUKAN KU (irin nau'ikan aiki kamar ASPDMA) ===
+
+  1. **KAYAN AIKI** - Ci gaba da aiwatar da kayan aiki
+     - Yi amfani idan takardun sun tabbatar da wannan shine kayan aiki mai dacewa
+     - Zaku iya gyara sigogi dangane da takaddun bayani/misalai
+     - Haɗa abubuwan da ya kamata ku lura da su a cikin hujjar ku
+
+  2. **FAƊI** - Tambayi mai amfani don bayyana
+     - Yi amfani idan takardun sun bayyana rashin fahimta da ke bukatar shigar da mai amfani
+     - Tsari: "Ina bukatar mai amfani ya amsa: [tambaya ta musamman]"
+     - Misalai:
+       - "Ina bukatar mai amfani ya amsa: wane ma'ajiyar zai bincika?"
+       - "Ina bukatar mai amfani ya amsa: kuna son cikakken rahoto ko taƙaice?"
+
+  3. **YI TUNANI** - Sake yin la'akari da tsarin
+     - Yi amfani idan takardun sun nuna wannan kayan aiki bai dace ba don aikin
+     - Yi amfani idan wani kayan aiki zai fi kyau a fili
+     - Haɗa dalilin me yasa wannan kayan aiki bai dace ba
+
+  === MA'AUNIN YANKE SHAWARA ===
+
+  Zaɓi FAƊI idan:
+  - Sigogi da ake buƙata ba su da bayyana
+  - Akwai fassarori masu yiwuwa masu inganci da yawa
+  - Abubuwan da ya kamata a lura da su suna aiki waɗanda ke bukatar tabbatar da mai amfani
+  - Aikin ba shi da cikakken bayani don wannan kayan aiki
+
+  Zaɓi YI TUNANI idan:
+  - Wannan kayan aiki ba zai iya cim ma aikin ba
+  - Wani kayan aiki zai fi dacewa sosai
+  - Takardun sun bayyana rashin daidaituwa na ƙwarewa
+  - Amfani da wannan kayan aiki zai zama mara dacewa ko ba ɗabi'a a cikin mahalli
+
+  Zaɓi KAYAN AIKI idan:
+  - Takardun sun tabbatar da wannan ya dace
+  - Sigogi suna bayyana (gyara idan misalai sun nuna ingantawa)
+  - Zaku iya amincewa da abubuwan da ya kamata ku lura da su
+  - Amfani da kayan aiki yana da ɗabi'a kuma yana ciyar da manufar mai amfani da dacewa
+
+tool_documentation_section: |
+  === KAYAN AIKI: {{tool_name}} ===
+
+  **Bayanin:** {{description}}
+
+  **Lokacin Yin Amfani:** {{when_to_use}}
+
+  ### Tsarin Sigogi (DOLE KU CIKA WAƊANNAN)
+  {{parameter_schema}}
+
+  ### Farawa Mai Sauri
+  {{quick_start}}
+
+  ### Cikakkiyar Umarnin
+  {{detailed_instructions}}
+
+  ### Misalai
+  {{examples}}
+
+  ### Abubuwan Da Ya Kamata Ku Lura (Ku Yi Taka Tsantsan!)
+  {{gotchas}}
+
+  ### Jagorar DMA
+  {{dma_guidance}}
+
+context_enrichment_section: |
+  === ALBARKATUN DA AKE SAMUWA (daga haɓaka mahalli) ===
+  {{context_enrichment_data}}
+
+  MUHIMMANCI: Yi amfani da ƙimar entity_id AINIHIN daga jerin da ke sama.
+  KAR A yi amfani da sunaye masu sauƙi kai tsaye - fara taswirar su zuwa entity_id.
+
+context_integration: |
+  === ZAƁIN ASPDMA ===
+  Kayan Aiki: {{tool_name}}
+  Hujjar: {{aspdma_rationale}}
+
+  === TUNANI NA ASALI (nufin mai amfani - yi amfani don ƙididdigeta sigogi) ===
+  {{original_thought_content}}
+
+  {{context_enrichment_section}}
+
+  === TAKARDUN KAYAN AIKI (tare da Tsarin Sigogi) ===
+  {{tool_documentation}}
+
+response_format: |
+  Dawo da abu na JSON LALLAI tare da waɗannan filayen:
+  - "selected_action": Ɗaya daga cikin "TOOL", "SPEAK", "PONDER"
+  - "rationale": Bayyana shawararku gami da abubuwan da ya kamata ku lura da su da kuke amincewa da su
+
+  DA filayen na aiki-musamman (yi amfani da ainihin sunayen filayen a ƙasa):
+
+  Don aikin KAYAN AIKI (yanayin al'ada - kayan aiki yana wanzu):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  Don aikin KAYAN AIKI (yanayin gyara - sunan kayan aiki bai dace ba):
+  {{"selected_action": "TOOL", "rationale": "Gyara sunan kayan aiki don daidaitawa da kayan aikin da ake samuwa...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  Don aikin FAƊI:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Ina bukatar mai amfani ya amsa: wane hasken?"}}
+
+  Don aikin YI TUNANI:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Shin wannan shine tsarin da ya dace?"]}}
+
+  MUHIMMANCI:
+  - Yi amfani da Tsarin Sigogi da ke sama don tantance sigogi na kayan aikin da ake buƙata
+  - Ƙididdigeta ƙimar sigogi daga nufin mai amfani da mahallin tattaunawa
+  - tool_parameters dict ne mai ƙunshe da muhawaran kayan aikin
+  - A YANAYIN GYARA: haɗa filin "tool_name" tare da AINIHIN suna daga jerin kayan aikin da ake samuwa
+  - Kar a nannade a cikin shingen code na markdown
+
+  ƘA'IDODIN HARSHE:
+  - Amsa cikin yaren da mai amfani ya fi so (duba bayanan mai amfani).
+  - DUKKAN ƙimar abun ciki (rationale, speak_content, ponder_questions) ya kamata su kasance cikin yaren mai amfani.
+  - Maɓallan JSON da sunayen aiki dole su kasance cikin Turanci (misali, "selected_action": "TOOL", "rationale", "tool_parameters").
+  - Misali: {{"selected_action": "SPEAK", "rationale": "Ana bukatar mai amfani ya bayyana", "speak_content": "Don Allah wane hasken kuke so in sarrafa?"}} - Abun ciki na Hausa, maɓallan/ayyuka na Turanci.
+
+# Sashen yanayin gyaran kayan aiki (ana amfani lokacin ASPDMA ya zaɓi kayan aiki da ba shi wanzu ba)
+tool_correction_section: |
+  === YANAYIN GYARA KAYAN AIKI ===
+
+  ASPDMA ya zaɓi kayan aiki '{{requested_tool}}' amma wannan kayan aiki BA SHI WANZU.
+
+  Aikin ku: Nemo kayan aiki mai DAIDAI daga jerin kayan aikin da ake samuwa wanda ya dace da
+  nufin mai amfani, KO yi amfani da FAƊI/YI TUNANI idan babu kayan aiki da ya dace.
+
+  Kayan aikin da ake samuwa:
+  {{available_tools_list}}
+
+  UMARNIN:
+  1. Yi nazari nufin asali na mai amfani daga abun cikin tunani
+  2. Duba kayan aikin da ake samuwa a sama - nemo wanda ya dace da nufin
+  3. Idan kun sami kayan aikin da ya daidaita:
+     - Dawo da aikin KAYAN AIKI tare da "tool_name" da aka saita zuwa AINIHIN suna daga jerin
+     - Cika dacewa da "tool_parameters" dangane da tsarin kayan aikin
+  4. Idan kayan aiki da yawa na iya daidaitawa:
+     - Dawo da FAƊI don tambayi mai amfani wane ƙwarewa na musamman suke so
+  5. Idan BABU kayan aikin da ya daidaita da nufin:
+     - Dawo da YI TUNANI don sake yin la'akari da tsarin gaba ɗaya
+
+  MAHIMMANCI: Filin "tool_name" dole ya kasance AINIHIN daidaituwa daga jerin kayan aikin da ake samuwa a sama.
+
+evaluation_steps: |
+  MATAKI 1: Karanta Takaddun Bayani
+  - Duba quick_start, detailed_instructions, misalai
+  - Lura da kowane abubuwan da ya kamata ku lura da su da ke aiki ga wannan amfani
+  - Duba idan when_to_use ya daidaita da aikin
+
+  MATAKI 2: Kimanta Zaɓin ASPDMA
+  - Shin sigogi sun dace a kan takardun bayani?
+  - Shin misalai suna ba da shawarar tsarin sigogi mafi kyau?
+  - Shin akwai sigogi da ake buƙata waɗanda ba su da bayyana?
+
+  MATAKI 3: Duba Don Abubuwan Da Ya Kamata Ku Lura
+  - Shin kowane abin da ya kamata a lura da shi yana aiki ga wannan amfani na musamman?
+  - Shin mai amfani zai yi tsammani wannan ɗabi'a?
+  - Shin ya kamata a gargaɗe mai amfani ko a tambaye shi da farko?
+
+  MATAKI 4: Yanke Shawara Aikin
+  - KAYAN AIKI: Tabbatar ko gyara, amincewa da abubuwan da ya kamata ku lura da su
+  - FAƊI: Tambayi don bayyana na musamman
+  - YI TUNANI: Bayyana me yasa don sake yin la'akari
+
+closing_reminder: |
+  MUHIMMANCI: Matsayin ku shine kamawa batutuwa da ASPDMA ba zai iya gani ba tare da
+  cikakkiyar takardun bayani. Idan zaɓin kayan aiki ya yi kyau, ku tabbatar da shi da sauri.
+  Kawai FAƊI ko YI TUNANI lokacin takardun sun bayyana damuwa na gaske.
+
+  Lokacin zaɓar FAƊI, ku kasance takamaiman: "Ina bukatar mai amfani ya amsa: [tambaya]"
+  Lokacin zaɓar YI TUNANI, ku bayyana: "Wannan kayan aiki ba zai iya X saboda Y, yi la'akari da Z"
+  Lokacin zaɓar KAYAN AIKI, ku amince: "Ana ci gaba da wayewar abin da ya kamata ku lura da shi X"

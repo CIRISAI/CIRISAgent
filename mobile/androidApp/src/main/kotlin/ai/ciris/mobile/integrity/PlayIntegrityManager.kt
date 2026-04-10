@@ -71,6 +71,18 @@ class PlayIntegrityManager(
             requestIntegrityToken(nonce)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get Play Integrity token: ${e.message}")
+
+            // Extract error code from exception message (e.g., "-16: Integrity API error")
+            val errorCode = Regex("""-(\d+):""").find(e.message ?: "")?.groupValues?.get(1)?.toIntOrNull() ?: -1
+
+            // Report failure to CIRISVerify so level_pending becomes false (v1.5.3+)
+            try {
+                apiClient.reportPlayIntegrityFailed(errorCode, e.message ?: "Unknown error")
+                Log.i(TAG, "Reported Play Integrity failure to CIRISVerify")
+            } catch (reportError: Exception) {
+                Log.w(TAG, "Failed to report Play Integrity failure: ${reportError.message}")
+            }
+
             return@withContext PlayIntegrityResult(
                 verified = false,
                 error = "Failed to get Play Integrity token: ${e.message}"

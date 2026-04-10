@@ -409,7 +409,7 @@ class MainActivity : ComponentActivity() {
 
             // Use -T 1 to only read entries from NOW (not buffered history)
             // This ensures incremental progress tracking instead of reading all at once
-            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "raw", "-T", "1", "python.stdout:I", "python.stderr:W", "*:S"))
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "raw", "-T", "1", "python.stdout:I", "python.stderr:W", "CIRISVerify:I", "*:S"))
 
             // Register process and check if still valid
             if (!PythonRuntime.registerLogcatProcess(process, generation)) {

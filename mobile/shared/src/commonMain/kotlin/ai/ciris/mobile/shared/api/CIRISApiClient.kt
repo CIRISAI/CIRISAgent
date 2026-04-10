@@ -2690,6 +2690,11 @@ class CIRISApiClient(
                         isLenient = true
                     })
                 }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 15000
+                    connectTimeoutMillis = 10000
+                    socketTimeoutMillis = 15000
+                }
             }
 
             val response = client.get("$baseUrl/v1/wallet/status") {
@@ -2777,6 +2782,7 @@ class CIRISApiClient(
 
             val walletStatus = ai.ciris.mobile.shared.ui.screens.WalletStatusResponse(
                 hasWallet = json["has_wallet"]?.jsonPrimitive?.boolean ?: false,
+                isInitializing = json["is_initializing"]?.jsonPrimitive?.boolean ?: false,
                 provider = json["provider"]?.jsonPrimitive?.contentOrNull ?: "x402",
                 network = json["network"]?.jsonPrimitive?.contentOrNull ?: "base-sepolia",
                 currency = json["currency"]?.jsonPrimitive?.contentOrNull ?: "USDC",
@@ -4712,6 +4718,60 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             PlayIntegrityVerifyResult(error = e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Report Play Integrity token acquisition failure.
+     * Called when Google Play Integrity API fails (e.g., error -16).
+     * This allows CIRISVerify to mark device attestation as failed (not pending).
+     * Added in CIRISVerify 1.5.3.
+     */
+    suspend fun reportPlayIntegrityFailed(errorCode: Int, errorMessage: String): Boolean {
+        val method = "reportPlayIntegrityFailed"
+        logInfo(method, "Reporting Play Integrity failure: code=$errorCode")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 15000
+                    connectTimeoutMillis = 10000
+                    socketTimeoutMillis = 15000
+                }
+            }
+
+            // Properly escape error message for JSON (handles newlines, quotes, control chars)
+            val escapedMessage = errorMessage
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+
+            val response = client.post("$baseUrl/v1/setup/play-integrity/failed") {
+                headers {
+                    accessToken?.let { append(HttpHeaders.Authorization, "Bearer $it") }
+                }
+                contentType(ContentType.Application.Json)
+                setBody("""{"error_code": $errorCode, "error_message": "$escapedMessage"}""")
+            }
+
+            client.close()
+
+            if (response.status.isSuccess()) {
+                logInfo(method, "Successfully reported Play Integrity failure")
+                true
+            } else {
+                val errorBody = response.bodyAsText()
+                logError(method, "Failed to report: HTTP ${response.status}: $errorBody")
+                false
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            false
         }
     }
 

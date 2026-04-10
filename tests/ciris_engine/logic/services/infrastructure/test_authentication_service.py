@@ -655,3 +655,267 @@ async def test_oauth_linking_without_memory_bus_still_works(auth_service):
     assert linked is not None
     assert any(link.provider == "discord" for link in linked.oauth_links)
     assert linked.oauth_provider == "discord"
+
+
+# =============================================================================
+# CIRISVerify Named Key Tests - WA Signing Capability
+# =============================================================================
+
+
+class MockCIRISVerify:
+    """Mock CIRISVerify for testing named key operations."""
+
+    def __init__(self):
+        self._keys: dict[str, bytes] = {}  # key_id -> private_key (seed)
+
+    def store_named_key(self, key_id: str, seed: bytes) -> bool:
+        """Store a named key."""
+        self._keys[key_id] = seed
+        return True
+
+    def has_named_key(self, key_id: str) -> bool:
+        """Check if a named key exists."""
+        return key_id in self._keys
+
+    def sign_with_named_key(self, key_id: str, data: bytes) -> bytes:
+        """Sign data with a named key."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        if key_id not in self._keys:
+            raise ValueError(f"Key {key_id} not found")
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._keys[key_id])
+        return private_key.sign(data)
+
+    def get_named_key_public(self, key_id: str) -> bytes:
+        """Get public key for a named key."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+        from cryptography.hazmat.primitives import serialization
+
+        if key_id not in self._keys:
+            raise ValueError(f"Key {key_id} not found")
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._keys[key_id])
+        return private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+    def delete_named_key(self, key_id: str) -> bool:
+        """Delete a named key."""
+        if key_id in self._keys:
+            del self._keys[key_id]
+            return True
+        return False
+
+    def list_named_keys(self) -> list:
+        """List all named key IDs."""
+        return list(self._keys.keys())
+
+
+@pytest.fixture
+def mock_verifier():
+    """Create a mock CIRISVerify instance."""
+    return MockCIRISVerify()
+
+
+@pytest.mark.asyncio
+async def test_create_wa_stores_key_in_verifier(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that create_wa() stores the private key in CIRISVerify."""
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    # Mock the verifier singleton functions
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+    monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        # Create a new WA
+        wa = await service.create_wa(
+            name="test_user",
+            email="test@example.com",
+            scopes=["read:any"],
+            role=WARole.OBSERVER,
+        )
+
+        # Verify key was stored in CIRISVerify
+        assert mock_verifier.has_named_key(wa.wa_id), "WA key should be stored in CIRISVerify"
+        assert wa.wa_id in mock_verifier.list_named_keys()
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_sign_as_wa_uses_verifier(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that sign_as_wa() uses CIRISVerify named keys."""
+    import base64
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    # Mock the verifier singleton functions
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+    monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        # Create a WA (this stores the key in mock verifier)
+        wa = await service.create_wa(
+            name="signer_test",
+            email="signer@example.com",
+            scopes=["*"],
+            role=WARole.AUTHORITY,
+        )
+
+        # Sign some data
+        test_data = b"test data to sign"
+        signature = await service.sign_as_wa(wa.wa_id, test_data)
+
+        # Verify signature is valid base64
+        sig_bytes = base64.b64decode(signature)
+        assert len(sig_bytes) == 64, "Ed25519 signature should be 64 bytes"
+
+        # Verify signature using the public key
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        pubkey_bytes = mock_verifier.get_named_key_public(wa.wa_id)
+        pubkey = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+        # This will raise if signature is invalid
+        pubkey.verify(sig_bytes, test_data)
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_sign_as_wa_fails_for_unknown_wa(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that sign_as_wa() fails for non-existent WA."""
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+    monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        with pytest.raises(ValueError, match="not found"):
+            await service.sign_as_wa("wa-nonexistent", b"data")
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_sign_as_wa_fails_without_key(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that sign_as_wa() fails for WA without signing key in CIRISVerify."""
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    # Start with verifier disabled so key isn't stored during create_wa
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: False)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        # Create WA without verifier (key not stored)
+        wa = await service.create_wa(
+            name="no_key_test",
+            email="nokey@example.com",
+            scopes=["read:any"],
+            role=WARole.OBSERVER,
+        )
+
+        # Now enable verifier but key wasn't stored
+        monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+        monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+        # Should fail because key doesn't exist
+        with pytest.raises(ValueError, match="No signing key available"):
+            await service.sign_as_wa(wa.wa_id, b"data")
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_migrate_wa_keys_auto_rotates_user_was(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that migration auto-rotates keys for user WAs without keys in CIRISVerify."""
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    # Start without verifier to simulate pre-migration state
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: False)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        # Create a user WA without verifier (simulating old behavior where keys were discarded)
+        wa = await service.create_wa(
+            name="legacy_user",
+            email="legacy@example.com",
+            scopes=["*"],
+            role=WARole.AUTHORITY,
+        )
+        original_pubkey = wa.pubkey
+
+        # Verify key is NOT in verifier
+        assert not mock_verifier.has_named_key(wa.wa_id)
+
+        # Now enable verifier and run migration
+        monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+        monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+        await service._migrate_wa_keys_to_verify()
+
+        # Verify key was auto-rotated and stored in CIRISVerify
+        assert mock_verifier.has_named_key(wa.wa_id), "User WA key should be auto-rotated into CIRISVerify"
+
+        # Verify pubkey was updated in database
+        updated_wa = await service.get_wa(wa.wa_id)
+        assert updated_wa.pubkey != original_pubkey, "Public key should be updated after rotation"
+
+        # Verify new pubkey matches the key in CIRISVerify
+        verify_pubkey = mock_verifier.get_named_key_public(wa.wa_id)
+        assert updated_wa.pubkey == service._encode_public_key(verify_pubkey)
+
+    finally:
+        await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_migrate_skips_was_with_existing_keys(temp_db, time_service, mock_verifier, monkeypatch):
+    """Test that migration doesn't re-rotate WAs that already have keys in CIRISVerify."""
+    from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
+
+    # Start with verifier enabled
+    monkeypatch.setattr(auth_module, "has_verifier", lambda: True)
+    monkeypatch.setattr(auth_module, "get_verifier", lambda: mock_verifier)
+
+    service = AuthenticationService(db_path=temp_db, time_service=time_service)
+    await service.start()
+
+    try:
+        # Create WA with verifier (key stored properly)
+        wa = await service.create_wa(
+            name="modern_user",
+            email="modern@example.com",
+            scopes=["*"],
+            role=WARole.AUTHORITY,
+        )
+        original_pubkey = wa.pubkey
+
+        # Verify key is in verifier
+        assert mock_verifier.has_named_key(wa.wa_id)
+
+        # Run migration again
+        await service._migrate_wa_keys_to_verify()
+
+        # Verify pubkey was NOT changed (no rotation needed)
+        updated_wa = await service.get_wa(wa.wa_id)
+        assert updated_wa.pubkey == original_pubkey, "Public key should NOT change for WAs with existing keys"
+
+    finally:
+        await service.stop()
+
+

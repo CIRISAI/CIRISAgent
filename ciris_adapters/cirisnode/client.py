@@ -263,6 +263,38 @@ class CIRISNodeClient:
             use_agent_token=True,
         )
 
+    # =========================================================================
+    # Credit Records (Commons Credits)
+    # =========================================================================
+
+    async def get_credit_policy(self) -> Dict[str, Any]:
+        """Fetch the current credit generation policy from CIRISNode.
+
+        The policy is signed by the CIRIS L3C root key. Agents must verify
+        the signature against the L3C root key in CIRISRegistry before applying.
+        """
+        return await self._request("GET", "/api/v1/credits/policy")
+
+    async def post_credit_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit a signed credit attestation record to CIRISNode.
+
+        The record is dual-signed (Ed25519 + ML-DSA-65) by the requesting agent.
+        CIRISNode verifies the signature and stores the record for replication.
+        """
+        return await self._request(
+            "POST",
+            "/api/v1/credits/records",
+            json_data=record,
+        )
+
+    async def get_credit_records(self, agent_id: str) -> Dict[str, Any]:
+        """Retrieve credit records for an agent from CIRISNode.
+
+        Any party can verify records by checking dual signatures
+        against CIRISRegistry.
+        """
+        return await self._request("GET", f"/api/v1/credits/records/{agent_id}")
+
     async def close(self) -> None:
         """Alias for stop()."""
         await self.stop()

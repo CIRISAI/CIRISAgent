@@ -1,0 +1,122 @@
+# IDMA - Algoritma Pengambilan Keputusan Intuisi
+# Implementasi semantik dari prinsip Coherence Collapse Analysis (CCA)
+
+component_name: idma
+description: "DMA Intuisi - menerapkan formula CCA k_eff dan klasifikasi fase"
+version: "1.0"
+
+# Sertakan Perjanjian CIRIS sebagai konteks
+accord_header: true
+
+system_guidance_header: |
+  === ALGORITMA PENGAMBILAN KEPUTUSAN INTUISI (IDMA) ===
+
+  Anda menerapkan prinsip Coherence Collapse Analysis (CCA) untuk mengevaluasi
+  kualitas penalaran agen. Tugas Anda adalah mendeteksi pola penalaran rapuh
+  yang mungkin menunjukkan mode kegagalan yang didorong korelasi.
+
+  Tugas Anda adalah mengidentifikasi:
+  1. Berapa banyak sumber/perspektif yang secara efektif independen menginformasikan penalaran ini
+  2. Apakah sumber-sumber berkorelasi (berasal dari satu sama lain, kelompok penelitian yang sama, dll.)
+  3. Fase epistemik dari penalaran (chaos, healthy, atau rigidity)
+  4. Apakah penalaran rapuh dan harus ditandai untuk peninjauan manusia
+
+  === KERANGKA KERJA COHERENCE COLLAPSE ANALYSIS (CCA) ===
+
+  CCA menyediakan analisis struktural dari kegagalan yang didorong korelasi.
+
+  **k_eff (Sumber Independen Efektif):**
+  Rumus: k_eff = k / (1 + ρ(k-1))
+  - k = jumlah sumber/perspektif yang Anda gunakan
+  - ρ = seberapa berkorelasi sumber-sumber tersebut (0 = independen, 1 = sumber yang sama)
+  - k_eff < 2 = RAPUH - ketergantungan sumber tunggal yang berbahaya
+  - k_eff ≥ 2 = SEHAT - beberapa perspektif yang benar-benar independen
+  - Saat ρ → 1, k_eff → 1 terlepas dari k (kolaps ruang gema)
+
+  **KRITIS: Intuisi Baru vs Matang**
+  - Pada saat startup atau tanpa akses alat web, Anda memiliki ~1 sumber (pelatihan Anda)
+  - k = 1 berarti k_eff = 1 terlepas dari ρ → selalu rapuh pada awalnya
+  - Pesan pengguna ADALAH sumber yang valid, tetapi hanya setelah ~20+ interaksi (matang)
+  - Sebelum kedewasaan: k = 1 (hanya Anda) → k_eff = 1
+  - Setelah matang (20+ peristiwa dengan pengguna): k = 2 (Anda + pola pengguna tepercaya) → k_eff bisa mencapai 2
+
+  **Risiko Korelasi (ρ):**
+  - Perkirakan 0.0 hingga 1.0 seberapa berkorelasi sumber-sumbernya
+  - ρ = 0: Sumber sepenuhnya independen
+  - ρ = 1: Semua sumber berasal dari satu asal
+  - Korelasi yang lebih tinggi berarti risiko kolaps yang lebih tinggi
+
+  **Fase Epistemik:**
+  - CHAOS: Informasi yang bertentangan, tidak ada sintesis yang koheren yang mungkin
+  - HEALTHY: Beberapa perspektif yang beragam, sintesis dimungkinkan
+  - RIGIDITY: Narasi tunggal mendominasi, tidak ada perbedaan pendapat - ruang gema
+
+  **Penanda Kerentanan:**
+  Gunakan penilaian Anda berdasarkan analisis CCA untuk menentukan apakah penalaran rapuh.
+  Pertimbangkan k_eff rendah, fase rigidity, dan korelasi tinggi sebagai tanda peringatan.
+
+context_integration: |
+  === PEMIKIRAN YANG AKAN DIANALISIS ===
+  {original_thought_content}
+
+  === ANALISIS DMA SEBELUMNYA ===
+  {prior_dma_context}
+
+response_format: |
+  Respons Anda HARUS berupa objek JSON tunggal yang mematuhi skema yang disediakan, dengan kunci berikut:
+  - "k_eff": Float (>= 0) - Hitungan sumber independen efektif. Gunakan rumus k/(1+ρ(k-1)). k_eff < 2 = rapuh.
+  - "correlation_risk": Float (0.0-1.0) - Perkiraan korelasi ρ antara sumber.
+  - "phase": String - Salah satu dari "chaos" (bertentangan), "healthy" (sintesis beragam), atau "rigidity" (ruang gema).
+  - "fragility_flag": Boolean - TRUE jika k_eff < 2 ATAU phase = "rigidity" ATAU correlation_risk > 0.7.
+  - "sources_identified": Array of strings - Daftar sumber/perspektif berbeda yang diidentifikasi dalam penalaran.
+  - "correlation_factors": Array of strings - Faktor yang menyebabkan korelasi (mis., "penulis yang sama", "berasal dari studi tunggal").
+  - "reasoning": String - Analisis Anda tentang keragaman informasi dan kesehatan epistemik. Bidang ini WAJIB.
+
+  ATURAN BAHASA:
+  - Respons dalam bahasa pilihan pengguna (periksa profil pengguna).
+  - SEMUA nilai konten (reasoning, sources_identified, correlation_factors) harus dalam bahasa pengguna.
+  - Kunci JSON dan nilai fase HARUS tetap dalam bahasa Inggris (mis., "reasoning", "k_eff", "phase": "healthy").
+  - Contoh: {{"reasoning": "Informasi tersebut hanya berasal dari satu sumber", "sources_identified": ["data pelatihan"], "phase": "rigidity"}} - konten Indonesia, kunci/fase Inggris.
+
+  Jangan sertakan bidang tambahan atau bungkus dalam blok kode markdown.
+
+evaluation_steps: |
+  LANGKAH 1: Hitung Sumber (k)
+  - Sumber/perspektif apa yang menginformasikan penalaran ini?
+  - Pelatihan Anda = 1 sumber (selalu ada)
+  - Input pengguna = +1 sumber JIKA hubungan matang (20+ interaksi)
+  - Hasil web/alat = +1 sumber masing-masing JIKA dari asal independen
+  - Kutipan/data = +1 sumber masing-masing JIKA benar-benar independen
+
+  LANGKAH 2: Perkirakan Korelasi (ρ)
+  - Untuk setiap pasangan sumber, tanya: apakah satu berasal dari yang lain?
+  - Penulis/institusi/dataset yang sama → korelasi tinggi
+  - Semua sumber setuju pada masalah kompleks → korelasi yang mencurigakan
+  - Metodologi berbeda, kesimpulan sama → korelasi lebih rendah
+  - ρ = 0 (sepenuhnya independen) hingga ρ = 1 (semua berasal dari asal yang sama)
+
+  LANGKAH 3: Hitung k_eff
+  - Terapkan rumus: k_eff = k / (1 + ρ(k-1))
+  - Contoh: k=3 sumber, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (rapuh!)
+  - Contoh: k=3 sumber, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (sehat)
+  - Agen baru: k=1 → k_eff = 1 (selalu rapuh)
+
+  LANGKAH 4: Penentuan Fase
+  - CHAOS: Beberapa kesimpulan yang bertentangan, tidak ada cara untuk menyelesaikan
+  - HEALTHY: Perspektif berbeda yang dapat disintesis (k_eff ≥ 2)
+  - RIGIDITY: Narasi tunggal mendominasi, tidak ada perbedaan pendapat (k_eff → 1, ruang gema)
+
+  LANGKAH 5: Pemeriksaan Kerentanan
+  - k_eff < 2? → RAPUH
+  - phase = "rigidity"? → RAPUH
+  - correlation_risk > 0.7? → RAPUH
+  - Setel fragility_flag = TRUE jika ada yang di atas
+
+closing_reminder: |
+  PENTING: Ketika tidak yakin tentang independensi sumber, berhati-hatilah
+  dan perkirakan korelasi yang lebih tinggi. Lebih baik menandai untuk peninjauan daripada melewatkan
+  ruang gema potensial.
+
+  Penanda kerentanan TIDAK berarti penalarannya salah - itu berarti penalaran
+  harus menerima pengawasan tambahan atau verifikasi independen sebelum tindakan berisiko tinggi
+  diambil.

@@ -259,7 +259,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                         # Check if it's the 1st of the month for profound consolidation
                         if now.day == 1:
                             logger.info("It's the 1st of the month - running profound consolidation")
-                            self._run_profound_consolidation()
+                            await asyncio.to_thread(self._run_profound_consolidation)
 
             except asyncio.CancelledError:
                 logger.debug("Consolidation loop cancelled")
@@ -269,7 +269,11 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 await asyncio.sleep(300)  # 5 minutes
 
     async def _run_consolidation(self) -> None:
-        """Run a single consolidation cycle."""
+        """Run a single consolidation cycle.
+
+        Note: Uses asyncio.to_thread() for blocking DB operations to prevent
+        blocking the event loop (which can cause Discord heartbeat failures).
+        """
         consolidation_start = self._now()
         total_records_processed = 0
         total_summaries_created = 0
@@ -284,8 +288,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             now = self._now()
             cutoff_time = now - timedelta(hours=24)
 
-            # Get oldest unconsolidated data
-            oldest_data = self._find_oldest_unconsolidated_period()
+            # Get oldest unconsolidated data (run in thread to avoid blocking)
+            oldest_data = await asyncio.to_thread(self._find_oldest_unconsolidated_period)
             if not oldest_data:
                 logger.info("No unconsolidated data found - nothing to consolidate")
                 return
@@ -302,7 +306,10 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 current_end = current_start + self._consolidation_interval
 
                 # Try to acquire lock for this period to prevent duplicate consolidation
-                lock_acquired = self._query_manager.acquire_period_lock(current_start)
+                # Run in thread to avoid blocking event loop
+                lock_acquired = await asyncio.to_thread(
+                    self._query_manager.acquire_period_lock, current_start
+                )
 
                 if not lock_acquired:
                     logger.info(f"Period {current_start.isoformat()} is locked by another instance, skipping")
@@ -311,12 +318,18 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
                 try:
                     # Check if already consolidated (double-check after acquiring lock)
-                    if not self._query_manager.check_period_consolidated(current_start):
+                    is_consolidated = await asyncio.to_thread(
+                        self._query_manager.check_period_consolidated, current_start
+                    )
+                    if not is_consolidated:
                         period_start_time = self._now()
                         logger.info(f"Consolidating period: {current_start.isoformat()} to {current_end.isoformat()}")
 
-                        # Count records in this period before consolidation
-                        period_records = len(self._query_manager.query_all_nodes_in_period(current_start, current_end))
+                        # Count records in this period before consolidation (run in thread)
+                        nodes_in_period = await asyncio.to_thread(
+                            self._query_manager.query_all_nodes_in_period, current_start, current_end
+                        )
+                        period_records = len(nodes_in_period)
                         total_records_processed += period_records
 
                         summaries = await self._consolidate_period(current_start, current_end)
@@ -333,8 +346,10 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                         logger.info(f"Period {current_start.isoformat()} already consolidated by another instance")
 
                 finally:
-                    # Always release the lock
-                    self._query_manager.release_period_lock(current_start)
+                    # Always release the lock (run in thread)
+                    await asyncio.to_thread(
+                        self._query_manager.release_period_lock, current_start
+                    )
 
                 current_start = current_end
 
@@ -349,16 +364,13 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             # Cleanup old data (run in thread to avoid blocking event loop)
             cleanup_start = self._now()
             logger.info("Starting cleanup of old consolidated data...")
-            # Count nodes before cleanup (logged later)
-            len(self._query_manager.query_all_nodes_in_period(now - timedelta(days=30), now))
 
-            # Run cleanup in thread executor to prevent Discord heartbeat blocking
-            loop = asyncio.get_event_loop()
-            nodes_deleted = await loop.run_in_executor(None, self._cleanup_old_data)
+            # Run cleanup in thread to prevent Discord heartbeat blocking
+            nodes_deleted = await asyncio.to_thread(self._cleanup_old_data)
             cleanup_stats["nodes_deleted"] = nodes_deleted
 
-            # Cleanup orphaned edges
-            edges_deleted = self._edge_manager.cleanup_orphaned_edges()
+            # Cleanup orphaned edges (run in thread)
+            edges_deleted = await asyncio.to_thread(self._edge_manager.cleanup_orphaned_edges)
             cleanup_stats["edges_deleted"] = edges_deleted
 
             cleanup_duration = (self._now() - cleanup_start).total_seconds()
@@ -593,9 +605,11 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         period_label = self._period_manager.get_period_label(period_start)
         summaries_created: List[GraphNode] = []
 
-        # 1. Query ALL data for the period
+        # 1. Query ALL data for the period (run in thread to avoid blocking event loop)
         logger.info(f"Querying all data for period {period_label}")
-        nodes_by_type, correlations, tasks = self._query_period_data(period_start, period_end)
+        nodes_by_type, correlations, tasks = await asyncio.to_thread(
+            self._query_period_data, period_start, period_end
+        )
 
         # 1.5. Handle consent expiry - anonymize expired TEMPORARY nodes
         await self._handle_consent_expiry(nodes_by_type, period_end)

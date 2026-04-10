@@ -30,6 +30,10 @@ class DeferralContext(BaseModel):
     reason: str = Field(..., description="Reason for deferral")
     defer_until: Optional[datetime] = Field(None, description="When to reconsider")
     priority: Optional[str] = Field(None, description="Priority level for later consideration")
+    domain_hint: Optional[str] = Field(
+        None,
+        description="Licensed domain category for routing (MEDICAL, FINANCIAL, etc.)",
+    )
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional deferral metadata")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

@@ -1368,6 +1368,10 @@ fun CIRISApp(
                             platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
                             currentScreen = Screen.Settings
                         },
+                        onOpenWiseAuthority = {
+                            platformLog(TAG, "[INFO] Opening WiseAuthority page for deferrals")
+                            currentScreen = Screen.WiseAuthority
+                        },
                         apiClient = apiClient,
                         liveBackgroundEnabled = liveBackgroundEnabled,
                         colorTheme = colorTheme,

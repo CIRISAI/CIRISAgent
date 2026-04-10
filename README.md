@@ -17,7 +17,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 2.4.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 2.4.1-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -199,9 +199,9 @@ cd mobile/iosApp && xcodebuild -scheme iosApp
 
 ## Localization
 
-CIRIS supports **14 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
+CIRIS supports **29 languages** with full pipeline localization - the entire ethical reasoning system operates in the user's preferred language:
 
-**Supported Languages:** Amharic (am), Arabic (ar), Chinese (zh), English (en), French (fr), German (de), Hindi (hi), Italian (it), Japanese (ja), Korean (ko), Portuguese (pt), Russian (ru), Swahili (sw), Turkish (tr)
+**Supported Languages:** Amharic (am), Arabic (ar), Bengali (bn), Burmese (my), Chinese (zh), English (en), French (fr), German (de), Hausa (ha), Hindi (hi), Indonesian (id), Italian (it), Japanese (ja), Korean (ko), Marathi (mr), Persian (fa), Portuguese (pt), Punjabi (pa), Russian (ru), Spanish (es), Swahili (sw), Tamil (ta), Telugu (te), Thai (th), Turkish (tr), Ukrainian (uk), Urdu (ur), Vietnamese (vi), Yoruba (yo)
 
 **What's Localized:**
 - **ACCORD** - The complete ethical framework (~1150 lines per language)

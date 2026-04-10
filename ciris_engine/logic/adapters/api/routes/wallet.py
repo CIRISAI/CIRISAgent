@@ -113,6 +113,7 @@ class WalletStatusResponse(BaseModel):
 
     # Core wallet info
     has_wallet: bool = Field(description="Whether wallet is configured")
+    is_initializing: bool = Field(default=False, description="True while wallet providers are starting up")
     provider: str = Field(description="Wallet provider (x402, chapa, etc.)")
     network: str = Field(description="Network (base-mainnet, base-sepolia)")
     currency: str = Field(description="Primary currency (USDC)")
@@ -229,6 +230,20 @@ class DuplicateCheckResponse(BaseModel):
 # ============================================================================
 
 
+def _get_wallet_adapter_from_app(request: Request) -> Any:
+    """Get the WalletAdapter from the app state."""
+    try:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime:
+            adapters = getattr(runtime, "adapters", [])
+            for adapter in adapters:
+                if type(adapter).__name__ == "WalletAdapter":
+                    return adapter
+    except Exception as e:
+        logger.error(f"[WALLET_ADAPTER] Error finding adapter: {e}", exc_info=True)
+    return None
+
+
 def _get_wallet_provider_from_app(request: Request) -> Any:
     """Get the x402 wallet provider from the app state."""
     logger.info("[WALLET_PROVIDER] Starting provider lookup...")
@@ -316,13 +331,26 @@ async def get_wallet_status(
     logger.info("[WALLET_STATUS] Fetching wallet status")
 
     try:
+        # Check if wallet adapter is initializing (race condition prevention)
+        wallet_adapter = _get_wallet_adapter_from_app(request)
+        is_initializing = False
+        if wallet_adapter:
+            is_initializing = getattr(wallet_adapter, "_wallet_initializing", False)
+            if is_initializing:
+                logger.info("[WALLET_STATUS] Wallet is still initializing (CIRISVerify startup)")
+
         provider = _get_wallet_provider_from_app(request)
 
         if not provider:
-            logger.warning("[WALLET_STATUS] No wallet provider available")
+            # Distinguish between "initializing" vs "no wallet configured"
+            if is_initializing:
+                logger.info("[WALLET_STATUS] Provider not ready yet - initialization in progress")
+            else:
+                logger.warning("[WALLET_STATUS] No wallet provider available")
             return WalletStatusResponse(
                 has_wallet=False,
-                provider="none",
+                is_initializing=is_initializing,
+                provider="initializing" if is_initializing else "none",
                 network="unknown",
                 currency="USDC",
                 balance="0.00",
@@ -439,12 +467,14 @@ async def get_wallet_status(
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not get spending progress: {e}")
 
-        # Get gas estimates from chain client
+        # Get gas estimates from chain client (with 2s timeout to prevent blocking)
         gas_estimate = None
         chain_client = getattr(provider, "_chain_client", None)
         if chain_client:
             try:
-                gas_price = await chain_client.get_gas_price()
+                import asyncio
+
+                gas_price = await asyncio.wait_for(chain_client.get_gas_price(), timeout=2.0)
                 gas_price_gwei = gas_price / 10**9
 
                 # Calculate costs (assume ETH ~ $2000 for estimate)
@@ -461,6 +491,8 @@ async def get_wallet_status(
                     usdc_transfer_cost_usd=f"{usdc_cost_usd:.4f}",
                     eth_price_usd=str(eth_price_usd),
                 )
+            except asyncio.TimeoutError:
+                logger.debug("[WALLET_STATUS] Gas price fetch timed out (2s)")
             except Exception as e:
                 logger.debug(f"[WALLET_STATUS] Could not get gas estimates: {e}")
 
@@ -518,6 +550,7 @@ async def get_wallet_status(
 
         return WalletStatusResponse(
             has_wallet=True,
+            is_initializing=False,
             provider="x402",
             network=network,
             currency="USDC",

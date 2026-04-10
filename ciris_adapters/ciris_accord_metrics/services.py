@@ -112,10 +112,16 @@ def _strip_empty(obj: Any) -> Any:
 
 @dataclass
 class SimpleCapabilities:
-    """Simple capabilities container for duck-typing with WiseBus."""
+    """Simple capabilities container for duck-typing with WiseBus.
+
+    The supported_domains field declares which DomainCategory values this
+    service can handle. WiseBus filters services by domain_hint when routing
+    deferrals to ensure only qualified handlers receive domain-specific requests.
+    """
 
     actions: List[str]
     scopes: List[str]
+    supported_domains: List[str] = field(default_factory=list)  # DomainCategory values
 
 
 @dataclass
@@ -394,6 +400,12 @@ class AccordMetricsService:
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
+        # Commons Credits trace events (bilateral verified interactions)
+        "DEFERRAL_ROUTED": "deferral_routed",
+        "DEFERRAL_RECEIVED": "deferral_received",
+        "DEFERRAL_RESOLVED": "deferral_resolved",
+        "GRATITUDE_SIGNALED": "gratitude_signaled",
+        "CREDIT_GENERATED": "credit_generated",
     }
 
     def __init__(

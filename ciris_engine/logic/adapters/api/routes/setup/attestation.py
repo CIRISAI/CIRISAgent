@@ -152,6 +152,13 @@ class PlayIntegrityVerifyRequest(BaseModel):
     nonce: str = Field(..., description="Nonce used when requesting the token")
 
 
+class PlayIntegrityFailedRequest(BaseModel):
+    """Request body for reporting Play Integrity failure."""
+
+    error_code: int = Field(..., description="Error code from Play Integrity API (e.g., -16)")
+    error_message: str = Field(..., description="Error message from Play Integrity API")
+
+
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -622,4 +629,59 @@ async def verify_play_integrity(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Play Integrity verification failed: {e}",
+        )
+
+
+@router.post("/play-integrity/failed")
+async def report_play_integrity_failed(
+    request: Request,
+    body: PlayIntegrityFailedRequest,
+) -> SuccessResponse[Dict[str, Any]]:
+    """Report Play Integrity token acquisition failure.
+
+    Called when the Android app fails to get a Play Integrity token
+    (e.g., error -16 CLOUD_PROJECT_NUMBER_INVALID). This allows CIRISVerify
+    to mark device attestation as failed (not pending) so level_pending=false.
+
+    Added in CIRISVerify 1.5.3.
+    """
+    verifier = _get_verifier(request)
+
+    # Check if FFI supports this (>= 1.5.3)
+    if not verifier.has_device_attestation_failed_support:
+        logger.warning("[play-integrity] device_attestation_failed not available (need >= 1.5.3)")
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="device_attestation_failed requires CIRISVerify >= 1.5.3",
+        )
+
+    try:
+        await verifier.device_attestation_failed(
+            platform="android",
+            error_code=body.error_code,
+            error_message=body.error_message,
+        )
+        # Log error code only - error_message is user-controlled data
+        logger.info(f"[play-integrity] Reported failure: code={body.error_code}")
+
+        # Invalidate cache and re-run attestation with device_attestation marked as failed
+        auth_service = _get_auth_service(request)
+        auth_service.invalidate_attestation_cache()
+        task = asyncio.create_task(auth_service.run_startup_attestation())
+        if hasattr(auth_service, "_background_tasks"):
+            auth_service._background_tasks.add(task)
+            task.add_done_callback(auth_service._background_tasks.discard)
+
+        return SuccessResponse(
+            data={
+                "reported": True,
+                "error_code": body.error_code,
+                "message": "Device attestation failure recorded, level_pending will be false",
+            }
+        )
+    except Exception as e:
+        logger.error(f"[play-integrity] Failed to report failure: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to report Play Integrity failure: {e}",
         )

@@ -25,6 +25,8 @@ from .prohibitions import (
     get_prohibition_severity,
 )
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
@@ -139,15 +141,25 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         return self._agent_tier
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
-        """Send a deferral to ALL wise authority services (broadcast)"""
-        # Get ALL services with send_deferral capability
-        # Since we want to broadcast to all WA services, we need to get them all
+        """Send a deferral to wise authority services that support the domain.
+
+        If context.domain_hint is set (for domain-specific deferrals like MEDICAL,
+        FINANCIAL, etc.), only services that advertise support for that domain
+        will receive the deferral. This prevents unnecessary broadcasting and
+        ensures only qualified handlers receive domain-specific requests.
+
+        If no domain_hint is set, broadcasts to all services with send_deferral
+        capability (legacy behavior for human deferrals).
+        """
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
         logger.info(f"Found {len(all_wa_services)} total WiseAuthority services")
 
-        # Filter for services with send_deferral capability
+        # Extract domain_hint for filtering
+        domain_hint = context.domain_hint
+
+        # Filter for services with send_deferral capability AND matching domain
         services = []
         for service in all_wa_services:
             logger.debug(f"Checking service {service.__class__.__name__} for send_deferral capability")
@@ -155,14 +167,34 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             if hasattr(service, "get_capabilities"):
                 caps = service.get_capabilities()
                 logger.debug(f"Service {service.__class__.__name__} has capabilities: {caps.actions}")
-                if "send_deferral" in caps.actions:
-                    services.append(service)
-                    logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
+                if "send_deferral" not in caps.actions:
+                    continue
+
+                # Check domain support if domain_hint is specified
+                # Services must explicitly declare supported domains to handle domain-specific deferrals
+                if domain_hint:
+                    supported_domains = getattr(caps, "supported_domains", [])
+                    # Reject services with empty supported_domains OR without the required domain
+                    if not supported_domains or domain_hint not in supported_domains:
+                        logger.debug(
+                            f"Skipping service {service.__class__.__name__}: "
+                            f"domain '{domain_hint}' not in supported_domains {supported_domains}"
+                        )
+                        continue
+
+                services.append(service)
+                logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
             else:
                 logger.warning(f"Service {service.__class__.__name__} has no get_capabilities method")
 
         if not services:
-            logger.info(f"No wise authority service available for {handler_name}")
+            if domain_hint:
+                logger.warning(
+                    f"No wise authority service supports domain '{domain_hint}' for {handler_name}. "
+                    f"Ensure a service advertising this domain is registered (e.g., CIRISNode)."
+                )
+            else:
+                logger.info(f"No wise authority service available for {handler_name}")
             return False
 
         # Track if any service successfully received the deferral
@@ -405,25 +437,36 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"SECURITY ALERT: Accord invocation handler error: {e}", exc_info=True)
             return False
 
-    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
+    def _validate_capability(
+        self, capability: Optional[str], agent_tier: int = 1
+    ) -> Optional[DomainDeferralRequired]:
         """
         Validate capability against prohibited domains with tier-based access.
+
+        For REQUIRES_SEPARATE_MODULE capabilities (MEDICAL, FINANCIAL, etc.),
+        returns a DomainDeferralRequired signal instead of raising. The caller
+        auto-constructs a DeferralContext with domain_hint and routes through
+        CIRISNode to a qualified licensed agent.
 
         Args:
             capability: The capability to validate
             agent_tier: Agent tier level (1-5, with 4-5 having stewardship)
 
+        Returns:
+            DomainDeferralRequired if the capability needs domain-specific routing,
+            None if the capability is allowed.
+
         Raises:
-            ValueError: If capability is prohibited for the agent's tier
+            ValueError: If capability is NEVER_ALLOWED or TIER_RESTRICTED
         """
         if not capability:
-            return
+            return None
 
         # Get the category of this capability
         category = get_capability_category(capability)
         if not category:
             # Not a prohibited capability
-            return
+            return None
 
         # Check if it's a community moderation capability
         if category.startswith("COMMUNITY_"):
@@ -435,17 +478,29 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     f"This capability is reserved for agents with stewardship responsibilities."
                 )
             # Tier 4-5 can use community moderation
-            return
+            return None
 
         # Get the severity of this prohibition
         severity = get_prohibition_severity(category)
 
         if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
-            # These require separate licensed systems
-            raise ValueError(
-                f"PROHIBITED: {category} capabilities blocked. "
-                f"Capability '{capability}' requires separate licensed system. "
-                f"Implementation must be in isolated repository with proper liability controls."
+            # Route to licensed handler via CIRISNode instead of raising
+            try:
+                domain = DomainCategory(category)
+            except ValueError:
+                domain = DomainCategory.MEDICAL  # Safe fallback
+
+            logger.info(
+                f"Domain deferral required: {category} capability '{capability}' "
+                f"will be routed to licensed handler via CIRISNode"
+            )
+            return DomainDeferralRequired(
+                category=domain,
+                capability=capability,
+                reason=(
+                    f"{category} capability '{capability}' requires licensed domain handler. "
+                    f"Routing to qualified agent via CIRISNode."
+                ),
             )
         elif severity == ProhibitionSeverity.NEVER_ALLOWED:
             # These are absolutely prohibited
@@ -455,6 +510,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 f"This capability cannot be implemented in any CIRIS system."
             )
         # TIER_RESTRICTED already handled above for community moderation
+        return None
 
     async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
         """Get services matching the request capability."""
@@ -555,7 +611,30 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # CRITICAL: Validate capability against comprehensive prohibitions
         if hasattr(request, "capability"):
-            self._validate_capability(request.capability, agent_tier)
+            deferral_signal = self._validate_capability(request.capability, agent_tier)
+            if deferral_signal is not None:
+                # Route to licensed domain handler via CIRISNode auto-deferral
+                deferral_context = DeferralContext(
+                    thought_id=f"domain_deferral_{id(request)}",
+                    task_id=f"domain_task_{id(request)}",
+                    reason=deferral_signal.reason,
+                    domain_hint=deferral_signal.category.value,
+                    metadata={
+                        "domain_category": deferral_signal.category.value,
+                        "capability": deferral_signal.capability,
+                        "domain_hint": deferral_signal.category.value,
+                    },
+                )
+                success = await self.send_deferral(deferral_context, "domain_auto_deferral")
+                return GuidanceResponse(
+                    reasoning=deferral_signal.reason,
+                    wa_id="wisebus_domain_deferral",
+                    signature="domain_auto_deferral",
+                    custom_guidance=(
+                        f"This request requires a licensed {deferral_signal.category.value} handler. "
+                        f"{'Deferral sent to CIRISNode for routing.' if success else 'No WA service available for routing.'}"
+                    ),
+                )
 
         # Get matching services
         services = await self._get_matching_services(request)

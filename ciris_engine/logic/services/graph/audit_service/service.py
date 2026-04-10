@@ -34,7 +34,7 @@ try:
 
     PSUTIL_AVAILABLE = True
 except ImportError:
-    psutil = None  # type: ignore
+    psutil = None  # type: ignore[assignment,unused-ignore]
     PSUTIL_AVAILABLE = False
 
 # SQLite PRAGMA constants (avoid duplicate literals)

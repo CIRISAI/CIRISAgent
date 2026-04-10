@@ -1,0 +1,188 @@
+# TSASPDMA - Pemilihan Tindakan Khusus Alat PDMA
+# "Pandangan kedua" setelah ASPDMA memilih tindakan TOOL
+
+component_name: tsaspdma
+description: "ASPDMA Khusus Alat - meninjau pemilihan alat dengan dokumentasi lengkap"
+version: "1.0"
+
+# Perjanjian selalu disertakan dalam prompt DMA
+accord_header: true
+
+system_guidance_header: |
+  === PEMILIHAN TINDAKAN KHUSUS ALAT (TSASPDMA) ===
+
+  Anda meninjau tindakan TOOL yang dipilih ASPDMA.
+  Anda sekarang memiliki DOKUMENTASI LENGKAP untuk alat ini.
+
+  Tugas Anda: Dengan konteks tambahan ini, tentukan tindakan terbaik.
+
+  === OPSI ANDA (jenis tindakan yang sama dengan ASPDMA) ===
+
+  1. **TOOL** - Lanjutkan dengan eksekusi alat
+     - Gunakan jika dokumentasi mengonfirmasi ini adalah alat yang tepat
+     - Anda dapat menyempurnakan parameter berdasarkan dokumentasi/contoh
+     - Sertakan gotcha yang Anda akui dalam alasan Anda
+
+  2. **SPEAK** - Tanyakan pengguna untuk klarifikasi
+     - Gunakan jika dokumentasi mengungkapkan ambiguitas yang memerlukan input pengguna
+     - Format: "Saya memerlukan pengguna untuk menjawab: [pertanyaan spesifik]"
+     - Contoh:
+       - "Saya memerlukan pengguna untuk menjawab: repositori mana yang harus saya periksa?"
+       - "Saya memerlukan pengguna untuk menjawab: apakah Anda menginginkan laporan lengkap atau ringkasan?"
+
+  3. **PONDER** - Pertimbangkan kembali pendekatannya
+     - Gunakan jika dokumentasi menunjukkan alat ini salah untuk tugas tersebut
+     - Gunakan jika alat yang berbeda akan jelas lebih baik
+     - Sertakan alasan mengapa alat ini tidak sesuai
+
+  === KRITERIA KEPUTUSAN ===
+
+  Pilih SPEAK jika:
+  - Parameter yang diperlukan ambigu
+  - Beberapa interpretasi valid ada
+  - Gotcha berlaku yang memerlukan konfirmasi pengguna
+  - Tugas tidak cukup dispesifikasikan untuk alat ini
+
+  Pilih PONDER jika:
+  - Alat ini tidak dapat menyelesaikan tugas
+  - Alat yang berbeda akan jauh lebih baik
+  - Dokumentasi mengungkapkan ketidaksesuaian kemampuan
+  - Menggunakan alat ini akan tidak pantas atau tidak etis dalam konteks
+
+  Pilih TOOL jika:
+  - Dokumentasi mengonfirmasi ini sesuai
+  - Parameter jelas (sempurnakan jika contoh menyarankan perbaikan)
+  - Anda dapat mengakui gotcha yang relevan
+  - Penggunaan alat adalah etis dan memajukan tujuan pengguna dengan tepat
+
+tool_documentation_section: |
+  === ALAT: {tool_name} ===
+
+  **Deskripsi:** {description}
+
+  **Kapan Menggunakan:** {when_to_use}
+
+  ### Skema Parameter (ANDA HARUS MENGISI INI)
+  {parameter_schema}
+
+  ### Mulai Cepat
+  {quick_start}
+
+  ### Instruksi Terperinci
+  {detailed_instructions}
+
+  ### Contoh
+  {examples}
+
+  ### Gotcha (Hati-hati!)
+  {gotchas}
+
+  ### Panduan DMA
+  {dma_guidance}
+
+context_enrichment_section: |
+  === SUMBER DAYA YANG TERSEDIA (dari pengayaan konteks) ===
+  {context_enrichment_data}
+
+  PENTING: Gunakan nilai entity_id EXACT dari daftar di atas.
+  JANGAN gunakan nama ramah secara langsung - petakan terlebih dahulu ke entity_id.
+
+context_integration: |
+  === PEMILIHAN ASPDMA ===
+  Alat: {tool_name}
+  Alasan: {aspdma_rationale}
+
+  === PEMIKIRAN ASLI (maksud pengguna - gunakan untuk menyimpulkan parameter) ===
+  {original_thought_content}
+
+  {context_enrichment_section}
+
+  === DOKUMENTASI ALAT (dengan Skema Parameter) ===
+  {tool_documentation}
+
+response_format: |
+  Kembalikan objek JSON FLAT dengan bidang ini:
+  - "selected_action": Salah satu dari "TOOL", "SPEAK", "PONDER"
+  - "rationale": Jelaskan keputusan Anda termasuk gotcha yang Anda akui
+
+  PLUS bidang khusus tindakan (gunakan nama bidang yang tepat di bawah ini):
+
+  Untuk tindakan TOOL (mode normal - alat ada):
+  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  Untuk tindakan TOOL (mode koreksi - nama alat salah):
+  {{"selected_action": "TOOL", "rationale": "Mengoreksi nama alat agar sesuai dengan alat yang tersedia...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  Untuk tindakan SPEAK:
+  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Saya memerlukan pengguna untuk menjawab: lampu mana?"}}
+
+  Untuk tindakan PONDER:
+  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Apakah ini pendekatan yang tepat?"]}}
+
+  PENTING:
+  - Gunakan Skema Parameter di atas untuk menentukan parameter alat yang diperlukan
+  - Simpulkan nilai parameter dari maksud pengguna dan konteks percakapan
+  - tool_parameters adalah dict yang berisi argumen alat
+  - Dalam MODE KOREKSI: sertakan bidang "tool_name" dengan nama EXACT dari daftar alat yang tersedia
+  - Jangan bungkus dalam blok kode markdown
+
+  ATURAN BAHASA:
+  - Respons dalam bahasa pilihan pengguna (periksa profil pengguna).
+  - SEMUA nilai konten (rationale, speak_content, ponder_questions) harus dalam bahasa pengguna.
+  - Kunci JSON dan nama tindakan HARUS tetap dalam bahasa Inggris (mis., "selected_action": "TOOL", "rationale", "tool_parameters").
+  - Contoh: {{"selected_action": "SPEAK", "rationale": "Memerlukan klarifikasi pengguna", "speak_content": "Lampu mana yang ingin Anda kontrol?"}} - konten Indonesia, kunci/tindakan Inggris.
+
+# Bagian mode koreksi alat (digunakan ketika ASPDMA memilih alat yang tidak ada)
+tool_correction_section: |
+  === MODE KOREKSI ALAT ===
+
+  ASPDMA memilih alat '{requested_tool}' tetapi alat ini TIDAK ada.
+
+  Tugas Anda: Temukan alat YANG BENAR dari daftar alat yang tersedia yang cocok dengan
+  maksud pengguna, ATAU gunakan SPEAK/PONDER jika tidak ada alat yang sesuai.
+
+  Alat yang tersedia:
+  {available_tools_list}
+
+  INSTRUKSI:
+  1. Analisis maksud asli pengguna dari konten pemikiran
+  2. Tinjau alat yang tersedia di atas - temukan yang cocok dengan maksud
+  3. Jika Anda menemukan alat yang cocok:
+     - Kembalikan tindakan TOOL dengan "tool_name" disetel ke nama EXACT dari daftar
+     - Isi "tool_parameters" yang sesuai berdasarkan skema alat
+  4. Jika beberapa alat bisa cocok:
+     - Kembalikan SPEAK untuk menanyakan pengguna kemampuan spesifik mana yang mereka inginkan
+  5. Jika TIDAK ada alat yang cocok dengan maksud:
+     - Kembalikan PONDER untuk mempertimbangkan kembali pendekatan sepenuhnya
+
+  KRITIS: Bidang "tool_name" harus EXACT cocok dari daftar alat yang tersedia di atas.
+
+evaluation_steps: |
+  LANGKAH 1: Baca Dokumentasi
+  - Tinjau quick_start, detailed_instructions, examples
+  - Catat gotcha apa pun yang berlaku untuk kasus penggunaan ini
+  - Periksa apakah when_to_use cocok dengan tugas
+
+  LANGKAH 2: Evaluasi Pemilihan ASPDMA
+  - Apakah parameter benar per dokumentasi?
+  - Apakah contoh menyarankan format parameter yang lebih baik?
+  - Apakah ada parameter yang diperlukan yang ambigu?
+
+  LANGKAH 3: Periksa Gotcha
+  - Apakah ada gotcha yang berlaku untuk penggunaan spesifik ini?
+  - Apakah pengguna akan mengharapkan perilaku ini?
+  - Haruskah pengguna diperingatkan atau ditanya terlebih dahulu?
+
+  LANGKAH 4: Tentukan Tindakan
+  - TOOL: Konfirmasi atau sempurnakan, akui gotcha
+  - SPEAK: Tanyakan untuk klarifikasi spesifik
+  - PONDER: Jelaskan mengapa harus mempertimbangkan kembali
+
+closing_reminder: |
+  PENTING: Peran Anda adalah menangkap masalah yang tidak dapat dilihat ASPDMA tanpa
+  dokumentasi lengkap. Jika pemilihan alat terlihat bagus, konfirmasikan dengan cepat.
+  Hanya SPEAK atau PONDER ketika dokumentasi mengungkapkan kekhawatiran asli.
+
+  Saat memilih SPEAK, jadilah spesifik: "Saya memerlukan pengguna untuk menjawab: [pertanyaan]"
+  Saat memilih PONDER, jelaskan: "Alat ini tidak dapat X karena Y, pertimbangkan Z"
+  Saat memilih TOOL, akui: "Melanjutkan dengan kesadaran gotcha X"

@@ -73,7 +73,7 @@ class StartupViewModel(
         const val TOTAL_PREP_STEPS = 8  // pydantic/native lib setup (1-6) + code integrity (7-8)
         const val TOTAL_VERIFY_STEPS = 11  // CIRISVerify attestation: Phase 1 (5) + Phase 2 (6)
 
-        // VERIFY log patterns from ciris-verify v1.1.5
+        // VERIFY log patterns from ciris-verify v1.5.x
         // Format: VERIFY STEP {n}/{total} COMPLETE: {OK|FAILED|SKIP} ({details})
         private val VERIFY_STEP_PATTERN = Regex(
             """VERIFY STEP (\d+)/(\d+) (STARTING|COMPLETE): (.+)"""
@@ -81,8 +81,14 @@ class StartupViewModel(
         private val VERIFY_PHASE_PATTERN = Regex(
             """VERIFY PHASE (\d+)/(\d+) (STARTING|COMPLETE): (.+)"""
         )
+        // Legacy format: VERIFY ATTESTATION COMPLETE: level=1, valid=false, checks=5/6
         private val VERIFY_COMPLETE_PATTERN = Regex(
             """VERIFY ATTESTATION COMPLETE: level=(\d+), valid=(true|false), checks=(\d+)/(\d+)"""
+        )
+        // New format (v1.5.x): Unified attestation complete, valid=false, level=1, level_pending=false, checks_passed=5, checks_total=6
+        // Read from CIRISVerify logcat tag (added to MainActivity logcat filter)
+        private val UNIFIED_ATTESTATION_PATTERN = Regex(
+            """Unified attestation complete, valid=(true|false), level=(\d+), level_pending=(true|false), checks_passed=(\d+), checks_total=(\d+)"""
         )
     }
 
@@ -204,8 +210,8 @@ class StartupViewModel(
                     }
                 }
             }
-            // Forward verify messages
-            if (line.contains("VERIFY")) {
+            // Forward verify messages (VERIFY for legacy, Unified for v1.5.x)
+            if (line.contains("VERIFY") || line.contains("Unified attestation")) {
                 onVerifyLogMessage(line)
             }
             // Check for consolidator status
@@ -570,12 +576,21 @@ class StartupViewModel(
             return
         }
 
-        // Check for attestation complete
+        // Check for attestation complete (legacy format)
         VERIFY_COMPLETE_PATTERN.find(message)?.let { match ->
             val (level, valid, passed, total) = match.destructured
             _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
             _statusMessage.value = "Attestation: Level $level ($passed/$total checks)"
             PlatformLogger.i(TAG, "Attestation complete: level=$level, valid=$valid, checks=$passed/$total")
+            return
+        }
+
+        // Check for unified attestation complete (v1.5.x format)
+        UNIFIED_ATTESTATION_PATTERN.find(message)?.let { match ->
+            val (valid, level, levelPending, passed, total) = match.destructured
+            _verifyStepsCompleted.value = TOTAL_VERIFY_STEPS
+            _statusMessage.value = "Attestation: Level $level ($passed/$total checks)"
+            PlatformLogger.i(TAG, "Unified attestation complete: level=$level, valid=$valid, level_pending=$levelPending, checks=$passed/$total")
         }
     }
 

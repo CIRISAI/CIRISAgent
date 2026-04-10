@@ -6,16 +6,39 @@ This module validates that all localized files have:
 2. No duplicate keys
 3. Complete ACCORD and Guide translations
 4. Complete DMA prompt translations
+
+Language lists are dynamically loaded from localization/manifest.json.
 """
 
 import json
 from pathlib import Path
-from typing import Set
+from typing import List, Set
 
 import pytest
 
 # Project root for file lookups
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+
+def get_supported_languages() -> List[str]:
+    """Get list of supported languages from manifest.json (excluding 'en')."""
+    manifest_path = PROJECT_ROOT / "localization" / "manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return sorted([code for code in manifest.get("languages", {}).keys() if code != "en"])
+
+
+def get_all_languages() -> List[str]:
+    """Get list of all languages from manifest.json (including 'en')."""
+    manifest_path = PROJECT_ROOT / "localization" / "manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return sorted(manifest.get("languages", {}).keys())
+
+
+# Dynamic language lists from manifest
+SUPPORTED_LANGUAGES = get_supported_languages()
+ALL_LANGUAGES = get_all_languages()
 
 
 def get_nested_keys(obj: dict, prefix: str = "") -> Set[str]:
@@ -75,10 +98,7 @@ class TestLocalizationKeyCompleteness:
         # As of current version, we expect ~1257 keys
         assert len(english_keys) >= 1200, f"English has only {len(english_keys)} keys"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_language_has_all_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has all keys from English."""
         lang_path = localization_dir / f"{lang_code}.json"
@@ -95,10 +115,7 @@ class TestLocalizationKeyCompleteness:
             f"{lang_code}.json is missing {len(missing)} keys. " f"First 10 missing: {sorted(missing)[:10]}"
         )
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["en", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", ALL_LANGUAGES)
     def test_no_extra_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
         """Test that a language file has no extra keys not in English."""
         lang_path = localization_dir / f"{lang_code}.json"
@@ -116,10 +133,7 @@ class TestLocalizationKeyCompleteness:
 
         assert len(extra) == 0, f"{lang_code}.json has {len(extra)} extra keys. " f"Extra keys: {sorted(extra)[:10]}"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["en", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", ALL_LANGUAGES)
     def test_no_duplicate_keys(self, localization_dir: Path, lang_code: str):
         """Test that language files have no duplicate keys."""
         lang_path = localization_dir / f"{lang_code}.json"
@@ -145,10 +159,7 @@ class TestACCORDCompleteness:
         with open(en_path, "r", encoding="utf-8") as f:
             return len(f.readlines())
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_accord_translation_complete(self, data_dir: Path, english_accord_lines: int, lang_code: str):
         """Test that ACCORD translation has similar line count to English."""
         localized_dir = data_dir / "localized"
@@ -187,10 +198,7 @@ class TestGuideCompleteness:
         with open(en_path, "r", encoding="utf-8") as f:
             return len(f.readlines())
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_guide_translation_exists(self, data_dir: Path, lang_code: str):
         """Test that Guide translation exists."""
         localized_dir = data_dir / "localized"
@@ -198,10 +206,7 @@ class TestGuideCompleteness:
 
         assert guide_path.exists(), f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md does not exist"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_guide_translation_complete(self, data_dir: Path, english_guide_lines: int, lang_code: str):
         """Test that Guide translation has reasonable line count."""
         localized_dir = data_dir / "localized"
@@ -235,19 +240,13 @@ class TestDMAPromptCompleteness:
         """Get list of English prompt files."""
         return [f.name for f in prompts_dir.glob("*.yml") if f.is_file()]
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_dma_prompts_directory_exists(self, prompts_dir: Path, lang_code: str):
         """Test that localized DMA prompts directory exists."""
         localized_dir = prompts_dir / "localized" / lang_code
         assert localized_dir.exists(), f"DMA prompts directory for {lang_code} does not exist"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_dma_prompts_complete(self, prompts_dir: Path, english_prompt_files: list, lang_code: str):
         """Test that all English prompt files exist in localized directory."""
         localized_dir = prompts_dir / "localized" / lang_code
@@ -272,19 +271,13 @@ class TestGlossaryCompleteness:
         """Get the glossary directory."""
         return PROJECT_ROOT / "docs" / "localization" / "glossaries"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_glossary_exists(self, glossary_dir: Path, lang_code: str):
         """Test that glossary exists for each language."""
         glossary_path = glossary_dir / f"{lang_code}_glossary.md"
         assert glossary_path.exists(), f"Glossary for {lang_code} does not exist"
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", "ru", "sw", "tr", "zh", "am", "ur"],
-    )
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_glossary_has_content(self, glossary_dir: Path, lang_code: str):
         """Test that glossary has meaningful content."""
         glossary_path = glossary_dir / f"{lang_code}_glossary.md"

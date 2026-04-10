@@ -134,7 +134,8 @@ data class WalletStatus(
     val provider: String = "x402",
     val network: String = "base-sepolia",
     val address: String? = null,
-    val isReceiveOnly: Boolean = false  // True if hardware trust degraded
+    val isReceiveOnly: Boolean = false,  // True if hardware trust degraded
+    val isInitializing: Boolean = false  // True while wallet provider is starting up
 )
 
 class InteractViewModel(
@@ -279,6 +280,10 @@ class InteractViewModel(
     private val _walletStatus = MutableStateFlow(WalletStatus())
     val walletStatus: StateFlow<WalletStatus> = _walletStatus.asStateFlow()
 
+    // Pending deferrals count for WA banner display
+    private val _pendingDeferrals = MutableStateFlow(0)
+    val pendingDeferrals: StateFlow<Int> = _pendingDeferrals.asStateFlow()
+
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
     val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
@@ -368,38 +373,29 @@ class InteractViewModel(
     }
 
     /**
-     * Fetch wallet adapter status from the adapters list.
-     * Updates WalletStatus based on whether wallet adapter is loaded.
+     * Fetch wallet status from the wallet API endpoint.
+     * Updates WalletStatus with balance, address, and initialization state.
      */
     private fun fetchWalletStatus() {
         val method = "fetchWalletStatus"
         viewModelScope.launch {
             try {
-                logInfo(method, "Fetching adapters list to check wallet status")
-                val adaptersData = apiClient.listAdapters()
-                val walletAdapter = adaptersData.adapters.find {
-                    it.adapterType.equals("wallet", ignoreCase = true)
-                }
+                logInfo(method, "Fetching wallet status from API")
+                val walletResponse = apiClient.getWalletStatus()
 
-                if (walletAdapter != null) {
-                    logInfo(method, "Wallet adapter found: isRunning=${walletAdapter.isRunning}")
-                    _walletStatus.value = WalletStatus(
-                        isLoaded = true,
-                        hasWallet = walletAdapter.isRunning,
-                        balance = "0.00",  // TODO: Fetch actual balance from wallet API
-                        currency = "USDC",
-                        provider = "x402",
-                        network = "base-sepolia",
-                        address = null,
-                        isReceiveOnly = false
-                    )
-                } else {
-                    logInfo(method, "Wallet adapter not found in adapters list")
-                    _walletStatus.value = WalletStatus(
-                        isLoaded = true,
-                        hasWallet = false
-                    )
-                }
+                logInfo(method, "Wallet response: hasWallet=${walletResponse.hasWallet}, isInitializing=${walletResponse.isInitializing}, provider=${walletResponse.provider}")
+
+                _walletStatus.value = WalletStatus(
+                    isLoaded = true,
+                    hasWallet = walletResponse.hasWallet,
+                    balance = walletResponse.balance,
+                    currency = walletResponse.currency,
+                    provider = walletResponse.provider,
+                    network = walletResponse.network,
+                    address = walletResponse.address,
+                    isReceiveOnly = walletResponse.isReceiveOnly,
+                    isInitializing = walletResponse.isInitializing
+                )
             } catch (e: Exception) {
                 logWarn(method, "Failed to fetch wallet status: ${e.message}")
                 _walletStatus.value = WalletStatus(isLoaded = true, hasWallet = false)
@@ -861,6 +857,18 @@ class InteractViewModel(
                 logDebug(method, "Trust: level=${verifyStatus.maxLevel}/5, keyStatus=${verifyStatus.keyStatus}, pending=${verifyStatus.levelPending}")
             } catch (e: Exception) {
                 logWarn(method, "Failed to fetch trust status: ${e.message}")
+            }
+
+            // Fetch pending deferrals count for WA banner
+            try {
+                val waStatus = apiClient.getWAStatus()
+                val prevCount = _pendingDeferrals.value
+                _pendingDeferrals.value = waStatus.pendingDeferrals
+                if (waStatus.pendingDeferrals != prevCount && waStatus.pendingDeferrals > 0) {
+                    logInfo(method, "Pending deferrals: ${waStatus.pendingDeferrals}")
+                }
+            } catch (e: Exception) {
+                logDebug(method, "Failed to fetch WA status: ${e.message}")
             }
         } catch (e: Exception) {
             logWarn(method, "Health polling error: ${e.message}")

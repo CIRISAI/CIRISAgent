@@ -169,6 +169,13 @@ interface CIRISApiClientProtocol {
      */
     suspend fun getServices(): ServicesResponse
 
+    // ===== Environment API =====
+
+    /**
+     * Get environment context information (location, context enrichment from adapters)
+     */
+    suspend fun getEnvironmentInfo(): EnvironmentInfoResponse
+
     // ===== Runtime Control API =====
 
     /**
@@ -251,6 +258,44 @@ data class AdapterActionData(
 data class ServicesResponse(
     val globalServices: Map<String, List<ServiceProviderData>>,
     val handlers: Map<String, Map<String, List<ServiceProviderData>>>
+)
+
+// ===== Environment API Data Models =====
+
+/**
+ * Environment info response from /v1/system/environment
+ */
+data class EnvironmentInfoResponse(
+    val location: LocationInfoData,
+    val contextEnrichment: Map<String, Any>,
+    val cacheStats: EnrichmentCacheStatsData,
+    val timestamp: String?
+)
+
+/**
+ * User location information from setup
+ */
+data class LocationInfoData(
+    val location: String?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val timezone: String?,
+    val country: String?,
+    val region: String?,
+    val city: String?,
+    val iso6709: String?,
+    val hasCoordinates: Boolean
+)
+
+/**
+ * Context enrichment cache statistics
+ */
+data class EnrichmentCacheStatsData(
+    val entries: Int,
+    val hits: Int,
+    val misses: Int,
+    val hitRatePct: Double,
+    val startupPopulated: Boolean
 )
 
 /**

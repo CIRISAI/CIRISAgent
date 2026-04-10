@@ -4145,6 +4145,93 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Environment API =====
+
+    override suspend fun getEnvironmentInfo(): EnvironmentInfoResponse {
+        val method = "getEnvironmentInfo"
+        logInfo(method, "Fetching environment info")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/system/environment") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+            val data = json["data"]?.jsonObject
+                ?: throw RuntimeException("API returned null data")
+
+            // Parse location
+            val locationObj = data["location"]?.jsonObject
+            val location = LocationInfoData(
+                location = locationObj?.get("location")?.jsonPrimitive?.contentOrNull,
+                latitude = locationObj?.get("latitude")?.jsonPrimitive?.doubleOrNull,
+                longitude = locationObj?.get("longitude")?.jsonPrimitive?.doubleOrNull,
+                timezone = locationObj?.get("timezone")?.jsonPrimitive?.contentOrNull,
+                country = locationObj?.get("country")?.jsonPrimitive?.contentOrNull,
+                region = locationObj?.get("region")?.jsonPrimitive?.contentOrNull,
+                city = locationObj?.get("city")?.jsonPrimitive?.contentOrNull,
+                iso6709 = locationObj?.get("iso6709")?.jsonPrimitive?.contentOrNull,
+                hasCoordinates = locationObj?.get("has_coordinates")?.jsonPrimitive?.boolean ?: false
+            )
+
+            // Parse context enrichment (keep as raw map for flexibility)
+            val enrichmentObj = data["context_enrichment"]?.jsonObject ?: JsonObject(emptyMap())
+            val contextEnrichment = mutableMapOf<String, Any>()
+            for ((key, value) in enrichmentObj) {
+                // Convert JsonElement to a usable type
+                contextEnrichment[key] = when {
+                    value is JsonObject -> value.toString()
+                    value is JsonArray -> value.toString()
+                    value.jsonPrimitive.isString -> value.jsonPrimitive.content
+                    else -> value.toString()
+                }
+            }
+
+            // Parse cache stats
+            val statsObj = data["cache_stats"]?.jsonObject
+            val cacheStats = EnrichmentCacheStatsData(
+                entries = statsObj?.get("entries")?.jsonPrimitive?.int ?: 0,
+                hits = statsObj?.get("hits")?.jsonPrimitive?.int ?: 0,
+                misses = statsObj?.get("misses")?.jsonPrimitive?.int ?: 0,
+                hitRatePct = statsObj?.get("hit_rate_pct")?.jsonPrimitive?.double ?: 0.0,
+                startupPopulated = statsObj?.get("startup_populated")?.jsonPrimitive?.boolean ?: false
+            )
+
+            val timestamp = data["timestamp"]?.jsonPrimitive?.contentOrNull
+
+            logInfo(method, "Environment info fetched: hasCoordinates=${location.hasCoordinates}, " +
+                    "enrichmentEntries=${contextEnrichment.size}, cacheHitRate=${cacheStats.hitRatePct}%")
+
+            EnvironmentInfoResponse(
+                location = location,
+                contextEnrichment = contextEnrichment,
+                cacheStats = cacheStats,
+                timestamp = timestamp
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     // ===== Runtime Control API =====
 
     override suspend fun getRuntimeState(): RuntimeStateResponse {

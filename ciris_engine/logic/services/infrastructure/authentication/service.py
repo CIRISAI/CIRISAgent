@@ -1732,8 +1732,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # so we can safely generate new keys without breaking anything.
             all_was = await self._list_all_was(active_only=True)
             for wa in all_was:
-                # Skip System WA (handled above) and root (seed key)
-                if wa.name == "CIRIS System Authority" or wa.role.value == "root":
+                # Skip System WA (handled above via file migration) and default admin
+                # Only migrate actual user WAs created during setup (the responsible human)
+                if wa.name in ("CIRIS System Authority", "admin"):
+                    # Clean up any erroneously stored admin keys from prior versions
+                    if wa.name == "admin" and verifier.has_named_key(wa.wa_id):
+                        verifier.delete_named_key(wa.wa_id)
+                        logger.info(f"Removed default admin key from CIRISVerify: {wa.wa_id}")
                     continue
 
                 # Check if this WA already has a key in CIRISVerify
@@ -1758,6 +1763,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         logger.info("AuthenticationService started")
 
         # Migrate existing WA keys to CIRISVerify (runs once per key)
+        # Note: CIRISVerify singleton must be initialized before this runs
         await self._migrate_wa_keys_to_verify()
 
         # Skip attestation in test mode to avoid TPM operations

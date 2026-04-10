@@ -147,6 +147,10 @@ class CIRISVerifyAdapter(Service):
             self._started = True
             logger.info("CIRISVerify adapter started successfully")
 
+            # Migrate WA keys now that CIRISVerify is available
+            # This must happen after verifier singleton is initialized
+            await self._migrate_wa_keys()
+
             # Check if we're in first-run mode - skip license check (no license exists yet)
             from ciris_engine.logic.setup.first_run import is_first_run
 
@@ -164,6 +168,23 @@ class CIRISVerifyAdapter(Service):
         else:
             logger.warning("CIRISVerify initialization failed - operating in community mode")
             self._started = True  # Still mark as started, just in degraded mode
+
+    async def _migrate_wa_keys(self) -> None:
+        """Migrate WA signing keys to CIRISVerify.
+
+        Called after CIRISVerify is initialized so the verifier singleton is available.
+        Gets AuthenticationService from runtime and triggers key migration.
+        """
+        try:
+            # Access AuthenticationService via runtime property
+            auth_service = getattr(self.runtime, "authentication_service", None)
+            if auth_service and hasattr(auth_service, "_migrate_wa_keys_to_verify"):
+                await auth_service._migrate_wa_keys_to_verify()
+                logger.info("WA key migration to CIRISVerify completed")
+            else:
+                logger.debug("AuthenticationService not available for WA key migration")
+        except Exception as e:
+            logger.warning(f"WA key migration failed (non-fatal): {e}")
 
     async def stop(self) -> None:
         """Stop the adapter and cleanup resources."""

@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "什么替代方法能更好地符合我的原则？",
         "ponder_forced_retry": "良知重试后强制进行 PONDER",
         "override_rationale": "被{conscience_name}覆盖：需要重新考虑{action}",
-        "forced_ponder_rationale": "良知重试后强制进行 PONDER 以防止循环"
+        "forced_ponder_rationale": "良知重试后强制进行 PONDER 以防止循环",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "了解如何在不同信任级别之间切换以及对您的数据意味着什么",
     "consent_about_title": "关于同意流",
@@ -386,6 +393,7 @@
         "interact_disconnected": "已断开",
         "interact_dismiss": "关闭",
         "interact_hallucination_warning": "AI 可能产生幻觉 - 请核实事实",
+        "interact_pending_deferrals": "{count} 个待处理的推迟等待审核",
         "interact_welcome_title": "欢迎使用 Ally",
         "interact_welcome_subtitle": "您的个人成长助手",
         "interact_welcome_hint": "询问 Ally 如何帮助您处理任务、日程、决策或生活——或者了解 CIRIS 如何工作！",
@@ -421,6 +429,7 @@
         "interact_clear": "清除",
         "interact_wallet_setup": "设置",
         "interact_wallet_receive_only": "仅接收",
+        "interact_wallet_loading": "加载中...",
         "interact_legend_title": "CIRIS 动作表情符号",
         "interact_legend_processing": "处理中",
         "interact_legend_thought_start": "思考开始",
@@ -1575,7 +1584,9 @@
         "wallet_paymaster_configure": "配置Paymaster Key",
         "wallet_paymaster_hint": "输入您的Etherspot Arka API密钥以启用无Gas USDC转账",
         "wallet_paymaster_key_label": "Arka API密钥",
-        "wallet_paymaster_save": "保存密钥"
+        "wallet_paymaster_save": "保存密钥",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1770,12 @@
     "setup_validation_select_mode": "选择模式",
     "setup_validation_username_required": "需要用户名",
     "startup": {
-        "startup_retry": "重试启动"
+        "startup_retry": "重试启动",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "执行中……",
@@ -1775,7 +1791,10 @@
     "status_pending": "待处理",
     "system": {
         "system_cognitive_state": "认知状态",
-        "system_queue_depth": "队列深度"
+        "system_queue_depth": "队列深度",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "任务ID",
     "telemetry_online": "在线",

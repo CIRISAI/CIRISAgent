@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "私の原則により適合する代替アプローチは何でしょうか？",
         "ponder_forced_retry": "良心の再試行後に強制的な PONDER",
         "override_rationale": "{conscience_name}によって上書きされました：{action}を再考する必要があります",
-        "forced_ponder_rationale": "ループを防ぐために良心の再試行後に強制的な PONDER"
+        "forced_ponder_rationale": "ループを防ぐために良心の再試行後に強制的な PONDER",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "CIRISにおける同意の仕組みについて学ぶ",
     "consent_about_title": "同意について",
@@ -376,6 +383,7 @@
         "interact_disconnected": "切断",
         "interact_dismiss": "閉じる",
         "interact_hallucination_warning": "AIは幻覚を起こす可能性があります - 事実を確認してください",
+        "interact_pending_deferrals": "{count}件の保留中の延期がレビュー待ちです",
         "interact_welcome_title": "Allyへようこそ",
         "interact_welcome_subtitle": "あなたの成長をサポートするアシスタント",
         "interact_welcome_hint": "タスク、スケジュール、意思決定、ウェルビーイングについてAllyに相談するか、CIRISの仕組みを学びましょう！",
@@ -411,6 +419,7 @@
         "interact_clear": "クリア",
         "interact_wallet_setup": "設定",
         "interact_wallet_receive_only": "受信のみ",
+        "interact_wallet_loading": "読み込み中...",
         "interact_legend_title": "CIRISアクション絵文字",
         "interact_legend_processing": "処理中",
         "interact_legend_thought_start": "思考開始",
@@ -1575,7 +1584,9 @@
         "wallet_paymaster_configure": "Paymaster Key を設定",
         "wallet_paymaster_hint": "ガスレスUSDC送金を有効にするにはEtherspot Arka APIキーを入力してください",
         "wallet_paymaster_key_label": "Arka APIキー",
-        "wallet_paymaster_save": "キーを保存"
+        "wallet_paymaster_save": "キーを保存",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1770,12 @@
     "setup_validation_select_mode": "モードを選択してください",
     "setup_validation_username_required": "ユーザー名は必須です",
     "startup": {
-        "startup_retry": "再試行"
+        "startup_retry": "再試行",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "all_operational": "[EN] All Operational",
@@ -1775,7 +1791,10 @@
     "status_pending": "保留中",
     "system": {
         "system_cognitive_state": "認知状態",
-        "system_queue_depth": "キューの深さ"
+        "system_queue_depth": "キューの深さ",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "タスクID",
     "telemetry_online": "オンライン",

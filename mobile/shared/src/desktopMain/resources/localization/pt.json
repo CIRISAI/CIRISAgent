@@ -141,7 +141,14 @@
         "ponder_alternative_approach": "Que abordagem alternativa se alinharia melhor com meus princípios?",
         "ponder_forced_retry": "PONDER forçado após nova tentativa de consciência",
         "override_rationale": "Substituído por {conscience_name}: Precisa reconsiderar {action}",
-        "forced_ponder_rationale": "PONDER forçado após nova tentativa de consciência para evitar loops"
+        "forced_ponder_rationale": "PONDER forçado após nova tentativa de consciência para evitar loops",
+        "ponder_concern_speak_confidence": "CONSCIENCE CONCERN: Minimum confidence for SPEAK was {threshold} but {confidence} was provided",
+        "ponder_concern_speak_harm": "CONSCIENCE CONCERN: SPEAK content may cause harm",
+        "ponder_concern_tool_confidence": "CONSCIENCE CONCERN: Minimum confidence for TOOL was {threshold} but {confidence} was provided",
+        "ponder_concern_tool_requires_wa": "CONSCIENCE CONCERN: This tool requires Wise Authority approval",
+        "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
+        "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
+        "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required"
     },
     "consent_about_desc": "Compartilhe dados agregados e anônimos para melhorar o CIRIS",
     "consent_about_title": "Sobre Compartilhamento de Consentimento",
@@ -376,6 +383,7 @@
         "interact_disconnected": "Desconectado",
         "interact_dismiss": "Fechar",
         "interact_hallucination_warning": "IA PODE ALUCINAR - VERIFIQUE OS FATOS",
+        "interact_pending_deferrals": "{count} adiamento(s) pendente(s) aguardando revisão",
         "interact_welcome_title": "Bem-vindo ao Ally",
         "interact_welcome_subtitle": "Seu assistente pessoal de crescimento",
         "interact_welcome_hint": "Pergunte ao Ally como ele pode ajudar com tarefas, agendamentos, decisões ou bem-estar — ou descubra como o CIRIS funciona!",
@@ -411,6 +419,7 @@
         "interact_clear": "Limpar",
         "interact_wallet_setup": "Configurar",
         "interact_wallet_receive_only": "Receber",
+        "interact_wallet_loading": "Carregando...",
         "interact_legend_title": "Emojis de Ação do CIRIS",
         "interact_legend_processing": "Processando",
         "interact_legend_thought_start": "Início do Pensamento",
@@ -1575,7 +1584,9 @@
         "wallet_paymaster_configure": "Configurar Chave Paymaster",
         "wallet_paymaster_hint": "Digite sua chave API Etherspot Arka para habilitar transferências USDC sem gás",
         "wallet_paymaster_key_label": "Chave API Arka",
-        "wallet_paymaster_save": "Salvar Chave"
+        "wallet_paymaster_save": "Salvar Chave",
+        "interact_viz_execute": "Execute",
+        "interact_viz_complete": "Complete"
     },
     "prompts": {
         "dma": {
@@ -1759,7 +1770,12 @@
     "setup_validation_select_mode": "Por favor, selecione um modo de implantação",
     "setup_validation_username_required": "Nome de usuário é obrigatório",
     "startup": {
-        "startup_retry": "Tentar Novamente"
+        "startup_retry": "Tentar Novamente",
+        "checking_services": "Checking services...",
+        "initializing": "Initializing...",
+        "loading_config": "Loading configuration...",
+        "ready": "Ready",
+        "starting": "Starting..."
     },
     "status": {
         "executing": "Executando...",
@@ -1775,7 +1791,10 @@
     "status_pending": "Pendente",
     "system": {
         "system_cognitive_state": "Estado Cognitivo",
-        "system_queue_depth": "Profundidade da Fila"
+        "system_queue_depth": "Profundidade da Fila",
+        "health": "Health",
+        "metrics": "Metrics",
+        "services": "Services"
     },
     "task_id": "ID da Tarefa",
     "telemetry_online": "Online",

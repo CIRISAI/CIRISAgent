@@ -32,6 +32,7 @@ from ciris_engine.logic.utils.mobile_exclusions import (
     compute_mobile_excluded_list,
 )
 from ciris_engine.logic.utils.path_resolution import get_secrets_home
+from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
 from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1037,8 +1038,14 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Store in database
         await self._store_wa_certificate(wa_cert)
 
-        # Store private key (in production, this would be in a secure key store)
-        # For now, we're not storing it as it's managed externally
+        # Store private key in CIRISVerify for signing capability
+        try:
+            if has_verifier():
+                verifier = get_verifier()
+                verifier.store_named_key(wa_id, private_key)
+                logger.info(f"Stored signing key for WA {wa_id} in CIRISVerify")
+        except Exception as e:
+            logger.warning(f"Could not store WA key in CIRISVerify: {e}")
 
         # Add audit log entry for WA creation (mint)
         if hasattr(self, "_audit_service") and self._audit_service:
@@ -1293,7 +1300,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Generate keypair for system WA
         private_key, public_key = self.generate_keypair()
 
-        # Store the private key securely
+        # Store the private key securely (file fallback)
         system_key_path = self.key_dir / "system_wa.key"
         system_key_path.write_bytes(private_key)
         system_key_path.chmod(0o600)
@@ -1343,12 +1350,25 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Store in database
         await self._store_wa_certificate(system_wa)
+
+        # Also store in CIRISVerify for TPM/Keystore protection
+        try:
+            if has_verifier():
+                verifier = get_verifier()
+                verifier.store_named_key(wa_id, private_key)
+                logger.info(f"Stored System WA key in CIRISVerify: {wa_id}")
+        except Exception as e:
+            logger.warning(f"Could not store System WA key in CIRISVerify: {e}")
+
         logger.info(f"Created system WA certificate: {wa_id} (child of {parent_wa_id})")
 
         return system_wa
 
     async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
         """Sign a task with a WA's private key.
+
+        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
+        Falls back to file-based keys for System WA (backward compat).
 
         Returns:
             Tuple of (signature, signed_at timestamp)
@@ -1357,17 +1377,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         wa = await self.get_wa(wa_id)
         if not wa:
             raise ValueError(f"WA {wa_id} not found")
-
-        # Load the private key
-        if wa.name == "CIRIS System Authority":
-            # System WA key is stored locally
-            key_path = self.key_dir / "system_wa.key"
-            if not key_path.exists():
-                raise ValueError("System WA private key not found")
-            private_key = key_path.read_bytes()
-        else:
-            # Other WAs would have their keys managed differently
-            raise ValueError(f"Private key management not implemented for WA {wa_id}")
 
         # Create canonical representation of task for signing
         task_data = {
@@ -1379,12 +1388,73 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "parent_task_id": task.parent_task_id,
             "context": task.context.model_dump() if task.context else None,
         }
-
         canonical_json = json.dumps(task_data, sort_keys=True, separators=(",", ":"))
-        signature = self.sign_data(canonical_json.encode("utf-8"), private_key)
-        signed_at = self._get_current_time().isoformat()
+        data_bytes = canonical_json.encode("utf-8")
 
-        return signature, signed_at
+        # Try CIRISVerify named key first (TPM/Keystore protected)
+        if has_verifier():
+            try:
+                verifier = get_verifier()
+                if verifier.has_named_key(wa_id):
+                    signature_bytes = verifier.sign_with_named_key(wa_id, data_bytes)
+                    signature = base64.b64encode(signature_bytes).decode()
+                    signed_at = self._get_current_time().isoformat()
+                    return signature, signed_at
+            except Exception as e:
+                logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
+
+        # Fallback to file-based key for System WA
+        if wa.name == "CIRIS System Authority":
+            key_path = self.key_dir / "system_wa.key"
+            if not key_path.exists():
+                raise ValueError("System WA private key not found")
+            private_key = key_path.read_bytes()
+            signature = self.sign_data(data_bytes, private_key)
+            signed_at = self._get_current_time().isoformat()
+            return signature, signed_at
+
+        raise ValueError(f"No signing key available for WA {wa_id}")
+
+    async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
+        """Sign arbitrary data with a WA's private key.
+
+        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
+        Falls back to file-based keys for System WA.
+
+        Args:
+            wa_id: The WA ID to sign with
+            data: The data to sign
+
+        Returns:
+            Base64-encoded signature
+
+        Raises:
+            ValueError: If WA not found or no signing key available
+        """
+        # Verify WA exists
+        wa = await self.get_wa(wa_id)
+        if not wa:
+            raise ValueError(f"WA {wa_id} not found")
+
+        # Try CIRISVerify named key first (TPM/Keystore protected)
+        if has_verifier():
+            try:
+                verifier = get_verifier()
+                if verifier.has_named_key(wa_id):
+                    signature_bytes = verifier.sign_with_named_key(wa_id, data)
+                    return base64.b64encode(signature_bytes).decode()
+            except Exception as e:
+                logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
+
+        # Fallback to file-based key for System WA
+        if wa.name == "CIRIS System Authority":
+            key_path = self.key_dir / "system_wa.key"
+            if not key_path.exists():
+                raise ValueError("System WA private key not found")
+            private_key = key_path.read_bytes()
+            return self.sign_data(data, private_key)
+
+        raise ValueError(f"No signing key available for WA {wa_id}")
 
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.
@@ -1633,12 +1703,42 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             last_health_check=current_time,
         )
 
+    async def _migrate_wa_keys_to_verify(self) -> None:
+        """Migrate existing WA signing keys from file storage to CIRISVerify.
+
+        This handles the transition from file-based key storage to TPM/Keystore
+        protected keys in CIRISVerify. Only migrates keys that exist on disk
+        but not yet in CIRISVerify.
+        """
+        if not has_verifier():
+            logger.debug("CIRISVerify not available - skipping key migration")
+            return
+
+        try:
+            verifier = get_verifier()
+
+            # Migrate System WA key if it exists on disk but not in CIRISVerify
+            system_key_path = self.key_dir / "system_wa.key"
+            if system_key_path.exists():
+                # Find the System WA to get its wa_id
+                system_wa = await self._get_system_wa()
+                if system_wa and not verifier.has_named_key(system_wa.wa_id):
+                    private_key = system_key_path.read_bytes()
+                    verifier.store_named_key(system_wa.wa_id, private_key)
+                    logger.info(f"Migrated System WA key to CIRISVerify: {system_wa.wa_id}")
+
+        except Exception as e:
+            logger.warning(f"WA key migration failed (non-fatal): {e}")
+
     async def start(self) -> None:
         """Start the service."""
         await super().start()
         self._started = True
         self._start_time = self._get_current_time()
         logger.info("AuthenticationService started")
+
+        # Migrate existing WA keys to CIRISVerify (runs once per key)
+        await self._migrate_wa_keys_to_verify()
 
         # Skip attestation in test mode to avoid TPM operations
         if os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true":

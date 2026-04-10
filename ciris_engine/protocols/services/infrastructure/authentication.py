@@ -147,6 +147,19 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
+    async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
+        """Sign arbitrary data with a WA's private key.
+
+        Args:
+            wa_id: The WA ID to sign with
+            data: The data to sign
+
+        Returns:
+            Base64-encoded signature
+        """
+        ...
+
+    @abstractmethod
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.
 

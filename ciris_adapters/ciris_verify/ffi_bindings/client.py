@@ -672,6 +672,67 @@ class CIRISVerify:
         except AttributeError:
             self._has_wallet_support = False
 
+        # Named key storage functions (v1.5.0)
+        self._has_named_key_support = False
+        try:
+            # ciris_verify_store_named_key(handle, key_id, seed, seed_len) -> i32
+            self._lib.ciris_verify_store_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # seed
+                ctypes.c_size_t,  # seed_len
+            ]
+            self._lib.ciris_verify_store_named_key.restype = ctypes.c_int
+
+            # ciris_verify_sign_with_named_key(handle, key_id, data, data_len, sig_out, sig_len_out) -> i32
+            self._lib.ciris_verify_sign_with_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # data
+                ctypes.c_size_t,  # data_len
+                ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+            ]
+            self._lib.ciris_verify_sign_with_named_key.restype = ctypes.c_int
+
+            # ciris_verify_has_named_key(handle, key_id) -> i32
+            self._lib.ciris_verify_has_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+            ]
+            self._lib.ciris_verify_has_named_key.restype = ctypes.c_int
+
+            # ciris_verify_delete_named_key(handle, key_id) -> i32
+            self._lib.ciris_verify_delete_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+            ]
+            self._lib.ciris_verify_delete_named_key.restype = ctypes.c_int
+
+            # ciris_verify_get_named_key_public(handle, key_id, pk_out, pk_len_out) -> i32
+            self._lib.ciris_verify_get_named_key_public.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.POINTER(ctypes.c_void_p),  # pubkey_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # pubkey_len (out)
+            ]
+            self._lib.ciris_verify_get_named_key_public.restype = ctypes.c_int
+
+            # ciris_verify_list_named_keys(handle, json_out) -> i32
+            self._lib.ciris_verify_list_named_keys.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_char_p),  # json_out
+            ]
+            self._lib.ciris_verify_list_named_keys.restype = ctypes.c_int
+
+            # ciris_verify_free_string(str) -> void
+            self._lib.ciris_verify_free_string.argtypes = [ctypes.c_char_p]
+            self._lib.ciris_verify_free_string.restype = None
+
+            self._has_named_key_support = True
+        except AttributeError:
+            self._has_named_key_support = False
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -2354,7 +2415,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"get_wallet_info failed with code {ret}")
+            raise VerificationFailedError(f"get_wallet_info failed with code {ret}")
 
         try:
             json_bytes = ctypes.string_at(result_json, result_len.value)
@@ -2391,7 +2452,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"derive_secp256k1_pubkey failed with code {ret}")
+            raise VerificationFailedError(f"derive_secp256k1_pubkey failed with code {ret}")
 
         try:
             return ctypes.string_at(pubkey_data, pubkey_len.value)
@@ -2525,7 +2586,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_secp256k1 failed with code {ret}")
+            raise VerificationFailedError(f"sign_secp256k1 failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)
@@ -2570,7 +2631,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_evm_transaction failed with code {ret}")
+            raise VerificationFailedError(f"sign_evm_transaction failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)
@@ -2619,7 +2680,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError()
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_typed_data failed with code {ret}")
+            raise VerificationFailedError(f"sign_typed_data failed with code {ret}")
 
         try:
             return ctypes.string_at(signature_data, signature_len.value)
@@ -2671,6 +2732,216 @@ class CIRISVerify:
         finally:
             if address_data:
                 self._lib.ciris_verify_free(address_data)
+
+    # =========================================================================
+    # NAMED KEY STORAGE (v1.5.0)
+    # =========================================================================
+
+    def store_named_key(self, key_id: str, seed: bytes) -> bool:
+        """Store a named Ed25519 key.
+
+        Keys are stored with hardware protection (TPM/Keystore/SecureEnclave)
+        when available.
+
+        Args:
+            key_id: Key identifier (e.g., "wa:0x1234...", "session:abc123").
+            seed: 32-byte Ed25519 seed.
+
+        Returns:
+            True if the key was stored successfully.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            ValueError: If seed is not 32 bytes.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+        if len(seed) != 32:
+            raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_store_named_key(
+            self._handle, key_id_bytes, seed, len(seed)
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("store_named_key")
+        return ret == 0
+
+    def sign_with_named_key(self, key_id: str, data: bytes) -> bytes:
+        """Sign data with a named Ed25519 key.
+
+        Args:
+            key_id: Key identifier.
+            data: Data to sign.
+
+        Returns:
+            64-byte Ed25519 signature.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            VerificationFailedError: If the key is not found or signing fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        sig_data = ctypes.c_void_p()
+        sig_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_sign_with_named_key(
+            self._handle,
+            key_id_bytes,
+            data,
+            len(data),
+            ctypes.byref(sig_data),
+            ctypes.byref(sig_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("sign_with_named_key")
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"sign_with_named_key failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(sig_data.value, sig_len.value)
+        finally:
+            if sig_data.value:
+                self._lib.ciris_verify_free(sig_data.value)
+
+    def has_named_key(self, key_id: str) -> bool:
+        """Check if a named key exists.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            True if the key exists, False otherwise.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_has_named_key(self._handle, key_id_bytes)
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("has_named_key")
+        return ret == 1
+
+    def delete_named_key(self, key_id: str) -> bool:
+        """Delete a named key.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            True if the key was deleted successfully.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        ret = self._lib.ciris_verify_delete_named_key(self._handle, key_id_bytes)
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("delete_named_key")
+        return ret == 0
+
+    def get_named_key_public(self, key_id: str) -> bytes:
+        """Get the public key for a named Ed25519 key.
+
+        Args:
+            key_id: Key identifier.
+
+        Returns:
+            32-byte Ed25519 public key.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            VerificationFailedError: If the key is not found.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        pk_data = ctypes.c_void_p()
+        pk_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_get_named_key_public(
+            self._handle,
+            key_id_bytes,
+            ctypes.byref(pk_data),
+            ctypes.byref(pk_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("get_named_key_public")
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"get_named_key_public failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(pk_data.value, pk_len.value)
+        finally:
+            if pk_data.value:
+                self._lib.ciris_verify_free(pk_data.value)
+
+    def list_named_keys(self) -> list:
+        """List all named keys.
+
+        Returns:
+            List of key identifiers.
+
+        Raises:
+            NotImplementedError: If named key support is not available.
+            CommunicationError: If list retrieval fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_named_key_support:
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
+
+        json_out = ctypes.c_char_p()
+        ret = self._lib.ciris_verify_list_named_keys(
+            self._handle, ctypes.byref(json_out)
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("list_named_keys")
+        if ret != 0:
+            raise CommunicationError(f"list_named_keys failed with code {ret}")
+
+        try:
+            json_str = json_out.value.decode("utf-8")
+            return json.loads(json_str)
+        finally:
+            if json_out.value:
+                self._lib.ciris_verify_free_string(json_out)
 
 
 class MockCIRISVerify(CIRISVerify):

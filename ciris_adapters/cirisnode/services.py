@@ -581,7 +581,9 @@ class CIRISNodeService:
         attestations stored locally and replicated to CIRISLens.
         """
         timestamp = datetime.now(timezone.utc)
-        requesting_trace_id = f"trace-{thought_id}-{timestamp.strftime('%Y%m%d%H%M%S')}"
+        # Use stable identifiers for deterministic trace ID (not timestamp)
+        # This ensures the same interaction yields the same ID on retry/validation
+        requesting_trace_id = f"trace-{thought_id}-{agent_task_id}"
 
         # Compute deterministic interaction ID from both trace IDs
         interaction_id = CreditRecord.compute_interaction_id(

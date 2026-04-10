@@ -171,9 +171,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     continue
 
                 # Check domain support if domain_hint is specified
+                # Services must explicitly declare supported domains to handle domain-specific deferrals
                 if domain_hint:
                     supported_domains = getattr(caps, "supported_domains", [])
-                    if supported_domains and domain_hint not in supported_domains:
+                    # Reject services with empty supported_domains OR without the required domain
+                    if not supported_domains or domain_hint not in supported_domains:
                         logger.debug(
                             f"Skipping service {service.__class__.__name__}: "
                             f"domain '{domain_hint}' not in supported_domains {supported_domains}"

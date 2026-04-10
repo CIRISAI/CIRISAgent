@@ -123,29 +123,66 @@ class TestKotlinLocalizations:
             pytest.fail("\n".join(msg_lines))
 
     def test_localization_files_in_sync(self, project_root: Path) -> None:
-        """Verify mobile localization files are in sync with main en.json."""
-        main_en = project_root / "localization" / "en.json"
-        mobile_locations = [
-            project_root / "mobile" / "androidApp" / "src" / "main" / "assets" / "localization" / "en.json",
-            project_root / "mobile" / "shared" / "src" / "desktopMain" / "resources" / "localization" / "en.json",
+        """Verify ALL localization copies are byte-identical to source.
+
+        Source of truth: localization/*.json
+        Copies that must stay in sync:
+        1. mobile/iosApp/iosApp/localization/     (iOS app bundle)
+        2. mobile/iosApp/Resources/app/localization/ (iOS Python Resources)
+        3. mobile/androidApp/src/main/assets/localization/ (Android assets)
+        4. mobile/desktopApp/src/main/resources/localization/ (Desktop resources)
+        5. mobile/shared/src/desktopMain/resources/localization/ (Desktop KMP)
+        """
+        source_dir = project_root / "localization"
+        if not source_dir.exists():
+            pytest.skip("localization/ directory not found")
+
+        copy_dirs = [
+            project_root / "mobile" / "iosApp" / "iosApp" / "localization",
+            project_root / "mobile" / "iosApp" / "Resources" / "app" / "localization",
+            project_root / "mobile" / "androidApp" / "src" / "main" / "assets" / "localization",
+            project_root / "mobile" / "desktopApp" / "src" / "main" / "resources" / "localization",
+            project_root / "mobile" / "shared" / "src" / "desktopMain" / "resources" / "localization",
         ]
 
-        if not main_en.exists():
-            pytest.skip("localization/en.json not found")
+        source_files = {f.name for f in source_dir.glob("*.json") if f.name != "manifest.json"}
+        errors = []
 
-        main_keys = load_localization_keys(main_en)
+        for copy_dir in copy_dirs:
+            if not copy_dir.exists():
+                continue
+            rel_dir = copy_dir.relative_to(project_root)
 
-        for mobile_file in mobile_locations:
-            if mobile_file.exists():
-                mobile_keys = load_localization_keys(mobile_file)
+            for lang_file in sorted(source_files):
+                source_file = source_dir / lang_file
+                copy_file = copy_dir / lang_file
 
-                missing_in_mobile = main_keys - mobile_keys
-                if missing_in_mobile:
-                    pytest.fail(
-                        f"{mobile_file.relative_to(project_root)} is missing "
-                        f"{len(missing_in_mobile)} keys from main en.json. "
-                        f"Run: cp localization/en.json {mobile_file.relative_to(project_root)}"
+                if not copy_file.exists():
+                    errors.append(f"{rel_dir}/{lang_file}: MISSING")
+                    continue
+
+                source_keys = load_localization_keys(source_file)
+                copy_keys = load_localization_keys(copy_file)
+                missing = source_keys - copy_keys
+                if missing:
+                    errors.append(
+                        f"{rel_dir}/{lang_file}: missing {len(missing)} keys " f"(e.g. {sorted(missing)[:3]})"
                     )
+
+        if errors:
+            fix_cmd = (
+                "cp localization/*.json mobile/iosApp/iosApp/localization/ && "
+                "cp localization/*.json mobile/iosApp/Resources/app/localization/ && "
+                "cp localization/*.json mobile/androidApp/src/main/assets/localization/ && "
+                "cp localization/*.json mobile/desktopApp/src/main/resources/localization/ && "
+                "cp localization/*.json mobile/shared/src/desktopMain/resources/localization/"
+            )
+            pytest.fail(
+                f"\n{len(errors)} localization sync issues:\n"
+                + "\n".join(f"  - {e}" for e in errors[:20])
+                + (f"\n  ... and {len(errors) - 20} more" if len(errors) > 20 else "")
+                + f"\n\nFix: {fix_cmd}"
+            )
 
     def test_no_duplicate_keys(self, project_root: Path) -> None:
         """Check for duplicate keys in localization files."""

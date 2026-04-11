@@ -1305,11 +1305,14 @@ class SetupViewModel : ViewModel() {
                 oauth_external_id = currentState.googleUserId,
                 oauth_email = currentState.googleEmail,
 
-                // Language and location preferences
+                // Language and location preferences (extract from selectedLocation)
                 preferred_language = currentState.preferredLanguage,
-                location_country = null,  // Simplified: only city is collected now
-                location_region = null,
-                location_city = currentState.city.takeIf { it.isNotEmpty() },
+                location_country = currentState.selectedLocation?.country,
+                location_region = currentState.selectedLocation?.region,
+                location_city = currentState.selectedLocation?.city ?: currentState.city.takeIf { it.isNotEmpty() },
+                location_latitude = currentState.selectedLocation?.latitude,
+                location_longitude = currentState.selectedLocation?.longitude,
+                timezone = currentState.selectedLocation?.timezone,
                 share_location_in_traces = currentState.shareLocationInTraces,
 
                 // Node flow fields
@@ -1374,11 +1377,14 @@ class SetupViewModel : ViewModel() {
                 oauth_external_id = if (isOAuthUser) currentState.googleUserId else null,
                 oauth_email = if (isOAuthUser) currentState.googleEmail else null,
 
-                // Language and location preferences
+                // Language and location preferences (extract from selectedLocation)
                 preferred_language = currentState.preferredLanguage,
-                location_country = null,  // Simplified: only city is collected now
-                location_region = null,
-                location_city = currentState.city.takeIf { it.isNotEmpty() },
+                location_country = currentState.selectedLocation?.country,
+                location_region = currentState.selectedLocation?.region,
+                location_city = currentState.selectedLocation?.city ?: currentState.city.takeIf { it.isNotEmpty() },
+                location_latitude = currentState.selectedLocation?.latitude,
+                location_longitude = currentState.selectedLocation?.longitude,
+                timezone = currentState.selectedLocation?.timezone,
                 share_location_in_traces = currentState.shareLocationInTraces,
 
                 // Node flow fields

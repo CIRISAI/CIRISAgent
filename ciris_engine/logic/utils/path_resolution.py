@@ -1023,6 +1023,19 @@ def sync_language_preference(language_code: str) -> bool:
     except Exception as e:
         logger.warning(f"[env_sync] Failed to update DMA prompt loader: {e}")
 
+    # Update the conscience prompt loader
+    try:
+        from ciris_engine.logic.conscience.prompt_loader import set_conscience_prompt_language
+
+        set_conscience_prompt_language(language_code)
+        logger.info(
+            f"[env_sync] Synced language preference to conscience prompt loader: {sanitize_for_log(language_code)}"
+        )
+    except ImportError:
+        logger.debug("[env_sync] Conscience prompt_loader not available, skipping conscience language update")
+    except Exception as e:
+        logger.warning(f"[env_sync] Failed to update conscience prompt loader: {e}")
+
     return True
 
 

@@ -317,6 +317,85 @@ class TestForgetMemory:
         assert data["data"]["status"] == "error"
         assert "not found" in data["data"]["reason"].lower()
 
+    def test_forget_memory_with_environment_scope(self, client, app, auth_context):
+        """Test forgetting a node with environment scope parameter."""
+        env_node = GraphNode(
+            id="env_item_123",
+            type=NodeType.CONCEPT,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={"name": "Test Item"},
+        )
+        app.state.memory_service.forget.return_value = MemoryOpResult(
+            status=MemoryOpStatus.OK, reason="Memory forgotten", data=env_node
+        )
+
+        app.dependency_overrides[require_admin] = lambda: auth_context
+        response = client.delete("/memory/env_item_123?scope=environment")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["status"] == "ok"
+
+        # Verify the forget was called with ENVIRONMENT scope
+        call_args = app.state.memory_service.forget.call_args
+        assert call_args is not None
+        node_arg = call_args.kwargs.get("node") or call_args.args[0]
+        assert node_arg.scope == GraphScope.ENVIRONMENT
+
+    def test_forget_memory_with_community_scope(self, client, app, auth_context):
+        """Test forgetting a node with community scope parameter."""
+        community_node = GraphNode(
+            id="community_item_456",
+            type=NodeType.CONCEPT,
+            scope=GraphScope.COMMUNITY,
+            attributes={"shared": True},
+        )
+        app.state.memory_service.forget.return_value = MemoryOpResult(
+            status=MemoryOpStatus.OK, reason="Memory forgotten", data=community_node
+        )
+
+        app.dependency_overrides[require_admin] = lambda: auth_context
+        response = client.delete("/memory/community_item_456?scope=community")
+
+        assert response.status_code == 200
+
+        # Verify the forget was called with COMMUNITY scope
+        call_args = app.state.memory_service.forget.call_args
+        node_arg = call_args.kwargs.get("node") or call_args.args[0]
+        assert node_arg.scope == GraphScope.COMMUNITY
+
+    def test_forget_memory_defaults_to_local_scope(self, client, app, sample_node, auth_context):
+        """Test that forget defaults to LOCAL scope when no scope param provided."""
+        app.state.memory_service.forget.return_value = MemoryOpResult(
+            status=MemoryOpStatus.OK, reason="Memory forgotten", data=sample_node
+        )
+
+        app.dependency_overrides[require_admin] = lambda: auth_context
+        response = client.delete("/memory/test_node_1")  # No scope param
+
+        assert response.status_code == 200
+
+        # Verify the forget was called with LOCAL scope (default)
+        call_args = app.state.memory_service.forget.call_args
+        node_arg = call_args.kwargs.get("node") or call_args.args[0]
+        assert node_arg.scope == GraphScope.LOCAL
+
+    def test_forget_memory_ignores_invalid_scope(self, client, app, sample_node, auth_context):
+        """Test that invalid scope parameter falls back to LOCAL."""
+        app.state.memory_service.forget.return_value = MemoryOpResult(
+            status=MemoryOpStatus.OK, reason="Memory forgotten", data=sample_node
+        )
+
+        app.dependency_overrides[require_admin] = lambda: auth_context
+        response = client.delete("/memory/test_node_1?scope=invalid_scope")
+
+        assert response.status_code == 200
+
+        # Verify the forget was called with LOCAL scope (fallback)
+        call_args = app.state.memory_service.forget.call_args
+        node_arg = call_args.kwargs.get("node") or call_args.args[0]
+        assert node_arg.scope == GraphScope.LOCAL
+
 
 class TestMemoryStats:
     """Test the /memory/stats endpoint."""

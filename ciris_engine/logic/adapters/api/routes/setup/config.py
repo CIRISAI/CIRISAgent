@@ -264,6 +264,47 @@ def _detect_api_key_set(provider: str) -> bool:
 router = APIRouter()
 
 
+async def _require_auth_if_configured(request: Request) -> None:
+    """Require authentication if setup is already completed."""
+    if _is_setup_allowed_without_auth():
+        return
+
+    from ...dependencies.auth import get_auth_context, get_auth_service
+
+    try:
+        authorization = request.headers.get("Authorization")
+        auth_service = get_auth_service(request)
+        auth = await get_auth_context(request, authorization, auth_service)
+        if auth is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Authentication failed for /setup/config: {e}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+
+def _get_template_id(request: Request) -> str:
+    """Get template ID from CLI flag or environment variable."""
+    template_id = os.getenv("CIRIS_TEMPLATE")
+    if not template_id:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and hasattr(runtime, "essential_config") and runtime.essential_config:
+            template_id = getattr(runtime.essential_config, "default_template", None)
+    return template_id or "default"
+
+
+def _parse_float_env(env_var: str) -> Optional[float]:
+    """Parse a float from environment variable, returning None if invalid."""
+    value = os.getenv(env_var)
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 @router.get("/config", responses=RESPONSES_401_500)
 async def get_current_config(request: Request) -> SuccessResponse[SetupConfigResponse]:
     """Get current configuration.
@@ -271,36 +312,12 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     Returns current setup configuration for editing.
     Requires authentication if setup is already completed.
     """
-    # If not first-run, require authentication
-    if not _is_setup_allowed_without_auth():
-        # Manually get auth context from request
-        try:
-            from ...dependencies.auth import get_auth_context, get_auth_service
+    await _require_auth_if_configured(request)
 
-            # Extract authorization header and auth service manually since we're not using Depends()
-            authorization = request.headers.get("Authorization")
-            auth_service = get_auth_service(request)
-            auth = await get_auth_context(request, authorization, auth_service)
-            if auth is None:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"Authentication failed for /setup/config: {e}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-
-    # Get template from CLI flag (via runtime config) or environment variable
-    # CLI --template flag takes precedence on first-run before .env exists
-    template_id = os.getenv("CIRIS_TEMPLATE")
-    if not template_id:
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "essential_config") and runtime.essential_config:
-            template_id = getattr(runtime.essential_config, "default_template", None)
-    if not template_id:
-        template_id = "default"
-
-    # Detect LLM provider using same logic as LLM service
+    template_id = _get_template_id(request)
     llm_provider = _detect_llm_provider(request)
+    latitude = _parse_float_env("CIRIS_USER_LATITUDE")
+    longitude = _parse_float_env("CIRIS_USER_LONGITUDE")
 
     config = SetupConfigResponse(
         llm_provider=llm_provider,
@@ -313,6 +330,13 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
         template_id=template_id,
         enabled_adapters=os.getenv("CIRIS_ADAPTER", "api").split(","),
         agent_port=int(os.getenv("CIRIS_API_PORT", "8080")),
+        location_country=os.getenv("CIRIS_USER_COUNTRY"),
+        location_region=os.getenv("CIRIS_USER_REGION"),
+        location_city=os.getenv("CIRIS_USER_CITY"),
+        location_latitude=latitude,
+        location_longitude=longitude,
+        timezone=os.getenv("CIRIS_USER_TIMEZONE"),
+        has_coordinates=latitude is not None and longitude is not None,
     )
 
     return SuccessResponse(data=config)

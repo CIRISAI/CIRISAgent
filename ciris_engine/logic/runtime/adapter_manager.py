@@ -8,7 +8,7 @@ extending the existing processor control capabilities with adapter lifecycle man
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
 import aiofiles
 
@@ -143,6 +143,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self.loaded_adapters: Dict[str, AdapterInstance] = {}
         self._adapter_counter = 0
         self._config_listener_registered = False
+        # Set to hold background tasks and prevent garbage collection
+        self._background_tasks: Set[asyncio.Task[Any]] = set()
         # Register for config changes after initialization
         self._register_config_listener()
 
@@ -246,6 +248,16 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             instance.is_running = True
 
             self._register_adapter_services(instance)
+
+            # Refresh context enrichment cache in background (non-blocking)
+            # This ensures newly loaded adapter tools are cached immediately
+            # Store task in set to prevent garbage collection (SonarCloud S5765)
+            task = asyncio.create_task(
+                self._refresh_enrichment_cache_for_adapter(instance),
+                name=f"refresh_enrichment_cache_{adapter_id}",
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             # Save adapter config to graph
             await self._save_adapter_config_to_graph(
@@ -985,6 +997,67 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         except Exception as e:
             logger.error(f"Error registering services for adapter {instance.adapter_id}: {e}", exc_info=True)
+
+    async def _refresh_enrichment_cache_for_adapter(self, instance: AdapterInstance) -> None:
+        """Refresh context enrichment cache for a newly loaded adapter.
+
+        This runs in the background after an adapter is loaded to ensure
+        its context_enrichment tools are cached immediately, rather than
+        waiting for the first thought to trigger cache population.
+        """
+        try:
+            from ciris_engine.logic.context.system_snapshot_helpers import (
+                _collect_available_tools,
+                get_enrichment_cache,
+                _collect_enrichment_tools,
+                _get_tool_services,
+                _execute_enrichment_tool,
+            )
+
+            # Give the adapter a moment to fully initialize
+            await asyncio.sleep(0.5)
+
+            # Collect tools from this adapter
+            available_tools = await _collect_available_tools(self.runtime)
+            if not available_tools:
+                logger.debug(f"No tools found for adapter {instance.adapter_id}")
+                return
+
+            # Find enrichment tools
+            enrichment_tools = _collect_enrichment_tools(available_tools)
+            if not enrichment_tools:
+                logger.debug(f"No context_enrichment tools in adapter {instance.adapter_id}")
+                return
+
+            # Execute enrichment tools and cache results
+            cache = get_enrichment_cache()
+            tool_services = _get_tool_services(self.runtime.service_registry)
+
+            for adapter_type, tool in enrichment_tools:
+                tool_key = f"{adapter_type}:{tool.name}"
+                try:
+                    # Skip if already cached
+                    if cache.get(tool_key) is not None:
+                        continue
+
+                    _, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+                    if result is not None:
+                        params = tool.context_enrichment_params or {}
+                        ttl_raw = params.get("_cache_ttl")
+                        ttl = float(ttl_raw) if isinstance(ttl_raw, (int, float)) else None
+                        cache.set(tool_key, result, ttl)
+                        logger.info(f"[ENRICHMENT_CACHE] Cached {tool_key} after adapter load")
+                except Exception as e:
+                    logger.warning(f"[ENRICHMENT_CACHE] Failed to cache {tool_key}: {e}")
+
+            logger.info(
+                f"[ENRICHMENT_CACHE] Refreshed cache after loading {instance.adapter_id}, "
+                f"stats: {cache.stats}"
+            )
+
+        except Exception as e:
+            # Non-critical - just log and continue
+            logger.warning(f"Failed to refresh enrichment cache for {instance.adapter_id}: {e}")
 
     def _unregister_adapter_services(self, instance: AdapterInstance) -> None:
         """Unregister services for an adapter instance"""

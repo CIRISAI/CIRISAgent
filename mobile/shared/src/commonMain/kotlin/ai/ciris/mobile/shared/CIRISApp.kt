@@ -55,6 +55,7 @@ import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import ai.ciris.mobile.shared.viewmodels.TicketsViewModel
 import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
+import ai.ciris.mobile.shared.viewmodels.EnvironmentInfoViewModel
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
@@ -589,6 +590,9 @@ fun CIRISApp(
     }
     val toolsViewModel: ToolsViewModel = viewModel {
         ToolsViewModel(apiClient)
+    }
+    val environmentInfoViewModel: EnvironmentInfoViewModel = viewModel {
+        EnvironmentInfoViewModel(apiClient)
     }
     val dataManagementViewModel: DataManagementViewModel = viewModel {
         DataManagementViewModel(apiClient, secureStorage, envFileUpdater)
@@ -1314,6 +1318,7 @@ fun CIRISApp(
                             onTicketsClick = { currentScreen = Screen.Tickets },
                             onSchedulerClick = { currentScreen = Screen.Scheduler },
                             onToolsClick = { currentScreen = Screen.Tools },
+                            onEnvironmentInfoClick = { currentScreen = Screen.EnvironmentInfo },
                             onHelpClick = { currentScreen = Screen.Help },
                             onLogoutClick = {
                                 PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout from nav bar")
@@ -2455,6 +2460,43 @@ fun CIRISApp(
                 )
             }
 
+            Screen.EnvironmentInfo -> {
+                val environmentInfoState by environmentInfoViewModel.state.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i(TAG, "[Screen.EnvironmentInfo] Loading environment info on screen entry")
+                    environmentInfoViewModel.startPolling()
+                }
+
+                EnvironmentInfoScreen(
+                    state = environmentInfoState,
+                    onRefresh = {
+                        PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] User triggered refresh")
+                        environmentInfoViewModel.refresh()
+                    },
+                    onNavigateBack = { currentScreen = Screen.Interact },
+                    onCategorySelected = { category ->
+                        PlatformLogger.d("CIRISApp", "[Screen.EnvironmentInfo] Category selected: $category")
+                        environmentInfoViewModel.setCategory(category)
+                    },
+                    onAddItem = {
+                        PlatformLogger.d("CIRISApp", "[Screen.EnvironmentInfo] Add item clicked")
+                        environmentInfoViewModel.showAddDialog(true)
+                    },
+                    onCreateItem = { name, category, quantity, condition, notes ->
+                        PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] Creating item: $name")
+                        environmentInfoViewModel.createItem(name, category, quantity, condition, notes)
+                    },
+                    onDeleteItem = { nodeId ->
+                        PlatformLogger.i("CIRISApp", "[Screen.EnvironmentInfo] Deleting item: $nodeId")
+                        environmentInfoViewModel.deleteItem(nodeId)
+                    },
+                    onDismissAddDialog = {
+                        environmentInfoViewModel.showAddDialog(false)
+                    }
+                )
+            }
+
             Screen.DataManagement -> {
                 DataManagementScreen(
                     viewModel = dataManagementViewModel,
@@ -2668,6 +2710,7 @@ private fun CIRISTopBar(
     onTicketsClick: () -> Unit = {},
     onSchedulerClick: () -> Unit = {},
     onToolsClick: () -> Unit = {},
+    onEnvironmentInfoClick: () -> Unit = {},
     onHelpClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     darkMode: Boolean = false,
@@ -2740,6 +2783,12 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
                         leadingIcon = { Icon(Icons.Default.Build, null) },
                         modifier = Modifier.testableClickable("menu_tools") { activeCategory = NavCategory.NONE; onToolsClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Environment Info") },
+                        onClick = { activeCategory = NavCategory.NONE; onEnvironmentInfoClick() },
+                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        modifier = Modifier.testableClickable("menu_environment_info") { activeCategory = NavCategory.NONE; onEnvironmentInfoClick() }
                     )
                 }
             }
@@ -3017,6 +3066,7 @@ private sealed class Screen {
     object Tickets : Screen()
     object Scheduler : Screen()
     object Tools : Screen()
+    object EnvironmentInfo : Screen()
     object SkillImport : Screen()
     object DataManagement : Screen()
     object Help : Screen()

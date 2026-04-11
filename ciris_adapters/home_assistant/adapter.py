@@ -140,6 +140,10 @@ class HomeAssistantAdapter(Service):
                         f"[HA DISCOVERY] Found {len(entities)} entities across {len(domains)} domains: "
                         + ", ".join(f"{d}={c}" for d, c in sorted(domains.items(), key=lambda x: -x[1])[:15])
                     )
+                    # Notify tool service that HA is now initialized so it can detect Music Assistant
+                    # This is critical - without this, MA tools won't appear if tool discovery
+                    # happened before HA finished loading entities
+                    await self.tool_service.notify_ha_initialized()
                 except Exception as e:
                     logger.warning(f"[HA DISCOVERY] Entity discovery failed: {e}")
             else:

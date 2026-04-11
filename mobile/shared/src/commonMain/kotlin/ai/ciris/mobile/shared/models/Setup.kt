@@ -187,12 +187,14 @@ data class CompleteSetupRequest(
     val oauth_email: String? = null,       // Google email
 
     // Language and location preferences (from PREFERENCES step)
-    // Mirrors Python: ciris_engine/logic/adapters/api/routes/setup/models.py:296-311
+    // Mirrors Python: ciris_engine/logic/adapters/api/routes/setup/models.py:296-320
     val preferred_language: String? = null,    // ISO 639-1 code (e.g., "en", "am", "es")
     val location_country: String? = null,      // Country name
     val location_region: String? = null,       // Region/state name
     val location_city: String? = null,         // City name
-    val timezone: String? = null,              // IANA timezone (auto-detected)
+    val location_latitude: Double? = null,     // Latitude in decimal degrees (ISO 6709)
+    val location_longitude: Double? = null,    // Longitude in decimal degrees (ISO 6709)
+    val timezone: String? = null,              // IANA timezone (from selected location)
     val share_location_in_traces: Boolean = false,  // Consent to include location in telemetry
 
     // Node flow fields (Connect to Node / Portal provisioning)

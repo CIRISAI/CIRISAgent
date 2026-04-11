@@ -1298,6 +1298,20 @@ MA supports synchronized multi-room audio. If players are grouped:
         """Return service metadata for DSAR and data source discovery."""
         return {"data_source": False, "service_type": "device_control"}
 
+    async def notify_ha_initialized(self) -> None:
+        """Called after HA background initialization completes.
+
+        This triggers Music Assistant detection now that entities are available.
+        Without this, MA tools might not appear if tool discovery happened
+        before HA finished loading entities.
+        """
+        logger.info("[HA TOOLS] HA initialized - checking for Music Assistant")
+        ma_detected = await self._check_ma_available()
+        if ma_detected:
+            logger.info("[HA TOOLS] Music Assistant tools now available")
+        else:
+            logger.debug("[HA TOOLS] Music Assistant not detected after HA init")
+
     async def get_available_tools(self) -> List[str]:
         """Get available tool names. Used by system snapshot tool collection."""
         tools = list(self.TOOL_DEFINITIONS.keys())

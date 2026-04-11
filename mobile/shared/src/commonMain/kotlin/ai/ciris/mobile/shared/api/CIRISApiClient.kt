@@ -48,6 +48,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.put
 
 /**
@@ -4142,6 +4145,230 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             throw e
+        }
+    }
+
+    // ===== Environment API =====
+
+    override suspend fun getContextEnrichment(): ContextEnrichmentResponse {
+        val method = "getContextEnrichment"
+        logInfo(method, "Fetching context enrichment cache")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true; isLenient = true })
+                }
+            }
+
+            val response = client.get("$baseUrl/v1/system/adapters/context-enrichment") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+            val data = json["data"]?.jsonObject ?: throw RuntimeException("API returned null data")
+
+            // Parse entries
+            val entriesObj = data["entries"]?.jsonObject ?: JsonObject(emptyMap())
+            val entries = mutableMapOf<String, Any>()
+            for ((key, value) in entriesObj) {
+                entries[key] = when {
+                    value is JsonObject -> value.toString()
+                    value is JsonArray -> value.toString()
+                    value.jsonPrimitive.isString -> value.jsonPrimitive.content
+                    else -> value.toString()
+                }
+            }
+
+            // Parse stats
+            val statsObj = data["stats"]?.jsonObject
+            val stats = EnrichmentCacheStatsData(
+                entries = statsObj?.get("entry_count")?.jsonPrimitive?.int ?: 0,
+                hits = statsObj?.get("hits")?.jsonPrimitive?.int ?: 0,
+                misses = statsObj?.get("misses")?.jsonPrimitive?.int ?: 0,
+                hitRatePct = statsObj?.get("hit_rate_pct")?.jsonPrimitive?.double ?: 0.0,
+                startupPopulated = statsObj?.get("startup_populated")?.jsonPrimitive?.boolean ?: false
+            )
+
+            logInfo(method, "Context enrichment fetched: ${entries.size} entries, hitRate=${stats.hitRatePct}%")
+            ContextEnrichmentResponse(entries = entries, stats = stats)
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun queryEnvironmentItems(): List<EnvironmentGraphNodeData> {
+        val method = "queryEnvironmentItems"
+        logInfo(method, "Querying environment items")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true; isLenient = true })
+                }
+            }
+
+            val response = client.post("$baseUrl/v1/memory/query") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("scope", "environment")  // GraphScope enum values are lowercase
+                    put("limit", 100)
+                })
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val jsonString = response.bodyAsText()
+            client.close()
+
+            val json = Json.parseToJsonElement(jsonString).jsonObject
+            val dataArray = json["data"]?.jsonArray ?: JsonArray(emptyList())
+
+            val items = dataArray.mapNotNull { element ->
+                val nodeObj = element.jsonObject
+                try {
+                    val attrsObj = nodeObj["attributes"]?.jsonObject ?: JsonObject(emptyMap())
+                    val attributes = mutableMapOf<String, Any>()
+                    for ((k, v) in attrsObj) {
+                        attributes[k] = when {
+                            v is JsonObject -> v.toString()
+                            v is JsonArray -> v.toString()
+                            v.jsonPrimitive.isString -> v.jsonPrimitive.content
+                            v.jsonPrimitive.intOrNull != null -> v.jsonPrimitive.int
+                            v.jsonPrimitive.doubleOrNull != null -> v.jsonPrimitive.double
+                            else -> v.toString()
+                        }
+                    }
+                    EnvironmentGraphNodeData(
+                        id = nodeObj["id"]?.jsonPrimitive?.content ?: "",
+                        type = nodeObj["type"]?.jsonPrimitive?.content ?: "OBJECT",
+                        attributes = attributes,
+                        createdAt = nodeObj["updated_at"]?.jsonPrimitive?.contentOrNull,
+                        communityShared = false
+                    )
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to parse item: ${e.message}")
+                    null
+                }
+            }
+
+            logInfo(method, "Fetched ${items.size} environment items")
+            items
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun createEnvironmentItem(
+        name: String,
+        category: String,
+        quantity: Int,
+        condition: String,
+        notes: String?
+    ): EnvironmentGraphNodeData {
+        val method = "createEnvironmentItem"
+        logInfo(method, "Creating environment item: $name")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true; isLenient = true })
+                }
+            }
+
+            val nodeId = "item_${System.currentTimeMillis()}"
+            val attributes = buildJsonObject {
+                put("name", name)
+                put("category", category)
+                put("quantity", quantity)
+                put("condition", condition)
+                notes?.let { put("notes", it) }
+            }
+
+            val response = client.post("$baseUrl/v1/memory/store") {
+                header("Authorization", "Bearer $accessToken")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("node", buildJsonObject {
+                        put("id", nodeId)
+                        put("type", "concept")  // NodeType.CONCEPT for environment items
+                        put("scope", "environment")  // GraphScope.ENVIRONMENT
+                        put("attributes", attributes)
+                    })
+                })
+            }
+
+            if (response.status != HttpStatusCode.OK) {
+                logError(method, "API returned non-success status: ${response.status}")
+                client.close()
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            client.close()
+            logInfo(method, "Created environment item: $nodeId")
+
+            EnvironmentGraphNodeData(
+                id = nodeId,
+                type = "CONCEPT",
+                attributes = mapOf(
+                    "name" to name,
+                    "category" to category,
+                    "quantity" to quantity,
+                    "condition" to condition
+                ).let { if (notes != null) it + ("notes" to notes) else it },
+                createdAt = null,
+                communityShared = false
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun deleteEnvironmentItem(nodeId: String): Boolean {
+        val method = "deleteEnvironmentItem"
+        logInfo(method, "Deleting environment item: $nodeId")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true; isLenient = true })
+                }
+            }
+
+            // Pass scope=environment to delete from correct graph scope
+            val response = client.delete("$baseUrl/v1/memory/$nodeId?scope=environment") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            client.close()
+
+            if (response.status == HttpStatusCode.OK) {
+                logInfo(method, "Deleted environment item: $nodeId")
+                true
+            } else {
+                logError(method, "Failed to delete: ${response.status}")
+                false
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            false
         }
     }
 

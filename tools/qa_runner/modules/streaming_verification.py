@@ -1175,25 +1175,26 @@ class StreamingVerificationModule:
                 "message": f"Error updating language: {e}",
             }
 
-    # Language-specific markers to detect proper localization in conscience prompts
-    # These are phrases that MUST appear in conscience prompts for each language
+    # Language-specific markers to detect proper localization in DMA prompts
+    # These are phrases that MUST appear in DMA prompts for each language
     # and MUST NOT appear when the language is different
-    CONSCIENCE_LANGUAGE_MARKERS = {
-        "en": ["You are IRIS-E", "You are IRIS-C", "You are CIRIS-EOV", "You are CIRIS-EH"],
-        "am": ["እርስዎ IRIS-E", "ኤንትሮፒ"],  # Amharic: formal "you are IRIS-E"
-        "ar": ["أنت IRIS-E", "الانتروبيا"],  # Arabic
-        "de": ["Sie sind IRIS-E", "Entropie"],  # German (formal Sie)
-        "es": ["Eres IRIS-E", "entropía"],  # Spanish
-        "fr": ["Vous êtes IRIS-E", "entropie"],  # French
-        "hi": ["आप IRIS-E हैं", "एन्ट्रॉपी"],  # Hindi
-        "it": ["Sei IRIS-E", "entropia"],  # Italian
-        "ja": ["あなたはIRIS-E", "エントロピー"],  # Japanese
-        "ko": ["당신은 IRIS-E", "엔트로피"],  # Korean
-        "pt": ["Você é IRIS-E", "entropia"],  # Portuguese
-        "ru": ["Ты IRIS-E", "энтропии"],  # Russian
-        "sw": ["Wewe ni IRIS-E", "entropy"],  # Swahili
-        "tr": ["Sen IRIS-E", "entropi"],  # Turkish
-        "zh": ["你是IRIS-E", "熵"],  # Chinese
+    # DMA prompts are used instead of conscience prompts because they are streamed in events
+    DMA_LANGUAGE_MARKERS = {
+        "en": ["Context Summary:", "Main Thought:", "Thought to evaluate:"],
+        "am": ["የአውድ ማጠቃለያ:", "ዋና ሀሳብ:", "የሚገመገም ሀሳብ:"],  # Amharic DMA markers
+        "ar": ["ملخص السياق:", "الفكرة الرئيسية:", "الفكرة للتقييم:"],  # Arabic
+        "de": ["Kontextzusammenfassung:", "Hauptgedanke:", "Zu bewertender Gedanke:"],  # German
+        "es": ["Resumen del contexto:", "Pensamiento principal:", "Pensamiento a evaluar:"],  # Spanish
+        "fr": ["Résumé du contexte:", "Pensée principale:", "Pensée à évaluer:"],  # French
+        "hi": ["संदर्भ सारांश:", "मुख्य विचार:", "मूल्यांकन के लिए विचार:"],  # Hindi
+        "it": ["Riepilogo del contesto:", "Pensiero principale:", "Pensiero da valutare:"],  # Italian
+        "ja": ["コンテキストの概要:", "主な考え:", "評価する考え:"],  # Japanese
+        "ko": ["컨텍스트 요약:", "주요 생각:", "평가할 생각:"],  # Korean
+        "pt": ["Resumo do contexto:", "Pensamento principal:", "Pensamento a avaliar:"],  # Portuguese
+        "ru": ["Резюме контекста:", "Основная мысль:", "Мысль для оценки:"],  # Russian
+        "sw": ["Muhtasari wa Muktadha:", "Wazo Kuu:", "Wazo la kutathmini:"],  # Swahili
+        "tr": ["Bağlam özeti:", "Ana düşünce:", "Değerlendirilecek düşünce:"],  # Turkish
+        "zh": ["上下文摘要:", "主要思想:", "待评估思想:"],  # Chinese
     }
 
     @staticmethod
@@ -1216,7 +1217,6 @@ class StreamingVerificationModule:
         """
         # Use separate typed variables to avoid mypy issues with heterogeneous dicts
         localization_evidence: List[Dict[str, Any]] = []
-        conscience_prompt_analysis: List[Dict[str, Any]] = []
         errors: List[str] = []
         language_update: Optional[Dict[str, Any]] = None
         streaming_result: Optional[Dict[str, Any]] = None
@@ -1237,7 +1237,7 @@ class StreamingVerificationModule:
                 "language_update": language_update,
                 "streaming_result": streaming_result,
                 "localization_evidence": localization_evidence,
-                "conscience_prompt_analysis": conscience_prompt_analysis,
+                "dma_prompt_analysis": [],
                 "errors": errors,
             }
 
@@ -1265,9 +1265,9 @@ class StreamingVerificationModule:
             errors.append(f"Failed to verify user profile: {e}")
 
         # Step 3: Run streaming verification with extended event collection
-        # We need to capture the raw events to analyze conscience prompts
+        # We need to capture the raw events to analyze DMA prompts
         print(f"\n📡 Running streaming verification with language '{target_language}'...")
-        print(f"   Capturing conscience prompts for localization analysis...")
+        print(f"   Capturing DMA prompts for localization analysis...")
 
         streaming_events_result = StreamingVerificationModule.verify_streaming_events_with_prompts(
             base_url, token, timeout=60
@@ -1278,24 +1278,25 @@ class StreamingVerificationModule:
             "total_events": streaming_events_result.get("total_events", 0),
         }
 
-        # Step 4: Analyze conscience prompts for localization
+        # Step 4: Analyze DMA prompts for localization (DMA prompts ARE streamed unlike conscience prompts)
         print(f"\n{'='*80}")
-        print(f"📝 CONSCIENCE PROMPT LOCALIZATION ANALYSIS")
+        print(f"📝 DMA PROMPT LOCALIZATION ANALYSIS")
         print(f"{'='*80}")
 
-        conscience_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("conscience_prompts", [])
-        english_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get("en", [])
-        target_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get(target_language, [])
+        dma_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("dma_prompts", [])
+        english_markers = StreamingVerificationModule.DMA_LANGUAGE_MARKERS.get("en", [])
+        target_markers = StreamingVerificationModule.DMA_LANGUAGE_MARKERS.get(target_language, [])
 
-        conscience_localized = False
+        dma_localized = False
         english_detected = False
+        dma_prompt_analysis: List[Dict[str, Any]] = []
 
-        for i, prompt_data in enumerate(conscience_prompts_list):
+        for i, prompt_data in enumerate(dma_prompts_list):
             prompt_text = prompt_data.get("prompt", "")
-            conscience_type = prompt_data.get("type", "unknown")
+            dma_type = prompt_data.get("type", "unknown")
 
             analysis = {
-                "conscience_type": conscience_type,
+                "dma_type": dma_type,
                 "prompt_length": len(prompt_text),
                 "english_markers_found": [],
                 "target_markers_found": [],
@@ -1312,7 +1313,7 @@ class StreamingVerificationModule:
             for marker in target_markers:
                 if marker in prompt_text:
                     analysis["target_markers_found"].append(marker)
-                    conscience_localized = True
+                    dma_localized = True
 
             # Determine if this prompt is properly localized
             if target_language != "en":
@@ -1324,11 +1325,11 @@ class StreamingVerificationModule:
                 # For English, we expect English markers
                 analysis["is_localized"] = len(analysis["english_markers_found"]) > 0
 
-            conscience_prompt_analysis.append(analysis)
+            dma_prompt_analysis.append(analysis)
 
             # Print analysis
             status = "✅" if analysis["is_localized"] else "❌"
-            print(f"\n  {status} Conscience: {conscience_type}")
+            print(f"\n  {status} DMA: {dma_type}")
             print(f"     Prompt length: {analysis['prompt_length']} chars")
             if analysis["english_markers_found"]:
                 print(f"     ⚠️  English markers found: {analysis['english_markers_found']}")
@@ -1369,13 +1370,13 @@ class StreamingVerificationModule:
 
         # Step 6: Determine overall localization success
         if target_language != "en":
-            # For non-English: success if at least one conscience prompt is localized
+            # For non-English: success if at least one DMA prompt is localized
             # and NO English markers were found
-            localization_passed = conscience_localized and not english_detected
+            localization_passed = dma_localized and not english_detected
             if localization_passed:
                 localization_evidence.append(
                     {
-                        "source": "conscience_prompts",
+                        "source": "dma_prompts",
                         "field": "localization",
                         "value": f"Prompts localized to {target_language}",
                     }
@@ -1383,11 +1384,11 @@ class StreamingVerificationModule:
             else:
                 if english_detected:
                     errors.append(
-                        f"English markers found in conscience prompts when language should be {target_language}"
+                        f"English markers found in DMA prompts when language should be {target_language}"
                     )
-                if not conscience_localized:
+                if not dma_localized:
                     errors.append(
-                        f"No {target_language} markers found in conscience prompts - localization may have failed"
+                        f"No {target_language} markers found in DMA prompts - localization may have failed"
                     )
         else:
             # For English: success if English markers are found
@@ -1403,8 +1404,8 @@ class StreamingVerificationModule:
         streaming_total = streaming_result.get("total_events", 0) if streaming_result else 0
         print(f"  Streaming test passed: {'✅' if streaming_success else '❌'}")
         print(f"  Events received: {streaming_total}")
-        print(f"  Conscience prompts captured: {len(conscience_prompts_list)}")
-        print(f"  Conscience localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
+        print(f"  DMA prompts captured: {len(dma_prompts_list)}")
+        print(f"  DMA localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
         print(f"  Localization evidence: {len(localization_evidence)} items")
 
         for evidence in localization_evidence:
@@ -1415,17 +1416,17 @@ class StreamingVerificationModule:
             for error in errors:
                 print(f"   - {error}")
 
-        # Success requires: language stored, streaming passed, AND conscience prompts localized
+        # Success requires: language stored, streaming passed, AND DMA prompts localized
         success = len(localization_evidence) > 0 and streaming_success and localization_passed and len(errors) == 0
 
         if success:
             print(f"\n✅ LOCALIZATION TEST PASSED")
             print(f"   Language preference '{target_language}' is stored and propagated through reasoning pipeline")
-            print(f"   Conscience prompts are properly localized to {target_language}")
+            print(f"   DMA prompts are properly localized to {target_language}")
         else:
             print(f"\n❌ LOCALIZATION TEST FAILED")
             if not localization_passed:
-                print(f"   Conscience prompts are NOT properly localized to {target_language}")
+                print(f"   DMA prompts are NOT properly localized to {target_language}")
 
         print(f"{'='*80}\n")
 
@@ -1434,7 +1435,7 @@ class StreamingVerificationModule:
             "language_update": language_update,
             "streaming_result": streaming_result,
             "localization_evidence": localization_evidence,
-            "conscience_prompt_analysis": conscience_prompt_analysis,
+            "dma_prompt_analysis": dma_prompt_analysis,
             "errors": errors,
         }
 
@@ -1450,6 +1451,7 @@ class StreamingVerificationModule:
         event_details: List[Dict[str, Any]] = []
         errors: List[str] = []
         conscience_prompts: List[Dict[str, Any]] = []
+        dma_prompts: List[Dict[str, Any]] = []
         start_time = time.time()
 
         # Track event-specific data
@@ -1461,7 +1463,7 @@ class StreamingVerificationModule:
         stream_error = threading.Event()
 
         def monitor_stream() -> None:
-            """Monitor SSE stream in a separate thread, capturing conscience prompts."""
+            """Monitor SSE stream in a separate thread, capturing DMA prompts."""
             nonlocal events_with_audit_data, unexpected_events
 
             try:
@@ -1506,7 +1508,20 @@ class StreamingVerificationModule:
                                 if event_type not in all_valid_events:
                                     unexpected_events.add(event_type)
 
-                                # Capture conscience prompts for localization analysis
+                                # Capture DMA prompts for localization analysis (from dma_results event)
+                                if event_type == "dma_results":
+                                    for prompt_key in ["csdma_prompt", "dsdma_prompt", "pdma_prompt"]:
+                                        prompt_value = event.get(prompt_key, "")
+                                        if prompt_value:
+                                            dma_prompts.append(
+                                                {
+                                                    "type": prompt_key.replace("_prompt", "").upper(),
+                                                    "prompt": prompt_value,
+                                                    "thought_id": event.get("thought_id"),
+                                                }
+                                            )
+
+                                # Also capture conscience prompts if present
                                 if event_type == "conscience_result":
                                     conscience_prompt = event.get("conscience_prompt", "")
                                     if conscience_prompt:
@@ -1573,6 +1588,7 @@ class StreamingVerificationModule:
                 "error": "Failed to connect to SSE stream",
                 "errors": errors,
                 "conscience_prompts": [],
+                "dma_prompts": [],
             }
 
         time.sleep(1)
@@ -1608,6 +1624,7 @@ class StreamingVerificationModule:
             "events_with_audit_data": events_with_audit_data,
             "event_details": event_details,
             "conscience_prompts": conscience_prompts,
+            "dma_prompts": dma_prompts,
             "errors": errors,
         }
 

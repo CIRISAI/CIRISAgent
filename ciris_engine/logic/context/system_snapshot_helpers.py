@@ -136,6 +136,27 @@ class ContextEnrichmentCache:
         """Check if cache has been populated (at startup or otherwise)."""
         return len(self._cache) > 0 or self._startup_populated
 
+    def get_all_entries(self) -> Dict[str, Any]:
+        """Get all non-expired cache entries for API exposure.
+
+        Returns a dict of {tool_key: data} for all entries that haven't expired.
+        Used by /v1/system/environment endpoint to expose context enrichment data.
+        """
+        result: Dict[str, Any] = {}
+        expired_keys: List[str] = []
+
+        for key, entry in self._cache.items():
+            if entry.is_expired():
+                expired_keys.append(key)
+            else:
+                result[key] = entry.data
+
+        # Clean up expired entries
+        for key in expired_keys:
+            del self._cache[key]
+
+        return result
+
     def mark_startup_populated(self) -> None:
         """Mark that startup population has completed."""
         self._startup_populated = True

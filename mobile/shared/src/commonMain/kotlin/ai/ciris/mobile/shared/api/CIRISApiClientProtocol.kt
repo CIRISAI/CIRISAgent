@@ -169,6 +169,34 @@ interface CIRISApiClientProtocol {
      */
     suspend fun getServices(): ServicesResponse
 
+    // ===== Environment API =====
+
+    /**
+     * Get context enrichment cache data from adapters
+     */
+    suspend fun getContextEnrichment(): ContextEnrichmentResponse
+
+    /**
+     * Query environment graph nodes (items in ENVIRONMENT scope)
+     */
+    suspend fun queryEnvironmentItems(): List<EnvironmentGraphNodeData>
+
+    /**
+     * Create an environment item
+     */
+    suspend fun createEnvironmentItem(
+        name: String,
+        category: String,
+        quantity: Int,
+        condition: String,
+        notes: String?
+    ): EnvironmentGraphNodeData
+
+    /**
+     * Delete an environment item by ID
+     */
+    suspend fun deleteEnvironmentItem(nodeId: String): Boolean
+
     // ===== Runtime Control API =====
 
     /**
@@ -251,6 +279,82 @@ data class AdapterActionData(
 data class ServicesResponse(
     val globalServices: Map<String, List<ServiceProviderData>>,
     val handlers: Map<String, Map<String, List<ServiceProviderData>>>
+)
+
+// ===== Environment API Data Models =====
+
+/**
+ * Context enrichment response from /v1/system/adapters/context-enrichment
+ */
+data class ContextEnrichmentResponse(
+    val entries: Map<String, Any>,
+    val stats: EnrichmentCacheStatsData
+)
+
+/**
+ * User location information from setup
+ */
+data class LocationInfoData(
+    val location: String?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val timezone: String?,
+    val country: String?,
+    val region: String?,
+    val city: String?,
+    val iso6709: String?,
+    val hasCoordinates: Boolean
+)
+
+/**
+ * Environment graph node (persistent ENVIRONMENT scope)
+ */
+data class EnvironmentGraphNodeData(
+    val id: String,
+    val type: String,
+    val attributes: Map<String, Any>,
+    val createdAt: String?,
+    val communityShared: Boolean
+) {
+    // Helper properties for item display
+    val name: String get() = attributes["name"]?.toString() ?: id
+    val category: String get() = attributes["category"]?.toString() ?: "have"
+    val quantity: Int get() = (attributes["quantity"] as? Number)?.toInt() ?: 1
+    val condition: String get() = attributes["condition"]?.toString() ?: "good"
+    val notes: String? get() = attributes["notes"]?.toString()
+}
+
+/**
+ * Item categories for environment items
+ */
+enum class ItemCategory(val displayName: String) {
+    WANT("Want"),
+    NEED("Need"),
+    HAVE("Have"),
+    CAN_BORROW("Can Borrow"),
+    CAN_BARTER("Can Barter")
+}
+
+/**
+ * Item conditions
+ */
+enum class ItemCondition(val displayName: String) {
+    NEW("New"),
+    GOOD("Good"),
+    FAIR("Fair"),
+    POOR("Poor"),
+    BROKEN("Broken")
+}
+
+/**
+ * Context enrichment cache statistics
+ */
+data class EnrichmentCacheStatsData(
+    val entries: Int,
+    val hits: Int,
+    val misses: Int,
+    val hitRatePct: Double,
+    val startupPopulated: Boolean
 )
 
 /**

@@ -1225,3 +1225,117 @@ class TestListModelsEndpoint:
             },
         )
         assert response.status_code == status.HTTP_200_OK
+
+
+class TestLocationEnvParsing:
+    """Test location environment variable parsing in setup config."""
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_valid_location(self, mock_detect, mock_allowed, client):
+        """Test that valid location env vars are parsed correctly."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "37.7749",
+                "CIRIS_USER_LONGITUDE": "-122.4194",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] == 37.7749
+        assert data["location_longitude"] == -122.4194
+        assert data["has_coordinates"] is True
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_invalid_latitude(self, mock_detect, mock_allowed, client):
+        """Test that invalid latitude env var falls back to None (no 500 error)."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "not_a_number",
+                "CIRIS_USER_LONGITUDE": "-122.4194",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        # Should NOT return 500, should gracefully return None for invalid lat
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] == -122.4194
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_invalid_longitude(self, mock_detect, mock_allowed, client):
+        """Test that invalid longitude env var falls back to None (no 500 error)."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "37.7749",
+                "CIRIS_USER_LONGITUDE": "invalid",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] == 37.7749
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_empty_location(self, mock_detect, mock_allowed, client):
+        """Test that empty location env vars return None."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        # Clear any existing location env vars
+        env_copy = os.environ.copy()
+        env_copy.pop("CIRIS_USER_LATITUDE", None)
+        env_copy.pop("CIRIS_USER_LONGITUDE", None)
+
+        with patch.dict(os.environ, env_copy, clear=True):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_both_invalid_locations(self, mock_detect, mock_allowed, client):
+        """Test that both invalid location env vars fall back to None."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "abc",
+                "CIRIS_USER_LONGITUDE": "xyz",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False

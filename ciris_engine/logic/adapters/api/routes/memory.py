@@ -434,8 +434,8 @@ async def forget_memory(
     request: Request,
     auth: AuthAdminDep,
     memory_service: MemoryServiceDep,
-    node_id: str = Path(..., description="Node ID to forget"),
-    scope: Optional[str] = Query(None, description="Graph scope (local, environment, community)"),
+    node_id: Annotated[str, Path(description="Node ID to forget")],
+    scope: Annotated[Optional[str], Query(description="Graph scope (local, environment, community)")] = None,
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Forget a specific memory node (FORGET).

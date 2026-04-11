@@ -185,6 +185,12 @@ class TestEnvironmentSync:
         sync_language_preference("fr")
         mock_set_lang.assert_called_once_with("fr")
 
+    @patch("ciris_engine.logic.conscience.prompt_loader.set_conscience_prompt_language")
+    def test_sync_language_preference_updates_conscience_prompt_loader(self, mock_set_lang):
+        """Test that sync_language_preference updates conscience prompt loader."""
+        sync_language_preference("am")
+        mock_set_lang.assert_called_once_with("am")
+
 
 # ============================================================================
 # Conscience Localization Tests

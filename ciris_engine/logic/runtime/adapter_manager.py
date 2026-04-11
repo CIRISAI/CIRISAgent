@@ -8,7 +8,7 @@ extending the existing processor control capabilities with adapter lifecycle man
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
 import aiofiles
 
@@ -143,6 +143,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self.loaded_adapters: Dict[str, AdapterInstance] = {}
         self._adapter_counter = 0
         self._config_listener_registered = False
+        # Set to hold background tasks and prevent garbage collection
+        self._background_tasks: Set[asyncio.Task[Any]] = set()
         # Register for config changes after initialization
         self._register_config_listener()
 
@@ -249,10 +251,13 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             # Refresh context enrichment cache in background (non-blocking)
             # This ensures newly loaded adapter tools are cached immediately
-            asyncio.create_task(
+            # Store task in set to prevent garbage collection (SonarCloud S5765)
+            task = asyncio.create_task(
                 self._refresh_enrichment_cache_for_adapter(instance),
                 name=f"refresh_enrichment_cache_{adapter_id}",
             )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             # Save adapter config to graph
             await self._save_adapter_config_to_graph(

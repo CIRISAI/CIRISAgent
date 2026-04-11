@@ -302,11 +302,21 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
     # Detect LLM provider using same logic as LLM service
     llm_provider = _detect_llm_provider(request)
 
-    # Get user location from environment
+    # Get user location from environment (safely handle invalid values)
     latitude_str = os.getenv("CIRIS_USER_LATITUDE")
     longitude_str = os.getenv("CIRIS_USER_LONGITUDE")
-    latitude = float(latitude_str) if latitude_str else None
-    longitude = float(longitude_str) if longitude_str else None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    if latitude_str:
+        try:
+            latitude = float(latitude_str)
+        except ValueError:
+            pass  # Invalid format, fall back to None
+    if longitude_str:
+        try:
+            longitude = float(longitude_str)
+        except ValueError:
+            pass  # Invalid format, fall back to None
 
     config = SetupConfigResponse(
         llm_provider=llm_provider,

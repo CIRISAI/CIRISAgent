@@ -435,6 +435,7 @@ async def forget_memory(
     auth: AuthAdminDep,
     memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID to forget"),
+    scope: Optional[str] = Query(None, description="Graph scope (local, environment, community)"),
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Forget a specific memory node (FORGET).
@@ -447,10 +448,19 @@ async def forget_memory(
         # The forget method will look up the full node internally
         from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
+        # Parse scope from query param, default to LOCAL for backwards compatibility
+        graph_scope = GraphScope.LOCAL
+        if scope:
+            scope_lower = scope.lower()
+            if scope_lower == "environment":
+                graph_scope = GraphScope.ENVIRONMENT
+            elif scope_lower == "community":
+                graph_scope = GraphScope.COMMUNITY
+
         node_to_forget = GraphNode(
             id=node_id,
             type=NodeType.CONCEPT,  # Default type, will be looked up by forget method
-            scope=GraphScope.LOCAL,  # Default scope
+            scope=graph_scope,
             attributes={},
         )
 

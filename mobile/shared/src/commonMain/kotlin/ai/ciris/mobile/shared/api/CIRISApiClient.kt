@@ -4307,8 +4307,8 @@ class CIRISApiClient(
                 setBody(buildJsonObject {
                     put("node", buildJsonObject {
                         put("id", nodeId)
-                        put("type", "object")  // NodeType enum values are lowercase
-                        put("scope", "environment")  // GraphScope enum values are lowercase
+                        put("type", "concept")  // NodeType.CONCEPT for environment items
+                        put("scope", "environment")  // GraphScope.ENVIRONMENT
                         put("attributes", attributes)
                     })
                 })
@@ -4325,7 +4325,7 @@ class CIRISApiClient(
 
             EnvironmentGraphNodeData(
                 id = nodeId,
-                type = "OBJECT",
+                type = "CONCEPT",
                 attributes = mapOf(
                     "name" to name,
                     "category" to category,
@@ -4352,7 +4352,8 @@ class CIRISApiClient(
                 }
             }
 
-            val response = client.delete("$baseUrl/v1/memory/$nodeId") {
+            // Pass scope=environment to delete from correct graph scope
+            val response = client.delete("$baseUrl/v1/memory/$nodeId?scope=environment") {
                 header("Authorization", "Bearer $accessToken")
             }
 

@@ -769,6 +769,7 @@ async def populate_context_enrichment_cache(runtime: Any) -> None:
         )
 
         available_tools = await _collect_available_tools(runtime)
+
         if not available_tools:
             logger.info("No adapter tools available, skipping enrichment cache population")
             return

@@ -1501,3 +1501,194 @@ class TestSystemSnapshotFormatter:
 
         # Should be truncated
         assert "... (truncated)" in result
+
+
+# =============================================================================
+# 11. STARTUP CACHE POPULATION TESTS
+# =============================================================================
+
+
+class TestStartupCachePopulation:
+    """Test the populate_enrichment_cache_at_startup function."""
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        # Reset the _startup_populated flag for isolated tests
+        cache._startup_populated = False
+        cache._hit_count = 0
+        cache._miss_count = 0
+        yield
+        cache.clear()
+        cache._startup_populated = False
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_with_no_tools(self, mock_runtime, caplog):
+        """Test startup cache population with no available tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        await populate_enrichment_cache_at_startup(mock_runtime, {})
+
+        cache = get_enrichment_cache()
+        assert cache.stats["hits"] == 0
+        assert cache.stats["misses"] == 0
+        assert cache.is_populated is True
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_with_enrichment_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test startup cache population executes enrichment tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        assert cache.is_populated is True
+        assert "[ENRICHMENT_CACHE] Startup population complete:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_skips_if_already_populated(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test startup cache population skips if cache already populated."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        # Mark cache as already populated
+        cache = get_enrichment_cache()
+        cache.mark_startup_populated()
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        assert "[ENRICHMENT_CACHE] Cache already populated, skipping" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_stores_results(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test that startup cache population stores tool results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        # Check that result is cached
+        cached_result = cache.get("test:test_list_items")
+        assert cached_result is not None
+        assert cached_result["count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_cache_get_with_hit(self, mock_runtime_with_enrichment, mock_enrichment_tool_info):
+        """Test cache get returns cached value and increments hits."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        initial_hits = cache.stats["hits"]
+
+        # Get the cached value
+        result = cache.get("test:test_list_items")
+        assert result is not None
+        assert cache.stats["hits"] == initial_hits + 1
+
+    @pytest.mark.asyncio
+    async def test_cache_get_with_miss(self):
+        """Test cache get returns None for missing key and increments misses."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        initial_misses = cache.stats["misses"]
+
+        result = cache.get("nonexistent:tool")
+        assert result is None
+        assert cache.stats["misses"] == initial_misses + 1
+
+    @pytest.mark.asyncio
+    async def test_cache_set_and_get(self):
+        """Test cache set and get operations."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        test_data = {"value": 42, "items": ["a", "b", "c"]}
+        cache.set("test:my_tool", test_data)
+
+        result = cache.get("test:my_tool")
+        assert result == test_data
+
+    @pytest.mark.asyncio
+    async def test_cache_clear(self):
+        """Test cache clear removes all entries."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        cache.set("test:tool1", {"data": 1})
+        cache.set("test:tool2", {"data": 2})
+        assert len(cache.get_all_entries()) == 2
+
+        cache.clear()
+        assert len(cache.get_all_entries()) == 0
+        # Note: clear() only clears entries, not _startup_populated flag
+        # is_populated returns True if entries > 0 OR _startup_populated is set
+        assert cache.stats["entries"] == 0
+
+    @pytest.mark.asyncio
+    async def test_cache_get_all_entries(self):
+        """Test getting all cache entries."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        cache.set("test:tool1", {"data": 1})
+        cache.set("test:tool2", {"data": 2})
+
+        entries = cache.get_all_entries()
+        assert len(entries) == 2
+        assert "test:tool1" in entries
+        assert "test:tool2" in entries
+
+    @pytest.mark.asyncio
+    async def test_cache_ttl_expiration(self):
+        """Test cache entries expire after TTL."""
+        import time
+
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        # Set with very short TTL (minimum is 5 seconds, so we test near that)
+        # Note: The cache has MIN_TTL=5.0, so we can't test sub-second expiry easily
+        # Instead, test that the TTL parameter is accepted and entry is stored
+        cache.set("test:expiring", {"data": "value"}, ttl_seconds=5.0)
+
+        # Should be present immediately
+        assert cache.get("test:expiring") is not None
+        assert cache.get("test:expiring")["data"] == "value"

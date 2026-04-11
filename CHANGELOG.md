@@ -5,6 +5,31 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-04-10
+
+### Added
+
+- **Context Enrichment Cache Auto-Population** - Enrichment cache now auto-populates at startup and when adapters load dynamically, eliminating first-thought latency
+- **Unit Tests for Enrichment Cache** - Added comprehensive tests for startup cache population and adapter cache refresh
+
+### Fixed
+
+- **Context Enrichment Route** - Fixed 404 on `/adapters/context-enrichment` endpoint by moving it before wildcard route
+
+## [2.4.1] - 2026-04-09
+
+### Added
+
+- **WA Key Auto-Rotation** - User Wise Authority keys now auto-rotate with unit test coverage
+- **WA Signing via CIRISVerify** - Named key signing capability through CIRISVerify integration
+- **Play Integrity Reporting** - CIRISVerify v1.5.3 with Play Integrity failure reporting
+
+### Fixed
+
+- **Wallet Badge Display** - Fixed trust badge and wallet race conditions at startup
+- **Attestation Lights** - Parse CIRISVerify v1.5.x unified attestation format correctly
+- **Domain Filtering** - Fixed domain filtering and deterministic trace IDs
+
 ## [2.4.0] - 2026-04-07
 
 ### Added

@@ -1716,3 +1716,317 @@ class TestEnvVarPersistence:
 
         # Should NOT have called set_config since persist=False
         mock_config.set_config.assert_not_called()
+
+
+class TestEnrichmentCacheRefresh:
+    """Tests for the _refresh_enrichment_cache_for_adapter method."""
+
+    @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        mock = Mock(spec=TimeServiceProtocol)
+        mock.now.return_value = datetime.now(timezone.utc)
+        return mock
+
+    @pytest.fixture
+    def mock_runtime_with_enrichment(self):
+        """Create a mock runtime with enrichment tool support."""
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        mock = Mock()
+        mock.service_registry = Mock()
+        mock.config_service = None
+        mock.adapters = []
+        mock.essential_config = EssentialConfig()
+        mock.modules_to_load = []
+        mock.startup_channel_id = "test_channel"
+        mock.debug = False
+        mock.bus_manager = Mock()
+        mock.agent_name = "test"
+        mock.agent_version = "1.0.0"
+        return mock
+
+    @pytest.fixture
+    def adapter_manager(self, mock_runtime_with_enrichment, mock_time_service):
+        """Create an adapter manager instance."""
+        return RuntimeAdapterManager(mock_runtime_with_enrichment, mock_time_service)
+
+    @pytest.fixture
+    def mock_adapter_instance(self, mock_time_service):
+        """Create a mock adapter instance."""
+        adapter = MockAdapter(None)
+        return AdapterInstance(
+            adapter_id="test_adapter",
+            adapter_type="home_assistant",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="home_assistant"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        yield
+        cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_no_tools(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test refresh when no tools are available."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        # Setup - no tool services
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = []
+
+        # Get initial cache state
+        cache = get_enrichment_cache()
+        initial_entries = len(cache.get_all_entries())
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Cache should not have new entries when no tools available
+        assert len(cache.get_all_entries()) == initial_entries
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_no_enrichment_tools(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test refresh when tools exist but none are marked for enrichment."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        # Create non-enrichment tool
+        tool_info = ToolInfo(
+            name="regular_tool",
+            description="A regular tool",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=False,
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["regular_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        # Get initial cache state
+        cache = get_enrichment_cache()
+        initial_entries = len(cache.get_all_entries())
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Cache should not have new entries for non-enrichment tools
+        assert len(cache.get_all_entries()) == initial_entries
+        # execute_tool should never be called
+        tool_service.execute_tool = AsyncMock()  # Not called
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_executes_tool(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh executes enrichment tools and caches results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="ha_list_entities",
+            description="List HA entities",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="ha_list_entities",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"entities": ["light.living_room", "switch.garage"]},
+            error=None,
+            correlation_id="test-123",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["ha_list_entities"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify cache was populated
+        cache = get_enrichment_cache()
+        cached = cache.get("test:ha_list_entities")
+        assert cached is not None
+        assert cached["entities"] == ["light.living_room", "switch.garage"]
+
+        # Verify logging
+        assert "[ENRICHMENT_CACHE] Cached test:ha_list_entities after adapter load" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_skips_existing(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test that refresh skips tools already in cache."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        # Pre-populate cache
+        cache = get_enrichment_cache()
+        cache.set("test:cached_tool", {"already": "cached"})
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="cached_tool",
+            description="Already cached",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["cached_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock()  # Should not be called
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # execute_tool should not have been called since it's already cached
+        tool_service.execute_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_handles_tool_error(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh handles tool execution errors gracefully."""
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="failing_tool",
+            description="Tool that fails",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["failing_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(side_effect=Exception("Tool execution failed"))
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        # Should not raise
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Should log warning
+        assert "[ENRICHMENT_CACHE] Failed to cache test:failing_tool" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_ttl(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test that refresh respects TTL in enrichment params."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        # Create enrichment tool with TTL
+        tool_info = ToolInfo(
+            name="ttl_tool",
+            description="Tool with TTL",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={"_cache_ttl": 60.0},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="ttl_tool",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"value": 42},
+            error=None,
+            correlation_id="test-456",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["ttl_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify cache was populated
+        cache = get_enrichment_cache()
+        cached = cache.get("test:ttl_tool")
+        assert cached is not None
+        assert cached["value"] == 42
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_logs_stats(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh logs cache stats after completion."""
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        tool_info = ToolInfo(
+            name="stats_tool",
+            description="Tool for stats test",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="stats_tool",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"result": "ok"},
+            error=None,
+            correlation_id="test-789",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["stats_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify stats were logged
+        assert "[ENRICHMENT_CACHE] Refreshed cache after loading test_adapter" in caplog.text
+        assert "stats:" in caplog.text

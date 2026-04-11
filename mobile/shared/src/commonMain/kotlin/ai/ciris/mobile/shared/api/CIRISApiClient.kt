@@ -4222,7 +4222,7 @@ class CIRISApiClient(
                 header("Authorization", "Bearer $accessToken")
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject {
-                    put("scope", "ENVIRONMENT")
+                    put("scope", "environment")  // GraphScope enum values are lowercase
                     put("limit", 100)
                 })
             }
@@ -4307,8 +4307,8 @@ class CIRISApiClient(
                 setBody(buildJsonObject {
                     put("node", buildJsonObject {
                         put("id", nodeId)
-                        put("type", "OBJECT")
-                        put("scope", "ENVIRONMENT")
+                        put("type", "object")  // NodeType enum values are lowercase
+                        put("scope", "environment")  // GraphScope enum values are lowercase
                         put("attributes", attributes)
                     })
                 })

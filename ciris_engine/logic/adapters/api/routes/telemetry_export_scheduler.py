@@ -98,7 +98,7 @@ class TelemetryExportScheduler:
             self._scheduler_task.cancel()
             try:
                 await self._scheduler_task
-            except asyncio.CancelledError:  # noqa: ASYNC910
+            except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
                 # Expected: we just cancelled this child task above.
                 # Do NOT re-raise - this is OUR cancellation, not external.
                 pass

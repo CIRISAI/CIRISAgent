@@ -9,6 +9,7 @@ prompts/localized/{lang}/ directories.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,24 @@ import yaml
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: str, max_length: int = 50) -> str:
+    """Sanitize user input for safe logging.
+
+    Prevents log injection attacks by:
+    - Removing newlines and control characters
+    - Truncating to max_length
+    - Replacing non-printable characters
+    """
+    if not isinstance(value, str):
+        value = str(value)
+    # Remove newlines and control characters
+    sanitized = re.sub(r"[\r\n\x00-\x1f\x7f-\x9f]", "", value)
+    # Truncate
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
 
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"
@@ -201,7 +220,7 @@ def get_conscience_prompt_loader(language: Optional[str] = None) -> ConsciencePr
             lang = language
         _default_loader = ConsciencePromptLoader(language=lang)
         _current_language = lang
-        logger.info(f"Conscience prompt loader initialized with language: {lang}")
+        logger.info(f"Conscience prompt loader initialized with language: {_sanitize_for_log(lang)}")
     elif language and language != _current_language:
         _default_loader.set_language(language)
         _current_language = language
@@ -219,4 +238,4 @@ def set_conscience_prompt_language(language: str) -> None:
     _current_language = language
     if _default_loader is not None:
         _default_loader.set_language(language)
-    logger.info(f"Conscience prompt language set to: {language}")
+    logger.info(f"Conscience prompt language set to: {_sanitize_for_log(language)}")

@@ -570,11 +570,20 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
             logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
 
-        # Adapter-specific environment variables
+        # Adapter-specific environment variables with proper env var naming
         if setup.adapter_config:
             f.write("\n# Adapter-Specific Configuration\n")
+            # Mapping of generic config keys to adapter-specific env var names
+            HA_ENV_MAPPING = {
+                "access_token": "HOME_ASSISTANT_TOKEN",
+                "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+                "base_url": "HOME_ASSISTANT_URL",
+                "client_id": "HOME_ASSISTANT_CLIENT_ID",
+            }
             for key, value in setup.adapter_config.items():
-                f.write(f"{key}={value}\n")
+                # Use mapped env var name if available, otherwise use key as-is
+                env_var_name = HA_ENV_MAPPING.get(key, key)
+                f.write(f"{env_var_name}={value}\n")
 
         # User preferences (language & location)
         # Always write language preference (defaults to English if not set)

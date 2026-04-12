@@ -273,8 +273,8 @@ class WeatherToolService:
             ),
         }
 
-        # Add context enrichment tool if user location is available
-        if self._default_lat is not None and self._location_source == "user_setup":
+        # Add context enrichment tool if user location is available (from any source)
+        if self._default_lat is not None:
             tools["weather:my_location"] = ToolInfo(
                 name="weather:my_location",
                 description=(

@@ -188,32 +188,69 @@ def _check_sensitive_paths(local_path: str) -> None:
 def _resolve_to_allowed_path(local_path: str) -> Path:
     """Resolve a validated path string to an allowed Path.
 
-    SECURITY: This function should only be called AFTER validation.
-    The path is constructed by joining trusted base directories with
-    validated path components, not by directly converting user input.
+    SECURITY: This function constructs paths ONLY from trusted base directories,
+    never directly from user input. User input is only used to select which
+    trusted base to use and to extract validated path components.
 
     Raises ValueError if resolved path is outside allowed directories.
     """
     allowed_bases = _get_allowed_bases()
 
-    # Handle tilde by using trusted home directory
+    # Handle tilde by constructing from trusted home directory
     if local_path.startswith("~"):
-        # Construct from trusted source: home dir + validated suffix
+        # Extract suffix and split into components for validation
         suffix = local_path[1:].lstrip("/\\")
-        resolved = (Path.home() / suffix).resolve()
-    else:
-        # For absolute paths, resolve and verify against allowed bases
-        # For relative paths, resolve against cwd (a trusted base)
-        normalized = os.path.normpath(local_path)
-        resolved = Path(normalized).resolve()
-
-    # Verify resolved path is within an allowed base directory
-    for base in allowed_bases:
+        # Construct path from trusted base + validated components
+        resolved = Path.home()
+        for component in suffix.replace("\\", "/").split("/"):
+            if component and component not in (".", ""):
+                resolved = resolved / component
+        resolved = resolved.resolve()
+        # Verify still within home
         try:
-            resolved.relative_to(base)
+            resolved.relative_to(Path.home())
             return resolved
         except ValueError:
-            continue
+            pass  # Fall through to error
+    else:
+        # For absolute/relative paths: find matching trusted base and construct from it
+        # Split user path into components (already validated for traversal)
+        path_components = local_path.replace("\\", "/").split("/")
+
+        # Try each trusted base directory
+        for base in allowed_bases:
+            base_resolved = base.resolve()
+            base_str = str(base_resolved)
+
+            # Check if user path starts with or is relative to this base
+            if local_path.startswith(base_str):
+                # Absolute path within this base - extract suffix
+                suffix = local_path[len(base_str):].lstrip("/\\")
+                resolved = base_resolved
+                for component in suffix.split("/"):
+                    if component and component not in (".", ""):
+                        resolved = resolved / component
+                resolved = resolved.resolve()
+                # Verify still within base after resolution
+                try:
+                    resolved.relative_to(base_resolved)
+                    return resolved
+                except ValueError:
+                    continue  # Escaped base via symlinks, try next
+            elif not local_path.startswith("/"):
+                # Relative path - resolve against this base (cwd)
+                resolved = base_resolved
+                for component in path_components:
+                    if component and component not in (".", ""):
+                        resolved = resolved / component
+                resolved = resolved.resolve()
+                # Verify within an allowed base
+                for check_base in allowed_bases:
+                    try:
+                        resolved.relative_to(check_base.resolve())
+                        return resolved
+                    except ValueError:
+                        continue
 
     raise ValueError(
         f"Path '{local_path}' is outside allowed directories. "

@@ -66,7 +66,7 @@ class DMAPromptLoader:
         """
         self.language = language
         self.localized_dir = self.prompts_dir / "localized" / language
-        logger.debug(f"DMA prompt language set to: {language}")
+        logger.debug(f"DMA prompt language set to: {_sanitize_for_log(language)}")
 
     def _normalize_accord_mode(self, value: Any) -> str:
         """Normalize accord_header value to accord_mode string.
@@ -296,7 +296,7 @@ def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
             lang = language
         _default_loader = DMAPromptLoader(language=lang)
         _current_language = lang
-        logger.info(f"DMA prompt loader initialized with language: {lang}")
+        logger.info(f"DMA prompt loader initialized with language: {_sanitize_for_log(lang)}")
     elif language and language != _current_language:
         _default_loader.set_language(language)
         _current_language = language

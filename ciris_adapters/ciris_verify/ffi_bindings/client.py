@@ -3373,3 +3373,54 @@ class MockCIRISVerify(CIRISVerify):
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""
         return super()._default_disclosure(status, reason=reason)
+
+    def _ensure_mock_key(self) -> None:
+        """Ensure a mock Ed25519 key pair exists."""
+        if not hasattr(self, "_mock_private_key"):
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+            self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
+            self._mock_public_key = self._mock_private_key.public_key()
+
+    def generate_key_sync(self) -> bool:
+        """Mock generate_key_sync — creates a software Ed25519 key."""
+        self._ensure_mock_key()
+        return True
+
+    def has_key_sync(self) -> bool:
+        """Mock has_key_sync — returns True if mock key exists."""
+        return hasattr(self, "_mock_private_key")
+
+    def sign_ed25519_sync(self, data: bytes) -> bytes:
+        """Mock sign_ed25519_sync — signs data with mock Ed25519 key."""
+        self._ensure_mock_key()
+        return self._mock_private_key.sign(data)
+
+    def get_ed25519_public_key_sync(self) -> bytes:
+        """Mock get_ed25519_public_key_sync — returns mock public key bytes."""
+        self._ensure_mock_key()
+        from cryptography.hazmat.primitives import serialization
+        return self._mock_public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+    def delete_key_sync(self) -> bool:
+        """Mock delete_key_sync — removes mock key."""
+        if hasattr(self, "_mock_private_key"):
+            del self._mock_private_key
+            del self._mock_public_key
+        return True
+
+    def import_key_sync(self, key_bytes: bytes) -> bool:
+        """Mock import_key_sync — imports Ed25519 private key bytes."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+        try:
+            self._mock_private_key = ed25519.Ed25519PrivateKey.from_private_bytes(key_bytes)
+            self._mock_public_key = self._mock_private_key.public_key()
+            return True
+        except Exception:
+            return False
+
+    def get_diagnostics_sync(self) -> str:
+        """Mock get_diagnostics_sync — returns mock diagnostic info."""
+        return "[MOCK] MockCIRISVerify - software Ed25519 key for testing"

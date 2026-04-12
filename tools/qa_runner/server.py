@@ -523,6 +523,10 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # Use MockCIRISVerify to avoid FFI crash in subprocess mode
+        # The real FFI library has a segfault bug when no Ed25519 key is loaded
+        env["CIRIS_MOCK_VERIFY"] = "1"
+
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
             project_root = Path(__file__).parent.parent.parent

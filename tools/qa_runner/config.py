@@ -176,8 +176,14 @@ class QAConfig:
     fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
     test_timeout: float = 30.0  # Timeout for individual test interactions
 
-    def get_module_tests(self, module: QAModule) -> List[QATestCase]:
-        """Get test cases for a specific module."""
+    def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
+        """Get test cases for a specific module.
+
+        Args:
+            module: The QA module to get tests for.
+            admin_password: The admin password to use for auth tests.
+                           If None, uses the config's admin_password.
+        """
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
         from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
@@ -186,9 +192,11 @@ class QAConfig:
         from .modules.setup_tests import SetupTestModule
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
+        effective_password = admin_password or self.admin_password
+
         # API test modules
         if module == QAModule.AUTH:
-            return APITestModule.get_auth_tests()
+            return APITestModule.get_auth_tests(admin_password=effective_password)
         elif module == QAModule.TELEMETRY:
             return APITestModule.get_telemetry_tests()
         elif module == QAModule.AGENT:

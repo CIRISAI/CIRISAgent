@@ -8,9 +8,13 @@ This ensures:
 2. Rust FFI initialization happens only once
 3. Network calls to registry happen only once
 4. All attestation state is shared
+
+Environment Variables:
+    CIRIS_MOCK_VERIFY=1: Use MockCIRISVerify instead of real FFI (for testing)
 """
 
 import logging
+import os
 import threading
 from typing import Any, Optional
 
@@ -58,6 +62,15 @@ def get_verifier() -> Any:
             _init_error = None
 
         try:
+            # Check for mock mode (for testing without FFI)
+            use_mock = os.environ.get("CIRIS_MOCK_VERIFY", "").lower() in ("1", "true", "yes")
+
+            if use_mock:
+                from ciris_adapters.ciris_verify import MockCIRISVerify
+                _verifier = MockCIRISVerify()
+                logger.info("[verifier_singleton] Using MockCIRISVerify (CIRIS_MOCK_VERIFY=1)")
+                return _verifier
+
             from ciris_adapters.ciris_verify import CIRISVerify
 
             # CRITICAL: Ensure CIRIS_HOME and CIRIS_DATA_DIR are set robustly

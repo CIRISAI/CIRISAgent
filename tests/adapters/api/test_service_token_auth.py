@@ -97,15 +97,15 @@ class TestServiceTokenAuthentication:
             assert "Invalid service token" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_legacy_admin_password_auth(self, auth_service, mock_request):
+    async def test_legacy_admin_password_auth(self, auth_service, mock_request, test_admin_password):
         """Test legacy Bearer admin:password authentication."""
         # Remove audit service to avoid asyncio issues in the test
         mock_request.app.state.audit_service = None
 
         # Admin user should be created by default in __init__
 
-        # Test valid admin credentials
-        auth_context = await get_auth_context(mock_request, "Bearer admin:ciris_admin_password", auth_service)
+        # Test valid admin credentials using dynamic password
+        auth_context = await get_auth_context(mock_request, f"Bearer admin:{test_admin_password}", auth_service)
 
         assert auth_context.user_id == "wa-system-admin"
         assert auth_context.role == UserRole.SYSTEM_ADMIN

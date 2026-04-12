@@ -24,6 +24,7 @@ from ciris_engine.schemas.consent.core import (
     DSARExportFormat,
     DSARExportPackage,
 )
+from tests.fixtures.auth import make_login_request
 
 
 @pytest.fixture
@@ -171,12 +172,8 @@ class TestMultiSourceDSARSubmit:
             "user_identifier": "user@example.com",
         }
 
-        # Login first
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        # Login using centralized auth helper
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -196,11 +193,7 @@ class TestMultiSourceDSARSubmit:
             "export_format": "json",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -217,11 +210,7 @@ class TestMultiSourceDSARSubmit:
             "user_identifier": "user@example.com",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -239,11 +228,7 @@ class TestMultiSourceDSARSubmit:
             "corrections": {"email": "newemail@example.com"},
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -260,11 +245,7 @@ class TestMultiSourceDSARSubmit:
             # Missing corrections field
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -290,11 +271,7 @@ class TestMultiSourceDSARSubmit:
             "user_identifier": "user@example.com",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
 
@@ -313,11 +290,7 @@ class TestMultiSourceDSARStatus:
             "user_identifier": "user@example.com",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         submit_response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
         ticket_id = submit_response.json()["data"]["ticket_id"]
@@ -332,11 +305,7 @@ class TestMultiSourceDSARStatus:
 
     def test_get_status_nonexistent_ticket_fails(self, client_with_auth):
         """Test getting status of non-existent ticket."""
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.get("/v1/dsar/multi-source/NONEXISTENT", headers=headers)
 
@@ -355,11 +324,7 @@ class TestMultiSourceDSARPartialResults:
             "user_identifier": "user@example.com",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         submit_response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
         ticket_id = submit_response.json()["data"]["ticket_id"]
@@ -385,11 +350,7 @@ class TestMultiSourceDSARCancellation:
             "user_identifier": "user@example.com",
         }
 
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         submit_response = client_with_auth.post("/v1/dsar/multi-source/", json=request_data, headers=headers)
         ticket_id = submit_response.json()["data"]["ticket_id"]
@@ -404,11 +365,7 @@ class TestMultiSourceDSARCancellation:
 
     def test_cancel_nonexistent_request_fails(self, client_with_auth):
         """Test cancelling non-existent request."""
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         response = client_with_auth.delete("/v1/dsar/multi-source/NONEXISTENT", headers=headers)
 
@@ -420,11 +377,7 @@ class TestMultiSourceDSARIntegration:
 
     def test_complete_access_flow(self, client_with_auth):
         """Test complete access request flow."""
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         # 1. Submit access request
         request_data = {
@@ -446,11 +399,7 @@ class TestMultiSourceDSARIntegration:
 
     def test_orchestrator_called_with_correct_parameters(self, client_with_auth):
         """Test that orchestrator is called with correct parameters."""
-        login_response = client_with_auth.post(
-            "/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
-        )
-        token = login_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = make_login_request(client_with_auth)
 
         request_data = {
             "request_type": "access",

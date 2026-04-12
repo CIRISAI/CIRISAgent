@@ -17,6 +17,7 @@ from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
 from ciris_engine.logic.adapters.api.services.auth_service import UserRole
+from tests.fixtures.auth import get_test_admin_credentials
 
 
 @pytest.fixture
@@ -59,7 +60,8 @@ async def oauth_client(oauth_test_app):
 @pytest.fixture
 async def admin_token(oauth_client):
     """Get admin authentication token."""
-    response = await oauth_client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
+    username, password = get_test_admin_credentials()
+    response = await oauth_client.post("/v1/auth/login", json={"username": username, "password": password})
     assert response.status_code == status.HTTP_200_OK
     return response.json()["access_token"]
 

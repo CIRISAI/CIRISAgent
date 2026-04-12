@@ -107,6 +107,36 @@ class APIAuthService:
     # Class-level instance counter to track re-initialization
     _instance_counter = 0
 
+    # SECURITY: One-time random password for fallback admin (generated per-process)
+    # This ensures the fallback admin password is never hardcoded in source
+    _fallback_admin_password: Optional[str] = None
+    _fallback_password_logged: bool = False
+
+    @classmethod
+    def _get_fallback_admin_password(cls) -> str:
+        """Get or generate the fallback admin password.
+
+        SECURITY: This generates a cryptographically random password once per process.
+        The password is printed ONCE to stdout so operators can use it during first-run setup.
+        After ROOT user is created, the fallback admin is disabled.
+        """
+        if cls._fallback_admin_password is None:
+            # Generate a secure random password
+            cls._fallback_admin_password = secrets.token_urlsafe(24)
+
+            # Print it ONCE so operator can see it during first-run
+            # Use print() not logger to avoid duplicate outputs from multiple log handlers
+            if not cls._fallback_password_logged:
+                cls._fallback_password_logged = True
+                print("=" * 70)
+                print("FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):")
+                print(f"  Username: admin")
+                print(f"  Password: {cls._fallback_admin_password}")
+                print("This password is randomly generated and valid only until setup completes.")
+                print("=" * 70)
+
+        return cls._fallback_admin_password
+
     def __init__(self, auth_service: Optional[AuthenticationServiceProtocol] = None) -> None:
         # Track instance creation for debugging
         APIAuthService._instance_counter += 1
@@ -134,6 +164,7 @@ class APIAuthService:
         # Instead, we'll load lazily on first access
         if not self._auth_service:
             # Fallback: Initialize with system admin user if no auth service
+            # SECURITY: Use randomly generated password, not hardcoded
             now = datetime.now(timezone.utc)
             admin_user = User(
                 wa_id="wa-system-admin",
@@ -143,7 +174,7 @@ class APIAuthService:
                 wa_role=None,  # System admin is not a WA by default
                 created_at=now,
                 is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
+                password_hash=self._hash_password(self._get_fallback_admin_password()),
             )
             self._users[admin_user.wa_id] = admin_user
             self._users_loaded = True
@@ -333,6 +364,8 @@ class APIAuthService:
         NOTE: This is only called if no user named 'admin' exists in the database.
         During first-run setup, the setup wizard creates the ROOT user, so this
         should NOT be called in that flow.
+
+        SECURITY: Uses randomly generated password, not hardcoded.
         """
         if not self._auth_service:
             logger.info("CIRIS_USER_CREATE: _create_default_admin skipped - no auth_service")
@@ -359,6 +392,9 @@ class APIAuthService:
 
             logger.info("CIRIS_USER_CREATE: No ROOT WA exists - creating default admin")
 
+            # SECURITY: Use randomly generated password, not hardcoded
+            fallback_password = self._get_fallback_admin_password()
+
             # Create admin WA certificate
             wa_cert = await self._auth_service.create_wa(
                 name="admin",
@@ -368,9 +404,9 @@ class APIAuthService:
             )
             logger.info(f"CIRIS_USER_CREATE: ✅ Created default admin WA: {wa_cert.wa_id}")
 
-            # Update with password hash
+            # Update with password hash (using random password)
             await self._auth_service.update_wa(
-                wa_cert.wa_id, updates=None, password_hash=self._hash_password("ciris_admin_password")
+                wa_cert.wa_id, updates=None, password_hash=self._hash_password(fallback_password)
             )
             logger.info(f"CIRIS_USER_CREATE: Password set for default admin: {wa_cert.wa_id}")
 
@@ -383,7 +419,7 @@ class APIAuthService:
                 wa_role=WARole.ROOT,
                 created_at=wa_cert.created_at,
                 is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
+                password_hash=self._hash_password(fallback_password),
             )
             self._users[admin_user.wa_id] = admin_user
             logger.info(f"CIRIS_USER_CREATE: Added default admin to user cache")
@@ -495,7 +531,8 @@ class APIAuthService:
 
         # Ensure system admin user exists in _users
         if stored_key.user_id == "wa-system-admin" and stored_key.user_id not in self._users:
-            # Re-create the system admin user
+            # Re-create the system admin user with random password
+            # SECURITY: Use randomly generated password, not hardcoded
             admin_user = User(
                 wa_id="wa-system-admin",
                 name="admin",
@@ -504,7 +541,7 @@ class APIAuthService:
                 wa_role=None,
                 created_at=datetime.now(timezone.utc),
                 is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
+                password_hash=self._hash_password(self._get_fallback_admin_password()),
             )
             self._users[admin_user.wa_id] = admin_user
 

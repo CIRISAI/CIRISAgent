@@ -203,11 +203,9 @@ def client(app):
     return TestClient(app)
 
 
-@pytest.fixture
-def auth_headers():
-    """Get auth headers for testing using dev credentials."""
-    # In dev mode, username:password format is supported
-    return {"Authorization": "Bearer admin:ciris_admin_password"}
+# NOTE: auth_headers fixture is now provided by tests.fixtures.auth
+# which is loaded via pytest_plugins in tests/conftest.py
+# This ensures all tests use the dynamically generated fallback password
 
 
 @pytest.fixture

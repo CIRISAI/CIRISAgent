@@ -173,7 +173,9 @@ Available modules:
     # Authentication
     parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
     parser.add_argument(
-        "--password", default="ciris_admin_password", help="Admin password (default: ciris_admin_password)"
+        "--password",
+        default="__auto_detect__",
+        help="Admin password (default: auto-detected from server output)",
     )
 
     # Test configuration

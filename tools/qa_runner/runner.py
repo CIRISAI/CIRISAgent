@@ -636,9 +636,15 @@ class QARunner:
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
+            # Use server manager's extracted password if available (dynamic password)
+            # Otherwise fall back to config password
+            admin_password = self.config.admin_password
+            if hasattr(self, "server_manager") and self.server_manager:
+                admin_password = self.server_manager.get_admin_password()
+
             response = requests.post(
                 f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": self.config.admin_password},
+                json={"username": self.config.admin_username, "password": admin_password},
                 timeout=10,
             )
 

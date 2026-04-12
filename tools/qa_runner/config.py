@@ -113,7 +113,9 @@ class QAConfig:
 
     # Authentication
     admin_username: str = "admin"
-    admin_password: str = "ciris_admin_password"
+    # Password is auto-detected from server console output (dynamically generated)
+    # This is a fallback that won't work with fresh servers
+    admin_password: str = "__auto_detect__"
 
     # OAuth test user configuration (for billing integration tests)
     oauth_test_user_id: str = "google:999888777666555444"

@@ -265,7 +265,7 @@ class SetupViewModel : ViewModel() {
      * Select a location from search results.
      * Auto-fills country, region, and city based on selection.
      * Sets location granularity to CITY.
-     * Also persists the location to the backend immediately (same as Settings).
+     * Location is persisted after setup completes (in completeSetup).
      */
     fun selectLocation(location: LocationSearchResult) {
         _state.value = _state.value.copy(
@@ -277,31 +277,6 @@ class SetupViewModel : ViewModel() {
             locationSearchQuery = location.displayName,
             locationSearchResults = emptyList()
         )
-
-        // Persist location to backend immediately (same endpoint as Settings)
-        viewModelScope.launch {
-            try {
-                val locationData = LocationResultData(
-                    city = location.city,
-                    region = location.region,
-                    country = location.country,
-                    countryCode = location.countryCode,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    population = location.population,
-                    timezone = location.timezone,
-                    displayName = location.displayName
-                )
-                val result = apiClient.updateUserLocation(locationData)
-                if (result.success) {
-                    PlatformLogger.i(TAG, "Location persisted: ${result.locationDisplay}")
-                } else {
-                    PlatformLogger.e(TAG, "Failed to persist location: ${result.message}")
-                }
-            } catch (e: Exception) {
-                PlatformLogger.e(TAG, "Location persist error: ${e.message}")
-            }
-        }
     }
 
     /**
@@ -1462,6 +1437,34 @@ class SetupViewModel : ViewModel() {
         PlatformLogger.i(TAG, "completeSetup: signing_key_id=${request.signing_key_id}, signing_key_provisioned=${request.signing_key_provisioned}")
         PlatformLogger.i(TAG, "completeSetup: provisioned_signing_key_b64=${request.provisioned_signing_key_b64?.take(20)}...")
         val result = submitFunc(request)
+
+        // After setup completes (.env now exists), persist location if selected
+        if (result.success) {
+            val selectedLocation = _state.value.selectedLocation
+            if (selectedLocation != null) {
+                try {
+                    val locationData = LocationResultData(
+                        city = selectedLocation.city,
+                        region = selectedLocation.region,
+                        country = selectedLocation.country,
+                        countryCode = selectedLocation.countryCode,
+                        latitude = selectedLocation.latitude,
+                        longitude = selectedLocation.longitude,
+                        population = selectedLocation.population,
+                        timezone = selectedLocation.timezone,
+                        displayName = selectedLocation.displayName
+                    )
+                    val locResult = apiClient.updateUserLocation(locationData)
+                    if (locResult.success) {
+                        PlatformLogger.i(TAG, "completeSetup: Location persisted: ${locResult.locationDisplay}")
+                    } else {
+                        PlatformLogger.e(TAG, "completeSetup: Failed to persist location: ${locResult.message}")
+                    }
+                } catch (e: Exception) {
+                    PlatformLogger.e(TAG, "completeSetup: Location persist error: ${e.message}")
+                }
+            }
+        }
 
         _state.value = _state.value.copy(
             isSubmitting = false,

@@ -1627,7 +1627,10 @@
         "wallet_paymaster_key_label": "مفتاح Arka API",
         "wallet_paymaster_save": "ذخیره المفتاح",
         "interact_viz_execute": "Execute",
-        "interact_viz_complete": "Complete"
+        "interact_viz_complete": "Complete",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "prompts": {
         "dma": {

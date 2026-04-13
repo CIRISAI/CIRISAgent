@@ -720,16 +720,29 @@ async def list_loadable_adapters(
 async def get_context_enrichment_cache(
     request: Request,
     auth: Annotated[AuthContext, Depends(require_observer)],
+    refresh: bool = False,
 ) -> SuccessResponse[Dict[str, Any]]:
     """
     Get context enrichment cache data from adapters.
 
     Returns cached results from adapter tools that have context_enrichment=True,
     along with cache statistics. This data is ephemeral and refreshed periodically.
+
+    Args:
+        refresh: If True, refresh all enrichment tools before returning data.
     """
-    from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+    from ciris_engine.logic.context.system_snapshot_helpers import (
+        get_enrichment_cache,
+        refresh_enrichment_cache,
+    )
 
     try:
+        # Refresh cache if requested (re-execute all enrichment tools)
+        if refresh:
+            runtime = request.app.state.runtime
+            if runtime:
+                await refresh_enrichment_cache(runtime)
+
         cache = get_enrichment_cache()
         enrichment_data = cache.get_all_entries()
         cache_stats = cache.stats

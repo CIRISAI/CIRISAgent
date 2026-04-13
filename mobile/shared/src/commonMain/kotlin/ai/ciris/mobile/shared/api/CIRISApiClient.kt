@@ -1913,7 +1913,9 @@ class CIRISApiClient(
                     AdapterStatusData(
                         adapterId = adapter.adapterId,
                         adapterType = adapter.adapterType,
-                        isRunning = adapter.isRunning
+                        isRunning = adapter.isRunning,
+                        needsReauth = adapter.needsReauth,
+                        reauthReason = adapter.reauthReason
                     )
                 },
                 totalCount = data.totalCount,
@@ -4161,7 +4163,7 @@ class CIRISApiClient(
                 }
             }
 
-            val response = client.get("$baseUrl/v1/system/adapters/context-enrichment") {
+            val response = client.get("$baseUrl/v1/system/adapters/context-enrichment?refresh=true") {
                 header("Authorization", "Bearer $accessToken")
             }
 
@@ -6015,6 +6017,72 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e)
             CountriesResponse(countries = emptyList(), count = 0)
+        }
+    }
+
+    /**
+     * Update user's location in the .env file.
+     */
+    override suspend fun updateUserLocation(location: LocationResultData): UpdateLocationResult {
+        val method = "updateUserLocation"
+        logInfo(method, "Updating user location to: ${location.displayName}")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val requestBody = mapOf(
+                "city" to location.city,
+                "region" to (location.region ?: ""),
+                "country" to location.country,
+                "country_code" to location.countryCode,
+                "latitude" to location.latitude,
+                "longitude" to location.longitude,
+                "timezone" to (location.timezone ?: "")
+            )
+
+            val response = client.post("$baseUrl/v1/setup/location") {
+                header("Authorization", authHeader())
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned error: ${response.status}")
+                return UpdateLocationResult(
+                    success = false,
+                    message = "API error: ${response.status}",
+                    locationDisplay = ""
+                )
+            }
+
+            @Serializable
+            data class LocationUpdateResponse(
+                val success: Boolean,
+                val message: String,
+                @SerialName("location_display") val locationDisplay: String
+            )
+
+            val body = response.body<LocationUpdateResponse>()
+            logInfo(method, "Location updated: ${body.locationDisplay}")
+
+            UpdateLocationResult(
+                success = body.success,
+                message = body.message,
+                locationDisplay = body.locationDisplay
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            UpdateLocationResult(
+                success = false,
+                message = "Failed to update location: ${e.message}",
+                locationDisplay = ""
+            )
         }
     }
 

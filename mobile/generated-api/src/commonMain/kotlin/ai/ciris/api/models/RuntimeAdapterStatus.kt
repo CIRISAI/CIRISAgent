@@ -62,7 +62,16 @@ data class RuntimeAdapterStatus (
 
     @SerialName(value = "last_activity") val lastActivity: kotlinx.datetime.Instant? = null,
 
-    @SerialName(value = "tools") val tools: kotlin.collections.List<ToolInfo>? = null
+    @SerialName(value = "tools") val tools: kotlin.collections.List<ToolInfo>? = null,
+
+    /* Error message if adapter failed */
+    @SerialName(value = "error") val error: kotlin.String? = null,
+
+    /* Whether re-authentication is required */
+    @SerialName(value = "needs_reauth") val needsReauth: kotlin.Boolean = false,
+
+    /* Reason re-authentication is needed */
+    @SerialName(value = "reauth_reason") val reauthReason: kotlin.String? = null
 
 ) {
 

@@ -1682,7 +1682,10 @@
         "env_cond_poor": "ਮਾੜਾ",
         "env_cond_broken": "ਟੁੱਟਿਆ",
         "interact_viz_execute": "Execute",
-        "interact_viz_complete": "Complete"
+        "interact_viz_complete": "Complete",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

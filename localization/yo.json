@@ -1682,7 +1682,10 @@
         "env_cond_good": "Dáradáradára",
         "env_cond_fair": "To bàjé",
         "env_cond_poor": "Kò dáradára",
-        "env_cond_broken": "Ti parí"
+        "env_cond_broken": "Ti parí",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

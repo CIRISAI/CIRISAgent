@@ -1682,7 +1682,10 @@
         "env_cond_good": "நல்ல",
         "env_cond_fair": "நியாயமான",
         "env_cond_poor": "மோசமான",
-        "env_cond_broken": "உடைந்த"
+        "env_cond_broken": "உடைந்த",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "conscience": {
         "ponder_attempted": "I முயற்சித்தது to {செயல்}",

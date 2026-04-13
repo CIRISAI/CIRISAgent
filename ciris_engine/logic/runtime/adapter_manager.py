@@ -1010,7 +1010,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 _collect_available_tools,
                 get_enrichment_cache,
                 _collect_enrichment_tools,
-                _get_tool_services,
+                _get_tool_providers,
                 _execute_enrichment_tool,
             )
 
@@ -1031,7 +1031,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             # Execute enrichment tools and cache results
             cache = get_enrichment_cache()
-            tool_services = _get_tool_services(self.runtime.service_registry)
+            # Use _get_tool_providers to get (instance, adapter_name) tuples
+            tool_providers = _get_tool_providers(self.runtime.service_registry)
 
             for adapter_type, tool in enrichment_tools:
                 tool_key = f"{adapter_type}:{tool.name}"
@@ -1040,7 +1041,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     if cache.get(tool_key) is not None:
                         continue
 
-                    _, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+                    _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
                     if result is not None:
                         params = tool.context_enrichment_params or {}
                         ttl_raw = params.get("_cache_ttl")

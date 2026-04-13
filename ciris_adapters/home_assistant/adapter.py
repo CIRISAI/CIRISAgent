@@ -201,13 +201,23 @@ class HomeAssistantAdapter(Service):
         )
 
     def get_status(self) -> RuntimeAdapterStatus:
-        """Get adapter status."""
+        """Get adapter status including re-auth requirements."""
+        needs_reauth = False
+        reauth_reason = None
+
+        # Check if HA service needs re-authentication
+        if self.ha_service:
+            needs_reauth = self.ha_service.needs_reauth
+            reauth_reason = self.ha_service.reauth_reason
+
         return RuntimeAdapterStatus(
             adapter_id="home_assistant",
             adapter_type="home_assistant",
             is_running=self._running,
             loaded_at=None,
             error=None,
+            needs_reauth=needs_reauth,
+            reauth_reason=reauth_reason,
         )
 
     async def get_active_channels(self) -> List[Dict[str, Any]]:

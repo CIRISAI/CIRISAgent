@@ -220,7 +220,9 @@ class AdaptersViewModel(
                     name = adapterStatus.adapterType.replaceFirstChar { it.uppercase() },
                     type = adapterStatus.adapterType.uppercase(),
                     status = statusText,
-                    isHealthy = adapterStatus.isRunning
+                    isHealthy = adapterStatus.isRunning,
+                    needsReauth = adapterStatus.needsReauth,
+                    reauthReason = adapterStatus.reauthReason
                 )
             }
 

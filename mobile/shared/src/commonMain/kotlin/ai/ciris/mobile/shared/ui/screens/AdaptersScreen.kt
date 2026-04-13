@@ -57,6 +57,7 @@ fun AdaptersScreen(
     onRemoveAdapter: (String) -> Unit,
     onToggleExpanded: (String) -> Unit,
     onEditConfig: (String) -> Unit,
+    onReauthAdapter: (String) -> Unit = {},  // Re-authenticate adapter (OAuth flow)
     onAddAdapter: () -> Unit,
     onImportSkill: () -> Unit = {},
     onSkillStudio: () -> Unit = {},
@@ -167,7 +168,8 @@ fun AdaptersScreen(
                             onToggleExpand = { onToggleExpanded(adapter.id) },
                             onReload = { onReloadAdapter(adapter.id) },
                             onRemove = { showRemoveDialog = adapter },
-                            onEditConfig = { onEditConfig(adapter.type.lowercase()) }
+                            onEditConfig = { onEditConfig(adapter.type.lowercase()) },
+                            onReauth = { onReauthAdapter(adapter.type.lowercase()) }
                         )
                     }
                 }
@@ -411,6 +413,7 @@ private fun AdapterCard(
     onReload: () -> Unit,
     onRemove: () -> Unit,
     onEditConfig: () -> Unit,
+    onReauth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val rotationAngle by animateFloatAsState(
@@ -444,7 +447,11 @@ private fun AdapterCard(
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
-                                if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
+                                when {
+                                    adapter.needsReauth -> SemanticColors.Default.warning
+                                    adapter.isHealthy -> SemanticColors.Default.success
+                                    else -> SemanticColors.Default.error
+                                }
                             )
                     )
 
@@ -467,9 +474,13 @@ private fun AdapterCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = DisplayNames.humanizeStatus(adapter.status),
+                        text = if (adapter.needsReauth) "Re-auth needed" else DisplayNames.humanizeStatus(adapter.status),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
+                        color = when {
+                            adapter.needsReauth -> SemanticColors.Default.warning
+                            adapter.isHealthy -> SemanticColors.Default.success
+                            else -> SemanticColors.Default.error
+                        }
                     )
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
@@ -477,6 +488,42 @@ private fun AdapterCard(
                         modifier = Modifier.rotate(rotationAngle),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            // Re-authentication warning banner
+            if (adapter.needsReauth) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = localizedString("mobile.adapter_reauth_required"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        adapter.reauthReason?.let { reason ->
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onReauth,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(localizedString("mobile.adapter_reauth"))
+                    }
                 }
             }
 
@@ -741,5 +788,7 @@ data class AdapterItem(
     val name: String,
     val type: String,
     val status: String,
-    val isHealthy: Boolean
+    val isHealthy: Boolean,
+    val needsReauth: Boolean = false,
+    val reauthReason: String? = null
 )

@@ -399,7 +399,7 @@ Attributes contain extra info depending on entity type:
             # Context enrichment: run this tool automatically during context gathering
             # to provide available entities to the ASPDMA for action selection
             context_enrichment=True,
-            context_enrichment_params={},  # Empty params = list all entities
+            context_enrichment_params={"_cache_ttl": 300},  # 5 min TTL - entity lists rarely change
             documentation=ToolDocumentation(
                 quick_start="List entities: ha_list_entities (all) or ha_list_entities domain='light' (filtered)",
                 detailed_instructions="""
@@ -770,7 +770,7 @@ The same song from Spotify and your local library will appear once.
             when_to_use="Use to PLAY MUSIC - when user says 'play [song/artist/album]', 'put on some [genre]', use this tool!",
             # Context enrichment: include this tool's info prominently in ASPDMA context
             context_enrichment=True,
-            context_enrichment_params={"_info_only": True},  # Just surface the tool info, don't execute
+            context_enrichment_params={"_info_only": True, "_cache_ttl": 300},  # Info only, 5 min TTL
             parameters=ToolParameterSchema(
                 type="object",
                 properties={
@@ -1123,7 +1123,7 @@ To control playback (pause, skip, stop), use ha_device_control:
             when_to_use="Use to see available music players, what's currently playing on each, and their entity IDs for targeting playback",
             # Context enrichment: run this to show available music players in context
             context_enrichment=True,
-            context_enrichment_params={},  # Empty = execute to get player list
+            context_enrichment_params={"_cache_ttl": 300},  # 5 min TTL - player list rarely changes
             parameters=ToolParameterSchema(
                 type="object",
                 properties={},

@@ -114,6 +114,10 @@ class HAIntegrationService:
         self._last_token_refresh: Optional[datetime] = None
         self._token_refresh_min_interval = 30  # seconds between refresh attempts
 
+        # Re-authentication tracking - set when refresh token is revoked/invalid
+        self._needs_reauth = False
+        self._reauth_reason: Optional[str] = None
+
         logger.info(f"HAIntegrationService initialized for {self.ha_url}")
         logger.info(f"Configured {len(self.camera_urls)} cameras via go2rtc")
 
@@ -164,6 +168,26 @@ class HAIntegrationService:
         Returns True as MA availability is checked at runtime.
         """
         return True
+
+    @property
+    def needs_reauth(self) -> bool:
+        """Check if re-authentication is required.
+
+        This is set when the refresh token is revoked/expired and a new OAuth
+        flow is needed. The mobile app should show this on the adapters page.
+        """
+        return self._needs_reauth
+
+    @property
+    def reauth_reason(self) -> Optional[str]:
+        """Get the reason re-authentication is required."""
+        return self._reauth_reason
+
+    def clear_reauth_flag(self) -> None:
+        """Clear the re-auth flag after successful re-authentication."""
+        self._needs_reauth = False
+        self._reauth_reason = None
+        logger.info("[HA] Re-auth flag cleared after successful authentication")
 
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
@@ -682,6 +706,8 @@ class HAIntegrationService:
                             # Refresh token may be revoked - clear it to prevent retry loops
                             if "invalid_grant" in body.lower():
                                 logger.warning("[HA] Refresh token appears revoked - re-authentication required")
+                                self._needs_reauth = True
+                                self._reauth_reason = "Refresh token revoked or expired. Please re-authenticate."
                         else:
                             body = await response.text()
                             logger.error(f"[HA] Token refresh failed: HTTP {response.status} - {body[:200]}")

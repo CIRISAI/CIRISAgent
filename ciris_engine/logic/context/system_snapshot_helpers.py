@@ -71,9 +71,19 @@ class ContextEnrichmentCache:
     - Cache statistics for monitoring
     """
 
-    DEFAULT_TTL = 30.0  # Default 30 second TTL
-    MIN_TTL = 5.0  # Minimum TTL to prevent excessive polling
-    MAX_TTL = 300.0  # Maximum TTL of 5 minutes
+    # TTL settings based on data type best practices:
+    # - HA entity lists: Devices rarely added/removed, 5 min is fine
+    # - Weather data: APIs recommend 10-20 min cache (OpenWeatherMap default: 20 min)
+    # - Real-time state: Use shorter TTL or on-demand refresh
+    # Reference: https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/appropriate-polling/
+    DEFAULT_TTL = 300.0  # 5 minutes - good for entity/device lists
+    MIN_TTL = 30.0  # 30 seconds minimum to prevent excessive polling
+    MAX_TTL = 900.0  # 15 minutes max - suitable for weather data
+
+    # Category-specific TTL recommendations (tools can override via context_enrichment_params)
+    TTL_ENTITY_LIST = 300.0  # 5 min - HA entities, MA players (rarely change)
+    TTL_WEATHER = 600.0  # 10 min - weather data (APIs rate-limit, data changes slowly)
+    TTL_DEVICE_STATE = 60.0  # 1 min - device states (more dynamic but not real-time)
 
     def __init__(self) -> None:
         self._cache: Dict[str, EnrichmentCacheEntry] = {}
@@ -950,22 +960,50 @@ def _validate_runtime_capabilities(runtime: Optional[Any]) -> bool:
     return True
 
 
+def _get_tool_providers(service_registry: Any) -> List[tuple[Any, str]]:
+    """Get tool service providers with their adapter names from registry.
+
+    Returns:
+        List of (instance, adapter_name) tuples
+    """
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    providers: List[tuple[Any, str]] = []
+
+    # Access _services directly to get full provider objects with metadata
+    if not hasattr(service_registry, "_services"):
+        logger.warning("[TOOL_PROVIDERS] service_registry has no _services attribute")
+        return providers
+
+    tool_providers = service_registry._services.get(ServiceType.TOOL, [])
+    for provider in tool_providers:
+        if hasattr(provider, "instance"):
+            # Get adapter name from metadata, fallback to class name
+            adapter_name = "unknown"
+            if hasattr(provider, "metadata") and isinstance(provider.metadata, dict):
+                adapter_name = provider.metadata.get("adapter", "unknown")
+            if adapter_name == "unknown":
+                # Fallback: derive from class name (e.g., HAToolService -> home_assistant)
+                class_name = type(provider.instance).__name__
+                if "HA" in class_name or "HomeAssistant" in class_name:
+                    adapter_name = "home_assistant"
+                elif "Wallet" in class_name:
+                    adapter_name = "wallet"
+                elif "Weather" in class_name:
+                    adapter_name = "weather"
+                else:
+                    adapter_name = class_name.lower().replace("toolservice", "")
+                logger.debug(f"[TOOL_PROVIDERS] Fallback adapter name for {class_name}: {adapter_name}")
+            providers.append((provider.instance, adapter_name))
+            logger.debug(f"[TOOL_PROVIDERS] Found provider: {adapter_name} -> {type(provider.instance).__name__}")
+
+    logger.info(f"[TOOL_PROVIDERS] Found {len(providers)} tool providers")
+    return providers
+
+
 def _get_tool_services(service_registry: Any) -> List[Any]:
-    """Get and validate tool services from registry."""
-    tool_services = service_registry.get_services_by_type("tool")
-
-    # Validate tool_services is iterable but not a string
-    try:
-        # Check if it's truly iterable and not a mock
-        if not hasattr(tool_services, "__iter__") or isinstance(tool_services, str):
-            logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
-            return []
-
-        # Try to convert to list to ensure it's really iterable
-        return list(tool_services)
-    except (TypeError, AttributeError):
-        logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
-        return []
+    """Get and validate tool services from registry (instances only, for backwards compat)."""
+    return [instance for instance, _ in _get_tool_providers(service_registry)]
 
 
 async def _call_async_or_sync_method(obj: Any, method_name: str, *args: Any) -> Any:
@@ -1013,8 +1051,22 @@ async def _get_tool_info_safely(tool_service: Any, tool_name: str, adapter_id: s
 
 
 def _extract_adapter_type(adapter_id: str) -> str:
-    """Extract adapter type from adapter_id."""
-    return adapter_id.split("_")[0] if "_" in adapter_id else adapter_id
+    """Extract adapter type from adapter_id.
+
+    Now that we get proper adapter names from metadata (e.g., 'home_assistant', 'wallet'),
+    we just return the name as-is. Only strip numeric suffixes if present (e.g., 'wallet_12345' -> 'wallet').
+    """
+    # Known adapter names that should not be split
+    known_adapters = {"home_assistant", "wallet", "navigation", "weather", "ciris_hosted_tools", "ciris_accord_metrics"}
+    if adapter_id in known_adapters:
+        return adapter_id
+
+    # For unknown adapters with numeric suffixes, strip the suffix
+    parts = adapter_id.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+
+    return adapter_id
 
 
 def _validate_tool_infos(tool_infos: List[ToolInfo]) -> None:
@@ -1035,11 +1087,10 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
         # Assert runtime is not None since we validated it
         assert runtime is not None
         service_registry = runtime.service_registry
-        tool_services = _get_tool_services(service_registry)
+        # Use _get_tool_providers to get (instance, adapter_name) tuples
+        tool_providers = _get_tool_providers(service_registry)
 
-        for tool_service in tool_services:
-            adapter_id = getattr(tool_service, "adapter_id", "unknown")
-
+        for tool_service, adapter_name in tool_providers:
             # Get available tools from this service
             tool_names = await _call_async_or_sync_method(tool_service, "get_available_tools")
             if not tool_names:
@@ -1048,15 +1099,15 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
             # Get detailed info for each tool
             tool_infos: List[ToolInfo] = []
             for tool_name in tool_names:
-                tool_info = await _get_tool_info_safely(tool_service, tool_name, adapter_id)
+                tool_info = await _get_tool_info_safely(tool_service, tool_name, adapter_name)
                 if tool_info:
                     tool_infos.append(tool_info)
 
             if tool_infos:
                 _validate_tool_infos(tool_infos)
 
-                # Group by adapter type
-                adapter_type = _extract_adapter_type(adapter_id)
+                # Group by adapter type (use adapter_name directly since it's already clean)
+                adapter_type = _extract_adapter_type(adapter_name)
                 if adapter_type not in available_tools:
                     available_tools[adapter_type] = []
                 available_tools[adapter_type].extend(tool_infos)
@@ -1073,9 +1124,11 @@ def _collect_enrichment_tools(available_tools: Dict[str, List[ToolInfo]]) -> Lis
     """Collect all tools marked for context enrichment."""
     enrichment_tools: List[tuple[str, ToolInfo]] = []
     for adapter_type, tools in available_tools.items():
+        logger.debug(f"[COLLECT_ENRICHMENT] {adapter_type}: {len(tools)} tools")
         for tool in tools:
             if tool.context_enrichment:
                 enrichment_tools.append((adapter_type, tool))
+                logger.debug(f"[COLLECT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
                 logger.info(f"[CONTEXT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
     return enrichment_tools
 
@@ -1088,15 +1141,27 @@ def _log_no_enrichment_tools(available_tools: Dict[str, List[ToolInfo]]) -> None
         logger.info(f"[CONTEXT_ENRICHMENT] {adapter_type} has {len(tools)} tools: {[t.name for t in tools]}")
 
 
-async def _find_tool_service(tool_services: List[Any], adapter_type: str, tool_name: str) -> Optional[Any]:
-    """Find the tool service that provides the specified tool."""
-    for ts in tool_services:
-        adapter_id = getattr(ts, "adapter_id", "")
-        ts_adapter_type = _extract_adapter_type(adapter_id)
+async def _find_tool_service(
+    tool_providers: List[tuple[Any, str]], adapter_type: str, tool_name: str
+) -> Optional[Any]:
+    """Find the tool service that provides the specified tool.
+
+    Args:
+        tool_providers: List of (instance, adapter_name) tuples from _get_tool_providers
+        adapter_type: Adapter type to match (e.g., "home_assistant", "wallet")
+        tool_name: Name of the tool to find
+
+    Returns:
+        Tool service instance if found, None otherwise
+    """
+    for ts, ts_adapter_name in tool_providers:
+        ts_adapter_type = _extract_adapter_type(ts_adapter_name)
         if ts_adapter_type == adapter_type:
             available = await _call_async_or_sync_method(ts, "get_available_tools")
             if available and tool_name in available:
+                logger.debug(f"[FIND_TOOL] Found {tool_name} in {ts_adapter_name}")
                 return ts
+    logger.warning(f"[FIND_TOOL] Could not find {tool_name} for adapter {adapter_type}")
     return None
 
 
@@ -1123,11 +1188,18 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
         return result
 
 
-async def _execute_enrichment_tool(tool_services: List[Any], adapter_type: str, tool: ToolInfo) -> tuple[str, Any]:
+async def _execute_enrichment_tool(
+    tool_providers: List[tuple[Any, str]], adapter_type: str, tool: ToolInfo
+) -> tuple[str, Any]:
     """Execute a single enrichment tool and return (tool_key, result).
 
     If the tool has `_info_only=True` in context_enrichment_params, it just surfaces
     the tool info for the prompt without actually executing the tool.
+
+    Args:
+        tool_providers: List of (instance, adapter_name) tuples from _get_tool_providers
+        adapter_type: Adapter type (e.g., "home_assistant")
+        tool: ToolInfo for the tool to execute
     """
     tool_key = f"{adapter_type}:{tool.name}"
 
@@ -1145,7 +1217,7 @@ async def _execute_enrichment_tool(tool_services: List[Any], adapter_type: str, 
             "message": f"USE THIS TOOL for this type of request: {tool.when_to_use or tool.description}",
         }
 
-    tool_service = await _find_tool_service(tool_services, adapter_type, tool.name)
+    tool_service = await _find_tool_service(tool_providers, adapter_type, tool.name)
     if not tool_service:
         logger.warning(f"[CONTEXT_ENRICHMENT] No tool service found for {tool_key}")
         return tool_key, None
@@ -1190,7 +1262,8 @@ async def _run_context_enrichment_tools(
         _log_no_enrichment_tools(available_tools)
         return enrichment_results
 
-    tool_services = _get_tool_services(runtime.service_registry)
+    # Use _get_tool_providers to get (instance, adapter_name) tuples with proper adapter mapping
+    tool_providers = _get_tool_providers(runtime.service_registry)
     cache_hits = 0
     cache_misses = 0
 
@@ -1206,7 +1279,7 @@ async def _run_context_enrichment_tools(
 
             # Cache miss - execute tool
             cache_misses += 1
-            _, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+            _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
             if result is not None:
                 # Get TTL from tool params (default: 30s)
                 params = tool.context_enrichment_params or {}
@@ -1245,6 +1318,35 @@ async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Di
 
     cache.mark_startup_populated()
     logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}")
+
+
+async def refresh_enrichment_cache(runtime: Any) -> Dict[str, Any]:
+    """Force refresh all context enrichment tools and update the cache.
+
+    This clears expired entries and re-executes all enrichment tools
+    to ensure fresh data is available. Used by the API endpoint when
+    ?refresh=true is requested.
+
+    Args:
+        runtime: The CIRIS runtime instance
+
+    Returns:
+        Dict of {tool_key: result} for all refreshed tools
+    """
+    cache = get_enrichment_cache()
+    logger.info("[ENRICHMENT_CACHE] API-triggered refresh starting...")
+
+    # Collect available tools
+    available_tools = await _collect_available_tools(runtime)
+    if not available_tools:
+        logger.warning("[ENRICHMENT_CACHE] No tools available for refresh")
+        return {}
+
+    # Run enrichment tools (this will update the cache)
+    results = await _run_context_enrichment_tools(runtime, available_tools)
+
+    logger.info(f"[ENRICHMENT_CACHE] API refresh complete: {len(results)} tools, stats: {cache.stats}")
+    return results
 
 
 # =============================================================================

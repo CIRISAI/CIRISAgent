@@ -1,16 +1,24 @@
-"""Location search endpoints for setup wizard.
+"""Location search and update endpoints for setup wizard.
 
-Provides fast typeahead search for international cities using GeoNames data.
+Provides fast typeahead search for international cities using GeoNames data,
+and endpoints to update user location preferences.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Query
+
 from pydantic import BaseModel, Field
+
+from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -247,3 +255,103 @@ async def list_countries() -> CountriesResponse:
 
     conn.close()
     return CountriesResponse(countries=countries, count=len(countries))
+
+
+class UpdateLocationRequest(BaseModel):
+    """Request to update user location."""
+
+    city: str = Field(..., description="City name")
+    region: Optional[str] = Field(None, description="State/province/region name")
+    country: str = Field(..., description="Country name")
+    country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
+    latitude: float = Field(..., description="Latitude")
+    longitude: float = Field(..., description="Longitude")
+    timezone: Optional[str] = Field(None, description="IANA timezone")
+
+
+class UpdateLocationResponse(BaseModel):
+    """Response from update location endpoint."""
+
+    success: bool = Field(..., description="Whether update succeeded")
+    message: str = Field(..., description="Status message")
+    location_display: str = Field(..., description="Formatted location display string")
+
+
+@router.post("/location")
+async def update_user_location(request: UpdateLocationRequest) -> UpdateLocationResponse:
+    """Update user's location in the .env file.
+
+    This persists the location so weather and other location-aware
+    services can use it.
+    """
+    try:
+        env_path = get_env_file_path()
+        if not env_path or not env_path.exists():
+            logger.error("[LOCATION] .env file not found")
+            return UpdateLocationResponse(
+                success=False,
+                message="Configuration file not found",
+                location_display="",
+            )
+
+        # Build location display string
+        location_parts = []
+        if request.city:
+            location_parts.append(request.city)
+        if request.region:
+            location_parts.append(request.region)
+        if request.country:
+            location_parts.append(request.country)
+        location_display = ", ".join(location_parts)
+
+        # Read existing .env content
+        content = env_path.read_text()
+        lines = content.split("\n")
+
+        # Keys to update
+        updates = {
+            "CIRIS_USER_CITY": request.city,
+            "CIRIS_USER_REGION": request.region or "",
+            "CIRIS_USER_COUNTRY": request.country,
+            "CIRIS_USER_LOCATION": location_display,
+            "CIRIS_USER_LATITUDE": str(request.latitude),
+            "CIRIS_USER_LONGITUDE": str(request.longitude),
+            "CIRIS_USER_TIMEZONE": request.timezone or "",
+        }
+
+        # Update or append each key
+        for key, value in updates.items():
+            found = False
+            for i, line in enumerate(lines):
+                if line.startswith(f"{key}="):
+                    lines[i] = f'{key}="{value}"' if value else f"{key}="
+                    found = True
+                    break
+            if not found and value:
+                lines.append(f'{key}="{value}"')
+
+        # Write back
+        env_path.write_text("\n".join(lines))
+
+        # Also update os.environ for immediate effect
+        for key, value in updates.items():
+            if value:
+                os.environ[key] = value
+            elif key in os.environ:
+                del os.environ[key]
+
+        logger.info(f"[LOCATION] Updated user location to: {location_display}")
+
+        return UpdateLocationResponse(
+            success=True,
+            message="Location updated successfully",
+            location_display=location_display,
+        )
+
+    except Exception as e:
+        logger.error(f"[LOCATION] Failed to update location: {e}")
+        return UpdateLocationResponse(
+            success=False,
+            message=f"Failed to update location: {e}",
+            location_display="",
+        )

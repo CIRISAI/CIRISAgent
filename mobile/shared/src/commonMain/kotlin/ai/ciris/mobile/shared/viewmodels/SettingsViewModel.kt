@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.LocationResultData
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -10,6 +11,8 @@ import ai.ciris.mobile.shared.platform.EnvFileUpdater
 import ai.ciris.mobile.shared.platform.SecureStorage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,6 +105,26 @@ class SettingsViewModel(
     // Brightness preference (persisted) - System is default
     private val _brightnessPreference = MutableStateFlow(BrightnessPreference.SYSTEM)
     val brightnessPreference: StateFlow<BrightnessPreference> = _brightnessPreference.asStateFlow()
+
+    // ========== Location Settings ==========
+
+    // Location search state
+    private val _locationSearchQuery = MutableStateFlow("")
+    val locationSearchQuery: StateFlow<String> = _locationSearchQuery.asStateFlow()
+
+    private val _locationSearchResults = MutableStateFlow<List<LocationResultData>>(emptyList())
+    val locationSearchResults: StateFlow<List<LocationResultData>> = _locationSearchResults.asStateFlow()
+
+    private val _locationSearchLoading = MutableStateFlow(false)
+    val locationSearchLoading: StateFlow<Boolean> = _locationSearchLoading.asStateFlow()
+
+    private val _selectedLocation = MutableStateFlow<LocationResultData?>(null)
+    val selectedLocation: StateFlow<LocationResultData?> = _selectedLocation.asStateFlow()
+
+    private val _currentLocationDisplay = MutableStateFlow<String?>(null)
+    val currentLocationDisplay: StateFlow<String?> = _currentLocationDisplay.asStateFlow()
+
+    private var locationSearchJob: Job? = null
 
     // Available LLM providers for BYOK mode
     val availableProviders = listOf(
@@ -767,6 +790,98 @@ class SettingsViewModel(
                 logDebug(method, "Brightness preference setting persisted")
             } catch (e: Exception) {
                 logWarn(method, "Failed to persist brightness preference: ${e.message}")
+            }
+        }
+    }
+
+    // ========== Location Settings ==========
+
+    /**
+     * Search for locations matching the query.
+     * Debounces input with 300ms delay.
+     */
+    fun searchLocations(query: String) {
+        val method = "searchLocations"
+        _locationSearchQuery.value = query
+
+        // Cancel previous search
+        locationSearchJob?.cancel()
+
+        // Clear results if query is too short
+        if (query.length < 2) {
+            _locationSearchResults.value = emptyList()
+            _locationSearchLoading.value = false
+            return
+        }
+
+        locationSearchJob = viewModelScope.launch {
+            _locationSearchLoading.value = true
+            delay(300) // Debounce
+
+            try {
+                val response = apiClient.searchLocations(query = query, limit = 10)
+                _locationSearchResults.value = response.results
+                logDebug(method, "Found ${response.results.size} locations for query: $query")
+            } catch (e: Exception) {
+                logError(method, "Location search failed: ${e.message}")
+                _locationSearchResults.value = emptyList()
+            } finally {
+                _locationSearchLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Select a location and save it to the backend.
+     */
+    fun selectLocation(location: LocationResultData) {
+        val method = "selectLocation"
+        logInfo(method, "Selecting location: ${location.displayName}")
+
+        _selectedLocation.value = location
+        _locationSearchQuery.value = location.displayName
+        _locationSearchResults.value = emptyList()
+
+        viewModelScope.launch {
+            try {
+                val result = apiClient.updateUserLocation(location)
+                if (result.success) {
+                    _currentLocationDisplay.value = result.locationDisplay
+                    logInfo(method, "Location saved successfully: ${result.locationDisplay}")
+                } else {
+                    logError(method, "Failed to save location: ${result.message}")
+                    _errorMessage.value = "Failed to save location: ${result.message}"
+                }
+            } catch (e: Exception) {
+                logError(method, "Location update failed: ${e.message}")
+                _errorMessage.value = "Failed to update location: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Clear the location search results.
+     */
+    fun clearLocationSearch() {
+        locationSearchJob?.cancel()
+        _locationSearchQuery.value = ""
+        _locationSearchResults.value = emptyList()
+        _locationSearchLoading.value = false
+    }
+
+    /**
+     * Load the current location display from secure storage.
+     */
+    fun loadCurrentLocation() {
+        val method = "loadCurrentLocation"
+        viewModelScope.launch {
+            try {
+                secureStorage.get("current_location_display").onSuccess { value ->
+                    _currentLocationDisplay.value = value
+                    logDebug(method, "Loaded current location: $value")
+                }
+            } catch (e: Exception) {
+                logWarn(method, "Failed to load current location: ${e.message}")
             }
         }
     }

@@ -1682,7 +1682,10 @@
         "env_cond_good": "మంచిది",
         "env_cond_fair": "సరసమైనది",
         "env_cond_poor": "అసంపూర్తిమైనది",
-        "env_cond_broken": "విరిగిపోయింది"
+        "env_cond_broken": "విరిగిపోయింది",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

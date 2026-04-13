@@ -1682,7 +1682,10 @@
         "help_section_troubleshooting": "Warware Matsaloli",
         "help_support_title": "Kuna bukatar ƙarin Taimako?",
         "help_welcome_desc": "Nemo amsoshi ga tambayoyi na yau da kullum da koyo yadda za ku iya samun mafi da CIRIS.",
-        "help_welcome_title": "Maraba zuwa Taimakan CIRIS"
+        "help_welcome_title": "Maraba zuwa Taimakan CIRIS",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}"
     },
     "conscience": {
         "ponder_attempted": "Na yi ƙoƙarin {action}",

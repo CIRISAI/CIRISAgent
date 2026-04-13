@@ -4300,7 +4300,7 @@ class CIRISApiClient(
                 }
             }
 
-            val nodeId = "item_${System.currentTimeMillis()}"
+            val nodeId = "item_${kotlinx.datetime.Clock.System.now().toEpochMilliseconds()}"
             val attributes = buildJsonObject {
                 put("name", name)
                 put("category", category)

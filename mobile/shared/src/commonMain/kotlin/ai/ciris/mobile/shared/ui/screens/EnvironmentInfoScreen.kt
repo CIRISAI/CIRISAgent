@@ -684,7 +684,7 @@ private fun parseEnrichmentData(json: String): ParsedEnrichmentData {
             // Group by domain/type if available
             val grouped = items.filter { it.group != null }.groupBy { it.group!! }
             val summary = "(${items.size} items)"
-            return ParsedEnrichmentData.ItemList(items, grouped.toSortedMap(), summary)
+            return ParsedEnrichmentData.ItemList(items, grouped.toList().sortedBy { it.first }.toMap(), summary)
         }
     }
 
@@ -1230,7 +1230,7 @@ private fun parseEntities(json: String): Map<String, List<EntityInfo>> {
         }
     }
 
-    return entities.groupBy { it.domain }.toSortedMap()
+    return entities.groupBy { it.domain }.toList().sortedBy { it.first }.toMap()
 }
 
 /**

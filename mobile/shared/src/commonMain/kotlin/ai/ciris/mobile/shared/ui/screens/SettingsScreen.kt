@@ -2489,8 +2489,14 @@ private fun LocationSection(viewModel: SettingsViewModel) {
  */
 private fun formatPopulation(population: Int): String {
     return when {
-        population >= 1_000_000 -> String.format("%.1fM", population / 1_000_000.0)
-        population >= 1_000 -> String.format("%.1fK", population / 1_000.0)
+        population >= 1_000_000 -> {
+            val v = (population / 100_000) / 10.0
+            "${v}M"
+        }
+        population >= 1_000 -> {
+            val v = (population / 100) / 10.0
+            "${v}K"
+        }
         else -> population.toString()
     }
 }

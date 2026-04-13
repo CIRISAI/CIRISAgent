@@ -590,18 +590,23 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
         preferred_lang = setup.preferred_language or "en"
         f.write(f'CIRIS_PREFERRED_LANGUAGE="{preferred_lang}"\n')
+
+        # Location settings - write individual fields for weather/navigation adapters
+        if setup.location_city:
+            f.write(f'CIRIS_USER_CITY="{setup.location_city}"\n')
+        if setup.location_region:
+            f.write(f'CIRIS_USER_REGION="{setup.location_region}"\n')
         if setup.location_country:
-            location_parts = [setup.location_country]
-            if setup.location_region:
-                location_parts.append(setup.location_region)
-            if setup.location_city:
-                location_parts.append(setup.location_city)
-            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+            f.write(f'CIRIS_USER_COUNTRY="{setup.location_country}"\n')
+            # Also write combined display name for backwards compatibility
+            location_parts = [setup.location_city, setup.location_region, setup.location_country]
+            location_display = ", ".join(p for p in location_parts if p)
+            f.write(f'CIRIS_USER_LOCATION="{location_display}"\n')
         # Store coordinates in ISO 6709 decimal degrees format
         if setup.location_latitude is not None:
-            f.write(f"CIRIS_USER_LATITUDE={setup.location_latitude}\n")
+            f.write(f'CIRIS_USER_LATITUDE="{setup.location_latitude}"\n')
         if setup.location_longitude is not None:
-            f.write(f"CIRIS_USER_LONGITUDE={setup.location_longitude}\n")
+            f.write(f'CIRIS_USER_LONGITUDE="{setup.location_longitude}"\n')
         if setup.timezone:
             f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
         # Location sharing consent for telemetry

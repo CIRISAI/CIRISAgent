@@ -185,6 +185,71 @@ def _check_sensitive_paths(local_path: str) -> None:
             raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
 
 
+def _build_path_from_components(base: Path, components: list[str]) -> Path:
+    """Build a path from a trusted base and validated components."""
+    resolved = base
+    for component in components:
+        if component and component not in (".", ""):
+            resolved = resolved / component
+    return resolved.resolve()
+
+
+def _is_within_base(path: Path, base: Path) -> bool:
+    """Check if a path is within a base directory."""
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
+def _resolve_tilde_path(local_path: str) -> Path | None:
+    """Resolve a path starting with ~ to home directory.
+
+    Returns None if path escapes home via symlinks.
+    """
+    suffix = local_path[1:].lstrip("/\\")
+    components = suffix.replace("\\", "/").split("/")
+    resolved = _build_path_from_components(Path.home(), components)
+    return resolved if _is_within_base(resolved, Path.home()) else None
+
+
+def _resolve_relative_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
+    """Resolve a relative path against cwd.
+
+    Returns None if resolved path is outside all allowed bases.
+    """
+    path_components = local_path.replace("\\", "/").split("/")
+    cwd_resolved = Path.cwd().resolve()
+    resolved = _build_path_from_components(cwd_resolved, path_components)
+
+    for check_base in allowed_bases:
+        if _is_within_base(resolved, check_base.resolve()):
+            return resolved
+    return None
+
+
+def _resolve_absolute_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
+    """Resolve an absolute path with proper containment checking.
+
+    Returns None if path is outside all allowed bases or escapes via symlinks.
+    """
+    input_path = Path(local_path).resolve()
+
+    for base in allowed_bases:
+        base_resolved = base.resolve()
+        if not _is_within_base(input_path, base_resolved):
+            continue
+
+        # Reconstruct from trusted base + relative suffix to prevent symlink attacks
+        relative_suffix = input_path.relative_to(base_resolved)
+        resolved = _build_path_from_components(base_resolved, list(relative_suffix.parts))
+
+        if _is_within_base(resolved, base_resolved):
+            return resolved
+    return None
+
+
 def _resolve_to_allowed_path(local_path: str) -> Path:
     """Resolve a validated path string to an allowed Path.
 
@@ -195,62 +260,17 @@ def _resolve_to_allowed_path(local_path: str) -> Path:
     Raises ValueError if resolved path is outside allowed directories.
     """
     allowed_bases = _get_allowed_bases()
+    resolved: Path | None = None
 
-    # Handle tilde by constructing from trusted home directory
     if local_path.startswith("~"):
-        # Extract suffix and split into components for validation
-        suffix = local_path[1:].lstrip("/\\")
-        # Construct path from trusted base + validated components
-        resolved = Path.home()
-        for component in suffix.replace("\\", "/").split("/"):
-            if component and component not in (".", ""):
-                resolved = resolved / component
-        resolved = resolved.resolve()
-        # Verify still within home
-        try:
-            resolved.relative_to(Path.home())
-            return resolved
-        except ValueError:
-            pass  # Fall through to error
+        resolved = _resolve_tilde_path(local_path)
+    elif not local_path.startswith("/"):
+        resolved = _resolve_relative_path(local_path, allowed_bases)
     else:
-        # For absolute/relative paths: find matching trusted base and construct from it
-        # Split user path into components (already validated for traversal)
-        path_components = local_path.replace("\\", "/").split("/")
+        resolved = _resolve_absolute_path(local_path, allowed_bases)
 
-        # Try each trusted base directory
-        for base in allowed_bases:
-            base_resolved = base.resolve()
-            base_str = str(base_resolved)
-
-            # Check if user path starts with or is relative to this base
-            if local_path.startswith(base_str):
-                # Absolute path within this base - extract suffix
-                suffix = local_path[len(base_str):].lstrip("/\\")
-                resolved = base_resolved
-                for component in suffix.split("/"):
-                    if component and component not in (".", ""):
-                        resolved = resolved / component
-                resolved = resolved.resolve()
-                # Verify still within base after resolution
-                try:
-                    resolved.relative_to(base_resolved)
-                    return resolved
-                except ValueError:
-                    continue  # Escaped base via symlinks, try next
-            elif not local_path.startswith("/"):
-                # Relative path - resolve against this base (cwd)
-                resolved = base_resolved
-                for component in path_components:
-                    if component and component not in (".", ""):
-                        resolved = resolved / component
-                resolved = resolved.resolve()
-                # Verify within an allowed base
-                for check_base in allowed_bases:
-                    try:
-                        resolved.relative_to(check_base.resolve())
-                        return resolved
-                    except ValueError:
-                        continue
+    if resolved is not None:
+        return resolved
 
     raise ValueError(
         f"Path '{local_path}' is outside allowed directories. "

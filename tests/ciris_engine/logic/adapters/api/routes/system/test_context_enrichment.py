@@ -81,12 +81,13 @@ class TestGetContextEnrichmentCache:
         # Import directly since we can't use TestClient easily with async
         result = await get_context_enrichment_cache(request, auth, refresh=False)
 
-        assert result.data["entries"] == mock_enrichment_cache.get_all_entries()
-        assert result.data["stats"]["entry_count"] == 1
-        assert result.data["stats"]["hits"] == 10
-        assert result.data["stats"]["misses"] == 5
-        assert result.data["stats"]["hit_rate_pct"] == 66.7
-        assert result.data["stats"]["startup_populated"] is True
+        # data is now EnrichmentCacheResponse, use attribute access
+        assert result.data.entries == mock_enrichment_cache.get_all_entries()
+        assert result.data.stats.entry_count == 1
+        assert result.data.stats.hits == 10
+        assert result.data.stats.misses == 5
+        assert result.data.stats.hit_rate_pct == 66.7
+        assert result.data.stats.startup_populated is True
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_entries(self):
@@ -110,8 +111,9 @@ class TestGetContextEnrichmentCache:
 
             result = await get_context_enrichment_cache(request, Mock(), refresh=False)
 
-            assert result.data["entries"] == {}
-            assert result.data["stats"]["entry_count"] == 0
+            # data is now EnrichmentCacheResponse, use attribute access
+            assert result.data.entries == {}
+            assert result.data.stats.entry_count == 0
 
     @pytest.mark.asyncio
     async def test_refresh_triggers_cache_refresh(self):
@@ -134,7 +136,8 @@ class TestGetContextEnrichmentCache:
             result = await get_context_enrichment_cache(request, Mock(), refresh=True)
 
             mock_refresh.assert_called_once_with(runtime)
-            assert result.data["entries"]["test:tool"]["data"] == "refreshed"
+            # data is now EnrichmentCacheResponse, use attribute access
+            assert result.data.entries["test:tool"]["data"] == "refreshed"
 
     @pytest.mark.asyncio
     async def test_refresh_skipped_when_no_runtime(self):
@@ -224,9 +227,10 @@ class TestGetContextEnrichmentCache:
 
         result = await get_context_enrichment_cache(request, Mock(), refresh=False)
 
-        stats = result.data["stats"]
-        assert "entry_count" in stats
-        assert "hits" in stats
-        assert "misses" in stats
-        assert "hit_rate_pct" in stats
-        assert "startup_populated" in stats
+        # data is now EnrichmentCacheResponse with stats as EnrichmentCacheStats
+        stats = result.data.stats
+        assert hasattr(stats, "entry_count")
+        assert hasattr(stats, "hits")
+        assert hasattr(stats, "misses")
+        assert hasattr(stats, "hit_rate_pct")
+        assert hasattr(stats, "startup_populated")

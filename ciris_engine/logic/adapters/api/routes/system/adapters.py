@@ -7,11 +7,19 @@ Provides functionality for listing, loading, unloading, and managing adapters.
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError
 
+from ciris_engine.schemas.adapters.discovery import (
+    AdapterDiscoveryReport,
+    EnrichmentCacheResponse,
+    EnrichmentCacheStats,
+    InstallRequest,
+    InstallResponse,
+    RecheckEligibilityResponse,
+)
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
@@ -352,7 +360,7 @@ async def remove_persisted_configuration(
 async def list_available_adapters(
     request: Request,
     auth: Annotated[AuthContext, Depends(require_observer)],
-) -> SuccessResponse[Dict[str, Any]]:
+) -> SuccessResponse[AdapterDiscoveryReport]:
     """
     List all discovered adapters with eligibility status.
 
@@ -365,7 +373,7 @@ async def list_available_adapters(
         discovery = AdapterDiscoveryService()
         report = await discovery.get_discovery_report()
 
-        return SuccessResponse(data=report.model_dump())
+        return SuccessResponse(data=report)
 
     except Exception as e:
         logger.error(f"Error getting adapter availability: {e}")
@@ -383,8 +391,8 @@ async def install_adapter_dependencies(
     adapter_name: str,
     request: Request,
     auth: Annotated[AuthContext, Depends(require_admin)],
-    body: Annotated[Dict[str, Any], Body()] = {},
-) -> SuccessResponse[Dict[str, Any]]:
+    body: Annotated[Optional[InstallRequest], Body()] = None,
+) -> SuccessResponse[InstallResponse]:
     """
     Install missing dependencies for an adapter.
 
@@ -395,11 +403,11 @@ async def install_adapter_dependencies(
     """
     from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
     from ciris_engine.logic.services.tool.installer import ToolInstaller
-    from ciris_engine.schemas.adapters.discovery import InstallResponse
 
     try:
-        dry_run = body.get("dry_run", False)
-        install_step_id = body.get("install_step_id")
+        # Handle None body (default empty request)
+        if body is None:
+            body = InstallRequest()
 
         discovery = AdapterDiscoveryService()
         status = await discovery.get_adapter_eligibility(adapter_name)
@@ -414,7 +422,7 @@ async def install_adapter_dependencies(
                     message=f"Adapter '{adapter_name}' is already eligible",
                     now_eligible=True,
                     eligibility=status,
-                ).model_dump()
+                )
             )
 
         if not status.can_install or not status.install_hints:
@@ -424,24 +432,24 @@ async def install_adapter_dependencies(
                     message=f"No installation hints available for '{adapter_name}'",
                     now_eligible=False,
                     eligibility=status,
-                ).model_dump()
+                )
             )
 
         # Find specific step if requested, otherwise use all hints
         hints = status.install_hints
-        if install_step_id:
-            hints = [h for h in hints if h.id == install_step_id]
+        if body.install_step_id:
+            hints = [h for h in hints if h.id == body.install_step_id]
             if not hints:
                 return SuccessResponse(
                     data=InstallResponse(
                         success=False,
-                        message=f"Install step '{install_step_id}' not found",
+                        message=f"Install step '{body.install_step_id}' not found",
                         now_eligible=False,
-                    ).model_dump()
+                    )
                 )
 
         # Run installation
-        installer = ToolInstaller(dry_run=dry_run)
+        installer = ToolInstaller(dry_run=body.dry_run)
         install_result = await installer.install_first_applicable(hints)
 
         # Recheck eligibility after installation
@@ -454,7 +462,7 @@ async def install_adapter_dependencies(
                 installed_binaries=install_result.binaries_installed or [],
                 now_eligible=new_status.eligible if new_status else False,
                 eligibility=new_status,
-            ).model_dump()
+            )
         )
 
     except HTTPException:
@@ -475,7 +483,7 @@ async def recheck_adapter_eligibility(
     adapter_name: str,
     request: Request,
     auth: Annotated[AuthContext, Depends(require_observer)],
-) -> SuccessResponse[Dict[str, Any]]:
+) -> SuccessResponse[RecheckEligibilityResponse]:
     """
     Recheck eligibility for an adapter.
 
@@ -483,7 +491,6 @@ async def recheck_adapter_eligibility(
     adapter is now eligible.
     """
     from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
-    from ciris_engine.schemas.adapters.discovery import RecheckEligibilityResponse
 
     try:
         discovery = AdapterDiscoveryService()
@@ -501,7 +508,7 @@ async def recheck_adapter_eligibility(
                 missing_env_vars=status.missing_env_vars,
                 missing_config=status.missing_config,
                 can_install=status.can_install,
-            ).model_dump()
+            )
         )
 
     except HTTPException:
@@ -742,7 +749,7 @@ async def get_context_enrichment_cache(
     request: Request,
     auth: Annotated[AuthContext, Depends(require_observer)],
     refresh: bool = False,
-) -> SuccessResponse[Dict[str, Any]]:
+) -> SuccessResponse[EnrichmentCacheResponse]:
     """
     Get context enrichment cache data from adapters.
 
@@ -769,16 +776,16 @@ async def get_context_enrichment_cache(
         cache_stats = cache.stats
 
         return SuccessResponse(
-            data={
-                "entries": enrichment_data,
-                "stats": {
-                    "entry_count": cache_stats.get("entries", 0),
-                    "hits": cache_stats.get("hits", 0),
-                    "misses": cache_stats.get("misses", 0),
-                    "hit_rate_pct": cache_stats.get("hit_rate_pct", 0.0),
-                    "startup_populated": cache_stats.get("startup_populated", False),
-                },
-            }
+            data=EnrichmentCacheResponse(
+                entries=enrichment_data,
+                stats=EnrichmentCacheStats(
+                    entry_count=cache_stats.get("entries", 0),
+                    hits=cache_stats.get("hits", 0),
+                    misses=cache_stats.get("misses", 0),
+                    hit_rate_pct=cache_stats.get("hit_rate_pct", 0.0),
+                    startup_populated=cache_stats.get("startup_populated", False),
+                ),
+            )
         )
 
     except Exception as e:

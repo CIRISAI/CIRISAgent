@@ -104,3 +104,22 @@ class RecheckEligibilityResponse(BaseModel):
     missing_env_vars: List[str] = Field(default_factory=list)
     missing_config: List[str] = Field(default_factory=list)
     can_install: bool = Field(False, description="Whether install hints are available")
+
+
+class EnrichmentCacheStats(BaseModel):
+    """Statistics about the context enrichment cache."""
+
+    model_config = ConfigDict(defer_build=True, extra="forbid")
+    entry_count: int = Field(0, description="Number of cache entries")
+    hits: int = Field(0, description="Cache hits")
+    misses: int = Field(0, description="Cache misses")
+    hit_rate_pct: float = Field(0.0, description="Cache hit rate percentage")
+    startup_populated: bool = Field(False, description="Whether cache was populated at startup")
+
+
+class EnrichmentCacheResponse(BaseModel):
+    """Response containing context enrichment cache data."""
+
+    model_config = ConfigDict(defer_build=True, extra="forbid")
+    entries: Dict[str, Any] = Field(default_factory=dict, description="Cache entries by tool name")
+    stats: EnrichmentCacheStats = Field(default_factory=EnrichmentCacheStats, description="Cache statistics")

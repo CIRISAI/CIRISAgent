@@ -213,25 +213,41 @@ async def start_adapter_configuration(
         # For re-auth flows (start_step_id specified), get existing config
         existing_config: Optional[Dict[str, Any]] = None
         if start_step_id:
+            logger.info(f"[REAUTH] Starting re-auth flow for {adapter_type} at step {start_step_id}")
             runtime_control = await _get_runtime_control_service_for_adapter_load(request)
+            logger.info(f"[REAUTH] runtime_control={runtime_control is not None}")
             if runtime_control:
                 adapter_manager = getattr(runtime_control, "adapter_manager", None)
+                logger.info(f"[REAUTH] adapter_manager={adapter_manager is not None}")
                 if adapter_manager:
+                    logger.info(f"[REAUTH] loaded_adapters keys: {list(adapter_manager.loaded_adapters.keys())}")
                     # Find existing adapter of this type
-                    for adapter_id, instance in adapter_manager.loaded_adapters.items():
+                    for aid, instance in adapter_manager.loaded_adapters.items():
+                        logger.info(f"[REAUTH] Checking adapter {aid}: type={instance.adapter_type}")
                         if instance.adapter_type == adapter_type:
+                            logger.info(f"[REAUTH] Found matching adapter: {aid}")
                             # Get config from the adapter instance
                             if hasattr(instance.adapter, "ha_service"):
                                 ha_service = instance.adapter.ha_service
+                                ha_url = getattr(ha_service, "ha_url", None)
+                                logger.info(f"[REAUTH] ha_service.ha_url = {ha_url}")
                                 existing_config = {
-                                    "base_url": getattr(ha_service, "ha_url", None),
+                                    "base_url": ha_url,
                                 }
                                 logger.info(f"[REAUTH] Using existing base_url: {existing_config.get('base_url')}")
                             elif instance.config_params and instance.config_params.settings:
                                 # Generic fallback - use settings from config
                                 existing_config = dict(instance.config_params.settings)
                                 logger.info(f"[REAUTH] Using existing config settings: {list(existing_config.keys())}")
+                            else:
+                                logger.warning(f"[REAUTH] No ha_service or config_params.settings found!")
                             break
+                    else:
+                        logger.warning(f"[REAUTH] No adapter found with type {adapter_type}!")
+                else:
+                    logger.warning("[REAUTH] No adapter_manager on runtime_control!")
+            else:
+                logger.warning("[REAUTH] No runtime_control service available!")
 
         # Start the session (optionally at a specific step with existing config)
         session = await config_service.start_session(

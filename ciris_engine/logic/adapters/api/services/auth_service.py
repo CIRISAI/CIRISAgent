@@ -126,14 +126,19 @@ class APIAuthService:
 
             # Print it ONCE so operator can see it during first-run
             # Use print() not logger to avoid duplicate outputs from multiple log handlers
+            # Only print if this is actually first-run (no .env configured yet)
             if not cls._fallback_password_logged:
                 cls._fallback_password_logged = True
-                print("=" * 70)
-                print("FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):")
-                print("  Username: admin")
-                print(f"  Password: {cls._fallback_admin_password}")
-                print("This password is randomly generated and valid only until setup completes.")
-                print("=" * 70)
+                # Check if this is first-run before printing credentials
+                from ciris_engine.logic.setup.first_run import is_first_run
+
+                if is_first_run():
+                    print("=" * 70)
+                    print("FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):")
+                    print("  Username: admin")
+                    print(f"  Password: {cls._fallback_admin_password}")
+                    print("This password is randomly generated and valid only until setup completes.")
+                    print("=" * 70)
 
         return cls._fallback_admin_password
 

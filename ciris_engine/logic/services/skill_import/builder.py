@@ -354,8 +354,7 @@ class SkillBuilder:
         if parsed.metadata and parsed.metadata.install:
             from .converter import _build_install_steps
 
-            step_dicts = _build_install_steps(parsed.metadata.install)
-            install.steps = [InstallStep(**s) for s in step_dicts]
+            install.steps = _build_install_steps(parsed.metadata.install)
 
         return SkillDraft(
             identity=identity,

@@ -870,18 +870,23 @@ class SettingsViewModel(
     }
 
     /**
-     * Load the current location display from secure storage.
+     * Load the current location display from backend API (.env file).
      */
     fun loadCurrentLocation() {
         val method = "loadCurrentLocation"
         viewModelScope.launch {
             try {
-                secureStorage.get("current_location_display").onSuccess { value ->
-                    _currentLocationDisplay.value = value
-                    logDebug(method, "Loaded current location: $value")
+                val location = apiClient.getCurrentLocation()
+                if (location.configured && location.displayName != null) {
+                    _currentLocationDisplay.value = location.displayName
+                    logDebug(method, "Loaded current location: ${location.displayName}")
+                } else {
+                    _currentLocationDisplay.value = null
+                    logDebug(method, "No location configured")
                 }
             } catch (e: Exception) {
                 logWarn(method, "Failed to load current location: ${e.message}")
+                _currentLocationDisplay.value = null
             }
         }
     }

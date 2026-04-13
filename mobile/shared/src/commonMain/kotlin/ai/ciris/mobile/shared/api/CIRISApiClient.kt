@@ -6105,6 +6105,62 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Get current location from .env file.
+     */
+    override suspend fun getCurrentLocation(): CurrentLocationData {
+        val method = "getCurrentLocation"
+        logDebug(method, "Fetching current location from backend")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/location") {
+                header("Authorization", authHeader())
+            }
+
+            if (!response.status.isSuccess()) {
+                logWarn(method, "API returned error: ${response.status}")
+                return CurrentLocationData(configured = false)
+            }
+
+            @Serializable
+            data class CurrentLocationResponse(
+                val configured: Boolean,
+                val city: String? = null,
+                val region: String? = null,
+                val country: String? = null,
+                val latitude: Double? = null,
+                val longitude: Double? = null,
+                val timezone: String? = null,
+                @SerialName("display_name") val displayName: String? = null
+            )
+
+            val body = response.body<CurrentLocationResponse>()
+            logDebug(method, "Location configured=${body.configured}, display=${body.displayName}")
+
+            CurrentLocationData(
+                configured = body.configured,
+                city = body.city,
+                region = body.region,
+                country = body.country,
+                latitude = body.latitude,
+                longitude = body.longitude,
+                timezone = body.timezone,
+                displayName = body.displayName
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            CurrentLocationData(configured = false)
+        }
+    }
+
     // ===== Skill Import API =====
 
     /**

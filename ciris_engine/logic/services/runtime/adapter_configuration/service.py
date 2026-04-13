@@ -159,9 +159,10 @@ class AdapterConfigurationService:
                     step_index = i
                     break
             if step_index is None:
-                raise ValueError(f"Step '{start_step_id}' not found in adapter '{adapter_type}'")
+                raise ValueError(f"Requested step not found in adapter '{adapter_type}'")
             session.current_step_index = step_index
-            logger.info(f"Starting session at step '{start_step_id}' (index {step_index})")
+            # Log index only to avoid logging user-controlled step ID
+            logger.info(f"Starting session at step index {step_index}")
 
         # Pre-populate collected_config with existing config for re-auth flows
         # This allows OAuth step to use previously configured base_url

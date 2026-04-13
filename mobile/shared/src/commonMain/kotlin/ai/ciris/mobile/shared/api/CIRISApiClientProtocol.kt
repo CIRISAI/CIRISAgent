@@ -136,6 +136,11 @@ interface CIRISApiClientProtocol {
      */
     suspend fun updateUserLocation(location: LocationResultData): UpdateLocationResult
 
+    /**
+     * Get current location from .env
+     */
+    suspend fun getCurrentLocation(): CurrentLocationData
+
     // ===== Config API =====
 
     /**
@@ -469,4 +474,18 @@ data class UpdateLocationResult(
     val success: Boolean,
     val message: String,
     val locationDisplay: String
+)
+
+/**
+ * Current location data from backend (.env)
+ */
+data class CurrentLocationData(
+    val configured: Boolean,
+    val city: String? = null,
+    val region: String? = null,
+    val country: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val timezone: String? = null,
+    val displayName: String? = null
 )

@@ -109,6 +109,7 @@ fun SettingsScreen(
     // Load config when screen is first shown
     LaunchedEffect(Unit) {
         viewModel.refresh()
+        viewModel.loadCurrentLocation()
     }
 
     val savedSuccessMessage = localizedString("mobile.settings_saved_successfully")

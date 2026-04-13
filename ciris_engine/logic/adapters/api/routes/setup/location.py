@@ -280,6 +280,19 @@ class UpdateLocationResponse(BaseModel):
     location_display: str = Field(..., description="Formatted location display string")
 
 
+class CurrentLocationResponse(BaseModel):
+    """Response from get current location endpoint."""
+
+    configured: bool = Field(..., description="Whether location is configured")
+    city: Optional[str] = Field(None, description="City name")
+    region: Optional[str] = Field(None, description="State/province/region name")
+    country: Optional[str] = Field(None, description=DESC_COUNTRY_NAME)
+    latitude: Optional[float] = Field(None, description="Latitude")
+    longitude: Optional[float] = Field(None, description="Longitude")
+    timezone: Optional[str] = Field(None, description="IANA timezone")
+    display_name: Optional[str] = Field(None, description="Formatted location display string")
+
+
 def _build_location_display(city: str, region: Optional[str], country: str) -> str:
     """Build formatted location display string."""
     parts = [p for p in [city, region, country] if p]
@@ -404,3 +417,41 @@ async def update_user_location(
     except Exception as e:
         logger.error("[LOCATION] Failed to update location: %s", type(e).__name__)
         return UpdateLocationResponse(success=False, message=f"Failed to update location: {e}", location_display="")
+
+
+@router.get("/location")
+async def get_current_location() -> CurrentLocationResponse:
+    """Get the user's currently configured location from .env.
+
+    Returns location details if configured, or configured=False if not set.
+    """
+    city = os.environ.get("CIRIS_USER_CITY")
+    region = os.environ.get("CIRIS_USER_REGION")
+    country = os.environ.get("CIRIS_USER_COUNTRY")
+    display = os.environ.get("CIRIS_USER_LOCATION")
+    lat_str = os.environ.get("CIRIS_USER_LATITUDE")
+    lon_str = os.environ.get("CIRIS_USER_LONGITUDE")
+    timezone = os.environ.get("CIRIS_USER_TIMEZONE")
+
+    # Check if location is configured (need at least city)
+    if not city:
+        return CurrentLocationResponse(configured=False)
+
+    # Parse lat/lon if available
+    latitude = float(lat_str) if lat_str else None
+    longitude = float(lon_str) if lon_str else None
+
+    # Build display name if not set
+    if not display:
+        display = _build_location_display(city, region, country or "")
+
+    return CurrentLocationResponse(
+        configured=True,
+        city=city,
+        region=region if region else None,
+        country=country,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone if timezone else None,
+        display_name=display,
+    )

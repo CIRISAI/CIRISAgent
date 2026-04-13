@@ -167,7 +167,8 @@ class AdapterConfigurationService:
         # This allows OAuth step to use previously configured base_url
         if existing_config:
             session.collected_config.update(existing_config)
-            logger.info(f"Pre-populated session with existing config: {list(existing_config.keys())}")
+            # Log count only to avoid exposing user-controlled key names
+            logger.info(f"Pre-populated session with {len(existing_config)} existing config keys")
 
         self._sessions[session.session_id] = session
         logger.info(f"Started config session {session.session_id} for {adapter_type}")

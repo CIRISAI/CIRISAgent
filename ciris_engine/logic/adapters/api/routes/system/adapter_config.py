@@ -136,6 +136,98 @@ async def _get_runtime_control_service_for_adapter_load(request: Request) -> Any
     return None
 
 
+def _resolve_url_hostname_to_ip(url: str) -> str:
+    """Resolve any hostname in a URL to its IP address.
+
+    This ensures reliable connectivity on Android where mDNS hostname
+    resolution (e.g., homeassistant.local) is unreliable in browsers.
+
+    Args:
+        url: URL that may contain a hostname (e.g., http://homeassistant.local:8123)
+
+    Returns:
+        URL with hostname replaced by IP if resolvable, original URL otherwise
+    """
+    import socket
+    from urllib.parse import urlparse, urlunparse
+
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return url
+
+        # Skip if already an IP address
+        try:
+            socket.inet_aton(hostname)
+            return url  # Already an IP
+        except socket.error:
+            pass  # Not an IP, try to resolve
+
+        # Resolve hostname to IP
+        ip_address = socket.gethostbyname(hostname)
+        # Reconstruct URL with IP instead of hostname
+        netloc = ip_address
+        if parsed.port:
+            netloc = f"{ip_address}:{parsed.port}"
+        new_parsed = parsed._replace(netloc=netloc)
+        return urlunparse(new_parsed)
+    except (socket.gaierror, Exception) as e:
+        logger.debug(f"Could not resolve hostname in URL {url}: {e}")
+        return url  # Return original if resolution fails
+
+
+async def _get_existing_reauth_config(
+    request: Request,
+    adapter_type: str,
+) -> Optional[Dict[str, Any]]:
+    """Get existing adapter config for re-auth flows.
+
+    When re-authenticating an already-configured adapter, we need to preserve
+    settings like base_url from the original config so OAuth steps work.
+
+    For Home Assistant, hostnames like homeassistant.local are resolved to IP
+    addresses to ensure reliable connectivity on Android browsers.
+
+    Args:
+        request: FastAPI request object
+        adapter_type: Type of adapter to get config for
+
+    Returns:
+        Existing config dict if found, None otherwise
+    """
+    runtime_control = await _get_runtime_control_service_for_adapter_load(request)
+    if not runtime_control:
+        return None
+
+    adapter_manager = getattr(runtime_control, "adapter_manager", None)
+    if not adapter_manager:
+        return None
+
+    # Find existing adapter of this type
+    for aid, instance in adapter_manager.loaded_adapters.items():
+        if instance.adapter_type != adapter_type:
+            continue
+
+        # Try to get config from the adapter instance's service
+        if hasattr(instance.adapter, "ha_service"):
+            ha_url = getattr(instance.adapter.ha_service, "ha_url", None)
+            if ha_url:
+                # Resolve hostname to IP for reliable Android browser connectivity
+                resolved_url = _resolve_url_hostname_to_ip(ha_url)
+                return {"base_url": resolved_url}
+
+        # Generic fallback - use settings from config_params
+        if instance.config_params and instance.config_params.settings:
+            config = dict(instance.config_params.settings)
+            # Resolve base_url if present
+            if "base_url" in config:
+                config["base_url"] = _resolve_url_hostname_to_ip(config["base_url"])
+            return config
+
+    return None
+
+
 async def _load_adapter_after_config(request: Request, session: Any, persist: bool = False) -> str:
     """Load adapter after configuration and return status message.
 
@@ -213,41 +305,7 @@ async def start_adapter_configuration(
         # For re-auth flows (start_step_id specified), get existing config
         existing_config: Optional[Dict[str, Any]] = None
         if start_step_id:
-            logger.info(f"[REAUTH] Starting re-auth flow for {adapter_type} at step {start_step_id}")
-            runtime_control = await _get_runtime_control_service_for_adapter_load(request)
-            logger.info(f"[REAUTH] runtime_control={runtime_control is not None}")
-            if runtime_control:
-                adapter_manager = getattr(runtime_control, "adapter_manager", None)
-                logger.info(f"[REAUTH] adapter_manager={adapter_manager is not None}")
-                if adapter_manager:
-                    logger.info(f"[REAUTH] loaded_adapters keys: {list(adapter_manager.loaded_adapters.keys())}")
-                    # Find existing adapter of this type
-                    for aid, instance in adapter_manager.loaded_adapters.items():
-                        logger.info(f"[REAUTH] Checking adapter {aid}: type={instance.adapter_type}")
-                        if instance.adapter_type == adapter_type:
-                            logger.info(f"[REAUTH] Found matching adapter: {aid}")
-                            # Get config from the adapter instance
-                            if hasattr(instance.adapter, "ha_service"):
-                                ha_service = instance.adapter.ha_service
-                                ha_url = getattr(ha_service, "ha_url", None)
-                                logger.info(f"[REAUTH] ha_service.ha_url = {ha_url}")
-                                existing_config = {
-                                    "base_url": ha_url,
-                                }
-                                logger.info(f"[REAUTH] Using existing base_url: {existing_config.get('base_url')}")
-                            elif instance.config_params and instance.config_params.settings:
-                                # Generic fallback - use settings from config
-                                existing_config = dict(instance.config_params.settings)
-                                logger.info(f"[REAUTH] Using existing config settings: {list(existing_config.keys())}")
-                            else:
-                                logger.warning(f"[REAUTH] No ha_service or config_params.settings found!")
-                            break
-                    else:
-                        logger.warning(f"[REAUTH] No adapter found with type {adapter_type}!")
-                else:
-                    logger.warning("[REAUTH] No adapter_manager on runtime_control!")
-            else:
-                logger.warning("[REAUTH] No runtime_control service available!")
+            existing_config = await _get_existing_reauth_config(request, adapter_type)
 
         # Start the session (optionally at a specific step with existing config)
         session = await config_service.start_session(

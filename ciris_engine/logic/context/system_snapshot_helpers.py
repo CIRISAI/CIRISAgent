@@ -960,6 +960,35 @@ def _validate_runtime_capabilities(runtime: Optional[Any]) -> bool:
     return True
 
 
+def _derive_adapter_name_from_class(class_name: str) -> str:
+    """Derive adapter name from class name as fallback."""
+    class_name_mappings = {
+        "HA": "home_assistant",
+        "HomeAssistant": "home_assistant",
+        "Wallet": "wallet",
+        "Weather": "weather",
+    }
+    for key, name in class_name_mappings.items():
+        if key in class_name:
+            return name
+    return class_name.lower().replace("toolservice", "")
+
+
+def _get_adapter_name_from_provider(provider: Any) -> str:
+    """Extract adapter name from provider metadata or derive from class name."""
+    # Try metadata first
+    if hasattr(provider, "metadata") and isinstance(provider.metadata, dict):
+        name = provider.metadata.get("adapter", "unknown")
+        if name != "unknown" and isinstance(name, str):
+            return name
+
+    # Fallback to class name derivation
+    class_name = type(provider.instance).__name__
+    derived = _derive_adapter_name_from_class(class_name)
+    logger.debug("[TOOL_PROVIDERS] Fallback adapter name for %s: %s", class_name, derived)
+    return derived
+
+
 def _get_tool_providers(service_registry: Any) -> List[tuple[Any, str]]:
     """Get tool service providers with their adapter names from registry.
 
@@ -968,36 +997,21 @@ def _get_tool_providers(service_registry: Any) -> List[tuple[Any, str]]:
     """
     from ciris_engine.schemas.runtime.enums import ServiceType
 
-    providers: List[tuple[Any, str]] = []
-
-    # Access _services directly to get full provider objects with metadata
     if not hasattr(service_registry, "_services"):
         logger.warning("[TOOL_PROVIDERS] service_registry has no _services attribute")
-        return providers
+        return []
 
+    providers: List[tuple[Any, str]] = []
     tool_providers = service_registry._services.get(ServiceType.TOOL, [])
-    for provider in tool_providers:
-        if hasattr(provider, "instance"):
-            # Get adapter name from metadata, fallback to class name
-            adapter_name = "unknown"
-            if hasattr(provider, "metadata") and isinstance(provider.metadata, dict):
-                adapter_name = provider.metadata.get("adapter", "unknown")
-            if adapter_name == "unknown":
-                # Fallback: derive from class name (e.g., HAToolService -> home_assistant)
-                class_name = type(provider.instance).__name__
-                if "HA" in class_name or "HomeAssistant" in class_name:
-                    adapter_name = "home_assistant"
-                elif "Wallet" in class_name:
-                    adapter_name = "wallet"
-                elif "Weather" in class_name:
-                    adapter_name = "weather"
-                else:
-                    adapter_name = class_name.lower().replace("toolservice", "")
-                logger.debug(f"[TOOL_PROVIDERS] Fallback adapter name for {class_name}: {adapter_name}")
-            providers.append((provider.instance, adapter_name))
-            logger.debug(f"[TOOL_PROVIDERS] Found provider: {adapter_name} -> {type(provider.instance).__name__}")
 
-    logger.info(f"[TOOL_PROVIDERS] Found {len(providers)} tool providers")
+    for provider in tool_providers:
+        if not hasattr(provider, "instance"):
+            continue
+        adapter_name = _get_adapter_name_from_provider(provider)
+        providers.append((provider.instance, adapter_name))
+        logger.debug("[TOOL_PROVIDERS] Found provider: %s -> %s", adapter_name, type(provider.instance).__name__)
+
+    logger.info("[TOOL_PROVIDERS] Found %d tool providers", len(providers))
     return providers
 
 

@@ -252,18 +252,44 @@ def _resolve_relative_path(local_path: str, allowed_bases: list[Path]) -> Path |
 def _resolve_absolute_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
     """Resolve an absolute path with proper containment checking.
 
+    SECURITY: Never constructs Path directly from user input. Instead:
+    1. Parse path components from the string
+    2. For each allowed base, check if components match the base prefix
+    3. Build final path only from trusted base + validated relative components
+
     Returns None if path is outside all allowed bases or escapes via symlinks.
     """
-    input_path = Path(local_path).resolve()
+    # Parse path components from string without constructing Path from user input
+    path_components = local_path.replace("\\", "/").split("/")
+    # Remove empty strings from leading/trailing slashes
+    path_components = [c for c in path_components if c]
 
     for base in allowed_bases:
         base_resolved = base.resolve()
-        if not _is_within_base(input_path, base_resolved):
+        base_parts = list(base_resolved.parts)
+
+        # Check if path starts with this base's components
+        if len(path_components) < len(base_parts) - 1:  # -1 for root
             continue
 
-        # Reconstruct from trusted base + relative suffix to prevent symlink attacks
-        relative_suffix = input_path.relative_to(base_resolved)
-        resolved = _build_path_from_components(base_resolved, list(relative_suffix.parts))
+        # Skip root component in comparison (e.g., "/" on Unix)
+        base_relative_parts = base_parts[1:] if base_parts and base_parts[0] == "/" else base_parts
+
+        # Check if path components match base prefix
+        matches = True
+        for i, base_part in enumerate(base_relative_parts):
+            if i >= len(path_components) or path_components[i] != base_part:
+                matches = False
+                break
+
+        if not matches:
+            continue
+
+        # Extract relative suffix components (after base prefix)
+        relative_components = path_components[len(base_relative_parts):]
+
+        # Build path from trusted base + validated relative components
+        resolved = _build_path_from_components(base_resolved, relative_components)
 
         if _is_within_base(resolved, base_resolved):
             return resolved

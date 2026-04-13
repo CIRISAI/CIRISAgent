@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Common field description constants
+DESC_COUNTRY_NAME = "Country name"
+DESC_COUNTRY_CODE = "ISO 3166-1 alpha-2 country code"
 
 # Path to the cities database
 # location.py is at ciris_engine/logic/adapters/api/routes/setup/location.py
@@ -35,8 +38,8 @@ class LocationResult(BaseModel):
 
     city: str = Field(..., description="City name")
     region: Optional[str] = Field(None, description="State/province/region name")
-    country: str = Field(..., description="Country name")
-    country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
+    country: str = Field(..., description=DESC_COUNTRY_NAME)
+    country_code: str = Field(..., description=DESC_COUNTRY_CODE)
     latitude: float = Field(..., description="Latitude")
     longitude: float = Field(..., description="Longitude")
     population: int = Field(..., description="City population")
@@ -55,8 +58,8 @@ class LocationSearchResponse(BaseModel):
 class CountryInfo(BaseModel):
     """Country information."""
 
-    code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
-    name: str = Field(..., description="Country name")
+    code: str = Field(..., description=DESC_COUNTRY_CODE)
+    name: str = Field(..., description=DESC_COUNTRY_NAME)
     currency_code: Optional[str] = Field(None, description="Currency code (ISO 4217)")
     currency_name: Optional[str] = Field(None, description="Currency name")
 
@@ -262,8 +265,8 @@ class UpdateLocationRequest(BaseModel):
 
     city: str = Field(..., description="City name")
     region: Optional[str] = Field(None, description="State/province/region name")
-    country: str = Field(..., description="Country name")
-    country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
+    country: str = Field(..., description=DESC_COUNTRY_NAME)
+    country_code: str = Field(..., description=DESC_COUNTRY_CODE)
     latitude: float = Field(..., description="Latitude")
     longitude: float = Field(..., description="Longitude")
     timezone: Optional[str] = Field(None, description="IANA timezone")
@@ -277,6 +280,48 @@ class UpdateLocationResponse(BaseModel):
     location_display: str = Field(..., description="Formatted location display string")
 
 
+def _build_location_display(city: str, region: Optional[str], country: str) -> str:
+    """Build formatted location display string."""
+    parts = [p for p in [city, region, country] if p]
+    return ", ".join(parts)
+
+
+def _build_location_updates(request: UpdateLocationRequest, location_display: str) -> dict[str, str]:
+    """Build dict of env var updates from request."""
+    return {
+        "CIRIS_USER_CITY": request.city,
+        "CIRIS_USER_REGION": request.region or "",
+        "CIRIS_USER_COUNTRY": request.country,
+        "CIRIS_USER_LOCATION": location_display,
+        "CIRIS_USER_LATITUDE": str(request.latitude),
+        "CIRIS_USER_LONGITUDE": str(request.longitude),
+        "CIRIS_USER_TIMEZONE": request.timezone or "",
+    }
+
+
+def _update_env_lines(lines: list[str], updates: dict[str, str]) -> list[str]:
+    """Update or append env var lines."""
+    for key, value in updates.items():
+        found = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{key}="):
+                lines[i] = f'{key}="{value}"' if value else f"{key}="
+                found = True
+                break
+        if not found and value:
+            lines.append(f'{key}="{value}"')
+    return lines
+
+
+def _apply_env_updates(updates: dict[str, str]) -> None:
+    """Apply updates to os.environ for immediate effect."""
+    for key, value in updates.items():
+        if value:
+            os.environ[key] = value
+        elif key in os.environ:
+            del os.environ[key]
+
+
 @router.post("/location")
 async def update_user_location(request: UpdateLocationRequest) -> UpdateLocationResponse:
     """Update user's location in the .env file.
@@ -288,70 +333,21 @@ async def update_user_location(request: UpdateLocationRequest) -> UpdateLocation
         env_path = get_env_file_path()
         if not env_path or not env_path.exists():
             logger.error("[LOCATION] .env file not found")
-            return UpdateLocationResponse(
-                success=False,
-                message="Configuration file not found",
-                location_display="",
-            )
+            return UpdateLocationResponse(success=False, message="Configuration file not found", location_display="")
 
-        # Build location display string
-        location_parts = []
-        if request.city:
-            location_parts.append(request.city)
-        if request.region:
-            location_parts.append(request.region)
-        if request.country:
-            location_parts.append(request.country)
-        location_display = ", ".join(location_parts)
+        location_display = _build_location_display(request.city, request.region, request.country)
+        updates = _build_location_updates(request, location_display)
 
-        # Read existing .env content
-        content = env_path.read_text()
-        lines = content.split("\n")
-
-        # Keys to update
-        updates = {
-            "CIRIS_USER_CITY": request.city,
-            "CIRIS_USER_REGION": request.region or "",
-            "CIRIS_USER_COUNTRY": request.country,
-            "CIRIS_USER_LOCATION": location_display,
-            "CIRIS_USER_LATITUDE": str(request.latitude),
-            "CIRIS_USER_LONGITUDE": str(request.longitude),
-            "CIRIS_USER_TIMEZONE": request.timezone or "",
-        }
-
-        # Update or append each key
-        for key, value in updates.items():
-            found = False
-            for i, line in enumerate(lines):
-                if line.startswith(f"{key}="):
-                    lines[i] = f'{key}="{value}"' if value else f"{key}="
-                    found = True
-                    break
-            if not found and value:
-                lines.append(f'{key}="{value}"')
-
-        # Write back
+        # Read, update, and write .env
+        lines = env_path.read_text().split("\n")
+        lines = _update_env_lines(lines, updates)
         env_path.write_text("\n".join(lines))
 
-        # Also update os.environ for immediate effect
-        for key, value in updates.items():
-            if value:
-                os.environ[key] = value
-            elif key in os.environ:
-                del os.environ[key]
+        _apply_env_updates(updates)
 
-        logger.info(f"[LOCATION] Updated user location to: {location_display}")
-
-        return UpdateLocationResponse(
-            success=True,
-            message="Location updated successfully",
-            location_display=location_display,
-        )
+        logger.info("[LOCATION] User location updated successfully")
+        return UpdateLocationResponse(success=True, message="Location updated successfully", location_display=location_display)
 
     except Exception as e:
-        logger.error(f"[LOCATION] Failed to update location: {e}")
-        return UpdateLocationResponse(
-            success=False,
-            message=f"Failed to update location: {e}",
-            location_display="",
-        )
+        logger.error("[LOCATION] Failed to update location: %s", type(e).__name__)
+        return UpdateLocationResponse(success=False, message=f"Failed to update location: {e}", location_display="")

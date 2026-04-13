@@ -50,32 +50,32 @@ from ciris_engine.schemas.services.llm import (
     EndpointStats,
     ExtractedJSONData,
     JSONExtractionResult,
+    LLMErrorContext,
     LLMRequestMetadata,
+    MultiEndpointStatus,
+    OpenRouterProviderConfig,
     RetryState,
 )
 
 from .pricing_calculator import LLMPricingCalculator
 
-# Type alias for error context dict - contains arbitrary debugging info for logging
-ErrorContext = Dict[str, Any]
-
 
 def _build_ciris_proxy_metadata(
     task_id: Optional[str],
     thought_id: Optional[str],
-    retry_state: Dict[str, Any],
+    retry_state: RetryState,
     resp_model_name: str,
-) -> Dict[str, Any]:
-    """Build metadata dict for CIRIS proxy requests.
+) -> LLMRequestMetadata:
+    """Build metadata for CIRIS proxy requests.
 
     Args:
         task_id: Task ID for billing (required for CIRIS proxy)
         thought_id: Optional thought ID for tracing
-        retry_state: Dict tracking retry count/error/request_id
+        retry_state: State tracking retry count/error/request_id
         resp_model_name: Name of the response model for logging
 
     Returns:
-        Dict with metadata including interaction_id and retry info
+        LLMRequestMetadata with interaction_id and retry info
 
     Raises:
         RuntimeError: If task_id is None (required for billing)
@@ -90,32 +90,33 @@ def _build_ciris_proxy_metadata(
         )
     interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
 
-    metadata: Dict[str, Any] = {"interaction_id": interaction_id}
-
-    if retry_state["count"] > 0:
-        metadata["retry_count"] = retry_state["count"]
-        if retry_state["previous_error"]:
-            metadata["previous_error"] = retry_state["previous_error"]
-        if retry_state["original_request_id"]:
-            metadata["original_request_id"] = retry_state["original_request_id"]
+    if retry_state.count > 0:
         logger.info(
-            f"[LLM_RETRY] attempt={retry_state['count']} "
-            f"prev_error={retry_state['previous_error']} "
+            f"[LLM_RETRY] attempt={retry_state.count} "
+            f"prev_error={retry_state.previous_error} "
             f"interaction_id={interaction_id}"
         )
+        return LLMRequestMetadata(
+            interaction_id=interaction_id,
+            retry_count=retry_state.count,
+            previous_error=retry_state.previous_error,
+            original_request_id=retry_state.original_request_id,
+        )
     else:
-        retry_state["original_request_id"] = uuid.uuid4().hex[:12]
-        metadata["request_id"] = retry_state["original_request_id"]
+        request_id = uuid.uuid4().hex[:12]
+        retry_state.original_request_id = request_id
         logger.info(
             f"[LLM_REQUEST] interaction_id={interaction_id} "
-            f"request_id={retry_state['original_request_id']} "
+            f"request_id={request_id} "
             f"thought_id={thought_id} model={resp_model_name}"
         )
+        return LLMRequestMetadata(
+            interaction_id=interaction_id,
+            original_request_id=request_id,
+        )
 
-    return metadata
 
-
-def _build_openrouter_provider_config() -> Dict[str, Any]:
+def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     """Build provider config for OpenRouter requests from environment variables.
 
     Environment variables:
@@ -123,22 +124,24 @@ def _build_openrouter_provider_config() -> Dict[str, Any]:
         OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip
 
     Returns:
-        Dict with provider ordering/ignore preferences, empty if none configured
+        OpenRouterProviderConfig with provider ordering/ignore preferences
     """
-    provider_config: Dict[str, Any] = {}
+    order: List[str] = []
+    ignore: List[str] = []
 
     provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
     if provider_order:
-        provider_config["order"] = [p.strip() for p in provider_order.split(",") if p.strip()]
+        order = [p.strip() for p in provider_order.split(",") if p.strip()]
 
     ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
     if ignore_providers:
-        provider_config["ignore"] = [p.strip() for p in ignore_providers.split(",") if p.strip()]
+        ignore = [p.strip() for p in ignore_providers.split(",") if p.strip()]
 
-    if provider_config:
-        logger.info(f"[OPENROUTER] Using provider config: {provider_config}")
+    config = OpenRouterProviderConfig(order=order, ignore=ignore)
+    if order or ignore:
+        logger.info(f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}")
 
-    return provider_config
+    return config
 
 
 def _count_images_in_content(content: Any) -> Tuple[int, int]:
@@ -188,7 +191,7 @@ def _log_multimodal_content(
 
 def _handle_instructor_retry_exception(
     error: Exception,
-    error_context: ErrorContext,
+    error_context: LLMErrorContext,
     circuit_breaker: "CircuitBreaker",
 ) -> None:
     """Handle InstructorRetryException with detailed error categorization.
@@ -198,7 +201,7 @@ def _handle_instructor_retry_exception(
 
     Args:
         error: The InstructorRetryException
-        error_context: Dict with model, provider, response_model, etc.
+        error_context: Context with model, provider, response_model, etc.
         circuit_breaker: The circuit breaker instance for recording failures
 
     Raises:
@@ -221,10 +224,10 @@ def _handle_instructor_retry_exception(
     # Schema validation errors
     if _is_validation_error(error_str):
         _log_instructor_error(
-            "SCHEMA VALIDATION", error_context, full_error, extra=f"Expected Schema: {error_context['response_model']}"
+            "SCHEMA VALIDATION", error_context, full_error, extra=f"Expected Schema: {error_context.response_model}"
         )
         raise RuntimeError(
-            f"LLM response validation failed for {error_context['response_model']} - "
+            f"LLM response validation failed for {error_context.response_model} - "
             "circuit breaker activated for failover"
         ) from error
 
@@ -242,9 +245,9 @@ def _handle_instructor_retry_exception(
     if is_rate_limit:
         logger.warning(
             f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
-            f"  Model: {error_context['model']}\n"
-            f"  Provider: {error_context['provider']}\n"
-            f"  CB State: {error_context['circuit_breaker_state']} "
+            f"  Model: {error_context.model}\n"
+            f"  Provider: {error_context.provider}\n"
+            f"  CB State: {error_context.circuit_breaker_state} "
             f"(not incrementing - rate limits are transient)\n"
             f"  Error: {full_error[:300]}"
         )
@@ -296,7 +299,7 @@ def _is_content_filter_error(error_str: str) -> bool:
 
 def _log_instructor_error(
     error_type: str,
-    error_context: ErrorContext,
+    error_context: LLMErrorContext,
     full_error: str,
     extra: Optional[str] = None,
 ) -> None:
@@ -304,17 +307,17 @@ def _log_instructor_error(
 
     Args:
         error_type: Type label for the error (e.g., "TIMEOUT", "VALIDATION")
-        error_context: Dict with model, provider, response_model, etc.
+        error_context: Context with model, provider, response_model, etc.
         full_error: Full error message string
         extra: Optional extra line to include in log
     """
     extra_line = f"\n  {extra}" if extra else ""
     logger.error(
         f"LLM {error_type} - Error occurred.\n"
-        f"  Model: {error_context['model']}\n"
-        f"  Provider: {error_context['provider']}{extra_line}\n"
-        f"  CB State: {error_context['circuit_breaker_state']} "
-        f"({error_context['consecutive_failures']} consecutive failures)\n"
+        f"  Model: {error_context.model}\n"
+        f"  Provider: {error_context.provider}{extra_line}\n"
+        f"  CB State: {error_context.circuit_breaker_state} "
+        f"({error_context.consecutive_failures} consecutive failures)\n"
         f"  Error: {full_error[:500]}"
     )
 
@@ -672,15 +675,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self._update_client_base_url(self._endpoint_urls[0])
             logger.info(f"[MULTI_ENDPOINT] Reset to primary endpoint: {self._endpoint_urls[0]}")
 
-    def get_endpoint_stats(self) -> Dict[str, Any]:
+    def get_endpoint_stats(self) -> MultiEndpointStatus:
         """Get statistics about endpoint usage and failures."""
-        return {
-            "endpoints": self._endpoint_urls,
-            "current_index": self._current_endpoint_index,
-            "current_endpoint": self._get_current_endpoint(),
-            "failure_counts": self._endpoint_failure_counts.copy(),
-            "total_endpoints": len(self._endpoint_urls),
-        }
+        return MultiEndpointStatus(
+            endpoints=self._endpoint_urls,
+            current_index=self._current_endpoint_index,
+            current_endpoint=self._get_current_endpoint(),
+            failure_counts=self._endpoint_failure_counts.copy(),
+            total_endpoints=len(self._endpoint_urls),
+        )
 
     def _init_openai_client(
         self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
@@ -1105,7 +1108,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         logger.debug(f"Structured LLM call for {response_model.__name__}")
         self.circuit_breaker.check_and_raise()
 
-        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state = RetryState()
 
         async def _make_structured_call(
             msg_list: List[MessageDict],
@@ -1194,7 +1197,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"[MULTI_ENDPOINT] Timeout on {current_endpoint}, "
                         f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
                     )
-                    retry_state = {"count": 0, "previous_error": None, "original_request_id": None}
+                    retry_state = RetryState()
                     continue
                 logger.warning("LLM structured service timeout, no more endpoints to try")
                 raise
@@ -1211,7 +1214,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"[MULTI_ENDPOINT] Error on {current_endpoint}, "
                         f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
                     )
-                    retry_state = {"count": 0, "previous_error": None, "original_request_id": None}
+                    retry_state = RetryState()
                     continue
                 raise
 
@@ -1225,7 +1228,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         task_id: Optional[str],
         thought_id: Optional[str],
         resp_model_name: str,
-        retry_state: Dict[str, Any],
+        retry_state: RetryState,
     ) -> Dict[str, Any]:
         """Build extra kwargs for the LLM API call based on provider."""
         extra_kwargs: Dict[str, Any] = {}
@@ -1233,12 +1236,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         if "ciris.ai" in base_url or "ciris-services" in base_url:
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
-            extra_kwargs["extra_body"] = {"metadata": metadata}
+            extra_kwargs["extra_body"] = {"metadata": metadata.model_dump()}
         elif "openrouter.ai" in base_url:
             extra_body: Dict[str, Any] = {}
             provider_config = _build_openrouter_provider_config()
-            if provider_config:
-                extra_body["provider"] = provider_config
+            if provider_config.order or provider_config.ignore:
+                extra_body["provider"] = provider_config.model_dump(exclude_defaults=True)
             # CRITICAL: Disable reasoning/thinking mode for faster responses
             # Models like Kimi K2.5 have thinking enabled by default (60-90s latency)
             # OpenRouter format: {"reasoning": {"enabled": false}}
@@ -1392,13 +1395,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             if isinstance(e, instructor.exceptions.InstructorRetryException):
                 self._track_error(e)
                 self._total_errors += 1
-                error_context: ErrorContext = {
-                    "model": self.model_name,
-                    "provider": self.openai_config.base_url or "default",
-                    "response_model": resp_model_name,
-                    "circuit_breaker_state": self.circuit_breaker.state.value,
-                    "consecutive_failures": self.circuit_breaker.consecutive_failures,
-                }
+                error_context = LLMErrorContext(
+                    model=self.model_name,
+                    provider=self.openai_config.base_url or "default",
+                    response_model=resp_model_name,
+                    circuit_breaker_state=self.circuit_breaker.state.value,
+                    consecutive_failures=self.circuit_breaker.consecutive_failures,
+                )
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
@@ -1437,7 +1440,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         response_model: Type[BaseModel],
         max_tokens: int,
         temperature: float,
-        retry_state: Optional[Dict[str, Any]] = None,
+        retry_state: Optional[RetryState] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Retry with exponential backoff (private method).
 
@@ -1447,8 +1450,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             response_model: Pydantic response model
             max_tokens: Max tokens
             temperature: Temperature
-            retry_state: Optional dict to track retry info for CIRIS proxy metadata
-                         {"count": int, "previous_error": str, "original_request_id": str}
+            retry_state: Optional RetryState to track retry info for CIRIS proxy metadata
         """
         last_exception = None
         for attempt in range(self.max_retries):
@@ -1462,8 +1464,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                 # Update retry state for next attempt's metadata
                 if retry_state is not None:
-                    retry_state["count"] = attempt + 1
-                    retry_state["previous_error"] = error_category
+                    retry_state.count = attempt + 1
+                    retry_state.previous_error = error_category
 
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2**attempt), self.max_delay)

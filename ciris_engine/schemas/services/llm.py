@@ -224,3 +224,38 @@ class EndpointStats(BaseModel):
     circuit_breaker_state: Optional[str] = Field(None, description="Current circuit breaker state")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class LLMErrorContext(BaseModel):
+    """Context information for LLM service error handling and logging."""
+
+    model: str = Field(..., description="LLM model name")
+    provider: str = Field(..., description="Provider name (openai, anthropic, etc.)")
+    response_model: str = Field(..., description="Expected response model class name")
+    circuit_breaker_state: str = Field(..., description="Circuit breaker state when error occurred")
+    consecutive_failures: int = Field(0, description="Number of consecutive failures")
+    thought_id: Optional[str] = Field(None, description="Thought ID if available")
+    task_id: Optional[str] = Field(None, description="Task ID if available")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class OpenRouterProviderConfig(BaseModel):
+    """Configuration for OpenRouter provider routing preferences."""
+
+    order: List[str] = Field(default_factory=list, description="Preferred provider order")
+    ignore: List[str] = Field(default_factory=list, description="Providers to skip")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class MultiEndpointStatus(BaseModel):
+    """Status of multi-endpoint configuration for failover."""
+
+    endpoints: List[str] = Field(default_factory=list, description="List of endpoint URLs")
+    current_index: int = Field(0, description="Index of currently active endpoint")
+    current_endpoint: Optional[str] = Field(None, description="Currently active endpoint URL")
+    failure_counts: Dict[str, int] = Field(default_factory=dict, description="Failure count per endpoint")
+    total_endpoints: int = Field(0, description="Total number of configured endpoints")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)

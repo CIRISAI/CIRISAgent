@@ -43,6 +43,7 @@ from ciris_engine.logic.services.runtime.llm_service.service import (
     _log_instructor_error,
     _log_multimodal_content,
 )
+from ciris_engine.schemas.services.llm import LLMErrorContext, RetryState
 
 
 class TestBuildCirisProxyMetadata:
@@ -50,7 +51,7 @@ class TestBuildCirisProxyMetadata:
 
     def test_builds_metadata_with_task_id(self):
         """Builds metadata with interaction_id from task_id."""
-        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state = RetryState()
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             metadata = _build_ciris_proxy_metadata(
@@ -60,14 +61,14 @@ class TestBuildCirisProxyMetadata:
                 resp_model_name="TestModel",
             )
 
-        assert "interaction_id" in metadata
-        assert len(metadata["interaction_id"]) == 32  # sha256[:32]
-        assert "request_id" in metadata
-        assert retry_state["original_request_id"] is not None
+        assert metadata.interaction_id is not None
+        assert len(metadata.interaction_id) == 32  # sha256[:32]
+        assert metadata.original_request_id is not None
+        assert retry_state.original_request_id is not None
 
     def test_raises_without_task_id(self):
         """Raises RuntimeError when task_id is None."""
-        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state = RetryState()
 
         with pytest.raises(RuntimeError) as exc_info:
             _build_ciris_proxy_metadata(
@@ -82,11 +83,11 @@ class TestBuildCirisProxyMetadata:
 
     def test_includes_retry_info_on_retry(self):
         """Includes retry count and previous error on retry attempts."""
-        retry_state: Dict[str, Any] = {
-            "count": 2,
-            "previous_error": "TIMEOUT",
-            "original_request_id": "abc123",
-        }
+        retry_state = RetryState(
+            count=2,
+            previous_error="TIMEOUT",
+            original_request_id="abc123",
+        )
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             metadata = _build_ciris_proxy_metadata(
@@ -96,14 +97,14 @@ class TestBuildCirisProxyMetadata:
                 resp_model_name="TestModel",
             )
 
-        assert metadata["retry_count"] == 2
-        assert metadata["previous_error"] == "TIMEOUT"
-        assert metadata["original_request_id"] == "abc123"
+        assert metadata.retry_count == 2
+        assert metadata.previous_error == "TIMEOUT"
+        assert metadata.original_request_id == "abc123"
 
     def test_same_task_id_produces_same_interaction_id(self):
         """Same task_id always produces same interaction_id (for billing)."""
-        retry_state1: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
-        retry_state2: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state1 = RetryState()
+        retry_state2 = RetryState()
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             metadata1 = _build_ciris_proxy_metadata(
@@ -119,19 +120,20 @@ class TestBuildCirisProxyMetadata:
                 resp_model_name="TestModel",
             )
 
-        assert metadata1["interaction_id"] == metadata2["interaction_id"]
+        assert metadata1.interaction_id == metadata2.interaction_id
 
 
 class TestBuildOpenrouterProviderConfig:
     """Tests for _build_openrouter_provider_config function."""
 
     def test_returns_empty_when_no_env_vars(self):
-        """Returns empty dict when no env vars set."""
+        """Returns empty config when no env vars set."""
         with patch.dict(os.environ, {}, clear=True):
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config == {}
+        assert config.order == []
+        assert config.ignore == []
 
     def test_parses_provider_order(self):
         """Parses OPENROUTER_PROVIDER_ORDER env var."""
@@ -139,7 +141,7 @@ class TestBuildOpenrouterProviderConfig:
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config["order"] == ["together", "groq", "sambanova"]
+        assert config.order == ["together", "groq", "sambanova"]
 
     def test_parses_ignore_providers(self):
         """Parses OPENROUTER_IGNORE_PROVIDERS env var."""
@@ -147,7 +149,7 @@ class TestBuildOpenrouterProviderConfig:
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config["ignore"] == ["friendli", "google-vertex"]
+        assert config.ignore == ["friendli", "google-vertex"]
 
     def test_parses_both_env_vars(self):
         """Parses both env vars together."""
@@ -161,8 +163,8 @@ class TestBuildOpenrouterProviderConfig:
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config["order"] == ["together", "groq"]
-        assert config["ignore"] == ["friendli"]
+        assert config.order == ["together", "groq"]
+        assert config.ignore == ["friendli"]
 
     def test_handles_whitespace_in_values(self):
         """Strips whitespace from comma-separated values."""
@@ -170,7 +172,7 @@ class TestBuildOpenrouterProviderConfig:
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config["order"] == ["together", "groq", "sambanova"]
+        assert config.order == ["together", "groq", "sambanova"]
 
     def test_ignores_empty_values(self):
         """Ignores empty values from comma splitting."""
@@ -178,7 +180,7 @@ class TestBuildOpenrouterProviderConfig:
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
-        assert config["order"] == ["together", "groq"]
+        assert config.order == ["together", "groq"]
 
 
 class TestLogMultimodalContent:
@@ -281,13 +283,13 @@ class TestLogInstructorError:
 
     def test_logs_error_with_context(self):
         """Logs error with full context."""
-        error_context = {
-            "model": "gpt-4",
-            "provider": "openai",
-            "response_model": "TestModel",
-            "circuit_breaker_state": "closed",
-            "consecutive_failures": 2,
-        }
+        error_context = LLMErrorContext(
+            model="gpt-4",
+            provider="openai",
+            response_model="TestModel",
+            circuit_breaker_state="closed",
+            consecutive_failures=2,
+        )
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger") as mock_logger:
             _log_instructor_error("TIMEOUT", error_context, "Connection timed out")
@@ -300,13 +302,13 @@ class TestLogInstructorError:
 
     def test_logs_extra_info_when_provided(self):
         """Includes extra info when provided."""
-        error_context = {
-            "model": "gpt-4",
-            "provider": "openai",
-            "response_model": "TestModel",
-            "circuit_breaker_state": "closed",
-            "consecutive_failures": 0,
-        }
+        error_context = LLMErrorContext(
+            model="gpt-4",
+            provider="openai",
+            response_model="TestModel",
+            circuit_breaker_state="closed",
+            consecutive_failures=0,
+        )
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger") as mock_logger:
             _log_instructor_error("VALIDATION", error_context, "Schema mismatch", extra="Expected: TestModel")
@@ -330,13 +332,13 @@ class TestHandleInstructorRetryException:
     @pytest.fixture
     def error_context(self):
         """Create error context for tests."""
-        return {
-            "model": "gpt-4",
-            "provider": "openai",
-            "response_model": "TestModel",
-            "circuit_breaker_state": "closed",
-            "consecutive_failures": 0,
-        }
+        return LLMErrorContext(
+            model="gpt-4",
+            provider="openai",
+            response_model="TestModel",
+            circuit_breaker_state="closed",
+            consecutive_failures=0,
+        )
 
     def test_handles_validation_error(self, mock_circuit_breaker, error_context):
         """Handles validation errors correctly."""

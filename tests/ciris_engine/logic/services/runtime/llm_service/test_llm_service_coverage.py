@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.schemas.services.llm import JSONExtractionResult
+from ciris_engine.schemas.services.llm import JSONExtractionResult, RetryState
 
 
 class TestExtractJSON:
@@ -303,7 +303,7 @@ class TestReasoningModeDisabling:
             task_id="test-task-123",
             thought_id="test-thought-456",
             resp_model_name="EthicalDMAResult",
-            retry_state={},
+            retry_state=RetryState(),
         )
 
         # Verify reasoning is disabled
@@ -331,7 +331,7 @@ class TestReasoningModeDisabling:
             task_id="test-task-123",
             thought_id="test-thought-456",
             resp_model_name="ActionSelectionDMAResult",
-            retry_state={},
+            retry_state=RetryState(),
         )
 
         # Verify thinking is disabled
@@ -359,7 +359,7 @@ class TestReasoningModeDisabling:
             task_id="test-task-123",
             thought_id="test-thought-456",
             resp_model_name="ActionSelectionDMAResult",
-            retry_state={},
+            retry_state=RetryState(),
         )
 
         # Standard OpenAI should have no extra_body with reasoning/thinking
@@ -386,7 +386,7 @@ class TestReasoningModeDisabling:
             task_id="test-task-123",
             thought_id="test-thought-456",
             resp_model_name="ActionSelectionDMAResult",
-            retry_state={},
+            retry_state=RetryState(),
         )
 
         # Verify reasoning is disabled

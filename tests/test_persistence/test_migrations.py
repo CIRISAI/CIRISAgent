@@ -540,3 +540,82 @@ class TestMigrationSystem:
             cursor.execute("SELECT COUNT(*) FROM schema_migrations WHERE filename = ?", ("001_slow.sql",))
             count = cursor.fetchone()[0]
             assert count == 1
+
+    def test_idempotent_index_creation(self, temp_db_path: str, temp_migrations_dir: Path):
+        """Test that CREATE INDEX IF NOT EXISTS is idempotent.
+
+        This tests the fix for the PostgreSQL QA runner issue where
+        'index idx_scheduled_tasks_status already exists' caused failures.
+        """
+        # Create migration with idempotent index creation
+        migration_file = temp_migrations_dir / "001_idempotent_indexes.sql"
+        migration_file.write_text(
+            """
+            CREATE TABLE IF NOT EXISTS test_tasks (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_test_tasks_status ON test_tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_test_tasks_created ON test_tasks(created_at);
+        """
+        )
+
+        # Initialize database
+        with get_db_connection(temp_db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    filename TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+            conn.commit()
+
+        # Apply migration first time
+        with get_db_connection(temp_db_path) as conn:
+            sql = migration_file.read_text()
+            conn.executescript(sql)
+            conn.commit()
+
+        # Running the same SQL again should NOT fail due to IF NOT EXISTS
+        with get_db_connection(temp_db_path) as conn:
+            sql = migration_file.read_text()
+            # This should not raise any exception
+            conn.executescript(sql)
+            conn.commit()
+
+        # Verify indexes exist
+        with get_db_connection(temp_db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='test_tasks'"
+            )
+            indexes = {row[0] for row in cursor.fetchall()}
+            assert "idx_test_tasks_status" in indexes
+            assert "idx_test_tasks_created" in indexes
+
+    def test_non_idempotent_index_creation_fails(self, temp_db_path: str, temp_migrations_dir: Path):
+        """Test that CREATE INDEX (without IF NOT EXISTS) fails on duplicate.
+
+        This verifies our understanding of the original bug.
+        """
+        # First, create a table and index
+        with get_db_connection(temp_db_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE test_data (id INTEGER PRIMARY KEY, value TEXT);
+                CREATE INDEX idx_test_data_value ON test_data(value);
+            """
+            )
+            conn.commit()
+
+        # Now try to create the same index again (without IF NOT EXISTS)
+        # This SHOULD fail
+        with pytest.raises(sqlite3.OperationalError) as exc_info:
+            with get_db_connection(temp_db_path) as conn:
+                conn.execute("CREATE INDEX idx_test_data_value ON test_data(value)")
+
+        assert "already exists" in str(exc_info.value)

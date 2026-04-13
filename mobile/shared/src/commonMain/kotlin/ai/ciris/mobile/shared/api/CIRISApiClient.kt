@@ -1905,7 +1905,7 @@ class CIRISApiClient(
             val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "API response: total=${data.totalCount}, running=${data.runningCount}, adapters.size=${data.adapters.size}")
             data.adapters.forEachIndexed { index, adapter ->
-                logInfo(method, "  API adapter[$index]: id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}")
+                logInfo(method, "  API adapter[$index]: id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}, needsReauth=${adapter.needsReauth}, hasAuthStep=${adapter.hasAuthStep}")
             }
 
             AdaptersListData(
@@ -1913,7 +1913,11 @@ class CIRISApiClient(
                     AdapterStatusData(
                         adapterId = adapter.adapterId,
                         adapterType = adapter.adapterType,
-                        isRunning = adapter.isRunning
+                        isRunning = adapter.isRunning,
+                        needsReauth = adapter.needsReauth,
+                        reauthReason = adapter.reauthReason,
+                        hasAuthStep = adapter.hasAuthStep,
+                        authStepId = adapter.authStepId
                     )
                 },
                 totalCount = data.totalCount,
@@ -2318,15 +2322,19 @@ class CIRISApiClient(
 
     /**
      * Start an adapter configuration wizard session.
+     *
+     * @param adapterType Type of adapter to configure
+     * @param startStepId Optional step ID to start at (useful for re-auth flows)
      */
-    suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData {
+    suspend fun startAdapterConfiguration(adapterType: String, startStepId: String? = null): ConfigSessionData {
         val method = "startAdapterConfiguration"
-        logInfo(method, "Starting configuration for adapter type: $adapterType")
+        logInfo(method, "Starting configuration for adapter type: $adapterType, startStepId: $startStepId")
 
         return try {
             val response = systemApi.startAdapterConfigurationV1SystemAdaptersAdapterTypeConfigureStartPost(
                 adapterType = adapterType,
-                authorization = authHeader()
+                authorization = authHeader(),
+                startStepId = startStepId
             )
             logDebug(method, "Response: status=${response.status}")
 
@@ -4161,7 +4169,7 @@ class CIRISApiClient(
                 }
             }
 
-            val response = client.get("$baseUrl/v1/system/adapters/context-enrichment") {
+            val response = client.get("$baseUrl/v1/system/adapters/context-enrichment?refresh=true") {
                 header("Authorization", "Bearer $accessToken")
             }
 
@@ -4292,7 +4300,7 @@ class CIRISApiClient(
                 }
             }
 
-            val nodeId = "item_${System.currentTimeMillis()}"
+            val nodeId = "item_${kotlinx.datetime.Clock.System.now().toEpochMilliseconds()}"
             val attributes = buildJsonObject {
                 put("name", name)
                 put("category", category)
@@ -6018,6 +6026,141 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Update user's location in the .env file.
+     */
+    override suspend fun updateUserLocation(location: LocationResultData): UpdateLocationResult {
+        val method = "updateUserLocation"
+        logInfo(method, "Updating user location to: ${location.displayName}")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        // Use a proper @Serializable data class instead of Map<String, Any>
+        // to avoid "Serializer for subclass 'LinkedHashMap' is not found" errors
+        @Serializable
+        data class LocationUpdateRequest(
+            val city: String,
+            val region: String,
+            val country: String,
+            @SerialName("country_code") val countryCode: String,
+            val latitude: Double,
+            val longitude: Double,
+            val timezone: String
+        )
+
+        val requestBody = LocationUpdateRequest(
+            city = location.city,
+            region = location.region ?: "",
+            country = location.country,
+            countryCode = location.countryCode,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            timezone = location.timezone ?: ""
+        )
+
+        return try {
+            val response = client.post("$baseUrl/v1/setup/location") {
+                header("Authorization", authHeader())
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+
+            if (!response.status.isSuccess()) {
+                logError(method, "API returned error: ${response.status}")
+                return UpdateLocationResult(
+                    success = false,
+                    message = "API error: ${response.status}",
+                    locationDisplay = ""
+                )
+            }
+
+            @Serializable
+            data class LocationUpdateResponse(
+                val success: Boolean,
+                val message: String,
+                @SerialName("location_display") val locationDisplay: String
+            )
+
+            val body = response.body<LocationUpdateResponse>()
+            logInfo(method, "Location updated: ${body.locationDisplay}")
+
+            UpdateLocationResult(
+                success = body.success,
+                message = body.message,
+                locationDisplay = body.locationDisplay
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            UpdateLocationResult(
+                success = false,
+                message = "Failed to update location: ${e.message}",
+                locationDisplay = ""
+            )
+        }
+    }
+
+    /**
+     * Get current location from .env file.
+     */
+    override suspend fun getCurrentLocation(): CurrentLocationData {
+        val method = "getCurrentLocation"
+        logDebug(method, "Fetching current location from backend")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/setup/location") {
+                header("Authorization", authHeader())
+            }
+
+            if (!response.status.isSuccess()) {
+                logWarn(method, "API returned error: ${response.status}")
+                return CurrentLocationData(configured = false)
+            }
+
+            @Serializable
+            data class CurrentLocationResponse(
+                val configured: Boolean,
+                val city: String? = null,
+                val region: String? = null,
+                val country: String? = null,
+                val latitude: Double? = null,
+                val longitude: Double? = null,
+                val timezone: String? = null,
+                @SerialName("display_name") val displayName: String? = null
+            )
+
+            val body = response.body<CurrentLocationResponse>()
+            logDebug(method, "Location configured=${body.configured}, display=${body.displayName}")
+
+            CurrentLocationData(
+                configured = body.configured,
+                city = body.city,
+                region = body.region,
+                country = body.country,
+                latitude = body.latitude,
+                longitude = body.longitude,
+                timezone = body.timezone,
+                displayName = body.displayName
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            CurrentLocationData(configured = false)
+        }
+    }
+
     // ===== Skill Import API =====
 
     /**
@@ -6072,6 +6215,104 @@ class CIRISApiClient(
                 hasSupportingFiles = obj["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
                 sourceUrl = obj["source_url"]?.jsonPrimitive?.contentOrNull,
                 instructionsPreview = obj["instructions_preview"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Validate an OpenClaw skill without importing.
+     *
+     * Parses the SKILL.md content, runs security scans, and returns
+     * validation results without writing any files. Used by Skill Studio
+     * for real-time validation feedback.
+     */
+    suspend fun validateSkill(skillMdContent: String): ai.ciris.mobile.shared.models.SkillValidateResult {
+        val method = "validateSkill"
+        val url = "$baseUrl/v1/system/adapters/import-skill/validate"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Validation failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            // Parse security report
+            val securityObj = obj["security"]?.jsonObject
+            val security = ai.ciris.mobile.shared.models.SecurityReport(
+                totalFindings = securityObj?.get("total_findings")?.jsonPrimitive?.intOrNull ?: 0,
+                criticalCount = securityObj?.get("critical_count")?.jsonPrimitive?.intOrNull ?: 0,
+                highCount = securityObj?.get("high_count")?.jsonPrimitive?.intOrNull ?: 0,
+                mediumCount = securityObj?.get("medium_count")?.jsonPrimitive?.intOrNull ?: 0,
+                lowCount = securityObj?.get("low_count")?.jsonPrimitive?.intOrNull ?: 0,
+                safeToImport = securityObj?.get("safe_to_import")?.jsonPrimitive?.boolean ?: true,
+                summary = securityObj?.get("summary")?.jsonPrimitive?.content ?: "",
+                findings = securityObj?.get("findings")?.jsonArray?.map { findingEl ->
+                    val finding = findingEl.jsonObject
+                    ai.ciris.mobile.shared.models.SecurityFinding(
+                        severity = finding["severity"]?.jsonPrimitive?.content ?: "info",
+                        category = finding["category"]?.jsonPrimitive?.content ?: "",
+                        title = finding["title"]?.jsonPrimitive?.content ?: "",
+                        description = finding["description"]?.jsonPrimitive?.content ?: "",
+                        evidence = finding["evidence"]?.jsonPrimitive?.contentOrNull,
+                        recommendation = finding["recommendation"]?.jsonPrimitive?.content ?: ""
+                    )
+                } ?: emptyList()
+            )
+
+            // Parse preview if present
+            val previewObj = obj["preview"]?.jsonObject
+            val preview = previewObj?.let {
+                ai.ciris.mobile.shared.models.SkillPreviewData(
+                    name = it["name"]?.jsonPrimitive?.content ?: "",
+                    description = it["description"]?.jsonPrimitive?.content ?: "",
+                    version = it["version"]?.jsonPrimitive?.content ?: "",
+                    moduleName = it["module_name"]?.jsonPrimitive?.content ?: "",
+                    tools = it["tools"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredEnvVars = it["required_env_vars"]?.jsonArray?.map { e -> e.jsonPrimitive.content } ?: emptyList(),
+                    requiredBinaries = it["required_binaries"]?.jsonArray?.map { b -> b.jsonPrimitive.content } ?: emptyList(),
+                    hasSupportingFiles = it["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                    sourceUrl = it["source_url"]?.jsonPrimitive?.contentOrNull,
+                    instructionsPreview = it["instructions_preview"]?.jsonPrimitive?.content ?: "",
+                    security = security
+                )
+            }
+
+            ai.ciris.mobile.shared.models.SkillValidateResult(
+                valid = obj["valid"]?.jsonPrimitive?.boolean ?: false,
+                errors = obj["errors"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                warnings = obj["warnings"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                security = security,
+                preview = preview
             )
         } catch (e: Exception) {
             logException(method, e)

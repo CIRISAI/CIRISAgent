@@ -12,6 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -45,7 +46,7 @@ import androidx.compose.ui.unit.dp
  * - Reload/remove adapters
  * - Add new adapters (platform-specific implementation)
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AdaptersScreen(
     adapters: List<AdapterItem>,
@@ -57,8 +58,10 @@ fun AdaptersScreen(
     onRemoveAdapter: (String) -> Unit,
     onToggleExpanded: (String) -> Unit,
     onEditConfig: (String) -> Unit,
+    onReauthAdapter: (adapterType: String, authStepId: String?) -> Unit = { _, _ -> },  // Re-authenticate adapter (OAuth flow)
     onAddAdapter: () -> Unit,
     onImportSkill: () -> Unit = {},
+    onSkillStudio: () -> Unit = {},
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -166,7 +169,8 @@ fun AdaptersScreen(
                             onToggleExpand = { onToggleExpanded(adapter.id) },
                             onReload = { onReloadAdapter(adapter.id) },
                             onRemove = { showRemoveDialog = adapter },
-                            onEditConfig = { onEditConfig(adapter.type.lowercase()) }
+                            onEditConfig = { onEditConfig(adapter.type.lowercase()) },
+                            onReauth = { onReauthAdapter(adapter.type.lowercase(), adapter.authStepId) }
                         )
                     }
                 }
@@ -222,13 +226,13 @@ fun AdaptersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Skill Workshop option
+                    // Skill Studio - Visual SKILL.md editor
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testableClickable("btn_skill_workshop") {
+                            .testableClickable("btn_skill_studio") {
                                 showAddMenu = false
-                                onImportSkill()
+                                onSkillStudio()
                             },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -248,14 +252,53 @@ fun AdaptersScreen(
                             )
                             Column {
                                 Text(
-                                    text = localizedString("mobile.skill_workshop"),
+                                    text = localizedString("mobile.skill_studio"),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = localizedString("mobile.skill_workshop_desc"),
+                                    text = localizedString("mobile.skill_studio_desc"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Import Skill - Paste existing SKILL.md
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_import_skill") {
+                                showAddMenu = false
+                                onImportSkill()
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Column {
+                                Text(
+                                    text = localizedString("mobile.skill_import"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    text = localizedString("mobile.skill_import_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                                 )
                             }
                         }
@@ -362,6 +405,7 @@ private fun AdapterStatusHeader(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AdapterCard(
     adapter: AdapterItem,
@@ -371,6 +415,7 @@ private fun AdapterCard(
     onReload: () -> Unit,
     onRemove: () -> Unit,
     onEditConfig: () -> Unit,
+    onReauth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val rotationAngle by animateFloatAsState(
@@ -404,7 +449,11 @@ private fun AdapterCard(
                             .size(12.dp)
                             .clip(CircleShape)
                             .background(
-                                if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
+                                when {
+                                    adapter.needsReauth -> SemanticColors.Default.warning
+                                    adapter.isHealthy -> SemanticColors.Default.success
+                                    else -> SemanticColors.Default.error
+                                }
                             )
                     )
 
@@ -427,9 +476,13 @@ private fun AdapterCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = DisplayNames.humanizeStatus(adapter.status),
+                        text = if (adapter.needsReauth) "Re-auth needed" else DisplayNames.humanizeStatus(adapter.status),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (adapter.isHealthy) SemanticColors.Default.success else SemanticColors.Default.error
+                        color = when {
+                            adapter.needsReauth -> SemanticColors.Default.warning
+                            adapter.isHealthy -> SemanticColors.Default.success
+                            else -> SemanticColors.Default.error
+                        }
                     )
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
@@ -437,6 +490,42 @@ private fun AdapterCard(
                         modifier = Modifier.rotate(rotationAngle),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            // Re-authentication warning banner
+            if (adapter.needsReauth) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = localizedString("mobile.adapter_reauth_required"),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        adapter.reauthReason?.let { reason ->
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onReauth,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(localizedString("mobile.adapter_reauth"))
+                    }
                 }
             }
 
@@ -523,31 +612,26 @@ private fun AdapterCard(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
-                    val services = details?.servicesRegistered ?: emptyList()
+                    // Filter out empty/blank service names to avoid empty chips
+                    val services = (details?.servicesRegistered ?: emptyList())
+                        .filter { it.isNotBlank() }
                     if (services.isNotEmpty()) {
-                        // Use Column with Rows to wrap chips properly
-                        Column(
+                        // Use FlowRow for natural wrapping of chips
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            // Group services into rows of 3 for better wrapping
-                            services.chunked(3).forEach { rowServices ->
-                                Row(
-                                    modifier = Modifier.wrapContentHeight(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowServices.forEach { service ->
-                                        SuggestionChip(
-                                            onClick = {},
-                                            label = {
-                                                Text(
-                                                    text = DisplayNames.humanizeServiceName(service),
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
+                            services.forEach { service ->
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(
+                                            text = DisplayNames.humanizeServiceName(service),
+                                            style = MaterialTheme.typography.labelSmall
                                         )
                                     }
-                                }
+                                )
                             }
                         }
                     } else {
@@ -651,6 +735,22 @@ private fun AdapterCard(
                     Text(localizedString("mobile.adapter_reload"))
                 }
 
+                // Show re-auth button for adapters with auth support (even if not needsReauth)
+                if (adapter.hasAuthStep && !adapter.needsReauth) {
+                    OutlinedButton(
+                        onClick = onReauth,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.RefreshIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(localizedString("mobile.adapter_reauth"))
+                    }
+                }
+
                 OutlinedButton(
                     onClick = onRemove,
                     modifier = Modifier.weight(1f),
@@ -701,5 +801,9 @@ data class AdapterItem(
     val name: String,
     val type: String,
     val status: String,
-    val isHealthy: Boolean
+    val isHealthy: Boolean,
+    val needsReauth: Boolean = false,
+    val reauthReason: String? = null,
+    val hasAuthStep: Boolean = false,
+    val authStepId: String? = null
 )

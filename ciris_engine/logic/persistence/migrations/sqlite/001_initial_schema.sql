@@ -246,9 +246,9 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     FOREIGN KEY (origin_thought_id) REFERENCES thoughts(thought_id)
 );
 
-CREATE INDEX idx_scheduled_tasks_status ON scheduled_tasks(status);
-CREATE INDEX idx_scheduled_tasks_next_trigger ON scheduled_tasks(next_trigger_at);
-CREATE INDEX idx_scheduled_tasks_agent ON scheduled_tasks(created_by_agent);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_status ON scheduled_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_trigger ON scheduled_tasks(next_trigger_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(created_by_agent);
 
 -- Table for agent creation ceremonies
 CREATE TABLE IF NOT EXISTS creation_ceremonies (
@@ -276,9 +276,9 @@ CREATE TABLE IF NOT EXISTS creation_ceremonies (
     ceremony_status TEXT NOT NULL
 );
 
-CREATE INDEX idx_ceremonies_timestamp ON creation_ceremonies(timestamp);
-CREATE INDEX idx_ceremonies_creator_agent ON creation_ceremonies(creator_agent_id);
-CREATE INDEX idx_ceremonies_new_agent ON creation_ceremonies(new_agent_id);
+CREATE INDEX IF NOT EXISTS idx_ceremonies_timestamp ON creation_ceremonies(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ceremonies_creator_agent ON creation_ceremonies(creator_agent_id);
+CREATE INDEX IF NOT EXISTS idx_ceremonies_new_agent ON creation_ceremonies(new_agent_id);
 
 -- Table for continuity awareness memories
 CREATE TABLE IF NOT EXISTS continuity_awareness (
@@ -306,8 +306,8 @@ CREATE TABLE IF NOT EXISTS continuity_awareness (
     FOREIGN KEY (preservation_node_id, preservation_scope) REFERENCES graph_nodes(node_id, scope)
 );
 
-CREATE INDEX idx_preservation_agent ON continuity_awareness(agent_id);
-CREATE INDEX idx_preservation_timestamp ON continuity_awareness(shutdown_timestamp);
+CREATE INDEX IF NOT EXISTS idx_preservation_agent ON continuity_awareness(agent_id);
+CREATE INDEX IF NOT EXISTS idx_preservation_timestamp ON continuity_awareness(shutdown_timestamp);
 
 -- View for active scheduled tasks (for scheduler service)
 CREATE VIEW IF NOT EXISTS active_scheduled_tasks AS

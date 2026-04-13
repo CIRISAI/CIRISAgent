@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import pty
 import subprocess
 import sys
 import threading
@@ -400,6 +401,7 @@ class APIServerManager:
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
         self.mock_logshipper: Optional[MockLogshipperServer] = None
+        self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
 
     def _clear_wakeup_state(self) -> bool:
         """Clear wakeup state from database for fresh wakeup run.
@@ -669,11 +671,47 @@ class APIServerManager:
             self.console.print(f"[dim]📝 Console log: {console_log_path}[/dim]")
             self.console.print(f"[dim]📝 CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
             self.console.print(f"[dim]🚀 Command: {' '.join(cmd)}[/dim]")
-            console_log = open(console_log_path, "w")
-            self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
+
+            # Use PTY for stdout - the Rust FFI code crashes when stdout is not a TTY
+            # This is a workaround for a bug in ciris_verify_ffi
+            master_fd, slave_fd = pty.openpty()
+            self._pty_master_fd = master_fd
+            self._pty_slave_fd = slave_fd
+
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                stdin=slave_fd,
+                env=env,
+                cwd=Path.cwd(),
+            )
+            os.close(slave_fd)  # Close slave fd in parent
             self.pid = self.process.pid
             self.console.print(f"[dim]   PID: {self.pid}[/dim]")
-            self._console_log_file = console_log  # Store reference to close later
+
+            # Start background thread to read from PTY master and write to log file
+            console_log = open(console_log_path, "w")
+            self._console_log_file = console_log
+
+            def log_reader():
+                try:
+                    while True:
+                        try:
+                            data = os.read(master_fd, 4096)
+                            if not data:
+                                break
+                            text = data.decode("utf-8", errors="replace")
+                            console_log.write(text)
+                            console_log.flush()
+                        except OSError:
+                            break
+                except Exception:
+                    pass
+
+            log_thread = threading.Thread(target=log_reader, daemon=True)
+            log_thread.start()
+            self._log_thread = log_thread
 
             # Wait for server to be ready
             if self._wait_for_server():
@@ -709,11 +747,18 @@ class APIServerManager:
                 self.process = None
                 self.pid = None
 
+                # Close PTY master fd
+                if hasattr(self, "_pty_master_fd"):
+                    try:
+                        os.close(self._pty_master_fd)
+                    except Exception:
+                        pass
+
                 # Close console log file
                 if hasattr(self, "_console_log_file"):
                     try:
                         self._console_log_file.close()
-                    except:
+                    except Exception:
                         pass
 
             except Exception as e:
@@ -738,6 +783,58 @@ class APIServerManager:
             return response.status_code == 200
         except:
             return False
+
+    def _extract_password_from_log(self) -> Optional[str]:
+        """Extract the dynamically generated admin password from console log.
+
+        The server prints the password in this format:
+        ======================================================================
+        FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):
+          Username: admin
+          Password: <random_password>
+        ======================================================================
+
+        Returns:
+            Extracted password string, or None if not found
+        """
+        console_log_path = getattr(self, "_console_log_path", None)
+        if not console_log_path:
+            return None
+
+        try:
+            with open(console_log_path, "r") as f:
+                content = f.read()
+
+            # Look for the password line
+            import re
+
+            match = re.search(r"Password:\s*(\S+)", content)
+            if match:
+                password = match.group(1)
+                self.console.print(f"[dim]🔑 Extracted dynamic admin password from console log[/dim]")
+                return password
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️  Could not extract password from log: {e}[/yellow]")
+
+        return None
+
+    def get_admin_password(self) -> str:
+        """Get the admin password to use for authentication.
+
+        Returns dynamically extracted password if available.
+        Falls back to config value only if it's not the auto-detect placeholder.
+
+        Raises:
+            ValueError: If no password is available
+        """
+        if self._extracted_password:
+            return self._extracted_password
+        if self.config.admin_password and self.config.admin_password != "__auto_detect__":
+            return self.config.admin_password
+        raise ValueError(
+            "No admin password available. Server may not have printed credentials yet. "
+            "Try using --wipe-data to reset to first-run state."
+        )
 
     def _wait_for_server(self) -> bool:
         """Wait for server to be ready and reach WORK state."""
@@ -797,6 +894,12 @@ class APIServerManager:
             # Timeout waiting for health check
             return False
 
+        # Extract dynamically generated password from console log
+        # This is needed because the admin password is now randomly generated per process
+        extracted_pwd = self._extract_password_from_log()
+        if extracted_pwd:
+            self._extracted_password = extracted_pwd
+
         # SETUP module: Skip WORK state check (first-run mode doesn't reach WORK)
         if QAModule.SETUP in self.modules:
             self.console.print("[green]✅ Server ready for SETUP tests (first-run mode)[/green]")
@@ -806,11 +909,13 @@ class APIServerManager:
         self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")
 
         # Get auth token for checking cognitive state
+        # Use dynamically extracted password if available, otherwise fall back to config
+        admin_password = self.get_admin_password()
         token = None
         try:
             auth_response = requests.post(
                 f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": self.config.admin_password},
+                json={"username": self.config.admin_username, "password": admin_password},
                 timeout=5,
             )
             if auth_response.status_code == 200:

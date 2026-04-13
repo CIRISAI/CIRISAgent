@@ -46,6 +46,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_with_sync_methods(self):
         """Test tool collection when service methods are synchronous."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service with sync methods
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "discord_adapter"
@@ -60,9 +62,14 @@ class TestCollectAvailableToolsBeforeRefactor:
 
         mock_tool_service.get_tool_info = Mock(side_effect=mock_get_tool_info)
 
-        # Create mock service registry
+        # Create provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -82,6 +89,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_with_async_methods(self):
         """Test tool collection when service methods are asynchronous."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service with async methods
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "api_service"
@@ -96,9 +105,14 @@ class TestCollectAvailableToolsBeforeRefactor:
 
         mock_tool_service.get_tool_info = AsyncMock(side_effect=mock_get_tool_info)
 
-        # Create mock service registry
+        # Create provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "api"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -131,15 +145,22 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_invalid_tool_info_type(self):
         """Test tool collection when get_tool_info returns wrong type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service that returns wrong type
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "bad_adapter"
         mock_tool_service.get_available_tools = Mock(return_value=["bad_tool"])
         mock_tool_service.get_tool_info = Mock(return_value={"not": "a_tool_info"})  # Wrong type!
 
-        # Create mock service registry
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -152,10 +173,10 @@ class TestCollectAvailableToolsBeforeRefactor:
 
     @pytest.mark.asyncio
     async def test_collect_tools_non_iterable_services(self):
-        """Test tool collection when get_services_by_type returns non-iterable."""
-        # Create mock service registry that returns non-iterable
+        """Test tool collection when _services is empty."""
+        # Create mock service registry with empty _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=MagicMock())  # Not iterable!
+        mock_service_registry._services = {}  # Empty _services dict
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -169,6 +190,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_mixed_sync_async(self):
         """Test tool collection with mixed sync/async tool services."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create sync tool service
         sync_service = Mock()
         sync_service.adapter_id = "sync_adapter"
@@ -189,9 +212,18 @@ class TestCollectAvailableToolsBeforeRefactor:
             )
         )
 
-        # Create mock service registry
+        # Create provider wrappers
+        sync_provider = Mock()
+        sync_provider.instance = sync_service
+        sync_provider.metadata = {"adapter": "sync"}
+
+        async_provider = Mock()
+        async_provider.instance = async_service
+        async_provider.metadata = {"adapter": "async"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[sync_service, async_service])
+        mock_service_registry._services = {ServiceType.TOOL: [sync_provider, async_provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -232,31 +264,39 @@ class TestHelperFunctions:
 
     def test_get_tool_services_valid(self):
         """Test getting tool services with valid registry."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         mock_registry = Mock()
-        mock_services = [Mock(), Mock()]
-        mock_registry.get_services_by_type.return_value = mock_services
+        mock_service1 = Mock()
+        mock_service2 = Mock()
+
+        # Create provider wrappers
+        provider1 = Mock()
+        provider1.instance = mock_service1
+        provider1.metadata = {"adapter": "test1"}
+
+        provider2 = Mock()
+        provider2.instance = mock_service2
+        provider2.metadata = {"adapter": "test2"}
+
+        mock_registry._services = {ServiceType.TOOL: [provider1, provider2]}
 
         result = _get_tool_services(mock_registry)
-        assert result == mock_services
-        mock_registry.get_services_by_type.assert_called_once_with("tool")
+        assert len(result) == 2
+        assert mock_service1 in result
+        assert mock_service2 in result
 
     def test_get_tool_services_non_iterable(self):
-        """Test getting tool services with non-iterable response."""
-        mock_registry = Mock()
-
-        # Create a non-iterable object
-        class NonIterable:
-            pass
-
-        mock_registry.get_services_by_type.return_value = NonIterable()
+        """Test getting tool services with missing _services."""
+        mock_registry = Mock(spec=[])  # No _services attribute
 
         result = _get_tool_services(mock_registry)
         assert result == []
 
     def test_get_tool_services_string(self):
-        """Test getting tool services with string response."""
+        """Test getting tool services with empty _services."""
         mock_registry = Mock()
-        mock_registry.get_services_by_type.return_value = "not_a_list"
+        mock_registry._services = {}  # Empty dict
 
         result = _get_tool_services(mock_registry)
         assert result == []
@@ -322,14 +362,23 @@ class TestHelperFunctions:
         assert result is None
 
     def test_extract_adapter_type_with_underscore(self):
-        """Test extracting adapter type with underscore."""
-        assert _extract_adapter_type("discord_adapter") == "discord"
-        assert _extract_adapter_type("api_service_v2") == "api"
+        """Test extracting adapter type with underscore - now preserves name."""
+        # The function now returns adapter_id as-is, only stripping numeric suffixes
+        assert _extract_adapter_type("discord_adapter") == "discord_adapter"
+        assert _extract_adapter_type("api_service_v2") == "api_service_v2"
+        # Known adapters are preserved
+        assert _extract_adapter_type("home_assistant") == "home_assistant"
+        assert _extract_adapter_type("wallet") == "wallet"
 
     def test_extract_adapter_type_without_underscore(self):
         """Test extracting adapter type without underscore."""
         assert _extract_adapter_type("cli") == "cli"
         assert _extract_adapter_type("mock") == "mock"
+
+    def test_extract_adapter_type_strips_numeric_suffix(self):
+        """Test that numeric suffixes are stripped."""
+        assert _extract_adapter_type("wallet_12345") == "wallet"
+        assert _extract_adapter_type("test_123") == "test"
 
     def test_validate_tool_infos_success(self):
         """Test validating tool infos successfully."""

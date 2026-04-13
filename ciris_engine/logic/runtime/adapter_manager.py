@@ -6,9 +6,11 @@ extending the existing processor control capabilities with adapter lifecycle man
 """
 
 import asyncio
+import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 import aiofiles
 
@@ -614,6 +616,27 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     # Create a minimal fallback config
                     sanitized_config = AdapterConfig(adapter_type=instance.adapter_type, enabled=instance.is_running)
 
+                # Check if adapter needs re-authentication (e.g., OAuth token expired)
+                needs_reauth = False
+                reauth_reason = None
+                try:
+                    has_get_status = hasattr(instance.adapter, "get_status")
+                    logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: has_get_status={has_get_status}")
+                    if has_get_status:
+                        adapter_status = instance.adapter.get_status()
+                        logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: adapter_status type={type(adapter_status)}")
+                        needs_reauth = getattr(adapter_status, "needs_reauth", False)
+                        reauth_reason = getattr(adapter_status, "reauth_reason", None)
+                        logger.info(
+                            f"[ADAPTER_MGR_LIST] {adapter_id} get_status: needs_reauth={needs_reauth}, reason={reauth_reason}"
+                        )
+                except Exception as status_err:
+                    logger.warning(f"[ADAPTER_MGR_LIST] Failed to get status for {adapter_id}: {status_err}", exc_info=True)
+
+                # Get auth step info from manifest
+                has_auth_step, auth_step_id = self._get_auth_step_info(instance.adapter_type)
+                logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: has_auth_step={has_auth_step}, auth_step_id={auth_step_id}")
+
                 adapters.append(
                     RuntimeAdapterStatus(
                         adapter_id=adapter_id,
@@ -625,6 +648,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         metrics=metrics,
                         last_activity=None,
                         tools=tools,
+                        needs_reauth=needs_reauth,
+                        reauth_reason=reauth_reason,
+                        has_auth_step=has_auth_step,
+                        auth_step_id=auth_step_id,
                     )
                 )
 
@@ -876,6 +903,55 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             adapter_config=None,  # Flattened into settings
         )
 
+    def _get_auth_step_info(self, adapter_type: str) -> Tuple[bool, Optional[str]]:
+        """Get authentication step info from adapter's manifest.
+
+        Checks the adapter's manifest.json for interactive_config.steps to find
+        auth steps (oauth or device_auth).
+
+        Args:
+            adapter_type: Type of adapter to check
+
+        Returns:
+            Tuple of (has_auth_step, auth_step_id).
+        """
+        try:
+            # Look in ciris_adapters directory for manifest
+            # On Android, __file__ might be in Chaquopy's extracted location
+            this_file = Path(__file__)
+            adapters_dir = this_file.parent.parent.parent.parent / "ciris_adapters"
+            manifest_path = adapters_dir / adapter_type / "manifest.json"
+            logger.warning(
+                f"[AUTH_STEP_INFO] {adapter_type}: __file__={this_file}, adapters_dir={adapters_dir}, manifest_path={manifest_path}"
+            )
+            logger.warning(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
+
+            if not manifest_path.exists():
+                logger.info(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
+                return False, None
+
+            with open(manifest_path) as f:
+                manifest_data = json.load(f)
+
+            interactive_config = manifest_data.get("interactive_config")
+            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
+            if not interactive_config:
+                return False, None
+
+            steps = interactive_config.get("steps", [])
+            logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
+            for step in steps:
+                step_type = step.get("step_type", "")
+                if step_type in ("oauth", "device_auth"):
+                    step_id = step.get("step_id")
+                    logger.info(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
+                    return True, step_id
+
+            return False, None
+        except Exception as e:
+            logger.debug(f"[ADAPTER_MGR] Failed to get auth step info for {adapter_type}: {e}")
+            return False, None
+
     async def load_adapter_from_template(
         self, template_name: str, adapter_id: Optional[str] = None
     ) -> AdapterOperationResult:
@@ -1010,7 +1086,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 _collect_available_tools,
                 get_enrichment_cache,
                 _collect_enrichment_tools,
-                _get_tool_services,
+                _get_tool_providers,
                 _execute_enrichment_tool,
             )
 
@@ -1031,7 +1107,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             # Execute enrichment tools and cache results
             cache = get_enrichment_cache()
-            tool_services = _get_tool_services(self.runtime.service_registry)
+            # Use _get_tool_providers to get (instance, adapter_name) tuples
+            tool_providers = _get_tool_providers(self.runtime.service_registry)
 
             for adapter_type, tool in enrichment_tools:
                 tool_key = f"{adapter_type}:{tool.name}"
@@ -1040,7 +1117,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     if cache.get(tool_key) is not None:
                         continue
 
-                    _, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+                    _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
                     if result is not None:
                         params = tool.context_enrichment_params or {}
                         ttl_raw = params.get("_cache_ttl")

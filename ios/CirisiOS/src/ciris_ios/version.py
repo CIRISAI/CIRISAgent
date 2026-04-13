@@ -6,7 +6,7 @@ The version hash is computed at build time from the main repository.
 """
 
 # Static version - updated at build time by the iOS build process
-__version__ = "ios-2.4.2"
+__version__ = "ios-2.4.4"
 
 
 def get_version() -> str:

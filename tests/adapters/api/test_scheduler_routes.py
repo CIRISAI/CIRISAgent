@@ -46,17 +46,8 @@ def client(app):
     return TestClient(app)
 
 
-@pytest.fixture
-def admin_auth_headers():
-    """Get admin auth headers for testing."""
-    return {"Authorization": "Bearer admin:ciris_admin_password"}
-
-
-@pytest.fixture
-def observer_auth_headers():
-    """Get observer auth headers for testing (lower privileges)."""
-    # Observer can view but not modify
-    return {"Authorization": "Bearer admin:ciris_admin_password"}
+# NOTE: admin_auth_headers and observer_auth_headers fixtures are now
+# provided by tests.fixtures.auth via conftest.py pytest_plugins
 
 
 @pytest.fixture

@@ -1793,7 +1793,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 self._attestation_refresh_task.cancel()
                 try:
                     await self._attestation_refresh_task
-                except asyncio.CancelledError:  # noqa: ASYNC910
+                except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
                     # Expected: we just cancelled this child task on line above.
                     # Do NOT re-raise - this is OUR cancellation, not external.
                     pass

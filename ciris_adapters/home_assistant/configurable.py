@@ -87,27 +87,25 @@ class HADiscoveryListener:
             if addresses:
                 ip_address = addresses[0]
 
-                # Prefer homeassistant.local if server name indicates it's available
-                # The server field contains the hostname (e.g., "homeassistant.local.")
+                # Get hostname for display purposes only
+                # We ALWAYS use IP for the URL because mDNS hostname resolution
+                # is unreliable on Android (especially Samsung browser)
                 server = getattr(info, "server", None)
-                if server and "homeassistant" in server.lower():
-                    # Strip trailing dot from mDNS name
-                    hostname = server.rstrip(".")
-                    host = hostname
-                    logger.info(f"[mDNS DISCOVERY] Using hostname: {hostname}")
-                else:
-                    host = ip_address
+                hostname = server.rstrip(".") if server else ip_address
+                display_name = hostname if "homeassistant" in hostname.lower() else ip_address
 
-                url = f"http://{host}:{port}"
+                # Always use IP address for the actual URL (reliable across all platforms)
+                url = f"http://{ip_address}:{port}"
                 logger.info(f"[mDNS DISCOVERY] Found Home Assistant at {url}")
-                logger.info(f"[mDNS DISCOVERY]   IP: {ip_address}, Host: {host}, Port: {port}, Name: {name}")
+                logger.info(f"[mDNS DISCOVERY]   IP: {ip_address}, Hostname: {hostname}, Port: {port}")
                 self.services.append(
                     {
                         "id": f"ha_{ip_address}_{port}",
-                        "label": f"Home Assistant ({host}:{port})",
+                        "label": f"Home Assistant ({display_name}:{port})",
                         "description": name.replace("._home-assistant._tcp.local.", ""),
                         "metadata": {
-                            "host": host,
+                            "host": ip_address,  # Use IP for actual connections
+                            "hostname": hostname,  # Keep hostname for reference
                             "ip": ip_address,
                             "port": port,
                             "name": name,
@@ -286,7 +284,12 @@ class HAConfigurableAdapter:
 
         This is a fallback when mDNS service discovery fails but the hostname
         might still resolve (e.g., when HA isn't advertising _home-assistant._tcp).
+
+        When a hostname is found, we resolve it to IP for the URL to ensure
+        reliable connectivity on Android where mDNS resolution is flaky.
         """
+        import socket
+
         common_hosts = [
             ("homeassistant.local", 8123),
             ("homeassistant", 8123),
@@ -307,16 +310,28 @@ class HAConfigurableAdapter:
                     ) as response:
                         # HA API returns 401 without auth, which confirms it's HA
                         if response.status in (200, 401):
-                            logger.info(f"[HOSTNAME PROBE] Found Home Assistant at {url}")
+                            # Resolve hostname to IP for reliable connectivity on Android
+                            try:
+                                ip_address = socket.gethostbyname(host)
+                                ip_url = f"http://{ip_address}:{port}"
+                                logger.info(f"[HOSTNAME PROBE] Found Home Assistant: {host} -> {ip_address}")
+                            except socket.gaierror:
+                                # Fallback to hostname if IP resolution fails
+                                ip_address = host
+                                ip_url = url
+                                logger.warning(f"[HOSTNAME PROBE] Could not resolve {host} to IP, using hostname")
+
                             discovered.append(
                                 {
-                                    "id": f"ha_{host}_{port}",
+                                    "id": f"ha_{ip_address}_{port}",
                                     "label": f"Home Assistant ({host}:{port})",
                                     "description": f"Discovered via hostname probe",
                                     "metadata": {
-                                        "host": host,
+                                        "host": ip_address,  # Use IP for connections
+                                        "hostname": host,  # Keep hostname for reference
+                                        "ip": ip_address,
                                         "port": port,
-                                        "url": url,
+                                        "url": ip_url,  # Use IP-based URL
                                         "source": "hostname_probe",
                                     },
                                 }
@@ -740,19 +755,23 @@ class HAConfigurableAdapter:
         refresh_token = config.get("refresh_token") or oauth_tokens.get("refresh_token")
         client_id = config.get("client_id") or oauth_tokens.get("client_id")
 
-        # Set environment variables for the HA service
+        # Set environment variables for the HA service AND persist to .env
         if config.get("base_url"):
             os.environ["HOME_ASSISTANT_URL"] = config["base_url"]
+            self._persist_to_env("HOME_ASSISTANT_URL", config["base_url"])
         if access_token:
             os.environ["HOME_ASSISTANT_TOKEN"] = access_token
+            self._persist_to_env("HOME_ASSISTANT_TOKEN", access_token)
         if refresh_token:
             os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = refresh_token
+            self._persist_to_env("HOME_ASSISTANT_REFRESH_TOKEN", refresh_token)
         if client_id:
             os.environ["HOME_ASSISTANT_CLIENT_ID"] = client_id
+            self._persist_to_env("HOME_ASSISTANT_CLIENT_ID", client_id)
 
         # Log sanitized config
         safe_config = {k: ("***" if "token" in k.lower() else v) for k, v in config.items()}
-        logger.info(f"HA configuration applied: {safe_config}")
+        logger.info(f"HA configuration applied and persisted: {safe_config}")
 
         return True
 
@@ -763,3 +782,32 @@ class HAConfigurableAdapter:
             Applied configuration or None if not configured
         """
         return self._applied_config
+
+    def _persist_to_env(self, key: str, value: str) -> None:
+        """Persist a key-value pair to the .env file for next restart.
+
+        This ensures HA tokens survive app restarts on mobile.
+        """
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+            env_path = get_env_file_path()
+            if env_path and env_path.exists():
+                content = env_path.read_text()
+                lines = content.split("\n")
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{key}="):
+                        # Preserve quoted format for tokens
+                        lines[i] = f'{key}="{value}"'
+                        updated = True
+                        break
+                if not updated:
+                    # Add new key before the last empty lines
+                    lines.append(f'{key}="{value}"')
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[HA CONFIG] Persisted {key} to .env file")
+            else:
+                logger.warning(f"[HA CONFIG] .env file not found, cannot persist {key}")
+        except Exception as e:
+            logger.error(f"[HA CONFIG] Failed to persist {key} to .env: {e}")

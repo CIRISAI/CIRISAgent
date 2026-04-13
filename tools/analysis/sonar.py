@@ -164,15 +164,30 @@ class SonarClient:
         response.raise_for_status()
         return response.json()
 
-    def mark_hotspot_safe(self, hotspot_key: str, comment: Optional[str] = None) -> Dict[str, Any]:
-        """Mark a security hotspot as safe."""
-        data = {"hotspot": hotspot_key, "status": "SAFE"}
+    def mark_hotspot_safe(
+        self, hotspot_key: str, resolution: str = "SAFE", comment: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Mark a security hotspot as reviewed.
+
+        Args:
+            hotspot_key: The hotspot key
+            resolution: SAFE, ACKNOWLEDGED, or FIXED
+            comment: Optional comment explaining the resolution
+
+        The SonarCloud API requires status=REVIEWED plus a resolution.
+        """
+        data = {"hotspot": hotspot_key, "status": "REVIEWED", "resolution": resolution}
         if comment:
             data["comment"] = comment
 
-        response = self.session.post(f"{SONAR_API_BASE}/hotspots/change_status", data=data)
+        response = self.session.post(
+            f"{SONAR_API_BASE}/hotspots/change_status",
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
         response.raise_for_status()
-        return response.json()
+        # API returns empty response on success
+        return {"status": "success", "hotspot": hotspot_key, "resolution": resolution}
 
     def get_coverage_metrics(self, new_code: bool = False, pull_request: Optional[str] = None) -> Dict[str, Any]:
         """Get coverage metrics for the project or a specific PR."""
@@ -531,7 +546,13 @@ def main():
     # Mark hotspot safe
     safe_parser = subparsers.add_parser("mark-safe", help="Mark security hotspot as safe")
     safe_parser.add_argument("hotspot_key", help="Hotspot key to mark")
-    safe_parser.add_argument("--comment", help="Comment explaining why it's safe")
+    safe_parser.add_argument(
+        "--resolution",
+        choices=["SAFE", "ACKNOWLEDGED", "FIXED"],
+        default="SAFE",
+        help="Resolution type (default: SAFE)",
+    )
+    safe_parser.add_argument("--comment", help="Comment explaining the resolution")
 
     # Coverage
     coverage_parser = subparsers.add_parser("coverage", help="Show coverage metrics")
@@ -709,13 +730,11 @@ def main():
                             print(format_hotspot(hotspot))
 
         elif args.command == "mark-safe":
-            if args.comment:
-                comment = f"Marking as safe: {args.comment}"
-            else:
-                comment = "Reviewed and determined to be safe"
+            resolution = args.resolution
+            comment = args.comment or f"Reviewed and determined to be {resolution.lower()}"
 
-            result = client.mark_hotspot_safe(args.hotspot_key, comment)
-            print(f"✓ Marked {args.hotspot_key} as safe")
+            result = client.mark_hotspot_safe(args.hotspot_key, resolution=resolution, comment=comment)
+            print(f"✓ Marked {args.hotspot_key} as {resolution}")
 
         elif args.command == "coverage":
             pr_number = getattr(args, "pr", None)

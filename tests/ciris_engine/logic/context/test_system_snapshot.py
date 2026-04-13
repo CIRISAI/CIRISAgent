@@ -77,6 +77,8 @@ def mock_thought():
 @pytest.fixture
 def mock_runtime_with_tools():
     """Create runtime with tool services."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
     runtime = Mock()
 
     # Setup adapter manager for channels
@@ -101,8 +103,13 @@ def mock_runtime_with_tools():
     )
     tool_service.get_tool_info = Mock(return_value=tool_info)
 
-    # Registry returns tool services
-    runtime.service_registry.get_services_by_type = Mock(return_value=[tool_service])
+    # Create provider wrapper
+    provider = Mock()
+    provider.instance = tool_service
+    provider.metadata = {"adapter": "test"}
+
+    # Registry uses _services dict pattern
+    runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
     # Setup bus_manager (needed for tool discovery)
     runtime.bus_manager = Mock()
@@ -320,6 +327,8 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
 @pytest.mark.asyncio
 async def test_build_system_snapshot_type_safety(mock_time_service):
     """Test that invalid types fail fast and loud."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
     # Mock resource monitor
     resource_monitor = Mock()
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
@@ -336,7 +345,12 @@ async def test_build_system_snapshot_type_safety(mock_time_service):
     tool_service.get_available_tools = Mock(return_value=["bad_tool"])
     tool_service.get_tool_info = Mock(return_value={"not": "a_tool_info"})  # Wrong type!
 
-    runtime.service_registry.get_services_by_type = Mock(return_value=[tool_service])
+    # Create provider wrapper
+    provider = Mock()
+    provider.instance = tool_service
+    provider.metadata = {"adapter": "bad"}
+
+    runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
     # Should raise TypeError - FAIL FAST AND LOUD
     with pytest.raises(TypeError, match="returned invalid type"):

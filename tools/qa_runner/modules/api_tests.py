@@ -11,15 +11,21 @@ class APITestModule:
     """Test module for API endpoints."""
 
     @staticmethod
-    def get_auth_tests() -> List[QATestCase]:
-        """Get authentication test cases."""
+    def get_auth_tests(admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
+        """Get authentication test cases.
+
+        Args:
+            admin_password: The admin password to use for login tests.
+                            Defaults to "__DYNAMIC__" which should be replaced
+                            by the QA runner with the actual password.
+        """
         return [
             QATestCase(
                 name="Login with valid credentials",
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": "ciris_admin_password"},
+                payload={"username": "admin", "password": admin_password},
                 expected_status=200,
                 requires_auth=False,
                 description="Test login with default admin credentials",

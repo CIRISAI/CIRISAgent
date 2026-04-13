@@ -93,6 +93,26 @@ class SkillPreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SkillValidateRequest(BaseModel):
+    """Request to validate a skill without importing."""
+
+    skill_md_content: str = Field(..., description="Raw SKILL.md content to validate")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SkillValidateResponse(BaseModel):
+    """Validation results for a skill."""
+
+    valid: bool = Field(..., description="Whether the skill is valid and safe to import")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    security: SecurityReportResponse = Field(..., description="Security scan results")
+    preview: Optional[SkillPreviewResponse] = Field(None, description="Preview info if valid")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SkillImportResponse(BaseModel):
     """Response from a skill import operation."""
 
@@ -185,35 +205,122 @@ def _check_sensitive_paths(local_path: str) -> None:
             raise ValueError(f"Access to paths containing '{pattern}' is not allowed for security reasons.")
 
 
+def _build_path_from_components(base: Path, components: list[str]) -> Path:
+    """Build a path from a trusted base and validated components."""
+    resolved = base
+    for component in components:
+        if component and component not in (".", ""):
+            resolved = resolved / component
+    return resolved.resolve()
+
+
+def _is_within_base(path: Path, base: Path) -> bool:
+    """Check if a path is within a base directory."""
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
+def _resolve_tilde_path(local_path: str) -> Path | None:
+    """Resolve a path starting with ~ to home directory.
+
+    Returns None if path escapes home via symlinks.
+    """
+    suffix = local_path[1:].lstrip("/\\")
+    components = suffix.replace("\\", "/").split("/")
+    resolved = _build_path_from_components(Path.home(), components)
+    return resolved if _is_within_base(resolved, Path.home()) else None
+
+
+def _resolve_relative_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
+    """Resolve a relative path against cwd.
+
+    Returns None if resolved path is outside all allowed bases.
+    """
+    path_components = local_path.replace("\\", "/").split("/")
+    cwd_resolved = Path.cwd().resolve()
+    resolved = _build_path_from_components(cwd_resolved, path_components)
+
+    for check_base in allowed_bases:
+        if _is_within_base(resolved, check_base.resolve()):
+            return resolved
+    return None
+
+
+def _path_matches_base_prefix(path_components: list[str], base_parts: list[str]) -> tuple[bool, list[str]]:
+    """Check if path components match a base directory prefix.
+
+    Returns (matches, relative_components) where relative_components are
+    the path components after the base prefix.
+    """
+    # Skip root component in comparison (e.g., "/" on Unix)
+    base_relative_parts = base_parts[1:] if base_parts and base_parts[0] == "/" else base_parts
+
+    # Check if path has enough components
+    if len(path_components) < len(base_relative_parts):
+        return False, []
+
+    # Check each base component matches
+    for i, base_part in enumerate(base_relative_parts):
+        if i >= len(path_components) or path_components[i] != base_part:
+            return False, []
+
+    # Return relative suffix components (after base prefix)
+    return True, path_components[len(base_relative_parts):]
+
+
+def _resolve_absolute_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
+    """Resolve an absolute path with proper containment checking.
+
+    SECURITY: Never constructs Path directly from user input. Instead:
+    1. Parse path components from the string
+    2. For each allowed base, check if components match the base prefix
+    3. Build final path only from trusted base + validated relative components
+
+    Returns None if path is outside all allowed bases or escapes via symlinks.
+    """
+    # Parse path components from string without constructing Path from user input
+    path_components = local_path.replace("\\", "/").split("/")
+    path_components = [c for c in path_components if c]
+
+    for base in allowed_bases:
+        base_resolved = base.resolve()
+        matches, relative_components = _path_matches_base_prefix(
+            path_components, list(base_resolved.parts)
+        )
+        if not matches:
+            continue
+
+        resolved = _build_path_from_components(base_resolved, relative_components)
+        if _is_within_base(resolved, base_resolved):
+            return resolved
+
+    return None
+
+
 def _resolve_to_allowed_path(local_path: str) -> Path:
     """Resolve a validated path string to an allowed Path.
 
-    SECURITY: This function should only be called AFTER validation.
-    The path is constructed by joining trusted base directories with
-    validated path components, not by directly converting user input.
+    SECURITY: This function constructs paths ONLY from trusted base directories,
+    never directly from user input. User input is only used to select which
+    trusted base to use and to extract validated path components.
 
     Raises ValueError if resolved path is outside allowed directories.
     """
     allowed_bases = _get_allowed_bases()
+    resolved: Path | None = None
 
-    # Handle tilde by using trusted home directory
     if local_path.startswith("~"):
-        # Construct from trusted source: home dir + validated suffix
-        suffix = local_path[1:].lstrip("/\\")
-        resolved = (Path.home() / suffix).resolve()
+        resolved = _resolve_tilde_path(local_path)
+    elif not local_path.startswith("/"):
+        resolved = _resolve_relative_path(local_path, allowed_bases)
     else:
-        # For absolute paths, resolve and verify against allowed bases
-        # For relative paths, resolve against cwd (a trusted base)
-        normalized = os.path.normpath(local_path)
-        resolved = Path(normalized).resolve()
+        resolved = _resolve_absolute_path(local_path, allowed_bases)
 
-    # Verify resolved path is within an allowed base directory
-    for base in allowed_bases:
-        try:
-            resolved.relative_to(base)
-            return resolved
-        except ValueError:
-            continue
+    if resolved is not None:
+        return resolved
 
     raise ValueError(
         f"Path '{local_path}' is outside allowed directories. "
@@ -380,6 +487,118 @@ async def preview_skill_import(
     module_name = f"imported_{sanitized}"
 
     return _build_preview(skill, module_name)
+
+
+@router.post(
+    "/adapters/import-skill/validate",
+    responses={
+        400: {"description": "Invalid skill content"},
+        500: {"description": "Server error"},
+    },
+)
+async def validate_skill(
+    request: Request,
+    auth: AuthAdminDep,
+    body: Annotated[SkillValidateRequest, Body()],
+) -> SkillValidateResponse:
+    """Validate a skill without importing it.
+
+    Parses the SKILL.md content, runs security scans, and returns
+    validation results without writing any files.
+
+    Useful for Skill Studio to provide real-time validation feedback.
+
+    Requires ADMIN role.
+    """
+    import re
+
+    from ciris_engine.logic.services.skill_import.scanner import SkillSecurityScanner
+
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    # Try to parse the skill
+    parser = OpenClawSkillParser()
+    try:
+        skill = parser.parse_skill_md(body.skill_md_content)
+    except ValueError as e:
+        return SkillValidateResponse(
+            valid=False,
+            errors=[str(e)],
+            warnings=[],
+            security=SecurityReportResponse(
+                safe_to_import=False,
+                summary="Cannot validate: parsing failed",
+            ),
+            preview=None,
+        )
+    except Exception as e:
+        logger.error(f"Error parsing skill for validation: {e}", exc_info=True)
+        return SkillValidateResponse(
+            valid=False,
+            errors=[f"Failed to parse skill: {e}"],
+            warnings=[],
+            security=SecurityReportResponse(
+                safe_to_import=False,
+                summary="Cannot validate: parsing failed",
+            ),
+            preview=None,
+        )
+
+    # Validate skill content
+    if not skill.name:
+        errors.append("Skill name is required")
+    elif not re.match(r"^[a-z0-9-]+$", skill.name):
+        errors.append("Skill name should only contain lowercase letters, numbers, and hyphens")
+
+    if not skill.description:
+        warnings.append("Description is recommended")
+
+    if not skill.instructions:
+        warnings.append("Instructions are empty - the skill won't provide any guidance to the agent")
+
+    # Run security scan
+    scanner = SkillSecurityScanner()
+    report = scanner.scan(skill)
+    security = SecurityReportResponse(
+        total_findings=report.total_findings,
+        critical_count=report.critical_count,
+        high_count=report.high_count,
+        medium_count=report.medium_count,
+        low_count=report.low_count,
+        safe_to_import=report.safe_to_import,
+        summary=report.summary,
+        findings=[
+            SecurityFindingResponse(
+                severity=f.severity.value,
+                category=f.category,
+                title=f.title,
+                description=f.description,
+                evidence=f.evidence,
+                recommendation=f.recommendation,
+            )
+            for f in report.findings
+        ],
+    )
+
+    # Generate module name for preview
+    sanitized = re.sub(r"[^a-z0-9_]", "_", skill.name.lower())
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    module_name = f"imported_{sanitized}"
+
+    # Build preview if valid
+    preview = None
+    valid = len(errors) == 0 and report.safe_to_import
+    if valid:
+        preview = _build_preview(skill, module_name)
+
+    return SkillValidateResponse(
+        valid=valid,
+        errors=errors,
+        warnings=warnings,
+        security=security,
+        preview=preview,
+    )
 
 
 @router.post(

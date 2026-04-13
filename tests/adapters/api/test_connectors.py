@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.routes import connectors
+from tests.fixtures.auth import make_login_request
 
 
 @pytest.fixture
@@ -33,11 +34,9 @@ def client_with_auth(test_db):
 
     client = TestClient(app)
 
-    # Login and get token
-    login_response = client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
-    token = login_response.json()["access_token"]
+    # Login and get token using centralized auth helper
+    client.auth_headers = make_login_request(client)
 
-    client.auth_headers = {"Authorization": f"Bearer {token}"}
     client.app = app
 
     # Clear connector registry before each test

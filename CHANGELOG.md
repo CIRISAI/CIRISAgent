@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] - 2026-04-13
+
+### Added
+
+- **Skill Studio UI** - Visual skill builder with validation and full 29-language localization
+- **Adapter Re-Auth Tracking** - Track adapter re-authentication events with structured telemetry
+- **Location Settings Persistence** - User location preferences now persist across restarts
+
+### Fixed
+
+- **HA Token Persistence** - Fixed Home Assistant token being null after restart
+- **SIGSEGV Crash** - Fixed crash in `ciris_verify_generate_key` by adding missing FFI argtypes
+- **HA Adapter Hardening** - Improved resilience for multi-occurrence deployments
+- **SonarCloud Issues** - Fixed cognitive complexity, duplicated literals, path security, and log injection issues
+
+### Security
+
+- **Dynamic Admin Password** - Admin password now dynamically generated at startup instead of hardcoded
+- **Path Construction Security** - Refactored skill_import to avoid constructing paths from user input
+- **Log Injection Prevention** - Removed user-controlled data from log messages
+
 ## [2.4.2] - 2026-04-10
 
 ### Added

@@ -570,29 +570,43 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
             logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
 
-        # Adapter-specific environment variables
+        # Adapter-specific environment variables with proper env var naming
         if setup.adapter_config:
             f.write("\n# Adapter-Specific Configuration\n")
+            # Mapping of generic config keys to adapter-specific env var names
+            HA_ENV_MAPPING = {
+                "access_token": "HOME_ASSISTANT_TOKEN",
+                "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+                "base_url": "HOME_ASSISTANT_URL",
+                "client_id": "HOME_ASSISTANT_CLIENT_ID",
+            }
             for key, value in setup.adapter_config.items():
-                f.write(f"{key}={value}\n")
+                # Use mapped env var name if available, otherwise use key as-is
+                env_var_name = HA_ENV_MAPPING.get(key, key)
+                f.write(f"{env_var_name}={value}\n")
 
         # User preferences (language & location)
         # Always write language preference (defaults to English if not set)
         f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
         preferred_lang = setup.preferred_language or "en"
         f.write(f'CIRIS_PREFERRED_LANGUAGE="{preferred_lang}"\n')
+
+        # Location settings - write individual fields for weather/navigation adapters
+        if setup.location_city:
+            f.write(f'CIRIS_USER_CITY="{setup.location_city}"\n')
+        if setup.location_region:
+            f.write(f'CIRIS_USER_REGION="{setup.location_region}"\n')
         if setup.location_country:
-            location_parts = [setup.location_country]
-            if setup.location_region:
-                location_parts.append(setup.location_region)
-            if setup.location_city:
-                location_parts.append(setup.location_city)
-            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+            f.write(f'CIRIS_USER_COUNTRY="{setup.location_country}"\n')
+            # Also write combined display name for backwards compatibility
+            location_parts = [setup.location_city, setup.location_region, setup.location_country]
+            location_display = ", ".join(p for p in location_parts if p)
+            f.write(f'CIRIS_USER_LOCATION="{location_display}"\n')
         # Store coordinates in ISO 6709 decimal degrees format
         if setup.location_latitude is not None:
-            f.write(f"CIRIS_USER_LATITUDE={setup.location_latitude}\n")
+            f.write(f'CIRIS_USER_LATITUDE="{setup.location_latitude}"\n')
         if setup.location_longitude is not None:
-            f.write(f"CIRIS_USER_LONGITUDE={setup.location_longitude}\n")
+            f.write(f'CIRIS_USER_LONGITUDE="{setup.location_longitude}"\n')
         if setup.timezone:
             f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
         # Location sharing consent for telemetry

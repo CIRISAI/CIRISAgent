@@ -251,6 +251,40 @@ CREATE INDEX IF NOT EXISTS idx_wa_created ON wa_cert(created DESC);
 CREATE INDEX IF NOT EXISTS idx_wa_token_type ON wa_cert(token_type);
 """
 
+# Scheduled tasks table (integrates with DEFER system)
+SCHEDULED_TASKS_TABLE_V1 = """
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    goal_description TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('PENDING', 'ACTIVE', 'COMPLETE', 'FAILED')),
+
+    -- Scheduling (integrates with time-based DEFER)
+    defer_until TIMESTAMP,
+    schedule_cron TEXT,
+
+    -- Execution details
+    trigger_prompt TEXT NOT NULL,
+    origin_thought_id TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    last_triggered_at TIMESTAMP,
+    next_trigger_at TIMESTAMP,
+
+    -- Self-deferral tracking
+    deferral_count INTEGER DEFAULT 0,
+    deferral_history JSONB,
+
+    -- Agent tracking
+    created_by_agent TEXT,
+
+    FOREIGN KEY (origin_thought_id) REFERENCES thoughts(thought_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_status ON scheduled_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_trigger ON scheduled_tasks(next_trigger_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(created_by_agent);
+"""
+
 # Deferral reports table for WA deferral tracking
 DEFERRAL_REPORTS_TABLE_V1 = """
 CREATE TABLE IF NOT EXISTS deferral_reports (
@@ -277,6 +311,7 @@ ALL_TABLES = [
     AUDIT_ROOTS_TABLE_V1,
     AUDIT_SIGNING_KEYS_TABLE_V1,
     WA_CERT_TABLE_V1,
+    SCHEDULED_TASKS_TABLE_V1,
     DEFERRAL_REPORTS_TABLE_V1,
 ]
 
@@ -291,6 +326,7 @@ __all__ = [
     "AUDIT_ROOTS_TABLE_V1",
     "AUDIT_SIGNING_KEYS_TABLE_V1",
     "WA_CERT_TABLE_V1",
+    "SCHEDULED_TASKS_TABLE_V1",
     "DEFERRAL_REPORTS_TABLE_V1",
     "ALL_TABLES",
 ]

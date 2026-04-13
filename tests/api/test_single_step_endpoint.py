@@ -53,10 +53,7 @@ class TestSingleStepEndpoint:
         """Create test client."""
         return TestClient(app)
 
-    @pytest.fixture
-    def auth_headers(self):
-        """Get auth headers for testing using dev credentials."""
-        return {"Authorization": "Bearer admin:ciris_admin_password"}
+    # NOTE: auth_headers fixture provided by tests.fixtures.auth via conftest.py
 
     @pytest.fixture
     def mock_app_with_services(self, app, mock_api_runtime_control_service, mock_runtime):

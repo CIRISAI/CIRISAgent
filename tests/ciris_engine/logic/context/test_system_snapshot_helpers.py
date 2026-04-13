@@ -803,7 +803,8 @@ class TestSystemData:
     async def test_collect_available_tools_with_missing_attributes(self):
         """Test collecting available tools with runtime missing required attributes."""
         runtime = Mock()
-        # Missing bus_manager or service_registry
+        # Missing bus_manager and service_registry._services
+        runtime.service_registry = Mock(spec=[])  # No _services attribute
 
         result = await _collect_available_tools(runtime)
         assert result == {}
@@ -811,6 +812,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_valid_tools(self, caplog):
         """Test collecting available tools with valid tool services."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -824,7 +827,13 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info.return_value = tool_info
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Set up _services dict for _get_tool_providers
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -835,6 +844,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_async_methods(self):
         """Test collecting available tools with async tool service methods."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -847,7 +858,12 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "api"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -856,22 +872,23 @@ class TestSystemData:
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_non_iterable_services(self, caplog):
-        """Test collecting available tools with non-iterable tool services."""
+        """Test collecting available tools with non-iterable tool services (empty _services)."""
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
 
-        # Return non-iterable
-        runtime.service_registry.get_services_by_type.return_value = "not_iterable"
+        # Return empty _services - no tool providers
+        runtime.service_registry._services = {}
 
         result = await _collect_available_tools(runtime)
 
         assert result == {}
-        assert "get_services_by_type('tool') returned non-iterable: <class 'str'>" in caplog.text
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_invalid_tool_info_type(self):
         """Test collecting available tools with invalid tool info type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -881,7 +898,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["bad_tool"]
         tool_service.get_tool_info.return_value = "not_tool_info"  # Invalid type
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(TypeError, match="returned invalid type for bad_tool"):
             await _collect_available_tools(runtime)
@@ -889,6 +910,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_tool_info_exception(self):
         """Test collecting available tools with tool info exception."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -898,7 +921,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["error_tool"]
         tool_service.get_tool_info.side_effect = Exception("Tool info error")
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "error"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(Exception, match="Tool info error"):
             await _collect_available_tools(runtime)
@@ -1692,3 +1719,259 @@ class TestStartupCachePopulation:
         # Should be present immediately
         assert cache.get("test:expiring") is not None
         assert cache.get("test:expiring")["data"] == "value"
+
+
+# =============================================================================
+# 12. REFRESH ENRICHMENT CACHE TESTS
+# =============================================================================
+
+
+class TestRefreshEnrichmentCache:
+    """Test the refresh_enrichment_cache function for API-triggered refresh."""
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        cache._startup_populated = False
+        cache._hit_count = 0
+        cache._miss_count = 0
+        yield
+        cache.clear()
+        cache._startup_populated = False
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_no_tools(self, mock_runtime, caplog):
+        """Test refresh returns empty when no tools are available."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            refresh_enrichment_cache,
+        )
+
+        result = await refresh_enrichment_cache(mock_runtime)
+
+        assert result == {}
+        assert "[ENRICHMENT_CACHE] API-triggered refresh starting..." in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_none_runtime(self, caplog):
+        """Test refresh handles None runtime gracefully."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        result = await refresh_enrichment_cache(None)
+
+        assert result == {}
+        assert "[ENRICHMENT_CACHE] No tools available for refresh" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_executes_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh executes enrichment tools and returns results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            refresh_enrichment_cache,
+        )
+
+        # Mock _collect_available_tools to return our enrichment tool
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert "test:test_list_items" in result
+        assert result["test:test_list_items"]["count"] == 3
+        assert "[ENRICHMENT_CACHE] API refresh complete:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_updates_cache(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh updates the cache with new tool results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            refresh_enrichment_cache,
+        )
+
+        cache = get_enrichment_cache()
+        assert cache.get("test:test_list_items") is None
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Cache should now have the result
+        cached = cache.get("test:test_list_items")
+        assert cached is not None
+        assert cached["count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_populates_empty_cache(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh populates an empty cache with fresh data."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            refresh_enrichment_cache,
+        )
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+
+        cache = get_enrichment_cache()
+
+        # Verify cache is empty
+        assert cache.get("test:test_list_items") is None
+
+        # Create result to return on refresh
+        new_result = ToolExecutionResult(
+            tool_name="test_list_items",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"count": 5, "items": ["a", "b", "c", "d", "e"]},
+            error=None,
+            correlation_id="refresh-123",
+        )
+
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.adapter_id = "test_adapter"
+        tool_service.execute_tool = AsyncMock(return_value=new_result)
+        tool_service.get_available_tools = AsyncMock(return_value=["test_list_items"])
+        tool_service.get_tool_info = AsyncMock(return_value=mock_enrichment_tool_info)
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Cache should now have the value
+        new_value = cache.get("test:test_list_items")
+        assert new_value is not None
+        assert new_value["count"] == 5
+        assert new_value["items"] == ["a", "b", "c", "d", "e"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_logs_stats(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh logs cache statistics after completion."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert "[ENRICHMENT_CACHE] API refresh complete: 1 tools" in caplog.text
+        assert "stats:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_handles_tool_errors(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh handles tool execution errors gracefully."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        # Make tool execution fail
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.execute_tool = AsyncMock(side_effect=Exception("Network error"))
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Should still return result dict with error
+        assert "test:test_list_items" in result
+        assert "error" in result["test:test_list_items"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_multiple_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh handles multiple enrichment tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        # Create second tool
+        second_tool = ToolInfo(
+            name="test_get_status",
+            description="Get status",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        # Set up tool service to return different results for both tools
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.adapter_id = "test_adapter"
+        # Return both tools in get_available_tools
+        tool_service.get_available_tools = AsyncMock(return_value=["test_list_items", "test_get_status"])
+
+        def get_tool_info_side_effect(name):
+            if name == "test_list_items":
+                return mock_enrichment_tool_info
+            elif name == "test_get_status":
+                return second_tool
+            return None
+
+        tool_service.get_tool_info = AsyncMock(side_effect=get_tool_info_side_effect)
+
+        def execute_side_effect(name, params):
+            if name == "test_list_items":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"items": [1, 2, 3]},
+                    error=None,
+                    correlation_id="c1",
+                )
+            elif name == "test_get_status":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"status": "healthy"},
+                    error=None,
+                    correlation_id="c2",
+                )
+            return None
+
+        tool_service.execute_tool = AsyncMock(side_effect=execute_side_effect)
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info, second_tool]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert len(result) == 2
+        assert "test:test_list_items" in result
+        assert "test:test_get_status" in result
+        assert result["test:test_list_items"]["items"] == [1, 2, 3]
+        assert result["test:test_get_status"]["status"] == "healthy"

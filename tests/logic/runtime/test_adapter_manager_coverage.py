@@ -1732,9 +1732,12 @@ class TestEnrichmentCacheRefresh:
     def mock_runtime_with_enrichment(self):
         """Create a mock runtime with enrichment tool support."""
         from ciris_engine.schemas.config.essential import EssentialConfig
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         mock = Mock()
         mock.service_registry = Mock()
+        # Initialize _services as empty dict (will be set per-test)
+        mock.service_registry._services = {}
         mock.config_service = None
         mock.adapters = []
         mock.essential_config = EssentialConfig()
@@ -1780,9 +1783,10 @@ class TestEnrichmentCacheRefresh:
     ):
         """Test refresh when no tools are available."""
         from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
-        # Setup - no tool services
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = []
+        # Setup - no tool services (empty _services dict)
+        mock_runtime_with_enrichment.service_registry._services = {}
 
         # Get initial cache state
         cache = get_enrichment_cache()
@@ -1800,6 +1804,7 @@ class TestEnrichmentCacheRefresh:
         """Test refresh when tools exist but none are marked for enrichment."""
         from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
         from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create non-enrichment tool
         tool_info = ToolInfo(
@@ -1814,7 +1819,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_available_tools = AsyncMock(return_value=["regular_tool"])
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Get initial cache state
         cache = get_enrichment_cache()
@@ -1839,6 +1849,7 @@ class TestEnrichmentCacheRefresh:
             ToolInfo,
             ToolParameterSchema,
         )
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create enrichment tool
         tool_info = ToolInfo(
@@ -1864,7 +1875,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
         tool_service.execute_tool = AsyncMock(return_value=tool_result)
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
 
@@ -1884,6 +1900,7 @@ class TestEnrichmentCacheRefresh:
         """Test that refresh skips tools already in cache."""
         from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
         from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Pre-populate cache
         cache = get_enrichment_cache()
@@ -1904,7 +1921,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
         tool_service.execute_tool = AsyncMock()  # Should not be called
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
 
@@ -1917,6 +1939,7 @@ class TestEnrichmentCacheRefresh:
     ):
         """Test that refresh handles tool execution errors gracefully."""
         from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create enrichment tool
         tool_info = ToolInfo(
@@ -1933,7 +1956,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
         tool_service.execute_tool = AsyncMock(side_effect=Exception("Tool execution failed"))
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Should not raise
         await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
@@ -1953,6 +1981,7 @@ class TestEnrichmentCacheRefresh:
             ToolInfo,
             ToolParameterSchema,
         )
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create enrichment tool with TTL
         tool_info = ToolInfo(
@@ -1978,7 +2007,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
         tool_service.execute_tool = AsyncMock(return_value=tool_result)
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
 
@@ -1999,6 +2033,7 @@ class TestEnrichmentCacheRefresh:
             ToolInfo,
             ToolParameterSchema,
         )
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         tool_info = ToolInfo(
             name="stats_tool",
@@ -2023,7 +2058,12 @@ class TestEnrichmentCacheRefresh:
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
         tool_service.execute_tool = AsyncMock(return_value=tool_result)
 
-        mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value = [tool_service]
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
 
         await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
 

@@ -882,6 +882,7 @@ def initialize_database(db_path: Optional[str] = None) -> None:
                 tables_module.AUDIT_ROOTS_TABLE_V1,
                 tables_module.AUDIT_SIGNING_KEYS_TABLE_V1,
                 tables_module.WA_CERT_TABLE_V1,
+                tables_module.SCHEDULED_TASKS_TABLE_V1,
             ]
 
             for table_sql in base_tables:

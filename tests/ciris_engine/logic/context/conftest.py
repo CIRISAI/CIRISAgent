@@ -87,6 +87,8 @@ def mock_service_registry():
 @pytest.fixture
 def mock_runtime():
     """Create a proper runtime mock."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
     runtime = Mock()
     runtime.current_shutdown_context = None
 
@@ -94,8 +96,9 @@ def mock_runtime():
     runtime.adapter_manager = Mock()
     runtime.adapter_manager._adapters = {}
 
-    # Mock service registry and bus manager
+    # Mock service registry with _services dict (no tool providers by default)
     runtime.service_registry = Mock()
+    runtime.service_registry._services = {}  # Empty _services dict
     runtime.service_registry.get_services_by_type.return_value = []
     runtime.bus_manager = Mock()
 
@@ -360,6 +363,8 @@ def mock_enrichment_tool_service(mock_enrichment_tool_info, mock_tool_execution_
 @pytest.fixture
 def mock_runtime_with_enrichment(mock_enrichment_tool_service):
     """Create a runtime mock with tool service that has enrichment tools."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
     runtime = Mock()
     runtime.current_shutdown_context = None
 
@@ -367,8 +372,15 @@ def mock_runtime_with_enrichment(mock_enrichment_tool_service):
     runtime.adapter_manager = Mock()
     runtime.adapter_manager._adapters = {}
 
-    # Mock service registry with tool services
+    # Create provider wrapper with instance and metadata
+    provider = Mock()
+    provider.instance = mock_enrichment_tool_service
+    provider.metadata = {"adapter": "test"}
+
+    # Mock service registry with _services dict containing tool providers
     runtime.service_registry = Mock()
+    runtime.service_registry._services = {ServiceType.TOOL: [provider]}
+    # Keep get_services_by_type for backward compatibility with some tests
     runtime.service_registry.get_services_by_type.return_value = [mock_enrichment_tool_service]
     runtime.bus_manager = Mock()
 

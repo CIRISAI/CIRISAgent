@@ -131,6 +131,16 @@ interface CIRISApiClientProtocol {
      */
     suspend fun getCountries(): CountriesResponse
 
+    /**
+     * Update user's location (city, country, coordinates)
+     */
+    suspend fun updateUserLocation(location: LocationResultData): UpdateLocationResult
+
+    /**
+     * Get current location from .env
+     */
+    suspend fun getCurrentLocation(): CurrentLocationData
+
     // ===== Config API =====
 
     /**
@@ -259,7 +269,11 @@ data class AdaptersListData(
 data class AdapterStatusData(
     val adapterId: String,
     val adapterType: String,
-    val isRunning: Boolean
+    val isRunning: Boolean,
+    val needsReauth: Boolean = false,
+    val reauthReason: String? = null,
+    val hasAuthStep: Boolean = false,
+    val authStepId: String? = null
 )
 
 /**
@@ -451,4 +465,27 @@ data class CountryInfoData(
 data class CountriesResponse(
     val countries: List<CountryInfoData>,
     val count: Int
+)
+
+/**
+ * Result from updating user location
+ */
+data class UpdateLocationResult(
+    val success: Boolean,
+    val message: String,
+    val locationDisplay: String
+)
+
+/**
+ * Current location data from backend (.env)
+ */
+data class CurrentLocationData(
+    val configured: Boolean,
+    val city: String? = null,
+    val region: String? = null,
+    val country: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val timezone: String? = null,
+    val displayName: String? = null
 )

@@ -1,19 +1,33 @@
-"""Location search endpoints for setup wizard.
+"""Location search and update endpoints for setup wizard.
 
-Provides fast typeahead search for international cities using GeoNames data.
+Provides fast typeahead search for international cities using GeoNames data,
+and endpoints to update user location preferences.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import sqlite3
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
+
 from pydantic import BaseModel, Field
+
+from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Common field description constants
+DESC_CITY_NAME = "City name"
+DESC_REGION_NAME = "State/province/region name"
+DESC_COUNTRY_NAME = "Country name"
+DESC_COUNTRY_CODE = "ISO 3166-1 alpha-2 country code"
+DESC_TIMEZONE = "IANA timezone"
 
 # Path to the cities database
 # location.py is at ciris_engine/logic/adapters/api/routes/setup/location.py
@@ -25,14 +39,14 @@ GEO_DB_PATH = Path(__file__).parent.parent.parent.parent.parent.parent / "data" 
 class LocationResult(BaseModel):
     """A single location search result."""
 
-    city: str = Field(..., description="City name")
-    region: Optional[str] = Field(None, description="State/province/region name")
-    country: str = Field(..., description="Country name")
-    country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
+    city: str = Field(..., description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
+    country: str = Field(..., description=DESC_COUNTRY_NAME)
+    country_code: str = Field(..., description=DESC_COUNTRY_CODE)
     latitude: float = Field(..., description="Latitude")
     longitude: float = Field(..., description="Longitude")
     population: int = Field(..., description="City population")
-    timezone: Optional[str] = Field(None, description="IANA timezone")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
     display_name: str = Field(..., description="Formatted display name")
 
 
@@ -47,8 +61,8 @@ class LocationSearchResponse(BaseModel):
 class CountryInfo(BaseModel):
     """Country information."""
 
-    code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
-    name: str = Field(..., description="Country name")
+    code: str = Field(..., description=DESC_COUNTRY_CODE)
+    name: str = Field(..., description=DESC_COUNTRY_NAME)
     currency_code: Optional[str] = Field(None, description="Currency code (ISO 4217)")
     currency_name: Optional[str] = Field(None, description="Currency name")
 
@@ -247,3 +261,199 @@ async def list_countries() -> CountriesResponse:
 
     conn.close()
     return CountriesResponse(countries=countries, count=len(countries))
+
+
+class UpdateLocationRequest(BaseModel):
+    """Request to update user location."""
+
+    city: str = Field(..., description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
+    country: str = Field(..., description=DESC_COUNTRY_NAME)
+    country_code: str = Field(..., description=DESC_COUNTRY_CODE)
+    latitude: float = Field(..., description="Latitude")
+    longitude: float = Field(..., description="Longitude")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
+
+
+class UpdateLocationResponse(BaseModel):
+    """Response from update location endpoint."""
+
+    success: bool = Field(..., description="Whether update succeeded")
+    message: str = Field(..., description="Status message")
+    location_display: str = Field(..., description="Formatted location display string")
+
+
+class CurrentLocationResponse(BaseModel):
+    """Response from get current location endpoint."""
+
+    configured: bool = Field(..., description="Whether location is configured")
+    city: Optional[str] = Field(None, description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
+    country: Optional[str] = Field(None, description=DESC_COUNTRY_NAME)
+    latitude: Optional[float] = Field(None, description="Latitude")
+    longitude: Optional[float] = Field(None, description="Longitude")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
+    display_name: Optional[str] = Field(None, description="Formatted location display string")
+
+
+def _build_location_display(city: str, region: Optional[str], country: str) -> str:
+    """Build formatted location display string."""
+    parts = [p for p in [city, region, country] if p]
+    return ", ".join(parts)
+
+
+def _build_location_updates(request: UpdateLocationRequest, location_display: str) -> dict[str, str]:
+    """Build dict of env var updates from request."""
+    return {
+        "CIRIS_USER_CITY": request.city,
+        "CIRIS_USER_REGION": request.region or "",
+        "CIRIS_USER_COUNTRY": request.country,
+        "CIRIS_USER_LOCATION": location_display,
+        "CIRIS_USER_LATITUDE": str(request.latitude),
+        "CIRIS_USER_LONGITUDE": str(request.longitude),
+        "CIRIS_USER_TIMEZONE": request.timezone or "",
+    }
+
+
+def _update_env_lines(lines: list[str], updates: dict[str, str]) -> list[str]:
+    """Update or append env var lines."""
+    for key, value in updates.items():
+        found = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{key}="):
+                lines[i] = f'{key}="{value}"' if value else f"{key}="
+                found = True
+                break
+        if not found and value:
+            lines.append(f'{key}="{value}"')
+    return lines
+
+
+def _apply_env_updates(updates: dict[str, str]) -> None:
+    """Apply updates to os.environ for immediate effect."""
+    for key, value in updates.items():
+        if value:
+            os.environ[key] = value
+        elif key in os.environ:
+            del os.environ[key]
+
+
+def _try_refresh_adapter_location(adapter_manager: Any, adapter_name: str, service_attr: str) -> None:
+    """Try to refresh location for a single adapter if it supports refresh_location."""
+    if adapter_name not in adapter_manager.loaded_adapters:
+        return
+
+    instance = adapter_manager.loaded_adapters[adapter_name]
+    service = getattr(instance.adapter, service_attr, None)
+    if service is None:
+        return
+
+    refresh_fn = getattr(service, "refresh_location", None)
+    if refresh_fn is None:
+        return
+
+    result = refresh_fn()
+    if result:
+        logger.info(f"[LOCATION] {adapter_name.title()} adapter location refreshed")
+    else:
+        logger.debug(f"[LOCATION] {adapter_name.title()} adapter location unchanged")
+
+
+def _refresh_location_aware_adapters(request: Request) -> None:
+    """Notify location-aware adapters (weather, navigation) to refresh their location cache.
+
+    This is called after location updates to ensure adapters pick up new coordinates
+    without requiring a full adapter reload.
+    """
+    try:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime is None:
+            logger.debug("[LOCATION] No runtime available, skipping adapter refresh")
+            return
+
+        adapter_manager = getattr(runtime, "adapter_manager", None)
+        if adapter_manager is None:
+            logger.debug("[LOCATION] No adapter manager available, skipping adapter refresh")
+            return
+
+        _try_refresh_adapter_location(adapter_manager, "weather", "weather_service")
+        _try_refresh_adapter_location(adapter_manager, "navigation", "navigation_service")
+
+    except Exception as e:
+        # Don't fail the location update if adapter refresh fails
+        logger.warning(f"[LOCATION] Failed to refresh adapters: {type(e).__name__}: {e}")
+
+
+@router.post("/location")
+async def update_user_location(
+    update_request: UpdateLocationRequest, request: Request
+) -> UpdateLocationResponse:
+    """Update user's location in the .env file.
+
+    This persists the location so weather and other location-aware
+    services can use it. Also notifies running adapters to refresh their
+    location cache.
+    """
+    try:
+        env_path = get_env_file_path()
+        if not env_path or not env_path.exists():
+            logger.error("[LOCATION] .env file not found")
+            return UpdateLocationResponse(success=False, message="Configuration file not found", location_display="")
+
+        location_display = _build_location_display(update_request.city, update_request.region, update_request.country)
+        updates = _build_location_updates(update_request, location_display)
+
+        # Read, update, and write .env
+        lines = env_path.read_text().split("\n")
+        lines = _update_env_lines(lines, updates)
+        env_path.write_text("\n".join(lines))
+
+        _apply_env_updates(updates)
+
+        # Notify location-aware adapters to refresh their cached location
+        _refresh_location_aware_adapters(request)
+
+        logger.info("[LOCATION] User location updated successfully")
+        return UpdateLocationResponse(success=True, message="Location updated successfully", location_display=location_display)
+
+    except Exception as e:
+        logger.error("[LOCATION] Failed to update location: %s", type(e).__name__)
+        return UpdateLocationResponse(success=False, message=f"Failed to update location: {e}", location_display="")
+
+
+@router.get("/location")
+async def get_current_location() -> CurrentLocationResponse:
+    """Get the user's currently configured location from .env.
+
+    Returns location details if configured, or configured=False if not set.
+    """
+    city = os.environ.get("CIRIS_USER_CITY")
+    region = os.environ.get("CIRIS_USER_REGION")
+    country = os.environ.get("CIRIS_USER_COUNTRY")
+    display = os.environ.get("CIRIS_USER_LOCATION")
+    lat_str = os.environ.get("CIRIS_USER_LATITUDE")
+    lon_str = os.environ.get("CIRIS_USER_LONGITUDE")
+    timezone = os.environ.get("CIRIS_USER_TIMEZONE")
+
+    # Check if location is configured (need at least city)
+    if not city:
+        return CurrentLocationResponse(configured=False)
+
+    # Parse lat/lon if available
+    latitude = float(lat_str) if lat_str else None
+    longitude = float(lon_str) if lon_str else None
+
+    # Build display name if not set
+    if not display:
+        display = _build_location_display(city, region, country or "")
+
+    return CurrentLocationResponse(
+        configured=True,
+        city=city,
+        region=region if region else None,
+        country=country,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone if timezone else None,
+        display_name=display,
+    )

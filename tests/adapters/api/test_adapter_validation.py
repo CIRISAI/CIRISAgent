@@ -59,7 +59,7 @@ class TestAdapterValidation:
         assert status.metrics == metrics
         assert status.metrics.messages_processed == 100
 
-    def test_adapter_listing_with_metrics(self, app, client):
+    def test_adapter_listing_with_metrics(self, app, client, auth_headers):
         """Test that adapter listing properly formats metrics."""
         # Router already included by app fixture
 
@@ -96,7 +96,7 @@ class TestAdapterValidation:
         app.state.main_runtime_control_service = mock_runtime
 
         # Use dev auth credentials
-        response = client.get("/v1/system/adapters", headers={"Authorization": "Bearer admin:ciris_admin_password"})
+        response = client.get("/v1/system/adapters", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -118,7 +118,7 @@ class TestAdapterValidation:
 class TestToolProviderCounting:
     """Test tool provider counting and deduplication."""
 
-    def test_tool_provider_deduplication(self, app, client):
+    def test_tool_provider_deduplication(self, app, client, auth_headers):
         """Test that duplicate tool providers are deduplicated."""
         # Router already included by app fixture
 
@@ -189,7 +189,7 @@ class TestToolProviderCounting:
         app.state.service_registry = mock_registry
 
         # Use dev auth credentials
-        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
+        response = client.get("/v1/system/tools", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -206,7 +206,7 @@ class TestToolProviderCounting:
         assert metadata["total_tools"] == 4
         assert len(data["data"]) == 4
 
-    def test_tool_deduplication_same_name(self, app, client):
+    def test_tool_deduplication_same_name(self, app, client, auth_headers):
         """Test that tools with same name from different providers are deduplicated."""
         # Router already included by app fixture
 
@@ -252,7 +252,7 @@ class TestToolProviderCounting:
         app.state.service_registry = mock_registry
 
         # Use dev auth credentials
-        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
+        response = client.get("/v1/system/tools", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -265,7 +265,7 @@ class TestToolProviderCounting:
         assert "Provider1" in tool["provider"]
         assert "Provider2" in tool["provider"]
 
-    def test_empty_tool_list(self, app, client):
+    def test_empty_tool_list(self, app, client, auth_headers):
         """Test handling of empty tool list."""
         # Router already included by app fixture
 
@@ -277,7 +277,7 @@ class TestToolProviderCounting:
         app.state.service_registry = mock_registry
 
         # Use dev auth credentials
-        response = client.get("/v1/system/tools", headers={"Authorization": "Bearer admin:ciris_admin_password"})
+        response = client.get("/v1/system/tools", headers=auth_headers)
 
         assert response.status_code == 200
         data = response.json()

@@ -375,6 +375,7 @@ def skip_without_discord_token(request):
 
 # Import centralized fixtures to make them available to all tests
 pytest_plugins = [
+    "tests.fixtures.auth",  # Centralized auth fixtures (SECURITY: uses dynamic passwords)
     "tests.fixtures.telemetry_api",
     "tests.fixtures.system_snapshot_fixtures",
     "tests.fixtures.audit",

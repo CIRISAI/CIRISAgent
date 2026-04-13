@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.api.LocationResultData
 
 private const val TAG = "SetupViewModel"
 
@@ -264,6 +265,7 @@ class SetupViewModel : ViewModel() {
      * Select a location from search results.
      * Auto-fills country, region, and city based on selection.
      * Sets location granularity to CITY.
+     * Location is persisted after setup completes (in completeSetup).
      */
     fun selectLocation(location: LocationSearchResult) {
         _state.value = _state.value.copy(
@@ -1244,7 +1246,7 @@ class SetupViewModel : ViewModel() {
             }
         }
 
-        // Build adapter config with consent settings
+        // Build adapter config with consent settings and adapter-specific config
         val adapterConfig = buildMap {
             // Accord metrics settings
             if (currentState.accordMetricsConsent) {
@@ -1254,6 +1256,11 @@ class SetupViewModel : ViewModel() {
             // Public API services (Navigation & Weather)
             if (currentState.publicApiServicesEnabled && currentState.publicApiEmail.isNotBlank()) {
                 put("PUBLIC_API_CONTACT_EMAIL", currentState.publicApiEmail)
+            }
+            // Include adapter-specific config from wizard (e.g., HA OAuth tokens)
+            // configuredAdapterData is Map<String, Map<String, String>>
+            for ((_, config) in currentState.configuredAdapterData) {
+                putAll(config)
             }
         }
 
@@ -1430,6 +1437,34 @@ class SetupViewModel : ViewModel() {
         PlatformLogger.i(TAG, "completeSetup: signing_key_id=${request.signing_key_id}, signing_key_provisioned=${request.signing_key_provisioned}")
         PlatformLogger.i(TAG, "completeSetup: provisioned_signing_key_b64=${request.provisioned_signing_key_b64?.take(20)}...")
         val result = submitFunc(request)
+
+        // After setup completes (.env now exists), persist location if selected
+        if (result.success) {
+            val selectedLocation = _state.value.selectedLocation
+            if (selectedLocation != null) {
+                try {
+                    val locationData = LocationResultData(
+                        city = selectedLocation.city,
+                        region = selectedLocation.region,
+                        country = selectedLocation.country,
+                        countryCode = selectedLocation.countryCode,
+                        latitude = selectedLocation.latitude,
+                        longitude = selectedLocation.longitude,
+                        population = selectedLocation.population,
+                        timezone = selectedLocation.timezone,
+                        displayName = selectedLocation.displayName
+                    )
+                    val locResult = apiClient.updateUserLocation(locationData)
+                    if (locResult.success) {
+                        PlatformLogger.i(TAG, "completeSetup: Location persisted: ${locResult.locationDisplay}")
+                    } else {
+                        PlatformLogger.e(TAG, "completeSetup: Failed to persist location: ${locResult.message}")
+                    }
+                } catch (e: Exception) {
+                    PlatformLogger.e(TAG, "completeSetup: Location persist error: ${e.message}")
+                }
+            }
+        }
 
         _state.value = _state.value.copy(
             isSubmitting = false,

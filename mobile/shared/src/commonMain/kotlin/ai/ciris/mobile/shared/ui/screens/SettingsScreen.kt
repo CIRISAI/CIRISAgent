@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.LocationResultData
 import ai.ciris.mobile.shared.localization.LocalCurrency
 import ai.ciris.mobile.shared.localization.LocalLocalization
 import ai.ciris.mobile.shared.localization.localizedString
@@ -108,6 +109,7 @@ fun SettingsScreen(
     // Load config when screen is first shown
     LaunchedEffect(Unit) {
         viewModel.refresh()
+        viewModel.loadCurrentLocation()
     }
 
     val savedSuccessMessage = localizedString("mobile.settings_saved_successfully")
@@ -264,6 +266,11 @@ fun SettingsScreen(
 
                 // Preferences Section (Language & Currency)
                 PreferencesSection()
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                // Location Section
+                LocationSection(viewModel = viewModel)
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
@@ -2357,6 +2364,144 @@ private fun ColorThemeChip(
 }
 
 /**
+ * Location section - City/location selection with typeahead search.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LocationSection(viewModel: SettingsViewModel) {
+    val locationSearchQuery by viewModel.locationSearchQuery.collectAsState()
+    val locationSearchResults by viewModel.locationSearchResults.collectAsState()
+    val locationSearchLoading by viewModel.locationSearchLoading.collectAsState()
+    val selectedLocation by viewModel.selectedLocation.collectAsState()
+    val currentLocationDisplay by viewModel.currentLocationDisplay.collectAsState()
+
+    Text(
+        text = localizedString("mobile.settings_location"),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = localizedString("mobile.settings_location_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Show current location if set
+            currentLocationDisplay?.let { location ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = location,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Typeahead search field
+            ExposedDropdownMenuBox(
+                expanded = locationSearchResults.isNotEmpty(),
+                onExpandedChange = { /* Controlled by search results */ }
+            ) {
+                OutlinedTextField(
+                    value = locationSearchQuery,
+                    onValueChange = { viewModel.searchLocations(it) },
+                    label = { Text(localizedString("mobile.settings_search_city")) },
+                    placeholder = { Text(localizedString("mobile.settings_search_city_hint")) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (locationSearchLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else if (locationSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearLocationSearch() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowBack,
+                                    contentDescription = "Clear"
+                                )
+                            }
+                        }
+                    }
+                )
+
+                ExposedDropdownMenu(
+                    expanded = locationSearchResults.isNotEmpty(),
+                    onDismissRequest = { viewModel.clearLocationSearch() }
+                ) {
+                    locationSearchResults.forEach { result ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = result.displayName,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (result.population > 0) {
+                                        Text(
+                                            text = "Pop: ${formatPopulation(result.population)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = { viewModel.selectLocation(result) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Format population number for display.
+ */
+private fun formatPopulation(population: Int): String {
+    return when {
+        population >= 1_000_000 -> {
+            val v = (population / 100_000) / 10.0
+            "${v}M"
+        }
+        population >= 1_000 -> {
+            val v = (population / 100) / 10.0
+            "${v}K"
+        }
+        else -> population.toString()
+    }
+}
+
+/**
  * Preferences section - Language and Currency selection.
  * Changes apply immediately to the app.
  */
@@ -2442,7 +2587,7 @@ private fun PreferencesSection() {
                             leadingIcon = {
                                 if (currentLanguage.code == language.code) {
                                     Icon(
-                                        imageVector = Icons.Default.Check,
+                                        imageVector = Icons.Filled.Check,
                                         contentDescription = localizedString("mobile.settings_selected"),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
@@ -2520,7 +2665,7 @@ private fun PreferencesSection() {
                             leadingIcon = {
                                 if (currentCurrency.code == curr.code) {
                                     Icon(
-                                        imageVector = Icons.Default.Check,
+                                        imageVector = Icons.Filled.Check,
                                         contentDescription = localizedString("mobile.settings_selected"),
                                         tint = MaterialTheme.colorScheme.primary
                                     )

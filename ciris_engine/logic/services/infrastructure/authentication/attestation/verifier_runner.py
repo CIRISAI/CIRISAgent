@@ -37,7 +37,7 @@ else:
         handle = loop.call_later(delay, timeout_callback)
         try:
             yield
-        except asyncio.CancelledError:  # noqa: ASYNC910
+        except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
             # Cleanup: cancel the timeout callback
             handle.cancel()
             # Convert our own timeout-triggered cancellation to TimeoutError

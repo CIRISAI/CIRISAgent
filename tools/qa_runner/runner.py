@@ -267,9 +267,18 @@ class QARunner:
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 
         # Collect HTTP test cases
+        # Get dynamic password from server manager if available
+        dynamic_password = None
+        if hasattr(self, "server_manager") and self.server_manager:
+            try:
+                dynamic_password = self.server_manager.get_admin_password()
+            except ValueError:
+                # Password not extracted yet, use config default
+                pass
+
         all_tests = []
         for module in http_modules:
-            tests = self.config.get_module_tests(module)
+            tests = self.config.get_module_tests(module, admin_password=dynamic_password)
             all_tests.extend(tests)
 
         # Run HTTP tests
@@ -636,9 +645,15 @@ class QARunner:
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
+            # Use server manager's extracted password if available (dynamic password)
+            # Otherwise fall back to config password
+            admin_password = self.config.admin_password
+            if hasattr(self, "server_manager") and self.server_manager:
+                admin_password = self.server_manager.get_admin_password()
+
             response = requests.post(
                 f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": self.config.admin_password},
+                json={"username": self.config.admin_username, "password": admin_password},
                 timeout=10,
             )
 

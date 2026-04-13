@@ -136,6 +136,98 @@ async def _get_runtime_control_service_for_adapter_load(request: Request) -> Any
     return None
 
 
+def _resolve_url_hostname_to_ip(url: str) -> str:
+    """Resolve any hostname in a URL to its IP address.
+
+    This ensures reliable connectivity on Android where mDNS hostname
+    resolution (e.g., homeassistant.local) is unreliable in browsers.
+
+    Args:
+        url: URL that may contain a hostname (e.g., http://homeassistant.local:8123)
+
+    Returns:
+        URL with hostname replaced by IP if resolvable, original URL otherwise
+    """
+    import socket
+    from urllib.parse import urlparse, urlunparse
+
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return url
+
+        # Skip if already an IP address
+        try:
+            socket.inet_aton(hostname)
+            return url  # Already an IP
+        except socket.error:
+            pass  # Not an IP, try to resolve
+
+        # Resolve hostname to IP
+        ip_address = socket.gethostbyname(hostname)
+        # Reconstruct URL with IP instead of hostname
+        netloc = ip_address
+        if parsed.port:
+            netloc = f"{ip_address}:{parsed.port}"
+        new_parsed = parsed._replace(netloc=netloc)
+        return urlunparse(new_parsed)
+    except Exception as e:
+        logger.debug(f"Could not resolve hostname in URL: {type(e).__name__}")
+        return url  # Return original if resolution fails
+
+
+async def _get_existing_reauth_config(
+    request: Request,
+    adapter_type: str,
+) -> Optional[Dict[str, Any]]:
+    """Get existing adapter config for re-auth flows.
+
+    When re-authenticating an already-configured adapter, we need to preserve
+    settings like base_url from the original config so OAuth steps work.
+
+    For Home Assistant, hostnames like homeassistant.local are resolved to IP
+    addresses to ensure reliable connectivity on Android browsers.
+
+    Args:
+        request: FastAPI request object
+        adapter_type: Type of adapter to get config for
+
+    Returns:
+        Existing config dict if found, None otherwise
+    """
+    runtime_control = await _get_runtime_control_service_for_adapter_load(request)
+    if not runtime_control:
+        return None
+
+    adapter_manager = getattr(runtime_control, "adapter_manager", None)
+    if not adapter_manager:
+        return None
+
+    # Find existing adapter of this type
+    for aid, instance in adapter_manager.loaded_adapters.items():
+        if instance.adapter_type != adapter_type:
+            continue
+
+        # Try to get config from the adapter instance's service
+        if hasattr(instance.adapter, "ha_service"):
+            ha_url = getattr(instance.adapter.ha_service, "ha_url", None)
+            if ha_url:
+                # Resolve hostname to IP for reliable Android browser connectivity
+                resolved_url = _resolve_url_hostname_to_ip(ha_url)
+                return {"base_url": resolved_url}
+
+        # Generic fallback - use settings from config_params
+        if instance.config_params and instance.config_params.settings:
+            config = dict(instance.config_params.settings)
+            # Resolve base_url if present
+            if "base_url" in config:
+                config["base_url"] = _resolve_url_hostname_to_ip(config["base_url"])
+            return config
+
+    return None
+
+
 async def _load_adapter_after_config(request: Request, session: Any, persist: bool = False) -> str:
     """Load adapter after configuration and return status message.
 
@@ -192,6 +284,7 @@ async def start_adapter_configuration(
     adapter_type: str,
     request: Request,
     auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
+    start_step_id: Optional[str] = None,
 ) -> SuccessResponse[ConfigurationSessionResponse]:
     """
     Start interactive configuration session for an adapter.
@@ -199,21 +292,38 @@ async def start_adapter_configuration(
     Creates a new configuration session and returns the session ID along with
     information about the first step in the workflow.
 
+    If `start_step_id` is provided, the session will start at that step (useful
+    for re-authentication flows where you want to skip to the oauth step).
+    When starting at a specific step, existing adapter config is pre-populated
+    so dependent steps (like OAuth needing base_url from discovery) work correctly.
+
     Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
 
-        # Start the session
-        session = await config_service.start_session(adapter_type=adapter_type, user_id=auth.user_id)
+        # For re-auth flows (start_step_id specified), get existing config
+        existing_config: Optional[Dict[str, Any]] = None
+        if start_step_id:
+            existing_config = await _get_existing_reauth_config(request, adapter_type)
+
+        # Start the session (optionally at a specific step with existing config)
+        session = await config_service.start_session(
+            adapter_type=adapter_type,
+            user_id=auth.user_id,
+            start_step_id=start_step_id,
+            existing_config=existing_config,
+        )
 
         # Get manifest to access steps
         manifest = config_service._adapter_manifests.get(adapter_type)
         if not manifest:
             raise HTTPException(status_code=404, detail=f"Adapter '{adapter_type}' not found")
 
-        # Get current step
-        current_step = manifest.steps[0] if manifest.steps else None
+        # Get current step (respects start_step_id if specified)
+        current_step = None
+        if manifest.steps and session.current_step_index < len(manifest.steps):
+            current_step = manifest.steps[session.current_step_index]
 
         response = ConfigurationSessionResponse(
             session_id=session.session_id,

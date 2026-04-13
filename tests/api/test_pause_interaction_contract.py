@@ -174,13 +174,11 @@ def test_app(stateful_runtime_control_service, mock_communication_service):
 
 @pytest.fixture
 def auth_headers(test_app):
-    """Get authentication headers."""
-    client = TestClient(test_app)
+    """Get authentication headers via login endpoint."""
+    from tests.fixtures.auth import make_login_request
 
-    login_response = client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
-    assert login_response.status_code == 200
-    token = login_response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    client = TestClient(test_app)
+    return make_login_request(client)
 
 
 class TestPauseInteractionContract:

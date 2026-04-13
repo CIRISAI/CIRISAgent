@@ -172,6 +172,7 @@ class TestThoughtProcessor:
         mock_runtime.adapter_manager = mock_adapter_manager
         mock_runtime.bus_manager = Mock()
         mock_runtime.service_registry = Mock()
+        mock_runtime.service_registry._services = {}  # Empty _services dict for tool provider iteration
         mock_runtime.current_shutdown_context = None  # None, not Mock, for Pydantic validation
         mock_context_builder.runtime = mock_runtime
 

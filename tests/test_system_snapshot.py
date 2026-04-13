@@ -579,6 +579,8 @@ class TestAdapterIntegration:
     @pytest.mark.asyncio
     async def test_available_tools_collection_success(self, mock_resource_monitor, mock_time_service):
         """Test successful collection of available tools."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         mock_runtime = MagicMock()
         mock_service_registry = MagicMock()
 
@@ -606,7 +608,13 @@ class TestAdapterIntegration:
 
         mock_tool_service.get_tool_info = get_tool_info
 
-        mock_service_registry.get_services_by_type.return_value = [mock_tool_service]
+        # Create provider wrapper with instance and metadata
+        provider = MagicMock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Set up _services dict
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.service_registry = mock_service_registry
@@ -630,6 +638,8 @@ class TestAdapterIntegration:
     @pytest.mark.asyncio
     async def test_available_tools_fail_fast_on_invalid_type(self, mock_resource_monitor, mock_time_service):
         """Test FAIL FAST when tool service returns invalid type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         mock_runtime = MagicMock()
         mock_service_registry = MagicMock()
 
@@ -639,7 +649,12 @@ class TestAdapterIntegration:
         mock_bad_tool_service.get_available_tools.return_value = ["tool1"]
         mock_bad_tool_service.get_tool_info.return_value = {"name": "tool1"}  # Not ToolInfo!
 
-        mock_service_registry.get_services_by_type.return_value = [mock_bad_tool_service]
+        # Create provider wrapper
+        provider = MagicMock()
+        provider.instance = mock_bad_tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.service_registry = mock_service_registry

@@ -1685,7 +1685,11 @@
         "env_cond_broken": "విరిగిపోయింది",
         "adapter_reauth_required": "Re-authentication Required",
         "adapter_reauth": "Re-authenticate",
-        "adapter_reauth_reason": "Reason: {reason}"
+        "adapter_reauth_reason": "Reason: {reason}",
+        "settings_location": "Location",
+        "settings_location_desc": "Set your city for weather and local information",
+        "settings_search_city": "City",
+        "settings_search_city_hint": "Search for a city..."
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

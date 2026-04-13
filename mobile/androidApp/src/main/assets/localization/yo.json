@@ -1682,7 +1682,14 @@
         "env_cond_good": "Dáradáradára",
         "env_cond_fair": "To bàjé",
         "env_cond_poor": "Kò dáradára",
-        "env_cond_broken": "Ti parí"
+        "env_cond_broken": "Ti parí",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}",
+        "settings_location": "Location",
+        "settings_location_desc": "Set your city for weather and local information",
+        "settings_search_city": "City",
+        "settings_search_city_hint": "Search for a city..."
     },
     "conscience": {
         "ponder_attempted": "I attempted to {action}",

@@ -803,7 +803,8 @@ class TestSystemData:
     async def test_collect_available_tools_with_missing_attributes(self):
         """Test collecting available tools with runtime missing required attributes."""
         runtime = Mock()
-        # Missing bus_manager or service_registry
+        # Missing bus_manager and service_registry._services
+        runtime.service_registry = Mock(spec=[])  # No _services attribute
 
         result = await _collect_available_tools(runtime)
         assert result == {}
@@ -811,6 +812,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_valid_tools(self, caplog):
         """Test collecting available tools with valid tool services."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -824,7 +827,13 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info.return_value = tool_info
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Set up _services dict for _get_tool_providers
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -835,6 +844,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_async_methods(self):
         """Test collecting available tools with async tool service methods."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -847,7 +858,12 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "api"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -856,22 +872,23 @@ class TestSystemData:
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_non_iterable_services(self, caplog):
-        """Test collecting available tools with non-iterable tool services."""
+        """Test collecting available tools with non-iterable tool services (empty _services)."""
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
 
-        # Return non-iterable
-        runtime.service_registry.get_services_by_type.return_value = "not_iterable"
+        # Return empty _services - no tool providers
+        runtime.service_registry._services = {}
 
         result = await _collect_available_tools(runtime)
 
         assert result == {}
-        assert "get_services_by_type('tool') returned non-iterable: <class 'str'>" in caplog.text
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_invalid_tool_info_type(self):
         """Test collecting available tools with invalid tool info type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -881,7 +898,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["bad_tool"]
         tool_service.get_tool_info.return_value = "not_tool_info"  # Invalid type
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(TypeError, match="returned invalid type for bad_tool"):
             await _collect_available_tools(runtime)
@@ -889,6 +910,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_tool_info_exception(self):
         """Test collecting available tools with tool info exception."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -898,7 +921,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["error_tool"]
         tool_service.get_tool_info.side_effect = Exception("Tool info error")
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "error"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(Exception, match="Tool info error"):
             await _collect_available_tools(runtime)

@@ -1621,7 +1621,14 @@
         "wallet_paymaster_key_label": "Arka API Key",
         "wallet_paymaster_save": "Сохранить ключ",
         "interact_viz_execute": "Execute",
-        "interact_viz_complete": "Complete"
+        "interact_viz_complete": "Complete",
+        "adapter_reauth_required": "Re-authentication Required",
+        "adapter_reauth": "Re-authenticate",
+        "adapter_reauth_reason": "Reason: {reason}",
+        "settings_location": "Location",
+        "settings_location_desc": "Set your city for weather and local information",
+        "settings_search_city": "City",
+        "settings_search_city_hint": "Search for a city..."
     },
     "prompts": {
         "dma": {

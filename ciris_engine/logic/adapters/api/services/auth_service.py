@@ -130,7 +130,7 @@ class APIAuthService:
                 cls._fallback_password_logged = True
                 print("=" * 70)
                 print("FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):")
-                print(f"  Username: admin")
+                print("  Username: admin")
                 print(f"  Password: {cls._fallback_admin_password}")
                 print("This password is randomly generated and valid only until setup completes.")
                 print("=" * 70)

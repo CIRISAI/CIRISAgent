@@ -29,8 +29,8 @@ def _sanitize_for_log(value: str, max_length: int = 50) -> str:
     """
     if not isinstance(value, str):
         value = str(value)
-    # Remove newlines and control characters
-    sanitized = re.sub(r"[\r\n\x00-\x1f\x7f-\x9f]", "", value)
+    # Remove control characters (includes \r=0x0d, \n=0x0a in 0x00-0x1f range)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
     # Truncate
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."

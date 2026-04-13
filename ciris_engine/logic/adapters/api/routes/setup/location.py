@@ -23,8 +23,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Common field description constants
+DESC_CITY_NAME = "City name"
+DESC_REGION_NAME = "State/province/region name"
 DESC_COUNTRY_NAME = "Country name"
 DESC_COUNTRY_CODE = "ISO 3166-1 alpha-2 country code"
+DESC_TIMEZONE = "IANA timezone"
 
 # Path to the cities database
 # location.py is at ciris_engine/logic/adapters/api/routes/setup/location.py
@@ -36,14 +39,14 @@ GEO_DB_PATH = Path(__file__).parent.parent.parent.parent.parent.parent / "data" 
 class LocationResult(BaseModel):
     """A single location search result."""
 
-    city: str = Field(..., description="City name")
-    region: Optional[str] = Field(None, description="State/province/region name")
+    city: str = Field(..., description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
     country: str = Field(..., description=DESC_COUNTRY_NAME)
     country_code: str = Field(..., description=DESC_COUNTRY_CODE)
     latitude: float = Field(..., description="Latitude")
     longitude: float = Field(..., description="Longitude")
     population: int = Field(..., description="City population")
-    timezone: Optional[str] = Field(None, description="IANA timezone")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
     display_name: str = Field(..., description="Formatted display name")
 
 
@@ -263,13 +266,13 @@ async def list_countries() -> CountriesResponse:
 class UpdateLocationRequest(BaseModel):
     """Request to update user location."""
 
-    city: str = Field(..., description="City name")
-    region: Optional[str] = Field(None, description="State/province/region name")
+    city: str = Field(..., description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
     country: str = Field(..., description=DESC_COUNTRY_NAME)
     country_code: str = Field(..., description=DESC_COUNTRY_CODE)
     latitude: float = Field(..., description="Latitude")
     longitude: float = Field(..., description="Longitude")
-    timezone: Optional[str] = Field(None, description="IANA timezone")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
 
 
 class UpdateLocationResponse(BaseModel):
@@ -284,12 +287,12 @@ class CurrentLocationResponse(BaseModel):
     """Response from get current location endpoint."""
 
     configured: bool = Field(..., description="Whether location is configured")
-    city: Optional[str] = Field(None, description="City name")
-    region: Optional[str] = Field(None, description="State/province/region name")
+    city: Optional[str] = Field(None, description=DESC_CITY_NAME)
+    region: Optional[str] = Field(None, description=DESC_REGION_NAME)
     country: Optional[str] = Field(None, description=DESC_COUNTRY_NAME)
     latitude: Optional[float] = Field(None, description="Latitude")
     longitude: Optional[float] = Field(None, description="Longitude")
-    timezone: Optional[str] = Field(None, description="IANA timezone")
+    timezone: Optional[str] = Field(None, description=DESC_TIMEZONE)
     display_name: Optional[str] = Field(None, description="Formatted location display string")
 
 
@@ -335,6 +338,27 @@ def _apply_env_updates(updates: dict[str, str]) -> None:
             del os.environ[key]
 
 
+def _try_refresh_adapter_location(adapter_manager: Any, adapter_name: str, service_attr: str) -> None:
+    """Try to refresh location for a single adapter if it supports refresh_location."""
+    if adapter_name not in adapter_manager.loaded_adapters:
+        return
+
+    instance = adapter_manager.loaded_adapters[adapter_name]
+    service = getattr(instance.adapter, service_attr, None)
+    if service is None:
+        return
+
+    refresh_fn = getattr(service, "refresh_location", None)
+    if refresh_fn is None:
+        return
+
+    result = refresh_fn()
+    if result:
+        logger.info(f"[LOCATION] {adapter_name.title()} adapter location refreshed")
+    else:
+        logger.debug(f"[LOCATION] {adapter_name.title()} adapter location unchanged")
+
+
 def _refresh_location_aware_adapters(request: Request) -> None:
     """Notify location-aware adapters (weather, navigation) to refresh their location cache.
 
@@ -342,40 +366,18 @@ def _refresh_location_aware_adapters(request: Request) -> None:
     without requiring a full adapter reload.
     """
     try:
-        # Check if runtime is available
-        if not hasattr(request.app.state, "runtime") or request.app.state.runtime is None:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime is None:
             logger.debug("[LOCATION] No runtime available, skipping adapter refresh")
             return
 
-        runtime = request.app.state.runtime
-
-        # Check if adapter manager is available
-        if not hasattr(runtime, "adapter_manager") or runtime.adapter_manager is None:
+        adapter_manager = getattr(runtime, "adapter_manager", None)
+        if adapter_manager is None:
             logger.debug("[LOCATION] No adapter manager available, skipping adapter refresh")
             return
 
-        adapter_manager = runtime.adapter_manager
-
-        # Refresh weather adapter if loaded
-        if "weather" in adapter_manager.loaded_adapters:
-            weather_instance = adapter_manager.loaded_adapters["weather"]
-            if hasattr(weather_instance.adapter, "weather_service"):
-                weather_service = weather_instance.adapter.weather_service
-                if hasattr(weather_service, "refresh_location"):
-                    changed = weather_service.refresh_location()
-                    if changed:
-                        logger.info("[LOCATION] Weather adapter location refreshed")
-                    else:
-                        logger.debug("[LOCATION] Weather adapter location unchanged")
-
-        # Refresh navigation adapter if loaded
-        if "navigation" in adapter_manager.loaded_adapters:
-            nav_instance = adapter_manager.loaded_adapters["navigation"]
-            if hasattr(nav_instance.adapter, "navigation_service"):
-                nav_service = nav_instance.adapter.navigation_service
-                if hasattr(nav_service, "refresh_location"):
-                    nav_service.refresh_location()
-                    logger.info("[LOCATION] Navigation adapter location refreshed")
+        _try_refresh_adapter_location(adapter_manager, "weather", "weather_service")
+        _try_refresh_adapter_location(adapter_manager, "navigation", "navigation_service")
 
     except Exception as e:
         # Don't fail the location update if adapter refresh fails

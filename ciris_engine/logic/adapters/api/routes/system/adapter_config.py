@@ -172,8 +172,8 @@ def _resolve_url_hostname_to_ip(url: str) -> str:
             netloc = f"{ip_address}:{parsed.port}"
         new_parsed = parsed._replace(netloc=netloc)
         return urlunparse(new_parsed)
-    except (socket.gaierror, Exception) as e:
-        logger.debug(f"Could not resolve hostname in URL {url}: {e}")
+    except Exception as e:
+        logger.debug(f"Could not resolve hostname in URL: {type(e).__name__}")
         return url  # Return original if resolution fails
 
 

@@ -12,6 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -45,7 +46,7 @@ import androidx.compose.ui.unit.dp
  * - Reload/remove adapters
  * - Add new adapters (platform-specific implementation)
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AdaptersScreen(
     adapters: List<AdapterItem>,
@@ -57,7 +58,7 @@ fun AdaptersScreen(
     onRemoveAdapter: (String) -> Unit,
     onToggleExpanded: (String) -> Unit,
     onEditConfig: (String) -> Unit,
-    onReauthAdapter: (String) -> Unit = {},  // Re-authenticate adapter (OAuth flow)
+    onReauthAdapter: (adapterType: String, authStepId: String?) -> Unit = { _, _ -> },  // Re-authenticate adapter (OAuth flow)
     onAddAdapter: () -> Unit,
     onImportSkill: () -> Unit = {},
     onSkillStudio: () -> Unit = {},
@@ -169,7 +170,7 @@ fun AdaptersScreen(
                             onReload = { onReloadAdapter(adapter.id) },
                             onRemove = { showRemoveDialog = adapter },
                             onEditConfig = { onEditConfig(adapter.type.lowercase()) },
-                            onReauth = { onReauthAdapter(adapter.type.lowercase()) }
+                            onReauth = { onReauthAdapter(adapter.type.lowercase(), adapter.authStepId) }
                         )
                     }
                 }
@@ -404,6 +405,7 @@ private fun AdapterStatusHeader(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AdapterCard(
     adapter: AdapterItem,
@@ -610,31 +612,26 @@ private fun AdapterCard(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
-                    val services = details?.servicesRegistered ?: emptyList()
+                    // Filter out empty/blank service names to avoid empty chips
+                    val services = (details?.servicesRegistered ?: emptyList())
+                        .filter { it.isNotBlank() }
                     if (services.isNotEmpty()) {
-                        // Use Column with Rows to wrap chips properly
-                        Column(
+                        // Use FlowRow for natural wrapping of chips
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            // Group services into rows of 3 for better wrapping
-                            services.chunked(3).forEach { rowServices ->
-                                Row(
-                                    modifier = Modifier.wrapContentHeight(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowServices.forEach { service ->
-                                        SuggestionChip(
-                                            onClick = {},
-                                            label = {
-                                                Text(
-                                                    text = DisplayNames.humanizeServiceName(service),
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
+                            services.forEach { service ->
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = {
+                                        Text(
+                                            text = DisplayNames.humanizeServiceName(service),
+                                            style = MaterialTheme.typography.labelSmall
                                         )
                                     }
-                                }
+                                )
                             }
                         }
                     } else {
@@ -738,6 +735,22 @@ private fun AdapterCard(
                     Text(localizedString("mobile.adapter_reload"))
                 }
 
+                // Show re-auth button for adapters with auth support (even if not needsReauth)
+                if (adapter.hasAuthStep && !adapter.needsReauth) {
+                    OutlinedButton(
+                        onClick = onReauth,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.RefreshIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(localizedString("mobile.adapter_reauth"))
+                    }
+                }
+
                 OutlinedButton(
                     onClick = onRemove,
                     modifier = Modifier.weight(1f),
@@ -790,5 +803,7 @@ data class AdapterItem(
     val status: String,
     val isHealthy: Boolean,
     val needsReauth: Boolean = false,
-    val reauthReason: String? = null
+    val reauthReason: String? = null,
+    val hasAuthStep: Boolean = false,
+    val authStepId: String? = null
 )

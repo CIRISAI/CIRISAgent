@@ -169,7 +169,28 @@ async def list_adapters(
             logger.debug("[LIST_ADAPTERS] Got %d auto-loaded adapters", len(auto_adapters))
             adapters.extend(auto_adapters)
 
-        adapter_statuses = [_convert_adapter_to_status(a) for a in adapters]
+        # adapters from runtime_control.list_adapters() are already RuntimeAdapterStatus
+        # Only convert AdapterInfo objects (from auto_adapters)
+        adapter_statuses: List[AdapterStatusSchema] = []
+        for a in adapters:
+            logger.info(
+                "[LIST_ADAPTERS] Processing adapter: type=%s, class=%s",
+                getattr(a, "adapter_type", "unknown"),
+                type(a).__name__,
+            )
+            if isinstance(a, AdapterStatusSchema):
+                # Already RuntimeAdapterStatus, use directly (preserves needs_reauth, has_auth_step)
+                logger.info(
+                    "[LIST_ADAPTERS]   is RuntimeAdapterStatus: needs_reauth=%s, has_auth_step=%s, auth_step_id=%s",
+                    getattr(a, "needs_reauth", "N/A"),
+                    getattr(a, "has_auth_step", "N/A"),
+                    getattr(a, "auth_step_id", "N/A"),
+                )
+                adapter_statuses.append(a)
+            else:
+                # AdapterInfo from auto-loaded adapters - convert
+                logger.info("[LIST_ADAPTERS]   is AdapterInfo, converting to status")
+                adapter_statuses.append(_convert_adapter_to_status(a))
         running_count = sum(1 for a in adapter_statuses if a.is_running)
 
         return SuccessResponse(

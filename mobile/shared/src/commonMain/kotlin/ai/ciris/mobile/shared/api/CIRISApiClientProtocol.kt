@@ -266,7 +266,9 @@ data class AdapterStatusData(
     val adapterType: String,
     val isRunning: Boolean,
     val needsReauth: Boolean = false,
-    val reauthReason: String? = null
+    val reauthReason: String? = null,
+    val hasAuthStep: Boolean = false,
+    val authStepId: String? = null
 )
 
 /**

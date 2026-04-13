@@ -103,6 +103,10 @@ class RuntimeAdapterStatus(BaseModel):
     needs_reauth: bool = Field(False, description="Whether re-authentication is required")
     reauth_reason: Optional[str] = Field(None, description="Reason re-authentication is needed")
 
+    # Interactive auth support - for adapters with auth steps in their wizard
+    has_auth_step: bool = Field(False, description="Whether adapter has an auth step in its wizard")
+    auth_step_id: Optional[str] = Field(None, description="ID of the auth step (oauth or device_auth)")
+
     model_config = ConfigDict(defer_build=True)
 
 

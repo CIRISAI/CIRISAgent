@@ -122,18 +122,24 @@ class AdapterConfigurationService:
         self,
         adapter_type: str,
         user_id: str,
+        start_step_id: Optional[str] = None,
+        existing_config: Optional[Dict[str, Any]] = None,
     ) -> AdapterConfigSession:
         """Start a new configuration session for an adapter.
 
         Args:
             adapter_type: Type of adapter to configure
             user_id: ID of user performing configuration
+            start_step_id: Optional step ID to start at (for re-auth flows)
+            existing_config: Optional existing config to pre-populate session data
+                             (used for re-auth to preserve base_url etc.)
 
         Returns:
             New configuration session
 
         Raises:
             ValueError: If adapter doesn't support interactive configuration
+            ValueError: If start_step_id is invalid
         """
         if adapter_type not in self._adapter_manifests:
             raise ValueError(f"Adapter '{adapter_type}' does not support interactive configuration")
@@ -143,6 +149,26 @@ class AdapterConfigurationService:
             adapter_type=adapter_type,
             user_id=user_id,
         )
+
+        # If start_step_id is specified, find and set the step index
+        if start_step_id:
+            config = self._adapter_manifests[adapter_type]
+            step_index = None
+            for i, step in enumerate(config.steps):
+                if step.step_id == start_step_id:
+                    step_index = i
+                    break
+            if step_index is None:
+                raise ValueError(f"Step '{start_step_id}' not found in adapter '{adapter_type}'")
+            session.current_step_index = step_index
+            logger.info(f"Starting session at step '{start_step_id}' (index {step_index})")
+
+        # Pre-populate collected_config with existing config for re-auth flows
+        # This allows OAuth step to use previously configured base_url
+        if existing_config:
+            session.collected_config.update(existing_config)
+            logger.info(f"Pre-populated session with existing config: {list(existing_config.keys())}")
+
         self._sessions[session.session_id] = session
         logger.info(f"Started config session {session.session_id} for {adapter_type}")
         return session

@@ -175,13 +175,31 @@ class HAIntegrationService:
 
         This is set when the refresh token is revoked/expired and a new OAuth
         flow is needed. The mobile app should show this on the adapters page.
+
+        Also returns True if no token is configured at all.
         """
-        return self._needs_reauth
+        # If explicitly flagged for reauth (e.g., token expired during operation)
+        if self._needs_reauth:
+            logger.info(f"[HA_NEEDS_REAUTH] _needs_reauth=True, returning True")
+            return True
+        # Also need reauth if no token configured
+        has_token = bool(self.ha_token)
+        logger.info(f"[HA_NEEDS_REAUTH] _needs_reauth=False, ha_token exists={has_token}")
+        if not self.ha_token:
+            logger.info(f"[HA_NEEDS_REAUTH] No token, returning True")
+            return True
+        logger.info(f"[HA_NEEDS_REAUTH] Has token, returning False")
+        return False
 
     @property
     def reauth_reason(self) -> Optional[str]:
         """Get the reason re-authentication is required."""
-        return self._reauth_reason
+        if self._reauth_reason:
+            return self._reauth_reason
+        # Provide default reason if no token
+        if not self.ha_token:
+            return "No Home Assistant token configured. Please authenticate."
+        return None
 
     def clear_reauth_flag(self) -> None:
         """Clear the re-auth flag after successful re-authentication."""
@@ -282,6 +300,8 @@ class HAIntegrationService:
 
         if not self.ha_token:
             logger.warning("Cannot initialize - no HA token configured")
+            self._needs_reauth = True
+            self._reauth_reason = "No Home Assistant token configured. Please authenticate."
             return False
 
         # Quick reachability check (1 second timeout) - fail fast if host unreachable
@@ -764,6 +784,9 @@ class HAIntegrationService:
     async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
         """Get all Home Assistant entities. Returns cached results if fresh."""
         if not self.ha_token:
+            # Set re-auth flag when called without token (e.g., during context enrichment)
+            self._needs_reauth = True
+            self._reauth_reason = "No Home Assistant token configured. Please authenticate."
             return []
 
         # Return cached results if still fresh (uses list-specific timestamp)

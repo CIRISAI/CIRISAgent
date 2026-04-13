@@ -206,11 +206,13 @@ class HomeAssistantAdapter(Service):
         reauth_reason = None
 
         # Check if HA service needs re-authentication
+        logger.info(f"[HA_ADAPTER_STATUS] ha_service exists={self.ha_service is not None}")
         if self.ha_service:
             needs_reauth = self.ha_service.needs_reauth
             reauth_reason = self.ha_service.reauth_reason
+            logger.info(f"[HA_ADAPTER_STATUS] needs_reauth={needs_reauth}, reauth_reason={reauth_reason}")
 
-        return RuntimeAdapterStatus(
+        status = RuntimeAdapterStatus(
             adapter_id="home_assistant",
             adapter_type="home_assistant",
             is_running=self._running,
@@ -219,6 +221,8 @@ class HomeAssistantAdapter(Service):
             needs_reauth=needs_reauth,
             reauth_reason=reauth_reason,
         )
+        logger.info(f"[HA_ADAPTER_STATUS] Returning status: needs_reauth={status.needs_reauth}")
+        return status
 
     async def get_active_channels(self) -> List[Dict[str, Any]]:
         """Get active communication channels from HA communication service."""

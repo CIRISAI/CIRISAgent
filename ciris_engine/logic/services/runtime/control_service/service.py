@@ -860,12 +860,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error=result.error,
         )
 
-    async def list_adapters(self) -> List[AdapterInfo]:
-        """List all loaded adapters including bootstrap adapters."""
+    async def list_adapters(self) -> List[Any]:
+        """List all loaded adapters including bootstrap adapters.
+
+        Returns a mix of AdapterInfo (bootstrap) and RuntimeAdapterStatus (managed).
+        RuntimeAdapterStatus preserves needs_reauth, has_auth_step, auth_step_id fields.
+        """
         logger.debug("[LIST_ADAPTERS_SVC] Starting list_adapters")
         self._ensure_adapter_manager_initialized()
 
-        adapters_list: List[AdapterInfo] = []
+        adapters_list: List[Any] = []
         bootstrap = await self._get_bootstrap_adapters()
         logger.debug("[LIST_ADAPTERS_SVC] Got %d bootstrap adapters", len(bootstrap))
         adapters_list.extend(bootstrap)
@@ -1060,19 +1064,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             logger.debug(f"Could not create ToolInfo for {tool_name}: {e}")
             return None
 
-    async def _get_managed_adapters(self) -> List[AdapterInfo]:
-        """Get adapters from adapter manager."""
+    async def _get_managed_adapters(self) -> List[Any]:
+        """Get adapters from adapter manager.
+
+        Returns RuntimeAdapterStatus objects directly to preserve
+        needs_reauth, has_auth_step, auth_step_id fields.
+        """
         if not self.adapter_manager:
             return []
 
-        adapters = []
-        adapters_raw = await self.adapter_manager.list_adapters()
-
-        for adapter_status in adapters_raw:
-            adapter_info = self._convert_managed_adapter_status(adapter_status)
-            adapters.append(adapter_info)
-
-        return adapters
+        # Return RuntimeAdapterStatus directly - don't convert to AdapterInfo
+        # This preserves needs_reauth, has_auth_step, auth_step_id fields
+        return await self.adapter_manager.list_adapters()
 
     def _convert_managed_adapter_status(self, adapter_status: Any) -> AdapterInfo:
         """Convert adapter manager status to AdapterInfo."""

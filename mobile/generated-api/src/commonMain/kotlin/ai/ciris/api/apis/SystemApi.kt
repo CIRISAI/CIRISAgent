@@ -850,10 +850,11 @@ open class SystemApi : ApiClient {
      * Start interactive configuration session for an adapter.  Creates a new configuration session and returns the session ID along with information about the first step in the workflow.  Requires ADMIN role.
      * @param adapterType
      * @param authorization  (optional)
+     * @param startStepId Optional step ID to start at (useful for re-auth flows)
      * @return SuccessResponseConfigurationSessionResponse
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun startAdapterConfigurationV1SystemAdaptersAdapterTypeConfigureStartPost(adapterType: kotlin.String, authorization: kotlin.String? = null): HttpResponse<SuccessResponseConfigurationSessionResponse> {
+    open suspend fun startAdapterConfigurationV1SystemAdaptersAdapterTypeConfigureStartPost(adapterType: kotlin.String, authorization: kotlin.String? = null, startStepId: kotlin.String? = null): HttpResponse<SuccessResponseConfigurationSessionResponse> {
 
         val localVariableAuthNames = listOf<String>()
 
@@ -861,6 +862,7 @@ open class SystemApi : ApiClient {
             io.ktor.client.utils.EmptyContent
 
         val localVariableQuery = mutableMapOf<String, List<String>>()
+        startStepId?.let { localVariableQuery["start_step_id"] = listOf(it) }
         val localVariableHeaders = mutableMapOf<String, String>()
         authorization?.apply { localVariableHeaders["authorization"] = this.toString() }
 

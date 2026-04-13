@@ -1695,6 +1695,10 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Edit config for: $adapterType")
                         adaptersViewModel.editAdapterConfig(adapterType)
                     },
+                    onReauthAdapter = { adapterType, authStepId ->
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Re-auth for: $adapterType, authStepId=$authStepId")
+                        adaptersViewModel.reauthAdapter(adapterType, authStepId)
+                    },
                     onReloadAdapter = { adapterId ->
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Reloading adapter: $adapterId")
                         adaptersViewModel.reloadAdapter(adapterId)

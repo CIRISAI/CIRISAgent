@@ -1905,7 +1905,7 @@ class CIRISApiClient(
             val data = body.`data` ?: throw RuntimeException("API returned null data")
             logInfo(method, "API response: total=${data.totalCount}, running=${data.runningCount}, adapters.size=${data.adapters.size}")
             data.adapters.forEachIndexed { index, adapter ->
-                logInfo(method, "  API adapter[$index]: id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}")
+                logInfo(method, "  API adapter[$index]: id=${adapter.adapterId}, type=${adapter.adapterType}, running=${adapter.isRunning}, needsReauth=${adapter.needsReauth}, hasAuthStep=${adapter.hasAuthStep}")
             }
 
             AdaptersListData(
@@ -1915,7 +1915,9 @@ class CIRISApiClient(
                         adapterType = adapter.adapterType,
                         isRunning = adapter.isRunning,
                         needsReauth = adapter.needsReauth,
-                        reauthReason = adapter.reauthReason
+                        reauthReason = adapter.reauthReason,
+                        hasAuthStep = adapter.hasAuthStep,
+                        authStepId = adapter.authStepId
                     )
                 },
                 totalCount = data.totalCount,
@@ -2320,15 +2322,19 @@ class CIRISApiClient(
 
     /**
      * Start an adapter configuration wizard session.
+     *
+     * @param adapterType Type of adapter to configure
+     * @param startStepId Optional step ID to start at (useful for re-auth flows)
      */
-    suspend fun startAdapterConfiguration(adapterType: String): ConfigSessionData {
+    suspend fun startAdapterConfiguration(adapterType: String, startStepId: String? = null): ConfigSessionData {
         val method = "startAdapterConfiguration"
-        logInfo(method, "Starting configuration for adapter type: $adapterType")
+        logInfo(method, "Starting configuration for adapter type: $adapterType, startStepId: $startStepId")
 
         return try {
             val response = systemApi.startAdapterConfigurationV1SystemAdaptersAdapterTypeConfigureStartPost(
                 adapterType = adapterType,
-                authorization = authHeader()
+                authorization = authHeader(),
+                startStepId = startStepId
             )
             logDebug(method, "Response: status=${response.status}")
 
@@ -6035,17 +6041,30 @@ class CIRISApiClient(
             }
         }
 
-        return try {
-            val requestBody = mapOf(
-                "city" to location.city,
-                "region" to (location.region ?: ""),
-                "country" to location.country,
-                "country_code" to location.countryCode,
-                "latitude" to location.latitude,
-                "longitude" to location.longitude,
-                "timezone" to (location.timezone ?: "")
-            )
+        // Use a proper @Serializable data class instead of Map<String, Any>
+        // to avoid "Serializer for subclass 'LinkedHashMap' is not found" errors
+        @Serializable
+        data class LocationUpdateRequest(
+            val city: String,
+            val region: String,
+            val country: String,
+            @SerialName("country_code") val countryCode: String,
+            val latitude: Double,
+            val longitude: Double,
+            val timezone: String
+        )
 
+        val requestBody = LocationUpdateRequest(
+            city = location.city,
+            region = location.region ?: "",
+            country = location.country,
+            countryCode = location.countryCode,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            timezone = location.timezone ?: ""
+        )
+
+        return try {
             val response = client.post("$baseUrl/v1/setup/location") {
                 header("Authorization", authHeader())
                 contentType(ContentType.Application.Json)

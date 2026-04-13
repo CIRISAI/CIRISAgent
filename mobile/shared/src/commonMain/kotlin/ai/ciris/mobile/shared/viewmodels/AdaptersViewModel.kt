@@ -222,7 +222,9 @@ class AdaptersViewModel(
                     status = statusText,
                     isHealthy = adapterStatus.isRunning,
                     needsReauth = adapterStatus.needsReauth,
-                    reauthReason = adapterStatus.reauthReason
+                    reauthReason = adapterStatus.reauthReason,
+                    hasAuthStep = adapterStatus.hasAuthStep,
+                    authStepId = adapterStatus.authStepId
                 )
             }
 
@@ -388,6 +390,39 @@ class AdaptersViewModel(
         logInfo(method, "Editing config for adapter type: $adapterType")
         // Re-use existing wizard flow
         startWizard(adapterType)
+    }
+
+    /**
+     * Re-authenticate an adapter (e.g., expired OAuth token).
+     * Opens the wizard dialog directly to the adapter's OAuth flow.
+     *
+     * @param adapterType Type of adapter to re-authenticate
+     * @param authStepId Optional auth step ID to jump directly to (if known from adapter status)
+     */
+    fun reauthAdapter(adapterType: String, authStepId: String? = null) {
+        val method = "reauthAdapter"
+        logInfo(method, "Re-authenticating adapter type: $adapterType, authStepId: $authStepId")
+        viewModelScope.launch {
+            _wizardLoading.value = true
+            _wizardError.value = null
+            _showWizardDialog.value = true  // Show dialog immediately
+            try {
+                // Start wizard at the auth step if provided
+                val session = apiClient.startAdapterConfiguration(adapterType, startStepId = authStepId)
+                _wizardSession.value = session
+                logInfo(method, "Re-auth session started: ${session.sessionId}, stepIdx=${session.currentStepIndex}/${session.totalSteps}")
+                // Auto-execute discovery step if first step is discovery type
+                if (session.currentStep?.stepType == "discovery") {
+                    logInfo(method, "Current step is discovery, auto-executing...")
+                    executeDiscoveryStepInternal(session)
+                }
+            } catch (e: Exception) {
+                logException(method, e)
+                _wizardError.value = "Failed to start re-authentication: ${e.message}"
+            } finally {
+                _wizardLoading.value = false
+            }
+        }
     }
 
     /**

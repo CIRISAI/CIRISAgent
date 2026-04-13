@@ -300,7 +300,20 @@ class CIRISVerify:
                 "Ensure the native library is included in jniLibs."
             )
 
-        # Search default paths
+        # 1. pip-installed ciris_verify — always correct platform
+        try:
+            import ciris_verify as cv_pkg
+            pkg_dir = Path(cv_pkg.__file__).parent
+            for suffix in [".dylib", ".so", ".dll"]:
+                candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
+                if candidate.exists():
+                    import logging
+                    logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
+                    return candidate
+        except (ImportError, AttributeError):
+            pass
+
+        # 2. Search default paths
         system = platform.system()
         paths = DEFAULT_BINARY_PATHS.get(system, [])
 
@@ -309,9 +322,15 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # Also check relative to this module
+        # 3. Check relative to this module (platform-aware suffix order)
         module_dir = Path(__file__).parent
-        for suffix in [".so", ".dylib", ".dll"]:
+        if system == "Darwin":
+            suffixes = [".dylib", ".so", ".dll"]
+        elif system == "Windows":
+            suffixes = [".dll", ".so", ".dylib"]
+        else:
+            suffixes = [".so", ".dylib", ".dll"]
+        for suffix in suffixes:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate

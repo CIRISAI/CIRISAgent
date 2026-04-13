@@ -786,7 +786,8 @@ private fun parseItemObject(json: String): EnrichmentItem? {
  */
 private fun extractKeyValuePairs(json: String): List<Pair<String, String>> {
     val pairs = mutableListOf<Pair<String, String>>()
-    val pattern = Regex("\"([^\"]+)\"\\s*:\\s*(?:\"([^\"]*)\"|([0-9.]+|true|false|null))")
+    // Note: -? allows optional negative sign for numbers like longitude (-88.08341)
+    val pattern = Regex("\"([^\"]+)\"\\s*:\\s*(?:\"([^\"]*)\"|(-?[0-9.]+|true|false|null))")
 
     pattern.findAll(json).forEach { match ->
         val key = match.groupValues[1]

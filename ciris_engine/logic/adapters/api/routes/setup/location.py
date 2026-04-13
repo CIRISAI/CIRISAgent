@@ -10,9 +10,9 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from pydantic import BaseModel, Field
 
@@ -322,12 +322,62 @@ def _apply_env_updates(updates: dict[str, str]) -> None:
             del os.environ[key]
 
 
+def _refresh_location_aware_adapters(request: Request) -> None:
+    """Notify location-aware adapters (weather, navigation) to refresh their location cache.
+
+    This is called after location updates to ensure adapters pick up new coordinates
+    without requiring a full adapter reload.
+    """
+    try:
+        # Check if runtime is available
+        if not hasattr(request.app.state, "runtime") or request.app.state.runtime is None:
+            logger.debug("[LOCATION] No runtime available, skipping adapter refresh")
+            return
+
+        runtime = request.app.state.runtime
+
+        # Check if adapter manager is available
+        if not hasattr(runtime, "adapter_manager") or runtime.adapter_manager is None:
+            logger.debug("[LOCATION] No adapter manager available, skipping adapter refresh")
+            return
+
+        adapter_manager = runtime.adapter_manager
+
+        # Refresh weather adapter if loaded
+        if "weather" in adapter_manager.loaded_adapters:
+            weather_instance = adapter_manager.loaded_adapters["weather"]
+            if hasattr(weather_instance.adapter, "weather_service"):
+                weather_service = weather_instance.adapter.weather_service
+                if hasattr(weather_service, "refresh_location"):
+                    changed = weather_service.refresh_location()
+                    if changed:
+                        logger.info("[LOCATION] Weather adapter location refreshed")
+                    else:
+                        logger.debug("[LOCATION] Weather adapter location unchanged")
+
+        # Refresh navigation adapter if loaded
+        if "navigation" in adapter_manager.loaded_adapters:
+            nav_instance = adapter_manager.loaded_adapters["navigation"]
+            if hasattr(nav_instance.adapter, "navigation_service"):
+                nav_service = nav_instance.adapter.navigation_service
+                if hasattr(nav_service, "refresh_location"):
+                    nav_service.refresh_location()
+                    logger.info("[LOCATION] Navigation adapter location refreshed")
+
+    except Exception as e:
+        # Don't fail the location update if adapter refresh fails
+        logger.warning(f"[LOCATION] Failed to refresh adapters: {type(e).__name__}: {e}")
+
+
 @router.post("/location")
-async def update_user_location(request: UpdateLocationRequest) -> UpdateLocationResponse:
+async def update_user_location(
+    update_request: UpdateLocationRequest, request: Request
+) -> UpdateLocationResponse:
     """Update user's location in the .env file.
 
     This persists the location so weather and other location-aware
-    services can use it.
+    services can use it. Also notifies running adapters to refresh their
+    location cache.
     """
     try:
         env_path = get_env_file_path()
@@ -335,8 +385,8 @@ async def update_user_location(request: UpdateLocationRequest) -> UpdateLocation
             logger.error("[LOCATION] .env file not found")
             return UpdateLocationResponse(success=False, message="Configuration file not found", location_display="")
 
-        location_display = _build_location_display(request.city, request.region, request.country)
-        updates = _build_location_updates(request, location_display)
+        location_display = _build_location_display(update_request.city, update_request.region, update_request.country)
+        updates = _build_location_updates(update_request, location_display)
 
         # Read, update, and write .env
         lines = env_path.read_text().split("\n")
@@ -344,6 +394,9 @@ async def update_user_location(request: UpdateLocationRequest) -> UpdateLocation
         env_path.write_text("\n".join(lines))
 
         _apply_env_updates(updates)
+
+        # Notify location-aware adapters to refresh their cached location
+        _refresh_location_aware_adapters(request)
 
         logger.info("[LOCATION] User location updated successfully")
         return UpdateLocationResponse(success=True, message="Location updated successfully", location_display=location_display)

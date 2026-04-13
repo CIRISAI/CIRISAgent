@@ -320,6 +320,48 @@ class WeatherToolService:
         """Stop the service."""
         logger.info("WeatherToolService stopped")
 
+    def refresh_location(self) -> bool:
+        """Refresh location from environment variables.
+
+        Call this after user location is updated to pick up new coordinates.
+        Re-reads location from env vars and re-registers tools.
+
+        Returns:
+            True if location was updated, False if unchanged or unavailable.
+        """
+        user_location = get_user_location()
+
+        # Check if location changed
+        old_lat = self._default_lat
+        old_lon = self._default_lon
+
+        if user_location.has_coordinates():
+            self._default_lat = user_location.latitude
+            self._default_lon = user_location.longitude
+            self._default_location_string = user_location.location_string
+            self._location_source = "user_setup"
+            logger.info(
+                f"Location refreshed: {user_location.location_string} "
+                f"({self._default_lat}, {self._default_lon})"
+            )
+        else:
+            # No coordinates available
+            self._default_lat = None
+            self._default_lon = None
+            self._default_location_string = None
+            self._location_source = None
+            logger.info("Location cleared (no coordinates available)")
+
+        # Check if anything changed
+        changed = (old_lat != self._default_lat) or (old_lon != self._default_lon)
+
+        if changed:
+            # Re-register tools with updated location info
+            self._tools = self._define_tools()
+            logger.info(f"Tools re-registered: {list(self._tools.keys())}")
+
+        return changed
+
     # ========== Tool Service Protocol Methods ==========
 
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:

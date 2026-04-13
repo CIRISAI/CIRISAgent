@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.api.LocationResultData
 
 private const val TAG = "SetupViewModel"
 
@@ -264,6 +265,7 @@ class SetupViewModel : ViewModel() {
      * Select a location from search results.
      * Auto-fills country, region, and city based on selection.
      * Sets location granularity to CITY.
+     * Also persists the location to the backend immediately (same as Settings).
      */
     fun selectLocation(location: LocationSearchResult) {
         _state.value = _state.value.copy(
@@ -275,6 +277,31 @@ class SetupViewModel : ViewModel() {
             locationSearchQuery = location.displayName,
             locationSearchResults = emptyList()
         )
+
+        // Persist location to backend immediately (same endpoint as Settings)
+        viewModelScope.launch {
+            try {
+                val locationData = LocationResultData(
+                    city = location.city,
+                    region = location.region,
+                    country = location.country,
+                    countryCode = location.countryCode,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    population = location.population,
+                    timezone = location.timezone,
+                    displayName = location.displayName
+                )
+                val result = apiClient.updateUserLocation(locationData)
+                if (result.success) {
+                    PlatformLogger.i(TAG, "Location persisted: ${result.locationDisplay}")
+                } else {
+                    PlatformLogger.e(TAG, "Failed to persist location: ${result.message}")
+                }
+            } catch (e: Exception) {
+                PlatformLogger.e(TAG, "Location persist error: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -1244,7 +1271,7 @@ class SetupViewModel : ViewModel() {
             }
         }
 
-        // Build adapter config with consent settings
+        // Build adapter config with consent settings and adapter-specific config
         val adapterConfig = buildMap {
             // Accord metrics settings
             if (currentState.accordMetricsConsent) {
@@ -1254,6 +1281,11 @@ class SetupViewModel : ViewModel() {
             // Public API services (Navigation & Weather)
             if (currentState.publicApiServicesEnabled && currentState.publicApiEmail.isNotBlank()) {
                 put("PUBLIC_API_CONTACT_EMAIL", currentState.publicApiEmail)
+            }
+            // Include adapter-specific config from wizard (e.g., HA OAuth tokens)
+            // configuredAdapterData is Map<String, Map<String, String>>
+            for ((_, config) in currentState.configuredAdapterData) {
+                putAll(config)
             }
         }
 

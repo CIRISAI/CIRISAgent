@@ -1564,6 +1564,8 @@
         "skill_validate": "問題をチェック",
         "skill_workshop": "スキル工房",
         "skill_workshop_desc": "エージェントのスキルを作成・インポート・管理します。",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "スキルをゼロから作成するためのビジュアルエディター。",
         "startup_creating_api": "API作成中",
         "startup_configuring": "ミドルウェア設定中",
         "startup_initializing_runtime": "ランタイム初期化中",

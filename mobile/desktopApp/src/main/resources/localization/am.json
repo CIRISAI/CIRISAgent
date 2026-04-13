@@ -1431,6 +1431,8 @@
         "login_error_connection": "ከአገልጋይ ጋር መገናኘት አልተቻለም። እባክዎ ግንኙነትዎን ያረጋግጡ።",
         "skill_workshop": "የክህሎት ወርክሾፕ",
         "skill_workshop_desc": "ለወኪልዎ ክህሎቶችን ይፍጠሩ፣ ያስገቡ እና ያስተዳድሩ።",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "ክህሎቶችን ከጀማርት ለመፍጠር ምስላዊ ኢዲተር።",
         "skill_create_new": "አዲስ ክህሎት ፍጠር",
         "skill_import": "ክህሎት አስገባ",
         "skill_import_desc": "ለመጨመር ከድሩ የክህሎት ፋይል ይለጥፉ።",

@@ -1431,6 +1431,8 @@
         "login_error_connection": "لا يمكن الاتصال بالخادم. يرجى التحقق من اتصالك.",
         "skill_workshop": "ورشة المهارات",
         "skill_workshop_desc": "إنشاء المهارات واستيرادها وإدارتها للوكيل الخاص بك.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "محرر مرئي لإنشاء مهارات من الصفر.",
         "skill_create_new": "إنشاء مهارة جديدة",
         "skill_import": "استيراد مهارة",
         "skill_import_desc": "الصق ملف مهارة من الويب لإضافته.",

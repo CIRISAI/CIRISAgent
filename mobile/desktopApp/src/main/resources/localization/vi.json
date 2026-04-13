@@ -1550,6 +1550,8 @@
     "skill_validate": "Xác thực",
     "skill_workshop": "Xưởng",
     "skill_workshop_desc": "Mô tả Xưởng",
+    "skill_studio": "Skill Studio",
+    "skill_studio_desc": "Trình chỉnh sửa trực quan để tạo kỹ năng từ đầu.",
     "startup_api_ready": "API Sẵn sàng",
     "startup_attestation": "Chứng thực Nền tảng",
     "startup_attestation_complete": "Chứng thực Nền tảng Hoàn thành",

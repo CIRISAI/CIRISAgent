@@ -1515,6 +1515,8 @@
         "login_error_connection": "Cannot connect to server. தயவுசெய்து check your connection.",
         "skill_workshop": "Skill Workshop",
         "skill_workshop_desc": "உருவாக்கு, import, and manage skills for your agent.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "உங்கள் திறமைகளை ஆரம்பத்திலிருந்து உருவாக்க visual editor.",
         "skill_create_new": "உருவாக்கு New Skill",
         "skill_import": "இறக்குமதி Skill",
         "skill_import_desc": "Paste a skill file from the web to add it.",

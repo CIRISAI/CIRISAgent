@@ -1564,6 +1564,8 @@
         "skill_validate": "문제 확인",
         "skill_workshop": "스킬 워크숍",
         "skill_workshop_desc": "에이전트를 위한 스킬을 만들고, 가져오고, 관리하세요.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "처음부터 스킬을 만드는 시각적 편집기입니다.",
         "startup_creating_api": "API 생성 중",
         "startup_configuring": "미들웨어 구성 중",
         "startup_initializing_runtime": "런타임 초기화 중",

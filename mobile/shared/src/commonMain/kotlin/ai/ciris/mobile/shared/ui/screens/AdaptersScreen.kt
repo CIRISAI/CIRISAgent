@@ -59,6 +59,7 @@ fun AdaptersScreen(
     onEditConfig: (String) -> Unit,
     onAddAdapter: () -> Unit,
     onImportSkill: () -> Unit = {},
+    onSkillStudio: () -> Unit = {},
     onRefresh: () -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -222,13 +223,13 @@ fun AdaptersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Skill Workshop option
+                    // Skill Studio - Visual SKILL.md editor
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testableClickable("btn_skill_workshop") {
+                            .testableClickable("btn_skill_studio") {
                                 showAddMenu = false
-                                onImportSkill()
+                                onSkillStudio()
                             },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -248,14 +249,53 @@ fun AdaptersScreen(
                             )
                             Column {
                                 Text(
-                                    text = localizedString("mobile.skill_workshop"),
+                                    text = localizedString("mobile.skill_studio"),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = localizedString("mobile.skill_workshop_desc"),
+                                    text = localizedString("mobile.skill_studio_desc"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Import Skill - Paste existing SKILL.md
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testableClickable("btn_import_skill") {
+                                showAddMenu = false
+                                onImportSkill()
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Column {
+                                Text(
+                                    text = localizedString("mobile.skill_import"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    text = localizedString("mobile.skill_import_desc"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                                 )
                             }
                         }

@@ -1515,6 +1515,8 @@
         "login_error_connection": "Cannot connect to server. దయచేసి check your connection.",
         "skill_workshop": "Skill Workshop",
         "skill_workshop_desc": "సృష్టించు, import, and manage skills for your agent.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "మీ నైపుణ్యాలను ఆరంభం నుండి సృష్టించడానికి visual editor.",
         "skill_create_new": "సృష్టించు New Skill",
         "skill_import": "Import Skill",
         "skill_import_desc": "Paste a skill file from the web to add it.",

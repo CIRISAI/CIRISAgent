@@ -1431,6 +1431,8 @@
         "login_error_connection": "Não é possível conectar ao servidor. Verifique sua conexão.",
         "skill_workshop": "Oficina de Skills",
         "skill_workshop_desc": "Crie, importe e gerencie skills para seu agente.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "Editor visual para criar skills do zero.",
         "skill_create_new": "Criar novo skill",
         "skill_import": "Importar skill",
         "skill_import_desc": "Cole um arquivo de skill da web para adicioná-lo.",

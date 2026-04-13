@@ -1564,6 +1564,8 @@
         "skill_validate": "检查问题",
         "skill_workshop": "技能工坊",
         "skill_workshop_desc": "为你的智能助手创建、导入和管理技能。",
+        "skill_studio": "技能工作室",
+        "skill_studio_desc": "用于从头开始创建技能的可视化编辑器。",
         "startup_creating_api": "正在创建API",
         "startup_configuring": "正在配置中间件",
         "startup_initializing_runtime": "正在初始化运行时",

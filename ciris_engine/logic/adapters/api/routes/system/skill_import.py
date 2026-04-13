@@ -93,6 +93,26 @@ class SkillPreviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SkillValidateRequest(BaseModel):
+    """Request to validate a skill without importing."""
+
+    skill_md_content: str = Field(..., description="Raw SKILL.md content to validate")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SkillValidateResponse(BaseModel):
+    """Validation results for a skill."""
+
+    valid: bool = Field(..., description="Whether the skill is valid and safe to import")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    security: SecurityReportResponse = Field(..., description="Security scan results")
+    preview: Optional[SkillPreviewResponse] = Field(None, description="Preview info if valid")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SkillImportResponse(BaseModel):
     """Response from a skill import operation."""
 
@@ -437,6 +457,118 @@ async def preview_skill_import(
     module_name = f"imported_{sanitized}"
 
     return _build_preview(skill, module_name)
+
+
+@router.post(
+    "/adapters/import-skill/validate",
+    responses={
+        400: {"description": "Invalid skill content"},
+        500: {"description": "Server error"},
+    },
+)
+async def validate_skill(
+    request: Request,
+    auth: AuthAdminDep,
+    body: Annotated[SkillValidateRequest, Body()],
+) -> SkillValidateResponse:
+    """Validate a skill without importing it.
+
+    Parses the SKILL.md content, runs security scans, and returns
+    validation results without writing any files.
+
+    Useful for Skill Studio to provide real-time validation feedback.
+
+    Requires ADMIN role.
+    """
+    import re
+
+    from ciris_engine.logic.services.skill_import.scanner import SkillSecurityScanner
+
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    # Try to parse the skill
+    parser = OpenClawSkillParser()
+    try:
+        skill = parser.parse_skill_md(body.skill_md_content)
+    except ValueError as e:
+        return SkillValidateResponse(
+            valid=False,
+            errors=[str(e)],
+            warnings=[],
+            security=SecurityReportResponse(
+                safe_to_import=False,
+                summary="Cannot validate: parsing failed",
+            ),
+            preview=None,
+        )
+    except Exception as e:
+        logger.error(f"Error parsing skill for validation: {e}", exc_info=True)
+        return SkillValidateResponse(
+            valid=False,
+            errors=[f"Failed to parse skill: {e}"],
+            warnings=[],
+            security=SecurityReportResponse(
+                safe_to_import=False,
+                summary="Cannot validate: parsing failed",
+            ),
+            preview=None,
+        )
+
+    # Validate skill content
+    if not skill.name:
+        errors.append("Skill name is required")
+    elif not re.match(r"^[a-z0-9-]+$", skill.name):
+        errors.append("Skill name should only contain lowercase letters, numbers, and hyphens")
+
+    if not skill.description:
+        warnings.append("Description is recommended")
+
+    if not skill.instructions:
+        warnings.append("Instructions are empty - the skill won't provide any guidance to the agent")
+
+    # Run security scan
+    scanner = SkillSecurityScanner()
+    report = scanner.scan(skill)
+    security = SecurityReportResponse(
+        total_findings=report.total_findings,
+        critical_count=report.critical_count,
+        high_count=report.high_count,
+        medium_count=report.medium_count,
+        low_count=report.low_count,
+        safe_to_import=report.safe_to_import,
+        summary=report.summary,
+        findings=[
+            SecurityFindingResponse(
+                severity=f.severity.value,
+                category=f.category,
+                title=f.title,
+                description=f.description,
+                evidence=f.evidence,
+                recommendation=f.recommendation,
+            )
+            for f in report.findings
+        ],
+    )
+
+    # Generate module name for preview
+    sanitized = re.sub(r"[^a-z0-9_]", "_", skill.name.lower())
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+    module_name = f"imported_{sanitized}"
+
+    # Build preview if valid
+    preview = None
+    valid = len(errors) == 0 and report.safe_to_import
+    if valid:
+        preview = _build_preview(skill, module_name)
+
+    return SkillValidateResponse(
+        valid=valid,
+        errors=errors,
+        warnings=warnings,
+        security=security,
+        preview=preview,
+    )
 
 
 @router.post(

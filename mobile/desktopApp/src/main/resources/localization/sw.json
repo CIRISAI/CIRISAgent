@@ -1431,6 +1431,8 @@
         "login_error_connection": "Haiwezi kuunganisha na seva. Tafadhali angalia muunganisho wako.",
         "skill_workshop": "Warsha ya Ujuzi",
         "skill_workshop_desc": "Unda, ingiza, na usimamie ujuzi kwa wakala wako.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "Mhariri wa kimatafsili kuunda ujuzi kutoka mwanzo.",
         "skill_create_new": "Unda Ujuzi Mpya",
         "skill_import": "Ingiza Ujuzi",
         "skill_import_desc": "Bandika faili ya ujuzi kutoka mtandaoni ili kuiongeza.",

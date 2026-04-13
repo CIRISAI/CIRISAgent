@@ -6080,6 +6080,104 @@ class CIRISApiClient(
     }
 
     /**
+     * Validate an OpenClaw skill without importing.
+     *
+     * Parses the SKILL.md content, runs security scans, and returns
+     * validation results without writing any files. Used by Skill Studio
+     * for real-time validation feedback.
+     */
+    suspend fun validateSkill(skillMdContent: String): ai.ciris.mobile.shared.models.SkillValidateResult {
+        val method = "validateSkill"
+        val url = "$baseUrl/v1/system/adapters/import-skill/validate"
+        val auth = authHeader()
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+            val body = buildJsonObject {
+                put("skill_md_content", JsonPrimitive(skillMdContent))
+            }
+
+            val response: HttpResponse = client.post(url) {
+                auth?.let { headers { append("Authorization", it) } }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            if (response.status.value !in 200..299) {
+                val errorBody = response.body<String>()
+                client.close()
+                throw Exception("Validation failed: $errorBody")
+            }
+
+            val responseText = response.body<String>()
+            client.close()
+
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = json.parseToJsonElement(responseText).jsonObject
+
+            // Parse security report
+            val securityObj = obj["security"]?.jsonObject
+            val security = ai.ciris.mobile.shared.models.SecurityReport(
+                totalFindings = securityObj?.get("total_findings")?.jsonPrimitive?.intOrNull ?: 0,
+                criticalCount = securityObj?.get("critical_count")?.jsonPrimitive?.intOrNull ?: 0,
+                highCount = securityObj?.get("high_count")?.jsonPrimitive?.intOrNull ?: 0,
+                mediumCount = securityObj?.get("medium_count")?.jsonPrimitive?.intOrNull ?: 0,
+                lowCount = securityObj?.get("low_count")?.jsonPrimitive?.intOrNull ?: 0,
+                safeToImport = securityObj?.get("safe_to_import")?.jsonPrimitive?.boolean ?: true,
+                summary = securityObj?.get("summary")?.jsonPrimitive?.content ?: "",
+                findings = securityObj?.get("findings")?.jsonArray?.map { findingEl ->
+                    val finding = findingEl.jsonObject
+                    ai.ciris.mobile.shared.models.SecurityFinding(
+                        severity = finding["severity"]?.jsonPrimitive?.content ?: "info",
+                        category = finding["category"]?.jsonPrimitive?.content ?: "",
+                        title = finding["title"]?.jsonPrimitive?.content ?: "",
+                        description = finding["description"]?.jsonPrimitive?.content ?: "",
+                        evidence = finding["evidence"]?.jsonPrimitive?.contentOrNull,
+                        recommendation = finding["recommendation"]?.jsonPrimitive?.content ?: ""
+                    )
+                } ?: emptyList()
+            )
+
+            // Parse preview if present
+            val previewObj = obj["preview"]?.jsonObject
+            val preview = previewObj?.let {
+                ai.ciris.mobile.shared.models.SkillPreviewData(
+                    name = it["name"]?.jsonPrimitive?.content ?: "",
+                    description = it["description"]?.jsonPrimitive?.content ?: "",
+                    version = it["version"]?.jsonPrimitive?.content ?: "",
+                    moduleName = it["module_name"]?.jsonPrimitive?.content ?: "",
+                    tools = it["tools"]?.jsonArray?.map { t -> t.jsonPrimitive.content } ?: emptyList(),
+                    requiredEnvVars = it["required_env_vars"]?.jsonArray?.map { e -> e.jsonPrimitive.content } ?: emptyList(),
+                    requiredBinaries = it["required_binaries"]?.jsonArray?.map { b -> b.jsonPrimitive.content } ?: emptyList(),
+                    hasSupportingFiles = it["has_supporting_files"]?.jsonPrimitive?.boolean ?: false,
+                    sourceUrl = it["source_url"]?.jsonPrimitive?.contentOrNull,
+                    instructionsPreview = it["instructions_preview"]?.jsonPrimitive?.content ?: "",
+                    security = security
+                )
+            }
+
+            ai.ciris.mobile.shared.models.SkillValidateResult(
+                valid = obj["valid"]?.jsonPrimitive?.boolean ?: false,
+                errors = obj["errors"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                warnings = obj["warnings"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList(),
+                security = security,
+                preview = preview
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
      * Import an OpenClaw skill as a CIRIS adapter.
      */
     suspend fun importSkill(skillMdContent: String, sourceUrl: String? = null, autoLoad: Boolean = true): ai.ciris.mobile.shared.models.SkillImportResult {

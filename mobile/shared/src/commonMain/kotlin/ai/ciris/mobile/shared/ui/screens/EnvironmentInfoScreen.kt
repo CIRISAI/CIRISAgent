@@ -48,7 +48,7 @@ fun EnvironmentInfoScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Environment") },
+                title = { Text(localizedString("mobile.env_title")) },
                 navigationIcon = {
                     IconButton(
                         onClick = onNavigateBack,
@@ -85,7 +85,7 @@ fun EnvironmentInfoScreen(
                 onClick = onAddItem,
                 modifier = Modifier.testableClickable("btn_add_item") { onAddItem() }
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Item")
+                Icon(Icons.Filled.Add, contentDescription = localizedString("mobile.env_add_item"))
             }
         }
     ) { paddingValues ->
@@ -153,9 +153,11 @@ fun EnvironmentInfoScreen(
                 ) {
                     Text(
                         text = if (state.selectedCategory == null) {
-                            "All Items (${state.items.size})"
+                            localizedString("mobile.env_all_items").replace("{count}", state.items.size.toString())
                         } else {
-                            "${getCategoryDisplayName(state.selectedCategory)} (${state.filteredItems.size})"
+                            localizedString("mobile.env_items_count")
+                                .replace("{name}", getCategoryDisplayName(state.selectedCategory))
+                                .replace("{count}", state.filteredItems.size.toString())
                         },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
@@ -182,7 +184,7 @@ fun EnvironmentInfoScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "No items yet. Tap + to add your first item.",
+                                text = localizedString("mobile.env_no_items"),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -202,7 +204,7 @@ fun EnvironmentInfoScreen(
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Context Enrichment (${state.contextEnrichment.size} sources)",
+                        text = localizedString("mobile.env_context_enrichment").replace("{count}", state.contextEnrichment.size.toString()),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -240,7 +242,7 @@ fun EnvironmentInfoScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Community sharing depends on community invitation system, coming soon.",
+                            text = localizedString("mobile.env_community_note"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
@@ -276,7 +278,7 @@ private fun CategoryFilterChips(
         FilterChip(
             selected = selectedCategory == null,
             onClick = { onCategorySelected(null) },
-            label = { Text("All") }
+            label = { Text(localizedString("mobile.env_filter_all")) }
         )
 
         // Category chips
@@ -360,7 +362,7 @@ private fun ItemCard(
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = localizedString("mobile.env_delete"),
                             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
@@ -383,19 +385,19 @@ private fun ItemCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Item") },
-            text = { Text("Are you sure you want to delete \"${item.name}\"?") },
+            title = { Text(localizedString("mobile.env_delete_item")) },
+            text = { Text(localizedString("mobile.env_delete_confirm").replace("{name}", item.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
                     onDelete()
                 }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(localizedString("mobile.env_delete"), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
+                    Text(localizedString("mobile.env_cancel"))
                 }
             }
         )
@@ -419,7 +421,7 @@ private fun AddItemDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isCreating) onDismiss() },
-        title = { Text("Add Item") },
+        title = { Text(localizedString("mobile.env_add_item")) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -427,7 +429,7 @@ private fun AddItemDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Item Name") },
+                    label = { Text(localizedString("mobile.env_item_name")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -441,7 +443,7 @@ private fun AddItemDialog(
                         value = getCategoryDisplayName(category),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Category") },
+                        label = { Text(localizedString("mobile.env_category")) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -467,7 +469,7 @@ private fun AddItemDialog(
                     OutlinedTextField(
                         value = quantity,
                         onValueChange = { quantity = it.filter { c -> c.isDigit() } },
-                        label = { Text("Qty") },
+                        label = { Text(localizedString("mobile.env_qty")) },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -482,7 +484,7 @@ private fun AddItemDialog(
                             value = getConditionDisplayName(condition),
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Condition") },
+                            label = { Text(localizedString("mobile.env_condition")) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCondition) },
                             modifier = Modifier.menuAnchor().fillMaxWidth()
                         )
@@ -506,7 +508,7 @@ private fun AddItemDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Notes (optional)") },
+                    label = { Text(localizedString("mobile.env_notes_optional")) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
@@ -531,7 +533,7 @@ private fun AddItemDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Add")
+                    Text(localizedString("mobile.env_add"))
                 }
             }
         },
@@ -540,7 +542,7 @@ private fun AddItemDialog(
                 onClick = onDismiss,
                 enabled = !isCreating
             ) {
-                Text("Cancel")
+                Text(localizedString("mobile.env_cancel"))
             }
         }
     )
@@ -549,6 +551,10 @@ private fun AddItemDialog(
 @Composable
 private fun EnrichmentCard(key: String, value: String) {
     var expanded by remember { mutableStateOf(false) }
+
+    // Parse JSON and format nicely, or use raw value if not JSON
+    val (formattedValue, isJson) = remember(value) { formatJsonValue(value) }
+    val summary = remember(value, isJson) { getJsonSummary(value, isJson) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -567,7 +573,7 @@ private fun EnrichmentCard(key: String, value: String) {
                     fontFamily = FontFamily.Monospace
                 )
                 TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "Collapse" else "Expand")
+                    Text(if (expanded) localizedString("mobile.common_collapse") else localizedString("mobile.common_expand"))
                 }
             }
 
@@ -578,7 +584,7 @@ private fun EnrichmentCard(key: String, value: String) {
                     shape = RoundedCornerShape(4.dp)
                 ) {
                     Text(
-                        text = value,
+                        text = formattedValue,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier.padding(8.dp)
@@ -586,7 +592,7 @@ private fun EnrichmentCard(key: String, value: String) {
                 }
             } else {
                 Text(
-                    text = if (value.length > 100) value.take(100) + "..." else value,
+                    text = summary,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2
@@ -594,6 +600,132 @@ private fun EnrichmentCard(key: String, value: String) {
             }
         }
     }
+}
+
+/**
+ * Format a JSON string with proper indentation, or return raw value if not JSON.
+ */
+private fun formatJsonValue(value: String): Pair<String, Boolean> {
+    val trimmed = value.trim()
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        return value to false
+    }
+
+    return try {
+        // Simple JSON formatter without external dependencies
+        val formatted = buildString {
+            var indent = 0
+            var inString = false
+            var escape = false
+
+            for (char in trimmed) {
+                when {
+                    escape -> {
+                        append(char)
+                        escape = false
+                    }
+                    char == '\\' && inString -> {
+                        append(char)
+                        escape = true
+                    }
+                    char == '"' -> {
+                        inString = !inString
+                        append(char)
+                    }
+                    !inString && (char == '{' || char == '[') -> {
+                        append(char)
+                        indent++
+                        append('\n')
+                        repeat(indent * 2) { append(' ') }
+                    }
+                    !inString && (char == '}' || char == ']') -> {
+                        indent--
+                        append('\n')
+                        repeat(indent * 2) { append(' ') }
+                        append(char)
+                    }
+                    !inString && char == ',' -> {
+                        append(char)
+                        append('\n')
+                        repeat(indent * 2) { append(' ') }
+                    }
+                    !inString && char == ':' -> {
+                        append(": ")
+                    }
+                    !inString && char.isWhitespace() -> {
+                        // Skip whitespace outside strings
+                    }
+                    else -> append(char)
+                }
+            }
+        }
+        formatted to true
+    } catch (e: Exception) {
+        value to false
+    }
+}
+
+/**
+ * Get a human-readable summary of JSON content.
+ */
+private fun getJsonSummary(value: String, isJson: Boolean): String {
+    if (!isJson) {
+        return if (value.length > 100) value.take(100) + "..." else value
+    }
+
+    val trimmed = value.trim()
+
+    // Try to extract key info from common patterns
+    return try {
+        when {
+            // Tool response: {"success":true, "tool_name":"xxx", ...}
+            trimmed.contains("\"tool_name\"") -> {
+                val toolName = extractJsonString(trimmed, "tool_name")
+                val success = trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true")
+                val status = if (success) "✓" else "⚠"
+                "$status Tool: $toolName"
+            }
+            // Players list: {"success":true, "players":[...]}
+            trimmed.contains("\"players\"") -> {
+                val count = trimmed.split("\"entity_id\"").size - 1
+                "✓ $count player(s) found"
+            }
+            // Generic success response
+            trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true") -> {
+                val desc = extractJsonString(trimmed, "description")
+                if (desc.isNotEmpty()) "✓ $desc" else "✓ Success"
+            }
+            // Error response
+            trimmed.contains("\"error\"") -> {
+                val error = extractJsonString(trimmed, "error")
+                "⚠ Error: ${error.take(50)}"
+            }
+            // Array response
+            trimmed.startsWith("[") -> {
+                val count = trimmed.count { it == '{' }
+                "$count item(s)"
+            }
+            else -> {
+                // Just show first meaningful key-value
+                val firstKey = extractFirstKey(trimmed)
+                if (firstKey.isNotEmpty()) "$firstKey: ..." else "JSON Object"
+            }
+        }
+    } catch (e: Exception) {
+        if (value.length > 100) value.take(100) + "..." else value
+    }
+}
+
+private fun extractJsonString(json: String, key: String): String {
+    val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\""
+    val regex = Regex(pattern)
+    return regex.find(json)?.groupValues?.getOrNull(1) ?: ""
+}
+
+private fun extractFirstKey(json: String): String {
+    val pattern = "\"([^\"]+)\"\\s*:"
+    val regex = Regex(pattern)
+    return regex.find(json)?.groupValues?.getOrNull(1) ?: ""
 }
 
 @Composable
@@ -606,7 +738,7 @@ private fun CacheStatsCard(stats: EnrichmentCacheStatsData) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Cache Statistics",
+                text = localizedString("mobile.env_cache_stats"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -615,10 +747,10 @@ private fun CacheStatsCard(stats: EnrichmentCacheStatsData) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                StatItem("Entries", stats.entries.toString())
-                StatItem("Hits", stats.hits.toString())
-                StatItem("Misses", stats.misses.toString())
-                StatItem("Hit Rate", "${stats.hitRatePct}%")
+                StatItem(localizedString("mobile.env_stat_entries"), stats.entries.toString())
+                StatItem(localizedString("mobile.env_stat_hits"), stats.hits.toString())
+                StatItem(localizedString("mobile.env_stat_misses"), stats.misses.toString())
+                StatItem(localizedString("mobile.env_stat_hit_rate"), "${stats.hitRatePct}%")
             }
         }
     }
@@ -640,21 +772,23 @@ private fun StatItem(label: String, value: String) {
     }
 }
 
+@Composable
 private fun getCategoryDisplayName(category: String): String = when (category) {
-    "want" -> "Want"
-    "need" -> "Need"
-    "have" -> "Have"
-    "can_borrow" -> "Can Borrow"
-    "can_barter" -> "Can Barter"
+    "want" -> localizedString("mobile.env_cat_want")
+    "need" -> localizedString("mobile.env_cat_need")
+    "have" -> localizedString("mobile.env_cat_have")
+    "can_borrow" -> localizedString("mobile.env_cat_can_borrow")
+    "can_barter" -> localizedString("mobile.env_cat_can_barter")
     else -> category.replaceFirstChar { it.uppercase() }
 }
 
+@Composable
 private fun getConditionDisplayName(condition: String): String = when (condition) {
-    "new" -> "New"
-    "good" -> "Good"
-    "fair" -> "Fair"
-    "poor" -> "Poor"
-    "broken" -> "Broken"
+    "new" -> localizedString("mobile.env_cond_new")
+    "good" -> localizedString("mobile.env_cond_good")
+    "fair" -> localizedString("mobile.env_cond_fair")
+    "poor" -> localizedString("mobile.env_cond_poor")
+    "broken" -> localizedString("mobile.env_cond_broken")
     else -> condition.replaceFirstChar { it.uppercase() }
 }
 

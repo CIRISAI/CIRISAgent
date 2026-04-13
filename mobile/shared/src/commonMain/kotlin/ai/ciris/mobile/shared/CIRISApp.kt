@@ -58,7 +58,9 @@ import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.viewmodels.EnvironmentInfoViewModel
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
 import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel
+import ai.ciris.mobile.shared.viewmodels.SkillStudioViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
+import ai.ciris.mobile.shared.ui.screens.SkillStudioScreen
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import androidx.compose.foundation.background
@@ -554,6 +556,9 @@ fun CIRISApp(
     }
     val skillImportViewModel: SkillImportViewModel = viewModel {
         SkillImportViewModel(apiClient)
+    }
+    val skillStudioViewModel: SkillStudioViewModel = viewModel {
+        SkillStudioViewModel(apiClient)
     }
     val auditViewModel: AuditViewModel = viewModel {
         AuditViewModel(apiClient)
@@ -1710,6 +1715,10 @@ fun CIRISApp(
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Import skill requested")
                         currentScreen = Screen.SkillImport
                     },
+                    onSkillStudio = {
+                        PlatformLogger.i("CIRISApp", "[Screen.Adapters] Skill Studio requested")
+                        currentScreen = Screen.SkillStudio
+                    },
                     onNavigateBack = {
                         PlatformLogger.i("CIRISApp", "[Screen.Adapters] Navigating back to Interact")
                         currentScreen = Screen.Interact
@@ -2633,6 +2642,64 @@ fun CIRISApp(
                     }
                 )
             }
+
+            Screen.SkillStudio -> {
+                // Collect SkillStudioViewModel state
+                val skillStudioState by skillStudioViewModel.state.collectAsState()
+                val skillStudioDialogState by skillStudioViewModel.dialogState.collectAsState()
+
+                // Initialize with new draft when entering screen
+                LaunchedEffect(Unit) {
+                    PlatformLogger.i("CIRISApp", "[Screen.SkillStudio] Opening skill studio")
+                    skillStudioViewModel.createNewDraft()
+                }
+
+                SkillStudioScreen(
+                    state = skillStudioState,
+                    dialogState = skillStudioDialogState,
+                    onNavigateBack = {
+                        PlatformLogger.i("CIRISApp", "[Screen.SkillStudio] Navigating back to Adapters")
+                        currentScreen = Screen.Adapters
+                    },
+                    onCreateNew = { skillStudioViewModel.createNewDraft() },
+                    onShowPreview = { skillStudioViewModel.showPreview() },
+                    onBackToEditing = { skillStudioViewModel.backToEditing() },
+                    onImport = { skillStudioViewModel.importAsAdapter() },
+                    onValidateAndImport = { skillStudioViewModel.validateAndShowSecurityReport() },
+                    // Metadata
+                    onUpdateName = { skillStudioViewModel.updateName(it) },
+                    onUpdateDescription = { skillStudioViewModel.updateDescription(it) },
+                    onUpdateVersion = { skillStudioViewModel.updateVersion(it) },
+                    onUpdateCategory = { skillStudioViewModel.updateCategory(it) },
+                    onUpdateInstructions = { skillStudioViewModel.updateInstructions(it) },
+                    onShowAddTagDialog = { skillStudioViewModel.showAddTagDialog() },
+                    onAddTag = { skillStudioViewModel.addTag(it) },
+                    onRemoveTag = { skillStudioViewModel.removeTag(it) },
+                    // Tools
+                    onShowAddToolDialog = { skillStudioViewModel.showAddToolDialog() },
+                    onShowEditToolDialog = { skillStudioViewModel.showEditToolDialog(it) },
+                    onSaveTool = { skillStudioViewModel.saveTool(it) },
+                    onDeleteTool = { skillStudioViewModel.deleteTool(it) },
+                    // Parameters
+                    onShowAddParameterDialog = { skillStudioViewModel.showAddParameterDialog(it) },
+                    onSaveParameter = { skillStudioViewModel.saveParameter(it) },
+                    onDeleteParameter = { toolIdx, paramIdx -> skillStudioViewModel.deleteParameter(toolIdx, paramIdx) },
+                    // Env Vars
+                    onShowAddEnvVarDialog = { skillStudioViewModel.showAddEnvVarDialog() },
+                    onShowEditEnvVarDialog = { skillStudioViewModel.showEditEnvVarDialog(it) },
+                    onSaveEnvVar = { skillStudioViewModel.saveEnvVar(it) },
+                    onDeleteEnvVar = { skillStudioViewModel.deleteEnvVar(it) },
+                    // Binaries
+                    onAddBinary = { skillStudioViewModel.addBinary(it) },
+                    onRemoveBinary = { skillStudioViewModel.removeBinary(it) },
+                    // Card expansion
+                    onToggleCard = { skillStudioViewModel.toggleCardExpansion(it) },
+                    // Dialog
+                    onDismissDialog = { skillStudioViewModel.dismissDialog() },
+                    // Preview tabs
+                    onSetPreviewTab = { skillStudioViewModel.setPreviewTab(it) }
+                )
+            }
         }
     }
     } // CompositionLocalProvider
@@ -3068,6 +3135,7 @@ private sealed class Screen {
     object Tools : Screen()
     object EnvironmentInfo : Screen()
     object SkillImport : Screen()
+    object SkillStudio : Screen()
     object DataManagement : Screen()
     object Help : Screen()
     object ServerConnection : Screen()

@@ -1431,6 +1431,8 @@
         "login_error_connection": "Sunucuya bağlanılamıyor. Lütfen bağlantınızı kontrol edin.",
         "skill_workshop": "Beceri Atölyesi",
         "skill_workshop_desc": "Ajanınız için beceriler oluşturun, içe aktarın ve yönetin.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "Sıfırdan beceri oluşturmak için görsel editör.",
         "skill_create_new": "Yeni beceri oluştur",
         "skill_import": "Beceri içe aktar",
         "skill_import_desc": "Eklemek için webden bir beceri dosyası yapıştırın.",

@@ -1431,6 +1431,8 @@
         "login_error_connection": "सर्वर से कनेक्ट नहीं हो सकता। कृपया अपना कनेक्शन जांचें।",
         "skill_workshop": "कौशल कार्यशाला",
         "skill_workshop_desc": "अपने एजेंट के लिए कौशल बनाएं, आयात करें और प्रबंधित करें।",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "कौशल बनाने के लिए दृश्य संपादक।",
         "skill_create_new": "नया कौशल बनाएं",
         "skill_import": "कौशल आयात करें",
         "skill_import_desc": "वेब से एक कौशल फ़ाइल पेस्ट करके इसे जोड़ें।",

@@ -1515,6 +1515,8 @@
     "login_error_connection": "Cannot connect to server. Please check your connection.",
     "skill_workshop": "Skill ทำงานshop",
     "skill_workshop_desc": "Create, import, and manage skills for your เอเจนต์.",
+    "skill_studio": "Skill Studio",
+    "skill_studio_desc": "โปรแกรมแก้ไขภาพเพื่อสร้างทักษะตั้งแต่เริ่มต้น",
     "skill_create_new": "Create New Skill",
     "skill_import": "Import Skill",
     "skill_import_desc": "Paste a skill file from the web to add it.",

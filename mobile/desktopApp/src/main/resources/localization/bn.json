@@ -1514,6 +1514,8 @@
         "login_error_connection": "Cannot connect to server. Please check your connection.",
         "skill_workshop": "Skill Workshop",
         "skill_workshop_desc": "Create, import, and manage skills for your agent.",
+        "skill_studio": "Skill Studio",
+        "skill_studio_desc": "দক্ষতা তৈরি করার জন্য ভিজ্যুয়াল সম্পাদক।",
         "skill_create_new": "Create New Skill",
         "skill_import": "Import Skill",
         "skill_import_desc": "Paste a skill file from the web to add it.",

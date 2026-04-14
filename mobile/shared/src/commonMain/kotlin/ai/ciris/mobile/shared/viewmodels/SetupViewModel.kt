@@ -1324,6 +1324,11 @@ class SetupViewModel : ViewModel() {
                 add("navigation")
                 add("weather")
             }
+            // Add mobile_local_llm adapter if on-device inference is selected
+            if (currentState.llmProvider == LOCAL_ON_DEVICE_PROVIDER_ID ||
+                currentState.llmProvider == LOCAL_ON_DEVICE_DISPLAY_NAME) {
+                add("mobile_local_llm")
+            }
         }
 
         // Build adapter config with consent settings and adapter-specific config

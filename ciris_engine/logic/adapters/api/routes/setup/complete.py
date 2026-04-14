@@ -549,8 +549,9 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
 
     # For local providers, use "local" as placeholder API key if none provided
+    # mobile_local provider doesn't need an API key - it runs on-device
     llm_api_key = setup.llm_api_key
-    if not llm_api_key and setup.llm_provider in ("local", "local_inference"):
+    if not llm_api_key and setup.llm_provider in ("local", "local_inference", "mobile_local"):
         llm_api_key = "local"
 
     config_path = create_env_file(
@@ -575,6 +576,15 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
             f.write("CIRIS_ACCORD_METRICS_CONSENT=true\n")
             f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
             logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
+
+        # Mobile Local LLM adapter configuration (on-device Gemma 4)
+        if "mobile_local_llm" in setup.enabled_adapters or setup.llm_provider == "mobile_local":
+            f.write("\n# Mobile Local LLM (On-Device Inference)\n")
+            f.write("CIRIS_MOBILE_LOCAL_LLM_ENABLED=true\n")
+            # Model defaults to gemma-4-e2b, can be configured via setup.llm_model
+            if setup.llm_model:
+                f.write(f'CIRIS_MOBILE_LOCAL_LLM_MODEL="{setup.llm_model}"\n')
+            logger.info("[SETUP] Mobile Local LLM adapter enabled for on-device inference")
 
         # Adapter-specific environment variables with proper env var naming
         if setup.adapter_config:

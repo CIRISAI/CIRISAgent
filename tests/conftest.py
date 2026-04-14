@@ -10,6 +10,7 @@ import tempfile
 
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
+os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests
 
 # CRITICAL: Override log directory for tests to prevent container interference
 # Tests should NEVER write to the main logs directory that containers use

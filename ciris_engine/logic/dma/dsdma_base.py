@@ -14,12 +14,13 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
+from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import DSDMAResult
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
@@ -59,39 +60,43 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         self.domain_name = domain_name
         self.domain_specific_knowledge = domain_specific_knowledge if domain_specific_knowledge else {}
 
-        self.prompt_loader = get_prompt_loader()
-        try:
-            prompt_collection = self.prompt_loader.load_prompt_template("dsdma_base")
-            self.prompt_template_data = prompt_collection
-            # Get system guidance header from the collection
-            system_guidance = prompt_collection.get_prompt("system_guidance_header")
-            if prompt_template is not None:
-                self.prompt_template = prompt_template
-            elif system_guidance:
-                self.prompt_template = system_guidance  # get_prompt returns a string
-            else:
-                self.prompt_template = ""
-        except FileNotFoundError:
-            logger.warning(f"DSDMA base prompt template not found for domain '{domain_name}', using fallback")
-            # Create a PromptCollection with fallback data
-            from ciris_engine.schemas.dma.prompts import PromptCollection
-
-            self.prompt_template_data = PromptCollection(
-                component_name="dsdma_base_fallback",
-                description="Fallback DSDMA prompt collection",
-                system_guidance_header=self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "",
-            )
-            self.prompt_template = (
-                prompt_template
-                if prompt_template is not None
-                else (self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "")
-            )
+        # Do NOT cache template - language may change at runtime
+        self._prompt_template_name = "dsdma_base"
+        self._custom_prompt_template = prompt_template  # User-provided override
 
         # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
 
         logger.info(f"BaseDSDMA '{self.domain_name}' initialized with model: {self.model_name}")
+
+    @property
+    def prompt_loader(self) -> DMAPromptLoader:
+        """Get prompt loader fresh each time to respect language changes."""
+        return get_prompt_loader()
+
+    @property
+    def prompt_template_data(self) -> PromptCollection:
+        """Load prompt template fresh each time to respect language changes."""
+        try:
+            return self.prompt_loader.load_prompt_template(self._prompt_template_name)
+        except FileNotFoundError:
+            logger.warning(f"DSDMA base prompt template not found for domain '{self.domain_name}', using fallback")
+            return PromptCollection(
+                component_name="dsdma_base_fallback",
+                description="Fallback DSDMA prompt collection",
+                system_guidance_header=self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "",
+            )
+
+    @property
+    def prompt_template(self) -> str:
+        """Get system guidance header, respecting language changes."""
+        if self._custom_prompt_template is not None:
+            return self._custom_prompt_template
+        system_guidance = self.prompt_template_data.get_prompt("system_guidance_header")
+        if system_guidance:
+            return system_guidance
+        return self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else ""
 
     class LLMOutputForDSDMA(BaseModel):
         score: float = Field(..., ge=0.0, le=1.0)

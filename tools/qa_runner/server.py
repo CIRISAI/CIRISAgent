@@ -330,6 +330,104 @@ def _stop_postgres_container(console: Console):
             console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
 
 
+def _wipe_postgres_databases(console: Console) -> bool:
+    """Wipe all tables in PostgreSQL databases for clean QA testing.
+
+    This drops and recreates all three databases:
+    - ciris_test_db (main)
+    - ciris_test_db_secrets
+    - ciris_test_db_auth
+
+    Returns:
+        True if wipe succeeded, False otherwise
+    """
+    if not _is_postgres_container_running():
+        console.print("[yellow]⚠️  PostgreSQL container not running, nothing to wipe[/yellow]")
+        return True
+
+    console.print("[cyan]🧹 Wiping PostgreSQL databases for clean QA state...[/cyan]")
+
+    databases = ["ciris_test_db", "ciris_test_db_secrets", "ciris_test_db_auth"]
+
+    for db_name in databases:
+        try:
+            # Drop and recreate the database
+            # First, terminate all connections to the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db_name}' AND pid <> pg_backend_pid();",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            # Drop the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"DROP DATABASE IF EXISTS {db_name};",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0 and "does not exist" not in result.stderr:
+                console.print(f"[yellow]⚠️  Could not drop {db_name}: {result.stderr}[/yellow]")
+
+            # Recreate the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"CREATE DATABASE {db_name} OWNER ciris_test;",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode == 0:
+                console.print(f"[green]✅ Wiped and recreated {db_name}[/green]")
+            elif "already exists" in result.stderr:
+                console.print(f"[dim]{db_name} already exists (drop may have failed)[/dim]")
+            else:
+                console.print(f"[yellow]⚠️  Could not create {db_name}: {result.stderr}[/yellow]")
+
+        except subprocess.TimeoutExpired:
+            console.print(f"[yellow]⚠️  Timeout wiping {db_name}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️  Error wiping {db_name}: {e}[/yellow]")
+
+    console.print("[green]✅ PostgreSQL databases wiped[/green]")
+    return True
+
+
 def _ensure_env_file(console: Console, mock_llm: bool = True) -> bool:
     """Ensure a minimal .env file exists for QA testing.
 
@@ -494,6 +592,10 @@ class APIServerManager:
             if not _start_postgres_container(self.console):
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
+            # Wipe PostgreSQL databases if --wipe-data is set
+            if self.config.wipe_data:
+                if not _wipe_postgres_databases(self.console):
+                    self.console.print("[yellow]⚠️  PostgreSQL wipe failed, continuing anyway[/yellow]")
 
         # Start mock logshipper to receive accord traces (unless using live lens)
         if self.config.live_lens:
@@ -522,6 +624,7 @@ class APIServerManager:
         # Set environment variables
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["CIRIS_TESTING_MODE"] = "true"  # Enable testing mode for admin user creation
 
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
@@ -551,12 +654,16 @@ class APIServerManager:
         if self.mock_logshipper:
             env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
-        # Force first-run mode for SETUP module tests
+        # Force first-run mode for SETUP module tests or when data was wiped
         from .config import QAModule
 
         if any(m == QAModule.SETUP for m in self.modules):
             env["CIRIS_FORCE_FIRST_RUN"] = "1"
             self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for SETUP module tests[/dim]")
+        elif self.config.wipe_data:
+            # When data is wiped, we need first-run to allow setup completion
+            env["CIRIS_FORCE_FIRST_RUN"] = "1"
+            self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for wiped data[/dim]")
 
         # Set backend-specific log directory to avoid symlink collisions
         # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)
@@ -836,6 +943,45 @@ class APIServerManager:
             "Try using --wipe-data to reset to first-run state."
         )
 
+    def _complete_qa_setup(self) -> bool:
+        """Complete setup wizard to create test user when data was wiped.
+
+        This is called when --wipe-data is used to create a known test user
+        before attempting authentication.
+        """
+        self.console.print("[cyan]🔧 Completing setup to create test user...[/cyan]")
+
+        # Use the config's admin credentials
+        setup_payload = {
+            "llm_provider": "openai",
+            "llm_api_key": "test-key-for-qa",
+            "llm_model": "gpt-4",
+            "template_id": "default",
+            "enabled_adapters": ["api"],
+            "adapter_config": {},
+            "admin_username": self.config.admin_username,
+            "admin_password": self.config.admin_password if self.config.admin_password != "__auto_detect__" else "qa_test_password_12345",
+            "agent_port": self.config.api_port,
+        }
+
+        try:
+            response = requests.post(
+                f"{self.config.base_url}/v1/setup/complete",
+                json=setup_payload,
+                timeout=30,
+            )
+            if response.status_code == 200:
+                self.console.print("[green]✅ Setup completed, test user created[/green]")
+                # Store the password we used
+                self._extracted_password = setup_payload["admin_password"]
+                return True
+            else:
+                self.console.print(f"[red]❌ Setup failed: {response.status_code} - {response.text[:200]}[/red]")
+                return False
+        except Exception as e:
+            self.console.print(f"[red]❌ Setup error: {e}[/red]")
+            return False
+
     def _wait_for_server(self) -> bool:
         """Wait for server to be ready and reach WORK state."""
         from .config import QAModule
@@ -904,6 +1050,11 @@ class APIServerManager:
         if QAModule.SETUP in self.modules:
             self.console.print("[green]✅ Server ready for SETUP tests (first-run mode)[/green]")
             return True
+
+        # If data was wiped, complete setup to create test user before authenticating
+        if self.config.wipe_data:
+            if not self._complete_qa_setup():
+                return False
 
         # Now wait for agent to reach WORK state
         self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")

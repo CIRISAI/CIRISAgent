@@ -33,7 +33,10 @@ from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskIn
 
 @pytest.fixture
 def app():
-    """Create FastAPI app with minimal required state."""
+    """Create FastAPI app with minimal required state.
+
+    Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
+    """
     app = create_app()
     app.state.auth_service = APIAuthService()
     app.state.auth_service._dev_mode = True

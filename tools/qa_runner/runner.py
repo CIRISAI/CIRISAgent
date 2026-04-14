@@ -112,6 +112,8 @@ class QARunner:
                 live_base_url=self.config.live_base_url,
                 # Live Lens configuration
                 live_lens=self.config.live_lens,
+                # Data management
+                wipe_data=self.config.wipe_data,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules

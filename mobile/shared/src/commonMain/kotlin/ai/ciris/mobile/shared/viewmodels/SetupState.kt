@@ -397,8 +397,8 @@ data class SetupFormState(
                     // CIRIS proxy mode - need Google auth token
                     googleIdToken != null
                 } else if (setupMode == SetupMode.BYOK) {
-                    // BYOK mode - need provider and API key (unless LocalAI)
-                    if (llmProvider == "LocalAI") {
+                    // BYOK mode - need provider and API key (unless local provider)
+                    if (llmProvider in listOf("local", "local_inference", "LocalAI")) {
                         true
                     } else {
                         llmApiKey.isNotEmpty()
@@ -513,6 +513,28 @@ data class ModelInfo(
     val cirisCompatible: Boolean = false,
     val cirisRecommended: Boolean = false,
     val contextWindow: Int? = null
+)
+
+/**
+ * Discovered local LLM server from network discovery.
+ * Source: POST /v1/setup/discover-local-llm
+ */
+@Serializable
+data class DiscoveredLlmServer(
+    /** Unique server ID (ip_port format) */
+    val id: String,
+    /** Display label (e.g., "jetson.local:8080 (Gemma 4)") */
+    val label: String,
+    /** Server URL (http://ip:port) */
+    val url: String,
+    /** Server type: ollama, llama_cpp, vllm, lmstudio, localai, openai_compatible */
+    @SerialName("server_type")
+    val serverType: String,
+    /** Number of models available */
+    @SerialName("model_count")
+    val modelCount: Int = 0,
+    /** Model names available on server */
+    val models: List<String> = emptyList()
 )
 
 /**

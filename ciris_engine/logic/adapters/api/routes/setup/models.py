@@ -3,9 +3,10 @@
 This module contains all request/response schemas used by the setup endpoints.
 """
 
+import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ciris_engine.config.model_capabilities import ModelCapabilities
 
@@ -254,6 +255,34 @@ class ListModelsResponse(BaseModel):
     )
 
 
+class DiscoveredLLMServer(BaseModel):
+    """A discovered local LLM inference server."""
+
+    id: str = Field(..., description="Unique server ID (ip_port format)")
+    label: str = Field(..., description="Display label (e.g., 'jetson.local:8080 (Gemma 4)')")
+    url: str = Field(..., description="Server URL (http://ip:port)")
+    server_type: str = Field(..., description="Server type: ollama, llama_cpp, vllm, lmstudio, localai, openai_compatible")
+    model_count: int = Field(default=0, description="Number of models available")
+    models: List[str] = Field(default_factory=list, description="Model names available on server")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (hostname, ip, port, source)")
+
+
+class DiscoverLocalLLMRequest(BaseModel):
+    """Request to discover local LLM servers."""
+
+    timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0, description="Discovery timeout")
+    include_localhost: bool = Field(default=True, description="Include localhost port scanning")
+
+
+class DiscoverLocalLLMResponse(BaseModel):
+    """Response from local LLM server discovery."""
+
+    servers: List[DiscoveredLLMServer] = Field(default_factory=list, description="Discovered servers")
+    total_count: int = Field(default=0, description="Total servers found")
+    discovery_methods: List[str] = Field(default_factory=list, description="Methods used (hostname_probe, localhost_scan)")
+    error: Optional[str] = Field(None, description="Error message if discovery partially failed")
+
+
 class SetupCompleteRequest(BaseModel):
     """Request to complete setup."""
 
@@ -276,7 +305,7 @@ class SetupCompleteRequest(BaseModel):
     adapter_config: Dict[str, Any] = Field(default_factory=dict, description="Adapter-specific configuration")
 
     # User Configuration - Dual Password Support
-    admin_username: str = Field(default="admin", description="New user's username")
+    admin_username: str = Field(default="owner", description="New user's username")
     admin_password: Optional[str] = Field(
         None,
         description="New user's password (min 8 characters). Optional for OAuth users - if not provided, a random password is generated and password auth is disabled for this user.",
@@ -353,6 +382,18 @@ class SetupCompleteRequest(BaseModel):
     # CIRISVerify (optional, set by node flow)
     verify_binary_path: Optional[str] = Field(None, description="Path to CIRISVerify binary")
     verify_require_hardware: bool = Field(default=False, description="Require hardware attestation for CIRISVerify")
+
+    @field_validator("admin_username")
+    @classmethod
+    def validate_admin_username(cls, v: str) -> str:
+        """Block 'admin' username in production - reserved for testing only."""
+        if v.lower() == "admin":
+            testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
+            if not testing_mode:
+                raise ValueError(
+                    "Username 'admin' is reserved for testing. Please choose a different username."
+                )
+        return v
 
 
 class SetupConfigResponse(BaseModel):

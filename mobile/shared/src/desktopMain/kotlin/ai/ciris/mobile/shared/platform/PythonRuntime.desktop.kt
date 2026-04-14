@@ -319,12 +319,13 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
     }
 
     actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = runCatching {
-        val response = httpClient.get("$_serverUrl/v1/telemetry/unified")
+        // Use unauthenticated startup-status endpoint for service counts
+        val response = httpClient.get("$_serverUrl/v1/system/startup-status")
         if (response.status != HttpStatusCode.OK) {
             return@runCatching Pair(0, 0)
         }
         val body = response.bodyAsText()
-        // Simple JSON parsing for services_online and services_total
+        // Parse services_online and services_total from startup-status response
         val onlineMatch = Regex(""""services_online"\s*:\s*(\d+)""").find(body)
         val totalMatch = Regex(""""services_total"\s*:\s*(\d+)""").find(body)
         val online = onlineMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0

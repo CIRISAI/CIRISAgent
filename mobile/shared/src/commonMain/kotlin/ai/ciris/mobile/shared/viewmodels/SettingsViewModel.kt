@@ -139,21 +139,37 @@ class SettingsViewModel(
         "deepseek" to "DeepSeek",
         "xai" to "xAI (Grok)",
         "azure" to "Azure OpenAI",
+        "local_inference" to "Local Inference Server",
         "local" to "Local (Ollama)",
         "openai_compatible" to "OpenAI Compatible",
         "other" to "Other"
     )
 
-    // Available models per provider
+    // Available models per provider (static fallbacks for cloud providers only)
+    // Local providers should ALWAYS query - no hardcoded defaults
     private val modelsByProvider = mapOf(
         "openai" to listOf("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"),
         "anthropic" to listOf("claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"),
-        "other" to listOf("default"),
-        "local" to listOf("llama3.2", "llama3.1", "mistral", "codellama", "qwen2.5")
+        "other" to listOf("default")
+        // NOTE: "local" and "openai_compatible" intentionally omitted - always query the endpoint
     )
 
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
+
+    // ========== Local Inference Server Discovery ==========
+
+    // Discovered servers from network scan
+    private val _discoveredServers = MutableStateFlow<List<DiscoveredLlmServer>>(emptyList())
+    val discoveredServers: StateFlow<List<DiscoveredLlmServer>> = _discoveredServers.asStateFlow()
+
+    // Currently selected server (for local_inference provider)
+    private val _selectedServer = MutableStateFlow<DiscoveredLlmServer?>(null)
+    val selectedServer: StateFlow<DiscoveredLlmServer?> = _selectedServer.asStateFlow()
+
+    // Discovery in progress flag
+    private val _isDiscovering = MutableStateFlow(false)
+    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
     // Track if we've loaded config
     private var hasLoadedConfig = false
@@ -349,9 +365,15 @@ class SettingsViewModel(
 
     // ========== BYOK Mode: Form Updates ==========
 
+    // Default base URLs for providers that need them
+    private val defaultBaseUrlsByProvider = mapOf(
+        "local" to "http://127.0.0.1:11434/v1",  // Ollama default with OpenAI-compatible endpoint
+        "openai_compatible" to "http://127.0.0.1:8080/v1"  // Generic local server
+    )
+
     /**
      * Update LLM provider (BYOK mode only).
-     * Fetches available models from the API for the selected provider.
+     * Resets base URL and API key to provider defaults, then fetches available models.
      */
     fun onProviderChanged(provider: String) {
         if (_isCirisProxy.value) {
@@ -363,16 +385,110 @@ class SettingsViewModel(
         logInfo(method, "Provider changed to: $provider")
 
         _llmProvider.value = provider
+
+        // Reset base URL to provider's default (clear for cloud providers, set localhost for local)
+        val defaultBaseUrl = defaultBaseUrlsByProvider[provider] ?: ""
+        _llmBaseUrl.value = defaultBaseUrl
+        logInfo(method, "Reset base URL to: ${defaultBaseUrl.ifEmpty { "(empty - use provider default)" }}")
+
+        // Clear API key for local providers (they don't need one)
+        // For cloud providers, load from storage
+        if (provider == "local" || provider == "openai_compatible" || provider == "local_inference") {
+            _apiKey.value = ""
+            _apiKeyMasked.value = ""
+            logInfo(method, "Cleared API key for local provider")
+        }
+
+        // For local_inference, trigger discovery instead of using static list
+        if (provider == "local_inference") {
+            _availableModels.value = emptyList()
+            _llmModel.value = ""
+            _selectedServer.value = null
+            _discoveredServers.value = emptyList()
+            discoverLocalServers()
+            return
+        }
+
         // Use static fallback first while fetching
         _availableModels.value = modelsByProvider[provider] ?: emptyList()
 
         // Reset model to first available
         _llmModel.value = modelsByProvider[provider]?.firstOrNull() ?: ""
 
-        // Load API key for new provider and fetch live models
+        // Load API key for cloud providers and fetch live models
         viewModelScope.launch {
-            loadApiKeyFromStorage(provider)
+            if (provider != "local" && provider != "openai_compatible") {
+                loadApiKeyFromStorage(provider)
+            }
             fetchModelsForProvider(provider)
+        }
+    }
+
+    // ========== Local Inference Server Discovery ==========
+
+    /**
+     * Discover local LLM inference servers on the network.
+     * Probes hostnames like jetson.local, ollama.local, etc.
+     * Also scans localhost ports for common LLM servers.
+     */
+    fun discoverLocalServers() {
+        val method = "discoverLocalServers"
+        logInfo(method, "Starting local LLM server discovery...")
+
+        viewModelScope.launch {
+            _isDiscovering.value = true
+            _discoveredServers.value = emptyList()
+
+            try {
+                val servers = apiClient.discoverLocalLlmServers(
+                    timeoutSeconds = 5.0f,
+                    includeLocalhost = true
+                )
+
+                _discoveredServers.value = servers
+                logInfo(method, "Discovered ${servers.size} local LLM servers")
+
+                // Auto-select first server if only one found
+                if (servers.size == 1) {
+                    selectServer(servers.first())
+                }
+            } catch (e: Exception) {
+                logError(method, "Discovery failed: ${e.message}")
+                _discoveredServers.value = emptyList()
+            } finally {
+                _isDiscovering.value = false
+            }
+        }
+    }
+
+    /**
+     * Select a discovered server as the LLM endpoint.
+     * Sets the base URL and fetches available models from the server.
+     */
+    fun selectServer(server: DiscoveredLlmServer) {
+        val method = "selectServer"
+        logInfo(method, "Selected server: ${server.label} (${server.url})")
+
+        _selectedServer.value = server
+
+        // Set base URL to server's URL with /v1 suffix for OpenAI-compatible endpoint
+        val baseUrl = when (server.serverType) {
+            "ollama" -> "${server.url}/v1"  // Ollama needs /v1 for OpenAI-compat
+            else -> "${server.url}/v1"      // Most servers use /v1
+        }
+        _llmBaseUrl.value = baseUrl
+        logInfo(method, "Set base URL to: $baseUrl")
+
+        // If server reported models, use them directly
+        if (server.models.isNotEmpty()) {
+            _availableModels.value = server.models
+            _llmModel.value = server.models.first()
+            logInfo(method, "Using ${server.models.size} models from discovery: ${server.models}")
+        } else {
+            // Otherwise fetch from the server's API
+            viewModelScope.launch {
+                fetchModelsForProvider("local")
+            }
         }
     }
 

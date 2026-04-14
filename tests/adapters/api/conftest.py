@@ -7,6 +7,8 @@ High-quality centralized fixtures for comprehensive API testing including:
 - WebSocket client simulation
 - Time service mocking for consistent timestamps
 - Service correlation fixtures for testing message fetching
+
+Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
 """
 
 import asyncio
@@ -185,7 +187,10 @@ def mock_persistence():
 
 @pytest.fixture
 def app():
-    """Create FastAPI app with minimal required state."""
+    """Create FastAPI app with minimal required state.
+
+    Note: CIRIS_TESTING_MODE is set by the autouse enable_testing_mode fixture.
+    """
     app = create_app()
 
     # Initialize auth service (required for auth endpoints)

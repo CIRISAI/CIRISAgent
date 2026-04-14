@@ -52,6 +52,25 @@ class SetupViewModel : ViewModel() {
         CIRISApiClient()
     }
 
+    // Available LLM providers for BYOK mode
+    val availableProviders = listOf(
+        "openai" to "OpenAI",
+        "anthropic" to "Anthropic",
+        "google" to "Google AI",
+        "openrouter" to "OpenRouter",
+        "groq" to "Groq",
+        "together" to "Together AI",
+        "mistral" to "Mistral",
+        "cohere" to "Cohere",
+        "deepseek" to "DeepSeek",
+        "xai" to "xAI (Grok)",
+        "azure" to "Azure OpenAI",
+        "local_inference" to "Local Inference Server",
+        "local" to "Local (Ollama)",
+        "openai_compatible" to "OpenAI Compatible",
+        "other" to "Other"
+    )
+
     // ========== Google OAuth State ==========
     // Source: SetupViewModel.kt:68-80, SetupWizardActivity.kt:110-174
 

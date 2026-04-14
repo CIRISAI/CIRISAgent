@@ -13,7 +13,10 @@ This is a semantic/LLM-based implementation - no hardware dependencies.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -25,7 +28,7 @@ from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +62,24 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             **kwargs,
         )
 
-        # Load prompts from YAML file
-        self.prompt_loader = get_prompt_loader()
-        self.prompt_template_data = self.prompt_loader.load_prompt_template("idma")
+        # Do NOT cache template - language may change at runtime
+        self._prompt_template_name = "idma"
 
         # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
 
         logger.info(f"IDMAEvaluator initialized with model: {self.model_name}")
+
+    @property
+    def prompt_loader(self) -> DMAPromptLoader:
+        """Get prompt loader fresh each time to respect language changes."""
+        return get_prompt_loader()
+
+    @property
+    def prompt_template_data(self) -> "PromptCollection":
+        """Load prompt template fresh each time to respect language changes."""
+        return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _create_idma_messages(
         self,

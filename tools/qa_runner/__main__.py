@@ -354,6 +354,8 @@ def main():
         # Fail-fast configuration
         fail_fast=not args.proceed_anyway,
         test_timeout=args.test_timeout,
+        # Data management
+        wipe_data=args.wipe_data,
     )
 
     # Create and run runner

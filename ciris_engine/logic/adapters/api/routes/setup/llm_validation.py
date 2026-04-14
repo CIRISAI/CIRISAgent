@@ -158,7 +158,7 @@ def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLM
                 message="Invalid API key",
                 error="OpenAI requires a valid API key starting with 'sk-'",
             )
-    elif config.provider != "local" and not config.api_key:
+    elif config.provider not in ("local", "local_inference") and not config.api_key:
         # Other non-local providers need API key
         return LLMValidationResponse(valid=False, message="API key required", error="This provider requires an API key")
     return None

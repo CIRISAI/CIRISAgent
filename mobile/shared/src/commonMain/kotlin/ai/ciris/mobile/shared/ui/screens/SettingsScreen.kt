@@ -8,6 +8,7 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.theme.BrightnessPreference
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
+import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.VerifyStatusResponse
 import ai.ciris.mobile.shared.viewmodels.SUPPORTED_CURRENCIES
@@ -17,6 +18,7 @@ import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.platform.testableWithHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -89,6 +91,11 @@ fun SettingsScreen(
     val apiKey by viewModel.apiKey.collectAsState()
     val apiKeyMasked by viewModel.apiKeyMasked.collectAsState()
     val availableModels by viewModel.availableModels.collectAsState()
+
+    // Local inference server discovery state
+    val discoveredServers by viewModel.discoveredServers.collectAsState()
+    val selectedServer by viewModel.selectedServer.collectAsState()
+    val isDiscovering by viewModel.isDiscovering.collectAsState()
 
     // Operation state
     val isSaving by viewModel.isSaving.collectAsState()
@@ -247,6 +254,9 @@ fun SettingsScreen(
                         apiKey = apiKey,
                         apiKeyMasked = apiKeyMasked,
                         availableModels = availableModels,
+                        discoveredServers = discoveredServers,
+                        selectedServer = selectedServer,
+                        isDiscovering = isDiscovering,
                         showApiKey = showApiKey,
                         isEditing = isEditing,
                         isSaving = isSaving,
@@ -556,6 +566,9 @@ private fun ByokConfigSection(
     apiKey: String,
     apiKeyMasked: String,
     availableModels: List<String>,
+    discoveredServers: List<DiscoveredLlmServer>,
+    selectedServer: DiscoveredLlmServer?,
+    isDiscovering: Boolean,
     showApiKey: Boolean,
     isEditing: Boolean,
     isSaving: Boolean,
@@ -628,43 +641,155 @@ private fun ByokConfigSection(
         }
     }
 
-    // Model selection
-    var modelExpanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = modelExpanded,
-        onExpandedChange = { modelExpanded = it }
-    ) {
-        OutlinedTextField(
-            value = llmModel.ifEmpty { localizedString("mobile.settings_select_model") },
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(localizedString("mobile.settings_model")) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
+    // Local Inference Server Discovery UI (only when local_inference provider selected)
+    if (llmProvider == "local_inference") {
+        // Discover servers button
+        OutlinedButton(
+            onClick = { viewModel.discoverLocalServers() },
+            enabled = !isDiscovering,
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
-                .testable("input_llm_model")
-        )
-
-        ExposedDropdownMenu(
-            expanded = modelExpanded,
-            onDismissRequest = { modelExpanded = false }
+                .testableClickable("btn_discover_servers") { viewModel.discoverLocalServers() }
         ) {
-            availableModels.forEach { model ->
-                DropdownMenuItem(
-                    text = { Text(model) },
-                    onClick = {
-                        viewModel.onModelChanged(model)
-                        modelExpanded = false
-                        onEditingChange(true)
-                    },
-                    modifier = Modifier.testableClickable("menu_model_$model") {
-                        viewModel.onModelChanged(model)
-                        modelExpanded = false
-                        onEditingChange(true)
-                    }
+            if (isDiscovering) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
                 )
+                Spacer(Modifier.width(8.dp))
+                Text("Discovering...")
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Discover Servers")
+            }
+        }
+
+        // Show discovered servers
+        if (discoveredServers.isNotEmpty()) {
+            Text(
+                text = "Found ${discoveredServers.size} server(s):",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            discoveredServers.forEach { server ->
+                val isSelected = selectedServer?.id == server.id
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.selectServer(server)
+                            onEditingChange(true)
+                        }
+                        .testableClickable("server_${server.id}") {
+                            viewModel.selectServer(server)
+                            onEditingChange(true)
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = if (isSelected)
+                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                    else
+                        null
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = server.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isSelected)
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = server.url,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isSelected)
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                        // Server type badge
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = server.serverType.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (!isDiscovering && discoveredServers.isEmpty()) {
+            // No servers found message
+            Text(
+                text = "No servers found. Ensure your LLM server is running.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    // Model selection (only show if not local_inference OR if a server is selected)
+    if (llmProvider != "local_inference" || selectedServer != null) {
+        var modelExpanded by remember { mutableStateOf(false) }
+
+        ExposedDropdownMenuBox(
+            expanded = modelExpanded,
+            onExpandedChange = { modelExpanded = it }
+        ) {
+            OutlinedTextField(
+                value = llmModel.ifEmpty { localizedString("mobile.settings_select_model") },
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(localizedString("mobile.settings_model")) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+                    .testable("input_llm_model")
+            )
+
+            ExposedDropdownMenu(
+                expanded = modelExpanded,
+                onDismissRequest = { modelExpanded = false }
+            ) {
+                availableModels.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model) },
+                        onClick = {
+                            viewModel.onModelChanged(model)
+                            modelExpanded = false
+                            onEditingChange(true)
+                        },
+                        modifier = Modifier.testableClickable("menu_model_$model") {
+                            viewModel.onModelChanged(model)
+                            modelExpanded = false
+                            onEditingChange(true)
+                        }
+                    )
+                }
             }
         }
     }

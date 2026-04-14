@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.viewmodels.AgentTemplateInfo
 import ai.ciris.mobile.shared.viewmodels.CheckDetail
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
+import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
@@ -1172,6 +1173,106 @@ class CIRISApiClient(
         @SerialName("ciris_compatible") val cirisCompatible: Boolean? = null,
         @SerialName("ciris_recommended") val cirisRecommended: Boolean? = null,
         @SerialName("context_window") val contextWindow: Int? = null
+    )
+
+    /**
+     * Discover local LLM inference servers on the network.
+     * Uses hostname probing and port scanning to find servers like:
+     * - Ollama (port 11434)
+     * - llama.cpp (port 8080)
+     * - vLLM (port 8000)
+     * - LM Studio (port 1234)
+     *
+     * @param timeoutSeconds Total timeout for discovery (default 5.0)
+     * @param includeLocalhost Whether to probe localhost ports (default true)
+     * @return List of discovered servers with their available models
+     */
+    suspend fun discoverLocalLlmServers(
+        timeoutSeconds: Float = 5.0f,
+        includeLocalhost: Boolean = true
+    ): List<DiscoveredLlmServer> {
+        val method = "discoverLocalLlmServers"
+        logInfo(method, "Discovering local LLM servers (timeout=${timeoutSeconds}s, localhost=$includeLocalhost)")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
+
+            val response = client.post("${this.baseUrl}/v1/setup/discover-local-llm") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody(DiscoverLlmRequest(timeoutSeconds, includeLocalhost))
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+            client.close()
+
+            if (response.status.value !in 200..299) {
+                logError(method, "API returned error status: ${response.status}")
+                return emptyList()
+            }
+
+            val body = response.body<DiscoverLlmApiResponse>()
+            val data = body.data ?: return emptyList()
+
+            val servers = data.servers?.map { server ->
+                DiscoveredLlmServer(
+                    id = server.id ?: "",
+                    label = server.label ?: server.url ?: "Unknown",
+                    url = server.url ?: "",
+                    serverType = server.serverType ?: "unknown",
+                    modelCount = server.modelCount ?: 0,
+                    models = server.models ?: emptyList()
+                )
+            } ?: emptyList()
+
+            logInfo(method, "Discovered ${servers.size} servers via ${data.discoveryMethods?.joinToString() ?: "unknown"}")
+            servers
+        } catch (e: Exception) {
+            logException(method, e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Response wrapper for /v1/setup/discover-local-llm endpoint
+     */
+    @Serializable
+    private data class DiscoverLlmRequest(
+        @SerialName("timeout_seconds") val timeoutSeconds: Float,
+        @SerialName("include_localhost") val includeLocalhost: Boolean
+    )
+
+    @Serializable
+    private data class DiscoverLlmApiResponse(
+        val status: String? = null,
+        val data: DiscoverLlmData? = null,
+        val metadata: JsonObject? = null  // SuccessResponse wrapper metadata
+    )
+
+    @Serializable
+    private data class DiscoverLlmData(
+        val servers: List<DiscoveredLlmServerApi>? = null,
+        @SerialName("total_count") val totalCount: Int? = null,
+        @SerialName("discovery_methods") val discoveryMethods: List<String>? = null,
+        val error: String? = null
+    )
+
+    @Serializable
+    private data class DiscoveredLlmServerApi(
+        val id: String? = null,
+        val label: String? = null,
+        val url: String? = null,
+        @SerialName("server_type") val serverType: String? = null,
+        @SerialName("model_count") val modelCount: Int? = null,
+        val models: List<String>? = null,
+        val metadata: JsonObject? = null  // Server metadata (hostname, ip, port, source)
     )
 
     /**

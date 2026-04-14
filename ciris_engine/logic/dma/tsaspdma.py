@@ -10,7 +10,10 @@ TSASPDMA returns ActionSelectionDMAResult (same as ASPDMA) for transparent integ
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,7 +29,7 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 
 class TSASPDMALLMResult(BaseModel):
@@ -100,14 +103,23 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             **kwargs,
         )
 
-        # Load prompts from YAML file
-        self.prompt_loader = get_prompt_loader()
-        self.prompt_template_data = self.prompt_loader.load_prompt_template("tsaspdma")
+        # Do NOT cache template - language may change at runtime
+        self._prompt_template_name = "tsaspdma"
 
         # Store last user prompt for debugging/streaming
         self.last_user_prompt: Optional[str] = None
 
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
+
+    @property
+    def prompt_loader(self) -> DMAPromptLoader:
+        """Get prompt loader fresh each time to respect language changes."""
+        return get_prompt_loader()
+
+    @property
+    def prompt_template_data(self) -> "PromptCollection":
+        """Load prompt template fresh each time to respect language changes."""
+        return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Sync user's language preference from context to prompt loader."""

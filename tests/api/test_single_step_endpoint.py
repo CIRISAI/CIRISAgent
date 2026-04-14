@@ -39,13 +39,13 @@ class TestSingleStepEndpoint:
 
     @pytest.fixture
     def app(self):
-        """Create FastAPI app with required services."""
-        app = create_app()
+        """Create FastAPI app with required services.
 
-        # Initialize auth service (required for auth endpoints)
+        Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
+        """
+        app = create_app()
         app.state.auth_service = APIAuthService()
         app.state.auth_service._dev_mode = True
-
         return app
 
     @pytest.fixture

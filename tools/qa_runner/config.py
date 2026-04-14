@@ -148,6 +148,7 @@ class QAConfig:
     )
     mock_llm: bool = True
     adapter: str = "api"
+    wipe_data: bool = False  # Wipe data directory before starting server
 
     # Database backend configuration (for parallel testing)
     database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
@@ -302,7 +303,7 @@ class QAConfig:
 
         # SDK test modules
         elif module == QAModule.SDK:
-            return SDKTestModule.get_sdk_tests()
+            return SDKTestModule.get_sdk_tests(admin_password=effective_password)
 
         # Extended API tests
         elif module == QAModule.EXTENDED_API:

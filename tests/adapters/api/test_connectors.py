@@ -14,32 +14,19 @@ from tests.fixtures.auth import make_login_request
 
 @pytest.fixture
 def client_with_auth(test_db):
-    """Create test client with admin authentication."""
+    """Create test client with admin authentication.
+
+    Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
+    """
+    from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+
     app = create_app()
-
-    # Mock authentication
-    from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
-
-    auth_service = APIAuthService()
-    admin_user = User(
-        wa_id="test_admin",
-        name="Test Admin",
-        auth_type="password",
-        api_role="ADMIN",
-        created_at=datetime.now(timezone.utc),
-        is_active=True,
-    )
-    auth_service._users[admin_user.wa_id] = admin_user
-    app.state.auth_service = auth_service
+    app.state.auth_service = APIAuthService()
 
     client = TestClient(app)
-
-    # Login and get token using centralized auth helper
     client.auth_headers = make_login_request(client)
-
     client.app = app
 
-    # Clear connector registry before each test
     connectors._connector_registry.clear()
 
     yield client

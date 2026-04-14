@@ -547,9 +547,15 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         Path where config was saved
     """
     llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
+
+    # For local providers, use "local" as placeholder API key if none provided
+    llm_api_key = setup.llm_api_key
+    if not llm_api_key and setup.llm_provider in ("local", "local_inference"):
+        llm_api_key = "local"
+
     config_path = create_env_file(
         llm_provider=setup.llm_provider,
-        llm_api_key=setup.llm_api_key,
+        llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
         llm_model=setup.llm_model or "",
         agent_port=setup.agent_port,

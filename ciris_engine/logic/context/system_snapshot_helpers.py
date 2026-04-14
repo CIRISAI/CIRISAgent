@@ -1490,6 +1490,58 @@ def _create_user_memory_query(user_id: str) -> MemoryQuery:
     )
 
 
+def _create_preferences_memory_query(user_id: str) -> MemoryQuery:
+    """Create memory query for user preferences node.
+
+    The setup wizard stores user preferences (language, location, timezone)
+    in a separate 'preferences/{user_id}' node. This query retrieves those
+    preferences for merging into the user profile.
+    """
+    return MemoryQuery(
+        node_id=f"preferences/{user_id}",
+        scope=GraphScope.LOCAL,
+        type=NodeType.CONCEPT,  # Preferences are stored as CONCEPT nodes
+        include_edges=False,
+        depth=1,
+    )
+
+
+async def _query_user_preferences(
+    user_id: str, memory_service: LocalGraphMemoryService
+) -> JSONDict:
+    """Query the preferences/{user_id} node for user settings.
+
+    The setup wizard and settings page store user preferences in a separate
+    node. This function retrieves those preferences for merging into the
+    user profile.
+
+    Args:
+        user_id: The user ID to query preferences for
+        memory_service: The memory service to query
+
+    Returns:
+        Dict of preference attributes (may be empty)
+    """
+    try:
+        prefs_query = _create_preferences_memory_query(user_id)
+        prefs_results = await memory_service.recall(prefs_query)
+
+        if prefs_results:
+            prefs_node = prefs_results[0]
+            attrs = _extract_node_attributes(prefs_node)
+            logger.debug(
+                f"[USER PREFS] Found preferences for {user_id}: {list(attrs.keys())}"
+            )
+            return attrs
+
+        logger.debug(f"[USER PREFS] No preferences node found for {user_id}")
+        return {}
+
+    except Exception as e:
+        logger.warning(f"[USER PREFS] Failed to query preferences for {user_id}: {e}")
+        return {}
+
+
 def _determine_if_admin_user(user_id: str) -> bool:
     """Determine if a user_id represents an admin or system user."""
     # Check for admin patterns
@@ -1598,6 +1650,10 @@ async def _enrich_single_user_profile(
 
     If no user node exists, creates one automatically with appropriate defaults.
     This ensures user_profiles is never empty in system snapshots.
+
+    IMPORTANT: This function queries BOTH the user/{user_id} node AND the
+    preferences/{user_id} node. The setup wizard stores language/location
+    preferences in the preferences node, so we must query both and merge.
     """
     try:
         # Query user node with ALL attributes
@@ -1608,21 +1664,78 @@ async def _enrich_single_user_profile(
             f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}"
         )
 
+        # Also query preferences node - setup wizard stores language/location here
+        prefs_attrs = await _query_user_preferences(user_id, memory_service)
+
         if user_results:
             user_node = user_results[0]
-            return await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+            profile = await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+
+            # Merge preferences into profile (preferences take priority)
+            if prefs_attrs:
+                profile = _merge_preferences_into_profile(profile, prefs_attrs)
+
+            return profile
 
         # No user node exists - create one automatically
         logger.info(f"[USER EXTRACTION] No node found for user/{user_id}, creating new user node with defaults")
         new_user_node = await _create_default_user_node(user_id, memory_service, channel_id)
 
         if new_user_node:
-            return await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
+            profile = await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
+
+            # Merge preferences into profile (preferences take priority)
+            if prefs_attrs:
+                profile = _merge_preferences_into_profile(profile, prefs_attrs)
+
+            return profile
 
     except Exception as e:
         logger.warning(f"Failed to enrich user {user_id}: {e}")
 
     return None
+
+
+def _merge_preferences_into_profile(profile: UserProfile, prefs_attrs: JSONDict) -> UserProfile:
+    """Merge preferences node attributes into a user profile.
+
+    The setup wizard stores user preferences (language, location, timezone)
+    in a separate preferences/{user_id} node. This function merges those
+    preferences into the user profile, with preferences taking priority.
+
+    Args:
+        profile: The user profile to update
+        prefs_attrs: Attributes from the preferences node
+
+    Returns:
+        Updated user profile with merged preferences
+    """
+    # Language - critical for localization
+    if prefs_attrs.get("preferred_language") and prefs_attrs.get("preferred_language") != "en":
+        profile.preferred_language = str(prefs_attrs["preferred_language"])
+        logger.debug(f"[PREFS MERGE] Set language to '{profile.preferred_language}' from preferences node")
+
+    # Timezone
+    if prefs_attrs.get("timezone") and prefs_attrs.get("timezone") != "UTC":
+        profile.timezone = str(prefs_attrs["timezone"])
+
+    # Location
+    if prefs_attrs.get("location"):
+        profile.location = str(prefs_attrs["location"])
+    if prefs_attrs.get("location_country"):
+        # Build location string if not already set
+        if not profile.location:
+            parts = []
+            if prefs_attrs.get("location_city"):
+                parts.append(str(prefs_attrs["location_city"]))
+            if prefs_attrs.get("location_region"):
+                parts.append(str(prefs_attrs["location_region"]))
+            if prefs_attrs.get("location_country"):
+                parts.append(str(prefs_attrs["location_country"]))
+            if parts:
+                profile.location = ", ".join(parts)
+
+    return profile
 
 
 async def _enrich_user_profiles(
@@ -1631,18 +1744,59 @@ async def _enrich_user_profiles(
     channel_id: Optional[str],
     existing_profiles: List[UserProfile],
 ) -> List[UserProfile]:
-    """Enrich user profiles from memory graph with comprehensive data."""
-    existing_user_ids = {p.user_id for p in existing_profiles}
+    """Enrich user profiles from memory graph with comprehensive data.
+
+    IMPORTANT: For users that already exist in existing_profiles (e.g., from GraphQL),
+    we MERGE memory graph data into them rather than skipping. This ensures that
+    user preferences like preferred_language stored in the memory graph are always
+    reflected in the final profile.
+    """
+    # Build lookup for existing profiles by user_id
+    existing_by_id = {p.user_id: p for p in existing_profiles}
 
     for user_id in user_ids:
         logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
 
-        if _should_skip_user_enrichment(user_id, existing_user_ids):
+        # Get enriched profile from memory graph
+        memory_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
+
+        if not memory_profile:
             continue
 
-        user_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
-        if user_profile:
-            existing_profiles.append(user_profile)
+        if user_id in existing_by_id:
+            # User already exists - MERGE memory graph data into existing profile
+            # This is critical for localization: memory graph has the real preferred_language
+            existing = existing_by_id[user_id]
+            logger.debug(f"[USER EXTRACTION] Merging memory graph data into existing profile for {user_id}")
+
+            # Update fields from memory graph that may have been hardcoded or missing
+            # Only update if memory graph has non-default values
+            if memory_profile.preferred_language and memory_profile.preferred_language != "en":
+                existing.preferred_language = memory_profile.preferred_language
+            if memory_profile.timezone and memory_profile.timezone != "UTC":
+                existing.timezone = memory_profile.timezone
+            if memory_profile.communication_style and memory_profile.communication_style != "formal":
+                existing.communication_style = memory_profile.communication_style
+            if memory_profile.user_preferred_name:
+                existing.user_preferred_name = memory_profile.user_preferred_name
+            if memory_profile.location:
+                existing.location = memory_profile.location
+            if memory_profile.interaction_preferences:
+                existing.interaction_preferences = memory_profile.interaction_preferences
+            if memory_profile.oauth_name:
+                existing.oauth_name = memory_profile.oauth_name
+            # Merge memorized_attributes
+            if memory_profile.memorized_attributes:
+                if not existing.memorized_attributes:
+                    existing.memorized_attributes = {}
+                existing.memorized_attributes.update(memory_profile.memorized_attributes)
+            # Append notes
+            if memory_profile.notes:
+                existing.notes = (existing.notes or "") + "\n" + memory_profile.notes
+        else:
+            # New user - add to profiles
+            existing_profiles.append(memory_profile)
+            existing_by_id[user_id] = memory_profile
 
     return existing_profiles
 

@@ -5,6 +5,24 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] - 2026-04-13
+
+### Added
+
+- **Local LLM Server Discovery** - Backend endpoint to discover local inference servers (Ollama, vLLM, llama.cpp, LM Studio) via hostname probing
+- **Settings Screen LLM Discovery UI** - Mobile/desktop UI for discovering and selecting local LLM servers
+
+### Fixed
+
+- **Localization Pipeline** - Fixed DMA prompts caching templates at init; now load fresh each request to respect runtime language changes
+- **User Preferences Enrichment** - Fixed user enrichment to query and merge `preferences/{user_id}` node alongside `user/{user_id}` for complete profile data
+- **Fallback Admin Production Security** - Fallback admin now only created with `CIRIS_TESTING_MODE=true`; production requires setup wizard
+
+### Changed
+
+- **DMA Type Safety** - All DMAs now use proper `DMAPromptLoader` and `PromptCollection` return types instead of `Any`
+- **Test Infrastructure** - Global `CIRIS_TESTING_MODE` set in `tests/conftest.py` for all test authentication
+
 ## [2.4.3] - 2026-04-13
 
 ### Added

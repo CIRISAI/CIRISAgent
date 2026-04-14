@@ -15,7 +15,14 @@ from .._common import RESPONSES_404_500, RESPONSES_500
 from .dependencies import SetupOnlyDep
 from .helpers import _is_setup_allowed_without_auth
 from .llm_validation import _list_models_for_provider, _validate_llm_connection
-from .models import ListModelsResponse, LLMValidationRequest, LLMValidationResponse
+from .models import (
+    DiscoverLocalLLMRequest,
+    DiscoverLocalLLMResponse,
+    DiscoveredLLMServer,
+    ListModelsResponse,
+    LLMValidationRequest,
+    LLMValidationResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,3 +177,52 @@ async def list_models(config: LLMValidationRequest) -> SuccessResponse[ListModel
     """
     result = await _list_models_for_provider(config)
     return SuccessResponse(data=result)
+
+
+@router.post("/discover-local-llm", dependencies=[SetupOrAuthDep])
+async def discover_local_llm(
+    request: DiscoverLocalLLMRequest = DiscoverLocalLLMRequest(),
+) -> SuccessResponse[DiscoverLocalLLMResponse]:
+    """Discover local LLM inference servers on the network.
+
+    Uses hostname probing and localhost port scanning to find running
+    LLM servers (Ollama, llama.cpp, vLLM, LM Studio, LocalAI).
+
+    Probes common hostnames:
+    - jetson.local (NVIDIA Jetson with Ollama/llama.cpp)
+    - ollama.local, llm.local, inference.local, lmstudio.local, vllm.local
+
+    Probes localhost ports:
+    - 11434 (Ollama), 1234 (LM Studio), 8000 (vLLM), 8080 (llama.cpp/LocalAI)
+
+    Returns discovered servers with model counts and names.
+    Accessible without auth during first-run, or with auth after setup.
+    """
+    from .llm_discovery import discover_local_llm_servers
+
+    try:
+        servers_data, methods = await discover_local_llm_servers(
+            timeout_seconds=request.timeout_seconds,
+            include_localhost=request.include_localhost,
+        )
+
+        # Convert to Pydantic models
+        servers = [DiscoveredLLMServer(**s) for s in servers_data]
+
+        return SuccessResponse(
+            data=DiscoverLocalLLMResponse(
+                servers=servers,
+                total_count=len(servers),
+                discovery_methods=methods,
+            )
+        )
+    except Exception as e:
+        logger.error(f"[DISCOVER_LOCAL_LLM] Discovery failed: {e}")
+        return SuccessResponse(
+            data=DiscoverLocalLLMResponse(
+                servers=[],
+                total_count=0,
+                discovery_methods=[],
+                error=str(e),
+            )
+        )

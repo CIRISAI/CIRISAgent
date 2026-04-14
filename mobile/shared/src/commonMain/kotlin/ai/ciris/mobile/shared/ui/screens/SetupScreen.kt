@@ -18,6 +18,8 @@ import ai.ciris.mobile.shared.models.ConfigStepResultData
 import ai.ciris.mobile.shared.models.DiscoveredItemData
 import ai.ciris.mobile.shared.models.LoadableAdaptersData
 import ai.ciris.mobile.shared.ui.components.AdapterWizardDialog
+import ai.ciris.mobile.shared.ui.components.LocalLlmServerDiscovery
+import ai.ciris.mobile.shared.ui.components.rememberLocalLlmDiscoveryState
 import ai.ciris.mobile.shared.viewmodels.DeviceAuthStatus
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
@@ -1249,6 +1251,9 @@ private fun LlmConfigurationStep(
     var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
 
+    // State for local LLM server discovery
+    val discoveryState = rememberLocalLlmDiscoveryState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1372,14 +1377,18 @@ private fun LlmConfigurationStep(
             )
 
             var providerExpanded by remember { mutableStateOf(false) }
-            val providers = listOf("OpenAI", "Anthropic", "Google AI", "OpenRouter", "Groq", "Together AI", "LocalAI", "OpenAI Compatible")
+            // Use dynamic provider list from ViewModel
+            val providers = viewModel.availableProviders
+
+            // Get display name for current provider
+            val currentProviderDisplay = providers.find { it.first == state.llmProvider }?.second ?: state.llmProvider
 
             ExposedDropdownMenuBox(
                 expanded = providerExpanded,
                 onExpandedChange = { providerExpanded = it }
             ) {
                 OutlinedTextField(
-                    value = state.llmProvider,
+                    value = currentProviderDisplay,
                     onValueChange = {},
                     readOnly = true,
                     modifier = Modifier
@@ -1399,15 +1408,15 @@ private fun LlmConfigurationStep(
                     expanded = providerExpanded,
                     onDismissRequest = { providerExpanded = false }
                 ) {
-                    providers.forEach { provider ->
+                    providers.forEach { (key, label) ->
                         DropdownMenuItem(
-                            text = { Text(provider) },
+                            text = { Text(label) },
                             onClick = {
-                                viewModel.setLlmProvider(provider)
+                                viewModel.setLlmProvider(key)
                                 providerExpanded = false
                             },
-                            modifier = Modifier.testableClickable("menu_provider_${provider.lowercase().replace(" ", "_")}") {
-                                viewModel.setLlmProvider(provider)
+                            modifier = Modifier.testableClickable("menu_provider_$key") {
+                                viewModel.setLlmProvider(key)
                                 providerExpanded = false
                             }
                         )
@@ -1417,8 +1426,48 @@ private fun LlmConfigurationStep(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Endpoint URL for LocalAI and OpenAI Compatible
-            if (state.llmProvider == "LocalAI" || state.llmProvider == "OpenAI Compatible") {
+            // Local providers that need endpoint URL
+            val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "openai_compatible", "other")
+
+            // Local Inference Server Discovery UI
+            if (state.llmProvider == "local_inference") {
+                LocalLlmServerDiscovery(
+                    state = discoveryState,
+                    apiClient = apiClient,
+                    onServerSelected = { server ->
+                        // Set base URL from discovered server
+                        val baseUrl = when (server.serverType) {
+                            "ollama" -> "${server.url}/v1"
+                            else -> "${server.url}/v1"
+                        }
+                        viewModel.setLlmBaseUrl(baseUrl)
+
+                        // Populate availableModels from discovered server
+                        if (server.models.isNotEmpty()) {
+                            availableModels = server.models.map { modelId ->
+                                ModelInfo(
+                                    id = modelId,
+                                    displayName = modelId,
+                                    contextWindow = null,
+                                    cirisCompatible = true,
+                                    cirisRecommended = false
+                                )
+                            }
+                            // Auto-select first model
+                            viewModel.setLlmModel(server.models.first())
+                        }
+                    },
+                    primaryColor = SetupColors.Primary,
+                    surfaceColor = SetupColors.Background,
+                    textColor = SetupColors.TextPrimary,
+                    secondaryTextColor = SetupColors.TextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Endpoint URL for local providers (show for all local providers)
+            if (isLocalProvider) {
                 Text(
                     text = "Endpoint URL (optional)",
                     color = SetupColors.TextPrimary,
@@ -1445,9 +1494,9 @@ private fun LlmConfigurationStep(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // API Key input (optional for LocalAI and OpenAI Compatible)
-            if (state.llmProvider != "LocalAI") {
-                val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
+            // API Key input (optional for local providers)
+            if (state.llmProvider !in listOf("local", "local_inference")) {
+                val apiKeyLabel = if (isLocalProvider) {
                     "API Key (optional)"
                 } else {
                     localizedString("mobile.setup_api_key_label")
@@ -1623,13 +1672,13 @@ private fun LlmConfigurationStep(
                     placeholder = {
                         Text(
                             text = when (state.llmProvider) {
-                                "OpenAI" -> "gpt-4o"
-                                "Anthropic" -> "claude-sonnet-4-5-20250514"
-                                "Google AI" -> "gemini-2.0-flash"
-                                "OpenRouter" -> "anthropic/claude-sonnet-4"
-                                "Groq" -> "llama-3.3-70b-versatile"
-                                "Together AI" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-                                "LocalAI" -> "llama3"
+                                "openai" -> "gpt-4o"
+                                "anthropic" -> "claude-sonnet-4-5-20250514"
+                                "google" -> "gemini-2.0-flash"
+                                "openrouter" -> "anthropic/claude-sonnet-4"
+                                "groq" -> "llama-3.3-70b-versatile"
+                                "together" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+                                "local", "local_inference" -> "llama3.2"
                                 else -> "model-name"
                             },
                             color = SetupColors.TextSecondary
@@ -1656,17 +1705,8 @@ private fun LlmConfigurationStep(
                         testResult = null
                         coroutineScope.launch(Dispatchers.IO) {
                             try {
-                                val providerId = when (state.llmProvider) {
-                                    "OpenAI" -> "openai"
-                                    "Anthropic" -> "anthropic"
-                                    "Google AI" -> "google"
-                                    "OpenRouter" -> "openrouter"
-                                    "Groq" -> "groq"
-                                    "Together AI" -> "together"
-                                    "LocalAI" -> "local"
-                                    "OpenAI Compatible" -> "openai_compatible"
-                                    else -> "other"
-                                }
+                                // Provider is now stored as key directly (e.g., "openai", "local")
+                                val providerId = state.llmProvider
                                 val result = apiClient.validateLlmConfiguration(
                                     provider = providerId,
                                     apiKey = state.llmApiKey,
@@ -1712,7 +1752,7 @@ private fun LlmConfigurationStep(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().testable("btn_test_connection"),
-                enabled = !isTesting && (state.llmProvider == "LocalAI" || state.llmProvider == "OpenAI Compatible" || state.llmApiKey.isNotEmpty()),
+                enabled = !isTesting && (isLocalProvider || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
                 )

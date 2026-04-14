@@ -729,9 +729,10 @@ async def build_system_snapshot_with_batch(
                         user_id=name,
                         display_name=graphql_profile.nick or name,
                         created_at=datetime.now(timezone.utc),
-                        preferred_language="en",
-                        timezone="UTC",
-                        communication_style="formal",
+                        # Read language/timezone from GraphQL attrs, don't hardcode
+                        preferred_language=consent_attrs.get("preferred_language", consent_attrs.get("language", "en")),
+                        timezone=consent_attrs.get("timezone", "UTC"),
+                        communication_style=consent_attrs.get("communication_style", "formal"),
                         trust_level=graphql_profile.trust_score or 0.5,
                         last_interaction=(
                             datetime.fromisoformat(graphql_profile.last_seen) if graphql_profile.last_seen else None

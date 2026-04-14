@@ -135,25 +135,15 @@ def mock_orchestrator():
 
 @pytest.fixture
 def client_with_auth(test_db, mock_orchestrator):
-    """Create test client with mocked orchestrator."""
+    """Create test client with mocked orchestrator.
+
+    Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
+    """
+    from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+
     app = create_app()
+    app.state.auth_service = APIAuthService()
 
-    # Mock authentication
-    from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
-
-    auth_service = APIAuthService()
-    user = User(
-        wa_id="test_admin",
-        name="Test Admin",
-        auth_type="password",
-        api_role="ADMIN",
-        created_at=datetime.now(timezone.utc),
-        is_active=True,
-    )
-    auth_service._users[user.wa_id] = user
-    app.state.auth_service = auth_service
-
-    # Mock services needed for orchestrator
     with patch("ciris_engine.logic.adapters.api.routes.dsar_multi_source._initialize_orchestrator") as mock_init:
         mock_init.return_value = mock_orchestrator
         client = TestClient(app)

@@ -20,6 +20,8 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _collect_available_tools,
     _collect_resource_alerts,
     _collect_service_health,
+    _create_preferences_memory_query,
+    _enrich_single_user_profile,
     _enrich_user_profiles,
     _extract_agent_identity,
     _extract_thought_summary,
@@ -30,6 +32,8 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _get_telemetry_summary,
     _get_top_tasks,
     _json_serial_for_users,
+    _merge_preferences_into_profile,
+    _query_user_preferences,
     _resolve_channel_context,
     _safe_extract_channel_info,
 )
@@ -1054,17 +1058,40 @@ class TestUserManagement:
 
     @pytest.mark.asyncio
     async def test_enrich_user_profiles_with_existing_user(self, caplog):
-        """Test enriching user profiles skips existing users."""
+        """Test enriching user profiles merges memory data into existing users."""
         memory_service = Mock()
+
+        # Mock user node with preferences
+        user_node = Mock()
+        user_node.attributes = {
+            "username": "existing_user",
+            "display_name": "Existing User",
+            "language": "fr",  # Non-default language should be merged
+            "timezone": "Europe/Paris",  # Non-default timezone should be merged
+        }
+        memory_service.recall = AsyncMock(return_value=[user_node])
+
         user_ids = {"existing_user"}
         channel_id = "test_channel"
-        existing_profiles = [Mock()]
-        existing_profiles[0].user_id = "existing_user"
+        existing_profile = Mock()
+        existing_profile.user_id = "existing_user"
+        existing_profile.preferred_language = "en"  # Will be overwritten with "fr"
+        existing_profile.timezone = "UTC"  # Will be overwritten with "Europe/Paris"
+        existing_profile.communication_style = "formal"
+        existing_profile.user_preferred_name = None
+        existing_profile.location = None
+        existing_profile.interaction_preferences = None
+        existing_profile.oauth_name = None
+        existing_profile.memorized_attributes = None
+        existing_profiles = [existing_profile]
 
         result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
 
         assert len(result) == 1
-        assert "User existing_user already exists, skipping" in caplog.text
+        # Verify memory graph data was merged into existing profile
+        assert "Merging memory graph data into existing profile" in caplog.text
+        assert existing_profile.preferred_language == "fr"
+        assert existing_profile.timezone == "Europe/Paris"
 
     @pytest.mark.asyncio
     async def test_enrich_user_profiles_with_new_user_valid_node(self, caplog):
@@ -1975,3 +2002,225 @@ class TestRefreshEnrichmentCache:
         assert "test:test_get_status" in result
         assert result["test:test_list_items"]["items"] == [1, 2, 3]
         assert result["test:test_get_status"]["status"] == "healthy"
+
+
+# =============================================================================
+# LOCALIZATION / USER PREFERENCES TESTS
+# =============================================================================
+
+
+class TestUserPreferencesQuery:
+    """Test user preferences query and merge functions for localization.
+
+    These tests verify that user preferences (especially preferred_language)
+    are correctly queried from the preferences/{user_id} node and merged
+    into user profiles. This is critical for localization.
+    """
+
+    def test_create_preferences_memory_query(self):
+        """Test that preferences query is correctly constructed."""
+        query = _create_preferences_memory_query("user123")
+
+        assert query.node_id == "preferences/user123"
+        assert query.scope == GraphScope.LOCAL
+        assert query.type == NodeType.CONCEPT
+        assert query.include_edges is False
+        assert query.depth == 1
+
+    def test_merge_preferences_into_profile_with_language(self):
+        """Test merging preferences with non-English language."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default
+            timezone="UTC",
+        )
+
+        prefs_attrs = {
+            "preferred_language": "am",  # Amharic
+            "timezone": "Africa/Addis_Ababa",
+            "location": "Addis Ababa, Ethiopia",
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        assert result.preferred_language == "am"
+        assert result.timezone == "Africa/Addis_Ababa"
+        assert result.location == "Addis Ababa, Ethiopia"
+
+    def test_merge_preferences_skips_english_default(self):
+        """Test that English language is not overwritten with English."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="es",  # Spanish already set
+            timezone="Europe/Madrid",
+        )
+
+        prefs_attrs = {
+            "preferred_language": "en",  # Default - should not overwrite
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        # Should keep Spanish since prefs has English (default)
+        assert result.preferred_language == "es"
+
+    def test_merge_preferences_builds_location_from_parts(self):
+        """Test that location is built from city/region/country parts."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+        )
+
+        prefs_attrs = {
+            "location_city": "Austin",
+            "location_region": "Texas",
+            "location_country": "USA",
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        assert result.location == "Austin, Texas, USA"
+
+    def test_merge_preferences_with_empty_attrs(self):
+        """Test merging empty preferences doesn't modify profile."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="de",
+            timezone="Europe/Berlin",
+        )
+
+        result = _merge_preferences_into_profile(profile, {})
+
+        assert result.preferred_language == "de"
+        assert result.timezone == "Europe/Berlin"
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_with_results(self):
+        """Test querying preferences when node exists."""
+        mock_memory_service = AsyncMock()
+
+        # Create a mock node with preferences
+        mock_node = MagicMock()
+        mock_node.attributes = {
+            "preferred_language": "ja",
+            "timezone": "Asia/Tokyo",
+        }
+
+        mock_memory_service.recall = AsyncMock(return_value=[mock_node])
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result.get("preferred_language") == "ja"
+        assert result.get("timezone") == "Asia/Tokyo"
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_no_node(self):
+        """Test querying preferences when no node exists."""
+        mock_memory_service = AsyncMock()
+        mock_memory_service.recall = AsyncMock(return_value=[])
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_handles_exception(self):
+        """Test that query handles exceptions gracefully."""
+        mock_memory_service = AsyncMock()
+        mock_memory_service.recall = AsyncMock(side_effect=Exception("Database error"))
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_enrich_single_user_profile_merges_preferences(self):
+        """Test that single user enrichment queries and merges preferences."""
+        mock_memory_service = AsyncMock()
+
+        # Create mock user node
+        mock_user_node = MagicMock()
+        mock_user_node.id = "user/test_user"
+        mock_user_node.attributes = {
+            "username": "TestUser",
+            "trust_level": 0.8,
+        }
+        mock_user_node.edges = []
+
+        # Create mock preferences node
+        mock_prefs_node = MagicMock()
+        mock_prefs_node.attributes = {
+            "preferred_language": "ko",  # Korean
+            "timezone": "Asia/Seoul",
+        }
+
+        def recall_side_effect(query):
+            if "preferences/" in query.node_id:
+                return [mock_prefs_node]
+            elif "user/" in query.node_id:
+                return [mock_user_node]
+            return []
+
+        mock_memory_service.recall = AsyncMock(side_effect=recall_side_effect)
+
+        result = await _enrich_single_user_profile("test_user", mock_memory_service, "channel1")
+
+        assert result is not None
+        assert result.preferred_language == "ko"
+        assert result.timezone == "Asia/Seoul"
+
+    @pytest.mark.asyncio
+    async def test_enrich_user_profiles_merges_into_existing(self):
+        """Test that profile enrichment merges preferences into GraphQL profiles."""
+        mock_memory_service = AsyncMock()
+
+        # Create existing profile from GraphQL (with default English)
+        existing_profile = UserProfile(
+            user_id="oauth_user",
+            display_name="OAuth User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default from GraphQL
+        )
+
+        # Create mock user node
+        mock_user_node = MagicMock()
+        mock_user_node.id = "user/oauth_user"
+        mock_user_node.attributes = {
+            "username": "OAuth User",
+        }
+        mock_user_node.edges = []
+
+        # Create mock preferences node with non-English language
+        mock_prefs_node = MagicMock()
+        mock_prefs_node.attributes = {
+            "preferred_language": "ar",  # Arabic
+            "timezone": "Asia/Dubai",
+        }
+
+        def recall_side_effect(query):
+            if "preferences/" in query.node_id:
+                return [mock_prefs_node]
+            elif "user/" in query.node_id:
+                return [mock_user_node]
+            return []
+
+        mock_memory_service.recall = AsyncMock(side_effect=recall_side_effect)
+
+        result = await _enrich_user_profiles(
+            mock_memory_service,
+            {"oauth_user"},
+            "channel1",
+            [existing_profile],
+        )
+
+        # The existing profile should have been updated with Arabic
+        assert len(result) == 1
+        assert result[0].preferred_language == "ar"
+        assert result[0].timezone == "Asia/Dubai"

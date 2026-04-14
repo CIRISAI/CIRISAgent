@@ -29,8 +29,14 @@ enum class SetupMode {
 
     /**
      * Bring Your Own Key - user provides their own LLM API key.
-     * Supports OpenAI, Anthropic, Azure OpenAI, LocalAI, on-device
-     * Gemma 4 (via the mobile_local_llm adapter), etc.
+     * Supports OpenAI, Anthropic, Azure OpenAI, LocalAI, etc.
      */
-    BYOK
+    BYOK,
+
+    /**
+     * Local on-device inference using Gemma 4 via the mobile_local_llm adapter.
+     * No API key required - runs entirely on-device using LiteRT-LM.
+     * Available on capable Android devices (6GB+ RAM, arm64) and desktops (6GB+ RAM).
+     */
+    LOCAL_ON_DEVICE
 }

@@ -556,6 +556,31 @@ data class DiscoveredLlmServer(
 )
 
 /**
+ * Result of starting a local LLM server.
+ * Source: POST /v1/setup/start-local-server
+ */
+@Serializable
+data class StartLocalServerResult(
+    /** Whether the server was started successfully */
+    val success: Boolean,
+    /** Human-readable message explaining the result */
+    val message: String,
+    /** Server URL if started (http://127.0.0.1:port) */
+    @SerialName("server_url")
+    val serverUrl: String? = null,
+    /** Server type that was started: llama_cpp, ollama */
+    @SerialName("server_type")
+    val serverType: String? = null,
+    /** Model being loaded */
+    val model: String? = null,
+    /** Process ID of the server */
+    val pid: Int? = null,
+    /** Estimated seconds until server is ready to accept requests */
+    @SerialName("estimated_ready_seconds")
+    val estimatedReadySeconds: Int = 60
+)
+
+/**
  * Result of setup completion.
  * Source: POST /v1/setup/complete
  */

@@ -1486,6 +1486,7 @@ private fun LlmConfigurationStep(
                 LocalLlmServerDiscovery(
                     state = discoveryState,
                     apiClient = apiClient,
+                    localInferenceCapability = localInference,
                     onServerSelected = { server ->
                         // Set base URL from discovered server
                         val baseUrl = when (server.serverType) {
@@ -1552,8 +1553,8 @@ private fun LlmConfigurationStep(
             // - mobile_local (on-device Gemma 4)
             val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
                 state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
-            val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
-            if (!isLocalProvider && !isMobileLocalProvider) {
+            val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
+            if (!isKeylessProvider && !isMobileLocalProvider) {
                 val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
                     "API Key (optional)"
                 } else {

@@ -7,6 +7,7 @@ import ai.ciris.mobile.shared.viewmodels.CheckDetail
 import ai.ciris.mobile.shared.viewmodels.ConfigItemData
 import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
 import ai.ciris.mobile.shared.viewmodels.LlmValidationResult
+import ai.ciris.mobile.shared.viewmodels.StartLocalServerResult
 import ai.ciris.mobile.shared.viewmodels.ModelInfo
 import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import ai.ciris.mobile.shared.viewmodels.StateTransitionResult
@@ -1273,6 +1274,112 @@ class CIRISApiClient(
         @SerialName("model_count") val modelCount: Int? = null,
         val models: List<String>? = null,
         val metadata: JsonObject? = null  // Server metadata (hostname, ip, port, source)
+    )
+
+    /**
+     * Start a local LLM inference server (llama.cpp or Ollama).
+     *
+     * Used when the device is capable of local inference but no server is
+     * currently running. This starts the server in the background with a
+     * keepalive. After starting, call discoverLocalLlmServers() to find it.
+     *
+     * @param serverType Server to start: "llama_cpp" or "ollama"
+     * @param model Model to load: "gemma-4-e2b" or "gemma-4-e4b"
+     * @param port Port for the server (default 8080)
+     * @return StartLocalServerResult with success status and server info
+     */
+    suspend fun startLocalLlmServer(
+        serverType: String = "llama_cpp",
+        model: String = "gemma-4-e2b",
+        port: Int = 8080
+    ): StartLocalServerResult {
+        val method = "startLocalLlmServer"
+        logInfo(method, "Starting local LLM server (type=$serverType, model=$model, port=$port)")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 120_000  // Starting server can take time
+                    connectTimeoutMillis = 10_000
+                }
+            }
+
+            val response = client.post("${this.baseUrl}/v1/setup/start-local-server") {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody(StartLocalServerRequest(serverType, model, port))
+            }
+
+            logDebug(method, "Response: status=${response.status}")
+            client.close()
+
+            if (response.status.value !in 200..299) {
+                logError(method, "API returned error status: ${response.status}")
+                return StartLocalServerResult(
+                    success = false,
+                    message = "Server returned error: ${response.status}"
+                )
+            }
+
+            val body = response.body<StartLocalServerApiResponse>()
+            val data = body.data ?: return StartLocalServerResult(
+                success = false,
+                message = "Invalid response from server"
+            )
+
+            val result = StartLocalServerResult(
+                success = data.success ?: false,
+                serverUrl = data.serverUrl,
+                serverType = data.serverType ?: serverType,
+                model = data.model ?: model,
+                pid = data.pid,
+                message = data.message ?: "Unknown status",
+                estimatedReadySeconds = data.estimatedReadySeconds ?: 60
+            )
+
+            logInfo(method, "Start server result: success=${result.success}, message=${result.message}")
+            result
+        } catch (e: Exception) {
+            logException(method, e)
+            StartLocalServerResult(
+                success = false,
+                message = "Failed to start server: ${e.message ?: "Unknown error"}"
+            )
+        }
+    }
+
+    /**
+     * Request for starting a local LLM server
+     */
+    @Serializable
+    private data class StartLocalServerRequest(
+        @SerialName("server_type") val serverType: String,
+        val model: String,
+        val port: Int
+    )
+
+    @Serializable
+    private data class StartLocalServerApiResponse(
+        val status: String? = null,
+        val data: StartLocalServerData? = null,
+        val metadata: JsonObject? = null
+    )
+
+    @Serializable
+    private data class StartLocalServerData(
+        val success: Boolean? = null,
+        @SerialName("server_url") val serverUrl: String? = null,
+        @SerialName("server_type") val serverType: String? = null,
+        val model: String? = null,
+        val pid: Int? = null,
+        val message: String? = null,
+        @SerialName("estimated_ready_seconds") val estimatedReadySeconds: Int? = null
     )
 
     /**

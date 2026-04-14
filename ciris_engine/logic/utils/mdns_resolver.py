@@ -450,7 +450,7 @@ async def discover_and_probe_hostnames(
     Returns:
         List of discovered services with resolved IP addresses
     """
-    import httpx
+    import aiohttp
 
     discovered: List[Dict[str, Any]] = []
 
@@ -460,16 +460,17 @@ async def discover_and_probe_hostnames(
         url = f"http://{ip}:{port}{probe_endpoint}"
 
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(url)
-                if response.status_code in valid_status_codes:
-                    return {
-                        "hostname": hostname,
-                        "ip": ip,
-                        "port": port,
-                        "url": f"http://{ip}:{port}",
-                        "status": response.status_code,
-                    }
+            client_timeout = aiohttp.ClientTimeout(total=2.0)
+            async with aiohttp.ClientSession(timeout=client_timeout) as session:
+                async with session.get(url) as response:
+                    if response.status in valid_status_codes:
+                        return {
+                            "hostname": hostname,
+                            "ip": ip,
+                            "port": port,
+                            "url": f"http://{ip}:{port}",
+                            "status": response.status,
+                        }
         except Exception:
             pass
         return None

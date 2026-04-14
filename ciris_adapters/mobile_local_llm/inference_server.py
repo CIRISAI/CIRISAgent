@@ -31,16 +31,16 @@ from .config import MobileLocalLLMConfig
 logger = logging.getLogger(__name__)
 
 
-# Try to use httpx if available (it is already a transitive dependency on
-# desktop + server), fall back to urllib so the adapter can still probe
-# health on stripped-down Android builds.
+# Try to use aiohttp if available (it is a standard dependency), fall back
+# to urllib so the adapter can still probe health on stripped-down Android
+# builds where aiohttp may not be available.
 try:  # pragma: no cover - import guard
-    import httpx  # type: ignore[import-not-found]
+    import aiohttp
 
-    _HAVE_HTTPX = True
+    _HAVE_AIOHTTP = True
 except ImportError:  # pragma: no cover - fallback path
-    httpx = None  # type: ignore[assignment]
-    _HAVE_HTTPX = False
+    aiohttp = None  # type: ignore[assignment]
+    _HAVE_AIOHTTP = False
 
 
 class InferenceServerError(RuntimeError):
@@ -223,13 +223,14 @@ class InferenceServerManager:
 
     async def _probe_health(self, *, timeout: float) -> bool:
         url = self._config.health_url()
-        if _HAVE_HTTPX:
+        if _HAVE_AIOHTTP:
             try:
-                async with httpx.AsyncClient(timeout=timeout) as client:  # type: ignore[union-attr]
-                    response = await client.get(url)
-                    return 200 <= response.status_code < 500
+                client_timeout = aiohttp.ClientTimeout(total=timeout)
+                async with aiohttp.ClientSession(timeout=client_timeout) as session:
+                    async with session.get(url) as response:
+                        return 200 <= response.status < 500
             except Exception as exc:  # pragma: no cover - network variability
-                logger.debug("httpx health probe failed for %s: %s", url, exc)
+                logger.debug("aiohttp health probe failed for %s: %s", url, exc)
                 return False
         return await asyncio.to_thread(self._sync_probe_health, url, timeout)
 

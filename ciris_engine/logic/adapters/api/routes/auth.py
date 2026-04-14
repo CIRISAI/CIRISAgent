@@ -675,11 +675,11 @@ def _load_oauth_config(provider: str) -> Dict[str, str]:
 
 async def _handle_google_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
     """Handle Google OAuth token exchange and user info retrieval."""
-    import httpx
+    import aiohttp
 
-    async with httpx.AsyncClient() as client:
+    async with aiohttp.ClientSession() as session:
         # Exchange code for token
-        token_response = await client.post(
+        async with session.post(
             "https://oauth2.googleapis.com/token",
             data={
                 "code": code,
@@ -688,41 +688,40 @@ async def _handle_google_oauth(code: str, client_id: str, client_secret: str) ->
                 "redirect_uri": get_oauth_callback_url("google"),
                 "grant_type": "authorization_code",
             },
-        )
+        ) as token_response:
+            if token_response.status != 200:
+                error_text = await token_response.text()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to exchange code for token: {error_text}",
+                )
 
-        if token_response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to exchange code for token: {token_response.text}",
-            )
-
-        token_data = token_response.json()
-        access_token = token_data["access_token"]
+            token_data = await token_response.json()
+            access_token = token_data["access_token"]
 
         # Get user info
-        user_response = await client.get(
+        async with session.get(
             "https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": f"Bearer {access_token}"}
-        )
+        ) as user_response:
+            if user_response.status != 200:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
-        if user_response.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
-
-        user_info = user_response.json()
-        return {
-            "external_id": user_info["id"],
-            "email": user_info.get("email"),
-            "name": user_info.get("name", user_info.get("email")),
-            "picture": user_info.get("picture"),
-        }
+            user_info = await user_response.json()
+            return {
+                "external_id": user_info["id"],
+                "email": user_info.get("email"),
+                "name": user_info.get("name", user_info.get("email")),
+                "picture": user_info.get("picture"),
+            }
 
 
 async def _handle_github_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
     """Handle GitHub OAuth token exchange and user info retrieval."""
-    import httpx
+    import aiohttp
 
-    async with httpx.AsyncClient() as client:
+    async with aiohttp.ClientSession() as session:
         # Exchange code for token
-        token_response = await client.post(
+        async with session.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
             data={
@@ -732,42 +731,41 @@ async def _handle_github_oauth(code: str, client_id: str, client_secret: str) ->
                 "redirect_uri": os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
                 + OAUTH_CALLBACK_PATH.replace("{provider}", "github"),
             },
-        )
+        ) as token_response:
+            if token_response.status != 200:
+                error_text = await token_response.text()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to exchange code for token: {error_text}",
+                )
 
-        if token_response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to exchange code for token: {token_response.text}",
-            )
-
-        token_data = token_response.json()
-        access_token = token_data["access_token"]
+            token_data = await token_response.json()
+            access_token = token_data["access_token"]
 
         # Get user info
-        user_response = await client.get(
+        async with session.get(
             "https://api.github.com/user", headers={"Authorization": f"token {access_token}"}
-        )
+        ) as user_response:
+            if user_response.status != 200:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
-        if user_response.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
-
-        user_info = user_response.json()
-        external_id = str(user_info["id"])
-        email = user_info.get("email")
-        name = user_info.get("name", user_info.get("login"))
-        picture = user_info.get("avatar_url")
+            user_info = await user_response.json()
+            external_id = str(user_info["id"])
+            email = user_info.get("email")
+            name = user_info.get("name", user_info.get("login"))
+            picture = user_info.get("avatar_url")
 
         # If email is private, fetch from emails endpoint
         if not email:
-            emails_response = await client.get(
+            async with session.get(
                 "https://api.github.com/user/emails", headers={"Authorization": f"token {access_token}"}
-            )
-            if emails_response.status_code == 200:
-                emails = emails_response.json()
-                for e in emails:
-                    if e.get("primary"):
-                        email = e["email"]
-                        break
+            ) as emails_response:
+                if emails_response.status == 200:
+                    emails = await emails_response.json()
+                    for e in emails:
+                        if e.get("primary"):
+                            email = e["email"]
+                            break
 
         return {
             "external_id": external_id,
@@ -779,11 +777,11 @@ async def _handle_github_oauth(code: str, client_id: str, client_secret: str) ->
 
 async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -> Dict[str, Optional[str]]:
     """Handle Discord OAuth token exchange and user info retrieval."""
-    import httpx
+    import aiohttp
 
-    async with httpx.AsyncClient() as client:
+    async with aiohttp.ClientSession() as session:
         # Exchange code for token
-        token_response = await client.post(
+        async with session.post(
             "https://discord.com/api/oauth2/token",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={
@@ -793,40 +791,39 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
                 "redirect_uri": get_oauth_callback_url("discord"),
                 "grant_type": "authorization_code",
             },
-        )
+        ) as token_response:
+            if token_response.status != 200:
+                error_text = await token_response.text()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to exchange code for token: {error_text}",
+                )
 
-        if token_response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to exchange code for token: {token_response.text}",
-            )
-
-        token_data = token_response.json()
-        access_token = token_data["access_token"]
+            token_data = await token_response.json()
+            access_token = token_data["access_token"]
 
         # Get user info
-        user_response = await client.get(
+        async with session.get(
             "https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"}
-        )
+        ) as user_response:
+            if user_response.status != 200:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
 
-        if user_response.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=FETCH_USER_INFO_ERROR)
+            user_info = await user_response.json()
+            external_id = user_info["id"]
+            email = user_info.get("email")
+            name = user_info.get("username", email)
 
-        user_info = user_response.json()
-        external_id = user_info["id"]
-        email = user_info.get("email")
-        name = user_info.get("username", email)
+            # Construct Discord avatar URL if avatar exists
+            avatar_hash = user_info.get("avatar")
+            picture = f"https://cdn.discordapp.com/avatars/{external_id}/{avatar_hash}.png" if avatar_hash else None
 
-        # Construct Discord avatar URL if avatar exists
-        avatar_hash = user_info.get("avatar")
-        picture = f"https://cdn.discordapp.com/avatars/{external_id}/{avatar_hash}.png" if avatar_hash else None
-
-        return {
-            "external_id": external_id,
-            "email": email,
-            "name": name,
-            "picture": picture,
-        }
+            return {
+                "external_id": external_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+            }
 
 
 # =============================================================================
@@ -1569,24 +1566,26 @@ def _decode_google_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
 
 async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
     """Call Google's tokeninfo API and return the response JSON."""
-    import httpx
+    import aiohttp
 
     logger.debug("[NativeAuth] Calling Google tokeninfo API...")
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    client_timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=client_timeout) as session:
         # Use params dict for proper URL encoding of the token
-        response = await client.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token})
-        logger.debug("[NativeAuth] Google tokeninfo response: %d", response.status_code)
+        async with session.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token}) as response:
+            logger.debug("[NativeAuth] Google tokeninfo response: %d", response.status)
 
-        if response.status_code != 200:
-            logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
-            )
+            if response.status != 200:
+                error_text = await response.text()
+                logger.error(f"[NativeAuth] Google API rejected token: {response.status} - {error_text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
+                )
 
-        token_info: Dict[str, Any] = response.json()
-        return token_info
+            token_info: Dict[str, Any] = await response.json()
+            return token_info
 
 
 def _validate_all_token_claims(token_info: Dict[str, Any], allowed_audiences: Optional[Set[str]]) -> None:
@@ -1626,7 +1625,9 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     SECURITY: No fallback path exists. Tokens MUST be verified by Google
     with proper audience/issuer/expiry validation before user creation.
     """
-    import httpx
+    import asyncio
+
+    import aiohttp
 
     logger.debug("[NativeAuth] Verifying Google ID token")
 
@@ -1647,7 +1648,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
 
     except HTTPException:
         raise
-    except httpx.TimeoutException:
+    except asyncio.TimeoutError:
         logger.warning("[NativeAuth] Google tokeninfo API timed out")
         # On-device fallback: if we can't reach Google, decode the JWT locally
         # This is safe because the token came from Google Sign-In SDK on the device
@@ -1661,7 +1662,7 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Google verification service timed out. Please try again.",
             )
-    except httpx.RequestError as e:
+    except aiohttp.ClientError as e:
         logger.error(f"[NativeAuth] Network error calling Google API: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

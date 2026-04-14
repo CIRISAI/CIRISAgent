@@ -300,16 +300,20 @@ class CIRISVerify:
                 "Ensure the native library is included in jniLibs."
             )
 
-        # 1. pip-installed ciris_verify — always correct platform
+        # 1. pip-installed ciris_verify — always correct platform.
+        # The PyPI ciris_verify wheel on Windows names the DLL without the
+        # `lib` prefix (`ciris_verify_ffi.dll`); Unix wheels use the prefixed
+        # form (`libciris_verify_ffi.{so,dylib}`). Try both conventions.
         try:
             import ciris_verify as cv_pkg
             pkg_dir = Path(cv_pkg.__file__).parent
-            for suffix in [".dylib", ".so", ".dll"]:
-                candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
-                if candidate.exists():
-                    import logging
-                    logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
-                    return candidate
+            for prefix in ("lib", ""):
+                for suffix in (".dylib", ".so", ".dll"):
+                    candidate = pkg_dir / f"{prefix}ciris_verify_ffi{suffix}"
+                    if candidate.exists():
+                        import logging
+                        logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
+                        return candidate
         except (ImportError, AttributeError):
             pass
 
@@ -322,18 +326,21 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # 3. Check relative to this module (platform-aware suffix order)
+        # 3. Check relative to this module. Scope strictly to the host's
+        # native suffix — loading a foreign-platform binary (e.g. a Linux .so
+        # on Windows) raises WinError 193 and breaks startup.
         module_dir = Path(__file__).parent
         if system == "Darwin":
-            suffixes = [".dylib", ".so", ".dll"]
+            suffixes = (".dylib",)
         elif system == "Windows":
-            suffixes = [".dll", ".so", ".dylib"]
+            suffixes = (".dll",)
         else:
-            suffixes = [".so", ".dylib", ".dll"]
+            suffixes = (".so",)
         for suffix in suffixes:
-            candidate = module_dir / f"libciris_verify_ffi{suffix}"
-            if candidate.exists():
-                return candidate
+            for prefix in ("lib", ""):
+                candidate = module_dir / f"{prefix}ciris_verify_ffi{suffix}"
+                if candidate.exists():
+                    return candidate
 
         raise BinaryNotFoundError(f"Searched: {paths}")
 

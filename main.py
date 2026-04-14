@@ -88,15 +88,17 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     """Setup signal handlers for graceful shutdown."""
     shutdown_initiated = {"value": False}  # Use dict to allow modification in nested function
 
-    # Map signal numbers to names for better logging
+    # Map signal numbers to names for better logging. SIGHUP/SIGQUIT are
+    # POSIX-only — Windows Python's signal module doesn't define them, so
+    # guard every non-portable signal behind hasattr.
     signal_names: dict[int, str] = {
         int(signal.SIGTERM): "SIGTERM",
         int(signal.SIGINT): "SIGINT",
-        int(signal.SIGHUP): "SIGHUP",
     }
-    # SIGQUIT may not exist on all platforms
-    if hasattr(signal, "SIGQUIT"):
-        signal_names[int(signal.SIGQUIT)] = "SIGQUIT"
+    for name in ("SIGHUP", "SIGQUIT"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            signal_names[int(sig)] = name
 
     def signal_handler(signum: int, frame: Any) -> None:
         sig_name = signal_names.get(signum, f"signal {signum}")
@@ -118,9 +120,10 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGHUP, signal_handler)
-    if hasattr(signal, "SIGQUIT"):
-        signal.signal(signal.SIGQUIT, signal_handler)
+    for name in ("SIGHUP", "SIGQUIT"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            signal.signal(sig, signal_handler)
 
 
 def setup_global_exception_handler() -> None:

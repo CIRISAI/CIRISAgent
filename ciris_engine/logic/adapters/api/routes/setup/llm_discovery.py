@@ -96,19 +96,25 @@ async def _probe_and_build_entry(
     then probes the endpoint to detect LLM server type.
     """
     # Resolve hostname to IP via mDNS first
+    logger.info(f"[LLM_DISCOVERY] Resolving {hostname}...")
     ip = await _resolve_hostname(hostname)
+    logger.info(f"[LLM_DISCOVERY] Resolved {hostname} -> {ip}")
 
     # Build URL with resolved IP for reliable connectivity
     url = f"http://{ip}:{port}"
     if url in seen_urls:
+        logger.debug(f"[LLM_DISCOVERY] Skipping duplicate URL: {url}")
         return None
     seen_urls.add(url)
 
+    logger.info(f"[LLM_DISCOVERY] Probing {url}...")
     result = await _probe_llm_endpoint(url)
     if not result:
+        logger.info(f"[LLM_DISCOVERY] No LLM server found at {url}")
         return None
 
     server_type, model_count, models = result
+    logger.info(f"[LLM_DISCOVERY] Found {server_type} at {url} with {model_count} models")
     return _build_server_entry(hostname, port, ip, server_type, model_count, models)
 
 

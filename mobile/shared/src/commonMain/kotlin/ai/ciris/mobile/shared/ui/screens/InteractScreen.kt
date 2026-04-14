@@ -107,6 +107,7 @@ fun InteractScreen(
     onOpenBilling: () -> Unit = {},
     onOpenSystem: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
     onOpenSessions: () -> Unit = {},  // Navigate to sessions screen
     onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
     apiClient: CIRISApiClient? = null,  // For live background
@@ -323,6 +324,7 @@ fun InteractScreen(
                 onCreditsClick = onOpenBilling,
                 onLocalClick = onOpenSystem,
                 onSettingsClick = onOpenSettings,
+                onLLMSettingsClick = onOpenLLMSettings,
                 onSessionsClick = onOpenSessions,
                 theme = theme
             )
@@ -571,6 +573,7 @@ private fun EnhancedStatusBar(
     onCreditsClick: () -> Unit,
     onLocalClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onLLMSettingsClick: () -> Unit,
     onSessionsClick: () -> Unit,
     theme: InteractTheme,
     modifier: Modifier = Modifier
@@ -615,8 +618,8 @@ private fun EnhancedStatusBar(
                 // Divider
                 Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
 
-                // LLM health indicator - tappable to Settings (LLM config)
-                LlmHealthIndicator(health = llmHealth, onClick = onSettingsClick, theme = theme)
+                // LLM health indicator - tappable to LLM Settings
+                LlmHealthIndicator(health = llmHealth, onClick = onLLMSettingsClick, theme = theme)
 
                 // Credits indicator (only if CIRIS proxy) - clickable to billing
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {

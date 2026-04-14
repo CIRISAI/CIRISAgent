@@ -391,8 +391,9 @@ fun CIRISApp(
             // GraphMemory goes back to Memory list
             is Screen.GraphMemory -> Screen.Memory
 
-            // DataManagement goes back to Settings
-            is Screen.DataManagement -> Screen.Settings
+            // DataManagement and LLMSettings go back to Interact (main screen)
+            is Screen.DataManagement -> Screen.Interact
+            is Screen.LLMSettings -> Screen.Interact
 
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
@@ -1305,6 +1306,7 @@ fun CIRISApp(
                     topBar = {
                         CIRISTopBar(
                             onSettingsClick = { currentScreen = Screen.Settings },
+                            onLLMSettingsClick = { currentScreen = Screen.LLMSettings },
                             onBillingClick = { currentScreen = Screen.Billing },
                             onTelemetryClick = { currentScreen = Screen.Telemetry },
                             onSessionsClick = { currentScreen = Screen.Sessions },
@@ -1375,8 +1377,12 @@ fun CIRISApp(
                             currentScreen = Screen.ServerConnection
                         },
                         onOpenSettings = {
-                            platformLog(TAG, "[INFO] Opening Settings page from LLM indicator")
+                            platformLog(TAG, "[INFO] Opening Settings page")
                             currentScreen = Screen.Settings
+                        },
+                        onOpenLLMSettings = {
+                            platformLog(TAG, "[INFO] Opening LLM Settings page from LLM indicator")
+                            currentScreen = Screen.LLMSettings
                         },
                         onOpenWiseAuthority = {
                             platformLog(TAG, "[INFO] Opening WiseAuthority page for deferrals")
@@ -1416,6 +1422,22 @@ fun CIRISApp(
                     onNavigateToDataManagement = {
                         PlatformLogger.i("CIRISApp", "[Settings] Navigating to Data Management")
                         currentScreen = Screen.DataManagement
+                    },
+                    onNavigateToLLMSettings = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to LLM Settings")
+                        currentScreen = Screen.LLMSettings
+                    }
+                )
+            }
+
+            Screen.LLMSettings -> {
+                LLMSettingsScreen(
+                    viewModel = settingsViewModel,
+                    apiClient = apiClient,
+                    secureStorage = secureStorage,
+                    onNavigateBack = {
+                        PlatformLogger.i(TAG, "[Screen.LLMSettings] Navigating back to Interact")
+                        currentScreen = Screen.Interact
                     }
                 )
             }
@@ -2514,8 +2536,8 @@ fun CIRISApp(
                 DataManagementScreen(
                     viewModel = dataManagementViewModel,
                     onNavigateBack = {
-                        PlatformLogger.i(TAG, "[Screen.DataManagement] Navigating back to Settings")
-                        currentScreen = Screen.Settings
+                        PlatformLogger.i(TAG, "[Screen.DataManagement] Navigating back to Interact")
+                        currentScreen = Screen.Interact
                     },
                     onResetSetup = {
                         PlatformLogger.i(TAG, "[Screen.DataManagement] Reset triggered, restarting via Startup")
@@ -2763,6 +2785,7 @@ private enum class NavCategory {
 @Composable
 private fun CIRISTopBar(
     onSettingsClick: () -> Unit,
+    onLLMSettingsClick: () -> Unit = {},
     onBillingClick: () -> Unit = {},
     onTelemetryClick: () -> Unit = {},
     onSessionsClick: () -> Unit = {},
@@ -2905,6 +2928,12 @@ private fun CIRISTopBar(
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
                         leadingIcon = { Icon(Icons.Default.Settings, null) },
                         modifier = Modifier.testableClickable("menu_settings") { activeCategory = NavCategory.NONE; onSettingsClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(localizedString("mobile.nav_llm_settings")) },
+                        onClick = { activeCategory = NavCategory.NONE; onLLMSettingsClick() },
+                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        modifier = Modifier.testableClickable("menu_llm_settings") { activeCategory = NavCategory.NONE; onLLMSettingsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_agent_config")) },
@@ -3141,6 +3170,7 @@ private sealed class Screen {
     object SkillImport : Screen()
     object SkillStudio : Screen()
     object DataManagement : Screen()
+    object LLMSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
 }

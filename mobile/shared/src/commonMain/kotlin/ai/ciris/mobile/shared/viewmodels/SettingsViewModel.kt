@@ -867,6 +867,28 @@ class SettingsViewModel(
     }
 
     /**
+     * Switch from CIRIS Proxy to BYOK mode.
+     * This allows users to configure their own LLM provider.
+     */
+    fun switchToByokMode() {
+        val method = "switchToByokMode"
+        logInfo(method, "Switching from CIRIS Proxy to BYOK mode")
+
+        _isCirisProxy.value = false
+        // Set default provider for BYOK
+        _llmProvider.value = "openai"
+        _llmModel.value = ""
+        _llmBaseUrl.value = ""
+        _apiKey.value = ""
+        _apiKeyMasked.value = ""
+
+        // Clear available models since provider changed
+        _availableModels.value = emptyList()
+
+        logInfo(method, "Switched to BYOK mode, user can now configure their provider")
+    }
+
+    /**
      * Get display name for provider.
      */
     fun getProviderDisplayName(provider: String): String {

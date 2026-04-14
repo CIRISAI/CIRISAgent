@@ -27,20 +27,21 @@ class TestAdapterAvailabilityRoutes:
 
     def test_available_adapters_with_auth(self, client, auth_headers):
         """Test available adapters endpoint with valid auth."""
+        from ciris_engine.schemas.adapters.discovery import AdapterDiscoveryReport
+
         # Mock the discovery service at the source module
         with patch(DISCOVERY_SERVICE_PATCH) as mock_discovery_class:
             mock_discovery = Mock()
             mock_discovery_class.return_value = mock_discovery
 
-            # Create mock discovery report
-            mock_report = Mock()
-            mock_report.model_dump.return_value = {
-                "discovered_adapters": ["mcp_client", "mcp_server"],
-                "eligible_adapters": ["mcp_client"],
-                "ineligible_adapters": ["mcp_server"],
-                "total_discovered": 2,
-                "total_eligible": 1,
-            }
+            # Create a real AdapterDiscoveryReport instance
+            mock_report = AdapterDiscoveryReport(
+                eligible=[],
+                ineligible=[],
+                total_discovered=2,
+                total_eligible=1,
+                total_installable=1,
+            )
             mock_discovery.get_discovery_report = AsyncMock(return_value=mock_report)
 
             response = client.get("/v1/system/adapters/available", headers=auth_headers)

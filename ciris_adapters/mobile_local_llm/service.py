@@ -315,7 +315,9 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return response
+        # instructor.patch returns the response_model instance
+        result: BaseModel = response
+        return result
 
 
 # ---------------------------------------------------------------------------

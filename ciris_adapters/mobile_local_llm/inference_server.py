@@ -238,7 +238,8 @@ class InferenceServerManager:
 
         try:
             with urlopen(url, timeout=timeout) as response:  # noqa: S310 - loopback only
-                return 200 <= response.status < 500
+                status: int = response.status
+                return 200 <= status < 500
         except URLError:
             return False
         except Exception:  # pragma: no cover - best-effort probe

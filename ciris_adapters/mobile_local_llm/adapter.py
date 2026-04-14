@@ -27,7 +27,7 @@ from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from .capability import probe_device_capability
+from .capability import DeviceCapabilityReport, probe_device_capability
 from .config import MobileLocalLLMConfig, DeviceTier, load_config_from_env
 from .service import MobileLocalLLMService
 
@@ -62,7 +62,7 @@ class MobileLocalLLMAdapter(Service):
                 self._config = self._config.model_copy(update=provided)
 
         self._llm_service = MobileLocalLLMService(self._config)
-        self._capability = None  # populated during start()
+        self._capability: Optional[DeviceCapabilityReport] = None  # populated during start()
         self._running = False
         self._lifecycle_task: Optional[asyncio.Task[None]] = None
         self._health_task: Optional[asyncio.Task[None]] = None
@@ -260,7 +260,7 @@ class MobileLocalLLMAdapter(Service):
     def llm_service(self) -> MobileLocalLLMService:
         return self._llm_service
 
-    @property
+    @property  # type: ignore[override]
     def config(self) -> MobileLocalLLMConfig:
         return self._config
 

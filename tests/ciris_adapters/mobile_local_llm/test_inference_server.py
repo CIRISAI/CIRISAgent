@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 from pathlib import Path
 from unittest import mock
 
@@ -128,8 +129,16 @@ class TestSpawnMode:
         fake_process = mock.MagicMock()
         fake_process.returncode = None
         fake_process.pid = 5678
-        # First call during health loop: still running; after SIGTERM: exited.
-        fake_process.wait = mock.AsyncMock(return_value=0)
+
+        # Simulate "process exits after SIGTERM": await wait() flips
+        # returncode to 0. Setting returncode before stop() would short-
+        # circuit the already-exited path in InferenceServerManager.stop()
+        # and skip the SIGTERM we're asserting on.
+        async def _graceful_wait() -> int:
+            fake_process.returncode = 0
+            return 0
+
+        fake_process.wait = mock.AsyncMock(side_effect=_graceful_wait)
         fake_process.send_signal = mock.MagicMock()
 
         async def fake_exec(*_args, **_kwargs):
@@ -140,11 +149,10 @@ class TestSpawnMode:
         with mock.patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
             with mock.patch.object(mgr, "_probe_health", mock.AsyncMock(return_value=True)):
                 await mgr.start()
-        # Simulate graceful exit after SIGTERM.
-        fake_process.returncode = 0
         await mgr.stop()
-        fake_process.send_signal.assert_called_once()
+        fake_process.send_signal.assert_called_once_with(signal.SIGTERM)
         fake_process.wait.assert_awaited()
+        assert mgr.last_exit_code == 0
 
 
 @pytest.mark.asyncio

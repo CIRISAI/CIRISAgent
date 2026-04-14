@@ -317,6 +317,21 @@ def main():
             print(f"❌ Failed to read API key: {e}")
             sys.exit(1)
 
+    # Auto-enable --wipe-data for multi-backend testing to ensure clean state
+    # (Without wipe, existing data may have different passwords causing auth failures)
+    if len(args.database_backends) > 1 and not args.wipe_data:
+        print("ℹ️  Auto-wiping data for multi-backend testing (clean state)")
+        import shutil
+
+        data_dir = Path("data")
+        if data_dir.exists():
+            try:
+                shutil.rmtree(data_dir)
+                print("   ✅ Data directory cleared")
+            except Exception as e:
+                print(f"   ⚠️  Failed to wipe data directory: {e}")
+        args.wipe_data = True
+
     # Create configuration
     # --live implies --no-mock-llm
     use_mock_llm = not args.no_mock_llm and not args.live

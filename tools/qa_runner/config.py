@@ -195,6 +195,14 @@ class QAConfig:
 
         effective_password = admin_password or self.admin_password
 
+        # Warn if falling back to auto-detect placeholder (tests will fail)
+        if effective_password == "__auto_detect__":
+            import logging
+            logging.warning(
+                "Admin password not extracted from server output. "
+                "Auth tests may fail. Try --wipe-data for clean state."
+            )
+
         # API test modules
         if module == QAModule.AUTH:
             return APITestModule.get_auth_tests(admin_password=effective_password)

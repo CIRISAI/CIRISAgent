@@ -275,8 +275,14 @@ class QARunner:
             try:
                 dynamic_password = self.server_manager.get_admin_password()
             except ValueError:
-                # Password not extracted yet, use config default
-                pass
+                # Password not extracted - try to extract again from console log
+                extracted = self.server_manager._extract_password_from_log()
+                if extracted:
+                    self.server_manager._extracted_password = extracted
+                    dynamic_password = extracted
+                    self.console.print(f"[dim]🔑 Re-extracted admin password from console log[/dim]")
+                else:
+                    self.console.print("[yellow]⚠️  Could not extract admin password - using config default[/yellow]")
 
         all_tests = []
         for module in http_modules:

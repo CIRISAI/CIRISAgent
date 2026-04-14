@@ -1385,8 +1385,12 @@ private fun LlmConfigurationStep(
             }
         }
 
-        // BYOK configuration (shown when in BYOK mode or for non-Google users)
-        if (state.setupMode == SetupMode.BYOK || !state.isGoogleAuth) {
+        // BYOK configuration (shown when in BYOK mode or for non-Google
+        // users). Hidden when the user picked on-device inference —
+        // that mode owns its entire card above and needs no API key,
+        // base URL, or model text input.
+        if (state.setupMode != SetupMode.LOCAL_ON_DEVICE &&
+            (state.setupMode == SetupMode.BYOK || !state.isGoogleAuth)) {
             // Provider selection
             Text(
                 text = localizedString("mobile.setup_provider"),

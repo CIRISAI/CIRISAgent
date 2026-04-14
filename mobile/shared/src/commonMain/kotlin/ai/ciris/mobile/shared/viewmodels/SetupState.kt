@@ -403,6 +403,12 @@ data class SetupFormState(
                     } else {
                         llmApiKey.isNotEmpty()
                     }
+                } else if (setupMode == SetupMode.LOCAL_ON_DEVICE) {
+                    // On-device inference — the capability probe already
+                    // gated the UI option itself, and the Python adapter
+                    // runs a second probe at runtime, so no API key or
+                    // further input is required to progress.
+                    true
                 } else {
                     false // No mode selected
                 }

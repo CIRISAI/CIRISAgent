@@ -109,19 +109,45 @@ class SetupViewModel : ViewModel() {
     /**
      * Set the LLM setup mode (CIRIS_PROXY, BYOK, or LOCAL_ON_DEVICE).
      *
-     * When the user picks [SetupMode.LOCAL_ON_DEVICE] we also pre-populate
-     * the provider name so the downstream BYOK-style flow knows which
-     * entry in `availableProviders` to use — the Python runtime still
-     * reads the actual configuration from the `CIRIS_MOBILE_LOCAL_LLM_*`
-     * env vars that are set up at runtime_complete().
+     * When the user picks [SetupMode.LOCAL_ON_DEVICE] we store the
+     * canonical backend provider id [LOCAL_ON_DEVICE_PROVIDER_ID]
+     * ("mobile_local") in `llmProvider`, not a display label. The id
+     * is what both the BYOK completion path and the settings save path
+     * use to decide whether an API key is required, and it is also the
+     * value written to the backend `/v1/config/setup/complete` payload.
+     * The human-readable label lives in [SettingsViewModel.availableProviders].
      */
     fun setSetupMode(mode: SetupMode) {
         val next = _state.value.copy(setupMode = mode)
         _state.value = if (mode == SetupMode.LOCAL_ON_DEVICE) {
-            next.copy(llmProvider = "On-Device (Local Gemma 4)")
+            next.copy(
+                llmProvider = LOCAL_ON_DEVICE_PROVIDER_ID,
+                // On-device inference has no API key and defaults to the
+                // Mobile Local LLM loopback server on port 8091. Set both
+                // fields so the wizard summary and the completion payload
+                // stay internally consistent.
+                llmApiKey = "",
+                llmBaseUrl = LOCAL_ON_DEVICE_BASE_URL,
+                llmModel = LOCAL_ON_DEVICE_DEFAULT_MODEL,
+            )
         } else {
             next
         }
+    }
+
+    companion object {
+        /** Canonical backend provider id for on-device Gemma 4 inference. */
+        const val LOCAL_ON_DEVICE_PROVIDER_ID = "mobile_local"
+
+        /** Default model id used when the user picks on-device mode. */
+        const val LOCAL_ON_DEVICE_DEFAULT_MODEL = "gemma-4-e2b"
+
+        /**
+         * Loopback base URL of the on-device OpenAI-compatible server
+         * spawned by the Mobile Local LLM Python adapter. Kept in sync
+         * with `MobileLocalLLMConfig.base_url()` in the Python side.
+         */
+        const val LOCAL_ON_DEVICE_BASE_URL = "http://127.0.0.1:8091/v1"
     }
 
     // ========== LLM Configuration (BYOK mode) ==========
@@ -1210,6 +1236,21 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(isValidating = true, validationError = null)
 
         val currentState = _state.value
+
+        // On-device inference does not hit any external endpoint, so there
+        // is nothing to validate here — the device capability probe is the
+        // validation step for this mode. Return success immediately so the
+        // wizard's "Test connection" action does not appear broken.
+        if (currentState.setupMode == SetupMode.LOCAL_ON_DEVICE) {
+            val ok = LlmValidationResult(
+                valid = true,
+                message = "On-device inference — no remote endpoint to validate",
+                error = null,
+            )
+            _state.value = _state.value.copy(isValidating = false, validationError = null)
+            return ok
+        }
+
         val request = ValidateLlmRequest(
             provider = when (currentState.llmProvider) {
                 "OpenAI" -> "openai"
@@ -1363,7 +1404,9 @@ class SetupViewModel : ViewModel() {
                 signing_key_id = nodeFlowData?.keyId
             )
         } else {
-            // BYOK mode - use user-provided API key
+            // BYOK mode and LOCAL_ON_DEVICE mode share the same completion
+            // payload shape — the only differences are the provider id and
+            // the API-key handling, which are both no-op for on-device.
             val providerId = when (currentState.llmProvider) {
                 "OpenAI" -> "openai"
                 "OpenRouter" -> "openrouter"
@@ -1374,12 +1417,21 @@ class SetupViewModel : ViewModel() {
                 "Azure OpenAI" -> "other"
                 "LocalAI", "Local LLM" -> "local"
                 "OpenAI Compatible" -> "openai_compatible"
+                // setSetupMode(LOCAL_ON_DEVICE) stores the canonical id
+                // directly, so this branch is taken when the user picked
+                // the on-device option in the wizard.
+                LOCAL_ON_DEVICE_PROVIDER_ID -> LOCAL_ON_DEVICE_PROVIDER_ID
                 else -> "openai"
             }
 
             var apiKey = currentState.llmApiKey
             if (apiKey.isEmpty() && providerId == "local") {
                 apiKey = "local"
+            }
+            if (providerId == LOCAL_ON_DEVICE_PROVIDER_ID) {
+                // No external credential is required: the Python adapter
+                // runs its own OpenAI-compatible server on loopback.
+                apiKey = ""
             }
 
             // For BYOK mode, we still need OAuth fields if user authenticated via OAuth

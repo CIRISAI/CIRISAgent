@@ -36,6 +36,14 @@ class SettingsViewModel(
 
     companion object {
         private const val TAG = "SettingsViewModel"
+
+        /**
+         * Canonical backend provider id for on-device Gemma 4 inference.
+         * Kept in sync with [SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID]
+         * so that a selection made in either flow maps to the same
+         * `.env` value on the agent.
+         */
+        const val LOCAL_ON_DEVICE_PROVIDER_ID = "mobile_local"
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -520,9 +528,12 @@ class SettingsViewModel(
                 else -> provider.lowercase()
             }
 
-            // Only fetch if we have an API key
+            // Only fetch if we have an API key. The on-device
+            // `mobile_local` provider is keyless by design — it talks to
+            // a loopback server spawned by the Python adapter — so treat
+            // it the same way as the `local` (Ollama) provider here.
             val apiKey = _apiKey.value
-            if (apiKey.isEmpty() && provider != "local") {
+            if (apiKey.isEmpty() && provider != "local" && provider != LOCAL_ON_DEVICE_PROVIDER_ID) {
                 logWarn(method, "No API key available, using static model list")
                 return
             }
@@ -607,14 +618,20 @@ class SettingsViewModel(
             _errorMessage.value = null
 
             try {
-                // Validate
-                if (_apiKey.value.isEmpty() && _llmProvider.value != "local") {
+                // Validate — the on-device `mobile_local` provider has no
+                // external key. Everything else still requires one unless
+                // the user is using the Ollama-style "local" provider.
+                val providerLower = _llmProvider.value.lowercase()
+                val isKeylessProvider = providerLower == "local" ||
+                    providerLower == LOCAL_ON_DEVICE_PROVIDER_ID ||
+                    providerLower == "on-device (local gemma 4)"
+                if (_apiKey.value.isEmpty() && !isKeylessProvider) {
                     logWarn(method, "Validation failed: API key is required")
                     throw Exception("API key is required")
                 }
 
                 // Map provider display name to ID for API
-                val providerId = when (_llmProvider.value.lowercase()) {
+                val providerId = when (providerLower) {
                     "openai" -> "openai"
                     "openrouter" -> "openrouter"
                     "anthropic" -> "anthropic"
@@ -622,6 +639,7 @@ class SettingsViewModel(
                     "groq" -> "groq"
                     "together ai", "together" -> "together"
                     "local", "localai" -> "local"
+                    LOCAL_ON_DEVICE_PROVIDER_ID, "on-device (local gemma 4)" -> LOCAL_ON_DEVICE_PROVIDER_ID
                     else -> _llmProvider.value.lowercase()
                 }
 

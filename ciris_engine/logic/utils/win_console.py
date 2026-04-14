@@ -46,9 +46,11 @@ def _set_console_code_page_utf8() -> None:
     try:
         import ctypes
 
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        kernel32.SetConsoleOutputCP(65001)
-        kernel32.SetConsoleCP(65001)
+        windll = getattr(ctypes, "windll", None)
+        if windll is not None:
+            kernel32 = windll.kernel32
+            kernel32.SetConsoleOutputCP(65001)
+            kernel32.SetConsoleCP(65001)
     except (OSError, AttributeError):
         pass
 

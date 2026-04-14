@@ -301,16 +301,20 @@ class TestProbeLlmEndpoint:
     @pytest.mark.asyncio
     async def test_probe_ollama_server(self) -> None:
         """Test probing an Ollama server."""
+        import json
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value=json.dumps({
             "models": [{"name": "llama3"}, {"name": "mistral"}]
-        }
+        }))
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _probe_llm_endpoint("http://localhost:11434")
 
@@ -323,20 +327,27 @@ class TestProbeLlmEndpoint:
     @pytest.mark.asyncio
     async def test_probe_openai_compatible_v1_models(self) -> None:
         """Test probing an OpenAI-compatible /v1/models endpoint."""
+        import json
         # First call (Ollama) returns 404, second call (/v1/models) returns models
         mock_404 = MagicMock()
-        mock_404.status_code = 404
+        mock_404.status = 404
 
         mock_200 = MagicMock()
-        mock_200.status_code = 200
-        mock_200.json.return_value = {
+        mock_200.status = 200
+        mock_200.text = AsyncMock(return_value=json.dumps({
             "data": [{"id": "gpt-3.5-turbo"}, {"id": "gpt-4"}]
-        }
+        }))
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = [mock_404, mock_200]
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
+            # Create separate context managers for each get call
+            mock_get_cm1 = AsyncMock()
+            mock_get_cm1.__aenter__.return_value = mock_404
+            mock_get_cm2 = AsyncMock()
+            mock_get_cm2.__aenter__.return_value = mock_200
+            mock_session.get.side_effect = [mock_get_cm1, mock_get_cm2]
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _probe_llm_endpoint("http://localhost:8080")
 
@@ -349,18 +360,26 @@ class TestProbeLlmEndpoint:
     @pytest.mark.asyncio
     async def test_probe_models_endpoint_list_response(self) -> None:
         """Test probing /models endpoint with list response."""
+        import json
         mock_404 = MagicMock()
-        mock_404.status_code = 404
+        mock_404.status = 404
 
         mock_200 = MagicMock()
-        mock_200.status_code = 200
-        mock_200.json.return_value = [{"id": "model1"}, {"id": "model2"}]
+        mock_200.status = 200
+        mock_200.text = AsyncMock(return_value=json.dumps([{"id": "model1"}, {"id": "model2"}]))
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
+        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
             # Ollama fails, /v1/models fails, /models succeeds
-            mock_client.get.side_effect = [mock_404, mock_404, mock_200]
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_get_cm1 = AsyncMock()
+            mock_get_cm1.__aenter__.return_value = mock_404
+            mock_get_cm2 = AsyncMock()
+            mock_get_cm2.__aenter__.return_value = mock_404
+            mock_get_cm3 = AsyncMock()
+            mock_get_cm3.__aenter__.return_value = mock_200
+            mock_session.get.side_effect = [mock_get_cm1, mock_get_cm2, mock_get_cm3]
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _probe_llm_endpoint("http://localhost:9000")
 
@@ -372,17 +391,25 @@ class TestProbeLlmEndpoint:
     @pytest.mark.asyncio
     async def test_probe_models_endpoint_dict_response(self) -> None:
         """Test probing /models endpoint with dict response containing data."""
+        import json
         mock_404 = MagicMock()
-        mock_404.status_code = 404
+        mock_404.status = 404
 
         mock_200 = MagicMock()
-        mock_200.status_code = 200
-        mock_200.json.return_value = {"data": [{"id": "model1"}]}
+        mock_200.status = 200
+        mock_200.text = AsyncMock(return_value=json.dumps({"data": [{"id": "model1"}]}))
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = [mock_404, mock_404, mock_200]
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
+            mock_get_cm1 = AsyncMock()
+            mock_get_cm1.__aenter__.return_value = mock_404
+            mock_get_cm2 = AsyncMock()
+            mock_get_cm2.__aenter__.return_value = mock_404
+            mock_get_cm3 = AsyncMock()
+            mock_get_cm3.__aenter__.return_value = mock_200
+            mock_session.get.side_effect = [mock_get_cm1, mock_get_cm2, mock_get_cm3]
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _probe_llm_endpoint("http://localhost:9000")
 
@@ -392,10 +419,12 @@ class TestProbeLlmEndpoint:
     @pytest.mark.asyncio
     async def test_probe_all_endpoints_fail(self) -> None:
         """Test when all probe endpoints fail."""
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = httpx.ConnectError("Connection refused")
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        import aiohttp
+        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.get.side_effect = aiohttp.ClientError("Connection refused")
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _probe_llm_endpoint("http://localhost:9999")
 

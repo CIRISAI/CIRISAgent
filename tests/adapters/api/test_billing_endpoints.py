@@ -14,7 +14,7 @@ as well as all error handling paths and the implemented TODOs.
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
-import httpx
+import aiohttp
 import pytest
 from fastapi import HTTPException
 
@@ -22,6 +22,8 @@ from ciris_engine.logic.adapters.api.routes.billing import (
     ERROR_BILLING_SERVICE_UNAVAILABLE,
     ERROR_CREDIT_PROVIDER_NOT_CONFIGURED,
     ERROR_RESOURCE_MONITOR_UNAVAILABLE,
+    _billing_get,
+    _billing_post,
     get_credits,
     get_purchase_status,
     get_transactions,
@@ -192,6 +194,8 @@ class TestGetCredits:
     @pytest.mark.asyncio
     async def test_get_credits_billing_provider_success(self, mock_auth_context):
         """Test CIRISBillingProvider with successful API call (server mode with API key)."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -209,26 +213,27 @@ class TestGetCredits:
         resource_monitor.check_credit = AsyncMock(side_effect=check_credit_success)
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "has_credit": True,
-            "credits_remaining": 45,
-            "free_uses_remaining": 5,
-            "total_uses": 12,
-            "plan_name": "standard",
-            "purchase_required": False,
-        }
-        billing_client.post = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Mock _billing_post to return expected data
+        async def mock_billing_post(*args, **kwargs):
+            return {
+                "has_credit": True,
+                "credits_remaining": 45,
+                "free_uses_remaining": 5,
+                "total_uses": 12,
+                "plan_name": "standard",
+                "purchase_required": False,
+            }
 
         # Server mode - with API key, queries billing backend
         import os
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
-            response = await get_credits(request, mock_auth_context)
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_post",
+                side_effect=mock_billing_post,
+            ):
+                response = await get_credits(request, mock_auth_context)
 
         assert response.has_credit is True
         assert response.credits_remaining == 45
@@ -238,6 +243,8 @@ class TestGetCredits:
     @pytest.mark.asyncio
     async def test_get_credits_billing_provider_api_error(self, mock_auth_context):
         """Test CIRISBillingProvider with API error (server mode with API key)."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -255,18 +262,21 @@ class TestGetCredits:
         resource_monitor.check_credit = AsyncMock(side_effect=check_credit_success)
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with error
-        billing_client = AsyncMock()
-        billing_client.post = AsyncMock(side_effect=httpx.HTTPStatusError("Error", request=Mock(), response=Mock()))
-        request.app.state.billing_client = billing_client
+        # Mock _billing_post to raise HTTPException (simulating API error)
+        async def mock_billing_post_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail="Billing service unavailable")
 
         # Server mode - with API key, queries billing backend
         import os
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
-            with pytest.raises(HTTPException) as exc_info:
-                await get_credits(request, mock_auth_context)
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_post",
+                side_effect=mock_billing_post_error,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_credits(request, mock_auth_context)
 
         assert exc_info.value.status_code == 503
         assert "Billing service unavailable" in exc_info.value.detail
@@ -324,6 +334,8 @@ class TestInitiatePurchase:
     @pytest.mark.asyncio
     async def test_initiate_purchase_success_with_email(self, mock_auth_context, mock_purchase_request):
         """Test successful purchase initiation with user email from OAuth."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
 
@@ -332,6 +344,8 @@ class TestInitiatePurchase:
         oauth_user = Mock()
         oauth_user.marketing_opt_in = True
         oauth_user.oauth_email = "user@example.com"
+        oauth_user.oauth_provider = None
+        oauth_user.oauth_external_id = None
         auth_service.get_user = Mock(return_value=oauth_user)
         request.app.state.auth_service = auth_service
 
@@ -341,22 +355,31 @@ class TestInitiatePurchase:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "payment_id": "pi_123",
-            "client_secret": "pi_123_secret",
-            "amount_minor": 500,
-            "currency": "USD",
-            "uses_purchased": 20,
-            "publishable_key": "pk_test_123",  # Now returned by billing backend
-        }
-        billing_client.post = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Mock runtime
+        request.app.state.runtime = Mock()
+        request.app.state.runtime.agent_identity.agent_id = "test-agent"
 
-        # No need to patch - publishable key comes from billing backend response
-        response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
+        # Mock _billing_post to return expected data
+        captured_payload = {}
+
+        async def mock_billing_post(base_url, path, headers, json_data):
+            captured_payload.update(json_data)
+            return {
+                "payment_id": "pi_123",
+                "client_secret": "pi_123_secret",
+                "amount_minor": 500,
+                "currency": "USD",
+                "uses_purchased": 20,
+                "publishable_key": "pk_test_123",
+            }
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_post",
+                side_effect=mock_billing_post,
+            ):
+                response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
         assert response.payment_id == "pi_123"
         assert response.client_secret == "pi_123_secret"
@@ -365,8 +388,7 @@ class TestInitiatePurchase:
         assert response.publishable_key == "pk_test_123"
 
         # Verify customer email was extracted from OAuth
-        call_args = billing_client.post.call_args
-        assert call_args[1]["json"]["customer_email"] == "user@example.com"
+        assert captured_payload.get("customer_email") == "user@example.com"
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_no_email(self, mock_auth_context, mock_purchase_request):
@@ -384,6 +406,8 @@ class TestInitiatePurchase:
         user_without_email = Mock()
         user_without_email.marketing_opt_in = False
         user_without_email.oauth_email = None  # No email available
+        user_without_email.oauth_provider = None
+        user_without_email.oauth_external_id = None
         auth_service.get_user = Mock(return_value=user_without_email)
         request.app.state.auth_service = auth_service
 
@@ -397,9 +421,12 @@ class TestInitiatePurchase:
         request.app.state.runtime = Mock()
         request.app.state.runtime.agent_identity.agent_id = "test-agent"
 
-        # Should raise 400 error - email required for purchase
-        with pytest.raises(HTTPException) as exc_info:
-            await initiate_purchase(request, mock_purchase_request, mock_auth_context)
+        # Set API key so billing config can be retrieved
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            # Should raise 400 error - email required for purchase
+            with pytest.raises(HTTPException) as exc_info:
+                await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
         # Verify correct error
         assert exc_info.value.status_code == 400
@@ -409,6 +436,8 @@ class TestInitiatePurchase:
     @pytest.mark.asyncio
     async def test_initiate_purchase_api_error(self, mock_auth_context, mock_purchase_request):
         """Test purchase with billing API error."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
 
@@ -417,6 +446,8 @@ class TestInitiatePurchase:
         oauth_user = Mock()
         oauth_user.marketing_opt_in = False
         oauth_user.oauth_email = "user@example.com"
+        oauth_user.oauth_provider = None
+        oauth_user.oauth_external_id = None
         auth_service.get_user = Mock(return_value=oauth_user)
         request.app.state.auth_service = auth_service
 
@@ -426,16 +457,25 @@ class TestInitiatePurchase:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with error
-        billing_client = AsyncMock()
-        billing_client.post = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
-        request.app.state.billing_client = billing_client
+        # Mock runtime
+        request.app.state.runtime = Mock()
+        request.app.state.runtime.agent_identity.agent_id = "test-agent"
 
-        with pytest.raises(HTTPException) as exc_info:
-            await initiate_purchase(request, mock_purchase_request, mock_auth_context)
+        # Mock _billing_post to raise HTTPException (simulating network error)
+        async def mock_billing_post_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail="Billing service unavailable")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_post",
+                side_effect=mock_billing_post_error,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
         assert exc_info.value.status_code == 503
-        assert "Cannot reach billing service" in exc_info.value.detail
+        assert "Billing service unavailable" in exc_info.value.detail
 
 
 class TestGetPurchaseStatus:
@@ -471,6 +511,8 @@ class TestGetPurchaseStatus:
     @pytest.mark.asyncio
     async def test_get_purchase_status_success(self, mock_auth_context):
         """Test successful payment status query."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -481,24 +523,25 @@ class TestGetPurchaseStatus:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
+        # Mock _billing_get to return payment status
+        async def mock_billing_get(base_url, path, headers, params=None):
+            return {"status": "succeeded", "credits_added": 20}
 
-        # Mock payment status response
-        payment_response = Mock()
-        payment_response.json.return_value = {"status": "succeeded", "credits_added": 20}
-        payment_response.raise_for_status = Mock()
+        # Mock _billing_post to return credits check
+        async def mock_billing_post(base_url, path, headers, json_data):
+            return {"credits_remaining": 65}
 
-        # Mock credits check response
-        credits_response = Mock()
-        credits_response.json.return_value = {"credits_remaining": 65}
-        credits_response.raise_for_status = Mock()
-
-        billing_client.get = AsyncMock(return_value=payment_response)
-        billing_client.post = AsyncMock(return_value=credits_response)
-        request.app.state.billing_client = billing_client
-
-        response = await get_purchase_status("pi_123", request, mock_auth_context)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get,
+            ):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.billing._billing_post",
+                    side_effect=mock_billing_post,
+                ):
+                    response = await get_purchase_status("pi_123", request, mock_auth_context)
 
         assert response.status == "succeeded"
         assert response.credits_added == 20
@@ -507,6 +550,8 @@ class TestGetPurchaseStatus:
     @pytest.mark.asyncio
     async def test_get_purchase_status_pending_404(self, mock_auth_context):
         """Test payment status when payment not found (404)."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -517,16 +562,17 @@ class TestGetPurchaseStatus:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with 404 error
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.status_code = 404
-        billing_client.get = AsyncMock(
-            side_effect=httpx.HTTPStatusError("Not found", request=Mock(), response=mock_response)
-        )
-        request.app.state.billing_client = billing_client
+        # Mock _billing_get to return empty response (simulating 404)
+        async def mock_billing_get(base_url, path, headers, params=None):
+            return {"transactions": [], "total_count": 0, "has_more": False}
 
-        response = await get_purchase_status("pi_nonexistent", request, mock_auth_context)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get,
+            ):
+                response = await get_purchase_status("pi_nonexistent", request, mock_auth_context)
 
         assert response.status == "pending"
         assert response.credits_added == 0
@@ -535,6 +581,8 @@ class TestGetPurchaseStatus:
     @pytest.mark.asyncio
     async def test_get_purchase_status_api_error(self, mock_auth_context):
         """Test payment status with billing API error."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -545,17 +593,18 @@ class TestGetPurchaseStatus:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with 500 error
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.status_code = 500
-        billing_client.get = AsyncMock(
-            side_effect=httpx.HTTPStatusError("Server error", request=Mock(), response=mock_response)
-        )
-        request.app.state.billing_client = billing_client
+        # Mock _billing_get to raise HTTPException (simulating server error)
+        async def mock_billing_get_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_purchase_status("pi_123", request, mock_auth_context)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get_error,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_purchase_status("pi_123", request, mock_auth_context)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE
@@ -619,6 +668,8 @@ class TestGetTransactions:
     @pytest.mark.asyncio
     async def test_get_transactions_billing_provider_success(self, mock_auth_context):
         """Test CIRISBillingProvider with successful transaction listing."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -629,41 +680,47 @@ class TestGetTransactions:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "transactions": [
-                {
-                    "transaction_id": "charge_abc123",
-                    "type": "charge",
-                    "amount_minor": -100,
-                    "currency": "USD",
-                    "description": "Agent interaction",
-                    "created_at": "2025-10-16T12:00:00Z",
-                    "balance_after": 900,
-                    "metadata": {"agent_id": "test-agent", "channel": "discord"},
-                },
-                {
-                    "transaction_id": "credit_xyz789",
-                    "type": "credit",
-                    "amount_minor": 1000,
-                    "currency": "USD",
-                    "description": "Purchased 20 uses",
-                    "created_at": "2025-10-15T10:00:00Z",
-                    "balance_after": 1000,
-                    "transaction_type": "purchase",
-                    "external_transaction_id": "pi_stripe123",
-                },
-            ],
-            "total_count": 2,
-            "has_more": False,
-        }
-        mock_response.raise_for_status = Mock()
-        billing_client.get = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Capture params for verification
+        captured_params = {}
 
-        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+        # Mock _billing_get to return transaction data
+        async def mock_billing_get(base_url, path, headers, params=None):
+            captured_params.update(params or {})
+            return {
+                "transactions": [
+                    {
+                        "transaction_id": "charge_abc123",
+                        "type": "charge",
+                        "amount_minor": -100,
+                        "currency": "USD",
+                        "description": "Agent interaction",
+                        "created_at": "2025-10-16T12:00:00Z",
+                        "balance_after": 900,
+                        "metadata": {"agent_id": "test-agent", "channel": "discord"},
+                    },
+                    {
+                        "transaction_id": "credit_xyz789",
+                        "type": "credit",
+                        "amount_minor": 1000,
+                        "currency": "USD",
+                        "description": "Purchased 20 uses",
+                        "created_at": "2025-10-15T10:00:00Z",
+                        "balance_after": 1000,
+                        "transaction_type": "purchase",
+                        "external_transaction_id": "pi_stripe123",
+                    },
+                ],
+                "total_count": 2,
+                "has_more": False,
+            }
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get,
+            ):
+                response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
 
         assert len(response.transactions) == 2
         assert response.total_count == 2
@@ -684,17 +741,16 @@ class TestGetTransactions:
         assert credit.transaction_type == "purchase"
 
         # Verify API call parameters
-        call_args = billing_client.get.call_args
-        assert call_args[0][0] == "/v1/billing/transactions"
-        params = call_args[1]["params"]
-        assert params["limit"] == 50
-        assert params["offset"] == 0
-        assert "oauth_provider" in params
-        assert "external_id" in params
+        assert captured_params["limit"] == 50
+        assert captured_params["offset"] == 0
+        assert "oauth_provider" in captured_params
+        assert "external_id" in captured_params
 
     @pytest.mark.asyncio
     async def test_get_transactions_with_pagination(self, mock_auth_context):
         """Test transaction listing with custom pagination parameters."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -705,25 +761,28 @@ class TestGetTransactions:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "transactions": [],
-            "total_count": 100,
-            "has_more": True,
-        }
-        mock_response.raise_for_status = Mock()
-        billing_client.get = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Capture params for verification
+        captured_params = {}
 
-        response = await get_transactions(request, mock_auth_context, limit=10, offset=20)
+        async def mock_billing_get(base_url, path, headers, params=None):
+            captured_params.update(params or {})
+            return {
+                "transactions": [],
+                "total_count": 100,
+                "has_more": True,
+            }
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get,
+            ):
+                response = await get_transactions(request, mock_auth_context, limit=10, offset=20)
 
         # Verify pagination parameters were passed
-        call_args = billing_client.get.call_args
-        params = call_args[1]["params"]
-        assert params["limit"] == 10
-        assert params["offset"] == 20
+        assert captured_params["limit"] == 10
+        assert captured_params["offset"] == 20
 
         # Verify response
         assert response.total_count == 100
@@ -732,6 +791,8 @@ class TestGetTransactions:
     @pytest.mark.asyncio
     async def test_get_transactions_404_account_not_found(self, mock_auth_context):
         """Test transaction listing when account not found (404) returns empty list."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -742,17 +803,17 @@ class TestGetTransactions:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with 404 error
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_response.text = "Account not found"
-        billing_client.get = AsyncMock(
-            side_effect=httpx.HTTPStatusError("Not found", request=Mock(), response=mock_response)
-        )
-        request.app.state.billing_client = billing_client
+        # Mock _billing_get to return empty response (simulating 404)
+        async def mock_billing_get(base_url, path, headers, params=None):
+            return {"transactions": [], "total_count": 0, "has_more": False}
 
-        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get,
+            ):
+                response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
 
         # Should return empty list instead of raising error
         assert response.transactions == []
@@ -762,6 +823,8 @@ class TestGetTransactions:
     @pytest.mark.asyncio
     async def test_get_transactions_api_error(self, mock_auth_context):
         """Test transaction listing with billing API error (500)."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -772,18 +835,18 @@ class TestGetTransactions:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with 500 error
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.status_code = 500
-        mock_response.text = "Internal server error"
-        billing_client.get = AsyncMock(
-            side_effect=httpx.HTTPStatusError("Server error", request=Mock(), response=mock_response)
-        )
-        request.app.state.billing_client = billing_client
+        # Mock _billing_get to raise HTTPException (simulating server error)
+        async def mock_billing_get_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_transactions(request, mock_auth_context, limit=50, offset=0)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get_error,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_transactions(request, mock_auth_context, limit=50, offset=0)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE
@@ -791,6 +854,8 @@ class TestGetTransactions:
     @pytest.mark.asyncio
     async def test_get_transactions_request_error(self, mock_auth_context):
         """Test transaction listing with network request error."""
+        from unittest.mock import patch
+
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -801,13 +866,18 @@ class TestGetTransactions:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client with request error
-        billing_client = AsyncMock()
-        billing_client.get = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
-        request.app.state.billing_client = billing_client
+        # Mock _billing_get to raise HTTPException (simulating network error)
+        async def mock_billing_get_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_transactions(request, mock_auth_context, limit=50, offset=0)
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.billing._billing_get",
+                side_effect=mock_billing_get_error,
+            ):
+                with pytest.raises(HTTPException) as exc_info:
+                    await get_transactions(request, mock_auth_context, limit=50, offset=0)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE

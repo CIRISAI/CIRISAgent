@@ -251,9 +251,9 @@ def _sync_resolve_via_serviceinfo(
             if direct_info:
                 addresses = direct_info.parsed_addresses()
                 if addresses:
-                    ip = addresses[0]
-                    logger.info(f"[mDNS] Resolved {hostname} -> {ip} via device-info")
-                    return ip
+                    resolved_ip: str = addresses[0]
+                    logger.info(f"[mDNS] Resolved {hostname} -> {resolved_ip} via device-info")
+                    return resolved_ip
         except Exception:
             pass
 

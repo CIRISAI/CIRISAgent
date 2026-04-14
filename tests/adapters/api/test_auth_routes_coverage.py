@@ -227,27 +227,34 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_google_oauth_success(self):
         """Test successful Google OAuth handling."""
-        with patch("httpx.AsyncClient") as mock_client:
-            # Mock token response
+        with patch("aiohttp.ClientSession") as mock_session_class:
+            # Create mock responses
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
-            # Mock user info response
             mock_user_response = Mock()
-            mock_user_response.status_code = 200
-            mock_user_response.json.return_value = {
+            mock_user_response.status = 200
+            mock_user_response.json = AsyncMock(return_value={
                 "id": "12345",
                 "email": "test@example.com",
                 "name": "Test User",
                 "picture": "https://example.com/pic.jpg",
-            }
+            })
 
-            # Mock the async context manager and methods
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            # Create mock session with context managers for post/get
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            # Mock session context manager
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _handle_google_oauth("test-code", "client-id", "client-secret")
 
@@ -258,12 +265,19 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_google_oauth_token_error(self):
         """Test Google OAuth with token exchange error."""
-        with patch("httpx.AsyncClient") as mock_client:
-            # Mock failed token response
+        with patch("aiohttp.ClientSession") as mock_session_class:
+            # Mock failed token response with non-200 status
             mock_token_response = Mock()
-            mock_token_response.json.return_value = {"error": "invalid_grant"}
+            mock_token_response.status = 400  # Bad request status
+            mock_token_response.text = AsyncMock(return_value='{"error": "invalid_grant"}')
 
-            mock_client.return_value.__aenter__.return_value.post.return_value = mock_token_response
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_google_oauth("bad-code", "client-id", "client-secret")
@@ -274,28 +288,34 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_github_oauth_success(self):
         """Test successful GitHub OAuth handling."""
-        with patch("httpx.AsyncClient") as mock_client:
-            # Mock token response - GitHub returns JSON, not URL-encoded
+        with patch("aiohttp.ClientSession") as mock_session_class:
+            # Mock token response - GitHub returns JSON
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token", "token_type": "bearer"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token", "token_type": "bearer"})
 
             # Mock user info response
             mock_user_response = Mock()
-            mock_user_response.status_code = 200
-            mock_user_response.json.return_value = {
+            mock_user_response.status = 200
+            mock_user_response.json = AsyncMock(return_value={
                 "id": 123,
                 "email": "test@github.com",
                 "name": "GitHub User",
                 "avatar_url": "https://avatars.githubusercontent.com/u/123",
                 "login": "githubuser",
-            }
+            })
 
-            # Mock the async context manager and methods
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _handle_github_oauth("test-code", "client-id", "client-secret")
 
@@ -307,27 +327,33 @@ class TestOAuthHelperMethods:
     @pytest.mark.asyncio
     async def test_handle_discord_oauth_success(self):
         """Test successful Discord OAuth handling."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             # Mock token response
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
             # Mock user info response
             mock_user_response = Mock()
-            mock_user_response.status_code = 200
-            mock_user_response.json.return_value = {
+            mock_user_response.status = 200
+            mock_user_response.json = AsyncMock(return_value={
                 "email": "test@discord.com",
                 "username": "DiscordUser",
                 "avatar": "avatar123",
                 "id": "123456789",
-            }
+            })
 
-            # Mock the async context manager and methods
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _handle_discord_oauth("test-code", "client-id", "client-secret")
 
@@ -1387,14 +1413,18 @@ class TestGitHubOAuthErrors:
     @pytest.mark.asyncio
     async def test_github_oauth_token_error(self):
         """Test GitHub OAuth token exchange error - covers line 564."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 400
-            mock_token_response.text = "Bad Request"
+            mock_token_response.status = 400
+            mock_token_response.text = AsyncMock(return_value="Bad Request")
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_github_oauth("bad-code", "client-id", "client-secret")
@@ -1405,18 +1435,25 @@ class TestGitHubOAuthErrors:
     @pytest.mark.asyncio
     async def test_github_oauth_user_info_error(self):
         """Test GitHub OAuth user info fetch error - covers line 578."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
             mock_user_response = Mock()
-            mock_user_response.status_code = 401
+            mock_user_response.status = 401
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_github_oauth("test-code", "client-id", "client-secret")
@@ -1427,32 +1464,42 @@ class TestGitHubOAuthErrors:
     @pytest.mark.asyncio
     async def test_github_oauth_private_email_fetch(self):
         """Test GitHub OAuth private email fetch - covers lines 588-596."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
             mock_user_response = Mock()
-            mock_user_response.status_code = 200
-            mock_user_response.json.return_value = {
+            mock_user_response.status = 200
+            mock_user_response.json = AsyncMock(return_value={
                 "id": 123,
                 "email": None,  # Private email
                 "name": "GitHub User",
                 "avatar_url": "https://example.com/avatar.png",
                 "login": "githubuser",
-            }
+            })
 
             mock_emails_response = Mock()
-            mock_emails_response.status_code = 200
-            mock_emails_response.json.return_value = [
+            mock_emails_response.status = 200
+            mock_emails_response.json = AsyncMock(return_value=[
                 {"email": "secondary@example.com", "primary": False},
                 {"email": "primary@example.com", "primary": True},
-            ]
+            ])
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(side_effect=[mock_user_response, mock_emails_response])
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            # Create separate context managers for each get call
+            mock_get_cm1 = AsyncMock()
+            mock_get_cm1.__aenter__.return_value = mock_user_response
+            mock_get_cm2 = AsyncMock()
+            mock_get_cm2.__aenter__.return_value = mock_emails_response
+            mock_session.get.side_effect = [mock_get_cm1, mock_get_cm2]
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _handle_github_oauth("test-code", "client-id", "client-secret")
 
@@ -1466,14 +1513,18 @@ class TestDiscordOAuthErrors:
     @pytest.mark.asyncio
     async def test_discord_oauth_token_error(self):
         """Test Discord OAuth token exchange error - covers line 625."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 400
-            mock_token_response.text = "Bad Request"
+            mock_token_response.status = 400
+            mock_token_response.text = AsyncMock(return_value="Bad Request")
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_discord_oauth("bad-code", "client-id", "client-secret")
@@ -1484,18 +1535,25 @@ class TestDiscordOAuthErrors:
     @pytest.mark.asyncio
     async def test_discord_oauth_user_info_error(self):
         """Test Discord OAuth user info fetch error - covers line 639."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
             mock_user_response = Mock()
-            mock_user_response.status_code = 401
+            mock_user_response.status = 401
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_discord_oauth("test-code", "client-id", "client-secret")
@@ -1885,14 +1943,14 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             # Mock OAuth config with expected client ID
             mock_load_config.return_value = {"client_id": "test-client-id.apps.googleusercontent.com"}
 
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={
                 "sub": "google-user-123",
                 "email": "test@gmail.com",
                 "name": "Test User",
@@ -1901,11 +1959,15 @@ class TestNativeGoogleTokenExchange:
                 "iss": "accounts.google.com",  # Valid issuer
                 "exp": str(int(time.time()) + 3600),  # Not expired (1 hour in future)
                 "email_verified": "true",
-            }
+            })
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await _verify_google_id_token("valid-id-token")
 
@@ -1919,17 +1981,21 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             mock_load_config.return_value = {"client_id": "test-client-id"}
 
             mock_response = Mock()
-            mock_response.status_code = 400  # API failure
-            mock_response.text = "Invalid token"
+            mock_response.status = 400  # API failure
+            mock_response.text = AsyncMock(return_value="Invalid token")
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # No fallback - should raise 401
             with pytest.raises(HTTPException) as exc_info:
@@ -1947,24 +2013,28 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             # Our expected client ID
             mock_load_config.return_value = {"client_id": "our-client-id.apps.googleusercontent.com"}
 
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={
                 "sub": "attacker-user",
                 "email": "attacker@example.com",
                 "aud": "different-client-id.apps.googleusercontent.com",  # Wrong audience!
                 "iss": "accounts.google.com",
                 "exp": str(int(time.time()) + 3600),
-            }
+            })
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _verify_google_id_token("token-with-wrong-audience")
@@ -1981,23 +2051,27 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             mock_load_config.return_value = {"client_id": "test-client-id"}
 
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={
                 "sub": "user-123",
                 "email": "test@example.com",
                 "aud": "test-client-id",
                 "iss": "malicious-issuer.com",  # Wrong issuer!
                 "exp": str(int(time.time()) + 3600),
-            }
+            })
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _verify_google_id_token("token-with-wrong-issuer")
@@ -2014,23 +2088,27 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             mock_load_config.return_value = {"client_id": "test-client-id"}
 
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={
                 "sub": "user-123",
                 "email": "test@example.com",
                 "aud": "test-client-id",
                 "iss": "accounts.google.com",
                 "exp": str(int(time.time()) - 3600),  # Expired 1 hour ago!
-            }
+            })
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _verify_google_id_token("expired-token")
@@ -2047,22 +2125,26 @@ class TestNativeGoogleTokenExchange:
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
-            patch("httpx.AsyncClient") as mock_client,
+            patch("aiohttp.ClientSession") as mock_session_class,
         ):
             mock_load_config.return_value = {"client_id": "test-client-id"}
 
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value={
                 "email": "test@example.com",  # Missing 'sub'!
                 "aud": "test-client-id",
                 "iss": "accounts.google.com",
                 "exp": str(int(time.time()) + 3600),
-            }
+            })
 
-            mock_context = Mock()
-            mock_context.get = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _verify_google_id_token("token-without-sub")
@@ -2087,14 +2169,19 @@ class TestNativeGoogleTokenExchange:
                 status_code=404, detail="OAuth provider 'google' not configured"
             )
 
-            # Mock httpx to return a 401 from Google (token invalid)
-            with patch("httpx.AsyncClient") as mock_client:
+            # Mock aiohttp to return a 401 from Google (token invalid)
+            with patch("aiohttp.ClientSession") as mock_session_class:
                 mock_response = Mock()
-                mock_response.status_code = 401
-                mock_response.text = "Invalid token"
-                mock_context = Mock()
-                mock_context.get = AsyncMock(return_value=mock_response)
-                mock_client.return_value.__aenter__.return_value = mock_context
+                mock_response.status = 401
+                mock_response.text = AsyncMock(return_value="Invalid token")
+
+                mock_session = Mock()
+                mock_get_cm = AsyncMock()
+                mock_get_cm.__aenter__.return_value = mock_response
+                mock_session.get.return_value = mock_get_cm
+
+                mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+                mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 with pytest.raises(HTTPException) as exc_info:
                     await _verify_google_id_token("any-token")
@@ -2308,18 +2395,25 @@ class TestGoogleOAuthUserInfoError:
     @pytest.mark.asyncio
     async def test_google_oauth_user_info_error(self):
         """Test Google OAuth user info fetch error."""
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_token_response = Mock()
-            mock_token_response.status_code = 200
-            mock_token_response.json.return_value = {"access_token": "test-token"}
+            mock_token_response.status = 200
+            mock_token_response.json = AsyncMock(return_value={"access_token": "test-token"})
 
             mock_user_response = Mock()
-            mock_user_response.status_code = 401  # User info fetch failed
+            mock_user_response.status = 401  # User info fetch failed
 
-            mock_context = Mock()
-            mock_context.post = AsyncMock(return_value=mock_token_response)
-            mock_context.get = AsyncMock(return_value=mock_user_response)
-            mock_client.return_value.__aenter__.return_value = mock_context
+            mock_session = Mock()
+            mock_post_cm = AsyncMock()
+            mock_post_cm.__aenter__.return_value = mock_token_response
+            mock_session.post.return_value = mock_post_cm
+
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_user_response
+            mock_session.get.return_value = mock_get_cm
+
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await _handle_google_oauth("test-code", "client-id", "client-secret")

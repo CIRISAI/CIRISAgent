@@ -322,7 +322,7 @@ class TestDiscoverServices:
             new_callable=AsyncMock,
             return_value=mock_azc,
         ), patch(
-            "ciris_engine.logic.utils.mdns_resolver.ServiceBrowser",
+            "zeroconf.ServiceBrowser",
             return_value=mock_browser,
         ):
             # Use very short timeout for test
@@ -342,7 +342,7 @@ class TestDiscoverServices:
             new_callable=AsyncMock,
             return_value=mock_azc,
         ), patch(
-            "ciris_engine.logic.utils.mdns_resolver.ServiceBrowser",
+            "zeroconf.ServiceBrowser",
             side_effect=Exception("Network error"),
         ):
             result = await discover_services("_test._tcp.local.", timeout=0.1)
@@ -359,13 +359,16 @@ class TestDiscoverAndProbeHostnames:
             "ciris_engine.logic.utils.mdns_resolver.resolve_local_hostname",
             new_callable=AsyncMock,
             return_value="192.168.1.100",
-        ), patch("httpx.AsyncClient") as mock_client_class:
+        ), patch("aiohttp.ClientSession") as mock_session_class:
             mock_response = MagicMock()
-            mock_response.status_code = 200
+            mock_response.status = 200
 
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_session = MagicMock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await discover_and_probe_hostnames(
                 [("server.local", 8080)],
@@ -385,13 +388,16 @@ class TestDiscoverAndProbeHostnames:
             "ciris_engine.logic.utils.mdns_resolver.resolve_local_hostname",
             new_callable=AsyncMock,
             return_value="192.168.1.100",
-        ), patch("httpx.AsyncClient") as mock_client_class:
+        ), patch("aiohttp.ClientSession") as mock_session_class:
             mock_response = MagicMock()
-            mock_response.status_code = 401
+            mock_response.status = 401
 
-            mock_client = AsyncMock()
-            mock_client.get.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_session = MagicMock()
+            mock_get_cm = AsyncMock()
+            mock_get_cm.__aenter__.return_value = mock_response
+            mock_session.get.return_value = mock_get_cm
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await discover_and_probe_hostnames(
                 [("server.local", 8080)],
@@ -403,14 +409,16 @@ class TestDiscoverAndProbeHostnames:
     @pytest.mark.asyncio
     async def test_filters_failed_probes(self) -> None:
         """Test that failed probes are filtered out."""
+        import aiohttp
         with patch(
             "ciris_engine.logic.utils.mdns_resolver.resolve_local_hostname",
             new_callable=AsyncMock,
             return_value="192.168.1.100",
-        ), patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = Exception("Connection refused")
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        ), patch("aiohttp.ClientSession") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.get.side_effect = aiohttp.ClientError("Connection refused")
+            mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await discover_and_probe_hostnames(
                 [("unreachable.local", 8080)],

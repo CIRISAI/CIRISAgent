@@ -209,7 +209,7 @@ async def discover_local_llm_servers(
         methods_used.append("localhost_scan")
 
     # Build probe list with resolved IPs
-    probe_tasks = []
+    probe_tasks: List[asyncio.Task[Optional[Dict[str, Any]]]] = []
     for hostname, port in targets:
         if hostname == "localhost":
             ip = "127.0.0.1"
@@ -230,21 +230,29 @@ async def discover_local_llm_servers(
     remaining = max(timeout_seconds - elapsed, 2.0)
 
     if probe_tasks:
-        done, pending = await asyncio.wait(probe_tasks, timeout=remaining)
-
-        for task in pending:
-            task.cancel()
-
-        if pending:
-            logger.info(f"[LLM_DISCOVERY] Probe timeout: {len(done)} done, {len(pending)} cancelled")
-
-        for task in done:
-            try:
-                result = task.result()
-                if result:
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*probe_tasks, return_exceptions=True),
+                timeout=remaining,
+            )
+            for result in results:  # type: ignore[assignment]
+                if isinstance(result, dict):
                     all_discovered.append(result)
-            except Exception:
-                pass
+        except asyncio.TimeoutError:
+            # Cancel pending tasks on timeout
+            for task in probe_tasks:  # type: ignore[assignment]
+                if not task.done():
+                    task.cancel()
+            # Collect any results that did complete
+            for task in probe_tasks:  # type: ignore[assignment]
+                if task.done() and not task.cancelled():
+                    try:
+                        result = task.result()
+                        if isinstance(result, dict):
+                            all_discovered.append(result)
+                    except Exception:
+                        pass
+            logger.info(f"[LLM_DISCOVERY] Probe timeout after {remaining:.1f}s")
 
     elapsed = time.monotonic() - start_time
     logger.info(f"[LLM_DISCOVERY] Discovered {len(all_discovered)} servers in {elapsed:.1f}s")

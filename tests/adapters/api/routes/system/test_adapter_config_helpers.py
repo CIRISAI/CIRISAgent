@@ -14,56 +14,65 @@ from ciris_engine.logic.adapters.api.routes.system.adapter_config import (
 class TestResolveUrlHostnameToIp:
     """Tests for _resolve_url_hostname_to_ip helper function."""
 
-    def test_returns_original_if_already_ip(self):
+    @pytest.mark.asyncio
+    async def test_returns_original_if_already_ip(self):
         """Should return unchanged URL if hostname is already an IP."""
         url = "http://192.168.1.100:8123"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert result == url
 
-    def test_returns_original_if_resolution_fails(self):
+    @pytest.mark.asyncio
+    async def test_returns_original_if_resolution_fails(self):
         """Should return original URL if hostname cannot be resolved."""
         url = "http://nonexistent.invalid.hostname:8123"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert result == url  # Returns original on failure
 
-    def test_resolves_localhost(self):
+    @pytest.mark.asyncio
+    async def test_resolves_localhost(self):
         """Should resolve localhost to 127.0.0.1."""
         url = "http://localhost:8080"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert "127.0.0.1" in result or result == url  # localhost may already be IP
 
-    def test_preserves_port_after_resolution(self):
+    @pytest.mark.asyncio
+    async def test_preserves_port_after_resolution(self):
         """Should preserve port number after hostname resolution."""
         url = "http://localhost:9999/api"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert ":9999" in result
 
-    def test_preserves_path_after_resolution(self):
+    @pytest.mark.asyncio
+    async def test_preserves_path_after_resolution(self):
         """Should preserve path after hostname resolution."""
         url = "http://localhost:8080/api/v1/status"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert "/api/v1/status" in result
 
-    def test_preserves_scheme(self):
+    @pytest.mark.asyncio
+    async def test_preserves_scheme(self):
         """Should preserve http/https scheme."""
         url = "https://localhost:8443/secure"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert result.startswith("https://")
 
-    def test_handles_url_without_port(self):
+    @pytest.mark.asyncio
+    async def test_handles_url_without_port(self):
         """Should handle URLs without explicit port."""
         url = "http://localhost/api"
-        result = _resolve_url_hostname_to_ip(url)
+        result = await _resolve_url_hostname_to_ip(url)
         assert "/api" in result
 
-    def test_handles_empty_url(self):
+    @pytest.mark.asyncio
+    async def test_handles_empty_url(self):
         """Should handle empty URL gracefully."""
-        result = _resolve_url_hostname_to_ip("")
+        result = await _resolve_url_hostname_to_ip("")
         assert result == ""
 
-    def test_handles_malformed_url(self):
+    @pytest.mark.asyncio
+    async def test_handles_malformed_url(self):
         """Should handle malformed URL gracefully."""
-        result = _resolve_url_hostname_to_ip("not-a-url")
+        result = await _resolve_url_hostname_to_ip("not-a-url")
         assert result == "not-a-url"  # Returns original on parse failure
 
 

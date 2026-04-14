@@ -4,6 +4,7 @@ This module tests the mobile entrypoint used by the Android app via Chaquopy.
 """
 
 import asyncio
+import importlib
 import os
 import sys
 import tempfile
@@ -17,82 +18,75 @@ os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 
 
+def _reload_mobile_main():
+    """Reload mobile_main module to get fresh state."""
+    import android.app.src.main.python.mobile_main as mobile_main
+    importlib.reload(mobile_main)
+    return mobile_main
+
+
 class TestSetupAndroidEnvironment:
     """Tests for setup_android_environment() function."""
 
-    def test_not_running_on_android_logs_warning(self, caplog):
+    def test_not_running_on_android_logs_warning(self, monkeypatch, caplog):
         """Test that a warning is logged when ANDROID_DATA is not set."""
-        # Ensure ANDROID_DATA is not set
-        env_backup = os.environ.pop("ANDROID_DATA", None)
-        try:
-            # Import fresh to avoid module caching issues
-            from android.app.src.main.python import mobile_main
+        # Use monkeypatch to safely remove ANDROID_DATA
+        monkeypatch.delenv("ANDROID_DATA", raising=False)
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
 
-            with caplog.at_level("WARNING"):
-                mobile_main.setup_android_environment()
+        mobile_main = _reload_mobile_main()
 
-            assert "ANDROID_DATA not set - not running on Android?" in caplog.text
-        finally:
-            if env_backup:
-                os.environ["ANDROID_DATA"] = env_backup
+        with caplog.at_level("WARNING"):
+            mobile_main.setup_android_environment()
 
-    def test_android_environment_creates_directories(self, tmp_path):
+        assert "ANDROID_DATA not set - not running on Android?" in caplog.text
+
+    def test_android_environment_creates_directories(self, tmp_path, monkeypatch):
         """Test that required directories are created on Android."""
         # Create a mock Android data directory
         android_data = tmp_path / "data"
         android_data.mkdir()
 
-        env_backup = {
-            "ANDROID_DATA": os.environ.get("ANDROID_DATA"),
-            "CIRIS_HOME": os.environ.get("CIRIS_HOME"),
-            "CIRIS_DATA_DIR": os.environ.get("CIRIS_DATA_DIR"),
-            "CIRIS_DB_PATH": os.environ.get("CIRIS_DB_PATH"),
-            "CIRIS_LOG_DIR": os.environ.get("CIRIS_LOG_DIR"),
-        }
+        # Use monkeypatch for proper isolation in parallel test runs
+        monkeypatch.setenv("ANDROID_DATA", str(android_data))
+        # Clear any existing CIRIS env vars
+        for key in [
+            "CIRIS_HOME",
+            "CIRIS_DATA_DIR",
+            "CIRIS_DB_PATH",
+            "CIRIS_LOG_DIR",
+            "CIRIS_OFFLINE_MODE",
+            "CIRIS_CLOUD_SYNC",
+            "CIRIS_MAX_WORKERS",
+            "CIRIS_API_HOST",
+            "CIRIS_API_PORT",
+            "CIRIS_LOG_LEVEL",
+        ]:
+            monkeypatch.delenv(key, raising=False)
 
-        try:
-            # Set Android environment
-            os.environ["ANDROID_DATA"] = str(android_data)
-            # Clear any existing CIRIS env vars
-            for key in [
-                "CIRIS_HOME",
-                "CIRIS_DATA_DIR",
-                "CIRIS_DB_PATH",
-                "CIRIS_LOG_DIR",
-            ]:
-                os.environ.pop(key, None)
+        mobile_main = _reload_mobile_main()
+        mobile_main.setup_android_environment()
 
-            from android.app.src.main.python import mobile_main
+        # Check directories were created
+        ciris_home = android_data / "data" / "ai.ciris.mobile" / "files" / "ciris"
+        assert ciris_home.exists()
+        assert (ciris_home / "databases").exists()
+        assert (ciris_home / "logs").exists()
 
-            mobile_main.setup_android_environment()
+        # Check environment variables were set
+        assert os.environ.get("CIRIS_HOME") == str(ciris_home)
+        assert os.environ.get("CIRIS_DATA_DIR") == str(ciris_home)
+        assert os.environ.get("CIRIS_DB_PATH") == str(ciris_home / "databases" / "ciris.db")
+        assert os.environ.get("CIRIS_LOG_DIR") == str(ciris_home / "logs")
 
-            # Check directories were created
-            ciris_home = android_data / "data" / "ai.ciris.mobile" / "files" / "ciris"
-            assert ciris_home.exists()
-            assert (ciris_home / "databases").exists()
-            assert (ciris_home / "logs").exists()
+        # Check Android-specific settings
+        assert os.environ.get("CIRIS_OFFLINE_MODE") == "true"
+        assert os.environ.get("CIRIS_CLOUD_SYNC") == "false"
+        assert os.environ.get("CIRIS_MAX_WORKERS") == "1"
+        assert os.environ.get("CIRIS_API_HOST") == "0.0.0.0"
+        assert os.environ.get("CIRIS_API_PORT") == "8080"
 
-            # Check environment variables were set
-            assert os.environ.get("CIRIS_HOME") == str(ciris_home)
-            assert os.environ.get("CIRIS_DATA_DIR") == str(ciris_home)
-            assert os.environ.get("CIRIS_DB_PATH") == str(ciris_home / "databases" / "ciris.db")
-            assert os.environ.get("CIRIS_LOG_DIR") == str(ciris_home / "logs")
-
-            # Check Android-specific settings
-            assert os.environ.get("CIRIS_OFFLINE_MODE") == "true"
-            assert os.environ.get("CIRIS_CLOUD_SYNC") == "false"
-            assert os.environ.get("CIRIS_MAX_WORKERS") == "1"
-            assert os.environ.get("CIRIS_API_HOST") == "0.0.0.0"
-            assert os.environ.get("CIRIS_API_PORT") == "8080"
-        finally:
-            # Restore environment
-            for key, value in env_backup.items():
-                if value is not None:
-                    os.environ[key] = value
-                else:
-                    os.environ.pop(key, None)
-
-    def test_android_environment_loads_env_file(self, tmp_path, caplog):
+    def test_android_environment_loads_env_file(self, tmp_path, monkeypatch, caplog):
         """Test that .env file is loaded if present."""
         # Create mock Android structure
         android_data = tmp_path / "data"
@@ -105,57 +99,36 @@ class TestSetupAndroidEnvironment:
         env_file = app_data / ".env"
         env_file.write_text("OPENAI_API_KEY=test-key-12345\nOPENAI_API_BASE=http://test.api\n")
 
-        env_backup = {
-            "ANDROID_DATA": os.environ.get("ANDROID_DATA"),
-            "CIRIS_HOME": os.environ.get("CIRIS_HOME"),
-            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
-            "OPENAI_API_BASE": os.environ.get("OPENAI_API_BASE"),
-        }
+        # Use monkeypatch for proper isolation in parallel test runs
+        monkeypatch.setenv("ANDROID_DATA", str(android_data))
+        for key in ["CIRIS_HOME", "OPENAI_API_KEY", "OPENAI_API_BASE"]:
+            monkeypatch.delenv(key, raising=False)
 
-        try:
-            os.environ["ANDROID_DATA"] = str(android_data)
-            for key in ["CIRIS_HOME", "OPENAI_API_KEY", "OPENAI_API_BASE"]:
-                os.environ.pop(key, None)
+        mobile_main = _reload_mobile_main()
 
-            from android.app.src.main.python import mobile_main
+        with caplog.at_level("INFO"):
+            mobile_main.setup_android_environment()
 
-            with caplog.at_level("INFO"):
-                mobile_main.setup_android_environment()
+        # Verify .env was loaded
+        assert "Loading configuration from" in caplog.text
+        assert os.environ.get("OPENAI_API_KEY") == "test-key-12345"
+        assert os.environ.get("OPENAI_API_BASE") == "http://test.api"
 
-            # Verify .env was loaded
-            assert "Loading configuration from" in caplog.text
-            assert os.environ.get("OPENAI_API_KEY") == "test-key-12345"
-            assert os.environ.get("OPENAI_API_BASE") == "http://test.api"
-        finally:
-            for key, value in env_backup.items():
-                if value is not None:
-                    os.environ[key] = value
-                else:
-                    os.environ.pop(key, None)
-
-    def test_android_environment_handles_missing_env_file(self, tmp_path, caplog):
+    def test_android_environment_handles_missing_env_file(self, tmp_path, monkeypatch, caplog):
         """Test graceful handling when .env file is missing."""
         android_data = tmp_path / "data"
         android_data.mkdir()
 
-        env_backup = {"ANDROID_DATA": os.environ.get("ANDROID_DATA")}
+        # Use monkeypatch for proper isolation in parallel test runs
+        monkeypatch.setenv("ANDROID_DATA", str(android_data))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
 
-        try:
-            os.environ["ANDROID_DATA"] = str(android_data)
-            os.environ.pop("CIRIS_HOME", None)
+        mobile_main = _reload_mobile_main()
 
-            from android.app.src.main.python import mobile_main
+        with caplog.at_level("INFO"):
+            mobile_main.setup_android_environment()
 
-            with caplog.at_level("INFO"):
-                mobile_main.setup_android_environment()
-
-            assert "No .env file" in caplog.text
-        finally:
-            for key, value in env_backup.items():
-                if value is not None:
-                    os.environ[key] = value
-                else:
-                    os.environ.pop(key, None)
+        assert "No .env file" in caplog.text
 
 
 class TestStartMobileRuntime:
@@ -275,7 +248,12 @@ class TestMain:
     def test_main_calls_setup_and_runtime(self):
         """Test that main() calls setup and starts the runtime."""
         mock_setup = MagicMock()
-        mock_asyncio_run = MagicMock()
+
+        def close_coroutine(coro):
+            """Close coroutine to prevent 'never awaited' warnings."""
+            coro.close()
+
+        mock_asyncio_run = MagicMock(side_effect=close_coroutine)
 
         with patch(
             "android.app.src.main.python.mobile_main.setup_android_environment",
@@ -293,13 +271,18 @@ class TestMain:
         """Test that main() handles KeyboardInterrupt gracefully."""
         mock_setup = MagicMock()
 
+        def close_and_raise(coro):
+            """Close coroutine and raise KeyboardInterrupt."""
+            coro.close()
+            raise KeyboardInterrupt()
+
         with patch(
             "android.app.src.main.python.mobile_main.setup_android_environment",
             mock_setup,
         ):
             with patch(
                 "android.app.src.main.python.mobile_main.asyncio.run",
-                side_effect=KeyboardInterrupt(),
+                side_effect=close_and_raise,
             ):
                 from android.app.src.main.python import mobile_main
 
@@ -312,13 +295,18 @@ class TestMain:
         """Test that main() re-raises unexpected exceptions."""
         mock_setup = MagicMock()
 
+        def close_and_raise(coro):
+            """Close coroutine and raise ValueError."""
+            coro.close()
+            raise ValueError("Test error")
+
         with patch(
             "android.app.src.main.python.mobile_main.setup_android_environment",
             mock_setup,
         ):
             with patch(
                 "android.app.src.main.python.mobile_main.asyncio.run",
-                side_effect=ValueError("Test error"),
+                side_effect=close_and_raise,
             ):
                 from android.app.src.main.python import mobile_main
 
@@ -353,56 +341,34 @@ class TestModuleAttributes:
 class TestEnvironmentVariableDefaults:
     """Tests for environment variable default values."""
 
-    def test_low_resource_optimization_defaults(self, tmp_path):
+    def test_low_resource_optimization_defaults(self, tmp_path, monkeypatch):
         """Test that low-resource optimization defaults are set."""
         android_data = tmp_path / "data"
         android_data.mkdir()
 
-        env_backup = {
-            "ANDROID_DATA": os.environ.get("ANDROID_DATA"),
-            "CIRIS_MAX_WORKERS": os.environ.get("CIRIS_MAX_WORKERS"),
-            "CIRIS_LOG_LEVEL": os.environ.get("CIRIS_LOG_LEVEL"),
-        }
+        # Use monkeypatch for proper isolation in parallel test runs
+        monkeypatch.setenv("ANDROID_DATA", str(android_data))
+        for key in ["CIRIS_MAX_WORKERS", "CIRIS_LOG_LEVEL", "CIRIS_HOME"]:
+            monkeypatch.delenv(key, raising=False)
 
-        try:
-            os.environ["ANDROID_DATA"] = str(android_data)
-            for key in ["CIRIS_MAX_WORKERS", "CIRIS_LOG_LEVEL", "CIRIS_HOME"]:
-                os.environ.pop(key, None)
+        mobile_main = _reload_mobile_main()
+        mobile_main.setup_android_environment()
 
-            from android.app.src.main.python import mobile_main
+        # Verify low-resource defaults
+        assert os.environ.get("CIRIS_MAX_WORKERS") == "1"
+        assert os.environ.get("CIRIS_LOG_LEVEL") == "INFO"
 
-            mobile_main.setup_android_environment()
-
-            # Verify low-resource defaults
-            assert os.environ.get("CIRIS_MAX_WORKERS") == "1"
-            assert os.environ.get("CIRIS_LOG_LEVEL") == "INFO"
-        finally:
-            for key, value in env_backup.items():
-                if value is not None:
-                    os.environ[key] = value
-                else:
-                    os.environ.pop(key, None)
-
-    def test_offline_mode_enabled(self, tmp_path):
+    def test_offline_mode_enabled(self, tmp_path, monkeypatch):
         """Test that offline mode is enabled for Android."""
         android_data = tmp_path / "data"
         android_data.mkdir()
 
-        env_backup = {"ANDROID_DATA": os.environ.get("ANDROID_DATA")}
+        # Use monkeypatch for proper isolation in parallel test runs
+        monkeypatch.setenv("ANDROID_DATA", str(android_data))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
 
-        try:
-            os.environ["ANDROID_DATA"] = str(android_data)
-            os.environ.pop("CIRIS_HOME", None)
+        mobile_main = _reload_mobile_main()
+        mobile_main.setup_android_environment()
 
-            from android.app.src.main.python import mobile_main
-
-            mobile_main.setup_android_environment()
-
-            assert os.environ.get("CIRIS_OFFLINE_MODE") == "true"
-            assert os.environ.get("CIRIS_CLOUD_SYNC") == "false"
-        finally:
-            for key, value in env_backup.items():
-                if value is not None:
-                    os.environ[key] = value
-                else:
-                    os.environ.pop(key, None)
+        assert os.environ.get("CIRIS_OFFLINE_MODE") == "true"
+        assert os.environ.get("CIRIS_CLOUD_SYNC") == "false"

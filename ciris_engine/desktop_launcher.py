@@ -17,15 +17,46 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from ciris_engine.logic.utils import win_console as _win_console
+
+_win_console.setup()
+
 
 def _java_exe_name() -> str:
     return "java.exe" if sys.platform == "win32" else "java"
 
 
+def _ensure_bundled_jre_executable(jre_root: Path) -> None:
+    """Restore +x on bundled JRE binaries.
+
+    PEP 427 wheels install ``package_data`` files with mode 0644, dropping the
+    executable bit on the jlinked ``jre/bin/*`` tree that CI stages. Without
+    this, the JVM binary cannot be exec'd on macOS/Linux after ``pip install``.
+    Idempotent; no-op on Windows and on already-executable files.
+    """
+    if sys.platform == "win32":
+        return
+    bin_dir = jre_root / "bin"
+    if not bin_dir.is_dir():
+        return
+    for entry in bin_dir.iterdir():
+        if not entry.is_file():
+            continue
+        try:
+            mode = entry.stat().st_mode
+            if mode & 0o111:
+                continue
+            entry.chmod(mode | 0o755)
+        except OSError:
+            pass
+
+
 def find_bundled_jre() -> Optional[str]:
     """Find the fat-wheel bundled JRE shipped under ciris_engine/desktop_app/jre/."""
-    bundled = Path(__file__).parent / "desktop_app" / "jre" / "bin" / _java_exe_name()
+    jre_root = Path(__file__).parent / "desktop_app" / "jre"
+    bundled = jre_root / "bin" / _java_exe_name()
     if bundled.exists():
+        _ensure_bundled_jre_executable(jre_root)
         return str(bundled)
     return None
 

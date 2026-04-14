@@ -98,6 +98,11 @@ def setup_basic_logging(
     target_logger.handlers = []
 
     if console_output:
+        # Ensure stdout is UTF-8 before the handler captures a reference to it,
+        # so status glyphs (✓, ⚠, …) don't crash a cp1252 Windows console.
+        from ciris_engine.logic.utils import win_console
+
+        win_console.setup()
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
         target_logger.addHandler(console_handler)

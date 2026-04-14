@@ -5,6 +5,12 @@ import os
 
 os.environ.setdefault("CIRIS_SKIP_EARLY_VERIFY", "1")
 
+# Must run before any print() / logger output that might hit the console,
+# otherwise Windows cp1252 stdio crashes on the status glyphs used at startup.
+from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
+
+_win_console.setup()
+
 # Load environment variables from .env if present
 # Load from all standard config paths in priority order
 try:

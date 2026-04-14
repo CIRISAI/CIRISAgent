@@ -17,6 +17,10 @@ from pathlib import Path
 # Binary self-verification still runs when get_license_status() is called
 os.environ["CIRIS_SKIP_EARLY_VERIFY"] = "1"
 
+from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
+
+_win_console.setup()
+
 
 def main() -> None:
     """
@@ -63,10 +67,12 @@ def _run_desktop_mode() -> None:
 
     print("Starting CIRIS API server...")
 
-    # Start server in background (show output for debugging)
+    # Start server in background (show output for debugging). Propagate the
+    # UTF-8 stdio intent so the child main.py doesn't crash on cp1252 consoles.
     server_proc = subprocess.Popen(
         [sys.executable, str(main_py), "--adapter", "api", "--port", str(port)],
         cwd=str(parent_dir),
+        env=_win_console.subprocess_env(),
     )
 
     # Wait briefly and check if server crashed during startup

@@ -18,7 +18,7 @@ that imports `from ...routes.system import router`.
 
 from fastapi import APIRouter
 
-from . import adapter_config, adapters, data_management, health, runtime, services, shutdown, skill_builder, skill_import, tools
+from . import adapter_config, adapters, data_management, health, llm_routes, runtime, services, shutdown, skill_builder, skill_import, tools
 
 # Create the main router with the system prefix and tags
 router = APIRouter(prefix="/system", tags=["system"])
@@ -55,6 +55,9 @@ router.include_router(skill_builder.router)
 
 # Tools: /system/tools
 router.include_router(tools.router)
+
+# LLM management: /system/llm/status, /system/llm/providers, /system/llm/distribution
+router.include_router(llm_routes.router)
 
 from .schemas import (
     AdapterActionRequest,

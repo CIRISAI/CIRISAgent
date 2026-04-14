@@ -55,7 +55,39 @@ async def _require_setup_or_auth(request: Request) -> None:
         )
 
 
+async def _require_setup_or_admin(request: Request) -> None:
+    """Allow access during first-run OR with admin authentication post-setup.
+
+    Used for endpoints that perform privileged side effects (e.g. spawning
+    a local inference server subprocess). During setup the wizard runs
+    without auth, but once setup is complete we require ADMIN role — regular
+    observers must not be able to trigger background process launches.
+    """
+    if _is_setup_allowed_without_auth():
+        # First-run - no auth needed (wizard operates pre-account)
+        return
+
+    from ciris_engine.schemas.api.auth import UserRole
+
+    from ...dependencies.auth import get_auth_context, get_auth_service
+
+    authorization = request.headers.get("Authorization")
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if auth is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to start local LLM server",
+        )
+    if not auth.role.has_permission(UserRole.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required to start local LLM server",
+        )
+
+
 SetupOrAuthDep = Depends(_require_setup_or_auth)
+SetupOrAdminDep = Depends(_require_setup_or_admin)
 
 
 @router.get("/models", responses=RESPONSES_500, dependencies=[SetupOnlyDep])
@@ -230,7 +262,7 @@ async def discover_local_llm(
         )
 
 
-@router.post("/start-local-server", dependencies=[SetupOrAuthDep])
+@router.post("/start-local-server", dependencies=[SetupOrAdminDep])
 async def start_local_server(
     request: StartLocalServerRequest = StartLocalServerRequest(),
 ) -> SuccessResponse[StartLocalServerResponse]:
@@ -244,7 +276,9 @@ async def start_local_server(
 
     After starting, call /discover-local-llm to find the running server.
 
-    Accessible without auth during first-run, or with auth after setup.
+    Accessible without auth during first-run, or with ADMIN role after
+    setup — spawning a background subprocess is privileged and must not be
+    exposed to plain observer accounts.
     """
     from .llm_discovery import start_local_llm_server
 

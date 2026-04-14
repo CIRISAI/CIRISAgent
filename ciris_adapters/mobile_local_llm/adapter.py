@@ -59,7 +59,13 @@ class MobileLocalLLMAdapter(Service):
             # Start from env then layer any dict-form overrides on top.
             self._config = load_config_from_env()
             if isinstance(provided, dict):
-                self._config = self._config.model_copy(update=provided)
+                # Re-validate through Pydantic so overrides from persisted
+                # runtime config (e.g. ``{"model_variant": "gemma-4-e4b"}``)
+                # are coerced into their enum/Path types. ``model_copy`` skips
+                # validation, which leaves raw strings on the model and later
+                # crashes ``.value`` access during start().
+                merged = {**self._config.model_dump(), **provided}
+                self._config = MobileLocalLLMConfig.model_validate(merged)
 
         self._llm_service = MobileLocalLLMService(self._config)
         self._capability: Optional[DeviceCapabilityReport] = None  # populated during start()

@@ -173,17 +173,22 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
     # ------------------------------------------------------------------
 
     async def is_healthy(self) -> bool:
-        """Healthy only when we are available AND the server responds."""
+        """Healthy only when we are available AND the server responds.
+
+        This is a *liveness* probe and must be idempotent — it never mutates
+        ``self._available``. Doing so would short-circuit the next probe at
+        the top of this method and permanently hide a recovered server from
+        the LLM bus, which contradicts the adapter's "recover after failures"
+        semantics. Sustained failures are handled by the adapter's health
+        loop, which tracks consecutive failures and calls ``stop()`` (the
+        authoritative place that flips ``_available = False``).
+        """
         if not self._available:
             return False
         try:
             ok = await self._server.health_check()
         except Exception:  # pragma: no cover - defensive
             ok = False
-        if not ok:
-            # Health probe failed — mark unavailable so the LLM bus routes away
-            # from us until the adapter's lifecycle loop restarts the server.
-            self._available = False
         return ok
 
     def get_capabilities(self) -> ServiceCapabilities:

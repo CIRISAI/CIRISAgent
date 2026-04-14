@@ -141,16 +141,27 @@ class TestLifecycle:
         mgr.start.assert_not_awaited()
         await svc.stop()
 
-    async def test_is_healthy_drops_availability_on_probe_failure(self):
+    async def test_is_healthy_reports_probe_result_without_mutating_state(self):
+        """is_healthy() is a pure liveness probe.
+
+        It must not permanently mark the service unavailable after a single
+        failed probe — otherwise a transient network/timeout error would
+        short-circuit all subsequent probes to False and prevent recovery
+        before the adapter's 3-strike health loop even runs.
+        """
         cfg = MobileLocalLLMConfig()
         mgr = _fake_server_manager(available=True, health=False)
         svc = MobileLocalLLMService(cfg, server_manager=mgr, capability_report=_capable_report())
         await svc.start()
-        # After start we are available (no probe run yet).
         assert svc.available is True
-        # is_healthy() must flip us unavailable when the probe reports false.
+        # A failing probe reports False but leaves _available intact so the
+        # next probe can still observe recovery.
         assert await svc.is_healthy() is False
-        assert svc.available is False
+        assert svc.available is True
+        # When the server recovers, the next probe must succeed.
+        mgr.health_check = mock.AsyncMock(return_value=True)
+        assert await svc.is_healthy() is True
+        assert svc.available is True
         await svc.stop()
 
 

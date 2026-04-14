@@ -92,6 +92,24 @@ class TestAdapterRegistration:
         )
         assert adapter.config.port == 9100
 
+    async def test_dict_overlay_coerces_enum_strings(self):
+        """Persisted runtime config stores enums as plain strings.
+
+        Overrides must be re-validated so the stored model_variant remains a
+        ``ModelVariant`` enum — otherwise the subsequent ``.value`` access in
+        ``get_services_to_register`` / ``__init__`` logging crashes the
+        adapter load with ``AttributeError``.
+        """
+        adapter = MobileLocalLLMAdapter(
+            runtime=None,
+            adapter_config={"model_variant": "gemma-4-e4b"},
+        )
+        assert isinstance(adapter.config.model_variant, ModelVariant)
+        assert adapter.config.model_variant is ModelVariant.GEMMA_4_E4B
+        # Capability list access touches .value — must not raise.
+        services = adapter.get_services_to_register()
+        assert f"model:{ModelVariant.GEMMA_4_E4B.value}" in services[0].capabilities
+
 
 @pytest.mark.asyncio
 class TestAdapterLifecycle:

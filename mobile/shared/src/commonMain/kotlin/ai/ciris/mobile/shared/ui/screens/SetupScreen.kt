@@ -5,9 +5,12 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
+import ai.ciris.mobile.shared.platform.LocalInferenceCapability
+import ai.ciris.mobile.shared.platform.LocalInferenceTier
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getPlatform
+import ai.ciris.mobile.shared.platform.probeLocalInferenceCapability
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.platform.TestAutomation
@@ -1251,8 +1254,12 @@ private fun LlmConfigurationStep(
     var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
 
-    // State for local LLM server discovery
+    // State for local LLM server discovery (finds running servers on network)
     val discoveryState = rememberLocalLlmDiscoveryState()
+
+    // Probe on-device inference capability (checks if system CAN run local inference)
+    // Cheap: ActivityManager/NSProcessInfo call + disk check
+    val localInference: LocalInferenceCapability = remember { probeLocalInferenceCapability() }
 
     Column(
         modifier = modifier
@@ -1274,6 +1281,19 @@ private fun LlmConfigurationStep(
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 24.dp)
         )
+
+        // On-device Gemma 4 option. Shown only when the device capability
+        // probe reports a capable mobile phone, or when the platform is iOS
+        // with capable hardware but no model bundle installed yet (stub).
+        // Hidden entirely on desktop and low-spec devices so the wizard is
+        // not cluttered with options that cannot run.
+        if (!localInference.isHidden) {
+            LocalInferenceOptionCard(
+                capability = localInference,
+                isSelected = state.setupMode == SetupMode.LOCAL_ON_DEVICE,
+                onSelect = { viewModel.setSetupMode(SetupMode.LOCAL_ON_DEVICE) },
+            )
+        }
 
         // CIRIS Proxy card (for Google users in CIRIS_PROXY mode)
         if (state.isGoogleAuth && state.setupMode == SetupMode.CIRIS_PROXY) {
@@ -1806,6 +1826,99 @@ private fun LlmConfigurationStep(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Card for selecting on-device Gemma 4 inference during setup.
+ *
+ * Three visible states, driven by [LocalInferenceCapability]:
+ *
+ * 1. Capable (E2B or E4B) — card is selectable and, when selected,
+ *    highlighted. Shows the tier so the user knows which model will run.
+ * 2. iOS stub — card is shown but disabled, labelled "Coming soon".
+ *    Lets the user know the path exists without offering a broken click.
+ * 3. Incapable — card is not rendered (handled by the caller via
+ *    [LocalInferenceCapability.isHidden]).
+ */
+@Composable
+private fun LocalInferenceOptionCard(
+    capability: LocalInferenceCapability,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val isStub = capability.isComingSoon
+    val backgroundColor = when {
+        isSelected -> SetupColors.SuccessLight
+        isStub -> SetupColors.InfoLight
+        else -> SetupColors.InfoLight
+    }
+    val titleColor = if (isStub) SetupColors.InfoDark else SetupColors.SuccessDark
+    val bodyColor = if (isStub) SetupColors.InfoText else SetupColors.SuccessText
+
+    val tierLabel = when (capability.tier) {
+        LocalInferenceTier.CAPABLE_E4B -> "Gemma 4 E4B"
+        LocalInferenceTier.CAPABLE_E2B -> "Gemma 4 E2B"
+        LocalInferenceTier.IOS_STUB -> "Coming soon"
+        LocalInferenceTier.INCAPABLE -> "Unavailable"
+    }
+
+    val titleText = if (isStub) {
+        "On-Device (Coming Soon)"
+    } else {
+        "On-Device Local — $tierLabel"
+    }
+
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 16.dp)
+        .then(
+            if (!isStub) {
+                Modifier.testableClickable("btn_select_local_on_device") { onSelect() }
+            } else {
+                Modifier.testable("card_local_on_device_stub")
+            }
+        )
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = backgroundColor,
+        modifier = cardModifier,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp),
+            ) {
+                Text(
+                    text = if (isSelected) "✓" else if (isStub) "⏳" else "📱",
+                    color = titleColor,
+                    fontSize = 20.sp,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                Text(
+                    text = titleText,
+                    color = titleColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = capability.reason,
+                color = bodyColor,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            if (capability.totalRamGb > 0.0) {
+                val rounded = (capability.totalRamGb * 10).toLong() / 10.0
+                Text(
+                    text = "Detected device RAM: $rounded GB",
+                    color = bodyColor,
+                    fontSize = 12.sp,
+                )
             }
         }
     }

@@ -107,10 +107,21 @@ class SetupViewModel : ViewModel() {
     // Source: SetupViewModel.kt:82-85
 
     /**
-     * Set the LLM setup mode (CIRIS_PROXY or BYOK).
+     * Set the LLM setup mode (CIRIS_PROXY, BYOK, or LOCAL_ON_DEVICE).
+     *
+     * When the user picks [SetupMode.LOCAL_ON_DEVICE] we also pre-populate
+     * the provider name so the downstream BYOK-style flow knows which
+     * entry in `availableProviders` to use — the Python runtime still
+     * reads the actual configuration from the `CIRIS_MOBILE_LOCAL_LLM_*`
+     * env vars that are set up at runtime_complete().
      */
     fun setSetupMode(mode: SetupMode) {
-        _state.value = _state.value.copy(setupMode = mode)
+        val next = _state.value.copy(setupMode = mode)
+        _state.value = if (mode == SetupMode.LOCAL_ON_DEVICE) {
+            next.copy(llmProvider = "On-Device (Local Gemma 4)")
+        } else {
+            next
+        }
     }
 
     // ========== LLM Configuration (BYOK mode) ==========

@@ -126,8 +126,15 @@ class SettingsViewModel(
 
     private var locationSearchJob: Job? = null
 
-    // Available LLM providers for BYOK mode
+    // Available LLM providers for BYOK mode.
+    //
+    // The "mobile_local" entry is the on-device Gemma 4 provider backed by
+    // the `mobile_local_llm` Python adapter. The first-start wizard only
+    // surfaces it when `probeLocalInferenceCapability()` returns a capable
+    // or stub tier — this list exposes it for settings too so a user who
+    // sideloads a model on iOS can flip to on-device inference later.
     val availableProviders = listOf(
+        "mobile_local" to "On-Device (Local Gemma 4)",
         "openai" to "OpenAI",
         "anthropic" to "Anthropic",
         "google" to "Google AI",

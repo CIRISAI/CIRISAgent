@@ -18,6 +18,7 @@ import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
+import ai.ciris.mobile.shared.platform.initLocalInferenceProbe
 import ai.ciris.mobile.shared.platform.initUrlOpener
 import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
 import ai.ciris.mobile.shared.testing.AndroidTestAutomationServer
@@ -91,6 +92,10 @@ class MainActivity : ComponentActivity() {
 
         // Initialize URL opener for browser links
         initUrlOpener(this)
+
+        // Initialize local-inference capability probe (needs app context to
+        // query ActivityManager for RAM size).
+        initLocalInferenceProbe(this)
 
         // Initialize Python runtime (Chaquopy)
         if (!Python.isStarted()) {

@@ -74,15 +74,21 @@ fun LLMSettingsScreen(
     val selectedServer by viewModel.selectedServer.collectAsState()
     val isDiscovering by viewModel.isDiscovering.collectAsState()
 
+    // LLM Bus status state
+    val llmBusStatus by viewModel.llmBusStatus.collectAsState()
+    val llmProviders by viewModel.llmProviders.collectAsState()
+    val isLoadingLlmBus by viewModel.isLoadingLlmBus.collectAsState()
+
     // Operation state
     val isSaving by viewModel.isSaving.collectAsState()
     val saveSuccess by viewModel.saveSuccess.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // Section expansion state
-    var providersExpanded by remember { mutableStateOf(true) }
-    var localServersExpanded by remember { mutableStateOf(false) }
-    var advancedExpanded by remember { mutableStateOf(false) }
+    // Section expansion state from ViewModel
+    val statusExpanded by viewModel.statusExpanded.collectAsState()
+    val providersExpanded by viewModel.providersExpanded.collectAsState()
+    val localServersExpanded by viewModel.localServersExpanded.collectAsState()
+    val advancedExpanded by viewModel.advancedExpanded.collectAsState()
     var authExpanded by remember { mutableStateOf(false) }
 
     // On-device local inference capability
@@ -170,7 +176,10 @@ fun LLMSettingsScreen(
                 StatusOverviewCard(
                     isCirisProxy = isCirisProxy,
                     llmConfig = llmConfig,
-                    discoveredServersCount = discoveredServers.size
+                    llmBusStatus = llmBusStatus,
+                    llmProviders = llmProviders,
+                    discoveredServersCount = discoveredServers.size,
+                    isLoading = isLoadingLlmBus
                 )
 
                 // Section 2: Providers (Collapsible)
@@ -179,11 +188,11 @@ fun LLMSettingsScreen(
                     subtitle = if (isCirisProxy) {
                         localizedString("mobile.settings_using_proxy")
                     } else {
-                        localizedString("mobile.llm_settings_providers_count", "count", "1")
+                        localizedString("mobile.llm_settings_providers_count", "count", llmProviders.size.toString())
                     },
                     icon = Icons.Filled.Settings,
                     expanded = providersExpanded,
-                    onToggle = { providersExpanded = !providersExpanded }
+                    onToggle = { viewModel.toggleProvidersExpanded() }
                 ) {
                     if (isCirisProxy) {
                         CirisProxyContent()
@@ -221,7 +230,7 @@ fun LLMSettingsScreen(
                     },
                     icon = Icons.Filled.Wifi,
                     expanded = localServersExpanded,
-                    onToggle = { localServersExpanded = !localServersExpanded }
+                    onToggle = { viewModel.toggleLocalServersExpanded() }
                 ) {
                     LocalServersContent(
                         viewModel = viewModel,
@@ -238,12 +247,16 @@ fun LLMSettingsScreen(
                 // Section 4: Advanced Settings (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_advanced"),
-                    subtitle = localizedString("mobile.llm_distribution_latency"),
+                    subtitle = llmBusStatus?.distributionStrategyLabel ?: localizedString("mobile.llm_distribution_latency"),
                     icon = Icons.Filled.Tune,
                     expanded = advancedExpanded,
-                    onToggle = { advancedExpanded = !advancedExpanded }
+                    onToggle = { viewModel.toggleAdvancedExpanded() }
                 ) {
-                    AdvancedSettingsContent()
+                    AdvancedSettingsContent(
+                        viewModel = viewModel,
+                        llmBusStatus = llmBusStatus,
+                        llmProviders = llmProviders
+                    )
                 }
 
                 // Section 5: Authentication (Collapsible)
@@ -272,8 +285,13 @@ fun LLMSettingsScreen(
 private fun StatusOverviewCard(
     isCirisProxy: Boolean,
     llmConfig: ai.ciris.mobile.shared.api.LlmConfigData?,
-    discoveredServersCount: Int
+    llmBusStatus: ai.ciris.mobile.shared.models.LlmBusStatus?,
+    llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
+    discoveredServersCount: Int,
+    isLoading: Boolean
 ) {
+    val semantic = SemanticColors.Default
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -299,13 +317,20 @@ private fun StatusOverviewCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
             )
 
-            // Status grid
+            // Status grid - Row 1
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -316,24 +341,42 @@ private fun StatusOverviewCard(
                     modifier = Modifier.weight(1f)
                 )
                 StatusItem(
-                    label = localizedString("mobile.settings_provider"),
-                    value = llmConfig?.provider?.uppercase() ?: "-",
+                    label = "Distribution",
+                    value = llmBusStatus?.distributionStrategyLabel ?: "Automatic",
                     modifier = Modifier.weight(1f)
                 )
             }
 
+            // Status grid - Row 2
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 StatusItem(
-                    label = localizedString("mobile.settings_model"),
-                    value = llmConfig?.model?.take(20) ?: "-",
+                    label = "Providers",
+                    value = "${llmBusStatus?.providersAvailable ?: 0}/${llmBusStatus?.providersTotal ?: 0} healthy",
                     modifier = Modifier.weight(1f)
                 )
                 StatusItem(
-                    label = localizedString("mobile.llm_settings_local_servers"),
-                    value = "$discoveredServersCount",
+                    label = "Avg Latency",
+                    value = llmBusStatus?.let { "${it.averageLatencyMs.toInt()}ms" } ?: "-",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // Status grid - Row 3
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                StatusItem(
+                    label = "Uptime",
+                    value = llmBusStatus?.uptimeDisplay ?: "-",
+                    modifier = Modifier.weight(1f)
+                )
+                StatusItem(
+                    label = "Error Rate",
+                    value = llmBusStatus?.let { "${(it.errorRate * 100).let { r -> "%.1f".format(r) }}%" } ?: "-",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -343,9 +386,12 @@ private fun StatusOverviewCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val allHealthy = llmBusStatus?.allCircuitBreakersHealthy ?: true
+                val openCount = llmBusStatus?.circuitBreakersOpen ?: 0
+
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = SemanticColors.Default.surfaceSuccess
+                    color = if (allHealthy) semantic.surfaceSuccess else semantic.surfaceWarning
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -353,27 +399,27 @@ private fun StatusOverviewCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.CheckCircle,
+                            imageVector = if (allHealthy) Icons.Filled.CheckCircle else Icons.Filled.Warning,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
-                            tint = SemanticColors.Default.onSuccess
+                            tint = if (allHealthy) semantic.onSuccess else semantic.onWarning
                         )
                         Text(
-                            text = localizedString("mobile.llm_circuit_closed"),
+                            text = if (allHealthy)
+                                localizedString("mobile.llm_circuit_closed")
+                            else
+                                "$openCount provider(s) paused",
                             fontSize = 11.sp,
-                            color = SemanticColors.Default.onSuccess
+                            color = if (allHealthy) semantic.onSuccess else semantic.onWarning
                         )
                     }
                 }
                 Text(
-                    text = localizedString("mobile.llm_distribution_latency"),
+                    text = llmBusStatus?.distributionStrategyLabel ?: localizedString("mobile.llm_distribution_latency"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             }
-
-            // CIRIS Proxy mode is determined at first-run and cannot be changed
-            // Users who want BYOK must reconfigure via first-run wizard
         }
     }
 }
@@ -932,41 +978,46 @@ private fun LocalServersContent(
 // ============================================================================
 
 @Composable
-private fun AdvancedSettingsContent() {
+private fun AdvancedSettingsContent(
+    viewModel: SettingsViewModel,
+    llmBusStatus: ai.ciris.mobile.shared.models.LlmBusStatus?,
+    llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>
+) {
+    val currentStrategy = llmBusStatus?.distributionStrategy
+        ?: ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Distribution Strategy
         Text(
-            text = "Distribution Strategy",
+            text = "How should CIRIS pick providers?",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium
         )
 
-        var selectedStrategy by remember { mutableStateOf("latency_based") }
-
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StrategyOption(
-                name = localizedString("mobile.llm_distribution_round_robin"),
-                description = "Rotate through providers at same priority",
-                selected = selectedStrategy == "round_robin",
-                onClick = { selectedStrategy = "round_robin" }
+                name = "Automatic (Recommended)",
+                description = "Picks the fastest available provider",
+                selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED,
+                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED) }
             )
             StrategyOption(
-                name = localizedString("mobile.llm_distribution_latency"),
-                description = "Select provider with lowest latency",
-                selected = selectedStrategy == "latency_based",
-                onClick = { selectedStrategy = "latency_based" }
+                name = "Round Robin",
+                description = "Takes turns between providers",
+                selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN,
+                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN) }
             )
             StrategyOption(
-                name = localizedString("mobile.llm_distribution_random"),
-                description = "Random selection for load spreading",
-                selected = selectedStrategy == "random",
-                onClick = { selectedStrategy = "random" }
+                name = "Random",
+                description = "Picks randomly to spread the load",
+                selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM,
+                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM) }
             )
             StrategyOption(
-                name = localizedString("mobile.llm_distribution_least_loaded"),
-                description = "Select provider with fewest requests",
-                selected = selectedStrategy == "least_loaded",
-                onClick = { selectedStrategy = "least_loaded" }
+                name = "Least Loaded",
+                description = "Picks provider with fewest active requests",
+                selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED,
+                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED) }
             )
         }
 
@@ -974,24 +1025,91 @@ private fun AdvancedSettingsContent() {
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
         )
 
-        // Circuit Breaker Info (read-only for now)
-        Text(
-            text = "Circuit Breaker",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium
-        )
+        // Per-Provider Circuit Breaker Status
+        if (llmProviders.isNotEmpty()) {
+            Text(
+                text = "Provider Protection Status",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium
+            )
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoRow("Failure Threshold", "5 failures")
-            InfoRow("Recovery Timeout", "60 seconds")
-            InfoRow("Success to Close", "3 successes")
+            llmProviders.forEach { provider ->
+                ProviderCircuitBreakerRow(
+                    provider = provider,
+                    onReset = { viewModel.resetCircuitBreaker(provider.name) },
+                    onForceReset = { viewModel.resetCircuitBreaker(provider.name, force = true) }
+                )
+            }
         }
 
         Text(
-            text = "Circuit breaker settings are configured at the engine level.",
+            text = "Protection automatically pauses providers that have too many errors, then tries them again after a short wait.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
+    }
+}
+
+@Composable
+private fun ProviderCircuitBreakerRow(
+    provider: ai.ciris.mobile.shared.models.LlmProviderStatus,
+    onReset: () -> Unit,
+    onForceReset: () -> Unit
+) {
+    val cb = provider.circuitBreaker
+    val semantic = SemanticColors.Default
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            // Status indicator
+            Icon(
+                imageVector = when (cb.state) {
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> Icons.Filled.CheckCircle
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> Icons.Filled.Error
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> Icons.Filled.Schedule
+                },
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = when (cb.state) {
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> semantic.success
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> semantic.error
+                    ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> semantic.warning
+                }
+            )
+            Column {
+                Text(
+                    text = provider.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = when (cb.state) {
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> "Active and protecting"
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> "Paused due to errors"
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> "Testing recovery..."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        // Reset button (only show when circuit is open or half-open)
+        if (cb.state != ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED) {
+            TextButton(onClick = onReset) {
+                Text("Reset")
+            }
+        }
     }
 }
 

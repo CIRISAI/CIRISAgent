@@ -3874,6 +3874,367 @@ class CIRISApiClient(
     }
 
 
+    // ===== LLM Bus API =====
+
+    /**
+     * Get LLM Bus status including distribution strategy and aggregate metrics.
+     * Returns bus health, provider counts, circuit breaker summary.
+     */
+    suspend fun getLlmBusStatus(): ai.ciris.mobile.shared.models.LlmBusStatus {
+        val method = "getLlmBusStatus"
+        val url = "$baseUrl/v1/system/llm/status"
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.get(url) {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("LLM Bus status failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: ${body.take(200)}...")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            ai.ciris.mobile.shared.models.LlmBusStatus(
+                distributionStrategy = when (data["distribution_strategy"]?.jsonPrimitive?.content) {
+                    "round_robin" -> ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN
+                    "latency_based" -> ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED
+                    "random" -> ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM
+                    "least_loaded" -> ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED
+                    else -> ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED
+                },
+                totalRequests = data["total_requests"]?.jsonPrimitive?.intOrNull ?: 0,
+                failedRequests = data["failed_requests"]?.jsonPrimitive?.intOrNull ?: 0,
+                averageLatencyMs = data["average_latency_ms"]?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                errorRate = data["error_rate"]?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                providersTotal = data["providers_total"]?.jsonPrimitive?.intOrNull ?: 0,
+                providersAvailable = data["providers_available"]?.jsonPrimitive?.intOrNull ?: 0,
+                providersRateLimited = data["providers_rate_limited"]?.jsonPrimitive?.intOrNull ?: 0,
+                circuitBreakersClosed = data["circuit_breakers_closed"]?.jsonPrimitive?.intOrNull ?: 0,
+                circuitBreakersOpen = data["circuit_breakers_open"]?.jsonPrimitive?.intOrNull ?: 0,
+                circuitBreakersHalfOpen = data["circuit_breakers_half_open"]?.jsonPrimitive?.intOrNull ?: 0,
+                uptimeSeconds = data["uptime_seconds"]?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                timestamp = data["timestamp"]?.jsonPrimitive?.contentOrNull
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+    /**
+     * Get all LLM providers with their status, metrics, and circuit breaker state.
+     */
+    suspend fun getLlmProviders(): List<ai.ciris.mobile.shared.models.LlmProviderStatus> {
+        val method = "getLlmProviders"
+        val url = "$baseUrl/v1/system/llm/providers"
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.get(url) {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("LLM providers failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: ${body.take(500)}...")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+            val providers = data["providers"]?.jsonArray ?: emptyList()
+
+            providers.map { providerJson ->
+                val p = providerJson.jsonObject
+                val metrics = p["metrics"]?.jsonObject
+                val cb = p["circuit_breaker"]?.jsonObject
+                val cbConfig = cb?.get("config")?.jsonObject
+
+                ai.ciris.mobile.shared.models.LlmProviderStatus(
+                    name = p["name"]?.jsonPrimitive?.content ?: "Unknown",
+                    healthy = p["healthy"]?.jsonPrimitive?.boolean ?: false,
+                    enabled = p["enabled"]?.jsonPrimitive?.boolean ?: true,
+                    priority = when (p["priority"]?.jsonPrimitive?.content) {
+                        "critical" -> ai.ciris.mobile.shared.models.ProviderPriority.CRITICAL
+                        "high" -> ai.ciris.mobile.shared.models.ProviderPriority.HIGH
+                        "normal" -> ai.ciris.mobile.shared.models.ProviderPriority.NORMAL
+                        "low" -> ai.ciris.mobile.shared.models.ProviderPriority.LOW
+                        "fallback" -> ai.ciris.mobile.shared.models.ProviderPriority.FALLBACK
+                        else -> ai.ciris.mobile.shared.models.ProviderPriority.NORMAL
+                    },
+                    metrics = ai.ciris.mobile.shared.models.ProviderMetrics(
+                        totalRequests = metrics?.get("total_requests")?.jsonPrimitive?.intOrNull ?: 0,
+                        failedRequests = metrics?.get("failed_requests")?.jsonPrimitive?.intOrNull ?: 0,
+                        failureRate = metrics?.get("failure_rate")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                        averageLatencyMs = metrics?.get("average_latency_ms")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                        consecutiveFailures = metrics?.get("consecutive_failures")?.jsonPrimitive?.intOrNull ?: 0,
+                        lastRequestTime = metrics?.get("last_request_time")?.jsonPrimitive?.contentOrNull,
+                        lastFailureTime = metrics?.get("last_failure_time")?.jsonPrimitive?.contentOrNull,
+                        isRateLimited = metrics?.get("is_rate_limited")?.jsonPrimitive?.boolean ?: false,
+                        rateLimitCooldownRemainingSeconds = metrics?.get("rate_limit_cooldown_remaining_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat()
+                    ),
+                    circuitBreaker = ai.ciris.mobile.shared.models.CircuitBreakerStatus(
+                        state = when (cb?.get("state")?.jsonPrimitive?.content) {
+                            "closed" -> ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED
+                            "open" -> ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN
+                            "half_open" -> ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN
+                            else -> ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED
+                        },
+                        failureCount = cb?.get("failure_count")?.jsonPrimitive?.intOrNull ?: 0,
+                        successCount = cb?.get("success_count")?.jsonPrimitive?.intOrNull ?: 0,
+                        totalCalls = cb?.get("total_calls")?.jsonPrimitive?.intOrNull ?: 0,
+                        totalFailures = cb?.get("total_failures")?.jsonPrimitive?.intOrNull ?: 0,
+                        totalSuccesses = cb?.get("total_successes")?.jsonPrimitive?.intOrNull ?: 0,
+                        successRate = cb?.get("success_rate")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 1.0f,
+                        consecutiveFailures = cb?.get("consecutive_failures")?.jsonPrimitive?.intOrNull ?: 0,
+                        recoveryAttempts = cb?.get("recovery_attempts")?.jsonPrimitive?.intOrNull ?: 0,
+                        stateTransitions = cb?.get("state_transitions")?.jsonPrimitive?.intOrNull ?: 0,
+                        timeInOpenStateSeconds = cb?.get("time_in_open_state_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 0.0f,
+                        lastFailureAgeSeconds = cb?.get("last_failure_age_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat(),
+                        config = ai.ciris.mobile.shared.models.CircuitBreakerConfig(
+                            failureThreshold = cbConfig?.get("failure_threshold")?.jsonPrimitive?.intOrNull ?: 5,
+                            recoveryTimeoutSeconds = cbConfig?.get("recovery_timeout_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 10.0f,
+                            successThreshold = cbConfig?.get("success_threshold")?.jsonPrimitive?.intOrNull ?: 3,
+                            timeoutDurationSeconds = cbConfig?.get("timeout_duration_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 30.0f
+                        )
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+    /**
+     * Update the LLM Bus distribution strategy.
+     */
+    suspend fun updateLlmDistributionStrategy(strategy: ai.ciris.mobile.shared.models.DistributionStrategy): ai.ciris.mobile.shared.models.DistributionStrategyUpdateResponse {
+        val method = "updateLlmDistributionStrategy"
+        val url = "$baseUrl/v1/system/llm/distribution"
+        logInfo(method, "PUT $url strategy=${strategy.name.lowercase()}")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.put(url) {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("strategy", strategy.name.lowercase())
+                })
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Update distribution strategy failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            ai.ciris.mobile.shared.models.DistributionStrategyUpdateResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                previousStrategy = data["previous_strategy"]?.jsonPrimitive?.content ?: "",
+                newStrategy = data["new_strategy"]?.jsonPrimitive?.content ?: "",
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+    /**
+     * Reset a circuit breaker for a specific provider.
+     */
+    suspend fun resetLlmCircuitBreaker(providerName: String, force: Boolean = false): ai.ciris.mobile.shared.models.CircuitBreakerResetResponse {
+        val method = "resetLlmCircuitBreaker"
+        val url = "$baseUrl/v1/system/llm/providers/$providerName/circuit-breaker/reset"
+        logInfo(method, "POST $url force=$force")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.post(url) {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("force", force)
+                })
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Reset circuit breaker failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            ai.ciris.mobile.shared.models.CircuitBreakerResetResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                providerName = data["provider_name"]?.jsonPrimitive?.content ?: providerName,
+                previousState = data["previous_state"]?.jsonPrimitive?.content ?: "",
+                newState = data["new_state"]?.jsonPrimitive?.content ?: "",
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+    /**
+     * Update circuit breaker configuration for a specific provider.
+     */
+    suspend fun updateLlmCircuitBreakerConfig(
+        providerName: String,
+        failureThreshold: Int? = null,
+        recoveryTimeoutSeconds: Float? = null,
+        successThreshold: Int? = null,
+        timeoutDurationSeconds: Float? = null
+    ): ai.ciris.mobile.shared.models.CircuitBreakerConfigUpdateResponse {
+        val method = "updateLlmCircuitBreakerConfig"
+        val url = "$baseUrl/v1/system/llm/providers/$providerName/circuit-breaker/config"
+        logInfo(method, "PUT $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.put(url) {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    failureThreshold?.let { put("failure_threshold", it) }
+                    recoveryTimeoutSeconds?.let { put("recovery_timeout_seconds", it) }
+                    successThreshold?.let { put("success_threshold", it) }
+                    timeoutDurationSeconds?.let { put("timeout_duration_seconds", it) }
+                })
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Update circuit breaker config failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            val prevConfig = data["previous_config"]?.jsonObject
+            val newConfig = data["new_config"]?.jsonObject
+
+            ai.ciris.mobile.shared.models.CircuitBreakerConfigUpdateResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                providerName = data["provider_name"]?.jsonPrimitive?.content ?: providerName,
+                previousConfig = ai.ciris.mobile.shared.models.CircuitBreakerConfig(
+                    failureThreshold = prevConfig?.get("failure_threshold")?.jsonPrimitive?.intOrNull ?: 5,
+                    recoveryTimeoutSeconds = prevConfig?.get("recovery_timeout_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 10.0f,
+                    successThreshold = prevConfig?.get("success_threshold")?.jsonPrimitive?.intOrNull ?: 3,
+                    timeoutDurationSeconds = prevConfig?.get("timeout_duration_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 30.0f
+                ),
+                newConfig = ai.ciris.mobile.shared.models.CircuitBreakerConfig(
+                    failureThreshold = newConfig?.get("failure_threshold")?.jsonPrimitive?.intOrNull ?: 5,
+                    recoveryTimeoutSeconds = newConfig?.get("recovery_timeout_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 10.0f,
+                    successThreshold = newConfig?.get("success_threshold")?.jsonPrimitive?.intOrNull ?: 3,
+                    timeoutDurationSeconds = newConfig?.get("timeout_duration_seconds")?.jsonPrimitive?.doubleOrNull?.toFloat() ?: 30.0f
+                ),
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+
     // ===== Audit API =====
 
         /**

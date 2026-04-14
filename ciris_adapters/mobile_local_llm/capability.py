@@ -21,7 +21,6 @@ missing we return :attr:`DeviceTier.IOS_STUB` so the wizard can display a
 
 from __future__ import annotations
 
-import logging
 import os
 import platform as _platform
 import shutil
@@ -31,8 +30,6 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from .config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform
-
-logger = logging.getLogger(__name__)
 
 
 # Android app data directories follow /data/data/<pkg>/ — this is the most

@@ -158,8 +158,11 @@ def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLM
                 message="Invalid API key",
                 error="OpenAI requires a valid API key starting with 'sk-'",
             )
-    elif config.provider not in ("local", "local_inference") and not config.api_key:
-        # Other non-local providers need API key
+    elif config.provider not in ("local", "local_inference", "mobile_local") and not config.api_key:
+        # Non-keyless providers need an API key. `mobile_local` runs an
+        # on-device OpenAI-compatible server on loopback so no external
+        # credential is required — same as `local` / `local_inference`.
+        # This mirrors the allowlist used in `complete.py::_save_setup_config`.
         return LLMValidationResponse(valid=False, message="API key required", error="This provider requires an API key")
     return None
 
@@ -361,6 +364,19 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
     _log_validation_start(config)
 
     try:
+        # On-device inference has no remote endpoint to probe — the
+        # capability probe in the mobile adapter is the real validation
+        # step. Returning success here matches the mobile client's
+        # short-circuit for `mobile_local` and prevents the backend from
+        # trying to hit a non-existent endpoint with OpenAI defaults.
+        if config.provider == "mobile_local":
+            logger.info("[VALIDATE_LLM] mobile_local: on-device inference, skipping remote probe")
+            return LLMValidationResponse(
+                valid=True,
+                message="On-device inference — no remote endpoint to validate",
+                error=None,
+            )
+
         # Validate API key for provider type
         api_key_error = _validate_api_key_for_provider(config)
         if api_key_error:

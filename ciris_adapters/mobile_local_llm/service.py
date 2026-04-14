@@ -25,7 +25,7 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 
 from .capability import DeviceCapabilityReport, probe_device_capability
-from .config import MobileLocalLLMConfig, DeviceTier, ModelVariant
+from .config import MobileLocalLLMConfig
 from .inference_server import InferenceServerError, InferenceServerManager
 
 logger = logging.getLogger(__name__)

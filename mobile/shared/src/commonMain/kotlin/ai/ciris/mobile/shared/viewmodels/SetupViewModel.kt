@@ -152,6 +152,42 @@ class SetupViewModel : ViewModel() {
          * with `MobileLocalLLMConfig.base_url()` in the Python side.
          */
         const val LOCAL_ON_DEVICE_BASE_URL = "http://127.0.0.1:8091/v1"
+
+        /**
+         * Map the current `llmProvider` state value to the canonical
+         * backend provider id expected by `/v1/setup/complete` and
+         * `/v1/setup/validate-llm`.
+         *
+         * The BYOK dropdown stores the canonical id (`anthropic`, `groq`,
+         * `local_inference`, …) directly in state, so the pass-through
+         * case is the common path. The explicit display-label cases
+         * exist only as a back-compat shim for older state (e.g. saved
+         * setup data from a previous build) that still carries raw
+         * labels like `"Anthropic"`.
+         *
+         * Without this mapping, a user who picks any non-OpenAI
+         * provider from the dropdown would silently have their
+         * `llm_provider` serialised as `"openai"` because the old
+         * when-block only matched display labels.
+         */
+        fun canonicalProviderId(value: String): String = when (value) {
+            "" -> "openai"
+            // Legacy display-label → canonical id mapping (pre-canonical
+            // state, kept for back-compat).
+            "OpenAI" -> "openai"
+            "Anthropic" -> "anthropic"
+            "Google AI" -> "google"
+            "OpenRouter" -> "openrouter"
+            "Groq" -> "groq"
+            "Together AI" -> "together"
+            "Azure OpenAI" -> "other"
+            "LocalAI", "Local LLM" -> "local"
+            "OpenAI Compatible" -> "openai_compatible"
+            LOCAL_ON_DEVICE_DISPLAY_NAME -> LOCAL_ON_DEVICE_PROVIDER_ID
+            // Canonical ids coming straight from `availableProviders`
+            // pass through unchanged.
+            else -> value
+        }
     }
 
     // ========== LLM Configuration (BYOK mode) ==========
@@ -1259,20 +1295,7 @@ class SetupViewModel : ViewModel() {
         }
 
         val request = ValidateLlmRequest(
-            provider = when (currentState.llmProvider) {
-                "OpenAI" -> "openai"
-                "Anthropic" -> "anthropic"
-                "Google AI" -> "google"
-                "OpenRouter" -> "openrouter"
-                "Groq" -> "groq"
-                "Together AI" -> "together"
-                "LocalAI" -> "local"
-                "OpenAI Compatible" -> "openai_compatible"
-                "Azure OpenAI" -> "other"
-                LOCAL_ON_DEVICE_PROVIDER_ID, LOCAL_ON_DEVICE_DISPLAY_NAME ->
-                    LOCAL_ON_DEVICE_PROVIDER_ID
-                else -> "openai"
-            },
+            provider = canonicalProviderId(currentState.llmProvider),
             api_key = currentState.llmApiKey,
             base_url = currentState.llmBaseUrl.takeIf { it.isNotEmpty() },
             model = currentState.llmModel.takeIf { it.isNotEmpty() }
@@ -1420,25 +1443,11 @@ class SetupViewModel : ViewModel() {
         } else {
             // BYOK mode — user-provided API key, or keyless providers
             // (LocalAI / Ollama, or on-device Gemma 4 via the
-            // mobile_local adapter).
-            val providerId = when (currentState.llmProvider) {
-                "OpenAI" -> "openai"
-                "OpenRouter" -> "openrouter"
-                "Anthropic" -> "anthropic"
-                "Google AI" -> "google"
-                "Groq" -> "groq"
-                "Together AI" -> "together"
-                "Azure OpenAI" -> "other"
-                "LocalAI", "Local LLM" -> "local"
-                "OpenAI Compatible" -> "openai_compatible"
-                // Both the canonical id and the display label funnel to
-                // the same backend provider id. Using the canonical id
-                // end-to-end means the agent writes it straight into
-                // `.env` so the Python adapter picks it up verbatim.
-                LOCAL_ON_DEVICE_PROVIDER_ID, LOCAL_ON_DEVICE_DISPLAY_NAME ->
-                    LOCAL_ON_DEVICE_PROVIDER_ID
-                else -> "openai"
-            }
+            // mobile_local adapter). `llmProvider` already holds the
+            // canonical id (set by `setLlmProvider(key)` from the
+            // dropdown); `canonicalProviderId()` also maps legacy
+            // display labels for back-compat.
+            val providerId = canonicalProviderId(currentState.llmProvider)
 
             var apiKey = currentState.llmApiKey
             if (apiKey.isEmpty() && providerId == "local") {

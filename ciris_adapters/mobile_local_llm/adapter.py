@@ -142,6 +142,7 @@ class MobileLocalLLMAdapter(Service):
             try:
                 await self._health_task
             except asyncio.CancelledError:
+                # Expected — we just cancelled the health loop ourselves.
                 pass
         self._health_task = None
 
@@ -150,6 +151,7 @@ class MobileLocalLLMAdapter(Service):
             try:
                 await self._lifecycle_task
             except asyncio.CancelledError:
+                # Expected — cancellation is how the lifecycle task exits.
                 pass
         self._lifecycle_task = None
 

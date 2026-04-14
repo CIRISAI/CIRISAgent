@@ -7,7 +7,7 @@ Provides functionality for listing, loading, unloading, and managing adapters.
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError

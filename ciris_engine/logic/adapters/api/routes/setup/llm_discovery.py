@@ -2,14 +2,18 @@
 
 Discovers local inference servers (Ollama, llama.cpp, vLLM, LM Studio, LocalAI)
 on the network by probing common hostnames and ports.
+
+Uses zeroconf-based mDNS resolution for reliable .local hostname resolution
+on all platforms including Android.
 """
 
 import asyncio
 import logging
-import socket
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+
+from ciris_engine.logic.utils.mdns_resolver import resolve_local_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +40,13 @@ LOCALHOST_PORTS: List[Tuple[int, str]] = [
 PROBE_TIMEOUT = 2.0
 
 
-def _resolve_hostname(hostname: str) -> str:
-    """Resolve hostname to IP, returning hostname if resolution fails."""
-    try:
-        return socket.gethostbyname(hostname)
-    except socket.gaierror:
-        return hostname
+async def _resolve_hostname(hostname: str) -> str:
+    """Resolve hostname to IP via mDNS, returning hostname if resolution fails.
+
+    Uses zeroconf-based mDNS resolution for reliable .local hostname
+    resolution on all platforms including Android.
+    """
+    return await resolve_local_hostname(hostname, timeout=2.0)
 
 
 def _build_server_label(hostname: str, port: int, models: List[str]) -> str:
@@ -85,8 +90,16 @@ def _generate_probe_targets(include_localhost: bool) -> List[Tuple[str, int]]:
 async def _probe_and_build_entry(
     hostname: str, port: int, seen_urls: set[str]
 ) -> Optional[Dict[str, Any]]:
-    """Probe a single endpoint and return server entry if valid."""
-    url = f"http://{hostname}:{port}"
+    """Probe a single endpoint and return server entry if valid.
+
+    First resolves hostname via mDNS for reliable .local resolution,
+    then probes the endpoint to detect LLM server type.
+    """
+    # Resolve hostname to IP via mDNS first
+    ip = await _resolve_hostname(hostname)
+
+    # Build URL with resolved IP for reliable connectivity
+    url = f"http://{ip}:{port}"
     if url in seen_urls:
         return None
     seen_urls.add(url)
@@ -96,7 +109,6 @@ async def _probe_and_build_entry(
         return None
 
     server_type, model_count, models = result
-    ip = _resolve_hostname(hostname)
     return _build_server_entry(hostname, port, ip, server_type, model_count, models)
 
 

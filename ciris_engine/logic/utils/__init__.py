@@ -18,6 +18,14 @@ from .location_utils import (  # noqa:F401
     get_location_for_context_enrichment,
     get_user_location,
 )
+from .mdns_resolver import (  # noqa:F401
+    DiscoveredService,
+    close_mdns,
+    discover_and_probe_hostnames,
+    discover_services,
+    resolve_local_hostname,
+    resolve_url_hostname,
+)
 from .user_utils import extract_user_nick  # noqa:F401
 
 logger = logging.getLogger(__name__)
@@ -37,4 +45,11 @@ __all__ = [
     "get_user_location",
     "get_location_for_context_enrichment",
     "format_coordinates_for_trace",
+    # mDNS resolver utilities
+    "DiscoveredService",
+    "close_mdns",
+    "discover_and_probe_hostnames",
+    "discover_services",
+    "resolve_local_hostname",
+    "resolve_url_hostname",
 ]

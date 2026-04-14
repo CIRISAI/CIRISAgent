@@ -136,11 +136,11 @@ async def _get_runtime_control_service_for_adapter_load(request: Request) -> Any
     return None
 
 
-def _resolve_url_hostname_to_ip(url: str) -> str:
-    """Resolve any hostname in a URL to its IP address.
+async def _resolve_url_hostname_to_ip(url: str) -> str:
+    """Resolve any hostname in a URL to its IP address via mDNS.
 
-    This ensures reliable connectivity on Android where mDNS hostname
-    resolution (e.g., homeassistant.local) is unreliable in browsers.
+    Uses zeroconf-based mDNS resolution for reliable .local hostname
+    resolution on all platforms including Android.
 
     Args:
         url: URL that may contain a hostname (e.g., http://homeassistant.local:8123)
@@ -148,33 +148,9 @@ def _resolve_url_hostname_to_ip(url: str) -> str:
     Returns:
         URL with hostname replaced by IP if resolvable, original URL otherwise
     """
-    import socket
-    from urllib.parse import urlparse, urlunparse
+    from ciris_engine.logic.utils.mdns_resolver import resolve_url_hostname
 
-    try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        if not hostname:
-            return url
-
-        # Skip if already an IP address
-        try:
-            socket.inet_aton(hostname)
-            return url  # Already an IP
-        except socket.error:
-            pass  # Not an IP, try to resolve
-
-        # Resolve hostname to IP
-        ip_address = socket.gethostbyname(hostname)
-        # Reconstruct URL with IP instead of hostname
-        netloc = ip_address
-        if parsed.port:
-            netloc = f"{ip_address}:{parsed.port}"
-        new_parsed = parsed._replace(netloc=netloc)
-        return urlunparse(new_parsed)
-    except Exception as e:
-        logger.debug(f"Could not resolve hostname in URL: {type(e).__name__}")
-        return url  # Return original if resolution fails
+    return await resolve_url_hostname(url, timeout=3.0)
 
 
 async def _get_existing_reauth_config(
@@ -213,16 +189,16 @@ async def _get_existing_reauth_config(
         if hasattr(instance.adapter, "ha_service"):
             ha_url = getattr(instance.adapter.ha_service, "ha_url", None)
             if ha_url:
-                # Resolve hostname to IP for reliable Android browser connectivity
-                resolved_url = _resolve_url_hostname_to_ip(ha_url)
+                # Resolve hostname to IP via mDNS for reliable Android browser connectivity
+                resolved_url = await _resolve_url_hostname_to_ip(ha_url)
                 return {"base_url": resolved_url}
 
         # Generic fallback - use settings from config_params
         if instance.config_params and instance.config_params.settings:
             config = dict(instance.config_params.settings)
-            # Resolve base_url if present
+            # Resolve base_url if present via mDNS
             if "base_url" in config:
-                config["base_url"] = _resolve_url_hostname_to_ip(config["base_url"])
+                config["base_url"] = await _resolve_url_hostname_to_ip(config["base_url"])
             return config
 
     return None

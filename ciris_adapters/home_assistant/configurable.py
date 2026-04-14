@@ -285,10 +285,10 @@ class HAConfigurableAdapter:
         This is a fallback when mDNS service discovery fails but the hostname
         might still resolve (e.g., when HA isn't advertising _home-assistant._tcp).
 
-        When a hostname is found, we resolve it to IP for the URL to ensure
-        reliable connectivity on Android where mDNS resolution is flaky.
+        Uses zeroconf-based mDNS resolution for reliable .local hostname
+        resolution on all platforms including Android.
         """
-        import socket
+        from ciris_engine.logic.utils.mdns_resolver import resolve_local_hostname
 
         common_hosts = [
             ("homeassistant.local", 8123),
@@ -299,9 +299,12 @@ class HAConfigurableAdapter:
 
         discovered = []
         for host, port in common_hosts:
-            url = f"http://{host}:{port}"
+            # Resolve hostname to IP via mDNS first
+            ip_address = await resolve_local_hostname(host, timeout=2.0)
+            url = f"http://{ip_address}:{port}"
+
             try:
-                logger.info(f"[HOSTNAME PROBE] Trying {url}...")
+                logger.info(f"[HOSTNAME PROBE] Trying {url} (resolved from {host})...")
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
                         f"{url}/api/",
@@ -310,16 +313,7 @@ class HAConfigurableAdapter:
                     ) as response:
                         # HA API returns 401 without auth, which confirms it's HA
                         if response.status in (200, 401):
-                            # Resolve hostname to IP for reliable connectivity on Android
-                            try:
-                                ip_address = socket.gethostbyname(host)
-                                ip_url = f"http://{ip_address}:{port}"
-                                logger.info(f"[HOSTNAME PROBE] Found Home Assistant: {host} -> {ip_address}")
-                            except socket.gaierror:
-                                # Fallback to hostname if IP resolution fails
-                                ip_address = host
-                                ip_url = url
-                                logger.warning(f"[HOSTNAME PROBE] Could not resolve {host} to IP, using hostname")
+                            logger.info(f"[HOSTNAME PROBE] Found Home Assistant: {host} -> {ip_address}")
 
                             discovered.append(
                                 {
@@ -331,7 +325,7 @@ class HAConfigurableAdapter:
                                         "hostname": host,  # Keep hostname for reference
                                         "ip": ip_address,
                                         "port": port,
-                                        "url": ip_url,  # Use IP-based URL
+                                        "url": url,  # Use IP-based URL
                                         "source": "hostname_probe",
                                     },
                                 }

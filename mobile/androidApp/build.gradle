@@ -240,10 +240,19 @@ ${getterFunctions}
     }
 }
 
+// Clean Python sources before syncing to ensure no stale files remain
+// This is critical when Python files are deleted or renamed in the main repo
+task cleanPythonSources(type: Delete) {
+    description = "Clean synced Python sources to ensure fresh copy"
+    delete "${buildDir}/python-src"
+}
+
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
+// IMPORTANT: Depends on cleanPythonSources to guarantee fresh sync every time
 task syncPythonSources(type: Sync) {
     description = "Sync ciris_engine and ciris_adapters from main repo"
+    dependsOn cleanPythonSources
 
     from("../../ciris_engine") {
         into "ciris_engine"

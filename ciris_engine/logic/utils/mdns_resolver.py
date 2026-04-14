@@ -176,131 +176,111 @@ async def _resolve_via_zeroconf(
 ) -> Optional[str]:
     """Resolve hostname using zeroconf's mDNS query.
 
-    Uses a thread pool to run synchronous zeroconf operations,
-    ensuring compatibility with older zeroconf versions (0.39.4+).
+    Uses ServiceInfo to resolve the hostname, which is the same approach
+    that works reliably for Home Assistant discovery on Android.
     """
     # Run sync resolution in thread pool to avoid blocking event loop
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        _sync_resolve_via_zeroconf,
-        azc.zeroconf,
+        _sync_resolve_via_serviceinfo,
         hostname,
         timeout,
     )
 
 
-def _sync_resolve_via_zeroconf(
-    zc: Any,
+def _sync_resolve_via_serviceinfo(
     hostname: str,
     timeout: float,
 ) -> Optional[str]:
     """Synchronous hostname resolution via mDNS.
 
-    Sends an mDNS A record query and polls the cache for the response.
-    Compatible with zeroconf 0.39.4+.
+    Uses fresh synchronous Zeroconf instance (same as HA adapter) and
+    sends direct A record queries via multicast.
     """
     import time
 
-    # Standard DNS constants - use these as fallback
-    TYPE_A = 1
-    CLASS_IN = 1
-    FLAGS_QR_QUERY = 0
-
-    # Try to get DNSOutgoing and constants from zeroconf
-    dns_outgoing_cls: Any = None
-    dns_question_cls: Any = None
-
     try:
-        from zeroconf._dns import DNSOutgoing  # type: ignore[attr-defined]
-
-        dns_outgoing_cls = DNSOutgoing
+        from zeroconf import Zeroconf
     except ImportError:
-        try:
-            from zeroconf import DNSOutgoing  # type: ignore[attr-defined]
-
-            dns_outgoing_cls = DNSOutgoing
-        except ImportError:
-            pass
-
-    try:
-        # zeroconf._dns.DNSQuestion may not be exported explicitly
-        from zeroconf._dns import DNSQuestion
-
-        dns_question_cls = DNSQuestion
-    except ImportError:
-        pass
-
-    try:
-        # zeroconf.const internal constants
-        from zeroconf.const import (
-            _CLASS_IN,
-            _FLAGS_QR_QUERY,
-            _TYPE_A,
-        )
-
-        TYPE_A = _TYPE_A
-        CLASS_IN = _CLASS_IN
-        FLAGS_QR_QUERY = _FLAGS_QR_QUERY
-    except ImportError:
-        pass
-
-    if dns_outgoing_cls is None:
-        logger.debug("[mDNS] Could not import zeroconf DNS internals")
+        logger.info("[mDNS] Zeroconf not available")
         return None
 
     # Normalize hostname (ensure it ends with .)
     name = hostname if hostname.endswith(".") else f"{hostname}."
 
-    # Check cache first - the hostname might already be resolved
+    logger.info(f"[mDNS] Resolving {hostname} via sync Zeroconf")
+
+    zc: Any = None
     try:
-        cached_ip = _check_zeroconf_cache(zc, name, TYPE_A)
-        if cached_ip:
-            logger.debug(f"[mDNS] Found {hostname} in cache: {cached_ip}")
-            return cached_ip
-    except Exception as e:
-        logger.debug(f"[mDNS] Cache check failed: {e}")
+        # Create a fresh Zeroconf instance (same as HA adapter does)
+        zc = Zeroconf()
 
-    # Send mDNS A record query
-    query_sent = False
-    try:
-        out = dns_outgoing_cls(FLAGS_QR_QUERY)
-        # Try newer API first
-        if hasattr(out, "add_question_or_one_cache"):
-            out.add_question_or_one_cache(
-                zc.cache, time.time() * 1000, name, TYPE_A, CLASS_IN
-            )
-            query_sent = True
-        elif hasattr(out, "add_question") and dns_question_cls is not None:
-            out.add_question(dns_question_cls(name, TYPE_A, CLASS_IN))
-            query_sent = True
+        # Try to get DNS query classes
+        dns_outgoing_cls: Any = None
+        dns_question_cls: Any = None
+        TYPE_A = 1
+        CLASS_IN = 1
+        FLAGS_QR_QUERY = 0
 
-        if query_sent:
-            zc.send(out)
-            logger.debug(f"[mDNS] Sent A record query for {hostname}")
-    except Exception as e:
-        logger.debug(f"[mDNS] Failed to send query: {e}")
-        return None
-
-    if not query_sent:
-        logger.debug("[mDNS] Could not construct DNS query")
-        return None
-
-    # Poll cache for response
-    start = time.monotonic()
-    poll_interval = 0.1
-    while (time.monotonic() - start) < timeout:
         try:
-            cached_ip = _check_zeroconf_cache(zc, name, TYPE_A)
-            if cached_ip:
-                logger.debug(f"[mDNS] Resolved {hostname} -> {cached_ip} from cache")
-                return cached_ip
-        except Exception:
-            pass
-        time.sleep(poll_interval)
+            # zeroconf internal modules - may not be explicitly exported
+            from zeroconf._dns import (  # type: ignore[attr-defined]
+                DNSOutgoing,
+                DNSQuestion,
+            )
 
-    logger.debug(f"[mDNS] No response for {hostname} after {timeout}s")
-    return None
+            dns_outgoing_cls = DNSOutgoing
+            dns_question_cls = DNSQuestion
+        except ImportError:
+            pass
+
+        try:
+            from zeroconf.const import _CLASS_IN, _FLAGS_QR_QUERY, _TYPE_A
+
+            TYPE_A = _TYPE_A
+            CLASS_IN = _CLASS_IN
+            FLAGS_QR_QUERY = _FLAGS_QR_QUERY
+        except ImportError:
+            pass
+
+        if dns_outgoing_cls is None or dns_question_cls is None:
+            logger.info("[mDNS] Could not import zeroconf DNS classes")
+            return None
+
+        # Send A record query
+        logger.info(f"[mDNS] Sending A record query for {name}")
+        out = dns_outgoing_cls(FLAGS_QR_QUERY)
+        out.add_question(dns_question_cls(name, TYPE_A, CLASS_IN))
+        zc.send(out)
+
+        # Poll cache for response
+        start = time.monotonic()
+        poll_interval = 0.05  # 50ms polling
+        while (time.monotonic() - start) < timeout:
+            try:
+                cached = _check_zeroconf_cache(zc, name, TYPE_A)
+                if cached:
+                    logger.info(f"[mDNS] Resolved {hostname} -> {cached}")
+                    return cached
+            except Exception:
+                pass
+            time.sleep(poll_interval)
+
+        logger.info(f"[mDNS] No response for {hostname} after {timeout}s")
+        return None
+
+    except Exception as e:
+        logger.info(f"[mDNS] Resolution failed for {hostname}: {e}")
+        import traceback
+        logger.info(f"[mDNS] Traceback: {traceback.format_exc()}")
+        return None
+    finally:
+        if zc is not None:
+            try:
+                zc.close()
+            except Exception:
+                pass
 
 
 def _check_zeroconf_cache(zc: Any, name: str, type_a: int = 1) -> Optional[str]:

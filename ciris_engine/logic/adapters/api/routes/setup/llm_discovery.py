@@ -13,19 +13,34 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from ciris_engine.logic.utils.mdns_resolver import resolve_local_hostname
+from ciris_engine.logic.utils.mdns_resolver import (
+    DiscoveredService,
+    discover_services,
+    resolve_local_hostname,
+)
 
 logger = logging.getLogger(__name__)
 
 # Hostnames to probe with their likely ports
+# See: https://lmstudio.ai/docs/developer/core/server (LM Studio port 1234)
+# See: https://docs.ollama.com/faq (Ollama port 11434)
 PROBE_HOSTNAMES: List[Tuple[str, List[int]]] = [
     ("jetson.local", [8080, 11434]),  # NVIDIA Jetson with llama.cpp or Ollama
+    ("raspberrypi.local", [8080, 11434]),  # Raspberry Pi default hostname
     ("ollama.local", [11434]),  # Dedicated Ollama server
     ("inference.local", [8080, 8000]),  # Generic inference server
     ("llm.local", [11434, 8080]),  # Generic LLM server
-    ("lmstudio.local", [1234]),  # LM Studio server
+    ("lmstudio.local", [1234]),  # LM Studio server (port 1234 default)
     ("vllm.local", [8000]),  # vLLM server
     ("localai.local", [8080]),  # LocalAI server
+]
+
+# mDNS service types to browse (emerging standards)
+# See: https://github.com/ollama/ollama/issues/10283
+LLM_SERVICE_TYPES: List[Tuple[str, str]] = [
+    ("_ollama._tcp.local.", "ollama"),  # Proposed Ollama service type
+    ("_llm._tcp.local.", "llm"),  # Generic LLM service type
+    ("_openai._tcp.local.", "openai_compatible"),  # OpenAI-compatible servers
 ]
 
 # Localhost ports to scan (always checked)
@@ -124,7 +139,10 @@ async def discover_local_llm_servers(
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """Discover local LLM inference servers on the network.
 
-    Uses hostname probing and port scanning to find running LLM servers.
+    Uses multiple discovery methods:
+    1. mDNS service browsing for advertised services (_ollama._tcp, etc.)
+    2. Hostname probing for common .local hostnames
+    3. Localhost port scanning
 
     Args:
         timeout_seconds: Total timeout for all discovery operations
@@ -134,8 +152,23 @@ async def discover_local_llm_servers(
         Tuple of (discovered_servers, discovery_methods_used)
     """
     seen_urls: set[str] = set()
+    methods_used: List[str] = []
+    all_discovered: List[Dict[str, Any]] = []
+
+    # 1. mDNS service browsing (discover advertised LLM services)
+    logger.info("[LLM_DISCOVERY] Starting mDNS service browsing...")
+    mdns_discovered = await _discover_via_mdns_services(timeout_seconds / 2, seen_urls)
+    if mdns_discovered:
+        all_discovered.extend(mdns_discovered)
+        methods_used.append("mdns_service_browse")
+        logger.info(f"[LLM_DISCOVERY] Found {len(mdns_discovered)} via mDNS services")
+
+    # 2. Hostname probing (for servers without mDNS service advertising)
+    logger.info("[LLM_DISCOVERY] Starting hostname probing...")
     targets = _generate_probe_targets(include_localhost)
-    methods_used = ["hostname_probe"] + (["localhost_scan"] if include_localhost else [])
+    methods_used.append("hostname_probe")
+    if include_localhost:
+        methods_used.append("localhost_scan")
 
     # Probe all targets in parallel
     tasks = [_probe_and_build_entry(h, p, seen_urls) for h, p in targets]
@@ -150,9 +183,58 @@ async def discover_local_llm_servers(
         results = []
 
     # Filter out None results and exceptions
-    discovered = [r for r in results if isinstance(r, dict)]
-    logger.info(f"[LLM_DISCOVERY] Discovered {len(discovered)} LLM servers")
-    return discovered, methods_used
+    probe_discovered = [r for r in results if isinstance(r, dict)]
+    all_discovered.extend(probe_discovered)
+
+    logger.info(f"[LLM_DISCOVERY] Discovered {len(all_discovered)} LLM servers total")
+    return all_discovered, methods_used
+
+
+async def _discover_via_mdns_services(
+    timeout: float, seen_urls: set[str]
+) -> List[Dict[str, Any]]:
+    """Discover LLM servers via mDNS service browsing.
+
+    Browses for emerging LLM service types like _ollama._tcp.local.
+    See: https://github.com/ollama/ollama/issues/10283
+    """
+    discovered: List[Dict[str, Any]] = []
+
+    for service_type, server_type in LLM_SERVICE_TYPES:
+        try:
+            logger.info(f"[LLM_DISCOVERY] Browsing for {service_type}...")
+            services: List[DiscoveredService] = await discover_services(
+                service_type, timeout=timeout / len(LLM_SERVICE_TYPES)
+            )
+
+            for svc in services:
+                url = svc.url
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+
+                # Probe to get model info
+                result = await _probe_llm_endpoint(url)
+                if result:
+                    actual_type, model_count, models = result
+                    entry = _build_server_entry(
+                        svc.hostname,
+                        svc.port,
+                        svc.ip_address,
+                        actual_type or server_type,
+                        model_count,
+                        models,
+                    )
+                    entry["metadata"]["source"] = "mdns_service"
+                    entry["metadata"]["service_type"] = service_type
+                    discovered.append(entry)
+                    logger.info(
+                        f"[LLM_DISCOVERY] Found {actual_type} via {service_type}: {url}"
+                    )
+        except Exception as e:
+            logger.debug(f"[LLM_DISCOVERY] Error browsing {service_type}: {e}")
+
+    return discovered
 
 
 async def _probe_llm_endpoint(url: str) -> Optional[Tuple[str, int, List[str]]]:

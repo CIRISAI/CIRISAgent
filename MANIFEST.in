@@ -22,8 +22,8 @@ recursive-include ciris_adapters *.yaml
 recursive-include ciris_adapters *.txt
 
 # CIRIS Desktop app (Kotlin Compose Multiplatform)
-# Desktop UberJar is built by CI and bundled in the wheel
-recursive-include ciris_engine/desktop_app *.jar
+# Desktop UberJar + bundled jlinked JRE are built by CI and shipped in the wheel
+recursive-include ciris_engine/desktop_app *
 
 # Exclude test and build artifacts
 global-exclude *.pyc

@@ -18,16 +18,36 @@ from pathlib import Path
 from typing import Optional
 
 
+def _java_exe_name() -> str:
+    return "java.exe" if sys.platform == "win32" else "java"
+
+
+def find_bundled_jre() -> Optional[str]:
+    """Find the fat-wheel bundled JRE shipped under ciris_engine/desktop_app/jre/."""
+    bundled = Path(__file__).parent / "desktop_app" / "jre" / "bin" / _java_exe_name()
+    if bundled.exists():
+        return str(bundled)
+    return None
+
+
 def find_java() -> Optional[str]:
-    """Find Java executable."""
-    # Check JAVA_HOME first
+    """Find Java executable.
+
+    Preference order:
+      1. Bundled JRE shipped in the wheel (standalone install).
+      2. JAVA_HOME.
+      3. ``java`` on PATH.
+    """
+    bundled = find_bundled_jre()
+    if bundled:
+        return bundled
+
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
-        java_path = Path(java_home) / "bin" / "java"
+        java_path = Path(java_home) / "bin" / _java_exe_name()
         if java_path.exists():
             return str(java_path)
 
-    # Check PATH
     java = shutil.which("java")
     if java:
         return java

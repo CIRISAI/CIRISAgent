@@ -52,17 +52,40 @@ _JAR_PLATFORM_MAP = {
 }
 
 
+def _detect_host_wheel_tag():
+    """Fallback: derive a PEP 427 platform tag from the current interpreter host.
+
+    Used when a bundled JRE is present but no JAR filename is available to
+    imply the target platform.
+    """
+    import platform
+    import sys
+
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        return "macosx_11_0_arm64" if machine in {"arm64", "aarch64"} else "macosx_10_15_x86_64"
+    if sys.platform.startswith("linux"):
+        return "manylinux2014_x86_64" if machine in {"x86_64", "amd64"} else None
+    if sys.platform == "win32":
+        return "win_amd64" if machine in {"amd64", "x86_64"} else None
+    return None
+
+
 def _detect_jar_platform():
-    """Detect platform from the JAR filename in ciris_engine/desktop_app/."""
-    jar_dir = Path(__file__).parent / "ciris_engine" / "desktop_app"
-    if not jar_dir.exists():
+    """Detect platform from the bundled JAR and/or jlinked JRE in ciris_engine/desktop_app/."""
+    desktop_dir = Path(__file__).parent / "ciris_engine" / "desktop_app"
+    if not desktop_dir.exists():
         return None
-    for jar in jar_dir.glob("CIRIS-*.jar"):
+    for jar in desktop_dir.glob("CIRIS-*.jar"):
         # JAR names: CIRIS-macos-arm64-2.0.0.jar, CIRIS-linux-x64-2.0.0.jar, etc.
         stem = jar.stem  # e.g. "CIRIS-macos-arm64-2.0.0"
         for jar_suffix, wheel_tag in _JAR_PLATFORM_MAP.items():
             if jar_suffix in stem:
                 return wheel_tag
+    # A bundled JRE is inherently platform-specific even without a JAR: its
+    # native binaries only run on the host they were jlinked for.
+    if (desktop_dir / "jre" / "bin").exists():
+        return _detect_host_wheel_tag()
     return None
 
 
@@ -152,6 +175,8 @@ setup(
         "ciris_engine": [
             "ciris_templates/*.yaml",  # Bundled agent identity templates
             "desktop_app/*.jar",  # CIRIS Desktop app (Kotlin Compose)
+            "desktop_app/*.txt",  # Third-party license notices shipped with the JRE
+            "desktop_app/jre/**/*",  # Bundled jlinked JRE (fat wheel, standalone)
         ],
     },
     entry_points={

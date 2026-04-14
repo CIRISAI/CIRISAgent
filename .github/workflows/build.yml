@@ -320,6 +320,39 @@ jobs:
           ls -lh ../ciris_engine/desktop_app/
         shell: bash
 
+      # Fat wheel: embed a jlinked JRE next to the uberjar so `ciris-agent`
+      # runs on a machine with no system Java. `ALL-MODULE-PATH` keeps the
+      # runtime maximally compatible with anything the Compose uberjar pulls
+      # in (SPI providers, crypto, localedata, etc.).
+      - name: Bundle jlinked JRE
+        run: |
+          set -euo pipefail
+          JRE_DIR="ciris_engine/desktop_app/jre"
+          rm -rf "$JRE_DIR"
+          "$JAVA_HOME/bin/jlink" \
+            --module-path "$JAVA_HOME/jmods" \
+            --add-modules ALL-MODULE-PATH \
+            --no-header-files \
+            --no-man-pages \
+            --strip-debug \
+            --compress=2 \
+            --output "$JRE_DIR"
+          # Record Temurin attribution alongside the runtime so the wheel
+          # carries its license notice (GPLv2 + Classpath Exception).
+          if [ -f "$JRE_DIR/release" ]; then
+            cp "$JRE_DIR/release" ciris_engine/desktop_app/JRE_RELEASE.txt
+          fi
+          cat > ciris_engine/desktop_app/THIRD_PARTY_LICENSES.txt <<'EOF'
+          The ciris_engine/desktop_app/jre/ directory contains a minimized
+          OpenJDK runtime produced by `jlink` from Eclipse Temurin 17.
+          Temurin is distributed under the GNU General Public License v2
+          with the Classpath Exception: https://openjdk.org/legal/gplv2+ce.html
+          Source: https://adoptium.net/temurin/releases/
+          EOF
+          echo "Bundled JRE size:"
+          du -sh "$JRE_DIR" || true
+        shell: bash
+
       - name: Install build tools
         run: |
           pip install --upgrade pip
@@ -371,8 +404,8 @@ jobs:
 
       - name: Build headless wheel (no JAR)
         run: |
-          # Ensure no JAR is present so setup.py produces py3-none-any
-          rm -rf ciris_engine/desktop_app/*.jar
+          # Ensure no JAR or bundled JRE is present so setup.py produces py3-none-any
+          rm -rf ciris_engine/desktop_app/*.jar ciris_engine/desktop_app/jre
           python -m build --wheel
           ls -lh dist/
 

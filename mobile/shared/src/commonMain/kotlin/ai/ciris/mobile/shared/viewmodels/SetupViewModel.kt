@@ -107,37 +107,41 @@ class SetupViewModel : ViewModel() {
     // Source: SetupViewModel.kt:82-85
 
     /**
-     * Set the LLM setup mode (CIRIS_PROXY, BYOK, or LOCAL_ON_DEVICE).
-     *
-     * When the user picks [SetupMode.LOCAL_ON_DEVICE] we store the
-     * canonical backend provider id [LOCAL_ON_DEVICE_PROVIDER_ID]
-     * ("mobile_local") in `llmProvider`, not a display label. The id
-     * is what both the BYOK completion path and the settings save path
-     * use to decide whether an API key is required, and it is also the
-     * value written to the backend `/v1/config/setup/complete` payload.
-     * The human-readable label lives in [SettingsViewModel.availableProviders].
+     * Set the LLM setup mode (CIRIS_PROXY or BYOK).
      */
     fun setSetupMode(mode: SetupMode) {
-        val next = _state.value.copy(setupMode = mode)
-        _state.value = if (mode == SetupMode.LOCAL_ON_DEVICE) {
-            next.copy(
-                llmProvider = LOCAL_ON_DEVICE_PROVIDER_ID,
-                // On-device inference has no API key and defaults to the
-                // Mobile Local LLM loopback server on port 8091. Set both
-                // fields so the wizard summary and the completion payload
-                // stay internally consistent.
-                llmApiKey = "",
-                llmBaseUrl = LOCAL_ON_DEVICE_BASE_URL,
-                llmModel = LOCAL_ON_DEVICE_DEFAULT_MODEL,
-            )
-        } else {
-            next
-        }
+        _state.value = _state.value.copy(setupMode = mode)
+    }
+
+    /**
+     * Select the on-device Gemma 4 provider inside BYOK mode.
+     *
+     * This is a convenience wrapper the wizard UI calls when the user
+     * taps the "Mobile Local (On-Device)" option in the provider
+     * dropdown. It sets the canonical backend provider id
+     * [LOCAL_ON_DEVICE_PROVIDER_ID] in `llmProvider`, clears any
+     * previously entered API key, and pre-populates the loopback base
+     * URL the Python adapter serves on. Users can still come back and
+     * choose a different provider (e.g. OpenAI as a backup) if they
+     * want cloud fallback — the on-device adapter runs in parallel at
+     * [Priority.HIGH] so the LLM bus routes local-first.
+     */
+    fun selectLocalOnDeviceProvider() {
+        _state.value = _state.value.copy(
+            setupMode = SetupMode.BYOK,
+            llmProvider = LOCAL_ON_DEVICE_PROVIDER_ID,
+            llmApiKey = "",
+            llmBaseUrl = LOCAL_ON_DEVICE_BASE_URL,
+            llmModel = LOCAL_ON_DEVICE_DEFAULT_MODEL,
+        )
     }
 
     companion object {
         /** Canonical backend provider id for on-device Gemma 4 inference. */
         const val LOCAL_ON_DEVICE_PROVIDER_ID = "mobile_local"
+
+        /** Display label shown in the BYOK provider dropdown. */
+        const val LOCAL_ON_DEVICE_DISPLAY_NAME = "Mobile Local (On-Device)"
 
         /** Default model id used when the user picks on-device mode. */
         const val LOCAL_ON_DEVICE_DEFAULT_MODEL = "gemma-4-e2b"
@@ -1237,11 +1241,14 @@ class SetupViewModel : ViewModel() {
 
         val currentState = _state.value
 
-        // On-device inference does not hit any external endpoint, so there
-        // is nothing to validate here — the device capability probe is the
-        // validation step for this mode. Return success immediately so the
-        // wizard's "Test connection" action does not appear broken.
-        if (currentState.setupMode == SetupMode.LOCAL_ON_DEVICE) {
+        // On-device inference does not hit any external endpoint, so
+        // there is nothing to validate here — the device capability
+        // probe is the validation step for this provider. Return
+        // success immediately so the wizard's "Test connection" action
+        // does not appear broken.
+        val providerLower = currentState.llmProvider.lowercase()
+        if (providerLower == LOCAL_ON_DEVICE_PROVIDER_ID ||
+            providerLower.startsWith("mobile local")) {
             val ok = LlmValidationResult(
                 valid = true,
                 message = "On-device inference — no remote endpoint to validate",
@@ -1262,6 +1269,8 @@ class SetupViewModel : ViewModel() {
                 "LocalAI" -> "local"
                 "OpenAI Compatible" -> "openai_compatible"
                 "Azure OpenAI" -> "other"
+                LOCAL_ON_DEVICE_PROVIDER_ID, LOCAL_ON_DEVICE_DISPLAY_NAME ->
+                    LOCAL_ON_DEVICE_PROVIDER_ID
                 else -> "openai"
             },
             api_key = currentState.llmApiKey,
@@ -1404,9 +1413,9 @@ class SetupViewModel : ViewModel() {
                 signing_key_id = nodeFlowData?.keyId
             )
         } else {
-            // BYOK mode and LOCAL_ON_DEVICE mode share the same completion
-            // payload shape — the only differences are the provider id and
-            // the API-key handling, which are both no-op for on-device.
+            // BYOK mode — user-provided API key, or keyless providers
+            // (LocalAI / Ollama, or on-device Gemma 4 via the
+            // mobile_local adapter).
             val providerId = when (currentState.llmProvider) {
                 "OpenAI" -> "openai"
                 "OpenRouter" -> "openrouter"
@@ -1417,10 +1426,12 @@ class SetupViewModel : ViewModel() {
                 "Azure OpenAI" -> "other"
                 "LocalAI", "Local LLM" -> "local"
                 "OpenAI Compatible" -> "openai_compatible"
-                // setSetupMode(LOCAL_ON_DEVICE) stores the canonical id
-                // directly, so this branch is taken when the user picked
-                // the on-device option in the wizard.
-                LOCAL_ON_DEVICE_PROVIDER_ID -> LOCAL_ON_DEVICE_PROVIDER_ID
+                // Both the canonical id and the display label funnel to
+                // the same backend provider id. Using the canonical id
+                // end-to-end means the agent writes it straight into
+                // `.env` so the Python adapter picks it up verbatim.
+                LOCAL_ON_DEVICE_PROVIDER_ID, LOCAL_ON_DEVICE_DISPLAY_NAME ->
+                    LOCAL_ON_DEVICE_PROVIDER_ID
                 else -> "openai"
             }
 

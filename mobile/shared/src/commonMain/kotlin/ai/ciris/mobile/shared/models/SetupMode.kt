@@ -11,13 +11,13 @@ import kotlinx.serialization.Serializable
  *   Uses Google ID token with llm01.ciris-services-* proxy
  *
  * - BYOK: Bring Your Own Key
- *   User provides their own API key from OpenAI/Anthropic/etc
+ *   User provides their own API key from OpenAI/Anthropic/etc/on-device
  *
- * - LOCAL_ON_DEVICE: Run Gemma 4 via the `mobile_local_llm` adapter
- *   directly on the phone. Only offered in the wizard when the
- *   [ai.ciris.mobile.shared.platform.probeLocalInferenceCapability]
- *   probe reports a capable device. On iOS this option is shown
- *   as "coming soon" until an adequate LiteRT-LM model ships.
+ * On-device Gemma 4 inference lives under BYOK as the "mobile_local"
+ * provider so it can coexist with other providers: the Python
+ * LLMBus picks between installed providers by priority, which means a
+ * capable phone can run local-first with cloud fallback (or vice versa)
+ * simply by having both adapters loaded.
  */
 @Serializable
 enum class SetupMode {
@@ -29,16 +29,8 @@ enum class SetupMode {
 
     /**
      * Bring Your Own Key - user provides their own LLM API key.
-     * Supports OpenAI, Anthropic, Azure OpenAI, LocalAI, etc.
+     * Supports OpenAI, Anthropic, Azure OpenAI, LocalAI, on-device
+     * Gemma 4 (via the mobile_local_llm adapter), etc.
      */
-    BYOK,
-
-    /**
-     * On-device inference via the Mobile Local LLM adapter.
-     * Only available on phones whose capability probe returns a
-     * CAPABLE_E2B or CAPABLE_E4B tier. Selecting this mode sets
-     * `CIRIS_MOBILE_LOCAL_LLM_ENABLED=true` so the Python runtime
-     * spawns the on-device inference server on next restart.
-     */
-    LOCAL_ON_DEVICE
+    BYOK
 }

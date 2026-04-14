@@ -6,7 +6,6 @@ import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
 import ai.ciris.mobile.shared.platform.LocalInferenceCapability
-import ai.ciris.mobile.shared.platform.LocalInferenceTier
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getPlatform
@@ -1282,19 +1281,6 @@ private fun LlmConfigurationStep(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // On-device Gemma 4 option. Shown only when the device capability
-        // probe reports a capable mobile phone, or when the platform is iOS
-        // with capable hardware but no model bundle installed yet (stub).
-        // Hidden entirely on desktop and low-spec devices so the wizard is
-        // not cluttered with options that cannot run.
-        if (!localInference.isHidden) {
-            LocalInferenceOptionCard(
-                capability = localInference,
-                isSelected = state.setupMode == SetupMode.LOCAL_ON_DEVICE,
-                onSelect = { viewModel.setSetupMode(SetupMode.LOCAL_ON_DEVICE) },
-            )
-        }
-
         // CIRIS Proxy card (for Google users in CIRIS_PROXY mode)
         if (state.isGoogleAuth && state.setupMode == SetupMode.CIRIS_PROXY) {
             Surface(
@@ -1385,12 +1371,8 @@ private fun LlmConfigurationStep(
             }
         }
 
-        // BYOK configuration (shown when in BYOK mode or for non-Google
-        // users). Hidden when the user picked on-device inference —
-        // that mode owns its entire card above and needs no API key,
-        // base URL, or model text input.
-        if (state.setupMode != SetupMode.LOCAL_ON_DEVICE &&
-            (state.setupMode == SetupMode.BYOK || !state.isGoogleAuth)) {
+        // BYOK configuration (shown when in BYOK mode or for non-Google users)
+        if (state.setupMode == SetupMode.BYOK || !state.isGoogleAuth) {
             // Provider selection
             Text(
                 text = localizedString("mobile.setup_provider"),
@@ -1401,8 +1383,16 @@ private fun LlmConfigurationStep(
             )
 
             var providerExpanded by remember { mutableStateOf(false) }
-            // Use dynamic provider list from ViewModel
+
+            // Dynamic provider list from ViewModel - includes:
+            // - Cloud/hosted providers (OpenAI, Anthropic, etc.)
+            // - Discovered local servers (Ollama, llama.cpp, etc.)
+            // - On-device Gemma 4 (when localInference.isReady or .isComingSoon)
             val providers = viewModel.availableProviders
+
+            // Add on-device option if capable (mobile or desktop with sufficient resources)
+            val showOnDeviceProvider = localInference.isReady || localInference.isComingSoon
+            val onDeviceEntry = SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
 
             // Get display name for current provider
             val currentProviderDisplay = providers.find { it.first == state.llmProvider }?.second ?: state.llmProvider
@@ -1442,6 +1432,44 @@ private fun LlmConfigurationStep(
                             modifier = Modifier.testableClickable("menu_provider_$key") {
                                 viewModel.setLlmProvider(key)
                                 providerExpanded = false
+                            }
+                        )
+                    }
+
+                    // Show on-device option if capable (includes DESKTOP_CAPABLE)
+                    if (showOnDeviceProvider) {
+                        val isStub = localInference.isComingSoon
+                        // iOS-stub devices still advertise the option so
+                        // users know it exists, but the click is disabled
+                        // until a model bundle is installed.
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = if (isStub) {
+                                            "$onDeviceEntry — Coming Soon"
+                                        } else {
+                                            onDeviceEntry
+                                        },
+                                        color = if (isStub) SetupColors.TextSecondary else SetupColors.TextPrimary,
+                                    )
+                                    Text(
+                                        text = localInference.reason,
+                                        color = SetupColors.TextSecondary,
+                                        fontSize = 11.sp,
+                                    )
+                                }
+                            },
+                            enabled = !isStub,
+                            onClick = {
+                                viewModel.selectLocalOnDeviceProvider()
+                                providerExpanded = false
+                            },
+                            modifier = Modifier.testableClickable("menu_provider_mobile_local") {
+                                if (!isStub) {
+                                    viewModel.selectLocalOnDeviceProvider()
+                                    providerExpanded = false
+                                }
                             }
                         )
                     }
@@ -1518,9 +1546,15 @@ private fun LlmConfigurationStep(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // API Key input (optional for local providers)
-            if (state.llmProvider !in listOf("local", "local_inference")) {
-                val apiKeyLabel = if (isLocalProvider) {
+            // API Key input: skip for local/keyless providers
+            // - LocalAI (uses Ollama with no key)
+            // - local, local_inference (discovered local servers)
+            // - mobile_local (on-device Gemma 4)
+            val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
+                state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
+            val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
+            if (!isLocalProvider && !isMobileLocalProvider) {
+                val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
                     "API Key (optional)"
                 } else {
                     localizedString("mobile.setup_api_key_label")
@@ -1776,7 +1810,7 @@ private fun LlmConfigurationStep(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().testable("btn_test_connection"),
-                enabled = !isTesting && (isLocalProvider || state.llmApiKey.isNotEmpty()),
+                enabled = !isTesting && (isLocalProvider || isMobileLocalProvider || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary
                 )
@@ -1830,99 +1864,6 @@ private fun LlmConfigurationStep(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * Card for selecting on-device Gemma 4 inference during setup.
- *
- * Three visible states, driven by [LocalInferenceCapability]:
- *
- * 1. Capable (E2B or E4B) — card is selectable and, when selected,
- *    highlighted. Shows the tier so the user knows which model will run.
- * 2. iOS stub — card is shown but disabled, labelled "Coming soon".
- *    Lets the user know the path exists without offering a broken click.
- * 3. Incapable — card is not rendered (handled by the caller via
- *    [LocalInferenceCapability.isHidden]).
- */
-@Composable
-private fun LocalInferenceOptionCard(
-    capability: LocalInferenceCapability,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-) {
-    val isStub = capability.isComingSoon
-    val backgroundColor = when {
-        isSelected -> SetupColors.SuccessLight
-        isStub -> SetupColors.InfoLight
-        else -> SetupColors.InfoLight
-    }
-    val titleColor = if (isStub) SetupColors.InfoDark else SetupColors.SuccessDark
-    val bodyColor = if (isStub) SetupColors.InfoText else SetupColors.SuccessText
-
-    val tierLabel = when (capability.tier) {
-        LocalInferenceTier.CAPABLE_E4B -> "Gemma 4 E4B"
-        LocalInferenceTier.CAPABLE_E2B -> "Gemma 4 E2B"
-        LocalInferenceTier.IOS_STUB -> "Coming soon"
-        LocalInferenceTier.INCAPABLE -> "Unavailable"
-    }
-
-    val titleText = if (isStub) {
-        "On-Device (Coming Soon)"
-    } else {
-        "On-Device Local — $tierLabel"
-    }
-
-    val cardModifier = Modifier
-        .fillMaxWidth()
-        .padding(bottom = 16.dp)
-        .then(
-            if (!isStub) {
-                Modifier.testableClickable("btn_select_local_on_device") { onSelect() }
-            } else {
-                Modifier.testable("card_local_on_device_stub")
-            }
-        )
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = backgroundColor,
-        modifier = cardModifier,
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 8.dp),
-            ) {
-                Text(
-                    text = if (isSelected) "✓" else if (isStub) "⏳" else "📱",
-                    color = titleColor,
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
-                Text(
-                    text = titleText,
-                    color = titleColor,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Text(
-                text = capability.reason,
-                color = bodyColor,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-            if (capability.totalRamGb > 0.0) {
-                val rounded = (capability.totalRamGb * 10).toLong() / 10.0
-                Text(
-                    text = "Detected device RAM: $rounded GB",
-                    color = bodyColor,
-                    fontSize = 12.sp,
-                )
             }
         }
     }

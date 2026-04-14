@@ -397,17 +397,21 @@ data class SetupFormState(
                     // CIRIS proxy mode - need Google auth token
                     googleIdToken != null
                 } else if (setupMode == SetupMode.BYOK) {
-                    // BYOK mode - need provider and API key (unless local provider)
-                    if (llmProvider in listOf("local", "local_inference", "LocalAI")) {
-                        true
-                    } else {
-                        llmApiKey.isNotEmpty()
-                    }
+                    // BYOK mode - need provider and API key unless the provider is keyless.
+                    // Keyless providers: local inference servers (Ollama, llama.cpp),
+                    // discovered local servers, or on-device mobile_local adapter.
+                    val providerLower = llmProvider.lowercase()
+                    val isKeyless = providerLower == "localai" ||
+                        providerLower == "local" ||
+                        providerLower == "local_inference" ||
+                        providerLower == "mobile_local" ||
+                        providerLower.startsWith("mobile local") ||
+                        providerLower.startsWith("local inference")
+                    isKeyless || llmApiKey.isNotEmpty()
                 } else if (setupMode == SetupMode.LOCAL_ON_DEVICE) {
-                    // On-device inference — the capability probe already
-                    // gated the UI option itself, and the Python adapter
-                    // runs a second probe at runtime, so no API key or
-                    // further input is required to progress.
+                    // On-device inference — the capability probe already gated
+                    // the UI option, and the Python adapter probes at runtime.
+                    // No API key required.
                     true
                 } else {
                     false // No mode selected
@@ -462,11 +466,19 @@ data class SetupFormState(
             }
 
             SetupStep.LLM_CONFIGURATION -> {
+                // Keyless providers skip the API-key requirement: LocalAI
+                // (Ollama) and on-device Gemma 4 via the Mobile Local LLM
+                // adapter (`mobile_local`).
+                val providerLower = llmProvider.lowercase()
+                val isKeylessProvider = providerLower == "localai" ||
+                    providerLower == "local" ||
+                    providerLower == "mobile_local" ||
+                    providerLower.startsWith("mobile local")
                 when {
                     setupMode == null -> LocalizationHelper.getString("setup_validation_select_mode")
                     setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->
                         LocalizationHelper.getString("setup_validation_google_required")
-                    setupMode == SetupMode.BYOK && llmProvider != "LocalAI" && llmApiKey.isEmpty() ->
+                    setupMode == SetupMode.BYOK && !isKeylessProvider && llmApiKey.isEmpty() ->
                         LocalizationHelper.getString("setup_validation_api_key_required")
                     else -> null
                 }

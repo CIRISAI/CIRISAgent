@@ -479,11 +479,6 @@ class CIRISVerify:
             self._lib.ciris_verify_delete_key.argtypes = [ctypes.c_void_p]
             self._lib.ciris_verify_delete_key.restype = ctypes.c_int
 
-            # ciris_verify_generate_key(handle) -> i32
-            # CRITICAL: Must set argtypes or ctypes truncates 64-bit pointers!
-            self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
-            self._lib.ciris_verify_generate_key.restype = ctypes.c_int
-
             # ciris_verify_sign_ed25519(handle, data, data_len, sig_data, sig_len) -> i32
             self._lib.ciris_verify_sign_ed25519.argtypes = [
                 ctypes.c_void_p,                    # handle

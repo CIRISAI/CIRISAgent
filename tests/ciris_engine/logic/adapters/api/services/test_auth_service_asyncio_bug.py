@@ -193,12 +193,19 @@ class TestAuthServiceAsyncIOBug:
     def test_synchronous_init_with_mock(self):
         """Test that synchronous __init__ works when auth_service is None.
 
-        This simulates the fallback behavior when no auth service is provided.
+        The auth service no longer creates a fallback admin user.
+        Users are created via setup wizard or test fixtures.
         """
         # Create auth service without auth_service parameter
         auth_service = APIAuthService(auth_service=None)
 
-        # Should have created default admin user
+        # No users created by default (users created via setup wizard)
+        assert len(auth_service._users) == 0
+
+        # Test admin user can be added via fixture helper
+        from tests.fixtures.auth import setup_test_admin_user
+
+        setup_test_admin_user(auth_service)
         assert len(auth_service._users) == 1
         assert "wa-system-admin" in auth_service._users
 

@@ -31,7 +31,7 @@ async def run_qa_tests():
         print("\n1. AUTHENTICATION")
         print("-" * 40)
         try:
-            await client.authenticate(username="admin", password="ciris_admin_password")
+            await client.authenticate(username="admin", password="qa_test_password_12345")
             print(f"✓ Authentication successful")
             print(f"  Token: {client.auth_token[:20] if client.auth_token else 'N/A'}...")
             test_results["passed"] += 1
@@ -385,7 +385,7 @@ async def test_websocket():
     client = CIRISClient(base_url="http://localhost:9000")
 
     try:
-        await client.authenticate(username="admin", password="ciris_admin_password")
+        await client.authenticate(username="admin", password="qa_test_password_12345")
 
         # Connect WebSocket
         ws = await client.connect_websocket()

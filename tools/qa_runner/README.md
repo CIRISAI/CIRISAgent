@@ -76,7 +76,7 @@ python -m tools.qa_runner all --json --html --report-dir ./qa_reports
 
 ### Authentication
 - `--username USERNAME` - Admin username (default: admin)
-- `--password PASSWORD` - Admin password (default: ciris_admin_password)
+- `--password PASSWORD` - Admin password (default: qa_test_password_12345)
 
 ### Test Configuration
 - `--parallel` - Run tests in parallel

@@ -138,7 +138,7 @@ Press Ctrl+C to stop.
 
 Open your browser to: **http://localhost:3000**
 
-**Default credentials:** `admin` / `ciris_admin_password`
+**Credentials:** Set during setup wizard on first run
 
 The agent API is available at: **http://localhost:8080**
 

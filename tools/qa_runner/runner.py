@@ -269,20 +269,10 @@ class QARunner:
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 
         # Collect HTTP test cases
-        # Get dynamic password from server manager if available
+        # Get password from server manager (set during setup wizard completion)
         dynamic_password = None
         if hasattr(self, "server_manager") and self.server_manager:
-            try:
-                dynamic_password = self.server_manager.get_admin_password()
-            except ValueError:
-                # Password not extracted - try to extract again from console log
-                extracted = self.server_manager._extract_password_from_log()
-                if extracted:
-                    self.server_manager._extracted_password = extracted
-                    dynamic_password = extracted
-                    self.console.print(f"[dim]🔑 Re-extracted admin password from console log[/dim]")
-                else:
-                    self.console.print("[yellow]⚠️  Could not extract admin password - using config default[/yellow]")
+            dynamic_password = self.server_manager.get_admin_password()
 
         all_tests = []
         for module in http_modules:

@@ -96,7 +96,7 @@ echo "[4/8] Waiting for Login screen then logging in..."
 wait_screen "Login" 90
 sleep 1
 input_text "input_username" "admin"
-input_text "input_password" "ciris_admin_password"
+input_text "input_password" "qa_test_password_12345"
 click "btn_login_submit"
 wait_screen "Interact" 60
 echo "  Screen: $(screen)"

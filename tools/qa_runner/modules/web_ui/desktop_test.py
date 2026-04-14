@@ -55,7 +55,7 @@ async def main():
 
         elif command == "login":
             username = args[0] if len(args) > 0 else "admin"
-            password = args[1] if len(args) > 1 else "ciris_admin_password"
+            password = args[1] if len(args) > 1 else "qa_test_password_12345"
             print(f"Logging in as {username}...")
             success = await helper.login(username, password)
             print(f"Login: {'success' if success else 'FAILED'}")

@@ -191,13 +191,15 @@ def app():
 
     Note: CIRIS_TESTING_MODE is set by the autouse enable_testing_mode fixture.
     """
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
 
     # Initialize auth service (required for auth endpoints)
     app.state.auth_service = APIAuthService()
 
-    # Initialize auth service with dev mode if needed
-    app.state.auth_service._dev_mode = True
+    # Set up test admin user for auth (tests don't go through setup wizard)
+    setup_test_admin_user(app.state.auth_service)
 
     return app
 

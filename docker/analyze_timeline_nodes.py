@@ -8,7 +8,7 @@ def analyze_timeline():
     """Analyze timeline nodes and their edges."""
     # Login
     login_resp = requests.post(
-        "http://localhost:8080/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
+        "http://localhost:8080/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"}
     )
     token = login_resp.json()["access_token"]
 

@@ -117,7 +117,7 @@ Dynamic Services (per adapter):
 docker-compose -f docker-compose-api-mock.yml up -d
 
 # Access at http://localhost:8080
-# Default credentials: admin/ciris_admin_password
+# Complete setup wizard on first run to create credentials
 ```
 
 ### Local Development

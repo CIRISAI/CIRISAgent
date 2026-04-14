@@ -120,7 +120,7 @@ class DesktopAppTestRunner:
         self.results.append(result)
         return result
 
-    async def test_login_flow(self, username: str = "admin", password: str = "ciris_admin_password") -> bool:
+    async def test_login_flow(self, username: str = "admin", password: str = "qa_test_password_12345") -> bool:
         """Test the login flow on the desktop app."""
         print("\n🔐 Testing Login Flow")
 
@@ -345,7 +345,7 @@ Examples:
     parser.add_argument(
         "--password",
         default=None,
-        help="Password for desktop login test (default: ciris_admin_password)",
+        help="Password for desktop login test (default: qa_test_password_12345)",
     )
     parser.add_argument(
         "--message",
@@ -529,7 +529,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         elif args.command == "desktop-login":
             success = await runner.test_login_flow(
                 username=args.username or "admin",
-                password=args.password or "ciris_admin_password",
+                password=args.password or "qa_test_password_12345",
             )
             runner.print_summary()
             return 0 if success else 1

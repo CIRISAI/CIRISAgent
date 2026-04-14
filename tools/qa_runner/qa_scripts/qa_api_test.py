@@ -23,7 +23,7 @@ class APITestSuite:
         self.admin_token = None
         self.test_results = {}
 
-    def get_token(self, username: str = "admin", password: str = "ciris_admin_password") -> str:
+    def get_token(self, username: str = "admin", password: str = "qa_test_password_12345") -> str:
         """Get authentication token."""
         response = requests.post(f"{BASE_URL}/v1/auth/login", json={"username": username, "password": password})
         if response.status_code != 200:

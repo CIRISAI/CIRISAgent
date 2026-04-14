@@ -928,20 +928,13 @@ class APIServerManager:
     def get_admin_password(self) -> str:
         """Get the admin password to use for authentication.
 
-        Returns dynamically extracted password if available.
-        Falls back to config value only if it's not the auto-detect placeholder.
-
-        Raises:
-            ValueError: If no password is available
+        Returns extracted password (from setup) or config default.
+        Since QA runner always wipes data and uses setup wizard,
+        the password is always the known test password.
         """
         if self._extracted_password:
             return self._extracted_password
-        if self.config.admin_password and self.config.admin_password != "__auto_detect__":
-            return self.config.admin_password
-        raise ValueError(
-            "No admin password available. Server may not have printed credentials yet. "
-            "Try using --wipe-data to reset to first-run state."
-        )
+        return self.config.admin_password
 
     def _complete_qa_setup(self) -> bool:
         """Complete setup wizard to create test user when data was wiped.
@@ -952,6 +945,7 @@ class APIServerManager:
         self.console.print("[cyan]🔧 Completing setup to create test user...[/cyan]")
 
         # Use the config's admin credentials
+        # Use known test credentials (config defaults are qa_test_password_12345)
         setup_payload = {
             "llm_provider": "openai",
             "llm_api_key": "test-key-for-qa",
@@ -960,7 +954,7 @@ class APIServerManager:
             "enabled_adapters": ["api"],
             "adapter_config": {},
             "admin_username": self.config.admin_username,
-            "admin_password": self.config.admin_password if self.config.admin_password != "__auto_detect__" else "qa_test_password_12345",
+            "admin_password": self.config.admin_password,
             "agent_port": self.config.api_port,
         }
 

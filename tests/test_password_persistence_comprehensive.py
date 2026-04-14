@@ -206,7 +206,7 @@ async def test_default_admin_password_protection(auth_service):
     """Test that default admin password cannot be accidentally reset."""
     # Create default admin WA
     private_key, public_key = auth_service.generate_keypair()
-    default_password = "ciris_admin_password"  # Default from CLAUDE.md
+    default_password = "qa_test_password_12345"  # Default from CLAUDE.md
 
     admin_hash = auth_service.hash_password(default_password)
 
@@ -269,7 +269,7 @@ async def test_default_admin_no_accidental_reset(auth_service, temp_auth_db):
     """Test that admin password cannot be accidentally overwritten or reset."""
     # Create admin with default password
     private_key, public_key = auth_service.generate_keypair()
-    default_password = "ciris_admin_password"
+    default_password = "qa_test_password_12345"
     admin_hash = auth_service.hash_password(default_password)
 
     admin_wa = WACertificate(

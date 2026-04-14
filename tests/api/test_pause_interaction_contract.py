@@ -122,11 +122,13 @@ def stateful_runtime_control_service():
 @pytest.fixture
 def test_app(stateful_runtime_control_service, mock_communication_service):
     """Create test app with mocked services."""
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
 
-    # Set up APIAuthService in dev mode
+    # Set up APIAuthService with test admin user
     auth_service = APIAuthService()
-    auth_service._dev_mode = True
+    setup_test_admin_user(auth_service)
     app.state.auth_service = auth_service
 
     # Mock the service dependencies directly on app.state

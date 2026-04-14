@@ -168,7 +168,7 @@ async def main():
     """Main test runner."""
     # Test against production
     BASE_URL = "https://agents.ciris.ai/api/datum"
-    API_KEY = "admin:ciris_admin_password"
+    API_KEY = "admin:qa_test_password_12345"
 
     print(f"Testing SDK against: {BASE_URL}")
     print(f"Using auth: {'***' if API_KEY else 'None'}\n")

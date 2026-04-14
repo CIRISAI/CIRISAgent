@@ -342,7 +342,7 @@ class IdentityUpdateTests:
         # Login to get new token
         response = requests.post(
             f"{self._base_url}/v1/auth/login",
-            json={"username": "admin", "password": "ciris_admin_password"},
+            json={"username": "admin", "password": "qa_test_password_12345"},
             timeout=30,
         )
 

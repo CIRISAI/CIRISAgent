@@ -218,11 +218,10 @@ async def bootstrap_if_needed() -> None:
 2. **System WA Creation**: Creates system authority as child of root certificate
 3. **Key Storage**: Securely stores system WA private key for task signing
 
-### Default Credentials (Development)
+### Credentials (Development)
 
-- **Username**: `admin`
-- **Password**: `ciris_admin_password`
-- **Role**: AUTHORITY (for API access)
+Credentials are set during the setup wizard on first run.
+For QA testing, the runner creates: `admin` / `qa_test_password_12345`
 
 ## Integration Points
 

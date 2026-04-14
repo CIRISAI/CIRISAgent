@@ -45,12 +45,19 @@ def load_env_file(env_path: str = ".env") -> Dict[str, str]:
 
 
 def register_discord_adapter(
-    api_url: str = "http://localhost:8080", username: str = "admin", password: str = "ciris_admin_password"
+    api_url: str = "http://localhost:8080", username: str = "admin", password: Optional[str] = None
 ) -> None:
     """Register Discord adapter via CIRIS API."""
 
     # Load environment variables
     env_vars = load_env_file()
+
+    # Get password from environment or parameter
+    if password is None:
+        password = os.environ.get("CIRIS_API_PASSWORD")
+        if not password:
+            print("Error: CIRIS_API_PASSWORD not set. Use the password from setup wizard.")
+            sys.exit(1)
 
     # Check required Discord variables
     required_vars = ["DISCORD_BOT_TOKEN"]
@@ -190,7 +197,7 @@ if __name__ == "__main__":
     # Parse command line arguments
     api_url = os.environ.get("CIRIS_API_URL", "http://localhost:8080")
     username = os.environ.get("CIRIS_API_USER", "admin")
-    password = os.environ.get("CIRIS_API_PASSWORD", "ciris_admin_password")
+    password = os.environ.get("CIRIS_API_PASSWORD")  # Required - from setup wizard
 
     if len(sys.argv) > 1:
         api_url = sys.argv[1]

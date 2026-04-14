@@ -25,7 +25,7 @@ class APITestModule:
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": "ciris_admin_password"},
+                payload={"username": "admin", "password": "qa_test_password_12345"},
                 expected_status=200,
                 requires_auth=False,
             ),
@@ -184,7 +184,7 @@ python -m tools.qa_runner api_full billing
    - Records incidents log position
 
 2. **Authentication**
-   - Logs in with admin/ciris_admin_password
+   - Logs in with admin/qa_test_password_12345
    - Stores JWT token
 
 3. **HTTP Tests** (if any)

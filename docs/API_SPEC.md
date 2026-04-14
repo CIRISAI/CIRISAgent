@@ -21,7 +21,7 @@ This document provides a comprehensive reference for the CIRIS REST API, includi
 
 All API endpoints (except `/v1/system/health` and OAuth callbacks) require authentication. Three authentication methods are supported:
 
-1. **Basic Auth** - Development only (`admin:ciris_admin_password`)
+1. **Basic Auth** - Development only (credentials set via setup wizard)
 2. **Bearer Token** - API keys from login or API key creation
 3. **OAuth** - Google, GitHub, Discord
 
@@ -35,7 +35,7 @@ Authenticate with username and password to receive an API key.
 ```json
 {
   "username": "admin",
-  "password": "ciris_admin_password"
+  "password": "your_password_from_setup"
 }
 ```
 

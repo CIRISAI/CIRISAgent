@@ -112,10 +112,10 @@ class QAConfig:
     api_port: int = 8080  # Default API port (matches DEFAULT_API_PORT in constants.py)
 
     # Authentication
+    # QA runner always wipes data and uses setup wizard to create admin user
+    # with these known credentials (CIRIS_TEST_MODE allows "admin" username)
     admin_username: str = "admin"
-    # Password is auto-detected from server console output (dynamically generated)
-    # This is a fallback that won't work with fresh servers
-    admin_password: str = "__auto_detect__"
+    admin_password: str = "qa_test_password_12345"
 
     # OAuth test user configuration (for billing integration tests)
     oauth_test_user_id: str = "google:999888777666555444"
@@ -194,14 +194,6 @@ class QAConfig:
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
         effective_password = admin_password or self.admin_password
-
-        # Warn if falling back to auto-detect placeholder (tests will fail)
-        if effective_password == "__auto_detect__":
-            import logging
-            logging.warning(
-                "Admin password not extracted from server output. "
-                "Auth tests may fail. Try --wipe-data for clean state."
-            )
 
         # API test modules
         if module == QAModule.AUTH:

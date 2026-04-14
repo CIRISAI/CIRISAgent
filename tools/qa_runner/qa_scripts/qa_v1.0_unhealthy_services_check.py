@@ -16,7 +16,7 @@ async def check_unhealthy_services():
 
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
         # Login
-        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
+        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"})
         auth_data = response.json()
         token = auth_data["access_token"]
         client.headers["Authorization"] = f"Bearer {token}"

@@ -16,7 +16,7 @@ class CIRISClient:
     """Simple client for interacting with CIRIS API"""
 
     def __init__(
-        self, base_url: str = "http://localhost:8080", username: str = "admin", password: str = "ciris_admin_password"
+        self, base_url: str = "http://localhost:8080", username: str = "admin", password: str = "qa_test_password_12345"
     ):
         self.base_url = base_url.rstrip("/")
         self.token: Optional[str] = None

@@ -73,7 +73,7 @@ class MobileQAConfig:
 
     # Authentication (for tests that require it)
     admin_username: str = "admin"
-    admin_password: str = "ciris_admin_password"
+    admin_password: str = "qa_test_password_12345"
 
     # LLM configuration for setup
     llm_provider: str = "openai"

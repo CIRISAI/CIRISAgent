@@ -130,8 +130,12 @@ class TestStoreAndValidateAPIKey:
 
         assert result is None
 
-    def test_validate_creates_system_admin_user(self):
-        """validate_api_key creates system admin user if missing."""
+    def test_validate_key_without_user(self):
+        """validate_api_key works even if user doesn't exist in cache.
+
+        API key validation is separate from user existence.
+        Users are created via setup wizard, not auto-created.
+        """
         service = APIAuthService()
         key = "ciris_admin_sysadminkey123"
 
@@ -141,13 +145,15 @@ class TestStoreAndValidateAPIKey:
             role=UserRole.SYSTEM_ADMIN,
         )
 
-        # Clear the user
+        # Clear the user (simulates user not in cache)
         service._users.clear()
 
+        # Key validation should still succeed (key exists)
         result = service.validate_api_key(key)
-
         assert result is not None
-        assert "wa-system-admin" in service._users
+
+        # But user is NOT auto-created (users come from setup wizard)
+        assert "wa-system-admin" not in service._users
 
 
 class TestRevokeAPIKey:

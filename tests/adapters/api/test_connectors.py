@@ -20,8 +20,11 @@ def client_with_auth(test_db):
     """
     from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
 
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
     app.state.auth_service = APIAuthService()
+    setup_test_admin_user(app.state.auth_service)
 
     client = TestClient(app)
     client.auth_headers = make_login_request(client)

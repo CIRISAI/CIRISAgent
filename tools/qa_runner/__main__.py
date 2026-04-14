@@ -167,7 +167,7 @@ Available modules:
     parser.add_argument(
         "--wipe-data",
         action="store_true",
-        help="Wipe data directory before starting (clears stale state, resets to first-run)",
+        help="(Now automatic) Data is always wiped for clean QA state",
     )
 
     # Authentication
@@ -317,10 +317,10 @@ def main():
             print(f"❌ Failed to read API key: {e}")
             sys.exit(1)
 
-    # Auto-enable --wipe-data for multi-backend testing to ensure clean state
-    # (Without wipe, existing data may have different passwords causing auth failures)
-    if len(args.database_backends) > 1 and not args.wipe_data:
-        print("ℹ️  Auto-wiping data for multi-backend testing (clean state)")
+    # QA runner ALWAYS wipes data to ensure clean state and use setup wizard
+    # This ensures predictable test behavior with a known admin user/password
+    if not args.wipe_data:
+        print("ℹ️  Auto-wiping data for clean QA state (setup wizard creates test user)")
         import shutil
 
         data_dir = Path("data")

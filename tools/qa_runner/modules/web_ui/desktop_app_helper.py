@@ -421,7 +421,7 @@ class DesktopAppHelper:
     async def login(
         self,
         username: str = "admin",
-        password: str = "ciris_admin_password",
+        password: str = "qa_test_password_12345",
         timeout_ms: int = 10000,
     ) -> bool:
         """

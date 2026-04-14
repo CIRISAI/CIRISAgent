@@ -1274,8 +1274,8 @@ Examples:
     )
     portal_parser.add_argument(
         "--password",
-        default="ciris_admin_password",
-        help="CIRIS API password (default: ciris_admin_password)",
+        default="qa_test_password_12345",
+        help="CIRIS API password (default: qa_test_password_12345)",
     )
     portal_parser.add_argument(
         "--wait",
@@ -1342,7 +1342,7 @@ Examples:
         help="CIRIS API base URL (default: http://localhost:8080)",
     )
     la_parser.add_argument("--username", default="admin", help="Admin username to create")
-    la_parser.add_argument("--password", default="ciris_admin_password", help="Admin password to create")
+    la_parser.add_argument("--password", default="qa_test_password_12345", help="Admin password to create")
     la_parser.add_argument("--llm-provider", default="groq", help="LLM provider (default: groq)")
     la_parser.add_argument("--llm-key", default=None, help="LLM API key (overrides key file)")
     la_parser.add_argument(

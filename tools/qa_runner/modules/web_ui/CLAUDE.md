@@ -150,7 +150,7 @@ await helper.wait_for_element("btn_login", timeout=5000)
 await helper.wait_for_screen("Interact", timeout=10000)
 
 # High-level
-await helper.login(username="admin", password="ciris_admin_password")
+await helper.login(username="admin", password="qa_test_password_12345")
 await helper.navigate_to("Adapters")
 await helper.click_and_wait_for_screen("btn_login_submit", "Interact")
 

@@ -43,9 +43,11 @@ class TestSingleStepEndpoint:
 
         Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
         """
+        from tests.fixtures.auth import setup_test_admin_user
+
         app = create_app()
         app.state.auth_service = APIAuthService()
-        app.state.auth_service._dev_mode = True
+        setup_test_admin_user(app.state.auth_service)
         return app
 
     @pytest.fixture

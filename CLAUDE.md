@@ -662,10 +662,13 @@ python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-ba
 # 1. Start API server with mock LLM
 python main.py --adapter api --mock-llm --port 8000
 
-# 2. Get auth token (in another terminal)
+# 2. Complete setup wizard (first run) - creates admin user with your chosen password
+# Or for QA testing, use: python -m tools.qa_runner (auto-creates admin/qa_test_password_12345)
+
+# 3. Get auth token (use the password you set during setup)
 TOKEN=$(curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"ciris_admin_password"}' \
+  -d '{"username":"admin","password":"YOUR_PASSWORD_FROM_SETUP"}' \
   2>/dev/null | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
 # 3. Check telemetry (should show 35/35 services when fully working)
@@ -788,7 +791,7 @@ Long-running commands may need timeout parameters for CI operations and comprehe
 ## Important Reminders
 
 1. **OAuth Format**: `/v1/auth/oauth/{agent_id}/{provider}/callback`
-2. **Default Auth**: admin/ciris_admin_password (dev only)
+2. **Default Auth**: Set via setup wizard (QA runner uses admin/qa_test_password_12345)
 3. **Service Count**: 22 core services (complete, don't add more)
 4. **No Service Creates Services**: Only ServiceInitializer
 5. **Version After Changes**: Always bump version

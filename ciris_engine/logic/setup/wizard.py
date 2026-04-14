@@ -476,9 +476,7 @@ def run_setup_wizard() -> Path:
     print("  📡 API Endpoint:  http://localhost:8080/v1/")
     print("  📚 API Docs:      http://localhost:8080/docs")
     print()
-    print("Default credentials:")
-    print("  Username: admin")
-    print("  Password: ciris_admin_password")
+    print("Log in with the credentials you set during setup.")
     print()
 
     return save_path

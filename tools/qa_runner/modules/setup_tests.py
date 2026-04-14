@@ -302,7 +302,7 @@ class SetupTestModule:
                     "adapter_config": {},
                     "admin_username": "qa_test_user",
                     "admin_password": "qa_test_password_12345",
-                    "system_admin_password": "ciris_admin_password",  # Keep default to not break other tests
+                    "system_admin_password": "qa_test_password_12345",  # Keep default to not break other tests
                     "agent_port": 8080,
                 },
                 expected_status=200,

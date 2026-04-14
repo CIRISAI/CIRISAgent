@@ -473,7 +473,7 @@ check_setup_complete() {
     "adapter_config": {},
     "admin_username": "$ADMIN_USER",
     "admin_password": "$ADMIN_PASS",
-    "system_admin_password": "ciris_admin_password",
+    "system_admin_password": "qa_test_password_12345",
     "agent_port": 8080
 }
 EOF
@@ -541,9 +541,9 @@ check_auth() {
         fi
     fi
 
-    # Try default admin if custom user failed
+    # Try QA test admin if custom user failed
     if [ "$test_user" != "admin" ]; then
-        login_data='{"username":"admin","password":"ciris_admin_password"}'
+        login_data='{"username":"admin","password":"qa_test_password_12345"}'
         if response=$(http_post "$login_url" "$login_data" "$TIMEOUT" 2>/dev/null); then
             local token
             token=$(json_get "$response" "access_token")

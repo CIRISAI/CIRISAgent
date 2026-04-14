@@ -27,7 +27,7 @@ async def test_ciris_api():
         print("\n1. AUTHENTICATION")
         print("-" * 40)
 
-        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
+        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"})
         auth_data = response.json()
         token = auth_data["access_token"]
 

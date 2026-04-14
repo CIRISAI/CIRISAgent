@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from typing import Optional
@@ -21,11 +22,15 @@ import requests
 
 def get_auth_token(host: str = "localhost", port: int = 8080) -> Optional[str]:
     """Get authentication token from the API."""
+    password = os.environ.get("CIRIS_API_PASSWORD")
+    if not password:
+        print("❌ CIRIS_API_PASSWORD not set. Use the password from setup wizard.")
+        return None
     try:
         response = requests.post(
             f"http://{host}:{port}/v1/auth/login",
             headers={"Content-Type": "application/json"},
-            json={"username": "admin", "password": "ciris_admin_password"},
+            json={"username": "admin", "password": password},
             timeout=5,
         )
         if response.status_code == 200:

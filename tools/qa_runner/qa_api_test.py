@@ -13,7 +13,7 @@ BASE_URL = "http://localhost:8000"
 def get_token() -> str:
     """Get authentication token."""
     response = requests.post(
-        f"{BASE_URL}/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
+        f"{BASE_URL}/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"}
     )
     if response.status_code != 200:
         print(f"❌ Failed to get token: {response.status_code}")

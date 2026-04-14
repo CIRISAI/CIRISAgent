@@ -23,7 +23,7 @@ class APITelemetryTester:
     """Test telemetry endpoints."""
 
     def __init__(
-        self, base_url: str = "http://localhost:8000", username: str = "admin", password: str = "ciris_admin_password"
+        self, base_url: str = "http://localhost:8000", username: str = "admin", password: str = "qa_test_password_12345"
     ):
         self.base_url = base_url
         self.username = username
@@ -303,7 +303,7 @@ def main():
     parser.add_argument("--host", default="localhost", help="API host")
     parser.add_argument("--port", default=8000, type=int, help="API port")
     parser.add_argument("--username", default="admin", help="Auth username")
-    parser.add_argument("--password", default="ciris_admin_password", help="Auth password")
+    parser.add_argument("--password", default="qa_test_password_12345", help="Auth password")
     parser.add_argument("--monitor", action="store_true", help="Monitor mode")
     parser.add_argument("--interval", default=5, type=int, help="Monitor refresh interval")
 

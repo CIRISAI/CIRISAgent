@@ -181,7 +181,7 @@ class GraceFlow:
                     "-s",
                     "https://agents.ciris.ai/api/datum/v1/agent/status",
                     "-H",
-                    "Authorization: Bearer admin:ciris_admin_password",
+                    f"Authorization: Bearer {os.environ.get('CIRIS_DATUM_TOKEN', 'service:check_env')}",
                 ],
                 capture_output=True,
                 text=True,

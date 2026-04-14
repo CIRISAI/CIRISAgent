@@ -18,7 +18,7 @@ async def run_qa_tests():
 
     # Initialize client
     config = ClientConfig(
-        base_url="http://localhost:9000", username="admin", password="ciris_admin_password", timeout=30
+        base_url="http://localhost:9000", username="admin", password="qa_test_password_12345", timeout=30
     )
 
     client = CIRISClient(config)
@@ -231,7 +231,7 @@ async def test_websocket():
     print("\nWEBSOCKET TESTING")
     print("-" * 40)
 
-    config = ClientConfig(base_url="http://localhost:9000", username="admin", password="ciris_admin_password")
+    config = ClientConfig(base_url="http://localhost:9000", username="admin", password="qa_test_password_12345")
 
     client = CIRISClient(config)
     await client.connect()

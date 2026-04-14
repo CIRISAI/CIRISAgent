@@ -133,7 +133,7 @@ class APIClient:
             return self.is_first_run
         return False
 
-    def login(self, username: str = "admin", password: str = "ciris_admin_password") -> bool:
+    def login(self, username: str = "admin", password: str = "qa_test_password_12345") -> bool:
         """Login and store token. Falls back to first-run check on failure."""
         status, body = self.post("/v1/auth/login", {"username": username, "password": password})
         if status == 200 and "access_token" in body:

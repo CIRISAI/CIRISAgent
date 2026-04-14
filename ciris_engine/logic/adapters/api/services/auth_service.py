@@ -108,44 +108,6 @@ class APIAuthService:
     # Class-level instance counter to track re-initialization
     _instance_counter = 0
 
-    # SECURITY: One-time random password for fallback admin (generated per-process)
-    # This ensures the fallback admin password is never hardcoded in source
-    _fallback_admin_password: Optional[str] = None
-    _fallback_password_logged: bool = False
-
-    @classmethod
-    def _get_fallback_admin_password(cls) -> str:
-        """Get or generate the fallback admin password.
-
-        SECURITY: This generates a cryptographically random password once per process.
-        The password is printed ONCE to stdout so operators can use it during first-run setup.
-        After ROOT user is created, the fallback admin is disabled.
-        """
-        if cls._fallback_admin_password is None:
-            # Generate a secure random password
-            cls._fallback_admin_password = secrets.token_urlsafe(24)
-
-            # Print it ONCE so operator can see it during first-run or testing
-            # Use print() not logger to avoid duplicate outputs from multiple log handlers
-            if not cls._fallback_password_logged:
-                cls._fallback_password_logged = True
-                # Check if this is first-run or testing mode before printing credentials
-                from ciris_engine.logic.setup.first_run import is_first_run
-
-                testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
-                if is_first_run() or testing_mode:
-                    print("=" * 70)
-                    if testing_mode:
-                        print("TESTING MODE FALLBACK ADMIN CREDENTIALS:")
-                    else:
-                        print("FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):")
-                    print("  Username: admin")
-                    print(f"  Password: {cls._fallback_admin_password}")
-                    print("This password is randomly generated and valid only until setup completes.")
-                    print("=" * 70)
-
-        return cls._fallback_admin_password
-
     def __init__(self, auth_service: Optional[AuthenticationServiceProtocol] = None) -> None:
         # Track instance creation for debugging
         APIAuthService._instance_counter += 1
@@ -171,29 +133,7 @@ class APIAuthService:
 
         # Don't load from DB in __init__ - this causes asyncio.run() errors
         # Instead, we'll load lazily on first access
-        if not self._auth_service:
-            # Fallback: Initialize with system admin user if no auth service
-            # Only in testing mode - production requires setup wizard
-            # Skip if CIRIS_FORCE_FIRST_RUN is set (setup wizard will create the user)
-            testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
-            first_run_mode = os.environ.get("CIRIS_FORCE_FIRST_RUN", "").lower() in ("true", "1", "yes")
-            if testing_mode and not first_run_mode:
-                # SECURITY: Use randomly generated password, not hardcoded
-                now = datetime.now(timezone.utc)
-                admin_user = User(
-                    wa_id="wa-system-admin",
-                    name="admin",
-                    auth_type="password",
-                    api_role=APIRole.SYSTEM_ADMIN,
-                    wa_role=None,  # System admin is not a WA by default
-                    created_at=now,
-                    is_active=True,
-                    password_hash=self._hash_password(self._get_fallback_admin_password()),
-                )
-                self._users[admin_user.wa_id] = admin_user
-                self._users_loaded = True
-            else:
-                logger.debug("[AUTH SERVICE] No auth_service and not in testing mode - no fallback admin")
+        # Users are created via setup wizard (or test fixtures for unit tests)
 
     # ==========================================================================
     # Attestation Methods (delegate to infrastructure AuthenticationService)
@@ -337,39 +277,15 @@ class APIAuthService:
                 )
                 await self._process_wa_record(wa)
 
-            # Clear the fallback admin FIRST if it wasn't loaded from the database
-            # The fallback admin is only meant for when there's no auth_service
-            # If wa-system-admin is in the DB, it's a real user and should be kept
-            # IMPORTANT: This must happen BEFORE checking for has_admin, otherwise
-            # the fallback admin tricks the code into thinking admin exists
-            loaded_wa_ids = {wa.wa_id for wa in was}
-            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
-                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
-                del self._users["wa-system-admin"]
-
-            # Check if we need to create a default admin
-            # Skip if:
-            # 1. Any user named 'admin' exists, OR
-            # 2. Any ROOT user exists (setup wizard creates ROOT user with custom name)
+            # Log summary of users loaded
             has_admin_user = any(u.name == "admin" for u in self._users.values())
             has_root_user = any(u.wa_role == WARole.ROOT for u in self._users.values())
 
-            logger.info(f"CIRIS_USER_CREATE: Check default admin: has_admin={has_admin_user}, has_root={has_root_user}")
+            logger.info(f"CIRIS_USER_CREATE: has_admin={has_admin_user}, has_root={has_root_user}")
 
             if not has_admin_user and not has_root_user:
-                # Only create default admin in testing mode AND not in first-run mode
-                # First-run mode means setup wizard will create the user
-                testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
-                first_run_mode = os.environ.get("CIRIS_FORCE_FIRST_RUN", "").lower() in ("true", "1", "yes")
-                if testing_mode and not first_run_mode:
-                    logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - creating default admin (TESTING MODE)")
-                    await self._create_default_admin()
-                elif first_run_mode:
-                    logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - skipping default admin (FIRST RUN MODE - setup will create user)")
-                else:
-                    logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - setup wizard required (production mode)")
-            else:
-                logger.info("CIRIS_USER_CREATE: Skipping default admin creation - admin or ROOT already exists")
+                # No admin/ROOT - setup wizard required (in test mode, QA runner handles this)
+                logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - setup wizard required")
 
             logger.info(f"CIRIS_USER_CREATE: User loading complete. Total users in cache: {len(self._users)}")
             unique_users = {u.wa_id: u for u in self._users.values()}
@@ -382,75 +298,6 @@ class APIAuthService:
         except Exception as e:
             logger.error(f"CIRIS_USER_CREATE: Error loading users from database: {e}", exc_info=True)
             raise
-
-    async def _create_default_admin(self) -> None:
-        """Create the default admin user in the database.
-
-        NOTE: This is only called if no user named 'admin' exists in the database.
-        During first-run setup, the setup wizard creates the ROOT user, so this
-        should NOT be called in that flow.
-
-        SECURITY: Uses randomly generated password, not hardcoded.
-        """
-        if not self._auth_service:
-            logger.info("CIRIS_USER_CREATE: _create_default_admin skipped - no auth_service")
-            return
-
-        logger.info("=" * 70)
-        logger.info("CIRIS_USER_CREATE: _create_default_admin() called")
-        logger.info("=" * 70)
-
-        try:
-            # Check existing WAs before creating admin
-            existing_was = await self._auth_service.list_was(active_only=False)
-            logger.info(f"CIRIS_USER_CREATE: Existing WAs before default admin: {len(existing_was)}")
-            for wa in existing_was:
-                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
-
-            # Check if any ROOT user already exists - DON'T create another one
-            root_was = [wa for wa in existing_was if wa.role == WARole.ROOT]
-            if root_was:
-                logger.info(
-                    f"CIRIS_USER_CREATE: ROOT WA already exists ({root_was[0].wa_id}) - skipping default admin creation"
-                )
-                return
-
-            logger.info("CIRIS_USER_CREATE: No ROOT WA exists - creating default admin")
-
-            # SECURITY: Use randomly generated password, not hardcoded
-            fallback_password = self._get_fallback_admin_password()
-
-            # Create admin WA certificate
-            wa_cert = await self._auth_service.create_wa(
-                name="admin",
-                email="admin@ciris.local",
-                scopes=["*"],  # All permissions
-                role=WARole.ROOT,  # System admin gets ROOT role
-            )
-            logger.info(f"CIRIS_USER_CREATE: ✅ Created default admin WA: {wa_cert.wa_id}")
-
-            # Update with password hash (using random password)
-            await self._auth_service.update_wa(
-                wa_cert.wa_id, updates=None, password_hash=self._hash_password(fallback_password)
-            )
-            logger.info(f"CIRIS_USER_CREATE: Password set for default admin: {wa_cert.wa_id}")
-
-            # Add to cache
-            admin_user = User(
-                wa_id=wa_cert.wa_id,
-                name="admin",
-                auth_type="password",
-                api_role=APIRole.SYSTEM_ADMIN,
-                wa_role=WARole.ROOT,
-                created_at=wa_cert.created_at,
-                is_active=True,
-                password_hash=self._hash_password(fallback_password),
-            )
-            self._users[admin_user.wa_id] = admin_user
-            logger.info(f"CIRIS_USER_CREATE: Added default admin to user cache")
-
-        except Exception as e:
-            logger.error(f"CIRIS_USER_CREATE: Error creating default admin: {e}", exc_info=True)
 
     def _wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
         """Convert WA role to API role."""
@@ -553,22 +400,6 @@ class APIAuthService:
 
         # Update last used
         stored_key.last_used = datetime.now(timezone.utc)
-
-        # Ensure system admin user exists in _users
-        if stored_key.user_id == "wa-system-admin" and stored_key.user_id not in self._users:
-            # Re-create the system admin user with random password
-            # SECURITY: Use randomly generated password, not hardcoded
-            admin_user = User(
-                wa_id="wa-system-admin",
-                name="admin",
-                auth_type="password",
-                api_role=APIRole.SYSTEM_ADMIN,
-                wa_role=None,
-                created_at=datetime.now(timezone.utc),
-                is_active=True,
-                password_hash=self._hash_password(self._get_fallback_admin_password()),
-            )
-            self._users[admin_user.wa_id] = admin_user
 
         logger.debug(
             f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - SUCCESS: key valid for user={stored_key.user_id}, role={stored_key.role}"

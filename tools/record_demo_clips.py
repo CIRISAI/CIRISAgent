@@ -445,7 +445,7 @@ def do_login():
     print("  Logging in...")
     wait_for("input_username", 10000)
     input_text("input_username", "admin")
-    input_text("input_password", "ciris_admin_password")
+    input_text("input_password", "qa_test_password_12345")
     click("btn_login_submit")
     print("  Waiting for Interact screen...")
     wait_for("input_message", 30000)

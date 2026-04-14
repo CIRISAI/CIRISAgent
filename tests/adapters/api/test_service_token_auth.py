@@ -17,8 +17,12 @@ class TestServiceTokenAuthentication:
 
     @pytest.fixture
     def auth_service(self):
-        """Create auth service instance."""
-        return APIAuthService()
+        """Create auth service instance with test admin user."""
+        from tests.fixtures.auth import setup_test_admin_user
+
+        service = APIAuthService()
+        setup_test_admin_user(service)
+        return service
 
     @pytest.fixture
     def mock_request(self):

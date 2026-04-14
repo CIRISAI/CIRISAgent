@@ -141,8 +141,11 @@ def client_with_auth(test_db, mock_orchestrator):
     """
     from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
 
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
     app.state.auth_service = APIAuthService()
+    setup_test_admin_user(app.state.auth_service)
 
     with patch("ciris_engine.logic.adapters.api.routes.dsar_multi_source._initialize_orchestrator") as mock_init:
         mock_init.return_value = mock_orchestrator

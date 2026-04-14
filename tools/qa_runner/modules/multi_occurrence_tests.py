@@ -212,7 +212,7 @@ class MultiOccurrenceTestModule:
                 runner.console.print(f"[dim]Authenticating to occurrence_1 at {occ1_url}...[/dim]")
                 auth_response = requests.post(
                     f"{occ1_url}/v1/auth/login",
-                    json={"username": "admin", "password": "ciris_admin_password"},
+                    json={"username": "admin", "password": "qa_test_password_12345"},
                     timeout=10,
                 )
 
@@ -277,7 +277,7 @@ class MultiOccurrenceTestModule:
                 runner.console.print(f"[dim]Authenticating to occurrence_2 at {occ2_url}...[/dim]")
                 auth_response = requests.post(
                     f"{occ2_url}/v1/auth/login",
-                    json={"username": "admin", "password": "ciris_admin_password"},
+                    json={"username": "admin", "password": "qa_test_password_12345"},
                     timeout=10,
                 )
 

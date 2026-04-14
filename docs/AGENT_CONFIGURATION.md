@@ -87,14 +87,12 @@ After creating a Discord agent:
 5. Restart agent
 
 ### 2. API Authentication
-Default credentials:
-- Username: `admin`
-- Password: `ciris_admin_password`
+Credentials are set during the setup wizard on first run.
 
-To change:
+To reset:
 1. Stop agent
 2. Delete `/app/data/ciris_auth.db` in container
-3. Set new credentials via environment
+3. Restart - setup wizard will prompt for new credentials
 4. Restart agent
 
 ### 3. Persistent Storage

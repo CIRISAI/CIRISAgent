@@ -36,6 +36,70 @@ LOCALHOST_PORTS: List[Tuple[int, str]] = [
 PROBE_TIMEOUT = 2.0
 
 
+def _resolve_hostname(hostname: str) -> str:
+    """Resolve hostname to IP, returning hostname if resolution fails."""
+    try:
+        return socket.gethostbyname(hostname)
+    except socket.gaierror:
+        return hostname
+
+
+def _build_server_label(hostname: str, port: int, models: List[str]) -> str:
+    """Build a display label for a discovered server."""
+    label = f"{hostname}:{port}"
+    if models:
+        label += f" ({models[0]})" if len(models) == 1 else f" ({len(models)} models)"
+    return label
+
+
+def _build_server_entry(
+    hostname: str, port: int, ip: str, server_type: str, model_count: int, models: List[str]
+) -> Dict[str, Any]:
+    """Build a server entry dict for the discovered servers list."""
+    return {
+        "id": f"{ip}_{port}",
+        "label": _build_server_label(hostname, port, models),
+        "url": f"http://{ip}:{port}",
+        "server_type": server_type,
+        "model_count": model_count,
+        "models": models,
+        "metadata": {
+            "hostname": hostname,
+            "ip": ip,
+            "port": port,
+            "source": "hostname_probe" if hostname != "localhost" else "localhost_scan",
+        },
+    }
+
+
+def _generate_probe_targets(include_localhost: bool) -> List[Tuple[str, int]]:
+    """Generate list of (hostname, port) tuples to probe."""
+    targets: List[Tuple[str, int]] = []
+    for hostname, ports in PROBE_HOSTNAMES:
+        targets.extend((hostname, port) for port in ports)
+    if include_localhost:
+        targets.extend(("localhost", port) for port, _ in LOCALHOST_PORTS)
+    return targets
+
+
+async def _probe_and_build_entry(
+    hostname: str, port: int, seen_urls: set[str]
+) -> Optional[Dict[str, Any]]:
+    """Probe a single endpoint and return server entry if valid."""
+    url = f"http://{hostname}:{port}"
+    if url in seen_urls:
+        return None
+    seen_urls.add(url)
+
+    result = await _probe_llm_endpoint(url)
+    if not result:
+        return None
+
+    server_type, model_count, models = result
+    ip = _resolve_hostname(hostname)
+    return _build_server_entry(hostname, port, ip, server_type, model_count, models)
+
+
 async def discover_local_llm_servers(
     timeout_seconds: float = 5.0,
     include_localhost: bool = True,
@@ -51,69 +115,24 @@ async def discover_local_llm_servers(
     Returns:
         Tuple of (discovered_servers, discovery_methods_used)
     """
-    discovered: List[Dict[str, Any]] = []
-    methods_used: List[str] = []
     seen_urls: set[str] = set()
+    targets = _generate_probe_targets(include_localhost)
+    methods_used = ["hostname_probe"] + (["localhost_scan"] if include_localhost else [])
 
-    async def add_if_valid(url: str, hostname: str, port: int) -> None:
-        """Probe a URL and add to discovered if it's a valid LLM server."""
-        if url in seen_urls:
-            return
-        seen_urls.add(url)
+    # Probe all targets in parallel
+    tasks = [_probe_and_build_entry(h, p, seen_urls) for h, p in targets]
 
-        result = await _probe_llm_endpoint(url)
-        if result:
-            server_type, model_count, models = result
-            # Resolve hostname to IP for reliability
-            try:
-                ip = socket.gethostbyname(hostname)
-            except socket.gaierror:
-                ip = hostname
-
-            server_id = f"{ip}_{port}"
-            label = f"{hostname}:{port}"
-            if models:
-                label += f" ({models[0]})" if len(models) == 1 else f" ({len(models)} models)"
-
-            discovered.append({
-                "id": server_id,
-                "label": label,
-                "url": f"http://{ip}:{port}",
-                "server_type": server_type,
-                "model_count": model_count,
-                "models": models,
-                "metadata": {
-                    "hostname": hostname,
-                    "ip": ip,
-                    "port": port,
-                    "source": "hostname_probe" if hostname != "localhost" else "localhost_scan",
-                },
-            })
-
-    # Probe hostnames in parallel
-    tasks = []
-    for hostname, ports in PROBE_HOSTNAMES:
-        for port in ports:
-            url = f"http://{hostname}:{port}"
-            tasks.append(add_if_valid(url, hostname, port))
-    methods_used.append("hostname_probe")
-
-    # Probe localhost ports
-    if include_localhost:
-        for port, _ in LOCALHOST_PORTS:
-            url = f"http://localhost:{port}"
-            tasks.append(add_if_valid(url, "localhost", port))
-        methods_used.append("localhost_scan")
-
-    # Run all probes with overall timeout
     try:
-        await asyncio.wait_for(
+        results = await asyncio.wait_for(
             asyncio.gather(*tasks, return_exceptions=True),
             timeout=timeout_seconds,
         )
     except asyncio.TimeoutError:
         logger.warning("[LLM_DISCOVERY] Overall timeout reached during discovery")
+        results = []
 
+    # Filter out None results and exceptions
+    discovered = [r for r in results if isinstance(r, dict)]
     logger.info(f"[LLM_DISCOVERY] Discovered {len(discovered)} LLM servers")
     return discovered, methods_used
 

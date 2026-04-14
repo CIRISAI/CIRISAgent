@@ -283,6 +283,44 @@ class DiscoverLocalLLMResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if discovery partially failed")
 
 
+class StartLocalServerRequest(BaseModel):
+    """Request to start a local LLM inference server.
+
+    Used when the device is capable of running local inference but no server
+    is currently detected. The server will be started in the background.
+    """
+
+    server_type: str = Field(
+        default="llama_cpp",
+        description="Server type to start: llama_cpp, ollama",
+    )
+    model: str = Field(
+        default="gemma-4-e2b",
+        description="Model to load: gemma-4-e2b, gemma-4-e4b",
+    )
+    port: int = Field(
+        default=8080,
+        ge=1024,
+        le=65535,
+        description="Port for the server to listen on",
+    )
+
+
+class StartLocalServerResponse(BaseModel):
+    """Response from starting a local LLM server."""
+
+    success: bool = Field(..., description="Whether the server started successfully")
+    server_url: Optional[str] = Field(None, description="URL of the running server")
+    server_type: str = Field(..., description="Type of server started")
+    model: str = Field(..., description="Model loaded")
+    pid: Optional[int] = Field(None, description="Process ID of the server")
+    message: str = Field(..., description="Status message")
+    estimated_ready_seconds: int = Field(
+        default=60,
+        description="Estimated seconds until server is ready for requests",
+    )
+
+
 class SetupCompleteRequest(BaseModel):
     """Request to complete setup."""
 

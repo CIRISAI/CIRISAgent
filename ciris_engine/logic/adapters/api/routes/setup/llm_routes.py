@@ -22,6 +22,8 @@ from .models import (
     ListModelsResponse,
     LLMValidationRequest,
     LLMValidationResponse,
+    StartLocalServerRequest,
+    StartLocalServerResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,5 +226,56 @@ async def discover_local_llm(
                 total_count=0,
                 discovery_methods=[],
                 error=str(e),
+            )
+        )
+
+
+@router.post("/start-local-server", dependencies=[SetupOrAuthDep])
+async def start_local_server(
+    request: StartLocalServerRequest = StartLocalServerRequest(),
+) -> SuccessResponse[StartLocalServerResponse]:
+    """Start a local LLM inference server.
+
+    Used when the device is capable of running local inference but no server
+    is currently detected. Starts llama.cpp or Ollama in the background.
+
+    This operation may take 30-90 seconds as the model loads into memory.
+    The server runs with a keepalive and will stay running until shutdown.
+
+    After starting, call /discover-local-llm to find the running server.
+
+    Accessible without auth during first-run, or with auth after setup.
+    """
+    from .llm_discovery import start_local_llm_server
+
+    try:
+        result = await start_local_llm_server(
+            server_type=request.server_type,
+            model=request.model,
+            port=request.port,
+        )
+
+        return SuccessResponse(
+            data=StartLocalServerResponse(
+                success=result.get("success", False),
+                server_url=result.get("server_url"),
+                server_type=request.server_type,
+                model=request.model,
+                pid=result.get("pid"),
+                message=result.get("message", "Unknown status"),
+                estimated_ready_seconds=result.get("estimated_ready_seconds", 60),
+            )
+        )
+    except Exception as e:
+        logger.error(f"[START_LOCAL_SERVER] Failed to start server: {e}")
+        return SuccessResponse(
+            data=StartLocalServerResponse(
+                success=False,
+                server_url=None,
+                server_type=request.server_type,
+                model=request.model,
+                pid=None,
+                message=f"Failed to start server: {str(e)}",
+                estimated_ready_seconds=0,
             )
         )

@@ -191,3 +191,184 @@ def _detect_server_type_from_response(url: str, data: Dict[str, Any]) -> str:
 
     # Default to generic llama.cpp/OpenAI-compatible
     return "llama_cpp"
+
+
+async def start_local_llm_server(
+    server_type: str = "llama_cpp",
+    model: str = "gemma-4-e2b",
+    port: int = 8080,
+) -> Dict[str, Any]:
+    """Start a local LLM inference server.
+
+    Attempts to start llama.cpp or Ollama in the background with the
+    specified model. The server runs with keepalive enabled.
+
+    Args:
+        server_type: "llama_cpp" or "ollama"
+        model: Model to load (e.g., "gemma-4-e2b")
+        port: Port to listen on
+
+    Returns:
+        Dict with success, server_url, pid, message, estimated_ready_seconds
+    """
+    import os
+    import shutil
+    import subprocess
+
+    logger.info(f"[START_LOCAL_SERVER] Starting {server_type} on port {port} with model {model}")
+
+    # Find the server binary
+    if server_type == "ollama":
+        binary = shutil.which("ollama")
+        if not binary:
+            return {
+                "success": False,
+                "message": "Ollama not found. Install from https://ollama.ai",
+                "estimated_ready_seconds": 0,
+            }
+
+        # Start Ollama serve in background
+        try:
+            env = os.environ.copy()
+            env["OLLAMA_HOST"] = f"127.0.0.1:{port}"
+
+            process = subprocess.Popen(
+                [binary, "serve"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,  # Detach from parent
+            )
+
+            return {
+                "success": True,
+                "server_url": f"http://127.0.0.1:{port}",
+                "pid": process.pid,
+                "message": f"Ollama server started on port {port}. Pull model with: ollama pull {model}",
+                "estimated_ready_seconds": 30,
+            }
+        except Exception as e:
+            logger.error(f"[START_LOCAL_SERVER] Failed to start Ollama: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to start Ollama: {str(e)}",
+                "estimated_ready_seconds": 0,
+            }
+
+    elif server_type == "llama_cpp":
+        # Try common llama.cpp server binary names
+        binary = None
+        for name in ["llama-server", "llama.cpp-server", "server"]:
+            binary = shutil.which(name)
+            if binary:
+                break
+
+        # Also check common installation paths
+        if not binary:
+            common_paths = [
+                "/usr/local/bin/llama-server",
+                "/opt/llama.cpp/build/bin/llama-server",
+                os.path.expanduser("~/.local/bin/llama-server"),
+            ]
+            for path in common_paths:
+                if os.path.isfile(path) and os.access(path, os.X_OK):
+                    binary = path
+                    break
+
+        if not binary:
+            return {
+                "success": False,
+                "message": "llama.cpp server not found. Build from https://github.com/ggerganov/llama.cpp",
+                "estimated_ready_seconds": 0,
+            }
+
+        # Find model file
+        model_file = _find_model_file(model)
+        if not model_file:
+            return {
+                "success": False,
+                "message": f"Model file for '{model}' not found. Download GGUF from HuggingFace.",
+                "estimated_ready_seconds": 0,
+            }
+
+        # Start llama.cpp server
+        try:
+            cmd = [
+                binary,
+                "--model", model_file,
+                "--host", "127.0.0.1",
+                "--port", str(port),
+                "--ctx-size", "8192",  # Reasonable context for Gemma4
+                "--n-gpu-layers", "99",  # Use GPU if available
+            ]
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,  # Detach from parent
+            )
+
+            return {
+                "success": True,
+                "server_url": f"http://127.0.0.1:{port}",
+                "pid": process.pid,
+                "message": f"llama.cpp server started with {model}. Loading model...",
+                "estimated_ready_seconds": 60,  # Model loading takes time
+            }
+        except Exception as e:
+            logger.error(f"[START_LOCAL_SERVER] Failed to start llama.cpp: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to start llama.cpp: {str(e)}",
+                "estimated_ready_seconds": 0,
+            }
+
+    else:
+        return {
+            "success": False,
+            "message": f"Unknown server type: {server_type}. Use 'llama_cpp' or 'ollama'.",
+            "estimated_ready_seconds": 0,
+        }
+
+
+def _find_model_file(model: str) -> Optional[str]:
+    """Find a GGUF model file on disk.
+
+    Searches common model directories for the specified model.
+    """
+    import os
+    from pathlib import Path
+
+    # Map model names to file patterns
+    model_patterns = {
+        "gemma-4-e2b": ["gemma-4*-e2b*.gguf", "gemma-2*-e2b*.gguf", "gemma*e2b*.gguf"],
+        "gemma-4-e4b": ["gemma-4*-e4b*.gguf", "gemma-2*-e4b*.gguf", "gemma*e4b*.gguf"],
+    }
+
+    patterns = model_patterns.get(model, [f"*{model}*.gguf"])
+
+    # Common model directories
+    search_dirs = [
+        Path.home() / ".cache" / "llama.cpp",
+        Path.home() / ".local" / "share" / "llama.cpp" / "models",
+        Path.home() / "models",
+        Path("/usr/share/llama.cpp/models"),
+        Path("/opt/models"),
+    ]
+
+    # Add CIRIS model directory
+    ciris_home = os.environ.get("CIRIS_HOME")
+    if ciris_home:
+        search_dirs.insert(0, Path(ciris_home) / "models")
+
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for pattern in patterns:
+            matches = list(search_dir.glob(pattern))
+            if matches:
+                # Return the first match
+                return str(matches[0])
+
+    return None

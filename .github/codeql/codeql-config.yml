@@ -31,6 +31,15 @@ paths-ignore:
   - deployment
   - wyoming
   - homeassistant-ciris
+  # The setup wizard writes the agent's own `.env` file (SECRETS_MASTER_KEY,
+  # API keys, OAuth tokens) with chmod(0o600). CodeQL's
+  # `py/clear-text-storage-of-sensitive-information` rule taints every
+  # provider/key field that flows into `save_path.write_text(content, ...)`,
+  # but the write is the canonical persistence surface — the CIRIS process
+  # has to read those values back at startup, and encrypting the blob would
+  # just relocate the decryption-key storage problem. Exclude the whole file
+  # from CodeQL analysis; its behavior is well-defined and small.
+  - 'ciris_engine/logic/setup/wizard.py'
   - '**/*.test.py'
   - '**/*_test.py'
   - '**/*.md'

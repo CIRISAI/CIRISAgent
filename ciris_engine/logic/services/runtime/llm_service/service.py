@@ -1251,8 +1251,71 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # Together AI uses different format for disabling thinking
             # Format: {"thinking": {"type": "disabled"}}
             extra_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        elif self._is_local_endpoint(base_url):
+            # ALWAYS disable reasoning/thinking on local endpoints.
+            # CIRIS provides its own reasoning structure via the DMA pipeline -
+            # we don't need or want the model's built-in chain-of-thought.
+            # This also fixes Gemma 4 models which put responses in
+            # `reasoning_content` instead of `content` when thinking is enabled.
+            # See docs/GEMMA_4_COMPATIBILITY.md for details.
+            extra_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
+            logger.debug(
+                f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "
+                f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
+            )
 
         return extra_kwargs
+
+    def _is_local_endpoint(self, base_url: str) -> bool:
+        """Check if the endpoint is a local LLM server (not a cloud provider).
+
+        Returns True for local endpoints like llama.cpp, vLLM, ollama, LM Studio.
+        These need reasoning disabled since CIRIS provides its own reasoning.
+        """
+        if not base_url:
+            return False
+
+        base_url_lower = base_url.lower()
+
+        # Cloud providers that handle reasoning themselves or don't support it
+        cloud_providers = [
+            "ciris.ai",
+            "ciris-services",
+            "openrouter.ai",
+            "together.xyz",
+            "api.together",
+            "openai.com",
+            "api.openai",
+            "anthropic.com",
+            "api.anthropic",
+            "googleapis.com",
+            "generativelanguage.googleapis",
+            "groq.com",
+            "api.groq",
+        ]
+
+        if any(provider in base_url_lower for provider in cloud_providers):
+            return False
+
+        # Local indicators: localhost, local IPs, .local hostnames, common local ports
+        local_indicators = [
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "192.168.",
+            "10.0.",
+            "10.1.",
+            "172.16.",
+            ".local",
+            ":11434",  # Ollama default port
+            ":8080",   # llama.cpp default port
+            ":1234",   # LM Studio default port
+            ":8000",   # vLLM default port
+        ]
+
+        return any(indicator in base_url_lower for indicator in local_indicators)
 
     def _log_completion_details(self, completion: Any, image_count: int, thought_id: Optional[str]) -> None:
         """Log completion details for debugging."""

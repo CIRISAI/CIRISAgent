@@ -55,25 +55,30 @@ With `enable_thinking: false` the same model returns proper JSON in
 `content` and `finish_reason: stop` — CIRIS's instructor pipeline is
 satisfied without changes.
 
-## Fix (CIRIS side, pending)
+## Fix (CIRIS side, implemented ✅)
 
-A targeted patch in `ciris_engine/logic/services/runtime/llm_service/service.py`
-should:
+As of v2.4.4, CIRIS automatically disables reasoning/thinking mode on ALL
+local endpoints. This is done in `_build_extra_kwargs()` in
+`ciris_engine/logic/services/runtime/llm_service/service.py`:
 
-1. When the configured model matches a Gemma-4 family pattern (e.g. any
-   `gemma-4*` or `gemini-*it*` variant on a local endpoint), set
-   `extra_body={"chat_template_kwargs": {"enable_thinking": false}}` on
-   every `AsyncOpenAI.chat.completions.create` call so reasoning is
-   suppressed at the protocol level.
-2. Surface the real exception class when instructor retries exhaust, rather
-   than relabelling it `"Request timed out"` — the misleading error sent
-   operators down the DNS/timeout rabbit hole.
+```python
+# For local endpoints (llama.cpp, vLLM, ollama, LM Studio)
+extra_kwargs["extra_body"] = {
+    "chat_template_kwargs": {"enable_thinking": False}
+}
+```
 
-Until that lands, the workaround is to configure your inference server to
-default `enable_thinking` to `false` (most llama.cpp builds support this via
-`--chat-template-kwargs enable_thinking=false` or a server-side template
-override), or to use a non-reasoning model (e.g. `qwen2.5:3b`, `mistral-7b`,
-non-`it` Gemma variants).
+**Rationale**: CIRIS provides its own reasoning structure via the DMA
+(Decision Making Architecture) pipeline. We don't need or want the model's
+built-in chain-of-thought reasoning - it just slows things down and breaks
+instructor's JSON parsing.
+
+**Local endpoint detection** (`_is_local_endpoint()`):
+- Matches: `localhost`, `127.0.0.1`, `192.168.x`, `10.x`, `.local` hostnames
+- Matches common ports: `:11434` (Ollama), `:8080` (llama.cpp), `:1234` (LM Studio), `:8000` (vLLM)
+- Excludes cloud providers: `ciris.ai`, `openrouter.ai`, `openai.com`, etc.
+
+No manual configuration required - just point CIRIS at your local server.
 
 ## Reference log signature
 

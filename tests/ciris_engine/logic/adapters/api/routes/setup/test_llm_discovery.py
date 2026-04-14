@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import socket
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -12,45 +11,25 @@ import pytest
 
 from ciris_engine.logic.adapters.api.routes.setup.llm_discovery import (
     LOCALHOST_PORTS,
+    LLM_SERVICE_TYPES,
     PROBE_HOSTNAMES,
+    _batch_resolve_hostnames,
     _build_server_entry,
     _build_server_label,
     _detect_server_type_from_response,
+    _discover_via_mdns_services_parallel,
     _error_result,
     _find_llama_cpp_binary,
     _find_model_file,
     _generate_probe_targets,
-    _probe_and_build_entry,
+    _probe_endpoint_fast,
     _probe_llm_endpoint,
-    _resolve_hostname,
     _start_llama_cpp_server,
     _start_ollama_server,
     _success_result,
     discover_local_llm_servers,
     start_local_llm_server,
 )
-
-
-class TestResolveHostname:
-    """Tests for _resolve_hostname function."""
-
-    def test_resolve_hostname_success(self) -> None:
-        """Test successful hostname resolution."""
-        with patch("socket.gethostbyname", return_value="192.168.1.100"):
-            result = _resolve_hostname("jetson.local")
-            assert result == "192.168.1.100"
-
-    def test_resolve_hostname_failure_returns_hostname(self) -> None:
-        """Test that failed resolution returns the original hostname."""
-        with patch("socket.gethostbyname", side_effect=socket.gaierror):
-            result = _resolve_hostname("nonexistent.local")
-            assert result == "nonexistent.local"
-
-    def test_resolve_localhost(self) -> None:
-        """Test resolving localhost."""
-        with patch("socket.gethostbyname", return_value="127.0.0.1"):
-            result = _resolve_hostname("localhost")
-            assert result == "127.0.0.1"
 
 
 class TestBuildServerLabel:
@@ -208,6 +187,114 @@ class TestResultHelpers:
         assert result["estimated_ready_seconds"] == 30
 
 
+class TestBatchResolveHostnames:
+    """Tests for _batch_resolve_hostnames function."""
+
+    @pytest.mark.asyncio
+    async def test_resolves_multiple_hostnames(self) -> None:
+        """Test resolving multiple hostnames in parallel."""
+        async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
+            if hostname == "jetson.local":
+                return "192.168.1.100"
+            elif hostname == "ollama.local":
+                return "192.168.1.101"
+            return hostname
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.resolve_local_hostname",
+            side_effect=mock_resolve,
+        ):
+            result = await _batch_resolve_hostnames(
+                ["jetson.local", "ollama.local", "unknown.local"]
+            )
+
+            assert result["jetson.local"] == "192.168.1.100"
+            assert result["ollama.local"] == "192.168.1.101"
+            assert result["unknown.local"] == "unknown.local"
+
+    @pytest.mark.asyncio
+    async def test_handles_exceptions(self) -> None:
+        """Test that exceptions during resolution return the hostname."""
+        async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
+            if hostname == "error.local":
+                raise Exception("DNS error")
+            return "192.168.1.100"
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.resolve_local_hostname",
+            side_effect=mock_resolve,
+        ):
+            result = await _batch_resolve_hostnames(["good.local", "error.local"])
+
+            assert result["good.local"] == "192.168.1.100"
+            assert result["error.local"] == "error.local"
+
+    @pytest.mark.asyncio
+    async def test_empty_list(self) -> None:
+        """Test with empty hostname list."""
+        result = await _batch_resolve_hostnames([])
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_single_hostname(self) -> None:
+        """Test with single hostname."""
+        async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
+            return "10.0.0.1"
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.resolve_local_hostname",
+            side_effect=mock_resolve,
+        ):
+            result = await _batch_resolve_hostnames(["test.local"])
+            assert result["test.local"] == "10.0.0.1"
+
+
+class TestProbeEndpointFast:
+    """Tests for _probe_endpoint_fast function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_probe_fails(self) -> None:
+        """Test that None is returned when probe fails."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await _probe_endpoint_fast("jetson.local", 8080, "192.168.1.100")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_entry_on_success(self) -> None:
+        """Test that entry dict is returned on successful probe."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
+            new_callable=AsyncMock,
+            return_value=("llama_cpp", 1, ["gemma-4"]),
+        ):
+            result = await _probe_endpoint_fast("jetson.local", 8080, "192.168.1.100")
+
+            assert result is not None
+            assert result["id"] == "192.168.1.100_8080"
+            assert result["url"] == "http://192.168.1.100:8080"
+            assert result["server_type"] == "llama_cpp"
+            assert result["model_count"] == 1
+            assert result["models"] == ["gemma-4"]
+
+    @pytest.mark.asyncio
+    async def test_preserves_original_hostname(self) -> None:
+        """Test that the original hostname is preserved in metadata."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
+            new_callable=AsyncMock,
+            return_value=("ollama", 2, ["llama3", "mistral"]),
+        ):
+            result = await _probe_endpoint_fast("ollama.local", 11434, "10.0.0.50")
+
+            assert result is not None
+            assert result["metadata"]["hostname"] == "ollama.local"
+            assert result["metadata"]["ip"] == "10.0.0.50"
+
+
 class TestProbeLlmEndpoint:
     """Tests for _probe_llm_endpoint function."""
 
@@ -315,47 +402,101 @@ class TestProbeLlmEndpoint:
             assert result is None
 
 
-class TestProbeAndBuildEntry:
-    """Tests for _probe_and_build_entry function."""
+class TestDiscoverViaMdnsServicesParallel:
+    """Tests for _discover_via_mdns_services_parallel function."""
 
     @pytest.mark.asyncio
-    async def test_skips_seen_urls(self) -> None:
-        """Test that already-seen URLs are skipped."""
-        seen_urls: set[str] = {"http://localhost:8080"}
-        result = await _probe_and_build_entry("localhost", 8080, seen_urls)
-        assert result is None
+    async def test_browses_all_service_types(self) -> None:
+        """Test that all service types are browsed in parallel."""
+        browse_calls: List[str] = []
 
-    @pytest.mark.asyncio
-    async def test_returns_none_on_probe_failure(self) -> None:
-        """Test that None is returned when probe fails."""
-        seen_urls: set[str] = set()
+        async def mock_discover(service_type: str, timeout: float) -> List[Any]:
+            browse_calls.append(service_type)
+            return []
+
         with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
-            new_callable=AsyncMock,
-            return_value=None,
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.discover_services",
+            side_effect=mock_discover,
         ):
-            result = await _probe_and_build_entry("localhost", 9999, seen_urls)
-            assert result is None
-            assert "http://localhost:9999" in seen_urls
+            seen_urls: set[str] = set()
+            await _discover_via_mdns_services_parallel(1.5, seen_urls)
+
+            # Should browse all defined service types
+            assert len(browse_calls) == len(LLM_SERVICE_TYPES)
+            for service_type, _ in LLM_SERVICE_TYPES:
+                assert service_type in browse_calls
 
     @pytest.mark.asyncio
-    async def test_builds_entry_on_success(self) -> None:
-        """Test building entry on successful probe."""
-        seen_urls: set[str] = set()
+    async def test_returns_discovered_servers(self) -> None:
+        """Test that discovered servers are returned."""
+        mock_service = MagicMock()
+        mock_service.url = "http://192.168.1.100:11434"
+        mock_service.hostname = "ollama.local"
+        mock_service.port = 11434
+        mock_service.ip_address = "192.168.1.100"
+
+        async def mock_discover(service_type: str, timeout: float) -> List[Any]:
+            if "_ollama._tcp" in service_type:
+                return [mock_service]
+            return []
+
         with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.discover_services",
+            side_effect=mock_discover,
+        ), patch(
             "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
             new_callable=AsyncMock,
             return_value=("ollama", 2, ["llama3", "mistral"]),
-        ), patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._resolve_hostname",
-            return_value="127.0.0.1",
         ):
-            result = await _probe_and_build_entry("localhost", 11434, seen_urls)
+            seen_urls: set[str] = set()
+            result = await _discover_via_mdns_services_parallel(1.5, seen_urls)
 
-            assert result is not None
-            assert result["server_type"] == "ollama"
-            assert result["model_count"] == 2
-            assert "http://localhost:11434" in seen_urls
+            assert len(result) == 1
+            assert result[0]["server_type"] == "ollama"
+            assert result[0]["metadata"]["source"] == "mdns_service"
+
+    @pytest.mark.asyncio
+    async def test_skips_duplicate_urls(self) -> None:
+        """Test that duplicate URLs are skipped."""
+        mock_service = MagicMock()
+        mock_service.url = "http://192.168.1.100:11434"
+        mock_service.hostname = "ollama.local"
+        mock_service.port = 11434
+        mock_service.ip_address = "192.168.1.100"
+
+        async def mock_discover(service_type: str, timeout: float) -> List[Any]:
+            return [mock_service]
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.discover_services",
+            side_effect=mock_discover,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_llm_endpoint",
+            new_callable=AsyncMock,
+            return_value=("ollama", 1, ["llama3"]),
+        ):
+            # Pre-populate seen_urls
+            seen_urls: set[str] = {"http://192.168.1.100:11434"}
+            result = await _discover_via_mdns_services_parallel(1.5, seen_urls)
+
+            # Should skip the duplicate URL
+            assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_handles_browse_exceptions(self) -> None:
+        """Test that exceptions during browse are handled gracefully."""
+        async def mock_discover(service_type: str, timeout: float) -> List[Any]:
+            raise Exception("Network error")
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.discover_services",
+            side_effect=mock_discover,
+        ):
+            seen_urls: set[str] = set()
+            result = await _discover_via_mdns_services_parallel(1.5, seen_urls)
+
+            # Should return empty list, not raise
+            assert result == []
 
 
 class TestDiscoverLocalLlmServers:
@@ -365,11 +506,19 @@ class TestDiscoverLocalLlmServers:
     async def test_discovery_with_no_servers(self) -> None:
         """Test discovery when no servers are found."""
         with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_and_build_entry",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
             new_callable=AsyncMock,
             return_value=None,
         ):
-            servers, methods = await discover_local_llm_servers(timeout_seconds=1.0)
+            servers, methods = await discover_local_llm_servers(timeout_seconds=2.0)
 
             assert servers == []
             assert "hostname_probe" in methods
@@ -379,60 +528,152 @@ class TestDiscoverLocalLlmServers:
     async def test_discovery_without_localhost(self) -> None:
         """Test discovery excluding localhost."""
         with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_and_build_entry",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
             new_callable=AsyncMock,
             return_value=None,
         ):
             servers, methods = await discover_local_llm_servers(
-                timeout_seconds=1.0, include_localhost=False
+                timeout_seconds=2.0, include_localhost=False
             )
 
             assert "hostname_probe" in methods
             assert "localhost_scan" not in methods
 
     @pytest.mark.asyncio
-    async def test_discovery_returns_found_servers(self) -> None:
-        """Test discovery returns found servers."""
-        mock_entry = {
-            "id": "127.0.0.1_11434",
-            "label": "localhost:11434 (llama3)",
-            "url": "http://127.0.0.1:11434",
+    async def test_discovery_returns_mdns_servers(self) -> None:
+        """Test discovery returns servers found via mDNS."""
+        mdns_server = {
+            "id": "192.168.1.100_11434",
+            "url": "http://192.168.1.100:11434",
             "server_type": "ollama",
             "model_count": 1,
             "models": ["llama3"],
-            "metadata": {},
+            "metadata": {"source": "mdns_service"},
         }
 
-        async def mock_probe(h: str, p: int, seen: set[str]) -> Dict[str, Any] | None:
-            if h == "localhost" and p == 11434:
-                return mock_entry
-            return None
-
         with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_and_build_entry",
-            side_effect=mock_probe,
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[mdns_server],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
+            new_callable=AsyncMock,
+            return_value=None,
         ):
-            servers, methods = await discover_local_llm_servers(timeout_seconds=1.0)
+            servers, methods = await discover_local_llm_servers(timeout_seconds=2.0)
 
             assert len(servers) == 1
             assert servers[0]["server_type"] == "ollama"
+            assert "mdns_service_browse" in methods
+
+    @pytest.mark.asyncio
+    async def test_discovery_returns_probed_servers(self) -> None:
+        """Test discovery returns servers found via HTTP probing."""
+        probe_result = {
+            "id": "127.0.0.1_8080",
+            "url": "http://127.0.0.1:8080",
+            "server_type": "llama_cpp",
+            "model_count": 1,
+            "models": ["gemma-4"],
+            "label": "localhost:8080 (gemma-4)",
+            "metadata": {"hostname": "localhost", "ip": "127.0.0.1", "port": 8080},
+        }
+
+        call_count = 0
+
+        async def mock_probe(hostname: str, port: int, ip: str) -> Optional[Dict[str, Any]]:
+            nonlocal call_count
+            call_count += 1
+            if hostname == "localhost" and port == 8080:
+                return probe_result
+            return None
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
+            side_effect=mock_probe,
+        ):
+            servers, methods = await discover_local_llm_servers(timeout_seconds=5.0)
+
+            assert len(servers) == 1
+            assert servers[0]["server_type"] == "llama_cpp"
 
     @pytest.mark.asyncio
     async def test_discovery_handles_timeout(self) -> None:
         """Test that discovery handles timeout gracefully."""
-
-        async def slow_probe(h: str, p: int, seen: set[str]) -> None:
+        async def slow_probe(hostname: str, port: int, ip: str) -> None:
             await asyncio.sleep(10)  # Longer than timeout
             return None
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_and_build_entry",
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
             side_effect=slow_probe,
         ):
-            servers, methods = await discover_local_llm_servers(timeout_seconds=0.1)
+            # Use very short timeout
+            servers, methods = await discover_local_llm_servers(timeout_seconds=0.5)
 
-            # Should return empty list due to timeout
+            # Should return empty list due to timeout, not raise
             assert servers == []
+
+    @pytest.mark.asyncio
+    async def test_uses_resolved_ips(self) -> None:
+        """Test that resolved IPs are used for probing."""
+        resolved_hostnames = {
+            "jetson.local": "192.168.50.203",
+            "ollama.local": "192.168.50.100",
+        }
+
+        probed_ips: List[str] = []
+
+        async def mock_probe(hostname: str, port: int, ip: str) -> None:
+            probed_ips.append(ip)
+            return None
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._discover_via_mdns_services_parallel",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._batch_resolve_hostnames",
+            new_callable=AsyncMock,
+            return_value=resolved_hostnames,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._probe_endpoint_fast",
+            side_effect=mock_probe,
+        ):
+            await discover_local_llm_servers(timeout_seconds=5.0)
+
+            # Should use resolved IPs
+            assert "192.168.50.203" in probed_ips
+            assert "192.168.50.100" in probed_ips
+            assert "127.0.0.1" in probed_ips  # localhost
 
 
 class TestStartLocalLlmServer:
@@ -639,3 +880,33 @@ class TestFindModelFile:
             result = _find_model_file("gemma-4-e2b")
             assert result is not None
             assert "ciris" in result
+
+
+class TestProbeHostnameConstants:
+    """Tests for probe hostname and port constants."""
+
+    def test_probe_hostnames_not_empty(self) -> None:
+        """Test that PROBE_HOSTNAMES is defined and not empty."""
+        assert len(PROBE_HOSTNAMES) > 0
+
+    def test_probe_hostnames_have_ports(self) -> None:
+        """Test that all hostnames have at least one port."""
+        for hostname, ports in PROBE_HOSTNAMES:
+            assert len(ports) > 0, f"{hostname} has no ports defined"
+
+    def test_localhost_ports_not_empty(self) -> None:
+        """Test that LOCALHOST_PORTS is defined and not empty."""
+        assert len(LOCALHOST_PORTS) > 0
+
+    def test_llm_service_types_not_empty(self) -> None:
+        """Test that LLM_SERVICE_TYPES is defined and not empty."""
+        assert len(LLM_SERVICE_TYPES) > 0
+
+    def test_jetson_local_is_first(self) -> None:
+        """Test that jetson.local is the first hostname (priority)."""
+        assert PROBE_HOSTNAMES[0][0] == "jetson.local"
+
+    def test_ollama_port_in_localhost(self) -> None:
+        """Test that Ollama default port (11434) is in localhost ports."""
+        ollama_ports = [p for p, t in LOCALHOST_PORTS if t == "ollama"]
+        assert 11434 in ollama_ports

@@ -1189,19 +1189,26 @@ class CIRISApiClient(
      * @return List of discovered servers with their available models
      */
     suspend fun discoverLocalLlmServers(
-        timeoutSeconds: Float = 5.0f,
+        timeoutSeconds: Float = 12.0f,
         includeLocalhost: Boolean = true
     ): List<DiscoveredLlmServer> {
         val method = "discoverLocalLlmServers"
         logInfo(method, "Discovering local LLM servers (timeout=${timeoutSeconds}s, localhost=$includeLocalhost)")
 
         return try {
+            // Use longer HTTP timeout since discovery involves mDNS + HTTP probes
+            val httpTimeoutMs = ((timeoutSeconds + 8) * 1000).toLong()
             val client = HttpClient {
                 install(ContentNegotiation) {
                     json(Json {
                         ignoreUnknownKeys = true
                         isLenient = true
                     })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = httpTimeoutMs
+                    socketTimeoutMillis = httpTimeoutMs
+                    connectTimeoutMillis = 5000
                 }
             }
 

@@ -195,77 +195,67 @@ def _sync_resolve_via_serviceinfo(
 ) -> Optional[str]:
     """Synchronous hostname resolution via mDNS.
 
-    Uses fresh synchronous Zeroconf instance (same as HA adapter) and
-    sends direct A record queries via multicast.
+    Uses ServiceInfo.request() which is the same mechanism that
+    HA adapter's get_service_info() uses internally. This is the
+    standard zeroconf API for resolving addresses.
     """
-    import time
-
     try:
-        from zeroconf import Zeroconf
+        from zeroconf import ServiceInfo, Zeroconf
     except ImportError:
         logger.info("[mDNS] Zeroconf not available")
         return None
 
-    # Normalize hostname (ensure it ends with .)
-    name = hostname if hostname.endswith(".") else f"{hostname}."
+    # Normalize hostname
+    name = hostname.rstrip(".")
 
-    logger.info(f"[mDNS] Resolving {hostname} via sync Zeroconf")
+    logger.info(f"[mDNS] Resolving {hostname} via ServiceInfo.request()")
 
     zc: Any = None
     try:
-        # Create a fresh Zeroconf instance (same as HA adapter does)
         zc = Zeroconf()
 
-        # Try to get DNS query classes
-        dns_outgoing_cls: Any = None
-        dns_question_cls: Any = None
-        TYPE_A = 1
-        CLASS_IN = 1
-        FLAGS_QR_QUERY = 0
+        # Create a ServiceInfo for a dummy service on this host
+        # This lets us use ServiceInfo.request() to resolve the hostname
+        # The service type doesn't matter - we just want the address
+        service_name = f"_ciris-probe._tcp.local."
+        full_name = f"probe.{service_name}"
 
+        # Try using ServiceInfo to resolve the server hostname
+        # ServiceInfo.request() sends the appropriate mDNS queries
+        info = ServiceInfo(
+            service_name,
+            full_name,
+            server=f"{name}.",  # The hostname we want to resolve
+            port=0,
+        )
+
+        # request() sends mDNS queries and waits for response
+        # This is what get_service_info() uses internally
+        timeout_ms = int(timeout * 1000)
+        if info.request(zc, timeout_ms):
+            addresses = info.parsed_addresses()
+            if addresses:
+                ip = addresses[0]
+                logger.info(f"[mDNS] Resolved {hostname} -> {ip} via ServiceInfo")
+                return ip
+
+        # Fallback: Try direct A record lookup via get_service_info on the hostname
+        # Some zeroconf versions support this
         try:
-            # zeroconf internal modules - may not be explicitly exported
-            from zeroconf._dns import (  # type: ignore[attr-defined]
-                DNSOutgoing,
-                DNSQuestion,
+            # Try to resolve as if it's a service name
+            direct_info = zc.get_service_info(
+                "_device-info._tcp.local.",  # Standard device info service
+                f"{name}._device-info._tcp.local.",
+                timeout=int(timeout * 1000),
             )
-
-            dns_outgoing_cls = DNSOutgoing
-            dns_question_cls = DNSQuestion
-        except ImportError:
+            if direct_info:
+                addresses = direct_info.parsed_addresses()
+                if addresses:
+                    ip = addresses[0]
+                    logger.info(f"[mDNS] Resolved {hostname} -> {ip} via device-info")
+                    return ip
+        except Exception:
             pass
-
-        try:
-            from zeroconf.const import _CLASS_IN, _FLAGS_QR_QUERY, _TYPE_A
-
-            TYPE_A = _TYPE_A
-            CLASS_IN = _CLASS_IN
-            FLAGS_QR_QUERY = _FLAGS_QR_QUERY
-        except ImportError:
-            pass
-
-        if dns_outgoing_cls is None or dns_question_cls is None:
-            logger.info("[mDNS] Could not import zeroconf DNS classes")
-            return None
-
-        # Send A record query
-        logger.info(f"[mDNS] Sending A record query for {name}")
-        out = dns_outgoing_cls(FLAGS_QR_QUERY)
-        out.add_question(dns_question_cls(name, TYPE_A, CLASS_IN))
-        zc.send(out)
-
-        # Poll cache for response
-        start = time.monotonic()
-        poll_interval = 0.05  # 50ms polling
-        while (time.monotonic() - start) < timeout:
-            try:
-                cached = _check_zeroconf_cache(zc, name, TYPE_A)
-                if cached:
-                    logger.info(f"[mDNS] Resolved {hostname} -> {cached}")
-                    return cached
-            except Exception:
-                pass
-            time.sleep(poll_interval)
 
         logger.info(f"[mDNS] No response for {hostname} after {timeout}s")
         return None
@@ -273,7 +263,7 @@ def _sync_resolve_via_serviceinfo(
     except Exception as e:
         logger.info(f"[mDNS] Resolution failed for {hostname}: {e}")
         import traceback
-        logger.info(f"[mDNS] Traceback: {traceback.format_exc()}")
+        logger.debug(f"[mDNS] Traceback: {traceback.format_exc()}")
         return None
     finally:
         if zc is not None:
@@ -281,49 +271,6 @@ def _sync_resolve_via_serviceinfo(
                 zc.close()
             except Exception:
                 pass
-
-
-def _check_zeroconf_cache(zc: Any, name: str, type_a: int = 1) -> Optional[str]:
-    """Check zeroconf cache for A record of hostname.
-
-    Compatible with multiple zeroconf versions.
-
-    Args:
-        zc: Zeroconf instance
-        name: Hostname to look up (must end with .)
-        type_a: DNS type for A record (default 1)
-    """
-    # Try different cache access methods for compatibility
-    try:
-        # Newer API: entries_with_name returns iterable
-        entries = zc.cache.entries_with_name(name)
-        for entry in entries:
-            if hasattr(entry, "type") and entry.type == type_a:
-                if hasattr(entry, "address") and entry.address:
-                    return socket.inet_ntoa(entry.address)
-    except (AttributeError, TypeError):
-        pass
-
-    # Try alternate cache access
-    try:
-        # Some versions use cache.get()
-        entry = zc.cache.get(name)
-        if entry and hasattr(entry, "address") and entry.address:
-            return socket.inet_ntoa(entry.address)
-    except (AttributeError, TypeError):
-        pass
-
-    # Try entries() method
-    try:
-        for entry in zc.cache.entries():
-            if hasattr(entry, "name") and entry.name.lower() == name.lower():
-                if hasattr(entry, "type") and entry.type == type_a:
-                    if hasattr(entry, "address") and entry.address:
-                        return socket.inet_ntoa(entry.address)
-    except (AttributeError, TypeError):
-        pass
-
-    return None
 
 
 async def resolve_url_hostname(

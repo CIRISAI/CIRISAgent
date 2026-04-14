@@ -170,8 +170,7 @@ fun LLMSettingsScreen(
                 StatusOverviewCard(
                     isCirisProxy = isCirisProxy,
                     llmConfig = llmConfig,
-                    discoveredServersCount = discoveredServers.size,
-                    onSwitchToByok = { viewModel.switchToByokMode() }
+                    discoveredServersCount = discoveredServers.size
                 )
 
                 // Section 2: Providers (Collapsible)
@@ -273,8 +272,7 @@ fun LLMSettingsScreen(
 private fun StatusOverviewCard(
     isCirisProxy: Boolean,
     llmConfig: ai.ciris.mobile.shared.api.LlmConfigData?,
-    discoveredServersCount: Int,
-    onSwitchToByok: () -> Unit
+    discoveredServersCount: Int
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -374,29 +372,8 @@ private fun StatusOverviewCard(
                 )
             }
 
-            // Switch to BYOK button (only shown when using CIRIS Proxy)
-            if (isCirisProxy) {
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
-                )
-                OutlinedButton(
-                    onClick = onSwitchToByok,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testableClickable("btn_switch_to_byok") { onSwitchToByok() },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(localizedString("mobile.llm_switch_to_byok"))
-                }
-            }
+            // CIRIS Proxy mode is determined at first-run and cannot be changed
+            // Users who want BYOK must reconfigure via first-run wizard
         }
     }
 }

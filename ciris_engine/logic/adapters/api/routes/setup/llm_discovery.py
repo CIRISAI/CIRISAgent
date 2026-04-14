@@ -8,10 +8,11 @@ on all platforms including Android.
 """
 
 import asyncio
+import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
+import aiohttp
 
 from ciris_engine.logic.utils.mdns_resolver import (
     DiscoveredService,
@@ -134,15 +135,15 @@ async def _probe_and_build_entry(
 
 
 async def discover_local_llm_servers(
-    timeout_seconds: float = 5.0,
+    timeout_seconds: float = 15.0,
     include_localhost: bool = True,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """Discover local LLM inference servers on the network.
 
-    Uses multiple discovery methods:
-    1. mDNS service browsing for advertised services (_ollama._tcp, etc.)
-    2. Hostname probing for common .local hostnames
-    3. Localhost port scanning
+    Runs all discovery methods in PARALLEL for speed:
+    1. mDNS service browsing (all service types in parallel)
+    2. Batch hostname resolution (all hostnames in parallel)
+    3. HTTP endpoint probing (all endpoints in parallel)
 
     Args:
         timeout_seconds: Total timeout for all discovery operations
@@ -151,141 +152,261 @@ async def discover_local_llm_servers(
     Returns:
         Tuple of (discovered_servers, discovery_methods_used)
     """
+    import time
+    start_time = time.monotonic()
+
     seen_urls: set[str] = set()
     methods_used: List[str] = []
     all_discovered: List[Dict[str, Any]] = []
 
-    # 1. mDNS service browsing (discover advertised LLM services)
-    logger.info("[LLM_DISCOVERY] Starting mDNS service browsing...")
-    mdns_discovered = await _discover_via_mdns_services(timeout_seconds / 2, seen_urls)
-    if mdns_discovered:
-        all_discovered.extend(mdns_discovered)
-        methods_used.append("mdns_service_browse")
-        logger.info(f"[LLM_DISCOVERY] Found {len(mdns_discovered)} via mDNS services")
-
-    # 2. Hostname probing (for servers without mDNS service advertising)
-    logger.info("[LLM_DISCOVERY] Starting hostname probing...")
+    # Generate all probe targets
     targets = _generate_probe_targets(include_localhost)
+    unique_hostnames = list(set(h for h, _ in targets if h != "localhost"))
+
+    logger.info(f"[LLM_DISCOVERY] Starting parallel discovery: {len(unique_hostnames)} hostnames, {len(targets)} endpoints")
+
+    # PHASE 1: Run mDNS service browse AND hostname resolution in parallel
+    # Use asyncio.wait to get partial results even on timeout
+    mdns_task = asyncio.create_task(_discover_via_mdns_services_parallel(1.5, seen_urls))
+    resolution_task = asyncio.create_task(_batch_resolve_hostnames(unique_hostnames, timeout=2.0))
+
+    tasks = {mdns_task, resolution_task}
+    done, pending = await asyncio.wait(tasks, timeout=6.0)
+
+    # Cancel pending tasks
+    for task in pending:
+        task.cancel()
+        logger.debug(f"[LLM_DISCOVERY] Cancelled pending Phase 1 task")
+
+    # Extract results from completed tasks
+    mdns_results: List[Dict[str, Any]] = []
+    hostname_map: Dict[str, str] = {}
+
+    for task in done:
+        try:
+            result = task.result()
+            if task is mdns_task and isinstance(result, list):
+                mdns_results = result
+                logger.info(f"[LLM_DISCOVERY] mDNS task completed with {len(result)} results")
+            elif task is resolution_task and isinstance(result, dict):
+                hostname_map = result
+                logger.info(f"[LLM_DISCOVERY] Resolution task completed with {len(result)} hostnames")
+        except Exception as e:
+            logger.debug(f"[LLM_DISCOVERY] Phase 1 task failed: {e}")
+
+    # Process mDNS results
+    if mdns_results:
+        all_discovered.extend(mdns_results)
+        methods_used.append("mdns_service_browse")
+        logger.info(f"[LLM_DISCOVERY] Found {len(mdns_results)} via mDNS services")
+
+    resolved_count = sum(1 for ip in hostname_map.values() if ip and not ip.endswith(".local"))
+    logger.info(f"[LLM_DISCOVERY] Resolved {resolved_count}/{len(unique_hostnames)} hostnames")
+
+    # PHASE 2: Probe ALL endpoints in parallel
     methods_used.append("hostname_probe")
     if include_localhost:
         methods_used.append("localhost_scan")
 
-    # Probe all targets in parallel
-    tasks = [_probe_and_build_entry(h, p, seen_urls) for h, p in targets]
+    # Build probe list with resolved IPs
+    probe_tasks = []
+    for hostname, port in targets:
+        if hostname == "localhost":
+            ip = "127.0.0.1"
+        else:
+            ip = hostname_map.get(hostname, hostname)
 
-    try:
-        results = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
-            timeout=timeout_seconds,
-        )
-    except asyncio.TimeoutError:
-        logger.warning("[LLM_DISCOVERY] Overall timeout reached during discovery")
-        results = []
+        url = f"http://{ip}:{port}"
+        if url not in seen_urls:
+            seen_urls.add(url)
+            probe_tasks.append(asyncio.create_task(
+                _probe_endpoint_fast(hostname, port, ip)
+            ))
 
-    # Filter out None results and exceptions
-    probe_discovered = [r for r in results if isinstance(r, dict)]
-    all_discovered.extend(probe_discovered)
+    logger.info(f"[LLM_DISCOVERY] Probing {len(probe_tasks)} unique endpoints...")
 
-    logger.info(f"[LLM_DISCOVERY] Discovered {len(all_discovered)} LLM servers total")
+    # Wait for probes with remaining timeout
+    elapsed = time.monotonic() - start_time
+    remaining = max(timeout_seconds - elapsed, 2.0)
+
+    if probe_tasks:
+        done, pending = await asyncio.wait(probe_tasks, timeout=remaining)
+
+        for task in pending:
+            task.cancel()
+
+        if pending:
+            logger.info(f"[LLM_DISCOVERY] Probe timeout: {len(done)} done, {len(pending)} cancelled")
+
+        for task in done:
+            try:
+                result = task.result()
+                if result:
+                    all_discovered.append(result)
+            except Exception:
+                pass
+
+    elapsed = time.monotonic() - start_time
+    logger.info(f"[LLM_DISCOVERY] Discovered {len(all_discovered)} servers in {elapsed:.1f}s")
     return all_discovered, methods_used
 
 
-async def _discover_via_mdns_services(
+async def _batch_resolve_hostnames(
+    hostnames: List[str], timeout: float = 3.0
+) -> Dict[str, str]:
+    """Resolve multiple hostnames in parallel via mDNS.
+
+    Returns dict mapping hostname -> resolved IP (or hostname if failed).
+    Uses asyncio.wait to return partial results if some hostnames timeout.
+    """
+    async def resolve_one(hostname: str) -> Tuple[str, str]:
+        try:
+            ip = await resolve_local_hostname(hostname, timeout=2.0)
+            logger.debug(f"[LLM_DISCOVERY] Resolved {hostname} -> {ip}")
+            return (hostname, ip)
+        except Exception as e:
+            logger.debug(f"[LLM_DISCOVERY] Failed to resolve {hostname}: {e}")
+            return (hostname, hostname)
+
+    if not hostnames:
+        return {}
+
+    # Create tasks and wait with timeout to get partial results
+    tasks = [asyncio.create_task(resolve_one(h)) for h in hostnames]
+    done, pending = await asyncio.wait(tasks, timeout=timeout)
+
+    # Cancel pending tasks
+    for task in pending:
+        task.cancel()
+
+    if pending:
+        logger.debug(f"[LLM_DISCOVERY] Hostname resolution: {len(done)} done, {len(pending)} cancelled")
+
+    # Collect results from completed tasks
+    hostname_map: Dict[str, str] = {}
+    for task in done:
+        try:
+            result = task.result()
+            if isinstance(result, tuple) and len(result) == 2:
+                hostname_map[result[0]] = result[1]
+        except Exception:
+            pass
+    return hostname_map
+
+
+async def _probe_endpoint_fast(
+    hostname: str, port: int, ip: str
+) -> Optional[Dict[str, Any]]:
+    """Probe a single endpoint (IP already resolved)."""
+    url = f"http://{ip}:{port}"
+
+    result = await _probe_llm_endpoint(url)
+    if not result:
+        return None
+
+    server_type, model_count, models = result
+    logger.info(f"[LLM_DISCOVERY] Found {server_type} at {url} ({hostname}) with {model_count} models")
+    return _build_server_entry(hostname, port, ip, server_type, model_count, models)
+
+
+async def _discover_via_mdns_services_parallel(
     timeout: float, seen_urls: set[str]
 ) -> List[Dict[str, Any]]:
-    """Discover LLM servers via mDNS service browsing.
+    """Discover LLM servers via mDNS - ALL service types in parallel."""
 
-    Browses for emerging LLM service types like _ollama._tcp.local.
-    See: https://github.com/ollama/ollama/issues/10283
-    """
-    discovered: List[Dict[str, Any]] = []
-
-    for service_type, server_type in LLM_SERVICE_TYPES:
+    async def browse_one(service_type: str, server_type: str) -> List[Dict[str, Any]]:
+        discovered: List[Dict[str, Any]] = []
         try:
-            logger.info(f"[LLM_DISCOVERY] Browsing for {service_type}...")
             services: List[DiscoveredService] = await discover_services(
-                service_type, timeout=timeout / len(LLM_SERVICE_TYPES)
+                service_type, timeout=timeout
             )
-
             for svc in services:
                 url = svc.url
                 if url in seen_urls:
                     continue
                 seen_urls.add(url)
 
-                # Probe to get model info
                 result = await _probe_llm_endpoint(url)
                 if result:
                     actual_type, model_count, models = result
                     entry = _build_server_entry(
-                        svc.hostname,
-                        svc.port,
-                        svc.ip_address,
-                        actual_type or server_type,
-                        model_count,
-                        models,
+                        svc.hostname, svc.port, svc.ip_address,
+                        actual_type or server_type, model_count, models,
                     )
                     entry["metadata"]["source"] = "mdns_service"
                     entry["metadata"]["service_type"] = service_type
                     discovered.append(entry)
-                    logger.info(
-                        f"[LLM_DISCOVERY] Found {actual_type} via {service_type}: {url}"
-                    )
         except Exception as e:
             logger.debug(f"[LLM_DISCOVERY] Error browsing {service_type}: {e}")
+        return discovered
 
-    return discovered
+    # Browse ALL service types in parallel
+    tasks = [browse_one(st, srv) for st, srv in LLM_SERVICE_TYPES]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    all_discovered: List[Dict[str, Any]] = []
+    for result in results:
+        if isinstance(result, list):
+            all_discovered.extend(result)
+
+    return all_discovered
 
 
 async def _probe_llm_endpoint(url: str) -> Optional[Tuple[str, int, List[str]]]:
     """Probe an endpoint to determine if it's an LLM server.
 
+    Uses aiohttp instead of httpx for better timeout reliability on Android.
+
     Returns:
         Tuple of (server_type, model_count, model_names) if valid, None otherwise
     """
-    async with httpx.AsyncClient(timeout=PROBE_TIMEOUT) as client:
-        # Try Ollama /api/tags first
-        try:
-            response = await client.get(f"{url}/api/tags")
-            if response.status_code == 200:
-                data = response.json()
-                models = data.get("models", [])
-                model_names = [m.get("name", "unknown") for m in models]
-                return ("ollama", len(models), model_names)
-        except Exception as exc:
-            # Not an Ollama server (or unreachable) — fall through to next probe.
-            logger.debug("[LLM_DISCOVERY] Ollama probe failed for %s/api/tags: %s", url, exc)
+    timeout = aiohttp.ClientTimeout(total=1.5, connect=1.0)
 
-        # Try OpenAI-compatible /v1/models
-        try:
-            response = await client.get(f"{url}/v1/models")
-            if response.status_code == 200:
-                data = response.json()
-                models = data.get("data", [])
-                model_names = [m.get("id", "unknown") for m in models]
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            # Try Ollama /api/tags first
+            try:
+                async with session.get(f"{url}/api/tags") as response:
+                    if response.status == 200:
+                        text = await response.text()
+                        data = json.loads(text)
+                        models = data.get("models", [])
+                        model_names = [m.get("name", "unknown") for m in models]
+                        return ("ollama", len(models), model_names)
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                pass
 
-                # Detect server type by response characteristics
-                server_type = _detect_server_type_from_response(url, data)
-                return (server_type, len(models), model_names)
-        except Exception as exc:
-            # Not an OpenAI-compatible /v1/models server — fall through.
-            logger.debug("[LLM_DISCOVERY] /v1/models probe failed for %s: %s", url, exc)
+            # Try OpenAI-compatible /v1/models
+            try:
+                async with session.get(f"{url}/v1/models") as response:
+                    if response.status == 200:
+                        text = await response.text()
+                        data = json.loads(text)
+                        models = data.get("data", [])
+                        model_names = [m.get("id", "unknown") for m in models]
+                        server_type = _detect_server_type_from_response(url, data)
+                        return (server_type, len(models), model_names)
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                pass
 
-        # Try /models (some servers use this)
-        try:
-            response = await client.get(f"{url}/models")
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    model_names = [m.get("id", str(m)) if isinstance(m, dict) else str(m) for m in data]
-                    return ("openai_compatible", len(data), model_names)
-                elif isinstance(data, dict) and "data" in data:
-                    models = data.get("data", [])
-                    model_names = [m.get("id", "unknown") for m in models]
-                    return ("openai_compatible", len(models), model_names)
-        except Exception as exc:
-            # Final probe — return None below if we get here without a hit.
-            logger.debug("[LLM_DISCOVERY] /models probe failed for %s: %s", url, exc)
+            # Try /models (some servers use this)
+            try:
+                async with session.get(f"{url}/models") as response:
+                    if response.status == 200:
+                        text = await response.text()
+                        data = json.loads(text)
+                        if isinstance(data, list):
+                            model_names = [m.get("id", str(m)) if isinstance(m, dict) else str(m) for m in data]
+                            return ("openai_compatible", len(data), model_names)
+                        elif isinstance(data, dict) and "data" in data:
+                            models = data.get("data", [])
+                            model_names = [m.get("id", "unknown") for m in models]
+                            return ("openai_compatible", len(models), model_names)
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                pass
+
+    except Exception:
+        pass
 
     return None
 

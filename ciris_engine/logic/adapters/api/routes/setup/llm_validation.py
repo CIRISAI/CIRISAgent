@@ -25,7 +25,12 @@ _LIST_MODELS_TIMEOUT = 10.0  # seconds
 
 
 def _get_llm_providers() -> List[LLMProvider]:
-    """Get list of supported LLM providers."""
+    """Get list of supported LLM providers.
+
+    Note: CIRIS Proxy is not listed here as it's determined at first-run setup
+    and managed internally with multi-region failover. These are the BYOK providers
+    that users can configure as primary or secondary alongside CIRIS.
+    """
     return [
         LLMProvider(
             id="openai",

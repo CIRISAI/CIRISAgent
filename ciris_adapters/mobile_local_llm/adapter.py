@@ -44,7 +44,10 @@ class MobileLocalLLMAdapter(Service):
     """Adapter that runs a local Gemma 4 inference server on capable phones."""
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
-        super().__init__(config=kwargs.get("adapter_config"))
+        # Don't pass config to super().__init__() - we handle config ourselves
+        # via _config and the config property. The base Service class would try
+        # to set self.config which conflicts with our property.
+        super().__init__(config=None)
         self.runtime = runtime
         self.context = context
 
@@ -260,6 +263,12 @@ class MobileLocalLLMAdapter(Service):
     @property
     def config(self) -> MobileLocalLLMConfig:
         return self._config
+
+    @config.setter
+    def config(self, value: Any) -> None:
+        # Base class Service.__init__ sets self.config = {} - ignore it.
+        # We manage config via _config and load_config_from_env().
+        pass
 
 
 # Export as Adapter for RuntimeAdapterManager.load_adapter() compatibility.

@@ -89,6 +89,23 @@ class TestDeviceCapabilityReport:
         assert report.is_ios is True
         assert report.can_run(ModelVariant.GEMMA_4_E2B) is False
 
+    def test_desktop_capable_can_run_e2b(self):
+        report = DeviceCapabilityReport(
+            tier=DeviceTier.DESKTOP_CAPABLE,
+            platform=Platform.DESKTOP,
+            architecture="x86_64",
+            total_ram_gb=16.0,
+            available_ram_gb=8.0,
+            free_disk_gb=10.0,
+            reasons=["desktop system"],
+        )
+        assert report.capable is True
+        assert report.is_stub is False
+        # Desktop runs llama.cpp with E2B model
+        assert report.can_run(ModelVariant.GEMMA_4_E2B) is True
+        # E4B requires mobile tiers
+        assert report.can_run(ModelVariant.GEMMA_4_E4B) is False
+
     def test_incapable_cannot_run_anything(self):
         report = DeviceCapabilityReport(
             tier=DeviceTier.INCAPABLE,
@@ -186,22 +203,22 @@ class TestProbeiOS:
 
 
 class TestProbeDesktop:
-    def test_desktop_without_opt_in_is_incapable(self):
+    def test_desktop_with_sufficient_ram_is_capable(self):
+        # Desktop systems with enough RAM are now DESKTOP_CAPABLE
+        # User opts in via the wizard, not via config flag
         report = _probe(_config(), platform=Platform.DESKTOP, arch="x86_64", total_ram=32.0)
-        assert report.tier == DeviceTier.INCAPABLE
-        assert any("allow_desktop" in r for r in report.reasons)
+        assert report.tier == DeviceTier.DESKTOP_CAPABLE
+        assert report.capable is True
+        assert any("desktop system" in r for r in report.reasons)
 
-    def test_desktop_with_opt_in_is_capable(self):
-        report = _probe(
-            _config(allow_desktop=True),
-            platform=Platform.DESKTOP,
-            arch="x86_64",
-            total_ram=32.0,
-        )
-        assert report.tier == DeviceTier.CAPABLE_E4B
+    def test_desktop_with_low_ram_is_incapable(self):
+        # Desktop with insufficient RAM returns INCAPABLE
+        report = _probe(_config(), platform=Platform.DESKTOP, arch="x86_64", total_ram=4.0)
+        assert report.tier == DeviceTier.INCAPABLE
+        assert report.capable is False
 
     def test_unknown_platform_is_incapable(self):
-        report = _probe(_config(allow_desktop=True), platform=Platform.UNKNOWN, total_ram=16.0)
+        report = _probe(_config(), platform=Platform.UNKNOWN, total_ram=16.0)
         assert report.tier == DeviceTier.INCAPABLE
 
 

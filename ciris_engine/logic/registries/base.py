@@ -454,6 +454,70 @@ class ServiceRegistry(_Base):
 
         return False
 
+    def set_provider_priority(
+        self,
+        provider_name: str,
+        priority: Priority,
+        service_type: Optional[ServiceType] = None,
+    ) -> bool:
+        """
+        Update a provider's priority.
+
+        Args:
+            provider_name: Name of the provider to update
+            priority: New priority level
+            service_type: Optional service type to narrow search
+
+        Returns:
+            True if provider was found and updated
+        """
+        # Search specific service type or all
+        service_types_to_search = [service_type] if service_type else list(self._services.keys())
+
+        for st in service_types_to_search:
+            providers = self._services.get(st, [])
+            for provider in providers:
+                if provider.name == provider_name:
+                    old_priority = provider.priority
+                    provider.priority = priority
+
+                    # Re-sort providers by priority
+                    self._services[st].sort(key=lambda x: x.priority.value)
+
+                    logger.info(
+                        f"Updated {st} provider '{provider_name}' priority: "
+                        f"{old_priority.name} -> {priority.name}"
+                    )
+                    return True
+
+        logger.warning(f"Provider '{provider_name}' not found for priority update")
+        return False
+
+    def get_provider_by_name(
+        self,
+        provider_name: str,
+        service_type: Optional[ServiceType] = None,
+    ) -> Optional[ServiceProvider[Any]]:
+        """
+        Get a provider by name.
+
+        Args:
+            provider_name: Name of the provider
+            service_type: Optional service type to narrow search
+
+        Returns:
+            ServiceProvider if found, None otherwise
+        """
+        service_types_to_search = [service_type] if service_type else list(self._services.keys())
+
+        for st in service_types_to_search:
+            providers = self._services.get(st, [])
+            for provider in providers:
+                if provider.name == provider_name:
+                    return provider
+
+        return None
+
     def get_services(
         self,
         service_type: ServiceType,

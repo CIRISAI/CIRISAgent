@@ -11,6 +11,7 @@ import ai.ciris.mobile.shared.ui.components.LocalLlmServerDiscovery
 import ai.ciris.mobile.shared.ui.components.rememberLocalLlmDiscoveryState
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
+import ai.ciris.mobile.shared.viewmodels.LLMSettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -51,17 +52,18 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun LLMSettingsScreen(
     viewModel: SettingsViewModel,
+    llmViewModel: LLMSettingsViewModel,
     apiClient: CIRISApiClient,
     secureStorage: ai.ciris.mobile.shared.platform.SecureStorage,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Core state
+    // Core state from SettingsViewModel (config editing)
     val isLoading by viewModel.isLoading.collectAsState()
     val isCirisProxy by viewModel.isCirisProxy.collectAsState()
     val llmConfig by viewModel.llmConfig.collectAsState()
 
-    // BYOK form state
+    // BYOK form state from SettingsViewModel
     val llmProvider by viewModel.llmProvider.collectAsState()
     val llmModel by viewModel.llmModel.collectAsState()
     val llmBaseUrl by viewModel.llmBaseUrl.collectAsState()
@@ -69,26 +71,30 @@ fun LLMSettingsScreen(
     val apiKeyMasked by viewModel.apiKeyMasked.collectAsState()
     val availableModels by viewModel.availableModels.collectAsState()
 
-    // Local inference server discovery state
-    val discoveredServers by viewModel.discoveredServers.collectAsState()
+    // Local inference server discovery state from LLMSettingsViewModel
+    val discoveredServers by llmViewModel.discoveredServers.collectAsState()
     val selectedServer by viewModel.selectedServer.collectAsState()
-    val isDiscovering by viewModel.isDiscovering.collectAsState()
+    val isDiscovering by llmViewModel.isDiscovering.collectAsState()
 
-    // LLM Bus status state
-    val llmBusStatus by viewModel.llmBusStatus.collectAsState()
-    val llmProviders by viewModel.llmProviders.collectAsState()
-    val isLoadingLlmBus by viewModel.isLoadingLlmBus.collectAsState()
+    // LLM Bus status state from LLMSettingsViewModel
+    val llmBusStatus by llmViewModel.llmBusStatus.collectAsState()
+    val llmProviders by llmViewModel.llmProviders.collectAsState()
+    val isLoadingLlmBus by llmViewModel.isLoading.collectAsState()
 
-    // Operation state
+    // Operation state from SettingsViewModel
     val isSaving by viewModel.isSaving.collectAsState()
     val saveSuccess by viewModel.saveSuccess.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // Section expansion state from ViewModel
-    val statusExpanded by viewModel.statusExpanded.collectAsState()
-    val providersExpanded by viewModel.providersExpanded.collectAsState()
-    val localServersExpanded by viewModel.localServersExpanded.collectAsState()
-    val advancedExpanded by viewModel.advancedExpanded.collectAsState()
+    // LLM ViewModel messages
+    val llmErrorMessage by llmViewModel.errorMessage.collectAsState()
+    val llmSuccessMessage by llmViewModel.successMessage.collectAsState()
+
+    // Section expansion state from LLMSettingsViewModel
+    val statusExpanded by llmViewModel.statusExpanded.collectAsState()
+    val providersExpanded by llmViewModel.providersExpanded.collectAsState()
+    val localServersExpanded by llmViewModel.localServersExpanded.collectAsState()
+    val advancedExpanded by llmViewModel.advancedExpanded.collectAsState()
     var authExpanded by remember { mutableStateOf(false) }
 
     // On-device local inference capability
@@ -192,7 +198,7 @@ fun LLMSettingsScreen(
                     },
                     icon = Icons.Filled.Settings,
                     expanded = providersExpanded,
-                    onToggle = { viewModel.toggleProvidersExpanded() }
+                    onToggle = { llmViewModel.toggleProvidersExpanded() }
                 ) {
                     if (isCirisProxy) {
                         CirisProxyContent()
@@ -230,7 +236,7 @@ fun LLMSettingsScreen(
                     },
                     icon = Icons.Filled.Wifi,
                     expanded = localServersExpanded,
-                    onToggle = { viewModel.toggleLocalServersExpanded() }
+                    onToggle = { llmViewModel.toggleLocalServersExpanded() }
                 ) {
                     LocalServersContent(
                         viewModel = viewModel,
@@ -250,10 +256,10 @@ fun LLMSettingsScreen(
                     subtitle = llmBusStatus?.distributionStrategyLabel ?: localizedString("mobile.llm_distribution_latency"),
                     icon = Icons.Filled.Tune,
                     expanded = advancedExpanded,
-                    onToggle = { viewModel.toggleAdvancedExpanded() }
+                    onToggle = { llmViewModel.toggleAdvancedExpanded() }
                 ) {
                     AdvancedSettingsContent(
-                        viewModel = viewModel,
+                        llmViewModel = llmViewModel,
                         llmBusStatus = llmBusStatus,
                         llmProviders = llmProviders
                     )
@@ -979,7 +985,7 @@ private fun LocalServersContent(
 
 @Composable
 private fun AdvancedSettingsContent(
-    viewModel: SettingsViewModel,
+    llmViewModel: LLMSettingsViewModel,
     llmBusStatus: ai.ciris.mobile.shared.models.LlmBusStatus?,
     llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>
 ) {
@@ -999,25 +1005,25 @@ private fun AdvancedSettingsContent(
                 name = "Automatic (Recommended)",
                 description = "Picks the fastest available provider",
                 selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED,
-                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED) }
+                onClick = { llmViewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED) }
             )
             StrategyOption(
                 name = "Round Robin",
                 description = "Takes turns between providers",
                 selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN,
-                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN) }
+                onClick = { llmViewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.ROUND_ROBIN) }
             )
             StrategyOption(
                 name = "Random",
                 description = "Picks randomly to spread the load",
                 selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM,
-                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM) }
+                onClick = { llmViewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.RANDOM) }
             )
             StrategyOption(
                 name = "Least Loaded",
                 description = "Picks provider with fewest active requests",
                 selected = currentStrategy == ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED,
-                onClick = { viewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED) }
+                onClick = { llmViewModel.updateDistributionStrategy(ai.ciris.mobile.shared.models.DistributionStrategy.LEAST_LOADED) }
             )
         }
 
@@ -1036,8 +1042,9 @@ private fun AdvancedSettingsContent(
             llmProviders.forEach { provider ->
                 ProviderCircuitBreakerRow(
                     provider = provider,
-                    onReset = { viewModel.resetCircuitBreaker(provider.name) },
-                    onForceReset = { viewModel.resetCircuitBreaker(provider.name, force = true) }
+                    onReset = { llmViewModel.resetCircuitBreaker(provider.name) },
+                    onForceReset = { llmViewModel.resetCircuitBreaker(provider.name, force = true) },
+                    onPriorityChange = { priority -> llmViewModel.updateProviderPriority(provider.name, priority) }
                 )
             }
         }
@@ -1050,64 +1057,132 @@ private fun AdvancedSettingsContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProviderCircuitBreakerRow(
     provider: ai.ciris.mobile.shared.models.LlmProviderStatus,
     onReset: () -> Unit,
-    onForceReset: () -> Unit
+    onForceReset: () -> Unit,
+    onPriorityChange: (ai.ciris.mobile.shared.models.ProviderPriority) -> Unit
 ) {
     val cb = provider.circuitBreaker
     val semantic = SemanticColors.Default
+    var priorityExpanded by remember { mutableStateOf(false) }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Status indicator
-            Icon(
-                imageVector = when (cb.state) {
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> Icons.Filled.CheckCircle
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> Icons.Filled.Error
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> Icons.Filled.Schedule
-                },
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = when (cb.state) {
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> semantic.success
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> semantic.error
-                    ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> semantic.warning
-                }
-            )
-            Column {
-                Text(
-                    text = provider.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = when (cb.state) {
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> "Active and protecting"
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> "Paused due to errors"
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> "Testing recovery..."
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                // Status indicator
+                Icon(
+                    imageVector = when (cb.state) {
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> Icons.Filled.CheckCircle
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> Icons.Filled.Error
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> Icons.Filled.Schedule
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = when (cb.state) {
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> semantic.success
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> semantic.error
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> semantic.warning
+                    }
                 )
+                Column {
+                    Text(
+                        text = provider.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = when (cb.state) {
+                            ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> "Active and protecting"
+                            ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> "Paused due to errors"
+                            ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> "Testing recovery..."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // Reset button (only show when circuit is open or half-open)
+            if (cb.state != ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED) {
+                TextButton(onClick = onReset) {
+                    Text("Reset")
+                }
             }
         }
 
-        // Reset button (only show when circuit is open or half-open)
-        if (cb.state != ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED) {
-            TextButton(onClick = onReset) {
-                Text("Reset")
+        // Priority dropdown
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Priority:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            ExposedDropdownMenuBox(
+                expanded = priorityExpanded,
+                onExpandedChange = { priorityExpanded = it },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = provider.priorityLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = priorityExpanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .height(48.dp)
+                        .testable("priority_${provider.name}"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                )
+
+                ExposedDropdownMenu(
+                    expanded = priorityExpanded,
+                    onDismissRequest = { priorityExpanded = false }
+                ) {
+                    ai.ciris.mobile.shared.models.ProviderPriority.entries.forEach { priority ->
+                        val label = when (priority) {
+                            ai.ciris.mobile.shared.models.ProviderPriority.CRITICAL -> "Critical"
+                            ai.ciris.mobile.shared.models.ProviderPriority.HIGH -> "Primary"
+                            ai.ciris.mobile.shared.models.ProviderPriority.NORMAL -> "Standard"
+                            ai.ciris.mobile.shared.models.ProviderPriority.LOW -> "Backup"
+                            ai.ciris.mobile.shared.models.ProviderPriority.FALLBACK -> "Last Resort"
+                        }
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                onPriorityChange(priority)
+                                priorityExpanded = false
+                            },
+                            modifier = Modifier.testableClickable("priority_${provider.name}_$priority") {
+                                onPriorityChange(priority)
+                                priorityExpanded = false
+                            }
+                        )
+                    }
+                }
             }
         }
     }

@@ -4234,6 +4234,122 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Update a provider's priority level.
+     *
+     * @param providerName Name of the provider to update
+     * @param priority New priority level: "critical", "high", "normal", "low", "fallback"
+     */
+    suspend fun updateLlmProviderPriority(
+        providerName: String,
+        priority: ai.ciris.mobile.shared.models.ProviderPriority
+    ): ai.ciris.mobile.shared.models.ProviderPriorityUpdateResponse {
+        val method = "updateLlmProviderPriority"
+        val url = "$baseUrl/v1/system/llm/providers/$providerName/priority"
+        logInfo(method, "PUT $url priority=${priority.name.lowercase()}")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.put(url) {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("priority", priority.name.lowercase())
+                })
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Update provider priority failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            ai.ciris.mobile.shared.models.ProviderPriorityUpdateResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                providerName = data["provider_name"]?.jsonPrimitive?.content ?: providerName,
+                previousPriority = data["previous_priority"]?.jsonPrimitive?.content ?: "",
+                newPriority = data["new_priority"]?.jsonPrimitive?.content ?: "",
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
+    /**
+     * Delete/unregister an LLM provider.
+     *
+     * @param providerName Name of the provider to delete
+     */
+    suspend fun deleteLlmProvider(
+        providerName: String
+    ): ai.ciris.mobile.shared.models.ProviderDeleteResponse {
+        val method = "deleteLlmProvider"
+        val url = "$baseUrl/v1/system/llm/providers/$providerName"
+        logInfo(method, "DELETE $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.delete(url) {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Delete provider failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            ai.ciris.mobile.shared.models.ProviderDeleteResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                providerName = data["provider_name"]?.jsonPrimitive?.content ?: providerName,
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            throw e
+        }
+    }
+
 
     // ===== Audit API =====
 

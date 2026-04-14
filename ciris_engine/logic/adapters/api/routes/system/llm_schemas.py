@@ -221,3 +221,53 @@ class ProviderEnableResponse(BaseModel):
     provider_name: str = Field(..., description="Provider that was modified")
     enabled: bool = Field(..., description="New enabled state")
     message: str = Field(..., description="Status message")
+
+
+class ProviderPriorityUpdateRequest(BaseModel):
+    """Request to update a provider's priority."""
+
+    priority: ProviderPriority = Field(..., description="New priority level")
+
+
+class ProviderPriorityUpdateResponse(BaseModel):
+    """Response from updating a provider's priority."""
+
+    success: bool = Field(..., description="Whether update succeeded")
+    provider_name: str = Field(..., description="Provider that was updated")
+    previous_priority: ProviderPriority = Field(..., description="Previous priority")
+    new_priority: ProviderPriority = Field(..., description="New priority")
+    message: str = Field(..., description="Status message")
+
+
+class ProviderDeleteResponse(BaseModel):
+    """Response from deleting/unregistering a provider."""
+
+    success: bool = Field(..., description="Whether delete succeeded")
+    provider_name: str = Field(..., description="Provider that was deleted")
+    message: str = Field(..., description="Status message")
+
+
+class AddProviderRequest(BaseModel):
+    """Request to add a new provider to the LLM Bus.
+
+    Used primarily for registering discovered local inference servers.
+    """
+
+    provider_id: str = Field(..., description="Provider type: openai, anthropic, local, etc.")
+    name: Optional[str] = Field(None, description="Display name (auto-generated if not provided)")
+    base_url: str = Field(..., description="Base URL for the provider API")
+    model: Optional[str] = Field(None, description="Default model to use")
+    api_key: Optional[str] = Field(None, description="API key (empty for local servers)")
+    priority: ProviderPriority = Field(ProviderPriority.FALLBACK, description="Provider priority")
+    enabled: bool = Field(True, description="Whether provider is enabled")
+
+
+class AddProviderResponse(BaseModel):
+    """Response from adding a new provider."""
+
+    success: bool = Field(..., description="Whether provider was added")
+    provider_name: str = Field(..., description="Name of the new provider")
+    provider_id: str = Field(..., description="Provider type ID")
+    base_url: str = Field(..., description="Base URL that was configured")
+    priority: ProviderPriority = Field(..., description="Assigned priority")
+    message: str = Field(..., description="Status message")

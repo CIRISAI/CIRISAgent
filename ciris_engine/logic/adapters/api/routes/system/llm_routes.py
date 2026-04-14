@@ -20,7 +20,12 @@ from ciris_engine.logic.buses.llm_bus import LLMBus
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitState
 from ciris_engine.schemas.api.responses import SuccessResponse
 
+from ciris_engine.logic.registries.base import Priority as InternalPriority, get_global_registry
+from ciris_engine.schemas.runtime.enums import ServiceType
+
 from .llm_schemas import (
+    AddProviderRequest,
+    AddProviderResponse,
     CircuitBreakerConfig,
     CircuitBreakerConfigUpdateRequest,
     CircuitBreakerConfigUpdateResponse,
@@ -34,8 +39,11 @@ from .llm_schemas import (
     LLMBusStatusResponse,
     LLMProviderStatus,
     LLMProvidersResponse,
+    ProviderDeleteResponse,
     ProviderMetrics,
     ProviderPriority,
+    ProviderPriorityUpdateRequest,
+    ProviderPriorityUpdateResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,6 +145,30 @@ def get_internal_strategy(strategy: DistributionStrategy) -> InternalDistributio
         DistributionStrategy.LEAST_LOADED: InternalDistributionStrategy.LEAST_LOADED,
     }
     return mapping.get(strategy, InternalDistributionStrategy.LATENCY_BASED)
+
+
+def map_priority_to_api(priority: InternalPriority) -> ProviderPriority:
+    """Map internal Priority enum to API schema ProviderPriority."""
+    mapping = {
+        InternalPriority.CRITICAL: ProviderPriority.CRITICAL,
+        InternalPriority.HIGH: ProviderPriority.HIGH,
+        InternalPriority.NORMAL: ProviderPriority.NORMAL,
+        InternalPriority.LOW: ProviderPriority.LOW,
+        InternalPriority.FALLBACK: ProviderPriority.FALLBACK,
+    }
+    return mapping.get(priority, ProviderPriority.NORMAL)
+
+
+def get_internal_priority(priority: ProviderPriority) -> InternalPriority:
+    """Get internal Priority enum from API schema ProviderPriority."""
+    mapping = {
+        ProviderPriority.CRITICAL: InternalPriority.CRITICAL,
+        ProviderPriority.HIGH: InternalPriority.HIGH,
+        ProviderPriority.NORMAL: InternalPriority.NORMAL,
+        ProviderPriority.LOW: InternalPriority.LOW,
+        ProviderPriority.FALLBACK: InternalPriority.FALLBACK,
+    }
+    return mapping.get(priority, InternalPriority.NORMAL)
 
 
 def build_cb_status(cb: CircuitBreaker) -> CircuitBreakerStatus:
@@ -300,6 +332,7 @@ async def get_llm_providers(
     Returns each provider's health, metrics, and circuit breaker status.
     """
     llm_bus = get_llm_bus(request)
+    registry = get_global_registry()
 
     providers = []
     for name, cb in llm_bus.circuit_breakers.items():
@@ -317,12 +350,16 @@ async def get_llm_providers(
         # Determine health (CB not OPEN)
         healthy = cb.state != CircuitState.OPEN
 
+        # Get actual priority from registry
+        provider_info = registry.get_provider_by_name(name, ServiceType.LLM)
+        priority = map_priority_to_api(provider_info.priority) if provider_info else ProviderPriority.NORMAL
+
         providers.append(
             LLMProviderStatus(
                 name=name,
                 healthy=healthy,
                 enabled=True,  # All registered providers are enabled
-                priority=ProviderPriority.NORMAL,  # Default priority
+                priority=priority,
                 metrics=provider_metrics,
                 circuit_breaker=build_cb_status(cb),
             )
@@ -510,3 +547,235 @@ async def update_circuit_breaker_config(
             message="Circuit breaker configuration updated",
         )
     )
+
+
+# ============================================================================
+# PUT /system/llm/providers/{name}/priority - Update provider priority
+# ============================================================================
+
+
+@router.put(
+    "/providers/{name}/priority",
+    responses={
+        404: {"description": "Provider not found"},
+        503: {"description": "Service registry not available"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def update_provider_priority(
+    request: Request,
+    name: str,
+    body: ProviderPriorityUpdateRequest,
+) -> SuccessResponse[ProviderPriorityUpdateResponse]:
+    """
+    Update a provider's priority level.
+
+    Changes where this provider falls in the selection order:
+    - critical: Always try first
+    - high: Primary providers
+    - normal: Standard providers
+    - low: Use when others unavailable
+    - fallback: Last resort
+    """
+    registry = get_global_registry()
+
+    # Find the provider to get current priority
+    provider = registry.get_provider_by_name(name, ServiceType.LLM)
+    if not provider:
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+
+    previous_priority = map_priority_to_api(provider.priority)
+    new_internal_priority = get_internal_priority(body.priority)
+
+    # Update the priority
+    success = registry.set_provider_priority(name, new_internal_priority, ServiceType.LLM)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to update priority for '{name}'")
+
+    logger.info(f"Provider '{name}' priority changed from {previous_priority} to {body.priority}")
+
+    return SuccessResponse(
+        data=ProviderPriorityUpdateResponse(
+            success=True,
+            provider_name=name,
+            previous_priority=previous_priority,
+            new_priority=body.priority,
+            message=f"Priority updated from {previous_priority.value} to {body.priority.value}",
+        )
+    )
+
+
+# ============================================================================
+# DELETE /system/llm/providers/{name} - Unregister a provider
+# ============================================================================
+
+
+@router.delete(
+    "/providers/{name}",
+    responses={
+        404: {"description": "Provider not found"},
+        503: {"description": "Service registry not available"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def delete_provider(
+    request: Request,
+    name: str,
+) -> SuccessResponse[ProviderDeleteResponse]:
+    """
+    Unregister an LLM provider.
+
+    Removes the provider from the registry. This is typically used when:
+    - A local inference server is no longer available
+    - Removing a provider added during setup
+    """
+    registry = get_global_registry()
+
+    # Check if provider exists
+    provider = registry.get_provider_by_name(name, ServiceType.LLM)
+    if not provider:
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+
+    # Unregister
+    success = registry.unregister(name)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to unregister '{name}'")
+
+    logger.info(f"Provider '{name}' unregistered")
+
+    return SuccessResponse(
+        data=ProviderDeleteResponse(
+            success=True,
+            provider_name=name,
+            message=f"Provider '{name}' has been unregistered",
+        )
+    )
+
+
+# ============================================================================
+# POST /system/llm/providers - Add a new provider
+# ============================================================================
+
+
+@router.post(
+    "/providers",
+    responses={
+        400: {"description": "Invalid provider configuration"},
+        503: {"description": "Required services not available"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def add_provider(
+    request: Request,
+    body: AddProviderRequest,
+) -> SuccessResponse[AddProviderResponse]:
+    """
+    Add a new LLM provider to the bus.
+
+    This endpoint allows registering discovered local inference servers
+    or additional cloud providers at runtime. The provider will be
+    immediately available for use.
+
+    For local inference servers (Ollama, llama.cpp, vLLM, etc.):
+    - api_key can be empty or omitted
+    - base_url should point to the server (e.g., http://192.168.1.100:11434/v1)
+
+    For cloud providers:
+    - api_key is required
+    - base_url is optional (uses provider defaults)
+    """
+    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+    from ciris_engine.schemas.services.capabilities import LLMCapabilities
+
+    registry = get_global_registry()
+
+    # Get required services from app state
+    telemetry_service = getattr(request.app.state, "telemetry_service", None)
+    time_service = getattr(request.app.state, "time_service", None)
+
+    if not telemetry_service or not time_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Required services (telemetry, time) not available"
+        )
+
+    # Generate provider name if not provided
+    provider_name = body.name
+    if not provider_name:
+        # Generate from provider_id and base_url
+        url_part = body.base_url.replace("http://", "").replace("https://", "").replace("/", "_").replace(":", "_")
+        provider_name = f"{body.provider_id}_{url_part}"
+
+    # Check if provider already exists
+    existing = registry.get_provider_by_name(provider_name, ServiceType.LLM)
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider '{provider_name}' already exists"
+        )
+
+    # Map API priority to internal priority
+    priority_mapping = {
+        ProviderPriority.CRITICAL: InternalPriority.CRITICAL,
+        ProviderPriority.HIGH: InternalPriority.HIGH,
+        ProviderPriority.NORMAL: InternalPriority.NORMAL,
+        ProviderPriority.LOW: InternalPriority.LOW,
+        ProviderPriority.FALLBACK: InternalPriority.FALLBACK,
+    }
+    internal_priority = priority_mapping.get(body.priority, InternalPriority.FALLBACK)
+
+    try:
+        # Create config
+        llm_config = OpenAIConfig(
+            base_url=body.base_url,
+            model_name=body.model or "default",
+            api_key=body.api_key or "",  # Empty for local servers
+            instructor_mode="JSON",
+            timeout_seconds=30,
+            max_retries=2,
+        )
+
+        # Create and start service
+        service = OpenAICompatibleClient(
+            config=llm_config,
+            telemetry_service=telemetry_service,
+            time_service=time_service,
+        )
+        await service.start()
+
+        # Override the service name for registry
+        service.name = provider_name
+
+        # Register with registry
+        registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service,
+            priority=internal_priority,
+            capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+            metadata={
+                "provider": body.provider_id,
+                "model": body.model or "default",
+                "base_url": body.base_url,
+                "added_at_runtime": True,
+            },
+        )
+
+        logger.info(f"Added LLM provider '{provider_name}' with priority {body.priority.value}")
+
+        return SuccessResponse(
+            data=AddProviderResponse(
+                success=True,
+                provider_name=provider_name,
+                provider_id=body.provider_id,
+                base_url=body.base_url,
+                priority=body.priority,
+                message=f"Provider '{provider_name}' added successfully",
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to add provider '{provider_name}': {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to add provider: {str(e)}"
+        )

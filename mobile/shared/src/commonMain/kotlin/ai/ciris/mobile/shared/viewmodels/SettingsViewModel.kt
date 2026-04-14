@@ -172,46 +172,11 @@ class SettingsViewModel(
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
 
-    // ========== Local Inference Server Discovery ==========
-
-    // Discovered servers from network scan
-    private val _discoveredServers = MutableStateFlow<List<DiscoveredLlmServer>>(emptyList())
-    val discoveredServers: StateFlow<List<DiscoveredLlmServer>> = _discoveredServers.asStateFlow()
+    // ========== Local Inference Server Selection ==========
 
     // Currently selected server (for local_inference provider)
     private val _selectedServer = MutableStateFlow<DiscoveredLlmServer?>(null)
     val selectedServer: StateFlow<DiscoveredLlmServer?> = _selectedServer.asStateFlow()
-
-    // Discovery in progress flag
-    private val _isDiscovering = MutableStateFlow(false)
-    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
-
-    // ========== LLM Bus Status ==========
-
-    // LLM Bus aggregate status
-    private val _llmBusStatus = MutableStateFlow<ai.ciris.mobile.shared.models.LlmBusStatus?>(null)
-    val llmBusStatus: StateFlow<ai.ciris.mobile.shared.models.LlmBusStatus?> = _llmBusStatus.asStateFlow()
-
-    // LLM Providers with metrics and circuit breaker state
-    private val _llmProviders = MutableStateFlow<List<ai.ciris.mobile.shared.models.LlmProviderStatus>>(emptyList())
-    val llmProviders: StateFlow<List<ai.ciris.mobile.shared.models.LlmProviderStatus>> = _llmProviders.asStateFlow()
-
-    // LLM Bus loading state
-    private val _isLoadingLlmBus = MutableStateFlow(false)
-    val isLoadingLlmBus: StateFlow<Boolean> = _isLoadingLlmBus.asStateFlow()
-
-    // Section expansion states (for collapsible cards)
-    private val _statusExpanded = MutableStateFlow(true)  // Always visible by default
-    val statusExpanded: StateFlow<Boolean> = _statusExpanded.asStateFlow()
-
-    private val _providersExpanded = MutableStateFlow(false)
-    val providersExpanded: StateFlow<Boolean> = _providersExpanded.asStateFlow()
-
-    private val _localServersExpanded = MutableStateFlow(false)
-    val localServersExpanded: StateFlow<Boolean> = _localServersExpanded.asStateFlow()
-
-    private val _advancedExpanded = MutableStateFlow(false)
-    val advancedExpanded: StateFlow<Boolean> = _advancedExpanded.asStateFlow()
 
     // Track if we've loaded config
     private var hasLoadedConfig = false
@@ -400,11 +365,10 @@ class SettingsViewModel(
 
     /**
      * Refresh configuration from backend.
-     * Loads LLM config and LLM Bus status.
+     * Loads LLM configuration. LLM Bus status is managed by LLMSettingsViewModel.
      */
     fun refresh() {
         loadLlmConfig()
-        loadLlmBusStatus()
     }
 
     // ========== BYOK Mode: Form Updates ==========
@@ -443,13 +407,11 @@ class SettingsViewModel(
             logInfo(method, "Cleared API key for local provider")
         }
 
-        // For local_inference, trigger discovery instead of using static list
+        // For local_inference, reset model selection - discovery is triggered by LLMSettingsViewModel
         if (provider == "local_inference") {
             _availableModels.value = emptyList()
             _llmModel.value = ""
             _selectedServer.value = null
-            _discoveredServers.value = emptyList()
-            discoverLocalServers()
             return
         }
 
@@ -468,42 +430,7 @@ class SettingsViewModel(
         }
     }
 
-    // ========== Local Inference Server Discovery ==========
-
-    /**
-     * Discover local LLM inference servers on the network.
-     * Probes hostnames like jetson.local, ollama.local, etc.
-     * Also scans localhost ports for common LLM servers.
-     */
-    fun discoverLocalServers() {
-        val method = "discoverLocalServers"
-        logInfo(method, "Starting local LLM server discovery...")
-
-        viewModelScope.launch {
-            _isDiscovering.value = true
-            _discoveredServers.value = emptyList()
-
-            try {
-                val servers = apiClient.discoverLocalLlmServers(
-                    timeoutSeconds = 5.0f,
-                    includeLocalhost = true
-                )
-
-                _discoveredServers.value = servers
-                logInfo(method, "Discovered ${servers.size} local LLM servers")
-
-                // Auto-select first server if only one found
-                if (servers.size == 1) {
-                    selectServer(servers.first())
-                }
-            } catch (e: Exception) {
-                logError(method, "Discovery failed: ${e.message}")
-                _discoveredServers.value = emptyList()
-            } finally {
-                _isDiscovering.value = false
-            }
-        }
-    }
+    // ========== Local Inference Server Selection ==========
 
     /**
      * Select a discovered server as the LLM endpoint.
@@ -536,152 +463,8 @@ class SettingsViewModel(
         }
     }
 
-    // ========== LLM Bus Status Methods ==========
-
-    /**
-     * Load LLM Bus status and provider list.
-     * Fetches aggregate metrics and per-provider circuit breaker state.
-     */
-    fun loadLlmBusStatus() {
-        val method = "loadLlmBusStatus"
-        logInfo(method, "Loading LLM Bus status...")
-
-        viewModelScope.launch {
-            _isLoadingLlmBus.value = true
-            try {
-                // Fetch bus status and providers in parallel
-                val busStatus = try {
-                    apiClient.getLlmBusStatus()
-                } catch (e: Exception) {
-                    logWarn(method, "Failed to fetch LLM Bus status: ${e.message}")
-                    null
-                }
-
-                val providers = try {
-                    apiClient.getLlmProviders()
-                } catch (e: Exception) {
-                    logWarn(method, "Failed to fetch LLM providers: ${e.message}")
-                    emptyList()
-                }
-
-                _llmBusStatus.value = busStatus
-                _llmProviders.value = providers
-
-                logInfo(method, "Loaded LLM Bus: strategy=${busStatus?.distributionStrategyLabel}, " +
-                    "providers=${providers.size}, available=${busStatus?.providersAvailable}/${busStatus?.providersTotal}")
-            } catch (e: Exception) {
-                logError(method, "Failed to load LLM Bus status: ${e.message}")
-            } finally {
-                _isLoadingLlmBus.value = false
-            }
-        }
-    }
-
-    /**
-     * Toggle section expansion state.
-     */
-    fun toggleStatusExpanded() {
-        _statusExpanded.value = !_statusExpanded.value
-    }
-
-    fun toggleProvidersExpanded() {
-        _providersExpanded.value = !_providersExpanded.value
-    }
-
-    fun toggleLocalServersExpanded() {
-        _localServersExpanded.value = !_localServersExpanded.value
-    }
-
-    fun toggleAdvancedExpanded() {
-        _advancedExpanded.value = !_advancedExpanded.value
-    }
-
-    /**
-     * Update the distribution strategy for the LLM Bus.
-     */
-    fun updateDistributionStrategy(strategy: ai.ciris.mobile.shared.models.DistributionStrategy) {
-        val method = "updateDistributionStrategy"
-        logInfo(method, "Updating distribution strategy to: ${strategy.name}")
-
-        viewModelScope.launch {
-            try {
-                val result = apiClient.updateLlmDistributionStrategy(strategy)
-                if (result.success) {
-                    logInfo(method, "Distribution strategy updated: ${result.previousStrategy} -> ${result.newStrategy}")
-                    // Refresh status to reflect the change
-                    loadLlmBusStatus()
-                } else {
-                    logError(method, "Failed to update distribution strategy: ${result.message}")
-                    _errorMessage.value = result.message
-                }
-            } catch (e: Exception) {
-                logError(method, "Error updating distribution strategy: ${e.message}")
-                _errorMessage.value = "Failed to update strategy: ${e.message}"
-            }
-        }
-    }
-
-    /**
-     * Reset a circuit breaker for a specific provider.
-     */
-    fun resetCircuitBreaker(providerName: String, force: Boolean = false) {
-        val method = "resetCircuitBreaker"
-        logInfo(method, "Resetting circuit breaker for $providerName (force=$force)")
-
-        viewModelScope.launch {
-            try {
-                val result = apiClient.resetLlmCircuitBreaker(providerName, force)
-                if (result.success) {
-                    logInfo(method, "Circuit breaker reset: ${result.previousState} -> ${result.newState}")
-                    // Refresh status to reflect the change
-                    loadLlmBusStatus()
-                } else {
-                    logError(method, "Failed to reset circuit breaker: ${result.message}")
-                    _errorMessage.value = result.message
-                }
-            } catch (e: Exception) {
-                logError(method, "Error resetting circuit breaker: ${e.message}")
-                _errorMessage.value = "Failed to reset circuit breaker: ${e.message}"
-            }
-        }
-    }
-
-    /**
-     * Update circuit breaker configuration for a provider.
-     */
-    fun updateCircuitBreakerConfig(
-        providerName: String,
-        failureThreshold: Int? = null,
-        recoveryTimeoutSeconds: Float? = null,
-        successThreshold: Int? = null,
-        timeoutDurationSeconds: Float? = null
-    ) {
-        val method = "updateCircuitBreakerConfig"
-        logInfo(method, "Updating CB config for $providerName")
-
-        viewModelScope.launch {
-            try {
-                val result = apiClient.updateLlmCircuitBreakerConfig(
-                    providerName = providerName,
-                    failureThreshold = failureThreshold,
-                    recoveryTimeoutSeconds = recoveryTimeoutSeconds,
-                    successThreshold = successThreshold,
-                    timeoutDurationSeconds = timeoutDurationSeconds
-                )
-                if (result.success) {
-                    logInfo(method, "Circuit breaker config updated for $providerName")
-                    // Refresh status to reflect the change
-                    loadLlmBusStatus()
-                } else {
-                    logError(method, "Failed to update CB config: ${result.message}")
-                    _errorMessage.value = result.message
-                }
-            } catch (e: Exception) {
-                logError(method, "Error updating CB config: ${e.message}")
-                _errorMessage.value = "Failed to update config: ${e.message}"
-            }
-        }
-    }
+    // Note: LLM Bus management methods (status, circuit breakers, distribution strategy,
+    // provider priority, provider deletion) have been moved to LLMSettingsViewModel.
 
     /**
      * Fetch available models from API for a provider.

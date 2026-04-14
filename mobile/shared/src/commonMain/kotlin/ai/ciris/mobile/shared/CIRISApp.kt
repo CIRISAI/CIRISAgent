@@ -57,6 +57,7 @@ import ai.ciris.mobile.shared.viewmodels.SchedulerViewModel
 import ai.ciris.mobile.shared.viewmodels.ToolsViewModel
 import ai.ciris.mobile.shared.viewmodels.EnvironmentInfoViewModel
 import ai.ciris.mobile.shared.viewmodels.DataManagementViewModel
+import ai.ciris.mobile.shared.viewmodels.LLMSettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SkillImportViewModel
 import ai.ciris.mobile.shared.viewmodels.SkillStudioViewModel
 import ai.ciris.mobile.shared.ui.screens.graph.GraphMemoryScreen
@@ -533,6 +534,9 @@ fun CIRISApp(
     interactViewModel.observeLanguageChanges(localizationManager)
     val settingsViewModel: SettingsViewModel = viewModel {
         SettingsViewModel(secureStorage, apiClient, envFileUpdater)
+    }
+    val llmSettingsViewModel: LLMSettingsViewModel = viewModel {
+        LLMSettingsViewModel(apiClient)
     }
     val telemetryViewModel: TelemetryViewModel = viewModel {
         TelemetryViewModel(apiClient)
@@ -1433,6 +1437,7 @@ fun CIRISApp(
             Screen.LLMSettings -> {
                 LLMSettingsScreen(
                     viewModel = settingsViewModel,
+                    llmViewModel = llmSettingsViewModel,
                     apiClient = apiClient,
                     secureStorage = secureStorage,
                     onNavigateBack = {

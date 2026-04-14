@@ -9,7 +9,7 @@ These tests validate the LLMBus management API endpoints:
 """
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -527,3 +527,429 @@ class TestCircuitBreakerIntegration:
         cb.force_open(reason="test")
 
         assert cb.state == CircuitState.OPEN
+
+
+# ============================================================================
+# Test: Provider Priority Management
+# ============================================================================
+
+
+class TestProviderPriorityEndpoint:
+    """Tests for PUT /system/llm/providers/{name}/priority endpoint."""
+
+    def test_update_priority_success(self, client: TestClient) -> None:
+        """Test successful priority update."""
+        from ciris_engine.logic.registries.base import Priority, ServiceProvider
+
+        # Create a mock provider
+        mock_provider = MagicMock(spec=ServiceProvider)
+        mock_provider.name = "test_provider"
+        mock_provider.priority = Priority.NORMAL
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+        ) as mock_registry:
+            mock_reg = MagicMock()
+            mock_reg.get_provider_by_name.return_value = mock_provider
+            mock_reg.set_provider_priority.return_value = True
+            mock_registry.return_value = mock_reg
+
+            response = client.put(
+                "/system/llm/providers/test_provider/priority",
+                json={"priority": "high"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["success"] is True
+        assert data["data"]["provider_name"] == "test_provider"
+        assert data["data"]["new_priority"] == "high"
+
+    def test_update_priority_provider_not_found(self, client: TestClient) -> None:
+        """Test priority update returns 404 for unknown provider."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+        ) as mock_registry:
+            mock_reg = MagicMock()
+            mock_reg.get_provider_by_name.return_value = None
+            mock_registry.return_value = mock_reg
+
+            response = client.put(
+                "/system/llm/providers/nonexistent/priority",
+                json={"priority": "high"},
+            )
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_update_priority_validates_priority_enum(self, client: TestClient) -> None:
+        """Test that invalid priority values are rejected."""
+        response = client.put(
+            "/system/llm/providers/test_provider/priority",
+            json={"priority": "invalid_priority"},
+        )
+
+        assert response.status_code == 422  # Validation error
+
+
+class TestProviderDeleteEndpoint:
+    """Tests for DELETE /system/llm/providers/{name} endpoint."""
+
+    def test_delete_provider_success(self, client: TestClient) -> None:
+        """Test successful provider deletion."""
+        from ciris_engine.logic.registries.base import Priority, ServiceProvider
+
+        mock_provider = MagicMock(spec=ServiceProvider)
+        mock_provider.name = "test_provider"
+        mock_provider.priority = Priority.NORMAL
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+        ) as mock_registry:
+            mock_reg = MagicMock()
+            mock_reg.get_provider_by_name.return_value = mock_provider
+            mock_reg.unregister.return_value = True
+            mock_registry.return_value = mock_reg
+
+            response = client.delete("/system/llm/providers/test_provider")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["success"] is True
+        assert data["data"]["provider_name"] == "test_provider"
+
+    def test_delete_provider_not_found(self, client: TestClient) -> None:
+        """Test delete returns 404 for unknown provider."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+        ) as mock_registry:
+            mock_reg = MagicMock()
+            mock_reg.get_provider_by_name.return_value = None
+            mock_registry.return_value = mock_reg
+
+            response = client.delete("/system/llm/providers/nonexistent")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+
+# ============================================================================
+# Test: ServiceRegistry Priority Methods
+# ============================================================================
+
+
+class TestServiceRegistryPriorityMethods:
+    """Unit tests for ServiceRegistry priority management methods."""
+
+    def test_set_provider_priority_success(self) -> None:
+        """Test setting provider priority updates correctly."""
+        from ciris_engine.logic.registries.base import Priority, ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+        mock_service = MagicMock()
+
+        # Register a service
+        name = registry.register_service(
+            ServiceType.LLM,
+            mock_service,
+            priority=Priority.NORMAL,
+        )
+
+        # Update priority
+        success = registry.set_provider_priority(name, Priority.HIGH, ServiceType.LLM)
+        assert success is True
+
+        # Verify priority changed
+        provider = registry.get_provider_by_name(name, ServiceType.LLM)
+        assert provider is not None
+        assert provider.priority == Priority.HIGH
+
+    def test_set_provider_priority_not_found(self) -> None:
+        """Test setting priority for non-existent provider returns False."""
+        from ciris_engine.logic.registries.base import Priority, ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+
+        success = registry.set_provider_priority(
+            "nonexistent", Priority.HIGH, ServiceType.LLM
+        )
+        assert success is False
+
+    def test_get_provider_by_name_success(self) -> None:
+        """Test getting provider by name."""
+        from ciris_engine.logic.registries.base import Priority, ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+        mock_service = MagicMock()
+
+        name = registry.register_service(
+            ServiceType.LLM,
+            mock_service,
+            priority=Priority.NORMAL,
+        )
+
+        provider = registry.get_provider_by_name(name, ServiceType.LLM)
+        assert provider is not None
+        assert provider.name == name
+
+    def test_get_provider_by_name_not_found(self) -> None:
+        """Test getting non-existent provider returns None."""
+        from ciris_engine.logic.registries.base import ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+
+        provider = registry.get_provider_by_name("nonexistent", ServiceType.LLM)
+        assert provider is None
+
+    def test_set_priority_reorders_providers(self) -> None:
+        """Test that setting priority re-sorts the provider list."""
+        from ciris_engine.logic.registries.base import Priority, ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+
+        # Register two services with different priorities
+        mock_service_1 = MagicMock()
+        mock_service_2 = MagicMock()
+
+        name1 = registry.register_service(
+            ServiceType.LLM,
+            mock_service_1,
+            priority=Priority.NORMAL,
+        )
+        name2 = registry.register_service(
+            ServiceType.LLM,
+            mock_service_2,
+            priority=Priority.LOW,
+        )
+
+        # Verify initial order: NORMAL before LOW
+        providers = registry._services[ServiceType.LLM]
+        assert providers[0].name == name1
+        assert providers[1].name == name2
+
+        # Change second provider to HIGH (should now be first)
+        registry.set_provider_priority(name2, Priority.HIGH, ServiceType.LLM)
+
+        # Verify new order: HIGH before NORMAL
+        providers = registry._services[ServiceType.LLM]
+        assert providers[0].name == name2
+        assert providers[1].name == name1
+
+
+# ============================================================================
+# Test: Add Provider Endpoint
+# ============================================================================
+
+
+class TestAddProviderEndpoint:
+    """Tests for POST /system/llm/providers endpoint."""
+
+    def test_add_provider_success(self, app_with_llm_routes: FastAPI) -> None:
+        """Test successful provider addition."""
+        # Add required services to app state
+        app_with_llm_routes.state.telemetry_service = MagicMock()
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ):
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+            ) as mock_registry:
+                mock_reg = MagicMock()
+                mock_reg.get_provider_by_name.return_value = None  # Not existing
+                mock_reg.register_service.return_value = "test_local"
+                mock_registry.return_value = mock_reg
+
+                # Mock the OpenAI client creation
+                with patch(
+                    "ciris_engine.logic.services.runtime.llm_service.service.OpenAICompatibleClient"
+                ) as mock_client_class:
+                    mock_client = MagicMock()
+                    mock_client.start = AsyncMock()  # start() is async
+                    mock_client_class.return_value = mock_client
+
+                    client = TestClient(app_with_llm_routes)
+                    response = client.post(
+                        "/system/llm/providers",
+                        json={
+                            "provider_id": "local",
+                            "name": "test_local",
+                            "base_url": "http://192.168.1.100:11434/v1",
+                            "model": "llama3.2",
+                            "priority": "fallback",
+                        },
+                    )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["success"] is True
+        assert data["data"]["provider_name"] == "test_local"
+        assert data["data"]["provider_id"] == "local"
+        assert data["data"]["priority"] == "fallback"
+
+    def test_add_provider_generates_name(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that provider name is auto-generated if not provided."""
+        app_with_llm_routes.state.telemetry_service = MagicMock()
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ):
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+            ) as mock_registry:
+                mock_reg = MagicMock()
+                mock_reg.get_provider_by_name.return_value = None
+                mock_reg.register_service.return_value = "local_192.168.1.100_11434_v1"
+                mock_registry.return_value = mock_reg
+
+                with patch(
+                    "ciris_engine.logic.services.runtime.llm_service.service.OpenAICompatibleClient"
+                ) as mock_client_class:
+                    mock_client = MagicMock()
+                    mock_client.start = AsyncMock()  # start() is async
+                    mock_client_class.return_value = mock_client
+
+                    client = TestClient(app_with_llm_routes)
+                    response = client.post(
+                        "/system/llm/providers",
+                        json={
+                            "provider_id": "local",
+                            "base_url": "http://192.168.1.100:11434/v1",
+                            # No name provided
+                        },
+                    )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["success"] is True
+        # Name should be auto-generated from provider_id and url
+        assert "local" in data["data"]["provider_name"]
+        assert "192.168.1.100" in data["data"]["provider_name"]
+
+    def test_add_provider_already_exists(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that adding existing provider returns 400."""
+        from ciris_engine.logic.registries.base import Priority, ServiceProvider
+
+        app_with_llm_routes.state.telemetry_service = MagicMock()
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        mock_existing = MagicMock(spec=ServiceProvider)
+        mock_existing.name = "existing_provider"
+        mock_existing.priority = Priority.NORMAL
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ):
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+            ) as mock_registry:
+                mock_reg = MagicMock()
+                mock_reg.get_provider_by_name.return_value = mock_existing  # Already exists
+                mock_registry.return_value = mock_reg
+
+                client = TestClient(app_with_llm_routes)
+                response = client.post(
+                    "/system/llm/providers",
+                    json={
+                        "provider_id": "local",
+                        "name": "existing_provider",
+                        "base_url": "http://localhost:11434/v1",
+                    },
+                )
+
+        assert response.status_code == 400
+        assert "already exists" in response.json()["detail"].lower()
+
+    def test_add_provider_missing_services(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that 503 is returned when required services are unavailable."""
+        # Don't set telemetry_service and time_service
+        app_with_llm_routes.state.telemetry_service = None
+        app_with_llm_routes.state.time_service = None
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.post(
+                "/system/llm/providers",
+                json={
+                    "provider_id": "local",
+                    "name": "test",
+                    "base_url": "http://localhost:11434/v1",
+                },
+            )
+
+        assert response.status_code == 503
+        assert "services" in response.json()["detail"].lower()
+
+    def test_add_provider_validates_request(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that invalid request body returns 422."""
+        app_with_llm_routes.state.telemetry_service = MagicMock()
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ):
+            client = TestClient(app_with_llm_routes)
+            # Missing required field: base_url
+            response = client.post(
+                "/system/llm/providers",
+                json={
+                    "provider_id": "local",
+                    # No base_url
+                },
+            )
+
+        assert response.status_code == 422  # Validation error
+
+    def test_add_provider_with_all_priority_levels(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that all priority levels are accepted."""
+        app_with_llm_routes.state.telemetry_service = MagicMock()
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        priority_levels = ["critical", "high", "normal", "low", "fallback"]
+
+        for priority in priority_levels:
+            with patch(
+                "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+                return_value=True
+            ):
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
+                ) as mock_registry:
+                    mock_reg = MagicMock()
+                    mock_reg.get_provider_by_name.return_value = None
+                    mock_registry.return_value = mock_reg
+
+                    with patch(
+                        "ciris_engine.logic.services.runtime.llm_service.service.OpenAICompatibleClient"
+                    ) as mock_client_class:
+                        mock_client = MagicMock()
+                        mock_client.start = AsyncMock()  # start() is async
+                        mock_client_class.return_value = mock_client
+
+                        client = TestClient(app_with_llm_routes)
+                        response = client.post(
+                            "/system/llm/providers",
+                            json={
+                                "provider_id": "local",
+                                "name": f"provider_{priority}",
+                                "base_url": "http://localhost:11434/v1",
+                                "priority": priority,
+                            },
+                        )
+
+            assert response.status_code == 200, f"Failed for priority: {priority}"
+            assert response.json()["data"]["priority"] == priority

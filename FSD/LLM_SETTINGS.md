@@ -487,10 +487,8 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 | `/v1/system/llm/distribution` | PUT | ✅ | Update distribution strategy |
 | `/v1/system/llm/providers/{name}/circuit-breaker/reset` | POST | ✅ | Reset circuit breaker |
 | `/v1/system/llm/providers/{name}/circuit-breaker/config` | PUT | ✅ | Update CB config |
-| `/v1/system/llm/providers` | POST | 🚧 TODO | Add provider with priority |
-| `/v1/system/llm/providers/{id}/priority` | PUT | 🚧 TODO | Update provider priority |
-| `/v1/system/llm/providers/{id}/enabled` | PUT | 🚧 TODO | Toggle provider enabled |
-| `/v1/system/llm/providers/{id}` | DELETE | 🚧 TODO | Remove provider |
+| `/v1/system/llm/providers/{name}/priority` | PUT | ✅ | Update provider priority |
+| `/v1/system/llm/providers/{name}` | DELETE | ✅ | Remove provider |
 
 ### New Endpoint Schemas
 
@@ -645,14 +643,15 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 6. ✅ Backend: `/v1/system/llm/status` endpoint
 7. ✅ Backend: `/v1/system/llm/providers` endpoint (GET)
 
-### Phase 2: Multi-Provider (Priority Management) 🚧 IN PROGRESS
+### Phase 2: Multi-Provider (Priority Management) ✅ COMPLETE
 1. ✅ Backend: Distribution strategy endpoint
 2. ✅ Backend: Circuit breaker reset/config endpoints
-3. ✅ Frontend: Providers section with priority badges (display)
-4. 🚧 Backend: Provider CRUD endpoints (POST/PUT/DELETE)
-5. 🚧 Frontend: Priority dropdown (editable)
-6. 🚧 Frontend: Add/Remove provider flows
-7. 🚧 Frontend: "Add as Provider" button for discovered servers
+3. ✅ Backend: ServiceRegistry has full priority/enabled support
+4. ✅ Frontend: Providers section with priority badges (display)
+5. ✅ API shim: PUT /system/llm/providers/{name}/priority endpoint
+6. ✅ API shim: DELETE /system/llm/providers/{name} endpoint
+7. ✅ Frontend: Priority dropdown wired to backend (LLMSettingsViewModel)
+8. 🚧 Frontend: "Add as Provider" button (needs POST endpoint + runtime changes)
 
 ### Phase 3: Local Discovery (Network Scanning) ✅ COMPLETE
 1. ✅ Implement Local Servers section
@@ -660,7 +659,7 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 3. ✅ Backend: `/v1/setup/llm/start-local-server` endpoint
 4. ✅ Frontend: LocalLlmServerDiscovery component
 5. ✅ Auto-disable model reasoning on local endpoints (Gemma 4 fix)
-6. 🚧 "Add as Provider" flow (blocked on Phase 2 CRUD)
+6. 🚧 "Add as Provider" flow - needs POST endpoint + hot-reload support
 
 ### Phase 4: Advanced Settings ✅ COMPLETE
 1. ✅ Distribution strategy selection (radio buttons)
@@ -925,11 +924,11 @@ Before implementation is complete, verify all capabilities are exposed:
 - [x] Circuit breaker reset works (`POST /providers/{name}/circuit-breaker/reset`)
 - [x] Circuit breaker config update works (`PUT /providers/{name}/circuit-breaker/config`)
 - [x] Model reasoning disabled on local endpoints (Gemma 4 compatibility)
-- [ ] Every provider shows: Status, Priority, Protection, Enabled (Priority readonly)
-- [ ] Priority dropdown includes all 5 levels (🚧 needs backend CRUD)
-- [ ] Protection shows current state and allows reset (display works, toggle TODO)
-- [ ] Enabled toggle works for all provider types (🚧 needs backend CRUD)
-- [ ] "Add as Provider" button for discovered servers (🚧 needs backend CRUD)
+- [x] Every provider shows: Status, Priority, Protection
+- [x] Priority dropdown includes all 5 levels (API endpoint + frontend complete)
+- [x] Protection shows current state and allows reset
+- [ ] Enabled toggle works for all provider types (🚧 needs API shim)
+- [ ] "Add as Provider" button for discovered servers (🚧 needs POST endpoint + runtime hot-reload)
 - [ ] Developer options expose all numeric configs (🚧 UI TODO)
 - [ ] All metrics from `get_service_stats()` are accessible (partial)
 - [ ] All metrics from `get_metrics()` are accessible (partial)

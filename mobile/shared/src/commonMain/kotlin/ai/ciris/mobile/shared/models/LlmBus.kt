@@ -273,3 +273,19 @@ data class ProviderEnableResponse(
     val enabled: Boolean,
     val message: String
 )
+
+@Serializable
+data class ProviderPriorityUpdateResponse(
+    val success: Boolean,
+    @SerialName("provider_name") val providerName: String,
+    @SerialName("previous_priority") val previousPriority: String,
+    @SerialName("new_priority") val newPriority: String,
+    val message: String
+)
+
+@Serializable
+data class ProviderDeleteResponse(
+    val success: Boolean,
+    @SerialName("provider_name") val providerName: String,
+    val message: String
+)

@@ -60,10 +60,15 @@ class DeviceTier(str, Enum):
     does not yet ship an adequate on-device model in every configuration.
     The wizard surfaces iOS-stub devices differently so the user knows the
     path exists but is not yet active.
+
+    ``DESKTOP_CAPABLE`` indicates a desktop system with enough RAM/disk to
+    run llama.cpp with Gemma4. Unlike mobile, desktop doesn't auto-start
+    the server - the user must opt in via the wizard.
     """
 
     CAPABLE_E4B = "capable_e4b"  # can run the heavier E4B model
     CAPABLE_E2B = "capable_e2b"  # can run E2B reliably
+    DESKTOP_CAPABLE = "desktop_capable"  # desktop with enough RAM/disk for llama.cpp
     IOS_STUB = "ios_stub"  # iOS device that would be capable, model not yet available
     INCAPABLE = "incapable"  # local inference is not safe on this device
 

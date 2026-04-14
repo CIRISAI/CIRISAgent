@@ -13,6 +13,8 @@ enum class LocalInferenceTier {
     CAPABLE_E4B,
     /** Device has ≥ 6 GB RAM and an arm64 mobile CPU — can run E2B. */
     CAPABLE_E2B,
+    /** Desktop system with enough RAM/disk to run llama.cpp with Gemma4. */
+    DESKTOP_CAPABLE,
     /**
      * iOS hardware looks capable but no Gemma 4 model bundle is shipped
      * yet. The wizard shows this as "Coming soon" and disables selection.
@@ -36,7 +38,9 @@ data class LocalInferenceCapability(
     val reason: String,
 ) {
     /** True when the wizard should offer the local option as a normal choice. */
-    val isReady: Boolean get() = tier == LocalInferenceTier.CAPABLE_E2B || tier == LocalInferenceTier.CAPABLE_E4B
+    val isReady: Boolean get() = tier == LocalInferenceTier.CAPABLE_E2B ||
+                                  tier == LocalInferenceTier.CAPABLE_E4B ||
+                                  tier == LocalInferenceTier.DESKTOP_CAPABLE
 
     /** True when the wizard should show the option but mark it "coming soon". */
     val isComingSoon: Boolean get() = tier == LocalInferenceTier.IOS_STUB

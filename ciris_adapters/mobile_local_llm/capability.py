@@ -69,7 +69,7 @@ class DeviceCapabilityReport:
     @property
     def capable(self) -> bool:
         """True when the device can actually run local inference today."""
-        return self.tier in {DeviceTier.CAPABLE_E2B, DeviceTier.CAPABLE_E4B}
+        return self.tier in {DeviceTier.CAPABLE_E2B, DeviceTier.CAPABLE_E4B, DeviceTier.DESKTOP_CAPABLE}
 
     @property
     def is_stub(self) -> bool:
@@ -288,16 +288,10 @@ def probe_device_capability(
             reasons=reasons,
         )
 
-    # Gate 1: platform — Android and iOS (with caveats) are supported.
-    # Desktop only passes when ``allow_desktop`` is explicitly set for QA.
-    if current_platform == Platform.DESKTOP and not config.allow_desktop:
-        reasons.append(
-            "running on desktop; set allow_desktop=true to opt in for development"
-        )
-        return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
-        )
+    # Gate 1: platform — Android, iOS (with caveats), and Desktop are all supported.
+    # None auto-start the server; all platforms detect capability and let the
+    # user opt in via the wizard. This keeps behavior predictable and gives
+    # users control over when to allocate resources for local inference.
     if current_platform == Platform.UNKNOWN:
         reasons.append("unknown platform; refusing to run local inference")
         return _result(
@@ -366,6 +360,17 @@ def probe_device_capability(
                 DeviceTier.IOS_STUB, current_platform, architecture,
                 total_ram_gb, available_ram_gb, free_disk_gb, reasons,
             )
+
+    # Gate 6: Desktop — return DESKTOP_CAPABLE so the wizard can offer to
+    # start a local llama.cpp server. User must explicitly opt in.
+    if current_platform == Platform.DESKTOP:
+        reasons.append(
+            f"desktop system with {total_ram_gb:.1f}GB RAM can run local llama.cpp inference"
+        )
+        return _result(
+            DeviceTier.DESKTOP_CAPABLE, current_platform, architecture,
+            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+        )
 
     return _result(
         tentative_tier, current_platform, architecture,

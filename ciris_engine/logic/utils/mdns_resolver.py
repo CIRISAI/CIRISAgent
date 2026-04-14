@@ -135,28 +135,37 @@ async def resolve_local_hostname(
     # Non-.local hostname - use standard resolution
     if not _is_local_hostname(hostname):
         try:
-            return socket.gethostbyname(hostname)
+            ip = socket.gethostbyname(hostname)
+            logger.info(f"[mDNS] Resolved {hostname} -> {ip} via socket (non-.local)")
+            return ip
         except socket.gaierror:
+            logger.info(f"[mDNS] Failed to resolve non-.local hostname: {hostname}")
             return hostname
 
     # Try zeroconf for .local hostnames
+    logger.info(f"[mDNS] Attempting zeroconf resolution for {hostname}...")
     azc = await _get_async_zeroconf()
     if azc is not None:
         try:
-            ip = await _resolve_via_zeroconf(azc, hostname, timeout)
-            if ip:
-                logger.debug(f"[mDNS] Resolved {hostname} -> {ip} via zeroconf")
-                return ip
+            resolved_ip = await _resolve_via_zeroconf(azc, hostname, timeout)
+            if resolved_ip:
+                logger.info(f"[mDNS] Resolved {hostname} -> {resolved_ip} via zeroconf")
+                return resolved_ip
+            else:
+                logger.info(f"[mDNS] Zeroconf returned no result for {hostname}")
         except Exception as e:
-            logger.debug(f"[mDNS] Zeroconf resolution failed for {hostname}: {e}")
+            logger.warning(f"[mDNS] Zeroconf resolution failed for {hostname}: {e}")
+    else:
+        logger.warning("[mDNS] AsyncZeroconf not available")
 
     # Fall back to socket (works on some platforms)
+    logger.info(f"[mDNS] Falling back to socket.gethostbyname for {hostname}")
     try:
         ip = socket.gethostbyname(hostname)
-        logger.debug(f"[mDNS] Resolved {hostname} -> {ip} via socket")
+        logger.info(f"[mDNS] Resolved {hostname} -> {ip} via socket fallback")
         return ip
-    except socket.gaierror:
-        logger.debug(f"[mDNS] Failed to resolve {hostname}")
+    except socket.gaierror as e:
+        logger.warning(f"[mDNS] Socket resolution also failed for {hostname}: {e}")
         return hostname
 
 
@@ -165,52 +174,176 @@ async def _resolve_via_zeroconf(
     hostname: str,
     timeout: float,
 ) -> Optional[str]:
-    """Resolve hostname using zeroconf's A record query.
+    """Resolve hostname using zeroconf's mDNS query.
 
-    Zeroconf can query for A records by creating a service query for the
-    hostname. The ServiceInfo class handles the mDNS multicast query.
+    Uses a thread pool to run synchronous zeroconf operations,
+    ensuring compatibility with older zeroconf versions (0.39.4+).
     """
+    # Run sync resolution in thread pool to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        _sync_resolve_via_zeroconf,
+        azc.zeroconf,
+        hostname,
+        timeout,
+    )
+
+
+def _sync_resolve_via_zeroconf(
+    zc: Any,
+    hostname: str,
+    timeout: float,
+) -> Optional[str]:
+    """Synchronous hostname resolution via mDNS.
+
+    Sends an mDNS A record query and polls the cache for the response.
+    Compatible with zeroconf 0.39.4+.
+    """
+    import time
+
+    # Standard DNS constants - use these as fallback
+    TYPE_A = 1
+    CLASS_IN = 1
+    FLAGS_QR_QUERY = 0
+
+    # Try to get DNSOutgoing and constants from zeroconf
+    dns_outgoing_cls: Any = None
+    dns_question_cls: Any = None
+
     try:
-        from zeroconf._dns import DNSQuestion  # type: ignore[import-not-found]
-        from zeroconf.const import _TYPE_A  # type: ignore[import-not-found]
+        from zeroconf._dns import DNSOutgoing  # type: ignore[attr-defined]
+
+        dns_outgoing_cls = DNSOutgoing
     except ImportError:
-        # Zeroconf internal imports changed, fall back
+        try:
+            from zeroconf import DNSOutgoing  # type: ignore[attr-defined]
+
+            dns_outgoing_cls = DNSOutgoing
+        except ImportError:
+            pass
+
+    try:
+        # zeroconf._dns.DNSQuestion may not be exported explicitly
+        from zeroconf._dns import DNSQuestion
+
+        dns_question_cls = DNSQuestion
+    except ImportError:
+        pass
+
+    try:
+        # zeroconf.const internal constants
+        from zeroconf.const import (
+            _CLASS_IN,
+            _FLAGS_QR_QUERY,
+            _TYPE_A,
+        )
+
+        TYPE_A = _TYPE_A
+        CLASS_IN = _CLASS_IN
+        FLAGS_QR_QUERY = _FLAGS_QR_QUERY
+    except ImportError:
+        pass
+
+    if dns_outgoing_cls is None:
         logger.debug("[mDNS] Could not import zeroconf DNS internals")
         return None
-
-    zc = azc.zeroconf
 
     # Normalize hostname (ensure it ends with .)
     name = hostname if hostname.endswith(".") else f"{hostname}."
 
-    # Create listener for A record responses
-    result_ip: Optional[str] = None
-    event = asyncio.Event()
-
-    class ARecordListener:
-        def update_record(
-            self, zc: Any, now: float, record: Any
-        ) -> None:
-            nonlocal result_ip
-            if record.type == _TYPE_A and record.name.lower() == name.lower():
-                result_ip = socket.inet_ntoa(record.address)
-                event.set()
-
-    listener = ARecordListener()
-    question = DNSQuestion(name, _TYPE_A, 1)  # 1 = IN class
-
-    # Register listener and send query
-    await azc.async_add_listener(listener, question)
-
+    # Check cache first - the hostname might already be resolved
     try:
-        # Wait for response with timeout
-        await asyncio.wait_for(event.wait(), timeout=timeout)
-    except asyncio.TimeoutError:
-        pass
-    finally:
-        zc.remove_listener(listener)
+        cached_ip = _check_zeroconf_cache(zc, name, TYPE_A)
+        if cached_ip:
+            logger.debug(f"[mDNS] Found {hostname} in cache: {cached_ip}")
+            return cached_ip
+    except Exception as e:
+        logger.debug(f"[mDNS] Cache check failed: {e}")
 
-    return result_ip
+    # Send mDNS A record query
+    query_sent = False
+    try:
+        out = dns_outgoing_cls(FLAGS_QR_QUERY)
+        # Try newer API first
+        if hasattr(out, "add_question_or_one_cache"):
+            out.add_question_or_one_cache(
+                zc.cache, time.time() * 1000, name, TYPE_A, CLASS_IN
+            )
+            query_sent = True
+        elif hasattr(out, "add_question") and dns_question_cls is not None:
+            out.add_question(dns_question_cls(name, TYPE_A, CLASS_IN))
+            query_sent = True
+
+        if query_sent:
+            zc.send(out)
+            logger.debug(f"[mDNS] Sent A record query for {hostname}")
+    except Exception as e:
+        logger.debug(f"[mDNS] Failed to send query: {e}")
+        return None
+
+    if not query_sent:
+        logger.debug("[mDNS] Could not construct DNS query")
+        return None
+
+    # Poll cache for response
+    start = time.monotonic()
+    poll_interval = 0.1
+    while (time.monotonic() - start) < timeout:
+        try:
+            cached_ip = _check_zeroconf_cache(zc, name, TYPE_A)
+            if cached_ip:
+                logger.debug(f"[mDNS] Resolved {hostname} -> {cached_ip} from cache")
+                return cached_ip
+        except Exception:
+            pass
+        time.sleep(poll_interval)
+
+    logger.debug(f"[mDNS] No response for {hostname} after {timeout}s")
+    return None
+
+
+def _check_zeroconf_cache(zc: Any, name: str, type_a: int = 1) -> Optional[str]:
+    """Check zeroconf cache for A record of hostname.
+
+    Compatible with multiple zeroconf versions.
+
+    Args:
+        zc: Zeroconf instance
+        name: Hostname to look up (must end with .)
+        type_a: DNS type for A record (default 1)
+    """
+    # Try different cache access methods for compatibility
+    try:
+        # Newer API: entries_with_name returns iterable
+        entries = zc.cache.entries_with_name(name)
+        for entry in entries:
+            if hasattr(entry, "type") and entry.type == type_a:
+                if hasattr(entry, "address") and entry.address:
+                    return socket.inet_ntoa(entry.address)
+    except (AttributeError, TypeError):
+        pass
+
+    # Try alternate cache access
+    try:
+        # Some versions use cache.get()
+        entry = zc.cache.get(name)
+        if entry and hasattr(entry, "address") and entry.address:
+            return socket.inet_ntoa(entry.address)
+    except (AttributeError, TypeError):
+        pass
+
+    # Try entries() method
+    try:
+        for entry in zc.cache.entries():
+            if hasattr(entry, "name") and entry.name.lower() == name.lower():
+                if hasattr(entry, "type") and entry.type == type_a:
+                    if hasattr(entry, "address") and entry.address:
+                        return socket.inet_ntoa(entry.address)
+    except (AttributeError, TypeError):
+        pass
+
+    return None
 
 
 async def resolve_url_hostname(

@@ -474,21 +474,23 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/setup/llm-config` | GET | Get current LLM configuration |
-| `/v1/setup/llm-config` | PUT | Update LLM configuration |
-| `/v1/setup/models/{provider}` | GET | Get models for provider |
-| `/v1/setup/list-models` | POST | List models from live API |
-| `/v1/setup/validate-llm` | POST | Validate LLM config |
-| `/v1/setup/discover-local-llm` | POST | Discover local servers |
-| `/v1/setup/start-local-server` | POST | Start local server |
-| `/v1/system/llm/status` | GET | **NEW** Get LLMBus status |
-| `/v1/system/llm/providers` | GET | **NEW** List all providers with status |
-| `/v1/system/llm/providers` | POST | **NEW** Add provider |
-| `/v1/system/llm/providers/{id}` | PUT | **NEW** Update provider |
-| `/v1/system/llm/providers/{id}` | DELETE | **NEW** Remove provider |
-| `/v1/system/llm/distribution` | PUT | **NEW** Update distribution strategy |
+| Endpoint | Method | Status | Description |
+|----------|--------|--------|-------------|
+| `/v1/setup/llm/models` | GET | ✅ | Get model capabilities database |
+| `/v1/setup/llm/models/{provider}` | GET | ✅ | Get models for provider |
+| `/v1/setup/llm/list-models` | POST | ✅ | List models from live API |
+| `/v1/setup/llm/validate-llm` | POST | ✅ | Validate LLM config |
+| `/v1/setup/llm/discover-local-llm` | POST | ✅ | Discover local servers |
+| `/v1/setup/llm/start-local-server` | POST | ✅ | Start local server |
+| `/v1/system/llm/status` | GET | ✅ | Get LLMBus status |
+| `/v1/system/llm/providers` | GET | ✅ | List all providers with status |
+| `/v1/system/llm/distribution` | PUT | ✅ | Update distribution strategy |
+| `/v1/system/llm/providers/{name}/circuit-breaker/reset` | POST | ✅ | Reset circuit breaker |
+| `/v1/system/llm/providers/{name}/circuit-breaker/config` | PUT | ✅ | Update CB config |
+| `/v1/system/llm/providers` | POST | 🚧 TODO | Add provider with priority |
+| `/v1/system/llm/providers/{id}/priority` | PUT | 🚧 TODO | Update provider priority |
+| `/v1/system/llm/providers/{id}/enabled` | PUT | 🚧 TODO | Toggle provider enabled |
+| `/v1/system/llm/providers/{id}` | DELETE | 🚧 TODO | Remove provider |
 
 ### New Endpoint Schemas
 
@@ -634,31 +636,38 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 
 ## Implementation Phases
 
-### Phase 1: MVP (Status + Basic Provider Management)
-1. Create LLMSettingsViewModel with status state
-2. Implement Status Overview section
-3. Show existing providers from config
-4. Add Edit flow for single provider
-5. Wire to existing `/v1/setup/llm-config` endpoint
+### Phase 1: MVP (Status + Basic Provider Management) ✅ COMPLETE
+1. ✅ Create LLMSettingsViewModel with status state
+2. ✅ Implement Status Overview section
+3. ✅ Show existing providers from config
+4. ✅ Add Edit flow for single provider
+5. ✅ Wire to existing `/v1/setup/llm-config` endpoint
+6. ✅ Backend: `/v1/system/llm/status` endpoint
+7. ✅ Backend: `/v1/system/llm/providers` endpoint (GET)
 
-### Phase 2: Multi-Provider (Priority Management)
-1. Add new backend endpoints for provider CRUD
-2. Implement Providers section with priority badges
-3. Add/Remove provider flows
-4. Reorder by priority (drag or buttons)
-5. Circuit breaker status display
+### Phase 2: Multi-Provider (Priority Management) 🚧 IN PROGRESS
+1. ✅ Backend: Distribution strategy endpoint
+2. ✅ Backend: Circuit breaker reset/config endpoints
+3. ✅ Frontend: Providers section with priority badges (display)
+4. 🚧 Backend: Provider CRUD endpoints (POST/PUT/DELETE)
+5. 🚧 Frontend: Priority dropdown (editable)
+6. 🚧 Frontend: Add/Remove provider flows
+7. 🚧 Frontend: "Add as Provider" button for discovered servers
 
-### Phase 3: Local Discovery (Network Scanning)
-1. Implement Local Servers section
-2. Integrate with existing discovery endpoint
-3. "Add as Provider" flow
-4. Start local server flow (requires Ollama/llama.cpp)
+### Phase 3: Local Discovery (Network Scanning) ✅ COMPLETE
+1. ✅ Implement Local Servers section
+2. ✅ Backend: `/v1/setup/llm/discover-local-llm` endpoint
+3. ✅ Backend: `/v1/setup/llm/start-local-server` endpoint
+4. ✅ Frontend: LocalLlmServerDiscovery component
+5. ✅ Auto-disable model reasoning on local endpoints (Gemma 4 fix)
+6. 🚧 "Add as Provider" flow (blocked on Phase 2 CRUD)
 
-### Phase 4: Advanced Settings
-1. Distribution strategy selection
-2. Circuit breaker configuration
-3. Rate limit settings
-4. Domain routing per provider
+### Phase 4: Advanced Settings ✅ COMPLETE
+1. ✅ Distribution strategy selection (radio buttons)
+2. ✅ Circuit breaker status display
+3. ✅ Circuit breaker reset functionality
+4. 🚧 Rate limit settings (backend exists, UI TODO)
+5. 🚧 Domain routing per provider (deferred)
 
 ---
 
@@ -909,15 +918,19 @@ This section documents ALL capabilities exposed by the LLMBus runtime and how th
 
 Before implementation is complete, verify all capabilities are exposed:
 
-- [ ] Every provider shows: Status, Priority, Protection, Enabled
-- [ ] Priority dropdown includes all 5 levels
-- [ ] Protection shows current state and allows reset
-- [ ] Enabled toggle works for all provider types
-- [ ] Advanced settings expose distribution strategy
-- [ ] Developer options expose all numeric configs
-- [ ] Status overview shows bus health summary
-- [ ] Local server discovery works
-- [ ] All metrics from `get_service_stats()` are accessible
-- [ ] All metrics from `get_metrics()` are accessible
-- [ ] Circuit breaker reset works
-- [ ] Rate limit status is visible when active
+- [x] Status overview shows bus health summary
+- [x] Local server discovery works (`/v1/setup/llm/discover-local-llm`)
+- [x] Start local server works (`/v1/setup/llm/start-local-server`)
+- [x] Advanced settings expose distribution strategy (radio buttons)
+- [x] Circuit breaker reset works (`POST /providers/{name}/circuit-breaker/reset`)
+- [x] Circuit breaker config update works (`PUT /providers/{name}/circuit-breaker/config`)
+- [x] Model reasoning disabled on local endpoints (Gemma 4 compatibility)
+- [ ] Every provider shows: Status, Priority, Protection, Enabled (Priority readonly)
+- [ ] Priority dropdown includes all 5 levels (🚧 needs backend CRUD)
+- [ ] Protection shows current state and allows reset (display works, toggle TODO)
+- [ ] Enabled toggle works for all provider types (🚧 needs backend CRUD)
+- [ ] "Add as Provider" button for discovered servers (🚧 needs backend CRUD)
+- [ ] Developer options expose all numeric configs (🚧 UI TODO)
+- [ ] All metrics from `get_service_stats()` are accessible (partial)
+- [ ] All metrics from `get_metrics()` are accessible (partial)
+- [ ] Rate limit status is visible when active (🚧 UI TODO)

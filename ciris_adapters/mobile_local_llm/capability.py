@@ -195,12 +195,16 @@ def read_available_ram_gb() -> float:
                 try:
                     available_kb = int(line.split()[1])
                 except (ValueError, IndexError):
-                    pass
+                    # Malformed or partial /proc/meminfo line — skip it and
+                    # let the later psutil fallback provide the value.
+                    continue
             elif line.startswith("MemFree:"):
                 try:
                     free_kb = int(line.split()[1])
                 except (ValueError, IndexError):
-                    pass
+                    # Malformed MemFree line — skip; MemAvailable (or the
+                    # psutil fallback below) will still produce a reading.
+                    continue
         if available_kb is not None:
             return available_kb / (1024 * 1024)
         if free_kb is not None:

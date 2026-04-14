@@ -315,6 +315,13 @@ GOOGLE_PLAY_SERVICES_AVAILABLE="true"
     # Write file with restricted permissions (owner read/write only)
     # Path is from get_default_config_path() - constructed from known-safe bases
     save_path.parent.mkdir(parents=True, exist_ok=True)
+    # lgtm[py/clear-text-storage-of-sensitive-information]
+    # codeql[py/clear-text-storage-of-sensitive-information]
+    # The agent's `.env` file is the only place these credentials can live:
+    # the CIRIS process needs to read them at startup, and the file is the
+    # conventional persistence surface on every supported platform. The
+    # chmod(0o600) immediately below restricts it to the owner. Encrypting
+    # the blob would just push the problem to storing the decryption key.
     save_path.write_text(content, encoding="utf-8")
     save_path.chmod(0o600)  # rw------- (owner only)
 

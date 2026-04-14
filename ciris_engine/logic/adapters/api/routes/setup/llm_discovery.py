@@ -133,8 +133,9 @@ async def _probe_llm_endpoint(url: str) -> Optional[Tuple[str, int, List[str]]]:
                 models = data.get("models", [])
                 model_names = [m.get("name", "unknown") for m in models]
                 return ("ollama", len(models), model_names)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Not an Ollama server (or unreachable) — fall through to next probe.
+            logger.debug("[LLM_DISCOVERY] Ollama probe failed for %s/api/tags: %s", url, exc)
 
         # Try OpenAI-compatible /v1/models
         try:
@@ -147,8 +148,9 @@ async def _probe_llm_endpoint(url: str) -> Optional[Tuple[str, int, List[str]]]:
                 # Detect server type by response characteristics
                 server_type = _detect_server_type_from_response(url, data)
                 return (server_type, len(models), model_names)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Not an OpenAI-compatible /v1/models server — fall through.
+            logger.debug("[LLM_DISCOVERY] /v1/models probe failed for %s: %s", url, exc)
 
         # Try /models (some servers use this)
         try:
@@ -162,8 +164,9 @@ async def _probe_llm_endpoint(url: str) -> Optional[Tuple[str, int, List[str]]]:
                     models = data.get("data", [])
                     model_names = [m.get("id", "unknown") for m in models]
                     return ("openai_compatible", len(models), model_names)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Final probe — return None below if we get here without a hit.
+            logger.debug("[LLM_DISCOVERY] /models probe failed for %s: %s", url, exc)
 
     return None
 

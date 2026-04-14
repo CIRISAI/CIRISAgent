@@ -138,7 +138,9 @@ class InferenceServerManager:
             try:
                 self._process.kill()
             except ProcessLookupError:
-                pass
+                # Process already exited between our send_signal()/wait_for()
+                # and this forced kill; nothing to do.
+                logger.debug("Inference server pid=%s already gone before kill()", self._process.pid)
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
             except asyncio.TimeoutError:

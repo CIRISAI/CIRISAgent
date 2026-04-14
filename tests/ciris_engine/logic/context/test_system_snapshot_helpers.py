@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.context.system_snapshot_helpers import (
     _build_current_task_summary,
+    _build_location_string,
     _collect_adapter_channels,
     _collect_available_tools,
     _collect_resource_alerts,
@@ -32,6 +33,7 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _get_telemetry_summary,
     _get_top_tasks,
     _json_serial_for_users,
+    _merge_memory_profile_into_existing,
     _merge_preferences_into_profile,
     _query_user_preferences,
     _resolve_channel_context,
@@ -2224,3 +2226,300 @@ class TestUserPreferencesQuery:
         assert len(result) == 1
         assert result[0].preferred_language == "ar"
         assert result[0].timezone == "Asia/Dubai"
+
+
+# =============================================================================
+# 12. LOCATION STRING BUILDING TESTS
+# =============================================================================
+
+
+class TestBuildLocationString:
+    """Tests for _build_location_string function."""
+
+    def test_build_location_with_all_parts(self):
+        """Test building location string with all parts."""
+        prefs_attrs = {
+            "location_city": "Seattle",
+            "location_region": "WA",
+            "location_country": "US",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "Seattle, WA, US"
+
+    def test_build_location_city_only(self):
+        """Test building location string with city only."""
+        prefs_attrs = {"location_city": "Seattle"}
+        result = _build_location_string(prefs_attrs)
+        assert result == "Seattle"
+
+    def test_build_location_country_only(self):
+        """Test building location string with country only."""
+        prefs_attrs = {"location_country": "US"}
+        result = _build_location_string(prefs_attrs)
+        assert result == "US"
+
+    def test_build_location_empty_dict(self):
+        """Test building location string with empty dict."""
+        prefs_attrs: Dict[str, Any] = {}
+        result = _build_location_string(prefs_attrs)
+        assert result is None
+
+    def test_build_location_with_none_values(self):
+        """Test building location string when values are None."""
+        prefs_attrs = {
+            "location_city": None,
+            "location_region": "WA",
+            "location_country": "US",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "WA, US"
+
+    def test_build_location_region_and_country(self):
+        """Test building location string without city."""
+        prefs_attrs = {
+            "location_region": "Bavaria",
+            "location_country": "DE",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "Bavaria, DE"
+
+
+# =============================================================================
+# 13. MEMORY PROFILE MERGING TESTS
+# =============================================================================
+
+
+class TestMergeMemoryProfileIntoExisting:
+    """Tests for _merge_memory_profile_into_existing function."""
+
+    def test_merge_language_non_default(self):
+        """Test merging non-default language."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="fr",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.preferred_language == "fr"
+
+    def test_does_not_merge_default_language(self):
+        """Test that default language (en) is not merged."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="fr",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default - should not overwrite
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.preferred_language == "fr"
+
+    def test_merge_timezone_non_default(self):
+        """Test merging non-default timezone."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="UTC",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="America/New_York",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.timezone == "America/New_York"
+
+    def test_does_not_merge_default_timezone(self):
+        """Test that default timezone (UTC) is not merged."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="America/New_York",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="UTC",  # Default - should not overwrite
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.timezone == "America/New_York"
+
+    def test_merge_communication_style_non_default(self):
+        """Test merging non-default communication style."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            communication_style="formal",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            communication_style="casual",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.communication_style == "casual"
+
+    def test_merge_user_preferred_name(self):
+        """Test merging user preferred name."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            user_preferred_name="Johnny",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.user_preferred_name == "Johnny"
+
+    def test_merge_location(self):
+        """Test merging location."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            location="Seattle, WA",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.location == "Seattle, WA"
+
+    def test_merge_oauth_name(self):
+        """Test merging OAuth name."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            oauth_name="John Smith",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.oauth_name == "John Smith"
+
+    def test_merge_memorized_attributes_into_empty(self):
+        """Test merging memorized attributes into empty."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={},  # Empty dict, not None
+        )
+        # Force the attribute to None after construction to test the merge logic
+        existing.memorized_attributes = None  # type: ignore[assignment]
+
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_color": "blue"},
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.memorized_attributes == {"favorite_color": "blue"}
+
+    def test_merge_memorized_attributes_updates_existing(self):
+        """Test merging memorized attributes updates existing."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_color": "red"},
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_food": "pizza"},
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.memorized_attributes == {
+            "favorite_color": "red",
+            "favorite_food": "pizza",
+        }
+
+    def test_merge_notes_appends(self):
+        """Test merging notes appends to existing."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="Original note",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="Additional note",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert "Original note" in existing.notes
+        assert "Additional note" in existing.notes
+
+    def test_merge_notes_into_empty(self):
+        """Test merging notes into empty."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes=None,
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="New note",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert "New note" in existing.notes

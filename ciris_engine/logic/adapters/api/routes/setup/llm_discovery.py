@@ -184,7 +184,7 @@ def _detect_server_type_from_response(url: str, data: Dict[str, Any]) -> str:
     # Check response for hints
     models = data.get("data", [])
     if models:
-        first_model = models[0] if models else {}
+        first_model = models[0]
         # vLLM includes 'max_model_len' in model info
         if "max_model_len" in first_model:
             return "vllm"
@@ -214,125 +214,120 @@ async def start_local_llm_server(
     Returns:
         Dict with success, server_url, pid, message, estimated_ready_seconds
     """
-    import os
-    import shutil
-    import subprocess
-
     logger.info(f"[START_LOCAL_SERVER] Starting {server_type} on port {port} with model {model}")
 
-    # Find the server binary
     if server_type == "ollama":
-        binary = shutil.which("ollama")
-        if not binary:
-            return {
-                "success": False,
-                "message": "Ollama not found. Install from https://ollama.ai",
-                "estimated_ready_seconds": 0,
-            }
-
-        # Start Ollama serve in background
-        try:
-            env = os.environ.copy()
-            env["OLLAMA_HOST"] = f"127.0.0.1:{port}"
-
-            process = subprocess.Popen(
-                [binary, "serve"],
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,  # Detach from parent
-            )
-
-            return {
-                "success": True,
-                "server_url": f"http://127.0.0.1:{port}",
-                "pid": process.pid,
-                "message": f"Ollama server started on port {port}. Pull model with: ollama pull {model}",
-                "estimated_ready_seconds": 30,
-            }
-        except Exception as e:
-            logger.error(f"[START_LOCAL_SERVER] Failed to start Ollama: {e}")
-            return {
-                "success": False,
-                "message": f"Failed to start Ollama: {str(e)}",
-                "estimated_ready_seconds": 0,
-            }
-
+        return await _start_ollama_server(port, model)
     elif server_type == "llama_cpp":
-        # Try common llama.cpp server binary names
-        binary = None
-        for name in ["llama-server", "llama.cpp-server", "server"]:
-            binary = shutil.which(name)
-            if binary:
-                break
-
-        # Also check common installation paths
-        if not binary:
-            common_paths = [
-                "/usr/local/bin/llama-server",
-                "/opt/llama.cpp/build/bin/llama-server",
-                os.path.expanduser("~/.local/bin/llama-server"),
-            ]
-            for path in common_paths:
-                if os.path.isfile(path) and os.access(path, os.X_OK):
-                    binary = path
-                    break
-
-        if not binary:
-            return {
-                "success": False,
-                "message": "llama.cpp server not found. Build from https://github.com/ggerganov/llama.cpp",
-                "estimated_ready_seconds": 0,
-            }
-
-        # Find model file
-        model_file = _find_model_file(model)
-        if not model_file:
-            return {
-                "success": False,
-                "message": f"Model file for '{model}' not found. Download GGUF from HuggingFace.",
-                "estimated_ready_seconds": 0,
-            }
-
-        # Start llama.cpp server
-        try:
-            cmd = [
-                binary,
-                "--model", model_file,
-                "--host", "127.0.0.1",
-                "--port", str(port),
-                "--ctx-size", "8192",  # Reasonable context for Gemma4
-                "--n-gpu-layers", "99",  # Use GPU if available
-            ]
-
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,  # Detach from parent
-            )
-
-            return {
-                "success": True,
-                "server_url": f"http://127.0.0.1:{port}",
-                "pid": process.pid,
-                "message": f"llama.cpp server started with {model}. Loading model...",
-                "estimated_ready_seconds": 60,  # Model loading takes time
-            }
-        except Exception as e:
-            logger.error(f"[START_LOCAL_SERVER] Failed to start llama.cpp: {e}")
-            return {
-                "success": False,
-                "message": f"Failed to start llama.cpp: {str(e)}",
-                "estimated_ready_seconds": 0,
-            }
-
+        return await _start_llama_cpp_server(port, model)
     else:
-        return {
-            "success": False,
-            "message": f"Unknown server type: {server_type}. Use 'llama_cpp' or 'ollama'.",
-            "estimated_ready_seconds": 0,
-        }
+        return _error_result(f"Unknown server type: {server_type}. Use 'llama_cpp' or 'ollama'.")
+
+
+def _error_result(message: str) -> Dict[str, Any]:
+    """Create an error result dict."""
+    return {"success": False, "message": message, "estimated_ready_seconds": 0}
+
+
+def _success_result(port: int, pid: int, message: str, ready_seconds: int) -> Dict[str, Any]:
+    """Create a success result dict."""
+    return {
+        "success": True,
+        "server_url": f"http://127.0.0.1:{port}",
+        "pid": pid,
+        "message": message,
+        "estimated_ready_seconds": ready_seconds,
+    }
+
+
+async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
+    """Start Ollama server on the specified port."""
+    import os
+    import shutil
+
+    binary = shutil.which("ollama")
+    if not binary:
+        return _error_result("Ollama not found. Install from https://ollama.ai")
+
+    try:
+        env = os.environ.copy()
+        env["OLLAMA_HOST"] = f"127.0.0.1:{port}"
+
+        process = await asyncio.create_subprocess_exec(
+            binary, "serve",
+            env=env,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        return _success_result(
+            port, process.pid or 0,
+            f"Ollama server started on port {port}. Pull model with: ollama pull {model}",
+            ready_seconds=30,
+        )
+    except Exception as e:
+        logger.error(f"[START_LOCAL_SERVER] Failed to start Ollama: {e}")
+        return _error_result(f"Failed to start Ollama: {str(e)}")
+
+
+async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
+    """Start llama.cpp server on the specified port."""
+    binary = _find_llama_cpp_binary()
+    if not binary:
+        return _error_result(
+            "llama.cpp server not found. Build from https://github.com/ggerganov/llama.cpp"
+        )
+
+    model_file = _find_model_file(model)
+    if not model_file:
+        return _error_result(f"Model file for '{model}' not found. Download GGUF from HuggingFace.")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "--model", model_file,
+            "--host", "127.0.0.1",
+            "--port", str(port),
+            "--ctx-size", "8192",
+            "--n-gpu-layers", "99",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        return _success_result(
+            port, process.pid or 0,
+            f"llama.cpp server started with {model}. Loading model...",
+            ready_seconds=60,
+        )
+    except Exception as e:
+        logger.error(f"[START_LOCAL_SERVER] Failed to start llama.cpp: {e}")
+        return _error_result(f"Failed to start llama.cpp: {str(e)}")
+
+
+def _find_llama_cpp_binary() -> Optional[str]:
+    """Find the llama.cpp server binary."""
+    import os
+    import shutil
+
+    # Try common binary names
+    for name in ["llama-server", "llama.cpp-server", "server"]:
+        binary = shutil.which(name)
+        if binary:
+            return binary
+
+    # Check common installation paths
+    common_paths = [
+        "/usr/local/bin/llama-server",
+        "/opt/llama.cpp/build/bin/llama-server",
+        os.path.expanduser("~/.local/bin/llama-server"),
+    ]
+    for path in common_paths:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+
+    return None
 
 
 def _find_model_file(model: str) -> Optional[str]:

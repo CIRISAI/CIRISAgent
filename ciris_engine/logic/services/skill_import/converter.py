@@ -12,7 +12,7 @@ import logging
 import re
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.schemas.adapters.tools import InstallStep
 
@@ -48,6 +48,23 @@ def _map_install_kind(kind: str) -> str:
     return mapping.get(kind, "manual")
 
 
+def _build_download_command(spec: SkillInstallSpec, url: str) -> Tuple[Optional[str], str]:
+    """Build download command for archive-type install specs.
+
+    Returns:
+        Tuple of (command, kind) - command is None if not a download spec
+    """
+    archive = getattr(spec, "archive", None)
+    target_dir = getattr(spec, "targetDir", None) or getattr(spec, "target_dir", None)
+    if not (archive and target_dir):
+        return None, _map_install_kind(spec.kind)
+
+    strip = getattr(spec, "stripComponents", None) or getattr(spec, "strip_components", None)
+    strip_flag = f" --strip-components={strip}" if strip else ""
+    command = f"curl -L {url} | tar xz{strip_flag} -C {target_dir}"
+    return command, "manual"
+
+
 def _build_install_steps(specs: List[SkillInstallSpec]) -> List[InstallStep]:
     """Convert OpenClaw install specs to CIRIS InstallStep models.
 
@@ -57,31 +74,16 @@ def _build_install_steps(specs: List[SkillInstallSpec]) -> List[InstallStep]:
     """
     steps: List[InstallStep] = []
     for i, spec in enumerate(specs):
-        label = getattr(spec, "label", None) or f"Install via {spec.kind}"
-        step_id = getattr(spec, "id", None) or f"install_{i}"
-        kind = _map_install_kind(spec.kind)
-        formula: Optional[str] = spec.formula if spec.formula else None
-        package: Optional[str] = spec.package if spec.package else None
-        command: Optional[str] = None
         url: Optional[str] = getattr(spec, "url", None)
-
-        # Handle download-type specs: url, archive, stripComponents, targetDir
-        if url:
-            archive = getattr(spec, "archive", None)
-            target_dir = getattr(spec, "targetDir", None) or getattr(spec, "target_dir", None)
-            strip = getattr(spec, "stripComponents", None) or getattr(spec, "strip_components", None)
-            if archive and target_dir:
-                strip_flag = f" --strip-components={strip}" if strip else ""
-                command = f"curl -L {url} | tar xz{strip_flag} -C {target_dir}"
-                kind = "manual"
+        command, kind = _build_download_command(spec, url) if url else (None, _map_install_kind(spec.kind))
 
         steps.append(
             InstallStep(
-                id=step_id,
+                id=getattr(spec, "id", None) or f"install_{i}",
                 kind=kind,
-                label=label,
-                formula=formula,
-                package=package,
+                label=getattr(spec, "label", None) or f"Install via {spec.kind}",
+                formula=spec.formula if spec.formula else None,
+                package=spec.package if spec.package else None,
                 command=command,
                 url=url,
                 provides_binaries=spec.bins,

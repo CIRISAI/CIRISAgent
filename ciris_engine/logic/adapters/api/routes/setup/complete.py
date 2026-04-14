@@ -537,6 +537,74 @@ def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
     f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={require_hw}\n")
 
 
+def _write_accord_metrics_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write Accord metrics consent if enabled."""
+    if "ciris_accord_metrics" not in setup.enabled_adapters:
+        return
+    consent_timestamp = datetime.now(timezone.utc).isoformat()
+    f.write("\n# Accord Metrics Consent (auto-set when adapter enabled)\n")
+    f.write("CIRIS_ACCORD_METRICS_CONSENT=true\n")
+    f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
+    logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
+
+
+def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write Mobile Local LLM adapter configuration if enabled."""
+    if "mobile_local_llm" not in setup.enabled_adapters and setup.llm_provider != "mobile_local":
+        return
+    f.write("\n# Mobile Local LLM (On-Device Inference)\n")
+    f.write("CIRIS_MOBILE_LOCAL_LLM_ENABLED=true\n")
+    if setup.llm_model:
+        f.write(f'CIRIS_MOBILE_LOCAL_LLM_MODEL="{setup.llm_model}"\n')
+    logger.info("[SETUP] Mobile Local LLM adapter enabled for on-device inference")
+
+
+def _write_adapter_specific_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write adapter-specific environment variables."""
+    if not setup.adapter_config:
+        return
+    f.write("\n# Adapter-Specific Configuration\n")
+    ha_env_mapping = {
+        "access_token": "HOME_ASSISTANT_TOKEN",
+        "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+        "base_url": "HOME_ASSISTANT_URL",
+        "client_id": "HOME_ASSISTANT_CLIENT_ID",
+    }
+    for key, value in setup.adapter_config.items():
+        env_var_name = ha_env_mapping.get(key, key)
+        f.write(f"{env_var_name}={value}\n")
+
+
+def _write_location_config(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write location settings for weather/navigation adapters."""
+    if setup.location_city:
+        f.write(f'CIRIS_USER_CITY="{setup.location_city}"\n')
+    if setup.location_region:
+        f.write(f'CIRIS_USER_REGION="{setup.location_region}"\n')
+    if setup.location_country:
+        f.write(f'CIRIS_USER_COUNTRY="{setup.location_country}"\n')
+        location_parts = [setup.location_city, setup.location_region, setup.location_country]
+        location_display = ", ".join(p for p in location_parts if p)
+        f.write(f'CIRIS_USER_LOCATION="{location_display}"\n')
+    if setup.location_latitude is not None:
+        f.write(f'CIRIS_USER_LATITUDE="{setup.location_latitude}"\n')
+    if setup.location_longitude is not None:
+        f.write(f'CIRIS_USER_LONGITUDE="{setup.location_longitude}"\n')
+    if setup.timezone:
+        f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
+
+
+def _write_location_sharing_consent(f: Any, setup: SetupCompleteRequest) -> None:
+    """Write location sharing consent for telemetry."""
+    if not setup.share_location_in_traces:
+        return
+    consent_timestamp = datetime.now(timezone.utc).isoformat()
+    f.write("\n# Location Data Sharing Consent\n")
+    f.write("CIRIS_SHARE_LOCATION_IN_TRACES=true\n")
+    f.write(f"CIRIS_LOCATION_CONSENT_TIMESTAMP={consent_timestamp}\n")
+    logger.info(f"[SETUP] Location sharing consent enabled: {consent_timestamp}")
+
+
 def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     """Save setup configuration to .env file.
 
@@ -569,69 +637,17 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         f.write("\n# Enabled Adapters\n")
         f.write(f"CIRIS_ADAPTER={','.join(setup.enabled_adapters)}\n")
 
-        # Accord metrics consent
-        if "ciris_accord_metrics" in setup.enabled_adapters:
-            consent_timestamp = datetime.now(timezone.utc).isoformat()
-            f.write("\n# Accord Metrics Consent (auto-set when adapter enabled)\n")
-            f.write("CIRIS_ACCORD_METRICS_CONSENT=true\n")
-            f.write(f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={consent_timestamp}\n")
-            logger.info(f"[SETUP] Accord metrics consent enabled: {consent_timestamp}")
-
-        # Mobile Local LLM adapter configuration (on-device Gemma 4)
-        if "mobile_local_llm" in setup.enabled_adapters or setup.llm_provider == "mobile_local":
-            f.write("\n# Mobile Local LLM (On-Device Inference)\n")
-            f.write("CIRIS_MOBILE_LOCAL_LLM_ENABLED=true\n")
-            # Model defaults to gemma-4-e2b, can be configured via setup.llm_model
-            if setup.llm_model:
-                f.write(f'CIRIS_MOBILE_LOCAL_LLM_MODEL="{setup.llm_model}"\n')
-            logger.info("[SETUP] Mobile Local LLM adapter enabled for on-device inference")
-
-        # Adapter-specific environment variables with proper env var naming
-        if setup.adapter_config:
-            f.write("\n# Adapter-Specific Configuration\n")
-            # Mapping of generic config keys to adapter-specific env var names
-            HA_ENV_MAPPING = {
-                "access_token": "HOME_ASSISTANT_TOKEN",
-                "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
-                "base_url": "HOME_ASSISTANT_URL",
-                "client_id": "HOME_ASSISTANT_CLIENT_ID",
-            }
-            for key, value in setup.adapter_config.items():
-                # Use mapped env var name if available, otherwise use key as-is
-                env_var_name = HA_ENV_MAPPING.get(key, key)
-                f.write(f"{env_var_name}={value}\n")
+        # Write adapter-specific configs using helper functions
+        _write_accord_metrics_config(f, setup)
+        _write_mobile_local_llm_config(f, setup)
+        _write_adapter_specific_config(f, setup)
 
         # User preferences (language & location)
-        # Always write language preference (defaults to English if not set)
         f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
         preferred_lang = setup.preferred_language or "en"
         f.write(f'CIRIS_PREFERRED_LANGUAGE="{preferred_lang}"\n')
-
-        # Location settings - write individual fields for weather/navigation adapters
-        if setup.location_city:
-            f.write(f'CIRIS_USER_CITY="{setup.location_city}"\n')
-        if setup.location_region:
-            f.write(f'CIRIS_USER_REGION="{setup.location_region}"\n')
-        if setup.location_country:
-            f.write(f'CIRIS_USER_COUNTRY="{setup.location_country}"\n')
-            # Also write combined display name for backwards compatibility
-            location_parts = [setup.location_city, setup.location_region, setup.location_country]
-            location_display = ", ".join(p for p in location_parts if p)
-            f.write(f'CIRIS_USER_LOCATION="{location_display}"\n')
-        # Store coordinates in ISO 6709 decimal degrees format
-        if setup.location_latitude is not None:
-            f.write(f'CIRIS_USER_LATITUDE="{setup.location_latitude}"\n')
-        if setup.location_longitude is not None:
-            f.write(f'CIRIS_USER_LONGITUDE="{setup.location_longitude}"\n')
-        if setup.timezone:
-            f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
-        # Location sharing consent for telemetry
-        if setup.share_location_in_traces:
-            consent_timestamp = datetime.now(timezone.utc).isoformat()
-            f.write("\n# Location Data Sharing Consent\n")
-            f.write("CIRIS_SHARE_LOCATION_IN_TRACES=true\n")
-            f.write(f"CIRIS_LOCATION_CONSENT_TIMESTAMP={consent_timestamp}\n")
-            logger.info(f"[SETUP] Location sharing consent enabled: {consent_timestamp}")
+        _write_location_config(f, setup)
+        _write_location_sharing_consent(f, setup)
 
         # Write optional configuration sections
         _write_backup_llm_config(f, setup)

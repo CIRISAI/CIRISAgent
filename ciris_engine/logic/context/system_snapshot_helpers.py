@@ -1696,6 +1696,15 @@ async def _enrich_single_user_profile(
     return None
 
 
+def _build_location_string(prefs_attrs: JSONDict) -> Optional[str]:
+    """Build a location string from city, region, country parts."""
+    parts = []
+    for key in ("location_city", "location_region", "location_country"):
+        if prefs_attrs.get(key):
+            parts.append(str(prefs_attrs[key]))
+    return ", ".join(parts) if parts else None
+
+
 def _merge_preferences_into_profile(profile: UserProfile, prefs_attrs: JSONDict) -> UserProfile:
     """Merge preferences node attributes into a user profile.
 
@@ -1710,32 +1719,59 @@ def _merge_preferences_into_profile(profile: UserProfile, prefs_attrs: JSONDict)
     Returns:
         Updated user profile with merged preferences
     """
-    # Language - critical for localization
-    if prefs_attrs.get("preferred_language") and prefs_attrs.get("preferred_language") != "en":
-        profile.preferred_language = str(prefs_attrs["preferred_language"])
+    # Language - critical for localization (non-default only)
+    lang = prefs_attrs.get("preferred_language")
+    if lang and lang != "en":
+        profile.preferred_language = str(lang)
         logger.debug(f"[PREFS MERGE] Set language to '{profile.preferred_language}' from preferences node")
 
-    # Timezone
-    if prefs_attrs.get("timezone") and prefs_attrs.get("timezone") != "UTC":
-        profile.timezone = str(prefs_attrs["timezone"])
+    # Timezone (non-default only)
+    tz = prefs_attrs.get("timezone")
+    if tz and tz != "UTC":
+        profile.timezone = str(tz)
 
-    # Location
+    # Location - direct value or build from parts
     if prefs_attrs.get("location"):
         profile.location = str(prefs_attrs["location"])
-    if prefs_attrs.get("location_country"):
-        # Build location string if not already set
-        if not profile.location:
-            parts = []
-            if prefs_attrs.get("location_city"):
-                parts.append(str(prefs_attrs["location_city"]))
-            if prefs_attrs.get("location_region"):
-                parts.append(str(prefs_attrs["location_region"]))
-            if prefs_attrs.get("location_country"):
-                parts.append(str(prefs_attrs["location_country"]))
-            if parts:
-                profile.location = ", ".join(parts)
+    elif prefs_attrs.get("location_country") and not profile.location:
+        profile.location = _build_location_string(prefs_attrs)
 
     return profile
+
+
+def _merge_memory_profile_into_existing(existing: UserProfile, memory_profile: UserProfile) -> None:
+    """Merge memory graph profile data into an existing profile.
+
+    Updates fields from memory graph that may have been hardcoded or missing.
+    Only updates if memory graph has non-default values.
+    """
+    # Language, timezone, style - only non-default values
+    if memory_profile.preferred_language and memory_profile.preferred_language != "en":
+        existing.preferred_language = memory_profile.preferred_language
+    if memory_profile.timezone and memory_profile.timezone != "UTC":
+        existing.timezone = memory_profile.timezone
+    if memory_profile.communication_style and memory_profile.communication_style != "formal":
+        existing.communication_style = memory_profile.communication_style
+
+    # Direct copy for non-empty values
+    if memory_profile.user_preferred_name:
+        existing.user_preferred_name = memory_profile.user_preferred_name
+    if memory_profile.location:
+        existing.location = memory_profile.location
+    if memory_profile.interaction_preferences:
+        existing.interaction_preferences = memory_profile.interaction_preferences
+    if memory_profile.oauth_name:
+        existing.oauth_name = memory_profile.oauth_name
+
+    # Merge memorized_attributes
+    if memory_profile.memorized_attributes:
+        if not existing.memorized_attributes:
+            existing.memorized_attributes = {}
+        existing.memorized_attributes.update(memory_profile.memorized_attributes)
+
+    # Append notes
+    if memory_profile.notes:
+        existing.notes = (existing.notes or "") + "\n" + memory_profile.notes
 
 
 async def _enrich_user_profiles(
@@ -1751,50 +1787,19 @@ async def _enrich_user_profiles(
     user preferences like preferred_language stored in the memory graph are always
     reflected in the final profile.
     """
-    # Build lookup for existing profiles by user_id
     existing_by_id = {p.user_id: p for p in existing_profiles}
 
     for user_id in user_ids:
         logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
-
-        # Get enriched profile from memory graph
         memory_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
 
         if not memory_profile:
             continue
 
         if user_id in existing_by_id:
-            # User already exists - MERGE memory graph data into existing profile
-            # This is critical for localization: memory graph has the real preferred_language
-            existing = existing_by_id[user_id]
             logger.debug(f"[USER EXTRACTION] Merging memory graph data into existing profile for {user_id}")
-
-            # Update fields from memory graph that may have been hardcoded or missing
-            # Only update if memory graph has non-default values
-            if memory_profile.preferred_language and memory_profile.preferred_language != "en":
-                existing.preferred_language = memory_profile.preferred_language
-            if memory_profile.timezone and memory_profile.timezone != "UTC":
-                existing.timezone = memory_profile.timezone
-            if memory_profile.communication_style and memory_profile.communication_style != "formal":
-                existing.communication_style = memory_profile.communication_style
-            if memory_profile.user_preferred_name:
-                existing.user_preferred_name = memory_profile.user_preferred_name
-            if memory_profile.location:
-                existing.location = memory_profile.location
-            if memory_profile.interaction_preferences:
-                existing.interaction_preferences = memory_profile.interaction_preferences
-            if memory_profile.oauth_name:
-                existing.oauth_name = memory_profile.oauth_name
-            # Merge memorized_attributes
-            if memory_profile.memorized_attributes:
-                if not existing.memorized_attributes:
-                    existing.memorized_attributes = {}
-                existing.memorized_attributes.update(memory_profile.memorized_attributes)
-            # Append notes
-            if memory_profile.notes:
-                existing.notes = (existing.notes or "") + "\n" + memory_profile.notes
+            _merge_memory_profile_into_existing(existing_by_id[user_id], memory_profile)
         else:
-            # New user - add to profiles
             existing_profiles.append(memory_profile)
             existing_by_id[user_id] = memory_profile
 

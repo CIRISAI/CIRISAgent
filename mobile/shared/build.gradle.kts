@@ -92,10 +92,10 @@ kotlin {
                 implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
                 implementation("io.ktor:ktor-server-status-pages:2.3.7")
 
-                // On-device LLM inference: Not available on Android
-                // Available libraries (llmedge, kotlinllamacpp) require Kotlin 2.x
-                // Project stays on Kotlin 1.9.x to maintain ARMv7 (32-bit) support
-                // Android users should use "Local Inference Server" to discover network LLM servers
+                // On-device LLM inference via ONNX Runtime (works with Kotlin 1.9.x)
+                // 64-bit devices (arm64-v8a, x86_64): Full on-device inference
+                // 32-bit devices (armeabi-v7a): Falls back to "Local Inference Server" provider
+                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
 
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")

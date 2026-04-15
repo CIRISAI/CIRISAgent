@@ -408,7 +408,7 @@ private fun StatusOverviewCard(
                 )
                 StatusItem(
                     label = "Error Rate",
-                    value = llmBusStatus?.let { "${(it.errorRate * 100).let { r -> "%.1f".format(r) }}%" } ?: "-",
+                    value = llmBusStatus?.let { "${((it.errorRate * 1000).toInt() / 10.0)}%" } ?: "-",
                     modifier = Modifier.weight(1f)
                 )
             }

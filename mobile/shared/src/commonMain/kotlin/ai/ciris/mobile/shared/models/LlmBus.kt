@@ -289,3 +289,13 @@ data class ProviderDeleteResponse(
     @SerialName("provider_name") val providerName: String,
     val message: String
 )
+
+@Serializable
+data class AddProviderResponse(
+    val success: Boolean,
+    @SerialName("provider_name") val providerName: String,
+    @SerialName("provider_id") val providerId: String,
+    @SerialName("base_url") val baseUrl: String,
+    val priority: ProviderPriority,
+    val message: String
+)

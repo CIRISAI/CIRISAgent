@@ -489,6 +489,7 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 | `/v1/system/llm/providers/{name}/circuit-breaker/config` | PUT | ✅ | Update CB config |
 | `/v1/system/llm/providers/{name}/priority` | PUT | ✅ | Update provider priority |
 | `/v1/system/llm/providers/{name}` | DELETE | ✅ | Remove provider |
+| `/v1/system/llm/providers` | POST | ✅ | Add new provider (runtime hot-add) |
 
 ### New Endpoint Schemas
 
@@ -651,7 +652,8 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 5. ✅ API shim: PUT /system/llm/providers/{name}/priority endpoint
 6. ✅ API shim: DELETE /system/llm/providers/{name} endpoint
 7. ✅ Frontend: Priority dropdown wired to backend (LLMSettingsViewModel)
-8. 🚧 Frontend: "Add as Provider" button (needs POST endpoint + runtime changes)
+8. ✅ Backend: POST /system/llm/providers endpoint for runtime hot-add
+9. 🚧 Frontend: "Add as Provider" button (wire to POST endpoint)
 
 ### Phase 3: Local Discovery (Network Scanning) ✅ COMPLETE
 1. ✅ Implement Local Servers section
@@ -659,7 +661,8 @@ Same as current CirisJwtInfoCard - shows CIRIS token status.
 3. ✅ Backend: `/v1/setup/llm/start-local-server` endpoint
 4. ✅ Frontend: LocalLlmServerDiscovery component
 5. ✅ Auto-disable model reasoning on local endpoints (Gemma 4 fix)
-6. 🚧 "Add as Provider" flow - needs POST endpoint + hot-reload support
+6. ✅ Backend: POST endpoint for adding providers at runtime
+7. 🚧 Frontend: Wire "Add as Provider" button to POST endpoint
 
 ### Phase 4: Advanced Settings ✅ COMPLETE
 1. ✅ Distribution strategy selection (radio buttons)
@@ -928,7 +931,7 @@ Before implementation is complete, verify all capabilities are exposed:
 - [x] Priority dropdown includes all 5 levels (API endpoint + frontend complete)
 - [x] Protection shows current state and allows reset
 - [ ] Enabled toggle works for all provider types (🚧 needs API shim)
-- [ ] "Add as Provider" button for discovered servers (🚧 needs POST endpoint + runtime hot-reload)
+- [x] "Add as Provider" button for discovered servers (POST endpoint complete, frontend wiring TODO)
 - [ ] Developer options expose all numeric configs (🚧 UI TODO)
 - [ ] All metrics from `get_service_stats()` are accessible (partial)
 - [ ] All metrics from `get_metrics()` are accessible (partial)

@@ -240,6 +240,7 @@ fun LLMSettingsScreen(
                 ) {
                     LocalServersContent(
                         viewModel = viewModel,
+                        llmViewModel = llmViewModel,
                         apiClient = apiClient,
                         discoveredServers = discoveredServers,
                         selectedServer = selectedServer,
@@ -886,6 +887,7 @@ private fun ProviderCard(
 @Composable
 private fun LocalServersContent(
     viewModel: SettingsViewModel,
+    llmViewModel: LLMSettingsViewModel,
     apiClient: CIRISApiClient,
     discoveredServers: List<DiscoveredLlmServer>,
     selectedServer: DiscoveredLlmServer?,
@@ -970,6 +972,10 @@ private fun LocalServersContent(
             onServerSelected = { server ->
                 viewModel.selectServer(server)
                 onEditingChange(true)
+            },
+            onAddAsProvider = { server ->
+                // Add the discovered server as a provider to the LLM Bus
+                llmViewModel.addDiscoveredServerAsProvider(server)
             },
             primaryColor = MaterialTheme.colorScheme.primary,
             surfaceColor = MaterialTheme.colorScheme.surfaceVariant,

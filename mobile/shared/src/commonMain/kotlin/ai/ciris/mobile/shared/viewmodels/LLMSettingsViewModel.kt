@@ -317,6 +317,64 @@ class LLMSettingsViewModel(
         }
     }
 
+    // ========== Add Provider ==========
+
+    /**
+     * Add a discovered local server as an LLM provider.
+     *
+     * @param server The discovered server to add
+     * @param priority Priority level for the new provider
+     */
+    fun addDiscoveredServerAsProvider(
+        server: DiscoveredLlmServer,
+        priority: ProviderPriority = ProviderPriority.FALLBACK
+    ) {
+        val method = "addDiscoveredServerAsProvider"
+        logInfo(method, "Adding ${server.label} as ${priority.name} provider")
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // Map server type to provider ID
+                val providerId = when (server.serverType.lowercase()) {
+                    "ollama" -> "local"  // Ollama uses OpenAI-compatible API
+                    "llama_cpp" -> "local"
+                    "vllm" -> "local"
+                    "lmstudio" -> "local"
+                    "localai" -> "local"
+                    else -> "local"  // Default to local (OpenAI-compatible)
+                }
+
+                // Use first model if available, or "default"
+                val model = server.models.firstOrNull()
+
+                val result = apiClient.addLlmProvider(
+                    providerId = providerId,
+                    providerBaseUrl = server.url,
+                    name = server.label.replace(":", "_").replace(" ", "_"),
+                    model = model,
+                    apiKey = null,  // Local servers don't need API keys
+                    priority = priority
+                )
+
+                if (result.success) {
+                    logInfo(method, "Provider added: ${result.providerName}")
+                    _successMessage.value = "Added ${server.label} as ${priority.name.lowercase()} provider"
+                    // Refresh to show the new provider
+                    loadStatus()
+                } else {
+                    logError(method, "Failed to add provider: ${result.message}")
+                    _errorMessage.value = result.message
+                }
+            } catch (e: Exception) {
+                logError(method, "Error adding provider: ${e.message}")
+                _errorMessage.value = "Failed to add provider: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     // ========== Section Toggle Methods ==========
 
     fun toggleStatusExpanded() {

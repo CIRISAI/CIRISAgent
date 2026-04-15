@@ -55,6 +55,7 @@ fun rememberLocalLlmDiscoveryState(): LocalLlmDiscoveryState {
  * @param state The discovery state holder
  * @param apiClient The API client to use for discovery
  * @param onServerSelected Callback when a server is selected (provides URL and models)
+ * @param onAddAsProvider Optional callback when "Add as Provider" is clicked (if null, button is hidden)
  * @param localInferenceCapability Optional device capability for showing "Start Server" option
  * @param primaryColor Primary theme color for buttons/highlights
  * @param surfaceColor Surface color for cards
@@ -67,6 +68,7 @@ fun LocalLlmServerDiscovery(
     state: LocalLlmDiscoveryState,
     apiClient: CIRISApiClient,
     onServerSelected: (server: DiscoveredLlmServer) -> Unit,
+    onAddAsProvider: ((server: DiscoveredLlmServer) -> Unit)? = null,
     localInferenceCapability: LocalInferenceCapability? = null,
     primaryColor: Color = MaterialTheme.colorScheme.primary,
     surfaceColor: Color = MaterialTheme.colorScheme.surfaceVariant,
@@ -250,43 +252,64 @@ fun LocalLlmServerDiscovery(
                     ),
                     border = if (isSelected) BorderStroke(2.dp, primaryColor) else null
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(12.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = server.label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = textColor
-                            )
-                            Text(
-                                text = server.url,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = secondaryTextColor.copy(alpha = 0.7f)
-                            )
-                            if (server.models.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${server.modelCount} model(s): ${server.models.take(2).joinToString()}${if (server.models.size > 2) "..." else ""}",
+                                    text = server.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = textColor
+                                )
+                                Text(
+                                    text = server.url,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = secondaryTextColor.copy(alpha = 0.7f)
                                 )
+                                if (server.models.isNotEmpty()) {
+                                    Text(
+                                        text = "${server.modelCount} model(s): ${server.models.take(2).joinToString()}${if (server.models.size > 2) "..." else ""}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = secondaryTextColor.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                            // Server type badge
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = server.serverType.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
                             }
                         }
-                        // Server type badge
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = server.serverType.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+
+                        // Add as Provider button (only shown if callback is provided)
+                        if (onAddAsProvider != null) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { onAddAsProvider(server) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testableClickable("btn_add_provider_${server.id}") { onAddAsProvider(server) },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = primaryColor
+                                ),
+                                border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.5f))
+                            ) {
+                                Text("Add as Provider", color = primaryColor)
+                            }
                         }
                     }
                 }

@@ -4351,6 +4351,94 @@ class CIRISApiClient(
     }
 
 
+    /**
+     * Add a new LLM provider to the bus at runtime.
+     *
+     * @param providerId Provider type: "openai", "anthropic", "local", etc.
+     * @param baseUrl Base URL for the provider API
+     * @param name Optional display name (auto-generated if not provided)
+     * @param model Optional default model to use
+     * @param apiKey Optional API key (empty for local servers)
+     * @param priority Provider priority level
+     */
+    suspend fun addLlmProvider(
+        providerId: String,
+        providerBaseUrl: String,
+        name: String? = null,
+        model: String? = null,
+        apiKey: String? = null,
+        priority: ai.ciris.mobile.shared.models.ProviderPriority = ai.ciris.mobile.shared.models.ProviderPriority.FALLBACK
+    ): ai.ciris.mobile.shared.models.AddProviderResponse {
+        val method = "addLlmProvider"
+        val url = "$baseUrl/v1/system/llm/providers"
+        logInfo(method, "POST $url (provider=$providerId, priority=${priority.name})")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 15000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val requestBody = buildJsonObject {
+                put("provider_id", providerId)
+                put("base_url", providerBaseUrl)
+                name?.let { put("name", it) }
+                model?.let { put("model", it) }
+                apiKey?.let { put("api_key", it) }
+                put("priority", priority.name.lowercase())
+                put("enabled", true)
+            }
+
+            val response = client.post(url) {
+                authHeader()?.let { header("Authorization", it) }
+                contentType(ContentType.Application.Json)
+                setBody(requestBody.toString())
+            }
+
+            if (!response.status.isSuccess()) {
+                client.close()
+                throw RuntimeException("Add provider failed: ${response.status}")
+            }
+
+            val body = response.bodyAsText()
+            client.close()
+            logDebug(method, "Response body: $body")
+
+            val json = Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            val data = parsed["data"]?.jsonObject ?: throw RuntimeException("No data in response")
+
+            val priorityStr = data["priority"]?.jsonPrimitive?.content ?: "fallback"
+            val resultPriority = when (priorityStr.lowercase()) {
+                "critical" -> ai.ciris.mobile.shared.models.ProviderPriority.CRITICAL
+                "high" -> ai.ciris.mobile.shared.models.ProviderPriority.HIGH
+                "normal" -> ai.ciris.mobile.shared.models.ProviderPriority.NORMAL
+                "low" -> ai.ciris.mobile.shared.models.ProviderPriority.LOW
+                else -> ai.ciris.mobile.shared.models.ProviderPriority.FALLBACK
+            }
+
+            ai.ciris.mobile.shared.models.AddProviderResponse(
+                success = data["success"]?.jsonPrimitive?.boolean ?: false,
+                providerName = data["provider_name"]?.jsonPrimitive?.content ?: "",
+                providerId = data["provider_id"]?.jsonPrimitive?.content ?: providerId,
+                baseUrl = data["base_url"]?.jsonPrimitive?.content ?: providerBaseUrl,
+                priority = resultPriority,
+                message = data["message"]?.jsonPrimitive?.content ?: ""
+            )
+        } catch (e: Exception) {
+            logException(method, e, "providerId=$providerId, baseUrl=$providerBaseUrl")
+            throw e
+        }
+    }
+
     // ===== Audit API =====
 
         /**

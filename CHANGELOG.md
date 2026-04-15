@@ -5,18 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.4.4] - 2026-04-13
+## [2.5.0] - 2026-04-15
 
 ### Added
 
 - **Local LLM Server Discovery** - Backend endpoint to discover local inference servers (Ollama, vLLM, llama.cpp, LM Studio) via hostname probing
 - **Settings Screen LLM Discovery UI** - Mobile/desktop UI for discovering and selecting local LLM servers
+- **System Health Warnings** - Health endpoint now returns actionable warnings for missing LLM provider and adapters needing re-authentication
+- **Graceful No-LLM Startup** - Agent can start without LLM provider when CIRIS services disabled, displaying warning instead of failing
 
 ### Fixed
 
-- **Localization Pipeline** - Fixed DMA prompts caching templates at init; now load fresh each request to respect runtime language changes
-- **User Preferences Enrichment** - Fixed user enrichment to query and merge `preferences/{user_id}` node alongside `user/{user_id}` for complete profile data
-- **Fallback Admin Production Security** - Fallback admin now only created with `CIRIS_TESTING_MODE=true`; production requires setup wizard
+- **Windows Console Crash** - Fixed `AttributeError` on non-Windows platforms when `ctypes.windll` doesn't exist
+- **Persisted LLM Provider Loading** - Fixed LLM service not being set when loading from persisted runtime providers with CIRIS services disabled
+- **Local Inference Timeout** - Increased timeout for local inference servers from 30s to 120s to accommodate slower on-device models
+- **Localization Pipeline** - DMA prompts now load fresh each request to respect runtime language changes
+- **User Preferences Enrichment** - User enrichment now merges `preferences/{user_id}` node for complete profile data
+- **Fallback Admin Security** - Fallback admin only created with `CIRIS_TESTING_MODE=true`
 
 ### Changed
 

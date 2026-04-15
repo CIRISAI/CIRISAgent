@@ -76,7 +76,14 @@ object DisplayNames {
         // Adapter-provided services
         "accordmetricsservice" to "Accord Metrics",
         "cirisverifyservice" to "CIRIS Verify",
-        "openaicompatibleclient" to "OpenAI Client"
+        "openaicompatibleclient" to "OpenAI Client",
+
+        // CIRIS LLM services
+        "ciris_primary" to "CIRIS Primary",
+        "cirisprimary" to "CIRIS Primary",
+        "ciris_secondary" to "CIRIS Secondary",
+        "cirissecondary" to "CIRIS Secondary",
+        "ciris" to "CIRIS"
     )
 
     // Status label mappings

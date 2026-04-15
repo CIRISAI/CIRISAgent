@@ -271,3 +271,10 @@ class AddProviderResponse(BaseModel):
     base_url: str = Field(..., description="Base URL that was configured")
     priority: ProviderPriority = Field(..., description="Assigned priority")
     message: str = Field(..., description="Status message")
+
+
+class CirisServicesStatusResponse(BaseModel):
+    """Response for CIRIS services status."""
+
+    disabled: bool = Field(..., description="Whether CIRIS services are disabled")
+    message: str = Field(..., description="Status message")

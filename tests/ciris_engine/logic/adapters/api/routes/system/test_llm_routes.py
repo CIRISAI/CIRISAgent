@@ -152,10 +152,36 @@ def app_with_llm_routes(mock_runtime: MagicMock) -> FastAPI:
 
 
 @pytest.fixture
-def client(app_with_llm_routes: FastAPI) -> TestClient:
+def mock_registry() -> MagicMock:
+    """Create a mock registry with test providers."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+    from ciris_engine.logic.registries.base import Priority
+
+    registry = MagicMock()
+
+    # Create mock provider info objects
+    provider1 = MagicMock()
+    provider1.name = "test_provider"
+    provider1.priority = Priority.NORMAL
+
+    provider2 = MagicMock()
+    provider2.name = "failing_provider"
+    provider2.priority = Priority.NORMAL
+
+    # Registry returns these providers for LLM service type
+    registry._services = {ServiceType.LLM: [provider1, provider2]}
+    registry.get_provider_by_name.return_value = provider1
+
+    return registry
+
+
+@pytest.fixture
+def client(app_with_llm_routes: FastAPI, mock_registry: MagicMock) -> TestClient:
     """Create test client with first_run mocked to bypass auth."""
     # Patch is_first_run to return True (setup mode - no auth required)
-    with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True):
+    # Also patch the global registry to return our mock
+    with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True), \
+         patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_registry):
         yield TestClient(app_with_llm_routes)
 
 
@@ -953,3 +979,256 @@ class TestAddProviderEndpoint:
 
             assert response.status_code == 200, f"Failed for priority: {priority}"
             assert response.json()["data"]["priority"] == priority
+
+
+# ============================================================================
+# Test: CIRIS Services Disable/Enable/Status Endpoints
+# ============================================================================
+
+
+class TestCirisServicesEndpoints:
+    """Tests for /system/llm/ciris-services/* endpoints.
+
+    These endpoints control whether CIRIS hosted services are enabled:
+    - POST /system/llm/ciris-services/disable - Disable CIRIS services
+    - POST /system/llm/ciris-services/enable - Re-enable CIRIS services
+    - GET /system/llm/ciris-services/status - Get current status
+
+    Expected behavior:
+    - Disable sets CIRIS_SERVICES_DISABLED=true in .env
+    - Disable unregisters all CIRIS providers from registry
+    - Enable sets CIRIS_SERVICES_DISABLED=false in .env
+    - Status returns current disabled state
+    """
+
+    def test_disable_ciris_services_success(self, app_with_llm_routes: FastAPI) -> None:
+        """Test disabling CIRIS services successfully.
+
+        Expected:
+        - Returns 200 with disabled=True
+        - Message indicates providers were unregistered
+        - set_ciris_services_disabled(True) is called
+        - CIRIS providers are unregistered from registry
+        """
+        from ciris_engine.logic.registries.base import Priority
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create mock registry with CIRIS providers
+        mock_reg = MagicMock()
+        ciris_primary = MagicMock()
+        ciris_primary.name = "ciris_primary"
+        ciris_primary.priority = Priority.HIGH
+
+        ciris_secondary = MagicMock()
+        ciris_secondary.name = "ciris_secondary"
+        ciris_secondary.priority = Priority.NORMAL
+
+        local_provider = MagicMock()
+        local_provider.name = "local_llm"
+        local_provider.priority = Priority.FALLBACK
+
+        mock_reg._services = {
+            ServiceType.LLM: [ciris_primary, ciris_secondary, local_provider]
+        }
+        mock_reg.unregister.return_value = True
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
+            return_value=mock_reg
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
+            return_value=True
+        ) as mock_set_disabled:
+            client = TestClient(app_with_llm_routes)
+            response = client.post("/system/llm/ciris-services/disable")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["disabled"] is True
+        assert "2 provider" in data["message"]  # Should mention 2 CIRIS providers
+
+        # Verify set_ciris_services_disabled was called with True
+        mock_set_disabled.assert_called_once_with(True)
+
+        # Verify CIRIS providers were unregistered (but not local_llm)
+        assert mock_reg.unregister.call_count == 2
+        unregistered_names = [call.args[0] for call in mock_reg.unregister.call_args_list]
+        assert "ciris_primary" in unregistered_names
+        assert "ciris_secondary" in unregistered_names
+        assert "local_llm" not in unregistered_names
+
+    def test_disable_ciris_services_no_providers(self, app_with_llm_routes: FastAPI) -> None:
+        """Test disabling when no CIRIS providers exist.
+
+        Expected:
+        - Returns 200 with disabled=True
+        - Message indicates 0 providers unregistered
+        - Flag is still set in .env
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_reg = MagicMock()
+        local_provider = MagicMock()
+        local_provider.name = "local_llm"  # Not a CIRIS provider
+        mock_reg._services = {ServiceType.LLM: [local_provider]}
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
+            return_value=mock_reg
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
+            return_value=True
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.post("/system/llm/ciris-services/disable")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["disabled"] is True
+        assert "0 provider" in data["message"]
+
+    def test_disable_ciris_services_persist_fails(self, app_with_llm_routes: FastAPI) -> None:
+        """Test when .env persistence fails.
+
+        Expected:
+        - Returns 500 error
+        - Error message indicates persistence failure
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_reg = MagicMock()
+        mock_reg._services = {ServiceType.LLM: []}
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
+            return_value=mock_reg
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
+            return_value=False  # Persistence fails
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.post("/system/llm/ciris-services/disable")
+
+        assert response.status_code == 500
+        assert "persist" in response.json()["detail"].lower()
+
+    def test_enable_ciris_services_success(self, app_with_llm_routes: FastAPI) -> None:
+        """Test re-enabling CIRIS services.
+
+        Expected:
+        - Returns 200 with disabled=False
+        - Message indicates services will be enabled on restart
+        - set_ciris_services_disabled(False) is called
+        """
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
+            return_value=True
+        ) as mock_set_disabled:
+            client = TestClient(app_with_llm_routes)
+            response = client.post("/system/llm/ciris-services/enable")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["disabled"] is False
+        assert "enabled" in data["message"].lower()
+        assert "restart" in data["message"].lower()
+
+        mock_set_disabled.assert_called_once_with(False)
+
+    def test_enable_ciris_services_persist_fails(self, app_with_llm_routes: FastAPI) -> None:
+        """Test when enable persistence fails.
+
+        Expected:
+        - Returns 500 error
+        """
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
+            return_value=False
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.post("/system/llm/ciris-services/enable")
+
+        assert response.status_code == 500
+
+    def test_get_ciris_services_status_disabled(self, app_with_llm_routes: FastAPI) -> None:
+        """Test getting status when CIRIS services are disabled.
+
+        Expected:
+        - Returns 200 with disabled=True
+        - Message indicates disabled state
+        """
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled",
+            return_value=True
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.get("/system/llm/ciris-services/status")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["disabled"] is True
+        assert "disabled" in data["message"].lower()
+
+    def test_get_ciris_services_status_enabled(self, app_with_llm_routes: FastAPI) -> None:
+        """Test getting status when CIRIS services are enabled.
+
+        Expected:
+        - Returns 200 with disabled=False
+        - Message indicates enabled state
+        """
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=True
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled",
+            return_value=False
+        ):
+            client = TestClient(app_with_llm_routes)
+            response = client.get("/system/llm/ciris-services/status")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["disabled"] is False
+        assert "enabled" in data["message"].lower()
+
+    def test_ciris_services_requires_admin_auth(self, app_with_llm_routes: FastAPI) -> None:
+        """Test that CIRIS services endpoints require admin auth when not in setup mode.
+
+        Expected:
+        - Returns 401 or 500 (auth infrastructure not available) when not in setup mode
+        - Should NOT return 200 (success) without auth
+        """
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
+            return_value=False  # Not in setup mode
+        ):
+            client = TestClient(app_with_llm_routes)
+
+            # All endpoints should require auth - they should NOT succeed (200)
+            # In test environment without full auth setup, we get 500 or 401
+            response = client.post("/system/llm/ciris-services/disable")
+            assert response.status_code in (401, 500)  # Auth required, fails without it
+
+            response = client.post("/system/llm/ciris-services/enable")
+            assert response.status_code in (401, 500)
+
+            response = client.get("/system/llm/ciris-services/status")
+            assert response.status_code in (401, 500)

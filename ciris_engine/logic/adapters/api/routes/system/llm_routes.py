@@ -25,6 +25,8 @@ from ciris_engine.logic.persistence.llm_providers import (
     LLMProviderConfig,
     create_provider as persist_create_provider,
     delete_provider as persist_delete_provider,
+    set_ciris_services_disabled,
+    get_ciris_services_disabled,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -38,6 +40,7 @@ from .llm_schemas import (
     CircuitBreakerResetResponse,
     CircuitBreakerState,
     CircuitBreakerStatus,
+    CirisServicesStatusResponse,
     DistributionStrategy,
     DistributionStrategyUpdateRequest,
     DistributionStrategyUpdateResponse,
@@ -252,9 +255,14 @@ async def get_llm_status(
     provider availability, and circuit breaker state summary.
     """
     llm_bus = get_llm_bus(request)
+    registry = get_global_registry()
 
-    # Count providers and CB states
-    providers_total = len(llm_bus.circuit_breakers)
+    # Get total providers from registry (not circuit_breakers which are lazy)
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+    logger.info(f"[LLM_DEBUG] /status: registry has {len(registered_providers)} LLM providers")
+    for p in registered_providers:
+        logger.info(f"[LLM_DEBUG] /status:   - {p.name} (priority={p.priority})")
+    providers_total = len(registered_providers)
     providers_available = 0
     providers_rate_limited = 0
     cb_closed = 0
@@ -266,16 +274,25 @@ async def get_llm_status(
     failed_requests = 0
     total_latency = 0.0
 
-    for name, cb in llm_bus.circuit_breakers.items():
-        # Count CB states
-        if cb.state == CircuitState.CLOSED:
+    # Count status from all registered providers (not just those with circuit breakers)
+    for provider_info in registered_providers:
+        name = provider_info.name
+        cb = llm_bus.circuit_breakers.get(name)
+
+        if cb is None:
+            # No circuit breaker yet = never used = assume healthy
+            providers_available += 1
             cb_closed += 1
-            providers_available += 1
-        elif cb.state == CircuitState.OPEN:
-            cb_open += 1
-        elif cb.state == CircuitState.HALF_OPEN:
-            cb_half_open += 1
-            providers_available += 1
+        else:
+            # Count CB states
+            if cb.state == CircuitState.CLOSED:
+                cb_closed += 1
+                providers_available += 1
+            elif cb.state == CircuitState.OPEN:
+                cb_open += 1
+            elif cb.state == CircuitState.HALF_OPEN:
+                cb_half_open += 1
+                providers_available += 1
 
         # Check rate limiting
         rate_limited_until = llm_bus._rate_limited_until.get(name, 0)
@@ -346,6 +363,9 @@ async def get_llm_providers(
 
     # Get all registered LLM providers from registry (not from circuit_breakers which are lazy)
     registered_providers = registry._services.get(ServiceType.LLM, [])
+    logger.info(f"[LLM_DEBUG] /providers: registry has {len(registered_providers)} LLM providers")
+    for p in registered_providers:
+        logger.info(f"[LLM_DEBUG] /providers:   - {p.name} (priority={p.priority})")
 
     for provider_info in registered_providers:
         name = provider_info.name
@@ -603,6 +623,12 @@ async def update_provider_priority(
     - low: Use when others unavailable
     - fallback: Last resort
     """
+    from ciris_engine.logic.persistence.llm_providers import (
+        list_providers,
+        update_provider,
+        LLMProviderConfig,
+    )
+
     registry = get_global_registry()
 
     # Find the provider to get current priority
@@ -613,10 +639,32 @@ async def update_provider_priority(
     previous_priority = map_priority_to_api(provider.priority)
     new_internal_priority = get_internal_priority(body.priority)
 
-    # Update the priority
+    # Update the priority in registry (in-memory)
     success = registry.set_provider_priority(name, new_internal_priority, ServiceType.LLM)
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to update priority for '{name}'")
+
+    # Persist the priority change to survive restarts
+    try:
+        config_service = request.app.state.runtime.config_service if hasattr(request.app.state, 'runtime') else None
+        providers = await list_providers(config_service)
+        if name in providers:
+            # Update the priority in the persisted config
+            provider_config = providers[name]
+            updated_config = LLMProviderConfig(
+                provider_id=provider_config.provider_id,
+                base_url=provider_config.base_url,
+                model=provider_config.model,
+                api_key=provider_config.api_key,
+                priority=body.priority.value,
+            )
+            result = await update_provider(name, updated_config, config_service)
+            if result.success:
+                logger.info(f"Provider '{name}' priority persisted: {body.priority.value}")
+            else:
+                logger.warning(f"Provider '{name}' priority updated but not persisted: {result.error}")
+    except Exception as e:
+        logger.warning(f"Failed to persist priority for '{name}': {e}")
 
     logger.info(f"Provider '{name}' priority changed from {previous_priority} to {body.priority}")
 
@@ -845,3 +893,126 @@ async def add_provider(
             status_code=500,
             detail=f"Failed to add provider: {str(e)}"
         )
+
+
+# ============================================================================
+# POST /system/llm/ciris-services/disable - Disable CIRIS hosted services
+# ============================================================================
+
+
+@router.post(
+    "/ciris-services/disable",
+    responses={
+        500: {"description": "Failed to disable CIRIS services"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def disable_ciris_services(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Disable CIRIS hosted services (LLM providers and tools).
+
+    This sets CIRIS_SERVICES_DISABLED=true in the .env file, which:
+    - Prevents CIRIS LLM providers from being created on startup
+    - Disables CIRIS hosted tools
+    - Takes effect immediately for new requests and persists across restarts
+    """
+    registry = get_global_registry()
+
+    # Set the flag in .env
+    if not set_ciris_services_disabled(True):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
+        )
+
+    # Also set in current process environment for immediate effect
+    import os
+    os.environ["CIRIS_SERVICES_DISABLED"] = "true"
+
+    # Unregister existing CIRIS providers for immediate effect
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+    ciris_providers = [p for p in registered_providers if "ciris" in p.name.lower()]
+
+    for provider in ciris_providers:
+        registry.unregister(provider.name)
+        logger.info(f"Unregistered CIRIS provider: {provider.name}")
+
+    logger.info(f"CIRIS services disabled - {len(ciris_providers)} providers unregistered")
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=True,
+            message=f"CIRIS services disabled. {len(ciris_providers)} provider(s) unregistered.",
+        )
+    )
+
+
+# ============================================================================
+# POST /system/llm/ciris-services/enable - Re-enable CIRIS hosted services
+# ============================================================================
+
+
+@router.post(
+    "/ciris-services/enable",
+    responses={
+        500: {"description": "Failed to enable CIRIS services"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def enable_ciris_services(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Re-enable CIRIS hosted services.
+
+    This sets CIRIS_SERVICES_DISABLED=false in the .env file.
+    CIRIS providers will be registered on next restart.
+    """
+    # Set the flag in .env
+    if not set_ciris_services_disabled(False):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
+        )
+
+    # Clear in current process environment
+    import os
+    os.environ.pop("CIRIS_SERVICES_DISABLED", None)
+
+    logger.info("CIRIS services re-enabled (will take effect on next restart)")
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=False,
+            message="CIRIS services enabled. Providers will be registered on next restart.",
+        )
+    )
+
+
+# ============================================================================
+# GET /system/llm/ciris-services/status - Get CIRIS services status
+# ============================================================================
+
+
+@router.get(
+    "/ciris-services/status",
+    dependencies=[SetupOrAdminDep],
+)
+async def get_ciris_services_status(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Get the current CIRIS services status.
+
+    Returns whether CIRIS services are disabled.
+    """
+    disabled = get_ciris_services_disabled()
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=disabled,
+            message="CIRIS services are disabled" if disabled else "CIRIS services are enabled",
+        )
+    )

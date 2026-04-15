@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 88
-        versionName "2.4.4"
+        versionCode 89
+        versionName "2.5.0"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -252,12 +252,21 @@ task cleanPythonSources(type: Delete) {
     delete "${buildDir}/python-src"
 }
 
+// Clean Chaquopy's Python build outputs to force reprocessing
+// This ensures Python code changes are ALWAYS picked up in each build
+task cleanChaquopyOutputs(type: Delete) {
+    description = "Clean Chaquopy build outputs to force fresh Python processing"
+    delete "${buildDir}/python"
+    delete "${buildDir}/generated/ap_generated_sources"
+}
+
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
-// IMPORTANT: Depends on cleanPythonSources to guarantee fresh sync every time
+// IMPORTANT: Depends on clean tasks to guarantee fresh sync and rebuild every time
 task syncPythonSources(type: Sync) {
     description = "Sync ciris_engine and ciris_adapters from main repo"
     dependsOn cleanPythonSources
+    dependsOn cleanChaquopyOutputs
 
     from("../../ciris_engine") {
         into "ciris_engine"

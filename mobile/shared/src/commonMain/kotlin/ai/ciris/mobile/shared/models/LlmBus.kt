@@ -299,3 +299,12 @@ data class AddProviderResponse(
     val priority: ProviderPriority,
     val message: String
 )
+
+/**
+ * Simple success/failure response for operations.
+ */
+@Serializable
+data class SimpleResponse(
+    val success: Boolean,
+    val message: String? = null
+)

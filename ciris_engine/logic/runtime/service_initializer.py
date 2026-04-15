@@ -862,6 +862,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
             return
 
+        # Check if CIRIS services are disabled by user preference
+        ciris_services_disabled = os.environ.get("CIRIS_SERVICES_DISABLED", "").lower() in ("true", "1", "yes")
+        if ciris_services_disabled:
+            logger.info("🚫 CIRIS services disabled by user preference (CIRIS_SERVICES_DISABLED=true)")
+            # Continue to load persisted runtime providers (local servers, BYOK keys)
+            # but skip the hardcoded CIRIS proxy providers
+
         # Validate config
         if not hasattr(config, "services"):
             raise ValueError("Configuration missing LLM service settings")
@@ -901,6 +908,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 from ciris_engine.config.ciris_services import get_all_proxy_endpoints, is_ciris_proxy_url
 
                 if is_ciris_proxy_url(base_url):
+                    # Skip CIRIS proxy if user has disabled CIRIS services
+                    if ciris_services_disabled:
+                        logger.info("🚫 Skipping CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+                        # Load any persisted runtime providers (user's BYOK providers)
+                        await self._load_persisted_runtime_llm_providers()
+                        # Get the first LLM service from registry to satisfy validation
+                        if self.service_registry:
+                            llm_providers = self.service_registry._services.get(ServiceType.LLM, [])
+                            if llm_providers:
+                                self.llm_service = llm_providers[0].instance
+                                logger.info(f"✓ Using persisted LLM provider: {llm_providers[0].name}")
+                            else:
+                                logger.warning("⚠️ No LLM providers available after disabling CIRIS services")
+                        return
+
                     # Get all CIRIS proxy endpoints for multi-region failover
                     endpoints = get_all_proxy_endpoints()
                     if len(endpoints) > 1:
@@ -997,10 +1019,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url
 
         if is_ciris_proxy_secondary and google_id_token:
-            # CIRIS proxy with JWT auth - always use fresh billing token
-            # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
-            logger.info("Secondary LLM using CIRIS proxy with JWT auth")
-            await self._initialize_secondary_llm(config, google_id_token)
+            # Skip secondary CIRIS proxy if user has disabled CIRIS services
+            if ciris_services_disabled:
+                logger.info("🚫 Skipping secondary CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+            else:
+                # CIRIS proxy with JWT auth - always use fresh billing token
+                # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
+                logger.info("Secondary LLM using CIRIS proxy with JWT auth")
+                await self._initialize_secondary_llm(config, google_id_token)
         elif second_api_key:
             # Standard API key auth (non-proxy)
             await self._initialize_secondary_llm(config, second_api_key)
@@ -1106,12 +1132,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     if not api_key and config.provider_id in ("local", "local_inference"):
                         api_key = "local"
 
+                    # Use longer timeout for local endpoints (Jetson, llama.cpp, etc.)
+                    is_local = config.provider_id in ("local", "local_inference") or \
+                               "localhost" in config.base_url or \
+                               "192.168." in config.base_url or \
+                               ".local" in config.base_url
+                    timeout = 120 if is_local else 60  # 2 min for local, 1 min for cloud
+
                     llm_config = OpenAIConfig(
                         base_url=config.base_url,
                         model_name=config.model,
                         api_key=api_key,
                         instructor_mode="JSON",
-                        timeout_seconds=30,
+                        timeout_seconds=timeout,
                         max_retries=2,
                     )
 
@@ -1431,10 +1464,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Service registry not initialized")
                 return False
 
-            # Check critical services (LLM service is optional during first-run)
+            # Check critical services (LLM service is optional during first-run or when disabled)
             from typing import Any, List
 
             from ciris_engine.logic.setup.first_run import is_first_run
+            from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
 
             # Use named dict for better error messages
             critical_services: dict[str, Any] = {
@@ -1444,11 +1478,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 "adaptive_filter_service": self.adaptive_filter_service,
             }
 
-            # Only require LLM service if not in first-run mode
-            if not is_first_run():
+            # LLM service is optional when:
+            # 1. First-run mode (setup wizard will configure it)
+            # 2. CIRIS services disabled with no other provider (user can add via settings)
+            ciris_disabled = get_ciris_services_disabled()
+            if is_first_run():
+                if not self.llm_service:
+                    logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
+            elif ciris_disabled and not self.llm_service:
+                logger.warning("⚠️ No LLM provider configured - CIRIS services disabled and no local provider set up")
+                logger.warning("⚠️ Agent will start but cannot process requests until an LLM provider is added")
+            elif not ciris_disabled:
+                # Only require LLM service when CIRIS services are enabled
                 critical_services["llm_service"] = self.llm_service
-            elif not self.llm_service:
-                logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
             for name, service in critical_services.items():
                 if not service:

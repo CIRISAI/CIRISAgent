@@ -26,7 +26,7 @@ from .helpers import (
     get_current_time,
     get_system_uptime,
 )
-from .schemas import StartupStatusResponse, SystemHealthResponse, SystemTimeResponse
+from .schemas import StartupStatusResponse, SystemHealthResponse, SystemTimeResponse, SystemWarning
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,50 @@ AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 router = APIRouter()
 
 
+async def collect_system_warnings(request: Request) -> list[SystemWarning]:
+    """Collect system-level warnings that require user attention."""
+    warnings: list[SystemWarning] = []
+
+    # Check for missing LLM provider
+    from ciris_engine.logic.registries.base import get_global_registry
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    registry = get_global_registry()
+    llm_providers = registry._services.get(ServiceType.LLM, [])
+    if not llm_providers:
+        warnings.append(SystemWarning(
+            code="no_llm_provider",
+            message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
+            severity="error",
+            action_url="/settings/llm",
+        ))
+
+    # Check for adapters needing re-authentication
+    adapter_manager = getattr(request.app.state, "adapter_manager", None)
+    if adapter_manager:
+        try:
+            adapter_statuses = await adapter_manager.get_all_adapter_status()
+            for status in adapter_statuses:
+                if status.needs_reauth:
+                    warnings.append(SystemWarning(
+                        code="adapter_needs_reauth",
+                        message=f"Adapter '{status.adapter_id}' needs re-authentication: {status.reauth_reason or 'Token expired'}",
+                        severity="warning",
+                        action_url=f"/settings/adapters/{status.adapter_id}",
+                    ))
+        except Exception as e:
+            logger.debug(f"Could not check adapter reauth status: {e}")
+
+    return warnings
+
+
 @router.get("/health")
 async def get_system_health(request: Request) -> SuccessResponse[SystemHealthResponse]:
     """
     Overall system health.
 
     Returns comprehensive system health including service status,
-    initialization state, and current cognitive state.
+    initialization state, current cognitive state, and system warnings.
     """
     # Get basic system info
     uptime_seconds = get_system_uptime(request)
@@ -53,6 +90,9 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     # Collect service health data
     services = await collect_service_health(request)
     processor_healthy = await check_processor_health(request)
+
+    # Collect system warnings
+    warnings = await collect_system_warnings(request)
 
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)
@@ -65,6 +105,7 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
         initialization_complete=init_complete,
         cognitive_state=cognitive_state,
         timestamp=current_time,
+        warnings=warnings,
     )
 
     return SuccessResponse(data=response)

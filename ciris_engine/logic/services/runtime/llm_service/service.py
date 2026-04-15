@@ -1120,6 +1120,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 extra_kwargs = self._build_extra_kwargs(task_id, thought_id, resp_model.__name__, retry_state)
                 image_count = _log_multimodal_content(msg_list, self.model_name, thought_id, resp_model.__name__)
 
+                # Log request details for debugging local inference issues
+                client_base_url = getattr(self.client, "base_url", None)
+                client_timeout = getattr(self.client, "timeout", None)
+                is_local = self._is_local_endpoint(str(client_base_url) if client_base_url else "")
+                logger.info(
+                    f"[LLM_REQUEST] model={self.model_name}, base_url={client_base_url}, "
+                    f"timeout={client_timeout}, response_model={resp_model.__name__}, "
+                    f"msg_count={len(msg_list)}, thought_id={thought_id}, is_local={is_local}, "
+                    f"extra_body={extra_kwargs.get('extra_body')}"
+                )
+
                 # Google/Gemini uses generation_config dict instead of direct params
                 if self.provider == LLMProvider.GOOGLE:
                     extra_kwargs["generation_config"] = {
@@ -1140,6 +1151,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     token_param = {"max_tokens": max_toks}
                     temp_param = {"temperature": temp}
 
+                import time as _time
+                _call_start = _time.monotonic()
+                logger.debug(f"[LLM_REQUEST] Starting instructor call...")
+
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
                     messages=cast(Any, msg_list),
@@ -1150,6 +1165,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     **extra_kwargs,
                 )
 
+                _call_duration = _time.monotonic() - _call_start
+                logger.info(f"[LLM_REQUEST] Instructor call completed in {_call_duration:.2f}s")
                 self._log_completion_details(completion, image_count, thought_id)
                 return await self._process_successful_response(response, completion)
 
@@ -1258,6 +1275,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # This also fixes Gemma 4 models which put responses in
             # `reasoning_content` instead of `content` when thinking is enabled.
             # See docs/GEMMA_4_COMPATIBILITY.md for details.
+            # Use extra_body which OpenAI client merges into request JSON root.
             extra_kwargs["extra_body"] = {
                 "chat_template_kwargs": {"enable_thinking": False}
             }

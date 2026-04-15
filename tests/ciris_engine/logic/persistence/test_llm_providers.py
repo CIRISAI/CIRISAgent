@@ -7,21 +7,24 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from ciris_engine.logic.persistence.llm_providers import (
+    CIRIS_SERVICES_DISABLED_VAR,
     LLMProviderConfig,
     PersistenceResult,
     RUNTIME_PROVIDERS_CONFIG_KEY,
     RUNTIME_PROVIDERS_ENV_VAR,
-    read_providers_from_env,
-    write_providers_to_env,
-    read_providers_from_graph,
-    write_providers_to_graph,
-    list_providers,
-    get_provider,
-    create_provider,
-    update_provider,
-    delete_provider,
-    upsert_provider,
     clear_all_providers,
+    create_provider,
+    delete_provider,
+    get_ciris_services_disabled,
+    get_provider,
+    list_providers,
+    read_providers_from_env,
+    read_providers_from_graph,
+    set_ciris_services_disabled,
+    update_provider,
+    upsert_provider,
+    write_providers_to_env,
+    write_providers_to_graph,
 )
 
 
@@ -587,3 +590,234 @@ class TestCRUDOperations:
             # Verify .env is cleared
             content = temp_env_file.read_text()
             assert RUNTIME_PROVIDERS_ENV_VAR not in content
+
+
+# =============================================================================
+# CIRIS Services Disabled Flag Tests
+# =============================================================================
+
+
+class TestCirisServicesDisabledFlag:
+    """Tests for CIRIS_SERVICES_DISABLED flag management.
+
+    The CIRIS_SERVICES_DISABLED flag controls whether CIRIS hosted services
+    (LLM providers and tools) are initialized on startup.
+
+    Expected behavior:
+    - set_ciris_services_disabled(True) writes CIRIS_SERVICES_DISABLED=true to .env
+    - set_ciris_services_disabled(False) writes CIRIS_SERVICES_DISABLED=false to .env
+    - get_ciris_services_disabled() reads from environment variable
+    - Flag persists across restarts via .env file
+    """
+
+    def test_set_ciris_services_disabled_true(self, temp_env_file: Path) -> None:
+        """Test setting CIRIS services as disabled.
+
+        Expected:
+        - Returns True (success)
+        - Writes CIRIS_SERVICES_DISABLED=true to .env
+        - Preserves existing .env content
+        """
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=temp_env_file,
+        ):
+            result = set_ciris_services_disabled(True)
+
+            assert result is True
+
+            content = temp_env_file.read_text()
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=true" in content
+            # Verify existing content preserved
+            assert "SOME_VAR=value" in content
+
+    def test_set_ciris_services_disabled_false(self, temp_env_file: Path) -> None:
+        """Test re-enabling CIRIS services.
+
+        Expected:
+        - Returns True (success)
+        - Writes CIRIS_SERVICES_DISABLED=false to .env
+        """
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=temp_env_file,
+        ):
+            result = set_ciris_services_disabled(False)
+
+            assert result is True
+
+            content = temp_env_file.read_text()
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=false" in content
+
+    def test_set_ciris_services_disabled_overwrites_existing(
+        self, temp_env_file: Path
+    ) -> None:
+        """Test that setting flag overwrites existing value.
+
+        Expected:
+        - Removes old CIRIS_SERVICES_DISABLED line
+        - Adds new line with updated value
+        - Only one instance of the flag in file
+        """
+        # Add existing flag
+        content = temp_env_file.read_text()
+        content += f"\n{CIRIS_SERVICES_DISABLED_VAR}=false\n"
+        temp_env_file.write_text(content)
+
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=temp_env_file,
+        ):
+            result = set_ciris_services_disabled(True)
+
+            assert result is True
+
+            content = temp_env_file.read_text()
+            # Should only have one instance
+            assert content.count(CIRIS_SERVICES_DISABLED_VAR) == 1
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=true" in content
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=false" not in content
+
+    def test_set_ciris_services_disabled_no_env_file(self, tmp_path: Path) -> None:
+        """Test setting flag when .env doesn't exist.
+
+        Expected:
+        - Returns False (failure)
+        - Does not create .env file
+        """
+        nonexistent = tmp_path / "nonexistent.env"
+
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=nonexistent,
+        ):
+            result = set_ciris_services_disabled(True)
+
+            assert result is False
+            assert not nonexistent.exists()
+
+    def test_set_ciris_services_disabled_no_env_path(self) -> None:
+        """Test setting flag when env path cannot be determined.
+
+        Expected:
+        - Returns False (failure)
+        """
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=None,
+        ):
+            result = set_ciris_services_disabled(True)
+
+            assert result is False
+
+    def test_get_ciris_services_disabled_true(self) -> None:
+        """Test reading disabled flag when set to true.
+
+        Expected:
+        - Returns True when env var is "true"
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "true"}):
+            result = get_ciris_services_disabled()
+            assert result is True
+
+    def test_get_ciris_services_disabled_one(self) -> None:
+        """Test reading disabled flag when set to "1".
+
+        Expected:
+        - Returns True when env var is "1"
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "1"}):
+            result = get_ciris_services_disabled()
+            assert result is True
+
+    def test_get_ciris_services_disabled_yes(self) -> None:
+        """Test reading disabled flag when set to "yes".
+
+        Expected:
+        - Returns True when env var is "yes"
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "yes"}):
+            result = get_ciris_services_disabled()
+            assert result is True
+
+    def test_get_ciris_services_disabled_case_insensitive(self) -> None:
+        """Test reading disabled flag is case-insensitive.
+
+        Expected:
+        - Returns True for "TRUE", "True", etc.
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "TRUE"}):
+            result = get_ciris_services_disabled()
+            assert result is True
+
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "True"}):
+            result = get_ciris_services_disabled()
+            assert result is True
+
+    def test_get_ciris_services_disabled_false(self) -> None:
+        """Test reading disabled flag when set to false.
+
+        Expected:
+        - Returns False when env var is "false"
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "false"}):
+            result = get_ciris_services_disabled()
+            assert result is False
+
+    def test_get_ciris_services_disabled_not_set(self) -> None:
+        """Test reading disabled flag when not set.
+
+        Expected:
+        - Returns False when env var is not set
+        """
+        with patch.dict("os.environ", {}, clear=True):
+            # Ensure the var is not in environment
+            import os
+            os.environ.pop(CIRIS_SERVICES_DISABLED_VAR, None)
+
+            result = get_ciris_services_disabled()
+            assert result is False
+
+    def test_get_ciris_services_disabled_empty(self) -> None:
+        """Test reading disabled flag when empty.
+
+        Expected:
+        - Returns False when env var is empty string
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: ""}):
+            result = get_ciris_services_disabled()
+            assert result is False
+
+    def test_get_ciris_services_disabled_invalid(self) -> None:
+        """Test reading disabled flag with invalid value.
+
+        Expected:
+        - Returns False for unrecognized values
+        """
+        with patch.dict("os.environ", {CIRIS_SERVICES_DISABLED_VAR: "maybe"}):
+            result = get_ciris_services_disabled()
+            assert result is False
+
+    def test_roundtrip_disable_enable(self, temp_env_file: Path) -> None:
+        """Test full roundtrip: disable then enable.
+
+        Expected:
+        - Can disable, read as disabled
+        - Can re-enable, read as enabled
+        - File correctly updated at each step
+        """
+        with patch(
+            "ciris_engine.logic.persistence.llm_providers._get_env_path",
+            return_value=temp_env_file,
+        ):
+            # Disable
+            assert set_ciris_services_disabled(True) is True
+            content = temp_env_file.read_text()
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=true" in content
+
+            # Enable
+            assert set_ciris_services_disabled(False) is True
+            content = temp_env_file.read_text()
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=false" in content
+            # Old value should be gone
+            assert f"{CIRIS_SERVICES_DISABLED_VAR}=true" not in content

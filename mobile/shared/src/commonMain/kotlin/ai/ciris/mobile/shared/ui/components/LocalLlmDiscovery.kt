@@ -175,17 +175,24 @@ fun LocalLlmServerDiscovery(
         }
     }
 
-    // Auto-discover on first composition
-    LaunchedEffect(Unit) {
-        if (state.discoveredServers.isEmpty() && !state.isDiscovering) {
-            discoverServers()
-        }
-    }
+    // Discovery is user-initiated only (via "Discover Servers" button)
+    // This ensures network permission popups appear in context
 
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Explanation text - only show if no servers discovered yet
+        if (state.discoveredServers.isEmpty() && !state.isDiscovering) {
+            Text(
+                text = "Search your local network for AI inference servers like Ollama, llama.cpp, or vLLM. " +
+                       "This requires network access to scan for servers on your WiFi.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = secondaryTextColor,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
         // Discover button
         OutlinedButton(
             onClick = { discoverServers() },

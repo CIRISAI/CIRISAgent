@@ -465,7 +465,7 @@ class LLMBus(BaseBus[LLMService]):
             if not selected_service:
                 continue
 
-            service_name = f"{type(selected_service).__name__}_{id(selected_service)}"
+            service_name = self._get_service_name(selected_service)
 
             if not self._check_circuit_breaker(service_name):
                 logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
@@ -533,6 +533,16 @@ class LLMBus(BaseBus[LLMService]):
             temperature=temperature,
             domain=domain,
         )
+
+    def _get_service_name(self, service: Any) -> str:
+        """Get stable service name for circuit breaker tracking.
+
+        Uses service.service_name if available (for consistent CB tracking across restarts),
+        otherwise generates from class + id (fallback for services without service_name).
+        """
+        if hasattr(service, "service_name") and service.service_name:
+            return str(service.service_name)
+        return f"{type(service).__name__}_{id(service)}"
 
     def _check_service_capabilities(self, service: Any) -> bool:
         """Check if service has required LLM capabilities."""
@@ -644,7 +654,7 @@ class LLMBus(BaseBus[LLMService]):
             best_latency = float("inf")
 
             for service in services:
-                service_name = f"{type(service).__name__}_{id(service)}"
+                service_name = self._get_service_name(service)
                 metrics = self.service_metrics[service_name]
 
                 # New services get a chance
@@ -667,7 +677,7 @@ class LLMBus(BaseBus[LLMService]):
             # Select service with fewest active requests
             # This would require tracking active requests
             # For now, use the one with fewest total requests
-            return min(services, key=lambda s: self.service_metrics[f"{type(s).__name__}_{id(s)}"].total_requests)
+            return min(services, key=lambda s: self.service_metrics[self._get_service_name(s)].total_requests)
 
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""
@@ -989,7 +999,7 @@ class LLMBus(BaseBus[LLMService]):
                 return False
 
             # Check circuit breaker state
-            service_name = f"{type(service).__name__}_{id(service)}"
+            service_name = self._get_service_name(service)
             if not self._check_circuit_breaker(service_name):
                 return False
 

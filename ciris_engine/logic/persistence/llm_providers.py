@@ -23,6 +23,9 @@ RUNTIME_PROVIDERS_CONFIG_KEY = "runtime_llm_providers"
 # Env var name for .env file persistence
 RUNTIME_PROVIDERS_ENV_VAR = "RUNTIME_LLM_PROVIDERS_JSON"
 
+# Env var name for disabling CIRIS services
+CIRIS_SERVICES_DISABLED_VAR = "CIRIS_SERVICES_DISABLED"
+
 
 class LLMProviderConfig(BaseModel):
     """Configuration for a runtime LLM provider."""
@@ -148,6 +151,60 @@ def write_providers_to_env(providers: dict[str, LLMProviderConfig]) -> bool:
     except Exception as e:
         logger.warning(f"Failed to persist runtime providers to .env: {e}")
         return False
+
+
+def set_ciris_services_disabled(disabled: bool) -> bool:
+    """Set CIRIS_SERVICES_DISABLED flag in .env file.
+
+    Args:
+        disabled: True to disable CIRIS services, False to re-enable
+
+    Returns:
+        True if successfully persisted
+    """
+    env_path = _get_env_path()
+    if not env_path:
+        logger.warning("Cannot set CIRIS services disabled - .env path unknown")
+        return False
+
+    if not env_path.exists():
+        logger.warning("Cannot set CIRIS services disabled - .env not found")
+        return False
+
+    try:
+        # Read existing content
+        content = env_path.read_text()
+        lines = content.splitlines()
+
+        # Remove existing CIRIS_SERVICES_DISABLED line
+        new_lines = [
+            line
+            for line in lines
+            if not line.strip().startswith(f"{CIRIS_SERVICES_DISABLED_VAR}=")
+        ]
+
+        # Add new line
+        value = "true" if disabled else "false"
+        new_lines.append(f"{CIRIS_SERVICES_DISABLED_VAR}={value}")
+
+        # Write back
+        env_path.write_text("\n".join(new_lines) + "\n")
+        logger.info(f"Set CIRIS_SERVICES_DISABLED={value} in .env")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to set CIRIS services disabled in .env: {e}")
+        return False
+
+
+def get_ciris_services_disabled() -> bool:
+    """Check if CIRIS services are disabled.
+
+    Returns:
+        True if CIRIS services are disabled
+    """
+    import os
+    return os.environ.get(CIRIS_SERVICES_DISABLED_VAR, "").lower() in ("true", "1", "yes")
 
 
 # =============================================================================

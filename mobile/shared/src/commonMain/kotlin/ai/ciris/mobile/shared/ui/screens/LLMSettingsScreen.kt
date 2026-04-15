@@ -111,6 +111,7 @@ fun LLMSettingsScreen(
     // Load config when screen is first shown
     LaunchedEffect(Unit) {
         viewModel.refresh()
+        llmViewModel.loadStatus()  // Refresh LLM Bus status and providers
     }
 
     val savedSuccessMessage = localizedString("mobile.settings_saved_successfully")
@@ -215,7 +216,8 @@ fun LLMSettingsScreen(
                     RegisteredProvidersContent(
                         isCirisProxy = isCirisProxy,
                         llmProviders = llmProviders,
-                        llmViewModel = llmViewModel
+                        llmViewModel = llmViewModel,
+                        availableProviders = viewModel.availableProviders
                     )
 
                     // Only show BYOK editing UI when not using CIRIS Proxy
@@ -253,7 +255,7 @@ fun LLMSettingsScreen(
                     } else if (localInferenceCapability.isReady) {
                         localizedString("mobile.llm_on_device_available")
                     } else {
-                        localizedString("mobile.llm_settings_local_none")
+                        "Run Discovery"
                     },
                     icon = Icons.Filled.Wifi,
                     expanded = localServersExpanded,
@@ -564,7 +566,8 @@ private fun CollapsibleSection(
 private fun RegisteredProvidersContent(
     isCirisProxy: Boolean,
     llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
-    llmViewModel: LLMSettingsViewModel
+    llmViewModel: LLMSettingsViewModel,
+    availableProviders: List<Pair<String, String>>
 ) {
     val semantic = SemanticColors.Default
 
@@ -707,6 +710,157 @@ private fun RegisteredProvidersContent(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Add Provider Card
+        Spacer(Modifier.height(12.dp))
+        AddProviderCard(llmViewModel = llmViewModel, availableProviders = availableProviders)
+    }
+}
+
+/**
+ * Card for adding a new cloud provider.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddProviderCard(
+    llmViewModel: LLMSettingsViewModel,
+    availableProviders: List<Pair<String, String>>
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    var selectedProvider by remember { mutableStateOf("openai") }
+    var apiKey by remember { mutableStateOf("") }
+    var showApiKey by remember { mutableStateOf(false) }
+
+    // Filter to cloud providers that need API keys (exclude local/mobile/other)
+    val cloudProviders = availableProviders.filter { (id, _) ->
+        id !in listOf("mobile_local", "local_inference", "local", "openai_compatible", "other")
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testable("card_add_provider"),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        onClick = { isExpanded = !isExpanded }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Add Cloud Provider",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Icon(
+                    imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isExpanded) {
+                Spacer(Modifier.height(16.dp))
+
+                // Provider dropdown
+                var dropdownExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = dropdownExpanded,
+                    onExpandedChange = { dropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = cloudProviders.find { it.first == selectedProvider }?.second ?: selectedProvider,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Provider") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testable("input_add_provider_type")
+                    )
+                    ExposedDropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false }
+                    ) {
+                        cloudProviders.forEach { (id, name) ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    selectedProvider = id
+                                    dropdownExpanded = false
+                                },
+                                modifier = Modifier.testable("menu_provider_$id")
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // API Key input
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text("API Key") },
+                    placeholder = { Text("sk-...") },
+                    visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showApiKey = !showApiKey }) {
+                            Icon(
+                                imageVector = if (showApiKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (showApiKey) "Hide" else "Show"
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testable("input_add_provider_api_key")
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Add button
+                Button(
+                    onClick = {
+                        if (apiKey.isNotBlank()) {
+                            llmViewModel.addCloudProvider(selectedProvider, apiKey)
+                            apiKey = ""
+                            isExpanded = false
+                        }
+                    },
+                    enabled = apiKey.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testable("btn_add_provider_submit")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Provider")
                 }
             }
         }
@@ -1237,6 +1391,138 @@ private fun AdvancedSettingsContent(
             text = "Protection automatically pauses providers that have too many errors, then tries them again after a short wait.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+        )
+
+        // CIRIS Services Toggle (Danger Zone)
+        CirisServicesToggle(llmViewModel = llmViewModel)
+    }
+}
+
+/**
+ * Toggle to disable CIRIS services (switch to BYOK mode).
+ * Shows a warning that re-enabling requires re-running the setup wizard.
+ */
+@Composable
+private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel) {
+    val semantic = SemanticColors.Default
+    var showDisableDialog by remember { mutableStateOf(false) }
+    val isCirisServicesEnabled by llmViewModel.cirisServicesEnabled.collectAsState()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testable("card_ciris_services"),
+        colors = CardDefaults.cardColors(
+            containerColor = semantic.surfaceError.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "CIRIS Services",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = if (isCirisServicesEnabled) "Using CIRIS proxy for LLM requests"
+                               else "Disabled - using your own API keys",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                Switch(
+                    checked = isCirisServicesEnabled,
+                    onCheckedChange = { enabled ->
+                        if (!enabled) {
+                            showDisableDialog = true
+                        } else {
+                            // Re-enabling requires wizard - just show info
+                            llmViewModel.showCirisServicesReenableInfo()
+                        }
+                    },
+                    modifier = Modifier.testable("switch_ciris_services")
+                )
+            }
+
+            if (!isCirisServicesEnabled) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = semantic.warning,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Re-enabling requires re-running the setup wizard",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = semantic.warning
+                    )
+                }
+            }
+        }
+    }
+
+    // Confirmation dialog for disabling
+    if (showDisableDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisableDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = semantic.warning,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { Text("Disable CIRIS Services?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This will switch you to BYOK (Bring Your Own Key) mode.")
+                    Text("You'll need to provide your own API keys for OpenAI, Anthropic, or other providers.")
+                    Text(
+                        text = "To re-enable CIRIS services later, you'll need to re-run the setup wizard.",
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        llmViewModel.disableCirisServices()
+                        showDisableDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = semantic.error
+                    ),
+                    modifier = Modifier.testable("btn_confirm_disable_ciris")
+                ) {
+                    Text("Disable")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDisableDialog = false },
+                    modifier = Modifier.testable("btn_cancel_disable_ciris")
+                ) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

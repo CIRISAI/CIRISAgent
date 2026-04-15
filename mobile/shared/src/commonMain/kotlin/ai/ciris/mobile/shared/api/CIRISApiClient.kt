@@ -4439,6 +4439,101 @@ class CIRISApiClient(
         }
     }
 
+    /**
+     * Disable CIRIS services (switch to BYOK mode).
+     * Calls the dedicated API endpoint that:
+     * - Sets CIRIS_SERVICES_DISABLED=true in .env (persists across restarts)
+     * - Unregisters CIRIS providers from memory (immediate effect)
+     * - Disables CIRIS hosted tools
+     */
+    suspend fun disableCirisServices(): ai.ciris.mobile.shared.models.SimpleResponse {
+        val method = "disableCirisServices"
+        val url = "$baseUrl/v1/system/llm/ciris-services/disable"
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                accessToken?.let { bearerAuth(it) }
+            }
+
+            val responseBody = response.bodyAsText()
+            logInfo(method, "Response ${response.status}: $responseBody")
+
+            if (response.status.isSuccess()) {
+                // Parse response to get message
+                val jsonResponse = Json.parseToJsonElement(responseBody).jsonObject
+                val data = jsonResponse["data"]?.jsonObject
+                val disabled = data?.get("disabled")?.jsonPrimitive?.boolean ?: true
+                val message = data?.get("message")?.jsonPrimitive?.contentOrNull
+                    ?: "CIRIS services disabled"
+
+                ai.ciris.mobile.shared.models.SimpleResponse(
+                    success = disabled,
+                    message = message
+                )
+            } else {
+                logError(method, "Failed: ${response.status}")
+                ai.ciris.mobile.shared.models.SimpleResponse(
+                    success = false,
+                    message = "Failed to disable CIRIS services: ${response.status}"
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e, "disabling CIRIS services")
+            ai.ciris.mobile.shared.models.SimpleResponse(
+                success = false,
+                message = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * Delete a provider by name.
+     */
+    suspend fun deleteProvider(name: String) {
+        val method = "deleteProvider"
+        val url = "$baseUrl/v1/system/llm/providers/$name"
+        logInfo(method, "DELETE $url")
+
+        val client = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        val response = client.delete(url) {
+            authHeader()?.let { header("Authorization", it) }
+        }
+
+        client.close()
+
+        if (response.status.value !in 200..299) {
+            val body = response.bodyAsText()
+            throw RuntimeException("Failed to delete provider: ${response.status.value} - $body")
+        }
+    }
+
     // ===== Audit API =====
 
         /**

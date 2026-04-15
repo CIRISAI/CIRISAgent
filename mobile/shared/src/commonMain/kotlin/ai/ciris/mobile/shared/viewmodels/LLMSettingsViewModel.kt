@@ -90,6 +90,10 @@ class LLMSettingsViewModel(
     private val _advancedExpanded = MutableStateFlow(false)
     val advancedExpanded: StateFlow<Boolean> = _advancedExpanded.asStateFlow()
 
+    // CIRIS Services enabled state (loaded from config)
+    private val _cirisServicesEnabled = MutableStateFlow(true)
+    val cirisServicesEnabled: StateFlow<Boolean> = _cirisServicesEnabled.asStateFlow()
+
     // ========== Initialization ==========
 
     init {
@@ -375,6 +379,68 @@ class LLMSettingsViewModel(
         }
     }
 
+    /**
+     * Add a cloud provider with API key.
+     *
+     * @param providerId Provider type (openai, anthropic, openrouter, etc.)
+     * @param apiKey The API key for the provider
+     * @param baseUrl Optional custom base URL (uses default for provider if not specified)
+     * @param priority Priority level for the new provider
+     */
+    fun addCloudProvider(
+        providerId: String,
+        apiKey: String,
+        baseUrl: String? = null,
+        priority: ProviderPriority = ProviderPriority.FALLBACK
+    ) {
+        val method = "addCloudProvider"
+        logInfo(method, "Adding $providerId as ${priority.name} provider")
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // Default base URLs for known providers
+                val providerBaseUrl = baseUrl ?: when (providerId.lowercase()) {
+                    "openai" -> "https://api.openai.com/v1"
+                    "anthropic" -> "https://api.anthropic.com/v1"
+                    "openrouter" -> "https://openrouter.ai/api/v1"
+                    "deepseek" -> "https://api.deepseek.com/v1"
+                    "together" -> "https://api.together.xyz/v1"
+                    "groq" -> "https://api.groq.com/openai/v1"
+                    else -> ""
+                }
+
+                if (providerBaseUrl.isEmpty()) {
+                    _errorMessage.value = "Unknown provider: $providerId"
+                    return@launch
+                }
+
+                val result = apiClient.addLlmProvider(
+                    providerId = providerId,
+                    providerBaseUrl = providerBaseUrl,
+                    name = "${providerId}_byok",
+                    model = null,  // Will use provider's default
+                    apiKey = apiKey,
+                    priority = priority
+                )
+
+                if (result.success) {
+                    logInfo(method, "Provider added: ${result.providerName}")
+                    _successMessage.value = "Added $providerId as ${priority.name.lowercase()} provider"
+                    loadStatus()
+                } else {
+                    logError(method, "Failed to add provider: ${result.message}")
+                    _errorMessage.value = result.message
+                }
+            } catch (e: Exception) {
+                logError(method, "Error adding provider: ${e.message}")
+                _errorMessage.value = "Failed to add provider: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     // ========== Section Toggle Methods ==========
 
     fun toggleStatusExpanded() {
@@ -391,6 +457,47 @@ class LLMSettingsViewModel(
 
     fun toggleAdvancedExpanded() {
         _advancedExpanded.value = !_advancedExpanded.value
+    }
+
+    // ========== CIRIS Services ==========
+
+    /**
+     * Disable CIRIS services (switch to BYOK mode).
+     * This persists the setting and updates the LLM config.
+     */
+    fun disableCirisServices() {
+        val method = "disableCirisServices"
+        logInfo(method, "Disabling CIRIS services")
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // Call API to disable CIRIS services
+                val result = apiClient.disableCirisServices()
+                if (result.success) {
+                    _cirisServicesEnabled.value = false
+                    _successMessage.value = "CIRIS services disabled. Please restart the app for changes to take full effect."
+                    logInfo(method, "CIRIS services disabled successfully")
+                    // Refresh providers list to reflect changes
+                    refresh()
+                } else {
+                    _errorMessage.value = result.message ?: "Failed to disable CIRIS services"
+                    logError(method, "Failed to disable: ${result.message}")
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to disable CIRIS services: ${e.message}"
+                logError(method, "Error: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Show info about re-enabling CIRIS services (requires wizard).
+     */
+    fun showCirisServicesReenableInfo() {
+        _errorMessage.value = "To re-enable CIRIS services, please re-run the setup wizard from Settings > Data Management > Reset Account"
     }
 
     // ========== Message Clearing ==========

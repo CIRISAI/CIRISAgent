@@ -153,6 +153,24 @@ def write_providers_to_env(providers: dict[str, LLMProviderConfig]) -> bool:
         return False
 
 
+def _transform_local_provider_line(line: str) -> str:
+    """Transform a line for local provider deletion."""
+    stripped = line.strip()
+    if stripped.startswith("CIRIS_MOBILE_LOCAL_LLM_ENABLED="):
+        return "CIRIS_MOBILE_LOCAL_LLM_ENABLED=false"
+    if stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" in stripped.lower():
+        return f"# {line}  # Disabled by provider deletion"
+    return line
+
+
+def _transform_cloud_provider_line(line: str) -> str:
+    """Transform a line for cloud provider deletion."""
+    stripped = line.strip()
+    if stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" not in stripped.lower():
+        return f"# {line}  # Disabled by provider deletion"
+    return line
+
+
 def clear_primary_provider_env_vars(is_local: bool = False) -> bool:
     """Clear env vars that create the primary LLM provider on startup.
 
@@ -175,29 +193,11 @@ def clear_primary_provider_env_vars(is_local: bool = False) -> bool:
         content = env_path.read_text()
         lines = content.splitlines()
 
-        if is_local:
-            # Clear local LLM vars - set ENABLED to false
-            new_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith("CIRIS_MOBILE_LOCAL_LLM_ENABLED="):
-                    new_lines.append("CIRIS_MOBILE_LOCAL_LLM_ENABLED=false")
-                elif stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" in stripped.lower():
-                    # Comment out localhost URL
-                    new_lines.append(f"# {line}  # Disabled by provider deletion")
-                else:
-                    new_lines.append(line)
-            logger.info("Cleared local primary provider env vars")
-        else:
-            # For cloud providers, comment out the base URL
-            new_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" not in stripped.lower():
-                    new_lines.append(f"# {line}  # Disabled by provider deletion")
-                else:
-                    new_lines.append(line)
-            logger.info("Cleared cloud primary provider env vars")
+        transform_fn = _transform_local_provider_line if is_local else _transform_cloud_provider_line
+        new_lines = [transform_fn(line) for line in lines]
+
+        provider_type = "local" if is_local else "cloud"
+        logger.info(f"Cleared {provider_type} primary provider env vars")
 
         env_path.write_text("\n".join(new_lines) + "\n")
         return True

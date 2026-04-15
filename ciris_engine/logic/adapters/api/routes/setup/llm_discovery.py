@@ -22,6 +22,9 @@ from ciris_engine.logic.utils.mdns_resolver import (
 
 logger = logging.getLogger(__name__)
 
+# Constants
+LLAMA_CPP_CACHE_DIR = "llama.cpp"
+
 # Hostnames to probe with their likely ports
 # See: https://lmstudio.ai/docs/developer/core/server (LM Studio port 1234)
 # See: https://docs.ollama.com/faq (Ollama port 11434)
@@ -671,7 +674,7 @@ def _get_model_dir() -> str:
         return str(model_dir)
 
     # Desktop: use ~/.cache/llama.cpp
-    model_dir = Path.home() / ".cache" / "llama.cpp"
+    model_dir = Path.home() / ".cache" / LLAMA_CPP_CACHE_DIR
     model_dir.mkdir(parents=True, exist_ok=True)
     return str(model_dir)
 
@@ -694,8 +697,8 @@ def _find_model_file(model: str) -> Optional[str]:
 
     # Common model directories
     search_dirs = [
-        Path.home() / ".cache" / "llama.cpp",
-        Path.home() / ".local" / "share" / "llama.cpp" / "models",
+        Path.home() / ".cache" / LLAMA_CPP_CACHE_DIR,
+        Path.home() / ".local" / "share" / LLAMA_CPP_CACHE_DIR / "models",
         Path.home() / "models",
         Path("/usr/share/llama.cpp/models"),
         Path("/opt/models"),
@@ -772,9 +775,10 @@ async def download_model(model: str, progress_callback: Optional[Callable[[float
                 total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
 
-                with open(model_path, "wb") as f:
+                import aiofiles
+                async with aiofiles.open(model_path, "wb") as f:
                     async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
-                        f.write(chunk)
+                        await f.write(chunk)
                         downloaded += len(chunk)
                         if progress_callback and total_size > 0:
                             progress_callback(downloaded / total_size)

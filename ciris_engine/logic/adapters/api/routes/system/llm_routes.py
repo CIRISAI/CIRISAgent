@@ -129,8 +129,8 @@ def _sanitize_for_log(value: str, max_length: int = 64) -> str:
     Removes control characters, newlines, and truncates to prevent log injection.
     """
     import re
-    # Remove control characters and newlines that could be used for log injection
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f\r\n]', '', value)
+    # Remove control characters (includes \r\n which are \x0d\x0a)
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
     # Truncate to reasonable length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."

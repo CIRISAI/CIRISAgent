@@ -1737,7 +1737,9 @@
     "llm_success_threshold": "మూసేందుకు విజయం",
     "llm_rate_limit_cooldown": "డిఫాల్ట్ కూల్‌డౌన్",
     "llm_max_retries": "గరిష్ట పునఃప్రయత్నాలు",
-    "llm_max_wait": "గరిష్ట వేచి ఉండే సమయం"
+    "llm_max_wait": "గరిష్ట వేచి ఉండే సమయం",
+    "llm_local_inference_performance_warning": "కొన్ని పరికరాల్లో స్థానిక అనుమితి నెమ్మదిగా ఉండవచ్చు",
+    "llm_local_server_performance_note": "పనితీరు పరికర సామర్థ్యాలు మరియు మోడల్ పరిమాణంపై ఆధారపడి ఉంటుంది"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

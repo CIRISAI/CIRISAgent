@@ -36,7 +36,7 @@ import javax.imageio.ImageIO
  * Enable by setting CIRIS_TEST_MODE=true environment variable.
  */
 class TestAutomationServer(
-    private val port: Int = 8091
+    private val port: Int = 9091
 ) {
     private var server: ApplicationEngine? = null
 
@@ -610,7 +610,7 @@ class TestAutomationServer(
         /**
          * Get or create the singleton instance
          */
-        fun getInstance(port: Int = 8091): TestAutomationServer {
+        fun getInstance(port: Int = 9091): TestAutomationServer {
             return instance ?: synchronized(this) {
                 instance ?: TestAutomationServer(port).also { instance = it }
             }

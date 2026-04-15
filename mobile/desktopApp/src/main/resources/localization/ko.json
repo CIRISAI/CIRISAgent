@@ -1642,6 +1642,8 @@
     "llm_on_device_available": "온디바이스 지원",
     "llm_on_device_capable": "온디바이스 LLM 준비됨",
     "llm_on_device_coming_soon": "온디바이스 곧 지원",
+    "llm_local_inference_performance_warning": "일부 기기에서는 로컬 추론이 느릴 수 있습니다",
+    "llm_local_server_performance_note": "성능은 기기 성능과 모델 크기에 따라 달라집니다",
     "llm_settings_title": "LLM 구성",
     "llm_settings_status": "상태 개요",
     "llm_settings_providers": "제공자",

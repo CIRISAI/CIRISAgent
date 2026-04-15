@@ -634,6 +634,8 @@
         "llm_on_device_available": "On-device capable",
         "llm_on_device_capable": "On-Device LLM Ready",
         "llm_on_device_coming_soon": "On-Device Coming Soon",
+        "llm_local_inference_performance_warning": "Local inference may be slow on some devices",
+        "llm_local_server_performance_note": "Performance depends on device capabilities and model size",
         "llm_settings_advanced": "Advanced Settings",
         "llm_settings_auth": "Authentication",
         "llm_distribution_round_robin": "Round Robin",

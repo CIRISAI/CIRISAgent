@@ -25,7 +25,7 @@ private fun htonl(value: UInt): UInt {
  * Provides the same test automation endpoints as the desktop Ktor server.
  * Only starts when CIRIS_TEST_MODE=true.
  */
-class IOSTestAutomationServer(private val port: Int = 8091) {
+class IOSTestAutomationServer(private val port: Int = 9091) {
 
     private var serverSocket: Int = -1
     private var running = false
@@ -211,7 +211,7 @@ class IOSTestAutomationServer(private val port: Int = 8091) {
         fun startIfEnabled() {
             val testMode = platform.posix.getenv("CIRIS_TEST_MODE")?.toKString()?.lowercase()
             if (testMode in listOf("true", "1", "yes")) {
-                val port = platform.posix.getenv("CIRIS_TEST_PORT")?.toKString()?.toIntOrNull() ?: 8091
+                val port = platform.posix.getenv("CIRIS_TEST_PORT")?.toKString()?.toIntOrNull() ?: 9091
                 NSLog("[TestAutomation.ios] Test mode enabled, starting server on port $port")
                 instance = IOSTestAutomationServer(port).also { it.start() }
             }

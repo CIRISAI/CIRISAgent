@@ -1709,6 +1709,8 @@
     "llm_on_device_available": "ਡਿਵਾਈਸ ਤੇ ਸਮਰੱਥ",
     "llm_on_device_capable": "ਡਿਵਾਈਸ ਤੇ LLM ਤਿਆਰ",
     "llm_on_device_coming_soon": "ਡਿਵਾਈਸ ਤੇ ਜਲਦੀ",
+    "llm_local_inference_performance_warning": "ਸਥਾਨਕ ਅਨੁਮਾਨ ਕੁਝ ਡਿਵਾਈਸਾਂ ਤੇ ਹੌਲੀ ਹੋ ਸਕਦਾ ਹੈ",
+    "llm_local_server_performance_note": "ਪ੍ਰਦਰਸ਼ਨ ਡਿਵਾਈਸ ਸਮਰੱਥਾਵਾਂ ਅਤੇ ਮਾਡਲ ਦੇ ਆਕਾਰ 'ਤੇ ਨਿਰਭਰ ਕਰਦਾ ਹੈ",
     "llm_distribution_round_robin": "ਰਾਉਂਡ ਰੌਬਿਨ",
     "llm_distribution_latency": "ਦੇਰੀ ਅਧਾਰਿਤ (ਸਿਫ਼ਾਰਿਸ਼ ਕੀਤੀ)",
     "llm_distribution_random": "ਬੇਤਰਤੀਬ",

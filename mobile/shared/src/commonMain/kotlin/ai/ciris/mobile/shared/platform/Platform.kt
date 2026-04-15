@@ -80,7 +80,8 @@ expect fun getAppBuildNumber(): String
 /**
  * Start the test automation HTTP server if CIRIS_TEST_MODE is enabled.
  * On desktop: no-op (server is started from Main.kt).
- * On iOS: starts POSIX socket server on port 8091.
- * On Android: starts Ktor CIO server on port 8091.
+ * On iOS: starts POSIX socket server on port 9091.
+ * On Android: starts Ktor CIO server on port 9091.
+ * Note: Port 9091 avoids collision with local LLM server (port 8091).
  */
 expect fun startTestAutomationServer()

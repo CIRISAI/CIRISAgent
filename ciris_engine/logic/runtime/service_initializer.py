@@ -1007,6 +1007,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.resource_monitor_service.signal_bus.register("token_refreshed", openai_service.handle_token_refreshed)
             logger.info("Registered LLM service token refresh handler with ResourceMonitor")
 
+        # Auto-register CIRIS proxy fallback if primary is a local/non-CIRIS URL
+        # This ensures cloud fallback is always available when using local inference
+        from ciris_engine.config.ciris_services import get_proxy_url, is_ciris_proxy_url
+
+        primary_is_local = base_url and not is_ciris_proxy_url(base_url)
+        if primary_is_local and not ciris_services_disabled:
+            id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+                "CIRIS_BILLING_APPLE_ID_TOKEN", ""
+            )
+            if id_token:
+                logger.info("📡 Primary LLM is local - registering CIRIS proxy as fallback")
+                await self._initialize_ciris_proxy_fallback(config, id_token)
+
         # Optional: Initialize secondary LLM service
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
@@ -1083,6 +1096,69 @@ This directory contains critical cryptographic keys for the CIRIS system.
             )
 
         logger.info(f"Secondary LLM service initialized: {model_name}")
+
+    async def _initialize_ciris_proxy_fallback(self, config: Any, id_token: str) -> None:
+        """Initialize CIRIS proxy as fallback when primary is local/non-CIRIS.
+
+        This ensures users with local inference still have cloud fallback available.
+        The CIRIS proxy uses JWT auth (Google/Apple ID token) not API key.
+        """
+        from ciris_engine.config.ciris_services import get_all_proxy_endpoints
+        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
+
+        logger.info("Initializing CIRIS proxy fallback for local primary")
+
+        # Get all CIRIS proxy endpoints for multi-region failover
+        endpoints = get_all_proxy_endpoints()
+        if not endpoints:
+            logger.warning("No CIRIS proxy endpoints available for fallback")
+            return
+
+        # Build URLs with /v1 suffix
+        base_urls = [ep.url.rstrip("/") + "/v1" for ep in endpoints]
+        base_url = base_urls[0]
+
+        # Use CIRIS-recommended model for fallback
+        model_name = os.environ.get("CIRIS_PROXY_MODEL", "claude-sonnet-4-20250514")
+
+        # Use same timeout as primary LLM
+        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+            config, "llm_timeout", 20
+        )
+
+        llm_config = OpenAIConfig(
+            base_url=base_url,
+            base_urls=base_urls if len(base_urls) > 1 else None,
+            model_name=model_name,
+            api_key=id_token,  # JWT token for CIRIS proxy auth
+            instructor_mode="JSON",
+            timeout_seconds=llm_timeout,
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
+        )
+
+        service = OpenAICompatibleClient(
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name="ciris_proxy_fallback",
+        )
+        await service.start()
+
+        # Register with NORMAL priority (below CRITICAL local, above LOW)
+        if self.service_registry:
+            self.service_registry.register_service(
+                service_type=ServiceType.LLM,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                metadata={"provider": "ciris_proxy", "model": model_name, "base_url": base_url},
+            )
+
+        # Register token refresh handler
+        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
+
+        logger.info(f"✓ CIRIS proxy fallback initialized: {model_name} ({len(base_urls)} endpoints)")
 
     async def _load_persisted_runtime_llm_providers(self) -> None:
         """Load runtime LLM providers that were persisted to config.

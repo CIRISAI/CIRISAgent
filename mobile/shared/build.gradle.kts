@@ -75,6 +75,9 @@ kotlin {
 
                 // Generated API client
                 implementation(project(":generated-api"))
+
+                // On-device LLM: Android uses llmedge (androidMain), iOS coming soon.
+                // Desktop connects to external servers (Ollama, llama.cpp, etc.)
             }
         }
 
@@ -83,11 +86,16 @@ kotlin {
                 // Ktor Android engine
                 implementation("io.ktor:ktor-client-okhttp:2.3.7")
 
-                // Ktor server for test automation (CIO works on Android)
+                // Ktor server for local LLM HTTP API and test automation
                 implementation("io.ktor:ktor-server-core:2.3.7")
                 implementation("io.ktor:ktor-server-cio:2.3.7")
                 implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
                 implementation("io.ktor:ktor-server-status-pages:2.3.7")
+
+                // On-device LLM inference: Not available on Android
+                // Available libraries (llmedge, kotlinllamacpp) require Kotlin 2.x
+                // Project stays on Kotlin 1.9.x to maintain ARMv7 (32-bit) support
+                // Android users should use "Local Inference Server" to discover network LLM servers
 
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")

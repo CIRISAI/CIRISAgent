@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "На пристрої можливо",
     "llm_on_device_capable": "LLM на пристрої готова",
     "llm_on_device_coming_soon": "На пристрої незабаром",
+    "llm_local_inference_performance_warning": "Локальний висновок може бути повільним на деяких пристроях",
+    "llm_local_server_performance_note": "Продуктивність залежить від можливостей пристрою та розміру моделі",
     "llm_settings_advanced": "Розширені налаштування",
     "llm_settings_auth": "Автентифікація",
     "llm_distribution_round_robin": "По колу",

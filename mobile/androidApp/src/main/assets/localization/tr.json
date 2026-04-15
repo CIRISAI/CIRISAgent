@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "Cihazda Uyumlu",
     "llm_on_device_capable": "Cihazda LLM Hazır",
     "llm_on_device_coming_soon": "Cihazda Yakında",
+    "llm_local_inference_performance_warning": "Yerel çıkarım bazı cihazlarda yavaş olabilir",
+    "llm_local_server_performance_note": "Performans cihaz yeteneklerine ve model boyutuna bağlıdır",
     "llm_settings_advanced": "Gelişmiş Ayarlar",
     "llm_settings_auth": "Kimlik Doğrulama",
     "llm_distribution_round_robin": "Sıralı Dağıtım",

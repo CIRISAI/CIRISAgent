@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "በመሣሪያ ላይ ተችሎ ነገር",
     "llm_on_device_capable": "በመሣሪያ ላይ LLM ዝግጁ",
     "llm_on_device_coming_soon": "በመሣሪያ ላይ በቅርቡ",
+    "llm_local_inference_performance_warning": "በአንዳንድ መሣሪያዎች ላይ የአካባቢያዊ ማስተዋወቂያ ዘግይቶ ሊሆን ይችላል",
+    "llm_local_server_performance_note": "አፈጻጸም በመሣሪያ አቅምና በሞዴል መጠን ላይ ይመሰረታል",
     "llm_settings_advanced": "የላቁ ቅንብሮች",
     "llm_settings_auth": "ማረጋገጫ",
     "llm_distribution_round_robin": "በዙሪያ ዙሪያ",

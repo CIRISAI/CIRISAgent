@@ -1710,6 +1710,8 @@
     "llm_on_device_available": "ডিভাইসে সক্ষম",
     "llm_on_device_capable": "ডিভাইসে LLM প্রস্তুত",
     "llm_on_device_coming_soon": "ডিভাইসে শীঘ্রই আসছে",
+    "llm_local_inference_performance_warning": "স্থানীয় অনুমান কিছু ডিভাইসে ধীর হতে পারে",
+    "llm_local_server_performance_note": "কর্মক্ষমতা ডিভাইস সক্ষমতা এবং মডেল আকারের উপর নির্ভর করে",
     "llm_distribution_round_robin": "রাউন্ড রবিন",
     "llm_distribution_latency": "বিলম্ব ভিত্তিক (প্রস্তাবিত)",
     "llm_distribution_random": "এলোমেলো",

@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "قادر على الجهاز",
     "llm_on_device_capable": "LLM جاهز على الجهاز",
     "llm_on_device_coming_soon": "قادم قريباً على الجهاز",
+    "llm_local_inference_performance_warning": "قد يكون الاستدلال المحلي بطيئاً على بعض الأجهزة",
+    "llm_local_server_performance_note": "يعتمد الأداء على قدرات الجهاز وحجم النموذج",
     "llm_settings_advanced": "الإعدادات المتقدمة",
     "llm_settings_auth": "المصادقة",
     "llm_distribution_round_robin": "التوزيع الدائري",

@@ -1703,6 +1703,8 @@
     "llm_on_device_available": "ကိရိယာပေါ်တွင်ဖြစ်နိုင်သည်",
     "llm_on_device_capable": "ကိရိယာပေါ်ရှိ LLM အဆင်သင့်",
     "llm_on_device_coming_soon": "ကိရိယာပေါ်တွင် မကြေးမီ",
+    "llm_local_inference_performance_warning": "ကိရိယာအချို့တွင် ဒေသခံ ကောက်ချက်များ နှေးနိုင်သည်",
+    "llm_local_server_performance_note": "စွမ်းဆောင်ရည်သည် ကိရိယာစွမ်းရည်နှင့် မော်ဒယ်အရွယ်အစားပေါ်တွင် မူတည်သည်",
     "llm_settings_title": "LLM ဖွဲ့စည်းမှု",
     "llm_settings_status": "အခြေအနေ အကျဉ်းချုပ်",
     "llm_settings_providers": "ဝန်ဆောင်မှုပေးသူများ",

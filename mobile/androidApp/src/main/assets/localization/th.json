@@ -1703,6 +1703,8 @@
     "llm_on_device_available": "มีความสามารถบนอุปกรณ์",
     "llm_on_device_capable": "LLM บนอุปกรณ์พร้อมใช้",
     "llm_on_device_coming_soon": "บนอุปกรณ์ในเร็ว ๆ นี้",
+    "llm_local_inference_performance_warning": "การอนุมานในเครื่องอาจช้าบนอุปกรณ์บางรุ่น",
+    "llm_local_server_performance_note": "ประสิทธิภาพขึ้นอยู่กับความสามารถของอุปกรณ์และขนาดโมเดล",
     "llm_settings_title": "การกำหนดค่า LLM",
     "llm_settings_status": "ภาพรวมสถานะ",
     "llm_settings_providers": "ผู้ให้บริการ",

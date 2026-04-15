@@ -1707,6 +1707,8 @@
     "llm_on_device_available": "Iya aiki a kan na gaida",
     "llm_on_device_capable": "LLM Shirye a kan na gaida",
     "llm_on_device_coming_soon": "Za a zo koli a kan na gaida",
+    "llm_local_inference_performance_warning": "Ƙaddara na gida na iya zama a hankali a wasu na'urori",
+    "llm_local_server_performance_note": "Aiki ya dogara da iyawar na'ura da girman samfurin",
     "llm_settings_advanced": "Saitunan ci gaba",
     "llm_settings_auth": "Tabbatarwa",
     "llm_distribution_round_robin": "Zagayawa",

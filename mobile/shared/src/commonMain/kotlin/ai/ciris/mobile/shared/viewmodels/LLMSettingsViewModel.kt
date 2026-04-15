@@ -385,16 +385,18 @@ class LLMSettingsViewModel(
      * @param providerId Provider type (openai, anthropic, openrouter, etc.)
      * @param apiKey The API key for the provider
      * @param baseUrl Optional custom base URL (uses default for provider if not specified)
+     * @param model Optional specific model to use (fetched via listModels API)
      * @param priority Priority level for the new provider
      */
     fun addCloudProvider(
         providerId: String,
         apiKey: String,
         baseUrl: String? = null,
+        model: String? = null,
         priority: ProviderPriority = ProviderPriority.FALLBACK
     ) {
         val method = "addCloudProvider"
-        logInfo(method, "Adding $providerId as ${priority.name} provider")
+        logInfo(method, "Adding $providerId as ${priority.name} provider${model?.let { " with model $it" } ?: ""}")
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -419,7 +421,7 @@ class LLMSettingsViewModel(
                     providerId = providerId,
                     providerBaseUrl = providerBaseUrl,
                     name = "${providerId}_byok",
-                    model = null,  // Will use provider's default
+                    model = model,  // Use selected model or provider's default
                     apiKey = apiKey,
                     priority = priority
                 )

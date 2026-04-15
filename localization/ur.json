@@ -1648,6 +1648,8 @@
     "llm_on_device_available": "آن ڈیوائس قابل",
     "llm_on_device_capable": "آن ڈیوائس LLM تیار",
     "llm_on_device_coming_soon": "آن ڈیوائس جلد ہی",
+    "llm_local_inference_performance_warning": "مقامی استنتاج بعض آلات پر سست ہو سکتا ہے",
+    "llm_local_server_performance_note": "کارکردگی ڈیوائس کی صلاحیتوں اور ماڈل کے سائز پر منحصر ہے",
     "llm_distribution_round_robin": "راؤنڈ رابن",
     "llm_distribution_latency": "تاخیر پر مبنی (تجویز کردہ)",
     "llm_distribution_random": "بے ترتیب",

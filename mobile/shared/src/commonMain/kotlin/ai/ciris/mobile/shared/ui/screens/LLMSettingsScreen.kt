@@ -13,6 +13,7 @@ import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
 import ai.ciris.mobile.shared.viewmodels.LLMSettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -217,6 +218,7 @@ fun LLMSettingsScreen(
                         isCirisProxy = isCirisProxy,
                         llmProviders = llmProviders,
                         llmViewModel = llmViewModel,
+                        apiClient = apiClient,
                         availableProviders = viewModel.availableProviders
                     )
 
@@ -567,6 +569,7 @@ private fun RegisteredProvidersContent(
     isCirisProxy: Boolean,
     llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
     llmViewModel: LLMSettingsViewModel,
+    apiClient: CIRISApiClient,
     availableProviders: List<Pair<String, String>>
 ) {
     val semantic = SemanticColors.Default
@@ -716,17 +719,19 @@ private fun RegisteredProvidersContent(
 
         // Add Provider Card
         Spacer(Modifier.height(12.dp))
-        AddProviderCard(llmViewModel = llmViewModel, availableProviders = availableProviders)
+        AddProviderCard(llmViewModel = llmViewModel, apiClient = apiClient, availableProviders = availableProviders)
     }
 }
 
 /**
  * Card for adding a new cloud provider.
+ * Fetches available models from the provider's API after key entry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddProviderCard(
     llmViewModel: LLMSettingsViewModel,
+    apiClient: CIRISApiClient,
     availableProviders: List<Pair<String, String>>
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -734,9 +739,24 @@ private fun AddProviderCard(
     var apiKey by remember { mutableStateOf("") }
     var showApiKey by remember { mutableStateOf(false) }
 
+    // Model fetching state
+    var isFetchingModels by remember { mutableStateOf(false) }
+    var fetchedModels by remember { mutableStateOf<List<ai.ciris.mobile.shared.viewmodels.ModelInfo>>(emptyList()) }
+    var selectedModel by remember { mutableStateOf<String?>(null) }
+    var fetchError by remember { mutableStateOf<String?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
+
     // Filter to cloud providers that need API keys (exclude local/mobile/other)
     val cloudProviders = availableProviders.filter { (id, _) ->
         id !in listOf("mobile_local", "local_inference", "local", "openai_compatible", "other")
+    }
+
+    // Reset models when provider changes
+    LaunchedEffect(selectedProvider) {
+        fetchedModels = emptyList()
+        selectedModel = null
+        fetchError = null
     }
 
     Card(
@@ -819,7 +839,13 @@ private fun AddProviderCard(
                 // API Key input
                 OutlinedTextField(
                     value = apiKey,
-                    onValueChange = { apiKey = it },
+                    onValueChange = {
+                        apiKey = it
+                        // Clear models when key changes
+                        fetchedModels = emptyList()
+                        selectedModel = null
+                        fetchError = null
+                    },
                     label = { Text("API Key") },
                     placeholder = { Text("sk-...") },
                     visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -838,18 +864,198 @@ private fun AddProviderCard(
                         .testable("input_add_provider_api_key")
                 )
 
+                Spacer(Modifier.height(8.dp))
+
+                // Fetch Models button - show when key is entered but models not yet fetched
+                if (apiKey.isNotBlank() && fetchedModels.isEmpty() && !isFetchingModels) {
+                    OutlinedButton(
+                        onClick = {
+                            isFetchingModels = true
+                            fetchError = null
+                            coroutineScope.launch {
+                                try {
+                                    val models = apiClient.listModels(
+                                        provider = selectedProvider,
+                                        apiKey = apiKey,
+                                        baseUrl = null
+                                    )
+                                    fetchedModels = models
+                                    // Auto-select recommended or first model
+                                    if (models.isNotEmpty()) {
+                                        val best = models.firstOrNull { it.cirisRecommended }
+                                            ?: models.firstOrNull { it.cirisCompatible }
+                                            ?: models.first()
+                                        selectedModel = best.id
+                                    }
+                                } catch (e: Exception) {
+                                    fetchError = e.message ?: "Failed to fetch models"
+                                } finally {
+                                    isFetchingModels = false
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testable("btn_fetch_models")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Fetch Available Models")
+                    }
+                }
+
+                // Loading indicator
+                if (isFetchingModels) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Fetching models...", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                // Error message
+                fetchError?.let { error ->
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+
+                // Model dropdown - show when models are fetched
+                if (fetchedModels.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+
+                    var modelDropdownExpanded by remember { mutableStateOf(false) }
+                    val displayModel = fetchedModels.find { it.id == selectedModel }
+
+                    ExposedDropdownMenuBox(
+                        expanded = modelDropdownExpanded,
+                        onExpandedChange = { modelDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = displayModel?.displayName ?: selectedModel ?: "Select a model",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Model") },
+                            trailingIcon = {
+                                Row {
+                                    if (displayModel?.cirisRecommended == true) {
+                                        Text("★", color = MaterialTheme.colorScheme.primary)
+                                    }
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                                .testable("input_add_provider_model")
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelDropdownExpanded,
+                            onDismissRequest = { modelDropdownExpanded = false }
+                        ) {
+                            // Sort: recommended first, then compatible, then others
+                            val sortedModels = fetchedModels.sortedByDescending {
+                                when {
+                                    it.cirisRecommended -> 2
+                                    it.cirisCompatible -> 1
+                                    else -> 0
+                                }
+                            }
+                            sortedModels.forEach { model ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = model.displayName,
+                                                    fontWeight = if (model.cirisRecommended) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                                model.contextWindow?.let { ctx ->
+                                                    Text(
+                                                        text = "${ctx / 1000}K context",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            if (model.cirisRecommended) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.primaryContainer
+                                                ) {
+                                                    Text(
+                                                        "★ Best",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            } else if (model.cirisCompatible) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                                ) {
+                                                    Text(
+                                                        "Compatible",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedModel = model.id
+                                        modelDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.testable("menu_model_${model.id.replace("/", "_").replace(":", "_")}")
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "★ = Recommended for CIRIS",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 Spacer(Modifier.height(12.dp))
 
-                // Add button
+                // Add button - enabled when key is provided and (models fetched with selection OR no models needed)
+                val canAdd = apiKey.isNotBlank() && (fetchedModels.isEmpty() || selectedModel != null)
                 Button(
                     onClick = {
                         if (apiKey.isNotBlank()) {
-                            llmViewModel.addCloudProvider(selectedProvider, apiKey)
+                            llmViewModel.addCloudProvider(selectedProvider, apiKey, model = selectedModel)
                             apiKey = ""
+                            fetchedModels = emptyList()
+                            selectedModel = null
                             isExpanded = false
                         }
                     },
-                    enabled = apiKey.isNotBlank(),
+                    enabled = canAdd && !isFetchingModels,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testable("btn_add_provider_submit")
@@ -860,7 +1066,7 @@ private fun AddProviderCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Add Provider")
+                    Text(if (fetchedModels.isEmpty()) "Add Provider" else "Add Provider with Model")
                 }
             }
         }
@@ -1247,7 +1453,7 @@ private fun LocalServersContent(
                         tint = SemanticColors.Default.success,
                         modifier = Modifier.size(20.dp)
                     )
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = localizedString("mobile.llm_on_device_capable"),
                             style = MaterialTheme.typography.labelMedium,
@@ -1258,6 +1464,14 @@ private fun LocalServersContent(
                             text = localInferenceCapability.reason,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = localizedString("mobile.llm_local_inference_performance_warning"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            fontSize = 11.sp,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         )
                     }
                 }

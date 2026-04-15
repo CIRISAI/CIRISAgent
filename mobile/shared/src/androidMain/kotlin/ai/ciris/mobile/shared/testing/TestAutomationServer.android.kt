@@ -22,7 +22,7 @@ private const val TAG = "TestAutomation.android"
  * Provides HTTP endpoints for UI automation on port 8091.
  * Only starts when CIRIS_TEST_MODE=true.
  */
-class AndroidTestAutomationServer(private val port: Int = 8091) {
+class AndroidTestAutomationServer(private val port: Int = 9091) {
 
     private var server: ApplicationEngine? = null
 
@@ -134,7 +134,7 @@ class AndroidTestAutomationServer(private val port: Int = 8091) {
          */
         fun startIfEnabled() {
             if (isTestModeEnabled()) {
-                val port = 8091
+                val port = 9091
                 Log.i(TAG, "Test mode enabled, starting server on port $port")
                 instance = AndroidTestAutomationServer(port).also { it.start() }
             } else {

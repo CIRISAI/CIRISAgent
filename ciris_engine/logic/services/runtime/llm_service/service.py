@@ -1153,7 +1153,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                 import time as _time
                 _call_start = _time.monotonic()
-                logger.debug(f"[LLM_REQUEST] Starting instructor call...")
+                logger.debug("[LLM_REQUEST] Starting instructor call...")
 
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,

@@ -233,6 +233,82 @@ def build_provider_metrics(metrics: Any) -> ProviderMetrics:
     )
 
 
+def _count_cb_state(
+    cb: Optional[CircuitBreaker],
+) -> tuple[bool, str]:
+    """Count circuit breaker state and availability.
+
+    Returns:
+        (is_available, state_name) where state_name is 'closed', 'open', or 'half_open'
+    """
+    if cb is None:
+        return True, "closed"
+    if cb.state == CircuitState.CLOSED:
+        return True, "closed"
+    if cb.state == CircuitState.OPEN:
+        return False, "open"
+    if cb.state == CircuitState.HALF_OPEN:
+        return True, "half_open"
+    return True, "closed"
+
+
+def _aggregate_provider_stats(
+    llm_bus: LLMBus, registered_providers: list[Any]
+) -> tuple[int, int, int, int, int, int, int, float]:
+    """Aggregate stats across all providers.
+
+    Returns:
+        (providers_available, providers_rate_limited, cb_closed, cb_open, cb_half_open,
+         total_requests, failed_requests, total_latency)
+    """
+    providers_available = 0
+    providers_rate_limited = 0
+    cb_closed = 0
+    cb_open = 0
+    cb_half_open = 0
+    total_requests = 0
+    failed_requests = 0
+    total_latency = 0.0
+
+    for provider_info in registered_providers:
+        name = provider_info.name
+        cb = llm_bus.circuit_breakers.get(name)
+
+        # Count circuit breaker state and availability
+        is_available, state_name = _count_cb_state(cb)
+        if is_available:
+            providers_available += 1
+        if state_name == "closed":
+            cb_closed += 1
+        elif state_name == "open":
+            cb_open += 1
+        elif state_name == "half_open":
+            cb_half_open += 1
+
+        # Check rate limiting
+        rate_limited_until = llm_bus._rate_limited_until.get(name, 0)
+        if rate_limited_until > time.time():
+            providers_rate_limited += 1
+
+        # Aggregate metrics from service_metrics
+        if name in llm_bus.service_metrics:
+            metrics = llm_bus.service_metrics[name]
+            total_requests += metrics.total_requests
+            failed_requests += metrics.failed_requests
+            total_latency += metrics.total_latency_ms
+
+    return (
+        providers_available,
+        providers_rate_limited,
+        cb_closed,
+        cb_open,
+        cb_half_open,
+        total_requests,
+        failed_requests,
+        total_latency,
+    )
+
+
 # ============================================================================
 # GET /system/llm/status - Bus status and aggregate metrics
 # ============================================================================
@@ -259,52 +335,22 @@ async def get_llm_status(
 
     # Get total providers from registry (not circuit_breakers which are lazy)
     registered_providers = registry._services.get(ServiceType.LLM, [])
-    logger.info(f"[LLM_DEBUG] /status: registry has {len(registered_providers)} LLM providers")
+    logger.info("[LLM_DEBUG] /status: registry has %d LLM providers", len(registered_providers))
     for p in registered_providers:
-        logger.info(f"[LLM_DEBUG] /status:   - {p.name} (priority={p.priority})")
+        logger.info("[LLM_DEBUG] /status:   - %s (priority=%s)", p.name, p.priority)
     providers_total = len(registered_providers)
-    providers_available = 0
-    providers_rate_limited = 0
-    cb_closed = 0
-    cb_open = 0
-    cb_half_open = 0
 
-    # Aggregate metrics
-    total_requests = 0
-    failed_requests = 0
-    total_latency = 0.0
-
-    # Count status from all registered providers (not just those with circuit breakers)
-    for provider_info in registered_providers:
-        name = provider_info.name
-        cb = llm_bus.circuit_breakers.get(name)
-
-        if cb is None:
-            # No circuit breaker yet = never used = assume healthy
-            providers_available += 1
-            cb_closed += 1
-        else:
-            # Count CB states
-            if cb.state == CircuitState.CLOSED:
-                cb_closed += 1
-                providers_available += 1
-            elif cb.state == CircuitState.OPEN:
-                cb_open += 1
-            elif cb.state == CircuitState.HALF_OPEN:
-                cb_half_open += 1
-                providers_available += 1
-
-        # Check rate limiting
-        rate_limited_until = llm_bus._rate_limited_until.get(name, 0)
-        if rate_limited_until > time.time():
-            providers_rate_limited += 1
-
-        # Aggregate metrics from service_metrics
-        if name in llm_bus.service_metrics:
-            metrics = llm_bus.service_metrics[name]
-            total_requests += metrics.total_requests
-            failed_requests += metrics.failed_requests
-            total_latency += metrics.total_latency_ms
+    # Aggregate all stats using helper function
+    (
+        providers_available,
+        providers_rate_limited,
+        cb_closed,
+        cb_open,
+        cb_half_open,
+        total_requests,
+        failed_requests,
+        total_latency,
+    ) = _aggregate_provider_stats(llm_bus, registered_providers)
 
     # Calculate averages
     average_latency = total_latency / total_requests if total_requests > 0 else 0.0
@@ -312,9 +358,9 @@ async def get_llm_status(
 
     # Calculate uptime
     uptime = 0.0
-    if hasattr(llm_bus, "_start_time") and llm_bus._start_time:
-        now = datetime.now(timezone.utc)
-        uptime = (now - llm_bus._start_time).total_seconds()
+    start_time = getattr(llm_bus, "_start_time", None)
+    if start_time:
+        uptime = (datetime.now(timezone.utc) - start_time).total_seconds()
 
     return SuccessResponse(
         data=LLMBusStatusResponse(
@@ -715,7 +761,7 @@ async def delete_provider(
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to unregister '{name}'")
 
-    logger.info(f"Provider '{name}' unregistered")
+    logger.info("Provider '%s' unregistered", name)
 
     # Remove from persisted config (both graph AND .env)
     config_service = getattr(request.app.state, "config_service", None)
@@ -723,12 +769,14 @@ async def delete_provider(
 
     if persist_result.success:
         logger.info(
-            f"Removed provider '{name}' from persisted config "
-            f"(graph={persist_result.graph_persisted}, env={persist_result.env_persisted})"
+            "Removed provider '%s' from persisted config (graph=%s, env=%s)",
+            name,
+            persist_result.graph_persisted,
+            persist_result.env_persisted,
         )
     elif persist_result.error and "not found" not in persist_result.error:
         # Only warn if it's not a "not found" error (provider might not have been persisted)
-        logger.warning(f"Failed to remove provider '{name}' from persisted config: {persist_result.error}")
+        logger.warning("Failed to remove provider '%s' from persisted config: %s", name, persist_result.error)
 
     return SuccessResponse(
         data=ProviderDeleteResponse(

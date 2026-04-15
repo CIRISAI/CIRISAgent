@@ -555,17 +555,49 @@ async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
 
 
 def _find_llama_cpp_binary() -> Optional[str]:
-    """Find the llama.cpp server binary."""
+    """Find the llama.cpp server binary.
+
+    On Android, looks for the bundled binary extracted to the app's files directory.
+    On desktop, searches PATH and common installation locations.
+    """
     import os
     import shutil
+    import platform
 
-    # Try common binary names
+    # Check for Android bundled binary first
+    # The binary is extracted from assets/bin/llama-server-arm64 to files/bin/
+    android_paths = []
+
+    # Try to find CIRIS data directory (set by Android app)
+    # CIRIS_DATA_DIR is filesDir/ciris, binary is at filesDir/bin
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        # Check in CIRIS_DATA_DIR/bin (if binary was moved there)
+        android_paths.append(os.path.join(ciris_data_dir, "bin", "llama-server"))
+        # Check in parent/bin (filesDir/bin - where Android extracts it)
+        parent_dir = os.path.dirname(ciris_data_dir)
+        if parent_dir:
+            android_paths.append(os.path.join(parent_dir, "bin", "llama-server"))
+
+    # Also check common Android app data paths
+    for pkg in ["ai.ciris.mobile.debug", "ai.ciris.mobile"]:
+        android_paths.extend([
+            f"/data/data/{pkg}/files/bin/llama-server",
+            f"/data/data/{pkg}/files/ciris/bin/llama-server",
+        ])
+
+    for path in android_paths:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            logger.info(f"[LLAMA_BINARY] Found Android bundled binary: {path}")
+            return path
+
+    # Try common binary names in PATH
     for name in ["llama-server", "llama.cpp-server", "server"]:
         binary = shutil.which(name)
         if binary:
             return binary
 
-    # Check common installation paths
+    # Check common installation paths (desktop)
     common_paths = [
         "/usr/local/bin/llama-server",
         "/opt/llama.cpp/build/bin/llama-server",

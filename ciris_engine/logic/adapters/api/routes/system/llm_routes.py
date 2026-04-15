@@ -123,6 +123,20 @@ def get_llm_bus(request: Request) -> LLMBus:
     return llm_bus
 
 
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize user input for safe logging.
+
+    Removes control characters, newlines, and truncates to prevent log injection.
+    """
+    import re
+    # Remove control characters and newlines that could be used for log injection
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f\r\n]', '', value)
+    # Truncate to reasonable length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 def map_circuit_state(state: CircuitState) -> CircuitBreakerState:
     """Map internal CircuitState to API schema CircuitBreakerState."""
     mapping = {
@@ -761,7 +775,8 @@ async def delete_provider(
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to unregister '{name}'")
 
-    logger.info("Provider '%s' unregistered", name)
+    safe_name = _sanitize_for_log(name)
+    logger.info("Provider '%s' unregistered", safe_name)
 
     # Remove from persisted config (both graph AND .env)
     config_service = getattr(request.app.state, "config_service", None)
@@ -770,13 +785,14 @@ async def delete_provider(
     if persist_result.success:
         logger.info(
             "Removed provider '%s' from persisted config (graph=%s, env=%s)",
-            name,
+            safe_name,
             persist_result.graph_persisted,
             persist_result.env_persisted,
         )
     elif persist_result.error and "not found" not in persist_result.error:
         # Only warn if it's not a "not found" error (provider might not have been persisted)
-        logger.warning("Failed to remove provider '%s' from persisted config: %s", name, persist_result.error)
+        safe_error = _sanitize_for_log(persist_result.error or "", max_length=128)
+        logger.warning("Failed to remove provider '%s' from persisted config: %s", safe_name, safe_error)
 
     return SuccessResponse(
         data=ProviderDeleteResponse(

@@ -101,9 +101,26 @@ ok "$LANG_COUNT language files synced to 5 targets"
 # ============================================================================
 # 5. Rebuild Resources.zip
 # ============================================================================
+step "Pruning iOS Resources (removing desktop/test/Linux artifacts)"
+
+cd mobile/iosApp/Resources
+
+# Desktop JAR — macOS only, not for iOS (~98MB)
+rm -rf app/ciris_engine/desktop_app/
+# Linux .so — iOS uses .dylib from pip package (~10MB)
+rm -f app/ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
+# Python stdlib tests — not needed at runtime (~23MB)
+rm -rf python/lib/python3.10/test/
+# Ensurepip wheels — not needed at runtime (~3MB)
+rm -rf python/lib/python3.10/ensurepip/
+
+PRUNED_SIZE=$(du -sh . | awk '{print $1}')
+ok "Pruned to $PRUNED_SIZE"
+
+cd ..
+
 step "Rebuilding Resources.zip"
 
-cd mobile/iosApp
 rm -f Resources.zip
 cd Resources
 zip -q -r ../Resources.zip .
@@ -165,7 +182,7 @@ if [[ "$MODE" == "ios-deploy" ]]; then
     ok "Built: $(basename "$APP_PATH")"
 
     # Find device
-    DEVICE_ID=$(xcrun devicectl list devices 2>/dev/null | grep "connected" | awk '{print $NF}' | head -1)
+    DEVICE_ID=$(xcrun devicectl list devices 2>/dev/null | grep "connected" | awk '{for(i=1;i<=NF;i++) if($i ~ /^[A-F0-9]{8}-/) print $i}' | head -1)
     if [[ -z "$DEVICE_ID" ]]; then
         warn "No connected iOS device found — skipping deploy"
     else

@@ -449,11 +449,13 @@ jobs:
 
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+        continue-on-error: true
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload dist/*.whl --skip-existing
+          # Use verbose to diagnose any failures, continue-on-error allows CD to proceed
+          python -m twine upload dist/*.whl --skip-existing --verbose
 
       - name: Build and publish alias packages
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'

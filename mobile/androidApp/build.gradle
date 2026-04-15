@@ -94,12 +94,16 @@ android {
             minifyEnabled false
             shrinkResources false
             // proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // Disable test mode in release builds
+            buildConfigField "boolean", "TEST_MODE_ENABLED", "false"
         }
 
         debug {
             debuggable true
             applicationIdSuffix ".debug"  // Allows debug build to coexist with Play Store version
             resValue "string", "app_name", "CIRIS DEBUG"
+            // Enable test automation server for UI testing (act, screenshot endpoints)
+            buildConfigField "boolean", "TEST_MODE_ENABLED", "true"
             // Use default debug signing config
         }
     }
@@ -124,6 +128,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true  // Enable BuildConfig generation for TEST_MODE_ENABLED flag
     }
 
     // Note: APK splits conflict with Chaquopy's ndk.abiFilters requirement

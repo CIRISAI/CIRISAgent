@@ -129,6 +129,21 @@ fun LLMSettingsScreen(
         }
     }
 
+    // Show LLM ViewModel messages
+    LaunchedEffect(llmSuccessMessage) {
+        llmSuccessMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            llmViewModel.clearSuccessMessage()
+        }
+    }
+
+    LaunchedEffect(llmErrorMessage) {
+        llmErrorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            llmViewModel.clearErrorMessage()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -191,18 +206,24 @@ fun LLMSettingsScreen(
                 // Section 2: Providers (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_providers"),
-                    subtitle = if (isCirisProxy) {
-                        localizedString("mobile.settings_using_proxy")
-                    } else {
-                        localizedString("mobile.llm_settings_providers_count", "count", llmProviders.size.toString())
-                    },
+                    subtitle = localizedString("mobile.llm_settings_providers_count", "count", llmProviders.size.toString()),
                     icon = Icons.Filled.Settings,
                     expanded = providersExpanded,
                     onToggle = { llmViewModel.toggleProvidersExpanded() }
                 ) {
-                    if (isCirisProxy) {
-                        CirisProxyContent()
-                    } else {
+                    // Always show the registered providers list
+                    RegisteredProvidersContent(
+                        isCirisProxy = isCirisProxy,
+                        llmProviders = llmProviders,
+                        llmViewModel = llmViewModel
+                    )
+
+                    // Only show BYOK editing UI when not using CIRIS Proxy
+                    if (!isCirisProxy) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                        )
                         ProvidersContent(
                             viewModel = viewModel,
                             llmProvider = llmProvider,
@@ -534,6 +555,163 @@ private fun CollapsibleSection(
 // ============================================================================
 // Section 2: Providers Content
 // ============================================================================
+
+/**
+ * Shows all registered LLM providers from the LLMBus.
+ * This is shown in both CIRIS Proxy mode and BYOK mode.
+ */
+@Composable
+private fun RegisteredProvidersContent(
+    isCirisProxy: Boolean,
+    llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
+    llmViewModel: LLMSettingsViewModel
+) {
+    val semantic = SemanticColors.Default
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Show proxy info if using CIRIS Proxy
+        if (isCirisProxy) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column {
+                    Text(
+                        text = localizedString("mobile.settings_using_proxy"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val provider = getOAuthProviderName()
+                    Text(
+                        text = localizedString("mobile.settings_proxy_desc", "provider", provider),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // Show all registered providers
+        if (llmProviders.isEmpty()) {
+            Text(
+                text = "No providers registered",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        } else {
+            Text(
+                text = "Registered Providers (${llmProviders.size})",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium
+            )
+
+            llmProviders.forEach { provider ->
+                val cb = provider.circuitBreaker
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (provider.healthy)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        else
+                            semantic.surfaceError.copy(alpha = 0.3f)
+                    ),
+                    border = if (provider.healthy)
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    else
+                        BorderStroke(1.dp, semantic.error.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Health indicator
+                            Icon(
+                                imageVector = if (provider.healthy) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (provider.healthy) semantic.success else semantic.error
+                            )
+                            Column {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = provider.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    // Priority badge
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = when (provider.priority) {
+                                            ai.ciris.mobile.shared.models.ProviderPriority.CRITICAL -> semantic.surfaceError
+                                            ai.ciris.mobile.shared.models.ProviderPriority.HIGH -> MaterialTheme.colorScheme.primaryContainer
+                                            ai.ciris.mobile.shared.models.ProviderPriority.NORMAL -> MaterialTheme.colorScheme.secondaryContainer
+                                            ai.ciris.mobile.shared.models.ProviderPriority.LOW -> MaterialTheme.colorScheme.tertiaryContainer
+                                            ai.ciris.mobile.shared.models.ProviderPriority.FALLBACK -> MaterialTheme.colorScheme.surfaceVariant
+                                        }
+                                    ) {
+                                        Text(
+                                            text = provider.priorityLabel.uppercase(),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = provider.statusMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                                // Show metrics summary
+                                val metrics = provider.metrics
+                                if (metrics.totalRequests > 0) {
+                                    Text(
+                                        text = "${metrics.totalRequests} requests • ${metrics.averageLatencyMs.toInt()}ms avg",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Delete button for runtime-added providers (not CIRIS providers)
+                        if (!provider.name.startsWith("ciris_")) {
+                            IconButton(
+                                onClick = { llmViewModel.deleteProvider(provider.name) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Remove provider",
+                                    tint = semantic.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun CirisProxyContent() {

@@ -668,6 +668,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Initialize LLM service(s) based on configuration
         await self._initialize_llm_services(config, modules_to_load)
 
+        # Load any runtime LLM providers that were persisted to config (survives restarts)
+        await self._load_persisted_runtime_llm_providers()
+
         # Secrets service no longer needs LLM service reference
 
         # Initialize ALL THREE REQUIRED audit services
@@ -954,7 +957,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Create and start service
         openai_service = OpenAICompatibleClient(
-            config=llm_config, telemetry_service=self.telemetry_service, time_service=self.time_service
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name="ciris_primary",
         )
         await openai_service.start()
 
@@ -1033,7 +1039,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Create and start service
         service = OpenAICompatibleClient(
-            config=llm_config, telemetry_service=self.telemetry_service, time_service=self.time_service
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name="ciris_secondary",
         )
         await service.start()
 
@@ -1048,6 +1057,96 @@ This directory contains critical cryptographic keys for the CIRIS system.
             )
 
         logger.info(f"Secondary LLM service initialized: {model_name}")
+
+    async def _load_persisted_runtime_llm_providers(self) -> None:
+        """Load runtime LLM providers that were persisted to config.
+
+        This enables providers added via the API to survive restarts.
+        """
+        from ciris_engine.logic.persistence.llm_providers import (
+            LLMProviderConfig,
+            list_providers,
+        )
+        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
+        from ciris_engine.schemas.services.capabilities import LLMCapabilities
+
+        if not self.config_service or not self.service_registry:
+            logger.debug("Cannot load persisted LLM providers - services not available")
+            return
+
+        try:
+            providers = await list_providers(self.config_service)
+            if not providers:
+                logger.debug("No persisted runtime LLM providers to load")
+                return
+
+            logger.info(f"Loading {len(providers)} persisted runtime LLM provider(s)")
+
+            # Map priority strings to internal Priority enum
+            priority_map = {
+                "critical": Priority.CRITICAL,
+                "high": Priority.HIGH,
+                "normal": Priority.NORMAL,
+                "low": Priority.LOW,
+                "fallback": Priority.FALLBACK,
+            }
+
+            for provider_name, config in providers.items():
+                try:
+                    # Check if already registered (avoid duplicates)
+                    existing = self.service_registry.get_provider_by_name(
+                        provider_name, ServiceType.LLM
+                    )
+                    if existing:
+                        logger.debug(f"Provider '{provider_name}' already registered, skipping")
+                        continue
+
+                    # Create LLM config
+                    api_key = config.api_key
+                    if not api_key and config.provider_id in ("local", "local_inference"):
+                        api_key = "local"
+
+                    llm_config = OpenAIConfig(
+                        base_url=config.base_url,
+                        model_name=config.model,
+                        api_key=api_key,
+                        instructor_mode="JSON",
+                        timeout_seconds=30,
+                        max_retries=2,
+                    )
+
+                    # Create and start service
+                    service = OpenAICompatibleClient(
+                        config=llm_config,
+                        telemetry_service=self.telemetry_service,
+                        time_service=self.time_service,
+                        service_name=provider_name,
+                    )
+                    await service.start()
+
+                    # Register with appropriate priority
+                    priority = priority_map.get(config.priority.lower(), Priority.FALLBACK)
+                    self.service_registry.register_service(
+                        service_type=ServiceType.LLM,
+                        provider=service,
+                        priority=priority,
+                        capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                        metadata={
+                            "provider": config.provider_id,
+                            "model": config.model,
+                            "base_url": config.base_url,
+                            "added_at_runtime": True,
+                            "restored_from_persistence": True,
+                        },
+                    )
+
+                    logger.info(f"Restored runtime LLM provider '{provider_name}' with priority {config.priority}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to restore LLM provider '{provider_name}': {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to load persisted runtime LLM providers: {e}")
 
     async def _process_pending_users_from_setup(self) -> None:
         """Process pending user creation from setup wizard.

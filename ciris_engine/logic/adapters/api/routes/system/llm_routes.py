@@ -21,6 +21,11 @@ from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, Circui
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from ciris_engine.logic.registries.base import Priority as InternalPriority, get_global_registry
+from ciris_engine.logic.persistence.llm_providers import (
+    LLMProviderConfig,
+    create_provider as persist_create_provider,
+    delete_provider as persist_delete_provider,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .llm_schemas import (
@@ -145,6 +150,8 @@ def get_internal_strategy(strategy: DistributionStrategy) -> InternalDistributio
         DistributionStrategy.LEAST_LOADED: InternalDistributionStrategy.LEAST_LOADED,
     }
     return mapping.get(strategy, InternalDistributionStrategy.LATENCY_BASED)
+
+
 
 
 def map_priority_to_api(priority: InternalPriority) -> ProviderPriority:
@@ -330,13 +337,23 @@ async def get_llm_providers(
     Get status of all LLM providers.
 
     Returns each provider's health, metrics, and circuit breaker status.
+    Providers are read from ServiceRegistry (not circuit breakers which are lazy).
     """
     llm_bus = get_llm_bus(request)
     registry = get_global_registry()
 
     providers = []
-    for name, cb in llm_bus.circuit_breakers.items():
-        # Get service metrics
+
+    # Get all registered LLM providers from registry (not from circuit_breakers which are lazy)
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+
+    for provider_info in registered_providers:
+        name = provider_info.name
+
+        # Check if circuit breaker exists (created lazily on first use)
+        cb = llm_bus.circuit_breakers.get(name)
+
+        # Get service metrics (may not exist until first request)
         metrics = llm_bus.service_metrics.get(name)
         provider_metrics = build_provider_metrics(metrics) if metrics else ProviderMetrics()
 
@@ -347,12 +364,21 @@ async def get_llm_providers(
             provider_metrics.is_rate_limited = True
             provider_metrics.rate_limit_cooldown_remaining_seconds = rate_limited_until - current_time
 
-        # Determine health (CB not OPEN)
-        healthy = cb.state != CircuitState.OPEN
+        # Determine health: if no CB yet, assume healthy; otherwise check CB state
+        if cb is not None:
+            healthy = cb.state != CircuitState.OPEN
+            cb_status = build_cb_status(cb)
+        else:
+            healthy = True
+            cb_status = CircuitBreakerStatus(
+                state="closed",
+                failure_count=0,
+                success_count=0,
+                last_failure_time=None,
+            )
 
-        # Get actual priority from registry
-        provider_info = registry.get_provider_by_name(name, ServiceType.LLM)
-        priority = map_priority_to_api(provider_info.priority) if provider_info else ProviderPriority.NORMAL
+        # Get priority from provider_info
+        priority = map_priority_to_api(provider_info.priority) if provider_info.priority else ProviderPriority.NORMAL
 
         providers.append(
             LLMProviderStatus(
@@ -361,7 +387,7 @@ async def get_llm_providers(
                 enabled=True,  # All registered providers are enabled
                 priority=priority,
                 metrics=provider_metrics,
-                circuit_breaker=build_cb_status(cb),
+                circuit_breaker=cb_status,
             )
         )
 
@@ -643,6 +669,19 @@ async def delete_provider(
 
     logger.info(f"Provider '{name}' unregistered")
 
+    # Remove from persisted config (both graph AND .env)
+    config_service = getattr(request.app.state, "config_service", None)
+    persist_result = await persist_delete_provider(name=name, config_service=config_service)
+
+    if persist_result.success:
+        logger.info(
+            f"Removed provider '{name}' from persisted config "
+            f"(graph={persist_result.graph_persisted}, env={persist_result.env_persisted})"
+        )
+    elif persist_result.error and "not found" not in persist_result.error:
+        # Only warn if it's not a "not found" error (provider might not have been persisted)
+        logger.warning(f"Failed to remove provider '{name}' from persisted config: {persist_result.error}")
+
     return SuccessResponse(
         data=ProviderDeleteResponse(
             success=True,
@@ -725,11 +764,16 @@ async def add_provider(
     internal_priority = priority_mapping.get(body.priority, InternalPriority.FALLBACK)
 
     try:
+        # For local servers, use "local" as the API key (convention for local inference)
+        api_key = body.api_key
+        if not api_key and body.provider_id == "local":
+            api_key = "local"
+
         # Create config
         llm_config = OpenAIConfig(
             base_url=body.base_url,
             model_name=body.model or "default",
-            api_key=body.api_key or "",  # Empty for local servers
+            api_key=api_key or "",
             instructor_mode="JSON",
             timeout_seconds=30,
             max_retries=2,
@@ -759,6 +803,30 @@ async def add_provider(
         )
 
         logger.info(f"Added LLM provider '{provider_name}' with priority {body.priority.value}")
+
+        # Persist provider configuration for restart survival (both graph AND .env)
+        provider_config = LLMProviderConfig(
+            provider_id=body.provider_id,
+            base_url=body.base_url,
+            model=body.model or "default",
+            api_key=body.api_key or "",
+            priority=body.priority.value,
+        )
+
+        config_service = getattr(request.app.state, "config_service", None)
+        persist_result = await persist_create_provider(
+            name=provider_name,
+            config=provider_config,
+            config_service=config_service,
+        )
+
+        if persist_result.success:
+            logger.info(
+                f"Persisted LLM provider '{provider_name}' "
+                f"(graph={persist_result.graph_persisted}, env={persist_result.env_persisted})"
+            )
+        else:
+            logger.warning(f"Failed to persist provider '{provider_name}': {persist_result.error}")
 
         return SuccessResponse(
             data=AddProviderResponse(

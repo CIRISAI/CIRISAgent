@@ -740,11 +740,9 @@ async def add_provider(
             config=llm_config,
             telemetry_service=telemetry_service,
             time_service=time_service,
+            service_name=provider_name,
         )
         await service.start()
-
-        # Override the service name for registry
-        service.name = provider_name
 
         # Register with registry
         registry.register_service(

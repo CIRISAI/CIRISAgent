@@ -1908,15 +1908,27 @@ class CIRISApiClient(
             val body = response.body<SetupConfigApiResponse>()
             val data = body.data ?: throw RuntimeException("API returned null data")
 
-            // Detect if using CIRIS proxy by checking provider or base URL
+            // Check if CIRIS services are disabled (BYOK mode)
+            val cirisServicesEnabled = try {
+                getCirisServicesStatus()
+            } catch (e: Exception) {
+                logWarn(method, "Failed to get CIRIS services status: ${e.message}, assuming enabled")
+                true
+            }
+
+            // Detect if using CIRIS proxy - BOTH conditions must be true:
+            // 1. CIRIS services must be enabled (not disabled)
+            // 2. URL must be a CIRIS proxy URL
             val llmBaseUrl = data.llmBaseUrl ?: ""
-            val isCirisProxy = data.llmProvider == "ciris_proxy" ||
+            val urlIsCirisProxy = data.llmProvider == "ciris_proxy" ||
                     llmBaseUrl.contains("ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("llm.ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("proxy", ignoreCase = true)
+            val isCirisProxy = cirisServicesEnabled && urlIsCirisProxy
 
             logDebug(method, "LLM Config: provider=${data.llmProvider}, model=${data.llmModel}, " +
-                    "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, apiKeySet=${data.llmApiKeySet}")
+                    "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, cirisServicesEnabled=$cirisServicesEnabled, " +
+                    "apiKeySet=${data.llmApiKeySet}")
 
             client.close()
 
@@ -4498,6 +4510,54 @@ class CIRISApiClient(
                 success = false,
                 message = e.message ?: "Unknown error"
             )
+        }
+    }
+
+    /**
+     * Get CIRIS services status (whether they are disabled or enabled).
+     * Returns true if services are ENABLED (not disabled).
+     */
+    suspend fun getCirisServicesStatus(): Boolean {
+        val method = "getCirisServicesStatus"
+        val url = "$baseUrl/v1/system/llm/ciris-services/status"
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.get(url) {
+                accessToken?.let { bearerAuth(it) }
+            }
+
+            val responseBody = response.bodyAsText()
+            logInfo(method, "Response ${response.status}: $responseBody")
+            client.close()
+
+            if (response.status.isSuccess()) {
+                // Parse response - disabled=true means services are OFF
+                val jsonResponse = Json.parseToJsonElement(responseBody).jsonObject
+                val data = jsonResponse["data"]?.jsonObject
+                val disabled = data?.get("disabled")?.jsonPrimitive?.boolean ?: false
+                // Return true if ENABLED (not disabled)
+                !disabled
+            } else {
+                logWarn(method, "Failed to get status: ${response.status}, assuming enabled")
+                true // Default to enabled if we can't get status
+            }
+        } catch (e: Exception) {
+            logException(method, e, "getting CIRIS services status")
+            true // Default to enabled on error
         }
     }
 

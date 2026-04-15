@@ -110,6 +110,16 @@ class LLMSettingsViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                // Load CIRIS services enabled state from backend
+                val cirisEnabled = try {
+                    apiClient.getCirisServicesStatus()
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to fetch CIRIS services status: ${e.message}")
+                    true // Default to enabled if we can't check
+                }
+                _cirisServicesEnabled.value = cirisEnabled
+                logInfo(method, "CIRIS services enabled: $cirisEnabled")
+
                 val busStatus = try {
                     apiClient.getLlmBusStatus()
                 } catch (e: Exception) {

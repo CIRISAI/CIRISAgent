@@ -217,6 +217,9 @@ actual class EnvFileUpdater {
             val model = values["OPENAI_MODEL"]
             val apiKey = values["OPENAI_API_KEY"]
 
+            // Check if CIRIS services are disabled (BYOK mode forced)
+            val cirisServicesDisabled = values["CIRIS_SERVICES_DISABLED"]?.lowercase() in listOf("true", "1", "yes")
+
             // Detect provider from base URL
             val provider = when {
                 baseUrl == null -> "openai"
@@ -226,11 +229,12 @@ actual class EnvFileUpdater {
                 else -> "other"
             }
 
-            // Check if CIRIS proxy
-            val isCirisProxy = baseUrl != null && CIRISConfig.isCirisProxyUrl(baseUrl)
+            // Check if CIRIS proxy - but respect CIRIS_SERVICES_DISABLED override
+            val isCirisProxy = !cirisServicesDisabled && baseUrl != null && CIRISConfig.isCirisProxyUrl(baseUrl)
 
             Log.i(TAG, "Parsed LLM config: provider=$provider, baseUrl=$baseUrl, model=$model, " +
-                    "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy")
+                    "apiKeySet=${!apiKey.isNullOrEmpty()}, isCirisProxy=$isCirisProxy, " +
+                    "cirisServicesDisabled=$cirisServicesDisabled")
 
             EnvLlmConfig(
                 provider = provider,

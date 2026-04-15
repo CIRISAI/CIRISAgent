@@ -43,6 +43,9 @@ class LocalLlmDiscoveryState {
     var isStartingServer by mutableStateOf(false)
     var serverStartResult by mutableStateOf<StartLocalServerResult?>(null)
     var serverStartProgress by mutableStateOf<String?>(null)
+    // Download confirmation dialog state
+    var showDownloadConfirmation by mutableStateOf(false)
+    var pendingDownloadSize by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -115,27 +118,37 @@ fun LocalLlmServerDiscovery(
         }
     }
 
-    fun startLocalServer() {
+    fun startLocalServer(confirmDownload: Boolean = false) {
         if (state.isStartingServer) return
 
         state.isStartingServer = true
         state.serverStartResult = null
-        state.serverStartProgress = "Starting local inference server..."
+        state.serverStartProgress = if (confirmDownload) "Downloading model..." else "Starting local inference server..."
         state.errorMessage = null
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                PlatformLogger.i(TAG, "Starting local LLM server...")
+                PlatformLogger.i(TAG, "Starting local LLM server (confirmDownload=$confirmDownload)...")
 
                 val result = apiClient.startLocalLlmServer(
                     serverType = "llama_cpp",
                     model = "gemma-4-e2b",
-                    port = 8080
+                    port = 8080,
+                    confirmDownload = confirmDownload
                 )
 
                 withContext(Dispatchers.Main) {
                     state.serverStartResult = result
                     state.isStartingServer = false
+
+                    // Handle download confirmation required
+                    if (result.requiresDownload && !confirmDownload) {
+                        state.serverStartProgress = null
+                        state.pendingDownloadSize = result.downloadSize
+                        state.showDownloadConfirmation = true
+                        PlatformLogger.i(TAG, "Model download required: ${result.downloadSize}")
+                        return@withContext
+                    }
 
                     if (result.success) {
                         state.serverStartProgress = "Server started! Loading model (this may take ${result.estimatedReadySeconds}s)..."
@@ -176,8 +189,58 @@ fun LocalLlmServerDiscovery(
         }
     }
 
+    // Handler for when user confirms model download
+    fun confirmModelDownload() {
+        state.showDownloadConfirmation = false
+        state.pendingDownloadSize = null
+        startLocalServer(confirmDownload = true)
+    }
+
+    // Handler for when user cancels model download
+    fun cancelModelDownload() {
+        state.showDownloadConfirmation = false
+        state.pendingDownloadSize = null
+    }
+
     // Discovery is user-initiated only (via "Discover Servers" button)
     // This ensures network permission popups appear in context
+
+    // Download confirmation dialog
+    if (state.showDownloadConfirmation) {
+        AlertDialog(
+            onDismissRequest = { cancelModelDownload() },
+            title = { Text("Download Model?") },
+            text = {
+                Column {
+                    Text("The AI model needs to be downloaded before local inference can start.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Download size: ${state.pendingDownloadSize ?: "Unknown"}",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Make sure you have enough storage space and a stable connection.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { confirmModelDownload() },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                ) {
+                    Text("Download")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { cancelModelDownload() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = modifier,

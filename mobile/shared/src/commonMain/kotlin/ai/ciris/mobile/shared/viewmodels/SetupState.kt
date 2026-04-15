@@ -577,7 +577,13 @@ data class StartLocalServerResult(
     val pid: Int? = null,
     /** Estimated seconds until server is ready to accept requests */
     @SerialName("estimated_ready_seconds")
-    val estimatedReadySeconds: Int = 60
+    val estimatedReadySeconds: Int = 60,
+    /** Whether the model needs to be downloaded first */
+    @SerialName("requires_download")
+    val requiresDownload: Boolean = false,
+    /** Human-readable download size (e.g., "~2.5 GB") */
+    @SerialName("download_size")
+    val downloadSize: String? = null
 )
 
 /**

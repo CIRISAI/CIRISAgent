@@ -741,7 +741,7 @@ class TestStartLocalLlmServer:
                 server_type="llama_cpp", model="gemma-4-e4b", port=8080
             )
 
-            mock_start.assert_called_once_with(8080, "gemma-4-e4b")
+            mock_start.assert_called_once_with(8080, "gemma-4-e4b", confirm_download=False)
 
 
 class TestStartOllamaServer:
@@ -802,7 +802,7 @@ class TestStartLlamaCppServer:
 
     @pytest.mark.asyncio
     async def test_model_not_found(self) -> None:
-        """Test when model file is not found."""
+        """Test when model file is not found - returns download confirmation request."""
         with patch(
             "ciris_engine.logic.adapters.api.routes.setup.llm_discovery._find_llama_cpp_binary",
             return_value="/usr/bin/llama-server",
@@ -813,7 +813,9 @@ class TestStartLlamaCppServer:
             result = await _start_llama_cpp_server(8080, "nonexistent")
 
             assert result["success"] is False
-            assert "Model file" in result["message"]
+            assert result["requires_download"] is True
+            assert "not found" in result["message"]
+            assert "Confirm" in result["message"]
 
     @pytest.mark.asyncio
     async def test_llama_cpp_start_success(self) -> None:

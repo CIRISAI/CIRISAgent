@@ -1293,15 +1293,17 @@ class CIRISApiClient(
      * @param serverType Server to start: "llama_cpp" or "ollama"
      * @param model Model to load: "gemma-4-e2b" or "gemma-4-e4b"
      * @param port Port for the server (default 8080)
+     * @param confirmDownload If true, confirms model download if needed
      * @return StartLocalServerResult with success status and server info
      */
     suspend fun startLocalLlmServer(
         serverType: String = "llama_cpp",
         model: String = "gemma-4-e2b",
-        port: Int = 8080
+        port: Int = 8080,
+        confirmDownload: Boolean = false
     ): StartLocalServerResult {
         val method = "startLocalLlmServer"
-        logInfo(method, "Starting local LLM server (type=$serverType, model=$model, port=$port)")
+        logInfo(method, "Starting local LLM server (type=$serverType, model=$model, port=$port, confirmDownload=$confirmDownload)")
 
         return try {
             val client = HttpClient {
@@ -1320,7 +1322,7 @@ class CIRISApiClient(
             val response = client.post("${this.baseUrl}/v1/setup/start-local-server") {
                 authHeader()?.let { header("Authorization", it) }
                 contentType(io.ktor.http.ContentType.Application.Json)
-                setBody(StartLocalServerRequest(serverType, model, port))
+                setBody(StartLocalServerRequest(serverType, model, port, confirmDownload))
             }
 
             logDebug(method, "Response: status=${response.status}")
@@ -1347,7 +1349,9 @@ class CIRISApiClient(
                 model = data.model ?: model,
                 pid = data.pid,
                 message = data.message ?: "Unknown status",
-                estimatedReadySeconds = data.estimatedReadySeconds ?: 60
+                estimatedReadySeconds = data.estimatedReadySeconds ?: 60,
+                requiresDownload = data.requiresDownload ?: false,
+                downloadSize = data.downloadSize
             )
 
             logInfo(method, "Start server result: success=${result.success}, message=${result.message}")
@@ -1368,7 +1372,8 @@ class CIRISApiClient(
     private data class StartLocalServerRequest(
         @SerialName("server_type") val serverType: String,
         val model: String,
-        val port: Int
+        val port: Int,
+        @SerialName("confirm_download") val confirmDownload: Boolean = false
     )
 
     @Serializable
@@ -1386,7 +1391,9 @@ class CIRISApiClient(
         val model: String? = null,
         val pid: Int? = null,
         val message: String? = null,
-        @SerialName("estimated_ready_seconds") val estimatedReadySeconds: Int? = null
+        @SerialName("estimated_ready_seconds") val estimatedReadySeconds: Int? = null,
+        @SerialName("requires_download") val requiresDownload: Boolean? = null,
+        @SerialName("download_size") val downloadSize: String? = null
     )
 
     /**

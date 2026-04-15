@@ -977,12 +977,22 @@ This directory contains critical cryptographic keys for the CIRIS system.
             provider=provider,
         )
 
+        # Determine service name based on provider type
+        # Local providers (localhost, 127.0.0.1, LAN IPs) get "local_primary"
+        # Cloud/CIRIS providers get "ciris_primary"
+        effective_url = base_url or ""
+        is_local_provider = any(
+            x in effective_url.lower()
+            for x in ["localhost", "127.0.0.1", "192.168.", "10.", "172.16."]
+        )
+        service_name = "local_primary" if is_local_provider else "ciris_primary"
+
         # Create and start service
         openai_service = OpenAICompatibleClient(
             config=llm_config,
             telemetry_service=self.telemetry_service,
             time_service=self.time_service,
-            service_name="ciris_primary",
+            service_name=service_name,
         )
         await openai_service.start()
 
@@ -993,7 +1003,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 provider=openai_service,
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": provider.value, "model": llm_config.model_name},
+                metadata={"provider": provider.value, "model": llm_config.model_name, "is_local": is_local_provider},
             )
 
         # Store reference

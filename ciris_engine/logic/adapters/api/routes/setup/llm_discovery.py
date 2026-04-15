@@ -10,7 +10,7 @@ on all platforms including Android.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -448,6 +448,7 @@ async def start_local_llm_server(
     server_type: str = "llama_cpp",
     model: str = "gemma-4-e2b",
     port: int = 8080,
+    confirm_download: bool = False,
 ) -> Dict[str, Any]:
     """Start a local LLM inference server.
 
@@ -458,16 +459,20 @@ async def start_local_llm_server(
         server_type: "llama_cpp" or "ollama"
         model: Model to load (e.g., "gemma-4-e2b")
         port: Port to listen on
+        confirm_download: If True, automatically download missing model.
+            If False, return a confirmation prompt for large downloads.
 
     Returns:
-        Dict with success, server_url, pid, message, estimated_ready_seconds
+        Dict with success, server_url, pid, message, estimated_ready_seconds.
+        If requires_download is True, user should confirm and retry with
+        confirm_download=True.
     """
     logger.info(f"[START_LOCAL_SERVER] Starting {server_type} on port {port} with model {model}")
 
     if server_type == "ollama":
         return await _start_ollama_server(port, model)
     elif server_type == "llama_cpp":
-        return await _start_llama_cpp_server(port, model)
+        return await _start_llama_cpp_server(port, model, confirm_download=confirm_download)
     else:
         return _error_result(f"Unknown server type: {server_type}. Use 'llama_cpp' or 'ollama'.")
 
@@ -519,8 +524,15 @@ async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
         return _error_result(f"Failed to start Ollama: {str(e)}")
 
 
-async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
-    """Start llama.cpp server on the specified port."""
+async def _start_llama_cpp_server(
+    port: int, model: str, confirm_download: bool = False
+) -> Dict[str, Any]:
+    """Start llama.cpp server on the specified port.
+
+    If the model file is not found and confirm_download is False, returns a
+    prompt asking user to confirm the download. If confirm_download is True,
+    downloads the model automatically.
+    """
     binary = _find_llama_cpp_binary()
     if not binary:
         return _error_result(
@@ -529,7 +541,30 @@ async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
 
     model_file = _find_model_file(model)
     if not model_file:
-        return _error_result(f"Model file for '{model}' not found. Download GGUF from HuggingFace.")
+        # Model not found - check if user confirmed download
+        if not confirm_download:
+            # Return download confirmation prompt
+            download_size = MODEL_SIZES.get(model, "~2.5 GB")
+            return {
+                "success": False,
+                "requires_download": True,
+                "model": model,
+                "download_size": download_size,
+                "message": f"Model '{model}' not found. Download requires {download_size} of storage. Confirm to proceed.",
+                "server_url": None,
+                "pid": None,
+                "estimated_ready_seconds": None,
+            }
+
+        # User confirmed - download the model
+        logger.info(f"[START_LOCAL_SERVER] Model '{model}' not found, downloading...")
+        download_result = await download_model(model)
+        if not download_result["success"]:
+            return _error_result(
+                f"Model '{model}' download failed: {download_result['message']}"
+            )
+        model_file = download_result["model_path"]
+        logger.info(f"[START_LOCAL_SERVER] Downloaded model to {model_file}")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -610,6 +645,37 @@ def _find_llama_cpp_binary() -> Optional[str]:
     return None
 
 
+# Model download URLs (HuggingFace)
+MODEL_DOWNLOAD_URLS = {
+    "gemma-4-e2b": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
+    "gemma-4-e4b": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q8_0.gguf",
+}
+
+# Approximate model sizes for user confirmation
+MODEL_SIZES = {
+    "gemma-4-e2b": "~2.5 GB",
+    "gemma-4-e4b": "~4.5 GB",
+}
+
+
+def _get_model_dir() -> str:
+    """Get the directory for storing model files."""
+    import os
+    from pathlib import Path
+
+    # On Android, use CIRIS_DATA_DIR/models
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        model_dir = Path(ciris_data_dir) / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        return str(model_dir)
+
+    # Desktop: use ~/.cache/llama.cpp
+    model_dir = Path.home() / ".cache" / "llama.cpp"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
 def _find_model_file(model: str) -> Optional[str]:
     """Find a GGUF model file on disk.
 
@@ -620,8 +686,8 @@ def _find_model_file(model: str) -> Optional[str]:
 
     # Map model names to file patterns
     model_patterns = {
-        "gemma-4-e2b": ["gemma-4*-e2b*.gguf", "gemma-2*-e2b*.gguf", "gemma*e2b*.gguf"],
-        "gemma-4-e4b": ["gemma-4*-e4b*.gguf", "gemma-2*-e4b*.gguf", "gemma*e4b*.gguf"],
+        "gemma-4-e2b": ["gemma-4*-e2b*.gguf", "gemma-2*-e2b*.gguf", "gemma*e2b*.gguf", "google_gemma*.gguf"],
+        "gemma-4-e4b": ["gemma-4*-e4b*.gguf", "gemma-2*-e4b*.gguf", "gemma*e4b*.gguf", "google_gemma*Q8*.gguf"],
     }
 
     patterns = model_patterns.get(model, [f"*{model}*.gguf"])
@@ -635,7 +701,12 @@ def _find_model_file(model: str) -> Optional[str]:
         Path("/opt/models"),
     ]
 
-    # Add CIRIS model directory
+    # Add Android/CIRIS data directory first
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        search_dirs.insert(0, Path(ciris_data_dir) / "models")
+
+    # Add CIRIS_HOME model directory
     ciris_home = os.environ.get("CIRIS_HOME")
     if ciris_home:
         search_dirs.insert(0, Path(ciris_home) / "models")
@@ -650,3 +721,78 @@ def _find_model_file(model: str) -> Optional[str]:
                 return str(matches[0])
 
     return None
+
+
+async def download_model(model: str, progress_callback: Optional[Callable[[float], None]] = None) -> Dict[str, Any]:
+    """Download a model from HuggingFace.
+
+    Args:
+        model: Model name (e.g., "gemma-4-e2b")
+        progress_callback: Optional callback for download progress (0.0 to 1.0)
+
+    Returns:
+        Dict with success, model_path, message
+    """
+    import aiohttp
+    from pathlib import Path
+
+    url = MODEL_DOWNLOAD_URLS.get(model)
+    if not url:
+        return {
+            "success": False,
+            "model_path": None,
+            "message": f"No download URL for model '{model}'. Available: {list(MODEL_DOWNLOAD_URLS.keys())}",
+        }
+
+    model_dir = _get_model_dir()
+    filename = url.split("/")[-1]
+    model_path = Path(model_dir) / filename
+
+    # Check if already downloaded
+    if model_path.exists():
+        logger.info(f"[MODEL_DOWNLOAD] Model already exists: {model_path}")
+        return {
+            "success": True,
+            "model_path": str(model_path),
+            "message": f"Model already downloaded: {filename}",
+        }
+
+    logger.info(f"[MODEL_DOWNLOAD] Downloading {model} from {url} to {model_path}")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {
+                        "success": False,
+                        "model_path": None,
+                        "message": f"Download failed: HTTP {response.status}",
+                    }
+
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
+
+                with open(model_path, "wb") as f:
+                    async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback and total_size > 0:
+                            progress_callback(downloaded / total_size)
+
+        logger.info(f"[MODEL_DOWNLOAD] Download complete: {model_path}")
+        return {
+            "success": True,
+            "model_path": str(model_path),
+            "message": f"Downloaded {filename} ({downloaded / 1024 / 1024:.1f} MB)",
+        }
+
+    except Exception as e:
+        logger.error(f"[MODEL_DOWNLOAD] Failed to download model: {e}")
+        # Clean up partial download
+        if model_path.exists():
+            model_path.unlink()
+        return {
+            "success": False,
+            "model_path": None,
+            "message": f"Download failed: {str(e)}",
+        }

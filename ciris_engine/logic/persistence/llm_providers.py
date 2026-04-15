@@ -153,6 +153,60 @@ def write_providers_to_env(providers: dict[str, LLMProviderConfig]) -> bool:
         return False
 
 
+def clear_primary_provider_env_vars(is_local: bool = False) -> bool:
+    """Clear env vars that create the primary LLM provider on startup.
+
+    This is called when deleting local_primary or ciris_primary to ensure
+    the provider is not re-created on next restart.
+
+    Args:
+        is_local: If True, clear local provider vars (CIRIS_MOBILE_LOCAL_LLM_ENABLED).
+                  If False, clear cloud provider vars (NEXT_PUBLIC_API_BASE_URL).
+
+    Returns:
+        True if successfully updated
+    """
+    env_path = _get_env_path()
+    if not env_path or not env_path.exists():
+        logger.warning("Cannot clear primary provider env vars - .env not found")
+        return False
+
+    try:
+        content = env_path.read_text()
+        lines = content.splitlines()
+
+        if is_local:
+            # Clear local LLM vars - set ENABLED to false
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("CIRIS_MOBILE_LOCAL_LLM_ENABLED="):
+                    new_lines.append("CIRIS_MOBILE_LOCAL_LLM_ENABLED=false")
+                elif stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" in stripped.lower():
+                    # Comment out localhost URL
+                    new_lines.append(f"# {line}  # Disabled by provider deletion")
+                else:
+                    new_lines.append(line)
+            logger.info("Cleared local primary provider env vars")
+        else:
+            # For cloud providers, comment out the base URL
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("NEXT_PUBLIC_API_BASE_URL=") and "localhost" not in stripped.lower():
+                    new_lines.append(f"# {line}  # Disabled by provider deletion")
+                else:
+                    new_lines.append(line)
+            logger.info("Cleared cloud primary provider env vars")
+
+        env_path.write_text("\n".join(new_lines) + "\n")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to clear primary provider env vars: {e}")
+        return False
+
+
 def set_ciris_services_disabled(disabled: bool) -> bool:
     """Set CIRIS_SERVICES_DISABLED flag in .env file.
 
@@ -397,6 +451,9 @@ async def delete_provider(
 ) -> PersistenceResult:
     """Delete a runtime LLM provider.
 
+    For primary providers (local_primary, ciris_primary), also clears the
+    env vars that would re-create them on restart.
+
     Args:
         name: Provider name
         config_service: Optional GraphConfigService instance
@@ -404,16 +461,35 @@ async def delete_provider(
     Returns:
         PersistenceResult with success status
     """
-    # Load existing providers
+    # Handle primary providers specially - clear their env vars
+    # These are created from NEXT_PUBLIC_API_BASE_URL, CIRIS_MOBILE_LOCAL_LLM_ENABLED, etc.
+    # and won't be in the RUNTIME_LLM_PROVIDERS_JSON
+    primary_env_cleared = False
+    if name == "local_primary":
+        primary_env_cleared = clear_primary_provider_env_vars(is_local=True)
+        logger.info(f"Cleared local primary provider env vars: {primary_env_cleared}")
+    elif name == "ciris_primary":
+        primary_env_cleared = clear_primary_provider_env_vars(is_local=False)
+        logger.info(f"Cleared cloud primary provider env vars: {primary_env_cleared}")
+
+    # Load existing runtime providers
     providers = await list_providers(config_service)
 
-    # Check if exists
+    # For primary providers, they may not be in runtime providers list
+    # (created from individual env vars, not RUNTIME_LLM_PROVIDERS_JSON)
     if name not in providers:
+        if primary_env_cleared:
+            # Primary provider was handled via env var clearing
+            return PersistenceResult(
+                success=True,
+                env_persisted=True,
+                graph_persisted=False,
+            )
         return PersistenceResult(
             success=False, error=f"Provider '{name}' not found"
         )
 
-    # Remove provider
+    # Remove provider from runtime list
     del providers[name]
 
     # Persist to both stores
@@ -421,9 +497,9 @@ async def delete_provider(
     env_ok = write_providers_to_env(providers)
 
     return PersistenceResult(
-        success=graph_ok or env_ok,
+        success=graph_ok or env_ok or primary_env_cleared,
         graph_persisted=graph_ok,
-        env_persisted=env_ok,
+        env_persisted=env_ok or primary_env_cleared,
     )
 
 

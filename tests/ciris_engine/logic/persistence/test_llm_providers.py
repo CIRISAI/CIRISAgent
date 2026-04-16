@@ -111,6 +111,7 @@ class TestLLMProviderConfig:
             "model": "llama3",
             "api_key": "local",
             "priority": "normal",
+            "enabled": True,
         }
 
     def test_from_dict(self, sample_provider_dict: dict[str, Any]):

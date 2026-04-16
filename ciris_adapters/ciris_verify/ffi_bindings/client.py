@@ -300,24 +300,7 @@ class CIRISVerify:
                 "Ensure the native library is included in jniLibs."
             )
 
-        # 1. pip-installed ciris_verify — always correct platform.
-        # The PyPI ciris_verify wheel on Windows names the DLL without the
-        # `lib` prefix (`ciris_verify_ffi.dll`); Unix wheels use the prefixed
-        # form (`libciris_verify_ffi.{so,dylib}`). Try both conventions.
-        try:
-            import ciris_verify as cv_pkg
-            pkg_dir = Path(cv_pkg.__file__).parent
-            for prefix in ("lib", ""):
-                for suffix in (".dylib", ".so", ".dll"):
-                    candidate = pkg_dir / f"{prefix}ciris_verify_ffi{suffix}"
-                    if candidate.exists():
-                        import logging
-                        logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
-                        return candidate
-        except (ImportError, AttributeError):
-            pass
-
-        # 2. Search default paths
+        # Search default paths
         system = platform.system()
         paths = DEFAULT_BINARY_PATHS.get(system, [])
 
@@ -326,21 +309,12 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # 3. Check relative to this module. Scope strictly to the host's
-        # native suffix — loading a foreign-platform binary (e.g. a Linux .so
-        # on Windows) raises WinError 193 and breaks startup.
+        # Also check relative to this module
         module_dir = Path(__file__).parent
-        if system == "Darwin":
-            suffixes = (".dylib",)
-        elif system == "Windows":
-            suffixes = (".dll",)
-        else:
-            suffixes = (".so",)
-        for suffix in suffixes:
-            for prefix in ("lib", ""):
-                candidate = module_dir / f"{prefix}ciris_verify_ffi{suffix}"
-                if candidate.exists():
-                    return candidate
+        for suffix in [".so", ".dylib", ".dll"]:
+            candidate = module_dir / f"libciris_verify_ffi{suffix}"
+            if candidate.exists():
+                return candidate
 
         raise BinaryNotFoundError(f"Searched: {paths}")
 
@@ -2392,6 +2366,11 @@ class CIRISVerify:
                 "generate_key not available in this library version. "
                 "Update to ciris-verify >= 1.1.16."
             )
+
+        # CRITICAL: This must be set or ctypes truncates 64-bit pointers to 32-bit!
+        # See docs/bugs/CIRIS_VERIFY_KEY_SEGFAULT.md for full explanation.
+        self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
+        self._lib.ciris_verify_generate_key.restype = ctypes.c_int
 
         ret = self._lib.ciris_verify_generate_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:

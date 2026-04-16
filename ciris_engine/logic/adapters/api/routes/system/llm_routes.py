@@ -940,6 +940,22 @@ async def add_provider(
         else:
             logger.warning(f"Failed to persist provider '{provider_name}': {persist_result.error}")
 
+        # Hot-reload: If agent processor wasn't initialized (no LLM at startup),
+        # trigger component rebuild now that we have a provider
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and not getattr(runtime, "agent_processor", None):
+            logger.info(f"Hot-loading agent processor with new LLM provider '{provider_name}'")
+            try:
+                # Set the LLM service reference on service_initializer
+                # Note: runtime.llm_service is a read-only property that delegates to service_initializer
+                if hasattr(runtime, "service_initializer") and runtime.service_initializer:
+                    runtime.service_initializer.llm_service = service
+                # Build components (creates agent processor)
+                await runtime._build_components()
+                logger.info("Agent processor hot-loaded successfully")
+            except Exception as e:
+                logger.warning(f"Failed to hot-load agent processor: {e}")
+
         return SuccessResponse(
             data=AddProviderResponse(
                 success=True,

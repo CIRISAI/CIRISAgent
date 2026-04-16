@@ -556,7 +556,7 @@ async def _start_llama_cpp_server(
                 "message": f"Model '{model}' not found. Download requires {download_size} of storage. Confirm to proceed.",
                 "server_url": None,
                 "pid": None,
-                "estimated_ready_seconds": None,
+                "estimated_ready_seconds": 0,
             }
 
         # User confirmed - download the model

@@ -298,7 +298,7 @@ async def start_local_server(
                 model=request.model,
                 pid=result.get("pid"),
                 message=result.get("message", "Unknown status"),
-                estimated_ready_seconds=result.get("estimated_ready_seconds", 60),
+                estimated_ready_seconds=result.get("estimated_ready_seconds") or 60,
                 requires_download=result.get("requires_download", False),
                 download_size=result.get("download_size"),
             )

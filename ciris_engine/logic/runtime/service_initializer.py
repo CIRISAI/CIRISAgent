@@ -1106,6 +1106,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 metadata={"provider": "openai_secondary", "model": model_name, "base_url": base_url},
             )
 
+        # Register token refresh handler for secondary LLM (CIRIS proxy uses JWT auth)
+        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
+            logger.info("Registered secondary LLM service token refresh handler")
+
         logger.info(f"Secondary LLM service initialized: {model_name}")
 
     async def _initialize_ciris_proxy_fallback(self, config: Any, id_token: str) -> None:

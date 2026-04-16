@@ -921,11 +921,24 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """
         logger.info("[LLM_TOKEN] Received token_refreshed signal: %s for %s", signal, resource)
 
-        # Read fresh API key from environment
-        new_api_key = os.environ.get("OPENAI_API_KEY", "")
+        # Check if this service uses CIRIS proxy (JWT auth via Google/Apple ID token)
+        base_url = getattr(self.openai_config, "base_url", "") or ""
+        is_ciris_proxy = any(domain in base_url for domain in ("ciris.ai", "ciris-services"))
+
+        # Read fresh API key from appropriate environment variable
+        if is_ciris_proxy:
+            # CIRIS proxy uses JWT auth (Google/Apple ID token)
+            new_api_key = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+                "CIRIS_BILLING_APPLE_ID_TOKEN", ""
+            )
+            logger.info("[LLM_TOKEN] CIRIS proxy service - reading from CIRIS_BILLING_*_ID_TOKEN")
+        else:
+            # Standard OpenAI-compatible service uses OPENAI_API_KEY
+            new_api_key = os.environ.get("OPENAI_API_KEY", "")
 
         if not new_api_key:
-            logger.warning("[LLM_TOKEN] No OPENAI_API_KEY found in environment after refresh")
+            env_var = "CIRIS_BILLING_*_ID_TOKEN" if is_ciris_proxy else "OPENAI_API_KEY"
+            logger.warning("[LLM_TOKEN] No %s found in environment after refresh", env_var)
             return
 
         # Check if key actually changed

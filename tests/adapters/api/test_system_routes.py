@@ -267,12 +267,17 @@ class TestDegradedMode:
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType
 
-        # Mock registry with healthy LLM provider
-        mock_provider = MagicMock()
-        mock_provider.is_healthy = AsyncMock(return_value=True)
+        # Mock the actual LLM service
+        mock_service = MagicMock()
+        mock_service.is_healthy = AsyncMock(return_value=True)
+
+        # Wrap in ServiceProvider-like structure (registry returns ServiceProvider objects)
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
 
         mock_registry = MagicMock()
-        mock_registry._services = {ServiceType.LLM: [mock_provider]}
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
 
         with patch(
             "ciris_engine.logic.registries.base.get_global_registry",
@@ -287,18 +292,22 @@ class TestDegradedMode:
     @pytest.mark.asyncio
     async def test_degraded_when_all_llm_providers_unhealthy(self):
         """Test that degraded_mode=True when all LLM providers are unhealthy."""
-        from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+        from unittest.mock import MagicMock, AsyncMock, patch
 
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType
 
-        # Mock registry with unhealthy LLM provider
-        # Use spec to prevent auto-creation of attributes
-        mock_provider = MagicMock(spec=['is_healthy'])
-        mock_provider.is_healthy = AsyncMock(return_value=False)
+        # Mock the actual LLM service (unhealthy)
+        mock_service = MagicMock(spec=['is_healthy'])
+        mock_service.is_healthy = AsyncMock(return_value=False)
+
+        # Wrap in ServiceProvider-like structure
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
 
         mock_registry = MagicMock()
-        mock_registry._services = {ServiceType.LLM: [mock_provider]}
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
 
         with patch(
             "ciris_engine.logic.registries.base.get_global_registry",
@@ -320,12 +329,17 @@ class TestDegradedMode:
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType
 
-        # Mock registry with provider that throws on health check
-        mock_provider = MagicMock()
-        mock_provider.is_healthy = AsyncMock(side_effect=Exception("Connection refused"))
+        # Mock the actual LLM service that throws on health check
+        mock_service = MagicMock()
+        mock_service.is_healthy = AsyncMock(side_effect=Exception("Connection refused"))
+
+        # Wrap in ServiceProvider-like structure
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
 
         mock_registry = MagicMock()
-        mock_registry._services = {ServiceType.LLM: [mock_provider]}
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
 
         with patch(
             "ciris_engine.logic.registries.base.get_global_registry",

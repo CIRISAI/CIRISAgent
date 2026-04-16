@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 90
-        versionName "2.5.1"
+        versionCode 92
+        versionName "2.5.2"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -140,7 +140,10 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            // Use compressed native libraries for 16KB page size compatibility
+            // Required for Google Play submission on Android 15+ devices
+            // See: https://developer.android.com/guide/practices/page-sizes
+            useLegacyPackaging = false
         }
     }
 }

@@ -1737,7 +1737,9 @@
     "llm_success_threshold": "மூட வெற்றி",
     "llm_rate_limit_cooldown": "இயல்புநிலை குளிரூட்டல்",
     "llm_max_retries": "அதிகபட்ச மறு முயற்சிகள்",
-    "llm_max_wait": "அதிகபட்ச காத்திருப்பு நேரம்"
+    "llm_max_wait": "அதிகபட்ச காத்திருப்பு நேரம்",
+    "llm_local_inference_performance_warning": "சில சாதனங்களில் உள்ளூர் அனுமானம் மெதுவாக இருக்கலாம்",
+    "llm_local_server_performance_note": "செயல்திறன் சாதன திறன்கள் மற்றும் மாதிரி அளவைப் பொறுத்தது"
   },
   "conscience": {
     "ponder_attempted": "I முயற்சித்தது to {செயல்}",

@@ -52,6 +52,7 @@ class QAModule(Enum):
     CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
+    DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -291,6 +292,9 @@ class QAConfig:
             return HE300BenchmarkModule.get_he300_benchmark_tests()
         elif module == QAModule.CIRISNODE:
             # CIRISNode integration tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.DEGRADED_MODE:
+            # Degraded mode tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

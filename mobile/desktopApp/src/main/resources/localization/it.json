@@ -1676,7 +1676,9 @@
     "llm_success_threshold": "Successi per Chiudere",
     "llm_rate_limit_cooldown": "Cooldown Predefinito",
     "llm_max_retries": "Tentativi Massimi",
-    "llm_max_wait": "Tempo di Attesa Massimo"
+    "llm_max_wait": "Tempo di Attesa Massimo",
+    "llm_local_inference_performance_warning": "L'inferenza locale potrebbe essere lenta su alcuni dispositivi",
+    "llm_local_server_performance_note": "Le prestazioni dipendono dalle capacità del dispositivo e dalle dimensioni del modello"
   },
   "prompts": {
     "dma": {

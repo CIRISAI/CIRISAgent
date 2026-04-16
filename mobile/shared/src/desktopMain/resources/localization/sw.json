@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "Inaweza kwenye kifaa",
     "llm_on_device_capable": "LLM kwenye kifaa iko tayari",
     "llm_on_device_coming_soon": "Kwenye kifaa karibu",
+    "llm_local_inference_performance_warning": "Uamuzi wa ndani unaweza kuwa polepole kwenye vifaa vingine",
+    "llm_local_server_performance_note": "Utendaji unategemea uwezo wa kifaa na ukubwa wa muundo",
     "llm_settings_advanced": "Mipangilio ya Juu",
     "llm_settings_auth": "Uthibitishaji",
     "llm_distribution_round_robin": "Mzunguko wa Duara",

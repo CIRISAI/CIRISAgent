@@ -287,6 +287,7 @@ async def start_local_server(
             server_type=request.server_type,
             model=request.model,
             port=request.port,
+            confirm_download=request.confirm_download,
         )
 
         return SuccessResponse(
@@ -297,7 +298,9 @@ async def start_local_server(
                 model=request.model,
                 pid=result.get("pid"),
                 message=result.get("message", "Unknown status"),
-                estimated_ready_seconds=result.get("estimated_ready_seconds", 60),
+                estimated_ready_seconds=result.get("estimated_ready_seconds") or 60,
+                requires_download=result.get("requires_download", False),
+                download_size=result.get("download_size"),
             )
         )
     except Exception as e:
@@ -311,5 +314,7 @@ async def start_local_server(
                 pid=None,
                 message=f"Failed to start server: {str(e)}",
                 estimated_ready_seconds=0,
+                requires_download=False,
+                download_size=None,
             )
         )

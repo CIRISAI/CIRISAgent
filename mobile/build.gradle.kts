@@ -1,5 +1,6 @@
 plugins {
-    // Kotlin Multiplatform
+    // Kotlin Multiplatform - staying on 1.9.22 for AGP 8.1.0/Chaquopy compatibility
+    // Kotlin 2.x requires AGP 8.5+ which needs more testing with Chaquopy
     kotlin("multiplatform").version("1.9.22").apply(false)
     kotlin("android").version("1.9.22").apply(false)
 

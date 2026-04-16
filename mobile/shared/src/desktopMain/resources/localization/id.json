@@ -1703,6 +1703,8 @@
     "llm_on_device_available": "Mampu di perangkat",
     "llm_on_device_capable": "LLM di perangkat siap",
     "llm_on_device_coming_soon": "Di perangkat segera hadir",
+    "llm_local_inference_performance_warning": "Inferensi lokal mungkin lambat pada beberapa perangkat",
+    "llm_local_server_performance_note": "Performa tergantung pada kemampuan perangkat dan ukuran model",
     "llm_settings_title": "Konfigurasi LLM",
     "llm_settings_status": "Ikhtisar Status",
     "llm_settings_providers": "Penyedia",

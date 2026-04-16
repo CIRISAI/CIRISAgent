@@ -200,3 +200,154 @@ class TestSystemRoutes:
             # Check for tools with multiple providers (comma-separated)
             multi_provider_tools = [tool for tool in tools if "," in tool.get("provider", "")]
             # This is valid - tools can have multiple providers listed
+
+    def test_health_includes_degraded_mode_field(self, client):
+        """Test that health endpoint includes degraded_mode field."""
+        response = client.get("/v1/system/health")
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        health_data = data["data"]
+
+        # degraded_mode should always be present (defaults to False)
+        assert "degraded_mode" in health_data
+        assert isinstance(health_data["degraded_mode"], bool)
+
+    def test_health_includes_warnings_array(self, client):
+        """Test that health endpoint includes warnings array."""
+        response = client.get("/v1/system/health")
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        health_data = data["data"]
+
+        # warnings should always be present (can be empty list)
+        assert "warnings" in health_data
+        assert isinstance(health_data["warnings"], list)
+
+        # Each warning should have required fields
+        for warning in health_data["warnings"]:
+            assert "code" in warning
+            assert "message" in warning
+            assert "severity" in warning
+            # action_url is optional
+
+
+class TestDegradedMode:
+    """Test degraded mode detection in health endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_degraded_mode_when_no_llm_providers(self):
+        """Test that degraded_mode=True when no LLM providers are registered."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
+
+        # Mock empty registry
+        mock_registry = MagicMock()
+        mock_registry._services = {}  # No LLM providers
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=mock_registry,
+        ):
+            has_working_llm, warnings = await check_llm_availability()
+
+            # Should detect no LLM as degraded
+            assert has_working_llm is False
+            assert len(warnings) == 1
+            assert warnings[0].code == "no_llm_provider"
+            assert warnings[0].severity == "error"
+
+    @pytest.mark.asyncio
+    async def test_not_degraded_when_healthy_llm_provider(self):
+        """Test that degraded_mode=False when a healthy LLM provider exists."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Mock the actual LLM service
+        mock_service = MagicMock()
+        mock_service.is_healthy = AsyncMock(return_value=True)
+
+        # Wrap in ServiceProvider-like structure (registry returns ServiceProvider objects)
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
+
+        mock_registry = MagicMock()
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=mock_registry,
+        ):
+            has_working_llm, warnings = await check_llm_availability()
+
+            # Should not be degraded
+            assert has_working_llm is True
+            assert len(warnings) == 0
+
+    @pytest.mark.asyncio
+    async def test_degraded_when_all_llm_providers_unhealthy(self):
+        """Test that degraded_mode=True when all LLM providers are unhealthy."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Mock the actual LLM service (unhealthy)
+        mock_service = MagicMock(spec=['is_healthy'])
+        mock_service.is_healthy = AsyncMock(return_value=False)
+
+        # Wrap in ServiceProvider-like structure
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
+
+        mock_registry = MagicMock()
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=mock_registry,
+        ):
+            has_working_llm, warnings = await check_llm_availability()
+
+            # Should detect unhealthy providers as degraded
+            assert has_working_llm is False
+            assert len(warnings) == 1
+            assert warnings[0].code == "llm_providers_unhealthy"
+            assert warnings[0].severity == "warning"
+
+    @pytest.mark.asyncio
+    async def test_degraded_when_provider_health_check_throws(self):
+        """Test that degraded_mode=True when provider health check raises exception."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+
+        from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Mock the actual LLM service that throws on health check
+        mock_service = MagicMock()
+        mock_service.is_healthy = AsyncMock(side_effect=Exception("Connection refused"))
+
+        # Wrap in ServiceProvider-like structure
+        mock_service_provider = MagicMock()
+        mock_service_provider.name = "test_provider"
+        mock_service_provider.instance = mock_service
+
+        mock_registry = MagicMock()
+        mock_registry._services = {ServiceType.LLM: [mock_service_provider]}
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=mock_registry,
+        ):
+            has_working_llm, warnings = await check_llm_availability()
+
+            # Should treat exception as unhealthy
+            assert has_working_llm is False
+            assert len(warnings) == 1
+            assert warnings[0].code == "llm_providers_unhealthy"

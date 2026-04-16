@@ -534,8 +534,9 @@ private fun ServiceTypeCard(
                 )
             }
 
-            providers.forEach { provider ->
-                val serviceId = "${serviceType}_${provider.name}"
+            providers.forEachIndexed { index, provider ->
+                // Use index to ensure unique serviceId even when display names collide
+                val serviceId = "${serviceType}_${provider.name}_${index}"
                 ServiceProviderRow(
                     provider = provider,
                     isExpanded = serviceId in expandedServiceIds,
@@ -741,8 +742,9 @@ private fun HandlerServicesCard(
                         color = MaterialTheme.colorScheme.primary
                     )
 
-                    providers.forEach { provider ->
-                        val serviceId = "${handler}_${serviceType}_${provider.name}"
+                    providers.forEachIndexed { index, provider ->
+                        // Use index to ensure unique serviceId even when display names collide
+                        val serviceId = "${handler}_${serviceType}_${provider.name}_${index}"
                         ServiceProviderRow(
                             provider = provider,
                             isExpanded = serviceId in expandedServiceIds,

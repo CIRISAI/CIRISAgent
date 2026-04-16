@@ -1646,6 +1646,8 @@
     "llm_on_device_available": "Возможно на устройстве",
     "llm_on_device_capable": "LLM на устройстве готов",
     "llm_on_device_coming_soon": "На устройстве в скором времени",
+    "llm_local_inference_performance_warning": "Локальный вывод может быть медленным на некоторых устройствах",
+    "llm_local_server_performance_note": "Производительность зависит от возможностей устройства и размера модели",
     "llm_settings_advanced": "Расширенные настройки",
     "llm_settings_auth": "Аутентификация",
     "llm_distribution_round_robin": "По кругу",

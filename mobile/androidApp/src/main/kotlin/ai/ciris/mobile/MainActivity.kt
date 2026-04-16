@@ -108,7 +108,9 @@ class MainActivity : ComponentActivity() {
         LocalizationResourceLoader.init(applicationContext)
         Log.i(TAG, "Localization resource loader initialized")
 
-        // Start test automation server if CIRIS_TEST_MODE=true
+        // Enable test mode for debug builds (TEST_MODE_ENABLED is set in build.gradle)
+        AndroidTestAutomationServer.forceTestMode = BuildConfig.TEST_MODE_ENABLED
+        // Start test automation server if test mode is enabled
         AndroidTestAutomationServer.startIfEnabled()
 
         // Initialize Google Sign-In

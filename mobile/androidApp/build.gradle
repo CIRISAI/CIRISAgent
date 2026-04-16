@@ -13,8 +13,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 88
-        versionName "2.4.4"
+        versionCode 89
+        versionName "2.5.0"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -94,12 +94,16 @@ android {
             minifyEnabled false
             shrinkResources false
             // proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // Disable test mode in release builds
+            buildConfigField "boolean", "TEST_MODE_ENABLED", "false"
         }
 
         debug {
             debuggable true
             applicationIdSuffix ".debug"  // Allows debug build to coexist with Play Store version
             resValue "string", "app_name", "CIRIS DEBUG"
+            // Enable test automation server for UI testing (act, screenshot endpoints)
+            buildConfigField "boolean", "TEST_MODE_ENABLED", "true"
             // Use default debug signing config
         }
     }
@@ -124,6 +128,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true  // Enable BuildConfig generation for TEST_MODE_ENABLED flag
     }
 
     // Note: APK splits conflict with Chaquopy's ndk.abiFilters requirement
@@ -247,12 +252,21 @@ task cleanPythonSources(type: Delete) {
     delete "${buildDir}/python-src"
 }
 
+// Clean Chaquopy's Python build outputs to force reprocessing
+// This ensures Python code changes are ALWAYS picked up in each build
+task cleanChaquopyOutputs(type: Delete) {
+    description = "Clean Chaquopy build outputs to force fresh Python processing"
+    delete "${buildDir}/python"
+    delete "${buildDir}/generated/ap_generated_sources"
+}
+
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
-// IMPORTANT: Depends on cleanPythonSources to guarantee fresh sync every time
+// IMPORTANT: Depends on clean tasks to guarantee fresh sync and rebuild every time
 task syncPythonSources(type: Sync) {
     description = "Sync ciris_engine and ciris_adapters from main repo"
     dependsOn cleanPythonSources
+    dependsOn cleanChaquopyOutputs
 
     from("../../ciris_engine") {
         into "ciris_engine"

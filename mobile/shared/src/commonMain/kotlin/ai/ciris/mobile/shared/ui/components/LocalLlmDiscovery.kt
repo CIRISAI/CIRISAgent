@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -42,6 +43,13 @@ class LocalLlmDiscoveryState {
     var isStartingServer by mutableStateOf(false)
     var serverStartResult by mutableStateOf<StartLocalServerResult?>(null)
     var serverStartProgress by mutableStateOf<String?>(null)
+    // Download confirmation dialog state
+    var showDownloadConfirmation by mutableStateOf(false)
+    var pendingDownloadSize by mutableStateOf<String?>(null)
+    // Model selection dialog state
+    var showModelSelectionDialog by mutableStateOf(false)
+    var pendingAddServer by mutableStateOf<DiscoveredLlmServer?>(null)
+    var selectedModelForAdd by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -68,7 +76,7 @@ fun LocalLlmServerDiscovery(
     state: LocalLlmDiscoveryState,
     apiClient: CIRISApiClient,
     onServerSelected: (server: DiscoveredLlmServer) -> Unit,
-    onAddAsProvider: ((server: DiscoveredLlmServer) -> Unit)? = null,
+    onAddAsProvider: ((server: DiscoveredLlmServer, selectedModel: String?) -> Unit)? = null,
     localInferenceCapability: LocalInferenceCapability? = null,
     primaryColor: Color = MaterialTheme.colorScheme.primary,
     surfaceColor: Color = MaterialTheme.colorScheme.surfaceVariant,
@@ -77,6 +85,19 @@ fun LocalLlmServerDiscovery(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+
+    // Helper to handle adding a provider (may show model selection dialog)
+    fun handleAddAsProvider(server: DiscoveredLlmServer) {
+        if (server.models.size > 1) {
+            // Multiple models - show selection dialog
+            state.pendingAddServer = server
+            state.selectedModelForAdd = server.models.firstOrNull()
+            state.showModelSelectionDialog = true
+        } else {
+            // Single or no models - add directly
+            onAddAsProvider?.invoke(server, server.models.firstOrNull())
+        }
+    }
 
     fun discoverServers() {
         if (state.isDiscovering) return
@@ -114,27 +135,37 @@ fun LocalLlmServerDiscovery(
         }
     }
 
-    fun startLocalServer() {
+    fun startLocalServer(confirmDownload: Boolean = false) {
         if (state.isStartingServer) return
 
         state.isStartingServer = true
         state.serverStartResult = null
-        state.serverStartProgress = "Starting local inference server..."
+        state.serverStartProgress = if (confirmDownload) "Downloading model..." else "Starting local inference server..."
         state.errorMessage = null
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                PlatformLogger.i(TAG, "Starting local LLM server...")
+                PlatformLogger.i(TAG, "Starting local LLM server (confirmDownload=$confirmDownload)...")
 
                 val result = apiClient.startLocalLlmServer(
                     serverType = "llama_cpp",
                     model = "gemma-4-e2b",
-                    port = 8080
+                    port = 8080,
+                    confirmDownload = confirmDownload
                 )
 
                 withContext(Dispatchers.Main) {
                     state.serverStartResult = result
                     state.isStartingServer = false
+
+                    // Handle download confirmation required
+                    if (result.requiresDownload && !confirmDownload) {
+                        state.serverStartProgress = null
+                        state.pendingDownloadSize = result.downloadSize
+                        state.showDownloadConfirmation = true
+                        PlatformLogger.i(TAG, "Model download required: ${result.downloadSize}")
+                        return@withContext
+                    }
 
                     if (result.success) {
                         state.serverStartProgress = "Server started! Loading model (this may take ${result.estimatedReadySeconds}s)..."
@@ -175,17 +206,150 @@ fun LocalLlmServerDiscovery(
         }
     }
 
-    // Auto-discover on first composition
-    LaunchedEffect(Unit) {
-        if (state.discoveredServers.isEmpty() && !state.isDiscovering) {
-            discoverServers()
-        }
+    // Handler for when user confirms model download
+    fun confirmModelDownload() {
+        state.showDownloadConfirmation = false
+        state.pendingDownloadSize = null
+        startLocalServer(confirmDownload = true)
+    }
+
+    // Handler for when user cancels model download
+    fun cancelModelDownload() {
+        state.showDownloadConfirmation = false
+        state.pendingDownloadSize = null
+    }
+
+    // Discovery is user-initiated only (via "Discover Servers" button)
+    // This ensures network permission popups appear in context
+
+    // Download confirmation dialog
+    if (state.showDownloadConfirmation) {
+        AlertDialog(
+            onDismissRequest = { cancelModelDownload() },
+            title = { Text("Download Model?") },
+            text = {
+                Column {
+                    Text("The AI model needs to be downloaded before local inference can start.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Download size: ${state.pendingDownloadSize ?: "Unknown"}",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Make sure you have enough storage space and a stable connection.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { confirmModelDownload() },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                ) {
+                    Text("Download")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { cancelModelDownload() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Model selection dialog (when server has multiple models)
+    if (state.showModelSelectionDialog && state.pendingAddServer != null) {
+        val server = state.pendingAddServer!!
+        AlertDialog(
+            onDismissRequest = {
+                state.showModelSelectionDialog = false
+                state.pendingAddServer = null
+                state.selectedModelForAdd = null
+            },
+            title = { Text("Select Model") },
+            text = {
+                Column {
+                    Text(
+                        text = "Choose which model to use from ${server.label}:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    server.models.forEach { model ->
+                        val isSelected = state.selectedModelForAdd == model
+                        Surface(
+                            onClick = { state.selectedModelForAdd = model },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = if (isSelected) BorderStroke(2.dp, primaryColor) else BorderStroke(1.dp, secondaryTextColor.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { state.selectedModelForAdd = model },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = primaryColor
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = model,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = textColor
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onAddAsProvider?.invoke(server, state.selectedModelForAdd)
+                        state.showModelSelectionDialog = false
+                        state.pendingAddServer = null
+                        state.selectedModelForAdd = null
+                    },
+                    enabled = state.selectedModelForAdd != null,
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                ) {
+                    Text("Add Provider")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    state.showModelSelectionDialog = false
+                    state.pendingAddServer = null
+                    state.selectedModelForAdd = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Explanation text - only show if no servers discovered yet
+        if (state.discoveredServers.isEmpty() && !state.isDiscovering) {
+            Text(
+                text = "Search your local network for AI inference servers like Ollama, llama.cpp, or vLLM. " +
+                       "This requires network access to scan for servers on your WiFi.",
+                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                color = secondaryTextColor,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
         // Discover button
         OutlinedButton(
             onClick = { discoverServers() },
@@ -299,10 +463,10 @@ fun LocalLlmServerDiscovery(
                         if (onAddAsProvider != null) {
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(
-                                onClick = { onAddAsProvider(server) },
+                                onClick = { handleAddAsProvider(server) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .testableClickable("btn_add_provider_${server.id}") { onAddAsProvider(server) },
+                                    .testableClickable("btn_add_provider_${server.id}") { handleAddAsProvider(server) },
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = primaryColor
                                 ),
@@ -370,6 +534,34 @@ fun LocalLlmServerDiscovery(
                             color = secondaryTextColor,
                             fontSize = 12.sp
                         )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // Performance warning
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Local inference may be slow on some devices. Performance depends on device capabilities and model size.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = secondaryTextColor,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
 
                         Spacer(Modifier.height(12.dp))
 

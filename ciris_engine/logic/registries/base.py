@@ -133,7 +133,11 @@ class ServiceRegistry(_Base):
         if service_type not in self._services:
             self._services[service_type] = []
 
-        provider_name = f"{provider.__class__.__name__}_{id(provider)}"
+        # Use provider's service_name if available, otherwise generate from class + id
+        if hasattr(provider, "service_name") and provider.service_name:
+            provider_name = str(provider.service_name)
+        else:
+            provider_name = f"{provider.__class__.__name__}_{id(provider)}"
 
         # Validate LLM service mixing (extracted to helper)
         if service_type == ServiceType.LLM:

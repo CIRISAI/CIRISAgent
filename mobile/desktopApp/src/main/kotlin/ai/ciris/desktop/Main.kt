@@ -56,7 +56,7 @@ fun main() {
 
     // Start test automation server if enabled
     val testServer = if (TestAutomationServer.isTestModeEnabled()) {
-        val port = System.getenv("CIRIS_TEST_PORT")?.toIntOrNull() ?: 8091
+        val port = System.getenv("CIRIS_TEST_PORT")?.toIntOrNull() ?: 9091
         println("[Desktop] Test mode enabled - starting automation server on port $port")
         val server = TestAutomationServer.getInstance(port)
 

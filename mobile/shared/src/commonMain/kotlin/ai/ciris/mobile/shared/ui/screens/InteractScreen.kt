@@ -76,6 +76,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.SystemWarning
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
@@ -145,6 +146,7 @@ fun InteractScreen(
     val attachedFiles by viewModel.attachedFiles.collectAsState()
     val pipelineState by viewModel.pipelineState.collectAsState()
     val pendingDeferrals by viewModel.pendingDeferrals.collectAsState()
+    val systemWarnings by viewModel.systemWarnings.collectAsState()
 
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
@@ -339,6 +341,21 @@ fun InteractScreen(
             PendingDeferralsBanner(
                 count = pendingDeferrals,
                 onClick = onOpenWiseAuthority,
+                theme = theme
+            )
+        }
+
+        // System warnings banner - shows critical warnings like "no LLM provider"
+        systemWarnings.forEach { warning ->
+            SystemWarningBanner(
+                warning = warning,
+                onClick = {
+                    // Navigate based on action_url
+                    when (warning.actionUrl) {
+                        "/settings/llm" -> onOpenLLMSettings()
+                        else -> {} // Other action URLs can be added
+                    }
+                },
                 theme = theme
             )
         }
@@ -1175,6 +1192,65 @@ private fun PendingDeferralsBanner(
             fontSize = 14.sp,
             color = Color(0xFF2563EB)
         )
+    }
+}
+
+/**
+ * System warning banner - shows critical warnings like "no LLM provider configured"
+ * Tapping navigates to the appropriate settings screen to resolve the warning
+ */
+@Composable
+private fun SystemWarningBanner(
+    warning: SystemWarning,
+    onClick: () -> Unit,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = when (warning.severity) {
+        "error" -> Color(0xFFDC2626).copy(alpha = 0.15f)  // Red tint
+        "warning" -> Color(0xFFF59E0B).copy(alpha = 0.15f)  // Amber tint
+        else -> Color(0xFF2563EB).copy(alpha = 0.15f)  // Blue tint (info)
+    }
+    val textColor = when (warning.severity) {
+        "error" -> Color(0xFFDC2626)
+        "warning" -> Color(0xFFF59E0B)
+        else -> Color(0xFF2563EB)
+    }
+    val icon = when (warning.severity) {
+        "error" -> "⚠️"
+        "warning" -> "⚡"
+        else -> "ℹ️"
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = icon,
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = warning.message,
+            fontSize = 12.sp,
+            color = textColor,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (warning.actionUrl != null) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = "→",
+                fontSize = 14.sp,
+                color = textColor
+            )
+        }
     }
 }
 

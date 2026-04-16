@@ -20,6 +20,15 @@ from ...constants import DESC_CURRENT_COGNITIVE_STATE, DESC_HUMAN_READABLE_STATU
 # Health & Time Response Models
 
 
+class SystemWarning(BaseModel):
+    """A system-level warning that requires user attention."""
+
+    code: str = Field(..., description="Warning code (e.g., 'no_llm_provider', 'adapter_needs_reauth')")
+    message: str = Field(..., description="Human-readable warning message")
+    severity: str = Field("warning", description="Severity: 'info', 'warning', 'error'")
+    action_url: Optional[str] = Field(None, description="URL path to resolve the warning (e.g., '/settings/llm')")
+
+
 class SystemHealthResponse(BaseModel):
     """Overall system health status."""
 
@@ -30,6 +39,8 @@ class SystemHealthResponse(BaseModel):
     initialization_complete: bool = Field(..., description="Whether system initialization is complete")
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state if available")
     timestamp: datetime = Field(..., description="Current server time")
+    warnings: List[SystemWarning] = Field(default_factory=list, description="System warnings requiring attention")
+    degraded_mode: bool = Field(False, description="True when running without a working LLM provider")
 
     @field_serializer("timestamp")
     def serialize_ts(self, timestamp: datetime, _info: Any) -> Optional[str]:

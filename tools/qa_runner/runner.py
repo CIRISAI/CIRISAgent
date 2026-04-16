@@ -264,6 +264,7 @@ class QARunner:
             QAModule.HANDLERS,
             QAModule.DEFERRAL,
             QAModule.WALLET,
+            QAModule.DEGRADED_MODE,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -887,6 +888,7 @@ class QARunner:
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
+        from .modules.degraded_mode_tests import DegradedModeTests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.deferral_tests import DeferralTestModule
         from .modules.dream_live_tests import DreamLiveTests
@@ -946,6 +948,7 @@ class QARunner:
             QAModule.HANDLERS: HandlerTestModule,
             QAModule.DEFERRAL: DeferralTestModule,
             QAModule.WALLET: WalletTests,
+            QAModule.DEGRADED_MODE: DegradedModeTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

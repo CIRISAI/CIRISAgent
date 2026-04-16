@@ -1293,15 +1293,17 @@ class CIRISApiClient(
      * @param serverType Server to start: "llama_cpp" or "ollama"
      * @param model Model to load: "gemma-4-e2b" or "gemma-4-e4b"
      * @param port Port for the server (default 8080)
+     * @param confirmDownload If true, confirms model download if needed
      * @return StartLocalServerResult with success status and server info
      */
     suspend fun startLocalLlmServer(
         serverType: String = "llama_cpp",
         model: String = "gemma-4-e2b",
-        port: Int = 8080
+        port: Int = 8080,
+        confirmDownload: Boolean = false
     ): StartLocalServerResult {
         val method = "startLocalLlmServer"
-        logInfo(method, "Starting local LLM server (type=$serverType, model=$model, port=$port)")
+        logInfo(method, "Starting local LLM server (type=$serverType, model=$model, port=$port, confirmDownload=$confirmDownload)")
 
         return try {
             val client = HttpClient {
@@ -1320,7 +1322,7 @@ class CIRISApiClient(
             val response = client.post("${this.baseUrl}/v1/setup/start-local-server") {
                 authHeader()?.let { header("Authorization", it) }
                 contentType(io.ktor.http.ContentType.Application.Json)
-                setBody(StartLocalServerRequest(serverType, model, port))
+                setBody(StartLocalServerRequest(serverType, model, port, confirmDownload))
             }
 
             logDebug(method, "Response: status=${response.status}")
@@ -1347,7 +1349,9 @@ class CIRISApiClient(
                 model = data.model ?: model,
                 pid = data.pid,
                 message = data.message ?: "Unknown status",
-                estimatedReadySeconds = data.estimatedReadySeconds ?: 60
+                estimatedReadySeconds = data.estimatedReadySeconds ?: 60,
+                requiresDownload = data.requiresDownload ?: false,
+                downloadSize = data.downloadSize
             )
 
             logInfo(method, "Start server result: success=${result.success}, message=${result.message}")
@@ -1368,7 +1372,8 @@ class CIRISApiClient(
     private data class StartLocalServerRequest(
         @SerialName("server_type") val serverType: String,
         val model: String,
-        val port: Int
+        val port: Int,
+        @SerialName("confirm_download") val confirmDownload: Boolean = false
     )
 
     @Serializable
@@ -1386,7 +1391,9 @@ class CIRISApiClient(
         val model: String? = null,
         val pid: Int? = null,
         val message: String? = null,
-        @SerialName("estimated_ready_seconds") val estimatedReadySeconds: Int? = null
+        @SerialName("estimated_ready_seconds") val estimatedReadySeconds: Int? = null,
+        @SerialName("requires_download") val requiresDownload: Boolean? = null,
+        @SerialName("download_size") val downloadSize: String? = null
     )
 
     /**
@@ -1908,15 +1915,27 @@ class CIRISApiClient(
             val body = response.body<SetupConfigApiResponse>()
             val data = body.data ?: throw RuntimeException("API returned null data")
 
-            // Detect if using CIRIS proxy by checking provider or base URL
+            // Check if CIRIS services are disabled (BYOK mode)
+            val cirisServicesEnabled = try {
+                getCirisServicesStatus()
+            } catch (e: Exception) {
+                logWarn(method, "Failed to get CIRIS services status: ${e.message}, assuming enabled")
+                true
+            }
+
+            // Detect if using CIRIS proxy - BOTH conditions must be true:
+            // 1. CIRIS services must be enabled (not disabled)
+            // 2. URL must be a CIRIS proxy URL
             val llmBaseUrl = data.llmBaseUrl ?: ""
-            val isCirisProxy = data.llmProvider == "ciris_proxy" ||
+            val urlIsCirisProxy = data.llmProvider == "ciris_proxy" ||
                     llmBaseUrl.contains("ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("llm.ciris", ignoreCase = true) ||
                     llmBaseUrl.contains("proxy", ignoreCase = true)
+            val isCirisProxy = cirisServicesEnabled && urlIsCirisProxy
 
             logDebug(method, "LLM Config: provider=${data.llmProvider}, model=${data.llmModel}, " +
-                    "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, apiKeySet=${data.llmApiKeySet}")
+                    "baseUrl=$llmBaseUrl, isCirisProxy=$isCirisProxy, cirisServicesEnabled=$cirisServicesEnabled, " +
+                    "apiKeySet=${data.llmApiKeySet}")
 
             client.close()
 
@@ -3639,21 +3658,57 @@ class CIRISApiClient(
         logInfo(method, "Fetching system health")
 
         return try {
-            val response = systemApi.getSystemHealthV1SystemHealthGet()
-            logDebug(method, "Response: status=${response.status}")
+            // Use direct HTTP call to properly parse warnings
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
 
-            if (!response.success) {
-                logError(method, "API returned non-success status: ${response.status}")
+            val response = client.get("$baseUrl/v1/system/health") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
                 throw RuntimeException("API error: HTTP ${response.status}")
             }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logInfo(method, "System health: status=${data.status}, cognitiveState=${data.cognitiveState}")
+            val jsonText = response.bodyAsText()
+            val json = Json.parseToJsonElement(jsonText).jsonObject
+            val data = json["data"]?.jsonObject ?: throw RuntimeException("API returned null data")
+
+            val status = data["status"]?.jsonPrimitive?.content ?: "unknown"
+            val cognitiveState = data["cognitive_state"]?.jsonPrimitive?.content ?: "UNKNOWN"
+
+            // Parse warnings array
+            val warnings = data["warnings"]?.jsonArray?.mapNotNull { warningElement ->
+                try {
+                    val warningObj = warningElement.jsonObject
+                    SystemWarning(
+                        code = warningObj["code"]?.jsonPrimitive?.content ?: "",
+                        message = warningObj["message"]?.jsonPrimitive?.content ?: "",
+                        severity = warningObj["severity"]?.jsonPrimitive?.content ?: "warning",
+                        actionUrl = warningObj["action_url"]?.jsonPrimitive?.contentOrNull
+                    )
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to parse warning: ${e.message}")
+                    null
+                }
+            } ?: emptyList()
+
+            // Parse degraded_mode flag
+            val degradedMode = data["degraded_mode"]?.jsonPrimitive?.boolean ?: false
+
+            logInfo(method, "System health: status=$status, cognitiveState=$cognitiveState, warnings=${warnings.size}, degradedMode=$degradedMode")
 
             SystemHealthData(
-                status = data.status,
-                cognitiveState = data.cognitiveState ?: "UNKNOWN"
+                status = status,
+                cognitiveState = cognitiveState,
+                warnings = warnings,
+                degradedMode = degradedMode
             )
         } catch (e: Exception) {
             logException(method, e)
@@ -4392,7 +4447,8 @@ class CIRISApiClient(
                 put("base_url", providerBaseUrl)
                 name?.let { put("name", it) }
                 model?.let { put("model", it) }
-                apiKey?.let { put("api_key", it) }
+                // Always include api_key - use "local" for local providers if not specified
+                put("api_key", apiKey ?: "local")
                 put("priority", priority.name.lowercase())
                 put("enabled", true)
             }
@@ -4436,6 +4492,149 @@ class CIRISApiClient(
         } catch (e: Exception) {
             logException(method, e, "providerId=$providerId, baseUrl=$providerBaseUrl")
             throw e
+        }
+    }
+
+    /**
+     * Disable CIRIS services (switch to BYOK mode).
+     * Calls the dedicated API endpoint that:
+     * - Sets CIRIS_SERVICES_DISABLED=true in .env (persists across restarts)
+     * - Unregisters CIRIS providers from memory (immediate effect)
+     * - Disables CIRIS hosted tools
+     */
+    suspend fun disableCirisServices(): ai.ciris.mobile.shared.models.SimpleResponse {
+        val method = "disableCirisServices"
+        val url = "$baseUrl/v1/system/llm/ciris-services/disable"
+        logInfo(method, "POST $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.post(url) {
+                contentType(ContentType.Application.Json)
+                accessToken?.let { bearerAuth(it) }
+            }
+
+            val responseBody = response.bodyAsText()
+            logInfo(method, "Response ${response.status}: $responseBody")
+
+            if (response.status.isSuccess()) {
+                // Parse response to get message
+                val jsonResponse = Json.parseToJsonElement(responseBody).jsonObject
+                val data = jsonResponse["data"]?.jsonObject
+                val disabled = data?.get("disabled")?.jsonPrimitive?.boolean ?: true
+                val message = data?.get("message")?.jsonPrimitive?.contentOrNull
+                    ?: "CIRIS services disabled"
+
+                ai.ciris.mobile.shared.models.SimpleResponse(
+                    success = disabled,
+                    message = message
+                )
+            } else {
+                logError(method, "Failed: ${response.status}")
+                ai.ciris.mobile.shared.models.SimpleResponse(
+                    success = false,
+                    message = "Failed to disable CIRIS services: ${response.status}"
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e, "disabling CIRIS services")
+            ai.ciris.mobile.shared.models.SimpleResponse(
+                success = false,
+                message = e.message ?: "Unknown error"
+            )
+        }
+    }
+
+    /**
+     * Get CIRIS services status (whether they are disabled or enabled).
+     * Returns true if services are ENABLED (not disabled).
+     */
+    suspend fun getCirisServicesStatus(): Boolean {
+        val method = "getCirisServicesStatus"
+        val url = "$baseUrl/v1/system/llm/ciris-services/status"
+        logInfo(method, "GET $url")
+
+        return try {
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 10000
+                    connectTimeoutMillis = 5000
+                }
+            }
+
+            val response = client.get(url) {
+                accessToken?.let { bearerAuth(it) }
+            }
+
+            val responseBody = response.bodyAsText()
+            logInfo(method, "Response ${response.status}: $responseBody")
+            client.close()
+
+            if (response.status.isSuccess()) {
+                // Parse response - disabled=true means services are OFF
+                val jsonResponse = Json.parseToJsonElement(responseBody).jsonObject
+                val data = jsonResponse["data"]?.jsonObject
+                val disabled = data?.get("disabled")?.jsonPrimitive?.boolean ?: false
+                // Return true if ENABLED (not disabled)
+                !disabled
+            } else {
+                logWarn(method, "Failed to get status: ${response.status}, assuming enabled")
+                true // Default to enabled if we can't get status
+            }
+        } catch (e: Exception) {
+            logException(method, e, "getting CIRIS services status")
+            true // Default to enabled on error
+        }
+    }
+
+    /**
+     * Delete a provider by name.
+     */
+    suspend fun deleteProvider(name: String) {
+        val method = "deleteProvider"
+        val url = "$baseUrl/v1/system/llm/providers/$name"
+        logInfo(method, "DELETE $url")
+
+        val client = HttpClient {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+
+        val response = client.delete(url) {
+            authHeader()?.let { header("Authorization", it) }
+        }
+
+        client.close()
+
+        if (response.status.value !in 200..299) {
+            val body = response.bodyAsText()
+            throw RuntimeException("Failed to delete provider: ${response.status.value} - $body")
         }
     }
 
@@ -7493,9 +7692,21 @@ data class PartnershipStatusData(
 
 // ===== System Data Models =====
 
+/**
+ * System warning that requires user attention.
+ */
+data class SystemWarning(
+    val code: String,
+    val message: String,
+    val severity: String = "warning",
+    val actionUrl: String? = null
+)
+
 data class SystemHealthData(
     val status: String,
-    val cognitiveState: String
+    val cognitiveState: String,
+    val warnings: List<SystemWarning> = emptyList(),
+    val degradedMode: Boolean = false  // True when no working LLM provider
 )
 
 data class UnifiedTelemetryData(

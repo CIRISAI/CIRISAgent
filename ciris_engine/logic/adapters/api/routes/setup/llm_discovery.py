@@ -10,7 +10,7 @@ on all platforms including Android.
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -21,6 +21,9 @@ from ciris_engine.logic.utils.mdns_resolver import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Constants
+LLAMA_CPP_CACHE_DIR = "llama.cpp"
 
 # Hostnames to probe with their likely ports
 # See: https://lmstudio.ai/docs/developer/core/server (LM Studio port 1234)
@@ -50,6 +53,7 @@ LOCALHOST_PORTS: List[Tuple[int, str]] = [
     (1234, "lmstudio"),  # LM Studio default
     (8000, "vllm"),  # vLLM default
     (8080, "llama_cpp"),  # llama.cpp / LocalAI default
+    (8091, "llama_cpp"),  # On-device llama.cpp server (avoids conflict with CIRIS API on 8080)
 ]
 
 # Timeout for individual probes
@@ -448,6 +452,7 @@ async def start_local_llm_server(
     server_type: str = "llama_cpp",
     model: str = "gemma-4-e2b",
     port: int = 8080,
+    confirm_download: bool = False,
 ) -> Dict[str, Any]:
     """Start a local LLM inference server.
 
@@ -458,16 +463,20 @@ async def start_local_llm_server(
         server_type: "llama_cpp" or "ollama"
         model: Model to load (e.g., "gemma-4-e2b")
         port: Port to listen on
+        confirm_download: If True, automatically download missing model.
+            If False, return a confirmation prompt for large downloads.
 
     Returns:
-        Dict with success, server_url, pid, message, estimated_ready_seconds
+        Dict with success, server_url, pid, message, estimated_ready_seconds.
+        If requires_download is True, user should confirm and retry with
+        confirm_download=True.
     """
     logger.info(f"[START_LOCAL_SERVER] Starting {server_type} on port {port} with model {model}")
 
     if server_type == "ollama":
         return await _start_ollama_server(port, model)
     elif server_type == "llama_cpp":
-        return await _start_llama_cpp_server(port, model)
+        return await _start_llama_cpp_server(port, model, confirm_download=confirm_download)
     else:
         return _error_result(f"Unknown server type: {server_type}. Use 'llama_cpp' or 'ollama'.")
 
@@ -519,8 +528,15 @@ async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
         return _error_result(f"Failed to start Ollama: {str(e)}")
 
 
-async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
-    """Start llama.cpp server on the specified port."""
+async def _start_llama_cpp_server(
+    port: int, model: str, confirm_download: bool = False
+) -> Dict[str, Any]:
+    """Start llama.cpp server on the specified port.
+
+    If the model file is not found and confirm_download is False, returns a
+    prompt asking user to confirm the download. If confirm_download is True,
+    downloads the model automatically.
+    """
     binary = _find_llama_cpp_binary()
     if not binary:
         return _error_result(
@@ -529,7 +545,30 @@ async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
 
     model_file = _find_model_file(model)
     if not model_file:
-        return _error_result(f"Model file for '{model}' not found. Download GGUF from HuggingFace.")
+        # Model not found - check if user confirmed download
+        if not confirm_download:
+            # Return download confirmation prompt
+            download_size = MODEL_SIZES.get(model, "~2.5 GB")
+            return {
+                "success": False,
+                "requires_download": True,
+                "model": model,
+                "download_size": download_size,
+                "message": f"Model '{model}' not found. Download requires {download_size} of storage. Confirm to proceed.",
+                "server_url": None,
+                "pid": None,
+                "estimated_ready_seconds": 0,
+            }
+
+        # User confirmed - download the model
+        logger.info(f"[START_LOCAL_SERVER] Model '{model}' not found, downloading...")
+        download_result = await download_model(model)
+        if not download_result["success"]:
+            return _error_result(
+                f"Model '{model}' download failed: {download_result['message']}"
+            )
+        model_file = download_result["model_path"]
+        logger.info(f"[START_LOCAL_SERVER] Downloaded model to {model_file}")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -554,18 +593,91 @@ async def _start_llama_cpp_server(port: int, model: str) -> Dict[str, Any]:
         return _error_result(f"Failed to start llama.cpp: {str(e)}")
 
 
+def _get_android_llama_paths() -> list[str]:
+    """Get potential Android paths for the llama.cpp binary.
+
+    Returns paths in priority order: native lib dir first (most likely to work),
+    then CIRIS data dir, then common package paths.
+    """
+    import os
+
+    paths: list[str] = []
+
+    # BEST: Native library directory (where .so files can be executed)
+    native_lib_dir = os.environ.get("CIRIS_NATIVE_LIB_DIR", "")
+    if native_lib_dir:
+        paths.append(os.path.join(native_lib_dir, "libllama_server.so"))
+        logger.info(f"[LLAMA_BINARY] Will check native lib dir: {native_lib_dir}")
+
+    # FALLBACK: CIRIS data directory (may not be executable due to SELinux)
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        paths.append(os.path.join(ciris_data_dir, "bin", "llama-server"))
+        parent_dir = os.path.dirname(ciris_data_dir)
+        if parent_dir:
+            paths.append(os.path.join(parent_dir, "bin", "llama-server"))
+
+    # LAST RESORT: Common Android app data paths
+    for pkg in ["ai.ciris.mobile.debug", "ai.ciris.mobile"]:
+        paths.extend([
+            f"/data/data/{pkg}/files/bin/llama-server",
+            f"/data/data/{pkg}/files/ciris/bin/llama-server",
+        ])
+
+    return paths
+
+
+def _ensure_executable(path: str) -> bool:
+    """Ensure a file has execute permission.
+
+    Security: This is safe because:
+    1. We only call this on paths from _get_android_llama_paths() - our own bundled binary
+    2. The paths are hardcoded app-private directories, not user-supplied
+    3. We're adding execute permission to run our own llama.cpp server binary
+
+    Returns True if the file is now executable, False otherwise.
+    """
+    import os
+    import stat
+
+    if os.access(path, os.X_OK):
+        return True
+
+    try:
+        current_mode = os.stat(path).st_mode
+        # Add execute bits for owner/group/other to run the binary
+        # NOSONAR: Safe - path is from hardcoded app-private paths, not user input
+        new_mode = current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod(path, new_mode)  # NOSONAR
+        logger.info(f"[LLAMA_BINARY] Added execute permission to: {path}")
+        return os.access(path, os.X_OK)
+    except Exception as e:
+        logger.warning(f"[LLAMA_BINARY] Could not chmod {path}: {e}")
+        return False
+
+
 def _find_llama_cpp_binary() -> Optional[str]:
-    """Find the llama.cpp server binary."""
+    """Find the llama.cpp server binary.
+
+    On Android, looks for the bundled binary extracted to the app's files directory.
+    On desktop, searches PATH and common installation locations.
+    """
     import os
     import shutil
 
-    # Try common binary names
+    # Check Android paths first
+    for path in _get_android_llama_paths():
+        if os.path.isfile(path) and _ensure_executable(path):
+            logger.info(f"[LLAMA_BINARY] Found Android bundled binary: {path}")
+            return path
+
+    # Try common binary names in PATH
     for name in ["llama-server", "llama.cpp-server", "server"]:
         binary = shutil.which(name)
         if binary:
             return binary
 
-    # Check common installation paths
+    # Check common desktop installation paths
     common_paths = [
         "/usr/local/bin/llama-server",
         "/opt/llama.cpp/build/bin/llama-server",
@@ -578,6 +690,37 @@ def _find_llama_cpp_binary() -> Optional[str]:
     return None
 
 
+# Model download URLs (HuggingFace)
+MODEL_DOWNLOAD_URLS = {
+    "gemma-4-e2b": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf",
+    "gemma-4-e4b": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q8_0.gguf",
+}
+
+# Approximate model sizes for user confirmation
+MODEL_SIZES = {
+    "gemma-4-e2b": "~2.5 GB",
+    "gemma-4-e4b": "~4.5 GB",
+}
+
+
+def _get_model_dir() -> str:
+    """Get the directory for storing model files."""
+    import os
+    from pathlib import Path
+
+    # On Android, use CIRIS_DATA_DIR/models
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        model_dir = Path(ciris_data_dir) / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        return str(model_dir)
+
+    # Desktop: use ~/.cache/llama.cpp
+    model_dir = Path.home() / ".cache" / LLAMA_CPP_CACHE_DIR
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
 def _find_model_file(model: str) -> Optional[str]:
     """Find a GGUF model file on disk.
 
@@ -588,22 +731,27 @@ def _find_model_file(model: str) -> Optional[str]:
 
     # Map model names to file patterns
     model_patterns = {
-        "gemma-4-e2b": ["gemma-4*-e2b*.gguf", "gemma-2*-e2b*.gguf", "gemma*e2b*.gguf"],
-        "gemma-4-e4b": ["gemma-4*-e4b*.gguf", "gemma-2*-e4b*.gguf", "gemma*e4b*.gguf"],
+        "gemma-4-e2b": ["gemma-4*-e2b*.gguf", "gemma-2*-e2b*.gguf", "gemma*e2b*.gguf", "google_gemma*.gguf"],
+        "gemma-4-e4b": ["gemma-4*-e4b*.gguf", "gemma-2*-e4b*.gguf", "gemma*e4b*.gguf", "google_gemma*Q8*.gguf"],
     }
 
     patterns = model_patterns.get(model, [f"*{model}*.gguf"])
 
     # Common model directories
     search_dirs = [
-        Path.home() / ".cache" / "llama.cpp",
-        Path.home() / ".local" / "share" / "llama.cpp" / "models",
+        Path.home() / ".cache" / LLAMA_CPP_CACHE_DIR,
+        Path.home() / ".local" / "share" / LLAMA_CPP_CACHE_DIR / "models",
         Path.home() / "models",
         Path("/usr/share/llama.cpp/models"),
         Path("/opt/models"),
     ]
 
-    # Add CIRIS model directory
+    # Add Android/CIRIS data directory first
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        search_dirs.insert(0, Path(ciris_data_dir) / "models")
+
+    # Add CIRIS_HOME model directory
     ciris_home = os.environ.get("CIRIS_HOME")
     if ciris_home:
         search_dirs.insert(0, Path(ciris_home) / "models")
@@ -618,3 +766,79 @@ def _find_model_file(model: str) -> Optional[str]:
                 return str(matches[0])
 
     return None
+
+
+async def download_model(model: str, progress_callback: Optional[Callable[[float], None]] = None) -> Dict[str, Any]:
+    """Download a model from HuggingFace.
+
+    Args:
+        model: Model name (e.g., "gemma-4-e2b")
+        progress_callback: Optional callback for download progress (0.0 to 1.0)
+
+    Returns:
+        Dict with success, model_path, message
+    """
+    import aiohttp
+    from pathlib import Path
+
+    url = MODEL_DOWNLOAD_URLS.get(model)
+    if not url:
+        return {
+            "success": False,
+            "model_path": None,
+            "message": f"No download URL for model '{model}'. Available: {list(MODEL_DOWNLOAD_URLS.keys())}",
+        }
+
+    model_dir = _get_model_dir()
+    filename = url.split("/")[-1]
+    model_path = Path(model_dir) / filename
+
+    # Check if already downloaded
+    if model_path.exists():
+        logger.info(f"[MODEL_DOWNLOAD] Model already exists: {model_path}")
+        return {
+            "success": True,
+            "model_path": str(model_path),
+            "message": f"Model already downloaded: {filename}",
+        }
+
+    logger.info(f"[MODEL_DOWNLOAD] Downloading {model} from {url} to {model_path}")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {
+                        "success": False,
+                        "model_path": None,
+                        "message": f"Download failed: HTTP {response.status}",
+                    }
+
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
+
+                import aiofiles
+                async with aiofiles.open(model_path, "wb") as f:
+                    async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                        await f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback and total_size > 0:
+                            progress_callback(downloaded / total_size)
+
+        logger.info(f"[MODEL_DOWNLOAD] Download complete: {model_path}")
+        return {
+            "success": True,
+            "model_path": str(model_path),
+            "message": f"Downloaded {filename} ({downloaded / 1024 / 1024:.1f} MB)",
+        }
+
+    except Exception as e:
+        logger.error(f"[MODEL_DOWNLOAD] Failed to download model: {e}")
+        # Clean up partial download
+        if model_path.exists():
+            model_path.unlink()
+        return {
+            "success": False,
+            "model_path": None,
+            "message": f"Download failed: {str(e)}",
+        }

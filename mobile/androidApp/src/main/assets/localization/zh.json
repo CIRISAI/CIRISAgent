@@ -1642,6 +1642,8 @@
     "llm_on_device_available": "设备上可用",
     "llm_on_device_capable": "设备上 LLM 就绪",
     "llm_on_device_coming_soon": "即将在设备上推出",
+    "llm_local_inference_performance_warning": "本地推理在某些设备上可能较慢",
+    "llm_local_server_performance_note": "性能取决于设备性能和模型大小",
     "llm_settings_title": "LLM 配置",
     "llm_settings_status": "状态概览",
     "llm_settings_providers": "提供者",

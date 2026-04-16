@@ -1654,6 +1654,8 @@
     "llm_on_device_available": "قابل استفاده در دستگاه",
     "llm_on_device_capable": "LLM دستگاه آماده",
     "llm_on_device_coming_soon": "دستگاه به زودی",
+    "llm_local_inference_performance_warning": "استنتاج محلی ممکن است در برخی دستگاه‌ها کند باشد",
+    "llm_local_server_performance_note": "عملکرد به قابلیت‌های دستگاه و اندازه مدل بستگی دارد",
     "llm_distribution_round_robin": "نوبتی",
     "llm_distribution_latency": "مبتنی بر تأخیر (توصیه شده)",
     "llm_distribution_random": "تصادفی",

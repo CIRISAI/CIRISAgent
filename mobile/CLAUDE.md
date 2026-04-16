@@ -105,7 +105,7 @@ ciris-agent
 
 ### Test Server Endpoints
 
-The server runs on `http://localhost:8091` by default:
+The server runs on `http://localhost:9091` by default:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -124,12 +124,12 @@ The `/act` endpoint combines action + wait + tree into a single call, reducing 3
 
 ```bash
 # Click and get resulting UI state
-curl -X POST http://localhost:8091/act \
+curl -X POST http://localhost:9091/act \
   -H "Content-Type: application/json" \
   -d '{"testTag": "menu_adapters", "action": "click", "waitMs": 1000}'
 
 # Input text and get filtered elements
-curl -X POST http://localhost:8091/act \
+curl -X POST http://localhost:9091/act \
   -H "Content-Type: application/json" \
   -d '{
     "testTag": "input_skill_md",
@@ -163,24 +163,24 @@ curl -X POST http://localhost:8091/act \
 
 ```bash
 # Check current screen
-curl http://localhost:8091/screen
+curl http://localhost:9091/screen
 
 # Enter credentials
-curl -X POST http://localhost:8091/input \
+curl -X POST http://localhost:9091/input \
   -H "Content-Type: application/json" \
   -d '{"testTag": "input_username", "text": "admin"}'
 
-curl -X POST http://localhost:8091/input \
+curl -X POST http://localhost:9091/input \
   -H "Content-Type: application/json" \
   -d '{"testTag": "input_password", "text": "password"}'
 
 # Submit login
-curl -X POST http://localhost:8091/click \
+curl -X POST http://localhost:9091/click \
   -H "Content-Type: application/json" \
   -d '{"testTag": "btn_login_submit"}'
 
 # Wait for chat screen
-curl -X POST http://localhost:8091/wait \
+curl -X POST http://localhost:9091/wait \
   -H "Content-Type: application/json" \
   -d '{"testTag": "input_message", "timeoutMs": 10000}'
 ```
@@ -218,18 +218,18 @@ The test automation HTTP server runs on **all platforms** when `CIRIS_TEST_MODE=
 CIRIS_TEST_MODE=true python3 -m ciris_engine.cli
 
 # 2. Wait for test server
-curl http://localhost:8091/health
+curl http://localhost:9091/health
 
 # 3. Drive UI via HTTP
-curl -X POST http://localhost:8091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
-curl -X POST http://localhost:8091/click -d '{"testTag":"btn_login_submit"}'
-curl http://localhost:8091/screen  # -> {"screen":"Interact"}
+curl -X POST http://localhost:9091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
+curl -X POST http://localhost:9091/click -d '{"testTag":"btn_login_submit"}'
+curl http://localhost:9091/screen  # -> {"screen":"Interact"}
 
 # 4. Screenshots (desktop only - java.awt.Robot)
-curl -X POST http://localhost:8091/screenshot -d '{"path":"/tmp/screenshot.png"}'
+curl -X POST http://localhost:9091/screenshot -d '{"path":"/tmp/screenshot.png"}'
 
 # 5. Mouse click (desktop only - for dropdowns, popups)
-curl -X POST http://localhost:8091/mouse-click -d '{"testTag":"input_llm_provider"}'
+curl -X POST http://localhost:9091/mouse-click -d '{"testTag":"input_llm_provider"}'
 
 # 6. Full E2E test script (wipe → setup wizard → verify)
 bash tools/test_desktop_wipe_setup.sh
@@ -247,14 +247,14 @@ xcrun devicectl device process launch -d $DEVICE_ID \
   ai.ciris.mobile
 
 # 2. Port forward test server + API
-iproxy 18091 8091 -u $IDEVICE_ID &
+iproxy 19091 9091 -u $IDEVICE_ID &
 iproxy 18080 8080 -u $IDEVICE_ID &
 
 # 3. Drive UI (same endpoints as desktop)
-curl http://127.0.0.1:18091/health   # {"status":"ok","testMode":true}
-curl http://127.0.0.1:18091/screen   # {"screen":"Login"}
-curl -X POST http://127.0.0.1:18091/click -d '{"testTag":"btn_local_login"}'
-curl -X POST http://127.0.0.1:18091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
+curl http://127.0.0.1:19091/health   # {"status":"ok","testMode":true}
+curl http://127.0.0.1:19091/screen   # {"screen":"Login"}
+curl -X POST http://127.0.0.1:19091/click -d '{"testTag":"btn_local_login"}'
+curl -X POST http://127.0.0.1:19091/input -d '{"testTag":"input_username","text":"admin","clearFirst":true}'
 
 # 4. Screenshots (via pymobiledevice3, not test server)
 python3 -m pymobiledevice3 developer dvt screenshot /tmp/ios_screen.png

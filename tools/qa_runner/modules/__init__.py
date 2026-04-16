@@ -15,6 +15,7 @@ from .cirisnode_tests import CIRISNodeTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
+from .degraded_mode_tests import DegradedModeTests
 from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
@@ -55,6 +56,7 @@ __all__ = [
     "SDKTestModule",
     "SolitudeLiveTests",
     "ConsentTests",
+    "DegradedModeTests",
     "DSARTests",
     "DSARMultiSourceTests",
     "DSARTicketWorkflowTests",

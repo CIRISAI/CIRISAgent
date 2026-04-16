@@ -1642,6 +1642,8 @@
     "llm_on_device_available": "オンデバイス対応",
     "llm_on_device_capable": "オンデバイスLLM対応完了",
     "llm_on_device_coming_soon": "オンデバイス近日対応",
+    "llm_local_inference_performance_warning": "一部のデバイスではローカル推論が遅くなる場合があります",
+    "llm_local_server_performance_note": "パフォーマンスはデバイスの性能とモデルサイズに依存します",
     "llm_settings_title": "LLM設定",
     "llm_settings_status": "ステータス概要",
     "llm_settings_providers": "プロバイダー",

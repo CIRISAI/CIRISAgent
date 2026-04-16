@@ -1676,7 +1676,9 @@
     "llm_success_threshold": "Erfolge zum Schließen",
     "llm_rate_limit_cooldown": "Standard-Cooldown",
     "llm_max_retries": "Maximale Wiederholungen",
-    "llm_max_wait": "Maximale Wartezeit"
+    "llm_max_wait": "Maximale Wartezeit",
+    "llm_local_inference_performance_warning": "Lokale Inferenz kann auf einigen Geräten langsam sein",
+    "llm_local_server_performance_note": "Die Leistung hängt von den Gerätefähigkeiten und der Modellgröße ab"
   },
   "prompts": {
     "dma": {

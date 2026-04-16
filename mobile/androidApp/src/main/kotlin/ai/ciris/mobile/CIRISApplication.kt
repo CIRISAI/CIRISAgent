@@ -2,6 +2,7 @@ package ai.ciris.mobile
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import ai.ciris.mobile.shared.platform.ScheduledTaskBroadcastReceiver
 import ai.ciris.mobile.shared.platform.ScheduledTaskNotifications
@@ -37,6 +38,54 @@ class CIRISApplication : Application() {
 
         // Run migrations for version upgrades (e.g., 1.X -> 2.X)
         MigrationManager.runMigrations(this)
+
+        // Extract bundled llama-server binary for on-device LLM inference
+        extractLlamaServerBinary()
+    }
+
+    /**
+     * Extract the bundled llama-server binary from assets to the app's files directory.
+     * Only extracts for ARM64 devices (arm64-v8a ABI).
+     */
+    private fun extractLlamaServerBinary() {
+        val tag = "LlamaServer"
+
+        // Only extract for ARM64 devices
+        val supportedAbis = Build.SUPPORTED_ABIS
+        if (!supportedAbis.contains("arm64-v8a")) {
+            Log.i(tag, "Device ABI not ARM64, skipping llama-server extraction: ${supportedAbis.joinToString()}")
+            return
+        }
+
+        val binDir = File(filesDir, "bin")
+        val targetFile = File(binDir, "llama-server")
+
+        // Skip if already extracted and executable
+        if (targetFile.exists() && targetFile.canExecute()) {
+            Log.i(tag, "llama-server already extracted at ${targetFile.absolutePath}")
+            return
+        }
+
+        try {
+            // Create bin directory
+            if (!binDir.exists()) {
+                binDir.mkdirs()
+            }
+
+            // Copy from assets
+            assets.open("bin/llama-server-arm64").use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            // Make executable
+            targetFile.setExecutable(true, false)
+
+            Log.i(tag, "Extracted llama-server to ${targetFile.absolutePath} (${targetFile.length()} bytes)")
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to extract llama-server: ${e.message}", e)
+        }
     }
 
     override fun onTerminate() {

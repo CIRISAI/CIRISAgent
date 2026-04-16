@@ -633,13 +633,19 @@ def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[An
             agent_task = task
             break
 
-    # In first-run mode, there is no agent task - just monitor adapters
+    # In first-run mode or when services are disabled, there is no agent task - just monitor adapters
+    from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
     first_run = is_first_run()
-    if not agent_task and not first_run:
+    services_disabled = get_ciris_services_disabled()
+
+    if not agent_task and not first_run and not services_disabled:
         raise RuntimeError("Agent processor task not found - initialization may have failed")
 
     if first_run and not agent_task:
         logger.info("First-run mode: Monitoring adapters only (no agent processor)")
+    elif services_disabled and not agent_task:
+        logger.warning("No LLM provider configured: Running in limited mode (API-only, no agent processing)")
+        logger.warning("Add an LLM provider in Settings > LLM Configuration to enable full functionality")
 
     # Set up monitoring tasks
     runtime._ensure_shutdown_event()

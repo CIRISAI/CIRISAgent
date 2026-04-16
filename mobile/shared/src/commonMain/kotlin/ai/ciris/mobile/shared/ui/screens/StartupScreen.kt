@@ -312,11 +312,42 @@ fun StartupScreen(
             }
 
             // Error section with debug info (appears on error)
-            // Wrapped in SelectionContainer for easy copy/paste of error details
+            // Retry button is shown FIRST (above the fold), then error details below
             errorMessage?.let { error ->
                 Spacer(Modifier.height(16.dp))
 
-                // Error message box - all text is selectable
+                // Error title and retry button - always visible above the fold
+                Text(
+                    text = localizedString("mobile.startup_engine_failed"),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = CIRISColors.ErrorRed,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Error message (short)
+                Text(
+                    text = error,
+                    fontSize = 12.sp,
+                    color = CIRISColors.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Retry button - immediately visible
+                Button(
+                    onClick = { viewModel.retry() },
+                    modifier = Modifier.testableClickable("btn_startup_retry") { viewModel.retry() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CIRISColors.SignetTeal
+                    )
+                ) {
+                    Text(localizedString("mobile.startup_retry"), color = Color.White)
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // Debug info box - scrollable details below the fold
                 SelectionContainer {
                     Column(
                         modifier = Modifier
@@ -328,22 +359,6 @@ fun StartupScreen(
                             .padding(16.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
-                        Text(
-                            text = localizedString("mobile.startup_engine_failed"),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CIRISColors.ErrorRed,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-
-                        // Error message
-                        Text(
-                            text = error,
-                            fontSize = 12.sp,
-                            color = CIRISColors.TextSecondary,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-
                         // Debug info section
                         Text(
                             text = localizedString("mobile.startup_debug_info"),
@@ -371,19 +386,6 @@ fun StartupScreen(
                             textAlign = TextAlign.Start
                         )
                     }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Retry button
-                Button(
-                    onClick = { viewModel.retry() },
-                    modifier = Modifier.testableClickable("btn_startup_retry") { viewModel.retry() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CIRISColors.SignetTeal
-                    )
-                ) {
-                    Text(localizedString("mobile.startup_retry"), color = Color.White)
                 }
             }
         }

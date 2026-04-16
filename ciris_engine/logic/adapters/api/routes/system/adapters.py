@@ -12,6 +12,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import ValidationError
 
+from ciris_engine.logic.persistence.llm_providers import disable_adapter_in_env
 from ciris_engine.schemas.adapters.discovery import (
     AdapterDiscoveryReport,
     EnrichmentCacheResponse,
@@ -958,6 +959,15 @@ async def unload_adapter(
         # Log failures explicitly
         if not result.success:
             logger.error(f"Adapter unload failed: {result.error}")
+        else:
+            # Persist the adapter disable to .env so it doesn't reload on restart
+            adapter_type_or_id = result.adapter_type or adapter_id
+            # Sanitize for logging (prevent log injection)
+            safe_id = adapter_id.replace("\n", "").replace("\r", "")[:100]
+            if disable_adapter_in_env(adapter_type_or_id):
+                logger.info("Adapter %s disabled in .env for persistence", safe_id)
+            else:
+                logger.warning("Could not persist adapter %s disable to .env", safe_id)
 
         # Convert response
         response = AdapterOperationResult(

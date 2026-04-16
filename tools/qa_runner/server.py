@@ -626,6 +626,10 @@ class APIServerManager:
         env["PYTHONUNBUFFERED"] = "1"
         env["CIRIS_TESTING_MODE"] = "true"  # Enable testing mode for admin user creation
 
+        # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
+        if not self.config.mock_llm:
+            env.pop("CIRIS_MOCK_LLM", None)  # Remove if present
+
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
             project_root = Path(__file__).parent.parent.parent

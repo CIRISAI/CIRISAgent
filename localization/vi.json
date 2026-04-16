@@ -1928,6 +1928,8 @@
     "llm_on_device_available": "Có khả năng trên thiết bị",
     "llm_on_device_capable": "LLM trên thiết bị sẵn sàng",
     "llm_on_device_coming_soon": "Trên thiết bị sắp ra mắt",
+    "llm_local_inference_performance_warning": "Suy luận cục bộ có thể chậm trên một số thiết bị",
+    "llm_local_server_performance_note": "Hiệu suất phụ thuộc vào khả năng thiết bị và kích thước mô hình",
     "llm_settings_title": "Cấu hình LLM",
     "llm_settings_status": "Tổng quan trạng thái",
     "llm_settings_providers": "Nhà cung cấp",

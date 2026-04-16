@@ -21,6 +21,13 @@ from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, Circui
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from ciris_engine.logic.registries.base import Priority as InternalPriority, get_global_registry
+from ciris_engine.logic.persistence.llm_providers import (
+    LLMProviderConfig,
+    create_provider as persist_create_provider,
+    delete_provider as persist_delete_provider,
+    set_ciris_services_disabled,
+    get_ciris_services_disabled,
+)
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .llm_schemas import (
@@ -33,6 +40,7 @@ from .llm_schemas import (
     CircuitBreakerResetResponse,
     CircuitBreakerState,
     CircuitBreakerStatus,
+    CirisServicesStatusResponse,
     DistributionStrategy,
     DistributionStrategyUpdateRequest,
     DistributionStrategyUpdateResponse,
@@ -115,6 +123,20 @@ def get_llm_bus(request: Request) -> LLMBus:
     return llm_bus
 
 
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize user input for safe logging.
+
+    Removes control characters, newlines, and truncates to prevent log injection.
+    """
+    import re
+    # Remove control characters (includes \r\n which are \x0d\x0a)
+    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    # Truncate to reasonable length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 def map_circuit_state(state: CircuitState) -> CircuitBreakerState:
     """Map internal CircuitState to API schema CircuitBreakerState."""
     mapping = {
@@ -145,6 +167,8 @@ def get_internal_strategy(strategy: DistributionStrategy) -> InternalDistributio
         DistributionStrategy.LEAST_LOADED: InternalDistributionStrategy.LEAST_LOADED,
     }
     return mapping.get(strategy, InternalDistributionStrategy.LATENCY_BASED)
+
+
 
 
 def map_priority_to_api(priority: InternalPriority) -> ProviderPriority:
@@ -223,6 +247,82 @@ def build_provider_metrics(metrics: Any) -> ProviderMetrics:
     )
 
 
+def _count_cb_state(
+    cb: Optional[CircuitBreaker],
+) -> tuple[bool, str]:
+    """Count circuit breaker state and availability.
+
+    Returns:
+        (is_available, state_name) where state_name is 'closed', 'open', or 'half_open'
+    """
+    if cb is None:
+        return True, "closed"
+    if cb.state == CircuitState.CLOSED:
+        return True, "closed"
+    if cb.state == CircuitState.OPEN:
+        return False, "open"
+    if cb.state == CircuitState.HALF_OPEN:
+        return True, "half_open"
+    return True, "closed"
+
+
+def _aggregate_provider_stats(
+    llm_bus: LLMBus, registered_providers: list[Any]
+) -> tuple[int, int, int, int, int, int, int, float]:
+    """Aggregate stats across all providers.
+
+    Returns:
+        (providers_available, providers_rate_limited, cb_closed, cb_open, cb_half_open,
+         total_requests, failed_requests, total_latency)
+    """
+    providers_available = 0
+    providers_rate_limited = 0
+    cb_closed = 0
+    cb_open = 0
+    cb_half_open = 0
+    total_requests = 0
+    failed_requests = 0
+    total_latency = 0.0
+
+    for provider_info in registered_providers:
+        name = provider_info.name
+        cb = llm_bus.circuit_breakers.get(name)
+
+        # Count circuit breaker state and availability
+        is_available, state_name = _count_cb_state(cb)
+        if is_available:
+            providers_available += 1
+        if state_name == "closed":
+            cb_closed += 1
+        elif state_name == "open":
+            cb_open += 1
+        elif state_name == "half_open":
+            cb_half_open += 1
+
+        # Check rate limiting
+        rate_limited_until = llm_bus._rate_limited_until.get(name, 0)
+        if rate_limited_until > time.time():
+            providers_rate_limited += 1
+
+        # Aggregate metrics from service_metrics
+        if name in llm_bus.service_metrics:
+            metrics = llm_bus.service_metrics[name]
+            total_requests += metrics.total_requests
+            failed_requests += metrics.failed_requests
+            total_latency += metrics.total_latency_ms
+
+    return (
+        providers_available,
+        providers_rate_limited,
+        cb_closed,
+        cb_open,
+        cb_half_open,
+        total_requests,
+        failed_requests,
+        total_latency,
+    )
+
+
 # ============================================================================
 # GET /system/llm/status - Bus status and aggregate metrics
 # ============================================================================
@@ -245,42 +345,26 @@ async def get_llm_status(
     provider availability, and circuit breaker state summary.
     """
     llm_bus = get_llm_bus(request)
+    registry = get_global_registry()
 
-    # Count providers and CB states
-    providers_total = len(llm_bus.circuit_breakers)
-    providers_available = 0
-    providers_rate_limited = 0
-    cb_closed = 0
-    cb_open = 0
-    cb_half_open = 0
+    # Get total providers from registry (not circuit_breakers which are lazy)
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+    logger.info("[LLM_DEBUG] /status: registry has %d LLM providers", len(registered_providers))
+    for p in registered_providers:
+        logger.info("[LLM_DEBUG] /status:   - %s (priority=%s)", p.name, p.priority)
+    providers_total = len(registered_providers)
 
-    # Aggregate metrics
-    total_requests = 0
-    failed_requests = 0
-    total_latency = 0.0
-
-    for name, cb in llm_bus.circuit_breakers.items():
-        # Count CB states
-        if cb.state == CircuitState.CLOSED:
-            cb_closed += 1
-            providers_available += 1
-        elif cb.state == CircuitState.OPEN:
-            cb_open += 1
-        elif cb.state == CircuitState.HALF_OPEN:
-            cb_half_open += 1
-            providers_available += 1
-
-        # Check rate limiting
-        rate_limited_until = llm_bus._rate_limited_until.get(name, 0)
-        if rate_limited_until > time.time():
-            providers_rate_limited += 1
-
-        # Aggregate metrics from service_metrics
-        if name in llm_bus.service_metrics:
-            metrics = llm_bus.service_metrics[name]
-            total_requests += metrics.total_requests
-            failed_requests += metrics.failed_requests
-            total_latency += metrics.total_latency_ms
+    # Aggregate all stats using helper function
+    (
+        providers_available,
+        providers_rate_limited,
+        cb_closed,
+        cb_open,
+        cb_half_open,
+        total_requests,
+        failed_requests,
+        total_latency,
+    ) = _aggregate_provider_stats(llm_bus, registered_providers)
 
     # Calculate averages
     average_latency = total_latency / total_requests if total_requests > 0 else 0.0
@@ -288,9 +372,9 @@ async def get_llm_status(
 
     # Calculate uptime
     uptime = 0.0
-    if hasattr(llm_bus, "_start_time") and llm_bus._start_time:
-        now = datetime.now(timezone.utc)
-        uptime = (now - llm_bus._start_time).total_seconds()
+    start_time = getattr(llm_bus, "_start_time", None)
+    if start_time:
+        uptime = (datetime.now(timezone.utc) - start_time).total_seconds()
 
     return SuccessResponse(
         data=LLMBusStatusResponse(
@@ -330,13 +414,26 @@ async def get_llm_providers(
     Get status of all LLM providers.
 
     Returns each provider's health, metrics, and circuit breaker status.
+    Providers are read from ServiceRegistry (not circuit breakers which are lazy).
     """
     llm_bus = get_llm_bus(request)
     registry = get_global_registry()
 
     providers = []
-    for name, cb in llm_bus.circuit_breakers.items():
-        # Get service metrics
+
+    # Get all registered LLM providers from registry (not from circuit_breakers which are lazy)
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+    logger.info(f"[LLM_DEBUG] /providers: registry has {len(registered_providers)} LLM providers")
+    for p in registered_providers:
+        logger.info(f"[LLM_DEBUG] /providers:   - {p.name} (priority={p.priority})")
+
+    for provider_info in registered_providers:
+        name = provider_info.name
+
+        # Check if circuit breaker exists (created lazily on first use)
+        cb = llm_bus.circuit_breakers.get(name)
+
+        # Get service metrics (may not exist until first request)
         metrics = llm_bus.service_metrics.get(name)
         provider_metrics = build_provider_metrics(metrics) if metrics else ProviderMetrics()
 
@@ -347,12 +444,21 @@ async def get_llm_providers(
             provider_metrics.is_rate_limited = True
             provider_metrics.rate_limit_cooldown_remaining_seconds = rate_limited_until - current_time
 
-        # Determine health (CB not OPEN)
-        healthy = cb.state != CircuitState.OPEN
+        # Determine health: if no CB yet, assume healthy; otherwise check CB state
+        if cb is not None:
+            healthy = cb.state != CircuitState.OPEN
+            cb_status = build_cb_status(cb)
+        else:
+            healthy = True
+            cb_status = CircuitBreakerStatus(
+                state="closed",
+                failure_count=0,
+                success_count=0,
+                last_failure_time=None,
+            )
 
-        # Get actual priority from registry
-        provider_info = registry.get_provider_by_name(name, ServiceType.LLM)
-        priority = map_priority_to_api(provider_info.priority) if provider_info else ProviderPriority.NORMAL
+        # Get priority from provider_info
+        priority = map_priority_to_api(provider_info.priority) if provider_info.priority else ProviderPriority.NORMAL
 
         providers.append(
             LLMProviderStatus(
@@ -361,7 +467,7 @@ async def get_llm_providers(
                 enabled=True,  # All registered providers are enabled
                 priority=priority,
                 metrics=provider_metrics,
-                circuit_breaker=build_cb_status(cb),
+                circuit_breaker=cb_status,
             )
         )
 
@@ -577,6 +683,12 @@ async def update_provider_priority(
     - low: Use when others unavailable
     - fallback: Last resort
     """
+    from ciris_engine.logic.persistence.llm_providers import (
+        list_providers,
+        update_provider,
+        LLMProviderConfig,
+    )
+
     registry = get_global_registry()
 
     # Find the provider to get current priority
@@ -587,10 +699,32 @@ async def update_provider_priority(
     previous_priority = map_priority_to_api(provider.priority)
     new_internal_priority = get_internal_priority(body.priority)
 
-    # Update the priority
+    # Update the priority in registry (in-memory)
     success = registry.set_provider_priority(name, new_internal_priority, ServiceType.LLM)
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to update priority for '{name}'")
+
+    # Persist the priority change to survive restarts
+    try:
+        config_service = request.app.state.runtime.config_service if hasattr(request.app.state, 'runtime') else None
+        providers = await list_providers(config_service)
+        if name in providers:
+            # Update the priority in the persisted config
+            provider_config = providers[name]
+            updated_config = LLMProviderConfig(
+                provider_id=provider_config.provider_id,
+                base_url=provider_config.base_url,
+                model=provider_config.model,
+                api_key=provider_config.api_key,
+                priority=body.priority.value,
+            )
+            result = await update_provider(name, updated_config, config_service)
+            if result.success:
+                logger.info(f"Provider '{name}' priority persisted: {body.priority.value}")
+            else:
+                logger.warning(f"Provider '{name}' priority updated but not persisted: {result.error}")
+    except Exception as e:
+        logger.warning(f"Failed to persist priority for '{name}': {e}")
 
     logger.info(f"Provider '{name}' priority changed from {previous_priority} to {body.priority}")
 
@@ -641,7 +775,24 @@ async def delete_provider(
     if not success:
         raise HTTPException(status_code=500, detail=f"Failed to unregister '{name}'")
 
-    logger.info(f"Provider '{name}' unregistered")
+    safe_name = _sanitize_for_log(name)
+    logger.info("Provider '%s' unregistered", safe_name)
+
+    # Remove from persisted config (both graph AND .env)
+    config_service = getattr(request.app.state, "config_service", None)
+    persist_result = await persist_delete_provider(name=name, config_service=config_service)
+
+    if persist_result.success:
+        logger.info(
+            "Removed provider '%s' from persisted config (graph=%s, env=%s)",
+            safe_name,
+            persist_result.graph_persisted,
+            persist_result.env_persisted,
+        )
+    elif persist_result.error and "not found" not in persist_result.error:
+        # Only warn if it's not a "not found" error (provider might not have been persisted)
+        safe_error = _sanitize_for_log(persist_result.error or "", max_length=128)
+        logger.warning("Failed to remove provider '%s' from persisted config: %s", safe_name, safe_error)
 
     return SuccessResponse(
         data=ProviderDeleteResponse(
@@ -725,11 +876,16 @@ async def add_provider(
     internal_priority = priority_mapping.get(body.priority, InternalPriority.FALLBACK)
 
     try:
+        # For local servers, use "local" as the API key (convention for local inference)
+        api_key = body.api_key
+        if not api_key and body.provider_id == "local":
+            api_key = "local"
+
         # Create config
         llm_config = OpenAIConfig(
             base_url=body.base_url,
             model_name=body.model or "default",
-            api_key=body.api_key or "",  # Empty for local servers
+            api_key=api_key or "",
             instructor_mode="JSON",
             timeout_seconds=30,
             max_retries=2,
@@ -760,6 +916,46 @@ async def add_provider(
 
         logger.info(f"Added LLM provider '{provider_name}' with priority {body.priority.value}")
 
+        # Persist provider configuration for restart survival (both graph AND .env)
+        provider_config = LLMProviderConfig(
+            provider_id=body.provider_id,
+            base_url=body.base_url,
+            model=body.model or "default",
+            api_key=body.api_key or "",
+            priority=body.priority.value,
+        )
+
+        config_service = getattr(request.app.state, "config_service", None)
+        persist_result = await persist_create_provider(
+            name=provider_name,
+            config=provider_config,
+            config_service=config_service,
+        )
+
+        if persist_result.success:
+            logger.info(
+                f"Persisted LLM provider '{provider_name}' "
+                f"(graph={persist_result.graph_persisted}, env={persist_result.env_persisted})"
+            )
+        else:
+            logger.warning(f"Failed to persist provider '{provider_name}': {persist_result.error}")
+
+        # Hot-reload: If agent processor wasn't initialized (no LLM at startup),
+        # trigger component rebuild now that we have a provider
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime and not getattr(runtime, "agent_processor", None):
+            logger.info(f"Hot-loading agent processor with new LLM provider '{provider_name}'")
+            try:
+                # Set the LLM service reference on service_initializer
+                # Note: runtime.llm_service is a read-only property that delegates to service_initializer
+                if hasattr(runtime, "service_initializer") and runtime.service_initializer:
+                    runtime.service_initializer.llm_service = service
+                # Build components (creates agent processor)
+                await runtime._build_components()
+                logger.info("Agent processor hot-loaded successfully")
+            except Exception as e:
+                logger.warning(f"Failed to hot-load agent processor: {e}")
+
         return SuccessResponse(
             data=AddProviderResponse(
                 success=True,
@@ -777,3 +973,126 @@ async def add_provider(
             status_code=500,
             detail=f"Failed to add provider: {str(e)}"
         )
+
+
+# ============================================================================
+# POST /system/llm/ciris-services/disable - Disable CIRIS hosted services
+# ============================================================================
+
+
+@router.post(
+    "/ciris-services/disable",
+    responses={
+        500: {"description": "Failed to disable CIRIS services"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def disable_ciris_services(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Disable CIRIS hosted services (LLM providers and tools).
+
+    This sets CIRIS_SERVICES_DISABLED=true in the .env file, which:
+    - Prevents CIRIS LLM providers from being created on startup
+    - Disables CIRIS hosted tools
+    - Takes effect immediately for new requests and persists across restarts
+    """
+    registry = get_global_registry()
+
+    # Set the flag in .env
+    if not set_ciris_services_disabled(True):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
+        )
+
+    # Also set in current process environment for immediate effect
+    import os
+    os.environ["CIRIS_SERVICES_DISABLED"] = "true"
+
+    # Unregister existing CIRIS providers for immediate effect
+    registered_providers = registry._services.get(ServiceType.LLM, [])
+    ciris_providers = [p for p in registered_providers if "ciris" in p.name.lower()]
+
+    for provider in ciris_providers:
+        registry.unregister(provider.name)
+        logger.info(f"Unregistered CIRIS provider: {provider.name}")
+
+    logger.info(f"CIRIS services disabled - {len(ciris_providers)} providers unregistered")
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=True,
+            message=f"CIRIS services disabled. {len(ciris_providers)} provider(s) unregistered.",
+        )
+    )
+
+
+# ============================================================================
+# POST /system/llm/ciris-services/enable - Re-enable CIRIS hosted services
+# ============================================================================
+
+
+@router.post(
+    "/ciris-services/enable",
+    responses={
+        500: {"description": "Failed to enable CIRIS services"},
+    },
+    dependencies=[SetupOrAdminDep],
+)
+async def enable_ciris_services(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Re-enable CIRIS hosted services.
+
+    This sets CIRIS_SERVICES_DISABLED=false in the .env file.
+    CIRIS providers will be registered on next restart.
+    """
+    # Set the flag in .env
+    if not set_ciris_services_disabled(False):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
+        )
+
+    # Clear in current process environment
+    import os
+    os.environ.pop("CIRIS_SERVICES_DISABLED", None)
+
+    logger.info("CIRIS services re-enabled (will take effect on next restart)")
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=False,
+            message="CIRIS services enabled. Providers will be registered on next restart.",
+        )
+    )
+
+
+# ============================================================================
+# GET /system/llm/ciris-services/status - Get CIRIS services status
+# ============================================================================
+
+
+@router.get(
+    "/ciris-services/status",
+    dependencies=[SetupOrAdminDep],
+)
+async def get_ciris_services_status(
+    request: Request,
+) -> SuccessResponse[CirisServicesStatusResponse]:
+    """
+    Get the current CIRIS services status.
+
+    Returns whether CIRIS services are disabled.
+    """
+    disabled = get_ciris_services_disabled()
+
+    return SuccessResponse(
+        data=CirisServicesStatusResponse(
+            disabled=disabled,
+            message="CIRIS services are disabled" if disabled else "CIRIS services are enabled",
+        )
+    )

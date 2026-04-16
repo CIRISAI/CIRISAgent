@@ -1707,6 +1707,8 @@
     "llm_on_device_available": "O ní agbara lori ohun elo",
     "llm_on_device_capable": "LLM lori ohun elo ti o se",
     "llm_on_device_coming_soon": "Lori ohun elo ni laipe",
+    "llm_local_inference_performance_warning": "Ìmọ̀ àgbègbè lè lọ́ra lórí àwọn ẹ̀rọ kan",
+    "llm_local_server_performance_note": "Ìṣe é dá lórí agbára ẹ̀rọ àti ìwọ̀n àwòṣe",
     "llm_settings_advanced": "Àwọn Ètò Ilọsíwájú",
     "llm_settings_auth": "Ìjẹ́rìísí",
     "llm_distribution_round_robin": "Yíyíká Yíyíká",

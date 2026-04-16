@@ -52,6 +52,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -1481,6 +1482,37 @@ private fun LlmConfigurationStep(
             // Local providers that need endpoint URL
             val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "openai_compatible", "other")
 
+            // Performance warning for local inference providers
+            val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
+                state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
+            if (state.llmProvider == "local_inference" || isMobileLocalProvider) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SetupColors.InfoLight.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = SetupColors.Primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = localizedString("mobile.llm_local_inference_performance_warning"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SetupColors.TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             // Local Inference Server Discovery UI
             if (state.llmProvider == "local_inference") {
                 LocalLlmServerDiscovery(
@@ -1551,8 +1583,7 @@ private fun LlmConfigurationStep(
             // - LocalAI (uses Ollama with no key)
             // - local, local_inference (discovered local servers)
             // - mobile_local (on-device Gemma 4)
-            val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
-                state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
+            // Note: isMobileLocalProvider already defined above for performance warning
             val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
             if (!isKeylessProvider && !isMobileLocalProvider) {
                 val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {

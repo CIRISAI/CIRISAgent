@@ -1709,6 +1709,8 @@
     "llm_on_device_available": "डिव्हाइसवर सक्षम",
     "llm_on_device_capable": "डिव्हाइसवर LLM तयार",
     "llm_on_device_coming_soon": "डिव्हाइसवर लवकरच",
+    "llm_local_inference_performance_warning": "स्थानिक अनुमान काही उपकरणांवर मंद असू शकते",
+    "llm_local_server_performance_note": "कामगिरी डिव्हाइस क्षमता आणि मॉडेल आकारावर अवलंबून असते",
     "llm_distribution_round_robin": "राउंड रॉबिन",
     "llm_distribution_latency": "विलंबता आधारित (शिफारस केलेले)",
     "llm_distribution_random": "यादृच्छिक",

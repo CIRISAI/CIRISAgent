@@ -288,6 +288,10 @@ class StartLocalServerRequest(BaseModel):
 
     Used when the device is capable of running local inference but no server
     is currently detected. The server will be started in the background.
+
+    If the model needs to be downloaded and confirm_download is False, the
+    response will have requires_download=True. Retry with confirm_download=True
+    to proceed with the download.
     """
 
     server_type: str = Field(
@@ -304,6 +308,10 @@ class StartLocalServerRequest(BaseModel):
         le=65535,
         description="Port for the server to listen on",
     )
+    confirm_download: bool = Field(
+        default=False,
+        description="If True, automatically download missing model. If False, return confirmation prompt.",
+    )
 
 
 class StartLocalServerResponse(BaseModel):
@@ -318,6 +326,14 @@ class StartLocalServerResponse(BaseModel):
     estimated_ready_seconds: int = Field(
         default=60,
         description="Estimated seconds until server is ready for requests",
+    )
+    requires_download: bool = Field(
+        default=False,
+        description="If True, model needs to be downloaded. Retry with confirm_download=True.",
+    )
+    download_size: Optional[str] = Field(
+        None,
+        description="Human-readable download size (e.g., '~2.5 GB') if requires_download=True",
     )
 
 

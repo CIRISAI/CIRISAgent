@@ -21,12 +21,12 @@ export CIRIS_TEST_PORT=9000
 
 ## API Endpoints
 
-The server runs on `http://localhost:8091` by default.
+The server runs on `http://localhost:9091` by default.
 
 ### Health Check
 
 ```bash
-curl http://localhost:8091/health
+curl http://localhost:9091/health
 ```
 
 Response:
@@ -40,7 +40,7 @@ Response:
 ### Get Current Screen
 
 ```bash
-curl http://localhost:8091/screen
+curl http://localhost:9091/screen
 ```
 
 Response:
@@ -53,7 +53,7 @@ Response:
 ### Get UI Element Tree
 
 ```bash
-curl http://localhost:8091/tree
+curl http://localhost:9091/tree
 ```
 
 Response:
@@ -96,7 +96,7 @@ Response:
 ### Click Element
 
 ```bash
-curl -X POST http://localhost:8091/click \
+curl -X POST http://localhost:9091/click \
   -H "Content-Type: application/json" \
   -d '{"testTag": "btn_login_submit"}'
 ```
@@ -114,7 +114,7 @@ Response:
 ### Input Text
 
 ```bash
-curl -X POST http://localhost:8091/input \
+curl -X POST http://localhost:9091/input \
   -H "Content-Type: application/json" \
   -d '{"testTag": "input_username", "text": "admin", "clearFirst": true}'
 ```
@@ -132,7 +132,7 @@ Response:
 ### Wait for Element
 
 ```bash
-curl -X POST http://localhost:8091/wait \
+curl -X POST http://localhost:9091/wait \
   -H "Content-Type: application/json" \
   -d '{"testTag": "btn_send", "timeoutMs": 5000}'
 ```
@@ -157,7 +157,7 @@ Response (timeout):
 ### Get Element Info
 
 ```bash
-curl http://localhost:8091/element/input_username
+curl http://localhost:9091/element/input_username
 ```
 
 Response:
@@ -191,31 +191,31 @@ Response:
 
 ```bash
 # 1. Check we're on login screen
-curl http://localhost:8091/screen
+curl http://localhost:9091/screen
 # {"screen":"Login"}
 
 # 2. Wait for username field
-curl -X POST http://localhost:8091/wait \
+curl -X POST http://localhost:9091/wait \
   -d '{"testTag": "input_username", "timeoutMs": 10000}'
 
 # 3. Enter username
-curl -X POST http://localhost:8091/input \
+curl -X POST http://localhost:9091/input \
   -d '{"testTag": "input_username", "text": "admin"}'
 
 # 4. Enter password
-curl -X POST http://localhost:8091/input \
+curl -X POST http://localhost:9091/input \
   -d '{"testTag": "input_password", "text": "password123"}'
 
 # 5. Click login
-curl -X POST http://localhost:8091/click \
+curl -X POST http://localhost:9091/click \
   -d '{"testTag": "btn_login_submit"}'
 
 # 6. Wait for chat screen
-curl -X POST http://localhost:8091/wait \
+curl -X POST http://localhost:9091/wait \
   -d '{"testTag": "input_message", "timeoutMs": 10000}'
 
 # 7. Verify we're on Interact screen
-curl http://localhost:8091/screen
+curl http://localhost:9091/screen
 # {"screen":"Interact"}
 ```
 

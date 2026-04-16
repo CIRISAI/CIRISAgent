@@ -261,6 +261,13 @@ def main():
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
 
+    # Degraded mode tests require --live (no mock LLM)
+    if QAModule.DEGRADED_MODE in modules and not args.live:
+        print("❌ degraded_mode module requires --live flag")
+        print("   This module tests adding/removing real LLM providers at runtime")
+        print("   Example: python3 -m tools.qa_runner degraded_mode --live")
+        sys.exit(1)
+
     # HE-300 benchmark module-specific defaults
     is_he300 = QAModule.HE300_BENCHMARK in modules
     if is_he300:

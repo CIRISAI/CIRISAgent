@@ -278,11 +278,32 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             // Consider healthy if in WORK state (normal) or SETUP state (first-run ready, case-insensitive)
             val upper = cognitiveState.uppercase()
             val isReady = upper == "WORK" || upper == "SETUP"
-            if (!isReady) {
-                Log.d(TAG, "[checkHealth] Not ready yet - cognitive_state: $cognitiveState")
+
+            // Also accept "no LLM provider" mode where cognitive_state is null/empty
+            // but services are mostly running (21/22 or more)
+            // Note: optString returns "null" (the string) for JSON null values
+            val cognitiveStateIsNullOrEmpty = cognitiveState.isEmpty() || cognitiveState == "null"
+            val servicesDisabled = if (servicesOnline >= totalServices - 1 && servicesOnline > 0) {
+                // Check if there's a warning about no LLM provider
+                val warnings = data?.optJSONArray("warnings")
+                val hasNoLlmWarning = warnings?.let { arr ->
+                    (0 until arr.length()).any { i ->
+                        arr.optJSONObject(i)?.optString("code", "") == "NO_LLM_PROVIDER"
+                    }
+                } ?: false
+                // Accept if we have N-1 services and either a warning or null cognitive state
+                hasNoLlmWarning || cognitiveStateIsNullOrEmpty
+            } else {
+                false
             }
 
-            Result.success(isReady)
+            if (!isReady && !servicesDisabled) {
+                Log.d(TAG, "[checkHealth] Not ready yet - cognitive_state: $cognitiveState, services: $servicesOnline/$totalServices")
+            } else if (servicesDisabled) {
+                Log.i(TAG, "[checkHealth] Services disabled mode - proceeding with $servicesOnline/$totalServices services")
+            }
+
+            Result.success(isReady || servicesDisabled)
         } catch (e: Exception) {
             Log.d(TAG, "[checkHealth] Exception: ${e.message}")
             Result.success(false)

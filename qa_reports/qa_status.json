@@ -98,13 +98,22 @@
       "status": "passing",
       "duration_seconds": 8.79,
       "context": null
+    },
+    "degraded_mode": {
+      "last_run": "2026-04-16T04:21:21.686185+00:00",
+      "passed": 7,
+      "failed": 0,
+      "total": 7,
+      "status": "passing",
+      "duration_seconds": 23.53,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 11,
-    "passing": 11,
+    "total_modules": 12,
+    "passing": 12,
     "failing": 0,
     "not_run": 0
   },
-  "last_updated": "2026-04-14T15:17:00.073628+00:00"
+  "last_updated": "2026-04-16T04:21:21.686258+00:00"
 }

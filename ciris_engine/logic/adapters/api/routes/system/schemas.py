@@ -40,6 +40,7 @@ class SystemHealthResponse(BaseModel):
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state if available")
     timestamp: datetime = Field(..., description="Current server time")
     warnings: List[SystemWarning] = Field(default_factory=list, description="System warnings requiring attention")
+    degraded_mode: bool = Field(False, description="True when running without a working LLM provider")
 
     @field_serializer("timestamp")
     def serialize_ts(self, timestamp: datetime, _info: Any) -> Optional[str]:

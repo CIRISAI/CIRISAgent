@@ -8,20 +8,39 @@ import ai.ciris.mobile.shared.models.ProviderPriority
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
+ * Adapter item for display in the LLM Settings screen.
+ * Shows adapters that provide LLM services.
+ */
+data class LlmAdapterItem(
+    val adapterId: String,
+    val adapterType: String,
+    val isRunning: Boolean,
+    val servicesRegistered: List<String>,
+    val description: String
+)
+
+/**
  * LLM Settings ViewModel
  *
  * Manages LLM Bus runtime configuration:
  * - Bus status and provider list
+ * - LLM-capable adapters with CRUD
  * - Distribution strategy
  * - Circuit breaker management
  * - Provider priority management
  * - Local server discovery
+ *
+ * Follows the Adapters page patterns:
+ * - Operation coalescing (prevent concurrent ops)
+ * - Transient status messages with auto-dismiss
+ * - Lazy detail loading with caching
  */
 class LLMSettingsViewModel(
     private val apiClient: CIRISApiClient
@@ -29,6 +48,7 @@ class LLMSettingsViewModel(
 
     companion object {
         private const val TAG = "LLMSettingsViewModel"
+        private const val MESSAGE_DISMISS_DELAY_MS = 3000L
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -53,6 +73,10 @@ class LLMSettingsViewModel(
     private val _llmBusStatus = MutableStateFlow<LlmBusStatus?>(null)
     val llmBusStatus: StateFlow<LlmBusStatus?> = _llmBusStatus.asStateFlow()
 
+    // LLM-capable adapters
+    private val _llmAdapters = MutableStateFlow<List<LlmAdapterItem>>(emptyList())
+    val llmAdapters: StateFlow<List<LlmAdapterItem>> = _llmAdapters.asStateFlow()
+
     // LLM Providers with metrics and circuit breaker state
     private val _llmProviders = MutableStateFlow<List<LlmProviderStatus>>(emptyList())
     val llmProviders: StateFlow<List<LlmProviderStatus>> = _llmProviders.asStateFlow()
@@ -61,11 +85,15 @@ class LLMSettingsViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    // Operation in progress (prevents concurrent operations)
+    private val _operationInProgress = MutableStateFlow(false)
+    val operationInProgress: StateFlow<Boolean> = _operationInProgress.asStateFlow()
+
     // Error message
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // Success message
+    // Success/status message (transient, auto-dismisses)
     private val _successMessage = MutableStateFlow<String?>(null)
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
 
@@ -81,8 +109,14 @@ class LLMSettingsViewModel(
     private val _statusExpanded = MutableStateFlow(true)
     val statusExpanded: StateFlow<Boolean> = _statusExpanded.asStateFlow()
 
+    private val _adaptersExpanded = MutableStateFlow(false)
+    val adaptersExpanded: StateFlow<Boolean> = _adaptersExpanded.asStateFlow()
+
     private val _providersExpanded = MutableStateFlow(false)
     val providersExpanded: StateFlow<Boolean> = _providersExpanded.asStateFlow()
+
+    private val _addProviderExpanded = MutableStateFlow(false)
+    val addProviderExpanded: StateFlow<Boolean> = _addProviderExpanded.asStateFlow()
 
     private val _localServersExpanded = MutableStateFlow(false)
     val localServersExpanded: StateFlow<Boolean> = _localServersExpanded.asStateFlow()
@@ -94,6 +128,10 @@ class LLMSettingsViewModel(
     private val _cirisServicesEnabled = MutableStateFlow(true)
     val cirisServicesEnabled: StateFlow<Boolean> = _cirisServicesEnabled.asStateFlow()
 
+    // Provider pending delete confirmation (for system providers)
+    private val _providerPendingDelete = MutableStateFlow<String?>(null)
+    val providerPendingDelete: StateFlow<String?> = _providerPendingDelete.asStateFlow()
+
     // ========== Initialization ==========
 
     init {
@@ -101,7 +139,7 @@ class LLMSettingsViewModel(
     }
 
     /**
-     * Load LLM Bus status and provider list.
+     * Load LLM Bus status, adapters, and provider list.
      */
     fun loadStatus() {
         val method = "loadStatus"
@@ -119,6 +157,33 @@ class LLMSettingsViewModel(
                 }
                 _cirisServicesEnabled.value = cirisEnabled
                 logInfo(method, "CIRIS services enabled: $cirisEnabled")
+
+                // Load adapters that provide LLM services
+                // Filter by services_registered containing "LLM" (dynamic detection)
+                val adapters = try {
+                    val allAdapters = apiClient.listAdapters()
+                    // Filter to adapters that have registered LLM service
+                    allAdapters.adapters
+                        .filter { adapter ->
+                            adapter.servicesRegistered.any { service ->
+                                service.equals("LLM", ignoreCase = true)
+                            }
+                        }
+                        .map { adapter ->
+                            LlmAdapterItem(
+                                adapterId = adapter.adapterId,
+                                adapterType = adapter.adapterType,
+                                isRunning = adapter.isRunning,
+                                servicesRegistered = adapter.servicesRegistered,
+                                description = getAdapterDescription(adapter.adapterType)
+                            )
+                        }
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to fetch adapters: ${e.message}")
+                    emptyList()
+                }
+                _llmAdapters.value = adapters
+                logInfo(method, "Loaded ${adapters.size} LLM adapters (filtered by LLM service)")
 
                 val busStatus = try {
                     apiClient.getLlmBusStatus()
@@ -149,9 +214,101 @@ class LLMSettingsViewModel(
     }
 
     /**
+     * Get a human-readable description for an adapter type.
+     */
+    private fun getAdapterDescription(adapterType: String): String {
+        return when (adapterType.lowercase()) {
+            "mobile_local_llm" -> "On-device inference"
+            "api" -> "CIRIS API endpoint"
+            "discord" -> "Discord bot integration"
+            "cli" -> "Command-line interface"
+            else -> adapterType
+        }
+    }
+
+    /**
      * Refresh status (alias for loadStatus).
      */
     fun refresh() = loadStatus()
+
+    /**
+     * Show a transient success message that auto-dismisses.
+     */
+    private fun showTransientMessage(message: String) {
+        _successMessage.value = message
+        viewModelScope.launch {
+            delay(MESSAGE_DISMISS_DELAY_MS)
+            if (_successMessage.value == message) {
+                _successMessage.value = null
+            }
+        }
+    }
+
+    // ========== Adapter CRUD ==========
+
+    /**
+     * Reload an adapter with its current configuration.
+     */
+    fun reloadAdapter(adapterId: String) {
+        val method = "reloadAdapter"
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
+
+        logInfo(method, "Reloading adapter: $adapterId")
+        viewModelScope.launch {
+            _operationInProgress.value = true
+            try {
+                val result = apiClient.reloadAdapter(adapterId)
+                if (result.success) {
+                    logInfo(method, "Adapter reloaded: $adapterId")
+                    showTransientMessage("Adapter reloaded")
+                    loadStatus()
+                } else {
+                    logError(method, "Failed to reload adapter: ${result.message}")
+                    _errorMessage.value = result.message ?: "Failed to reload adapter"
+                }
+            } catch (e: Exception) {
+                logError(method, "Error reloading adapter: ${e.message}")
+                _errorMessage.value = "Failed to reload adapter: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
+            }
+        }
+    }
+
+    /**
+     * Remove/unload an adapter.
+     */
+    fun removeAdapter(adapterId: String) {
+        val method = "removeAdapter"
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
+
+        logInfo(method, "Removing adapter: $adapterId")
+        viewModelScope.launch {
+            _operationInProgress.value = true
+            try {
+                val result = apiClient.removeAdapter(adapterId)
+                if (result.success) {
+                    logInfo(method, "Adapter removed: $adapterId")
+                    showTransientMessage("Adapter removed")
+                    loadStatus()
+                } else {
+                    logError(method, "Failed to remove adapter: ${result.message}")
+                    _errorMessage.value = result.message ?: "Failed to remove adapter"
+                }
+            } catch (e: Exception) {
+                logError(method, "Error removing adapter: ${e.message}")
+                _errorMessage.value = "Failed to remove adapter: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
+            }
+        }
+    }
 
     // ========== Distribution Strategy ==========
 
@@ -160,14 +317,19 @@ class LLMSettingsViewModel(
      */
     fun updateDistributionStrategy(strategy: DistributionStrategy) {
         val method = "updateDistributionStrategy"
-        logInfo(method, "Updating distribution strategy to ${strategy.name}")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Updating distribution strategy to ${strategy.name}")
         viewModelScope.launch {
+            _operationInProgress.value = true
             try {
                 val result = apiClient.updateLlmDistributionStrategy(strategy)
                 if (result.success) {
                     logInfo(method, "Strategy updated: ${result.previousStrategy} -> ${result.newStrategy}")
-                    _successMessage.value = "Distribution strategy updated"
+                    showTransientMessage("Distribution strategy updated")
                     loadStatus()
                 } else {
                     logError(method, "Failed to update strategy: ${result.message}")
@@ -176,6 +338,8 @@ class LLMSettingsViewModel(
             } catch (e: Exception) {
                 logError(method, "Error updating strategy: ${e.message}")
                 _errorMessage.value = "Failed to update strategy: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
             }
         }
     }
@@ -187,14 +351,19 @@ class LLMSettingsViewModel(
      */
     fun resetCircuitBreaker(providerName: String, force: Boolean = false) {
         val method = "resetCircuitBreaker"
-        logInfo(method, "Resetting circuit breaker for $providerName (force=$force)")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Resetting circuit breaker for $providerName (force=$force)")
         viewModelScope.launch {
+            _operationInProgress.value = true
             try {
                 val result = apiClient.resetLlmCircuitBreaker(providerName, force)
                 if (result.success) {
                     logInfo(method, "Circuit breaker reset: ${result.previousState} -> ${result.newState}")
-                    _successMessage.value = "Protection reset for $providerName"
+                    showTransientMessage("Protection reset for $providerName")
                     loadStatus()
                 } else {
                     logError(method, "Failed to reset circuit breaker: ${result.message}")
@@ -203,6 +372,8 @@ class LLMSettingsViewModel(
             } catch (e: Exception) {
                 logError(method, "Error resetting circuit breaker: ${e.message}")
                 _errorMessage.value = "Failed to reset protection: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
             }
         }
     }
@@ -218,9 +389,14 @@ class LLMSettingsViewModel(
         timeoutDurationSeconds: Float? = null
     ) {
         val method = "updateCircuitBreakerConfig"
-        logInfo(method, "Updating CB config for $providerName")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Updating CB config for $providerName")
         viewModelScope.launch {
+            _operationInProgress.value = true
             try {
                 val result = apiClient.updateLlmCircuitBreakerConfig(
                     providerName = providerName,
@@ -231,7 +407,7 @@ class LLMSettingsViewModel(
                 )
                 if (result.success) {
                     logInfo(method, "Circuit breaker config updated for $providerName")
-                    _successMessage.value = "Protection settings updated"
+                    showTransientMessage("Protection settings updated")
                     loadStatus()
                 } else {
                     logError(method, "Failed to update CB config: ${result.message}")
@@ -240,6 +416,8 @@ class LLMSettingsViewModel(
             } catch (e: Exception) {
                 logError(method, "Error updating CB config: ${e.message}")
                 _errorMessage.value = "Failed to update config: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
             }
         }
     }
@@ -254,14 +432,19 @@ class LLMSettingsViewModel(
      */
     fun updateProviderPriority(providerName: String, priority: ProviderPriority) {
         val method = "updateProviderPriority"
-        logInfo(method, "Updating priority for $providerName to ${priority.name}")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Updating priority for $providerName to ${priority.name}")
         viewModelScope.launch {
+            _operationInProgress.value = true
             try {
                 val result = apiClient.updateLlmProviderPriority(providerName, priority)
                 if (result.success) {
                     logInfo(method, "Priority updated: ${result.previousPriority} -> ${result.newPriority}")
-                    _successMessage.value = "Priority updated for $providerName"
+                    showTransientMessage("Priority updated")
                     loadStatus()
                 } else {
                     logError(method, "Failed to update priority: ${result.message}")
@@ -270,8 +453,45 @@ class LLMSettingsViewModel(
             } catch (e: Exception) {
                 logError(method, "Error updating priority: ${e.message}")
                 _errorMessage.value = "Failed to update priority: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
             }
         }
+    }
+
+    /**
+     * Check if a provider is a system provider that requires confirmation to delete.
+     */
+    fun isSystemProvider(providerName: String): Boolean {
+        return providerName in listOf("ciris_primary", "local_primary")
+    }
+
+    /**
+     * Request deletion of a provider. For system providers, this sets the pending
+     * delete state to show a confirmation dialog.
+     */
+    fun requestDeleteProvider(providerName: String) {
+        if (isSystemProvider(providerName)) {
+            _providerPendingDelete.value = providerName
+        } else {
+            deleteProvider(providerName)
+        }
+    }
+
+    /**
+     * Cancel the pending provider deletion.
+     */
+    fun cancelDeleteProvider() {
+        _providerPendingDelete.value = null
+    }
+
+    /**
+     * Confirm deletion of a system provider.
+     */
+    fun confirmDeleteProvider() {
+        val providerName = _providerPendingDelete.value ?: return
+        _providerPendingDelete.value = null
+        deleteProvider(providerName)
     }
 
     /**
@@ -281,14 +501,19 @@ class LLMSettingsViewModel(
      */
     fun deleteProvider(providerName: String) {
         val method = "deleteProvider"
-        logInfo(method, "Deleting provider $providerName")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Deleting provider $providerName")
         viewModelScope.launch {
+            _operationInProgress.value = true
             try {
                 val result = apiClient.deleteLlmProvider(providerName)
                 if (result.success) {
                     logInfo(method, "Provider deleted: ${result.message}")
-                    _successMessage.value = "Provider removed"
+                    showTransientMessage("Provider removed")
                     loadStatus()
                 } else {
                     logError(method, "Failed to delete provider: ${result.message}")
@@ -297,6 +522,8 @@ class LLMSettingsViewModel(
             } catch (e: Exception) {
                 logError(method, "Error deleting provider: ${e.message}")
                 _errorMessage.value = "Failed to delete provider: ${e.message}"
+            } finally {
+                _operationInProgress.value = false
             }
         }
     }
@@ -308,8 +535,12 @@ class LLMSettingsViewModel(
      */
     fun discoverLocalServers() {
         val method = "discoverLocalServers"
-        logInfo(method, "Starting local LLM server discovery...")
+        if (_isDiscovering.value) {
+            logWarn(method, "Discovery already in progress")
+            return
+        }
 
+        logInfo(method, "Starting local LLM server discovery...")
         viewModelScope.launch {
             _isDiscovering.value = true
             try {
@@ -320,7 +551,9 @@ class LLMSettingsViewModel(
                 _discoveredServers.value = servers
                 logInfo(method, "Discovered ${servers.size} local LLM servers")
                 if (servers.isNotEmpty()) {
-                    _successMessage.value = "Found ${servers.size} local server${if (servers.size > 1) "s" else ""}"
+                    showTransientMessage("Found ${servers.size} server${if (servers.size > 1) "s" else ""}")
+                } else {
+                    showTransientMessage("No local servers found")
                 }
             } catch (e: Exception) {
                 logError(method, "Discovery failed: ${e.message}")
@@ -341,13 +574,18 @@ class LLMSettingsViewModel(
      */
     fun addDiscoveredServerAsProvider(
         server: DiscoveredLlmServer,
-        priority: ProviderPriority = ProviderPriority.FALLBACK
+        priority: ProviderPriority = ProviderPriority.FALLBACK,
+        selectedModel: String? = null
     ) {
         val method = "addDiscoveredServerAsProvider"
-        logInfo(method, "Adding ${server.label} as ${priority.name} provider")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Adding ${server.label} as ${priority.name} provider with model: ${selectedModel ?: "auto"}")
         viewModelScope.launch {
-            _isLoading.value = true
+            _operationInProgress.value = true
             try {
                 // Map server type to provider ID
                 val providerId = when (server.serverType.lowercase()) {
@@ -359,8 +597,8 @@ class LLMSettingsViewModel(
                     else -> "local"  // Default to local (OpenAI-compatible)
                 }
 
-                // Use first model if available, or "default"
-                val model = server.models.firstOrNull()
+                // Use selected model, or fall back to first available model
+                val model = selectedModel ?: server.models.firstOrNull()
 
                 val result = apiClient.addLlmProvider(
                     providerId = providerId,
@@ -373,7 +611,7 @@ class LLMSettingsViewModel(
 
                 if (result.success) {
                     logInfo(method, "Provider added: ${result.providerName}")
-                    _successMessage.value = "Added ${server.label} as ${priority.name.lowercase()} provider"
+                    showTransientMessage("Added ${server.label}")
                     // Refresh to show the new provider
                     loadStatus()
                 } else {
@@ -384,7 +622,7 @@ class LLMSettingsViewModel(
                 logError(method, "Error adding provider: ${e.message}")
                 _errorMessage.value = "Failed to add provider: ${e.message}"
             } finally {
-                _isLoading.value = false
+                _operationInProgress.value = false
             }
         }
     }
@@ -406,10 +644,14 @@ class LLMSettingsViewModel(
         priority: ProviderPriority = ProviderPriority.FALLBACK
     ) {
         val method = "addCloudProvider"
-        logInfo(method, "Adding $providerId as ${priority.name} provider${model?.let { " with model $it" } ?: ""}")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Adding $providerId as ${priority.name} provider${model?.let { " with model $it" } ?: ""}")
         viewModelScope.launch {
-            _isLoading.value = true
+            _operationInProgress.value = true
             try {
                 // Default base URLs for known providers
                 val providerBaseUrl = baseUrl ?: when (providerId.lowercase()) {
@@ -438,7 +680,7 @@ class LLMSettingsViewModel(
 
                 if (result.success) {
                     logInfo(method, "Provider added: ${result.providerName}")
-                    _successMessage.value = "Added $providerId as ${priority.name.lowercase()} provider"
+                    showTransientMessage("Added $providerId provider")
                     loadStatus()
                 } else {
                     logError(method, "Failed to add provider: ${result.message}")
@@ -448,7 +690,7 @@ class LLMSettingsViewModel(
                 logError(method, "Error adding provider: ${e.message}")
                 _errorMessage.value = "Failed to add provider: ${e.message}"
             } finally {
-                _isLoading.value = false
+                _operationInProgress.value = false
             }
         }
     }
@@ -459,8 +701,16 @@ class LLMSettingsViewModel(
         _statusExpanded.value = !_statusExpanded.value
     }
 
+    fun toggleAdaptersExpanded() {
+        _adaptersExpanded.value = !_adaptersExpanded.value
+    }
+
     fun toggleProvidersExpanded() {
         _providersExpanded.value = !_providersExpanded.value
+    }
+
+    fun toggleAddProviderExpanded() {
+        _addProviderExpanded.value = !_addProviderExpanded.value
     }
 
     fun toggleLocalServersExpanded() {
@@ -475,32 +725,78 @@ class LLMSettingsViewModel(
 
     /**
      * Disable CIRIS services (switch to BYOK mode).
-     * This persists the setting and updates the LLM config.
+     *
+     * This uses standard provider CRUD to delete CIRIS providers:
+     * 1. Delete ciris_primary provider (if exists)
+     * 2. Delete local_primary provider (if exists)
+     * 3. Persist disabled state for restart
      */
     fun disableCirisServices() {
         val method = "disableCirisServices"
-        logInfo(method, "Disabling CIRIS services")
+        if (_operationInProgress.value) {
+            logWarn(method, "Operation already in progress")
+            return
+        }
 
+        logInfo(method, "Disabling CIRIS services via provider CRUD")
         viewModelScope.launch {
-            _isLoading.value = true
+            _operationInProgress.value = true
             try {
-                // Call API to disable CIRIS services
+                val providers = _llmProviders.value
+                var deletedCount = 0
+
+                // 1. Delete ciris_primary provider via standard CRUD
+                val cirisProvider = providers.find { it.name == "ciris_primary" }
+                if (cirisProvider != null) {
+                    logInfo(method, "Deleting ciris_primary provider")
+                    try {
+                        val result = apiClient.deleteLlmProvider("ciris_primary")
+                        if (result.success) {
+                            deletedCount++
+                            logInfo(method, "Deleted ciris_primary")
+                        } else {
+                            logWarn(method, "Failed to delete ciris_primary: ${result.message}")
+                        }
+                    } catch (e: Exception) {
+                        logWarn(method, "Error deleting ciris_primary: ${e.message}")
+                    }
+                }
+
+                // 2. Delete local_primary provider via standard CRUD
+                val localProvider = providers.find { it.name == "local_primary" }
+                if (localProvider != null) {
+                    logInfo(method, "Deleting local_primary provider")
+                    try {
+                        val result = apiClient.deleteLlmProvider("local_primary")
+                        if (result.success) {
+                            deletedCount++
+                            logInfo(method, "Deleted local_primary")
+                        } else {
+                            logWarn(method, "Failed to delete local_primary: ${result.message}")
+                        }
+                    } catch (e: Exception) {
+                        logWarn(method, "Error deleting local_primary: ${e.message}")
+                    }
+                }
+
+                // 3. Persist disabled state for restart
+                logInfo(method, "Persisting CIRIS services disabled state")
                 val result = apiClient.disableCirisServices()
                 if (result.success) {
                     _cirisServicesEnabled.value = false
-                    _successMessage.value = "CIRIS services disabled. Please restart the app for changes to take full effect."
+                    showTransientMessage("CIRIS services disabled ($deletedCount providers removed)")
                     logInfo(method, "CIRIS services disabled successfully")
-                    // Refresh providers list to reflect changes
-                    refresh()
+                    // Refresh to reflect changes
+                    loadStatus()
                 } else {
-                    _errorMessage.value = result.message ?: "Failed to disable CIRIS services"
-                    logError(method, "Failed to disable: ${result.message}")
+                    _errorMessage.value = result.message ?: "Failed to persist disabled state"
+                    logError(method, "Failed to persist: ${result.message}")
                 }
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to disable CIRIS services: ${e.message}"
                 logError(method, "Error: ${e.message}")
             } finally {
-                _isLoading.value = false
+                _operationInProgress.value = false
             }
         }
     }

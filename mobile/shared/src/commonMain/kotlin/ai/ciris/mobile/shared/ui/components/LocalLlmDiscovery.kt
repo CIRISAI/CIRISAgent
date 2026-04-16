@@ -46,6 +46,10 @@ class LocalLlmDiscoveryState {
     // Download confirmation dialog state
     var showDownloadConfirmation by mutableStateOf(false)
     var pendingDownloadSize by mutableStateOf<String?>(null)
+    // Model selection dialog state
+    var showModelSelectionDialog by mutableStateOf(false)
+    var pendingAddServer by mutableStateOf<DiscoveredLlmServer?>(null)
+    var selectedModelForAdd by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -72,7 +76,7 @@ fun LocalLlmServerDiscovery(
     state: LocalLlmDiscoveryState,
     apiClient: CIRISApiClient,
     onServerSelected: (server: DiscoveredLlmServer) -> Unit,
-    onAddAsProvider: ((server: DiscoveredLlmServer) -> Unit)? = null,
+    onAddAsProvider: ((server: DiscoveredLlmServer, selectedModel: String?) -> Unit)? = null,
     localInferenceCapability: LocalInferenceCapability? = null,
     primaryColor: Color = MaterialTheme.colorScheme.primary,
     surfaceColor: Color = MaterialTheme.colorScheme.surfaceVariant,
@@ -81,6 +85,19 @@ fun LocalLlmServerDiscovery(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+
+    // Helper to handle adding a provider (may show model selection dialog)
+    fun handleAddAsProvider(server: DiscoveredLlmServer) {
+        if (server.models.size > 1) {
+            // Multiple models - show selection dialog
+            state.pendingAddServer = server
+            state.selectedModelForAdd = server.models.firstOrNull()
+            state.showModelSelectionDialog = true
+        } else {
+            // Single or no models - add directly
+            onAddAsProvider?.invoke(server, server.models.firstOrNull())
+        }
+    }
 
     fun discoverServers() {
         if (state.isDiscovering) return
@@ -242,6 +259,82 @@ fun LocalLlmServerDiscovery(
         )
     }
 
+    // Model selection dialog (when server has multiple models)
+    if (state.showModelSelectionDialog && state.pendingAddServer != null) {
+        val server = state.pendingAddServer!!
+        AlertDialog(
+            onDismissRequest = {
+                state.showModelSelectionDialog = false
+                state.pendingAddServer = null
+                state.selectedModelForAdd = null
+            },
+            title = { Text("Select Model") },
+            text = {
+                Column {
+                    Text(
+                        text = "Choose which model to use from ${server.label}:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    server.models.forEach { model ->
+                        val isSelected = state.selectedModelForAdd == model
+                        Surface(
+                            onClick = { state.selectedModelForAdd = model },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = if (isSelected) BorderStroke(2.dp, primaryColor) else BorderStroke(1.dp, secondaryTextColor.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { state.selectedModelForAdd = model },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = primaryColor
+                                    )
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = model,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = textColor
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onAddAsProvider?.invoke(server, state.selectedModelForAdd)
+                        state.showModelSelectionDialog = false
+                        state.pendingAddServer = null
+                        state.selectedModelForAdd = null
+                    },
+                    enabled = state.selectedModelForAdd != null,
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                ) {
+                    Text("Add Provider")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    state.showModelSelectionDialog = false
+                    state.pendingAddServer = null
+                    state.selectedModelForAdd = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -370,10 +463,10 @@ fun LocalLlmServerDiscovery(
                         if (onAddAsProvider != null) {
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(
-                                onClick = { onAddAsProvider(server) },
+                                onClick = { handleAddAsProvider(server) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .testableClickable("btn_add_provider_${server.id}") { onAddAsProvider(server) },
+                                    .testableClickable("btn_add_provider_${server.id}") { handleAddAsProvider(server) },
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = primaryColor
                                 ),

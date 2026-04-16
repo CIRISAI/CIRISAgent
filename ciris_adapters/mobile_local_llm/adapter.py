@@ -91,7 +91,14 @@ class MobileLocalLLMAdapter(Service):
         bus will prefer on-device inference; when the adapter reports
         unhealthy (weak device, crashed server, etc.) the bus drops to the
         cloud provider automatically.
+
+        Returns empty list if adapter is disabled via config, preventing
+        registration of an unavailable provider.
         """
+        if not self._config.enabled:
+            logger.info("MobileLocalLLMAdapter disabled by config - not registering LLM service")
+            return []
+
         return [
             AdapterServiceRegistration(
                 service_type=ServiceType.LLM,

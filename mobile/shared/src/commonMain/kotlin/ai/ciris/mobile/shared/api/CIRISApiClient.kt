@@ -3658,21 +3658,57 @@ class CIRISApiClient(
         logInfo(method, "Fetching system health")
 
         return try {
-            val response = systemApi.getSystemHealthV1SystemHealthGet()
-            logDebug(method, "Response: status=${response.status}")
+            // Use direct HTTP call to properly parse warnings
+            val client = HttpClient {
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
+                }
+            }
 
-            if (!response.success) {
-                logError(method, "API returned non-success status: ${response.status}")
+            val response = client.get("$baseUrl/v1/system/health") {
+                header("Authorization", "Bearer $accessToken")
+            }
+
+            if (response.status != HttpStatusCode.OK) {
                 throw RuntimeException("API error: HTTP ${response.status}")
             }
 
-            val body = response.body()
-            val data = body.`data` ?: throw RuntimeException("API returned null data")
-            logInfo(method, "System health: status=${data.status}, cognitiveState=${data.cognitiveState}")
+            val jsonText = response.bodyAsText()
+            val json = Json.parseToJsonElement(jsonText).jsonObject
+            val data = json["data"]?.jsonObject ?: throw RuntimeException("API returned null data")
+
+            val status = data["status"]?.jsonPrimitive?.content ?: "unknown"
+            val cognitiveState = data["cognitive_state"]?.jsonPrimitive?.content ?: "UNKNOWN"
+
+            // Parse warnings array
+            val warnings = data["warnings"]?.jsonArray?.mapNotNull { warningElement ->
+                try {
+                    val warningObj = warningElement.jsonObject
+                    SystemWarning(
+                        code = warningObj["code"]?.jsonPrimitive?.content ?: "",
+                        message = warningObj["message"]?.jsonPrimitive?.content ?: "",
+                        severity = warningObj["severity"]?.jsonPrimitive?.content ?: "warning",
+                        actionUrl = warningObj["action_url"]?.jsonPrimitive?.contentOrNull
+                    )
+                } catch (e: Exception) {
+                    logWarn(method, "Failed to parse warning: ${e.message}")
+                    null
+                }
+            } ?: emptyList()
+
+            // Parse degraded_mode flag
+            val degradedMode = data["degraded_mode"]?.jsonPrimitive?.boolean ?: false
+
+            logInfo(method, "System health: status=$status, cognitiveState=$cognitiveState, warnings=${warnings.size}, degradedMode=$degradedMode")
 
             SystemHealthData(
-                status = data.status,
-                cognitiveState = data.cognitiveState ?: "UNKNOWN"
+                status = status,
+                cognitiveState = cognitiveState,
+                warnings = warnings,
+                degradedMode = degradedMode
             )
         } catch (e: Exception) {
             logException(method, e)
@@ -4411,7 +4447,8 @@ class CIRISApiClient(
                 put("base_url", providerBaseUrl)
                 name?.let { put("name", it) }
                 model?.let { put("model", it) }
-                apiKey?.let { put("api_key", it) }
+                // Always include api_key - use "local" for local providers if not specified
+                put("api_key", apiKey ?: "local")
                 put("priority", priority.name.lowercase())
                 put("enabled", true)
             }
@@ -7655,9 +7692,21 @@ data class PartnershipStatusData(
 
 // ===== System Data Models =====
 
+/**
+ * System warning that requires user attention.
+ */
+data class SystemWarning(
+    val code: String,
+    val message: String,
+    val severity: String = "warning",
+    val actionUrl: String? = null
+)
+
 data class SystemHealthData(
     val status: String,
-    val cognitiveState: String
+    val cognitiveState: String,
+    val warnings: List<SystemWarning> = emptyList(),
+    val degradedMode: Boolean = false  // True when no working LLM provider
 )
 
 data class UnifiedTelemetryData(

@@ -889,7 +889,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key = os.environ.get("CIRIS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
 
         if not api_key:
-            logger.warning(f"No API key found for {provider.value} - LLM service will not be initialized")
+            # No primary API key - persisted runtime providers will be loaded after this returns
+            logger.info(f"No API key found for {provider.value} - will use persisted runtime providers if available")
             return
 
         # Initialize real LLM service
@@ -1188,11 +1189,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         try:
             providers = await list_providers(self.config_service)
+            logger.info(f"[LLM_LOAD] list_providers returned {len(providers) if providers else 0} providers")
             if not providers:
-                logger.debug("No persisted runtime LLM providers to load")
+                logger.info("No persisted runtime LLM providers to load")
                 return
 
-            logger.info(f"Loading {len(providers)} persisted runtime LLM provider(s)")
+            logger.info(f"Loading {len(providers)} persisted runtime LLM provider(s): {list(providers.keys())}")
 
             # Map priority strings to internal Priority enum
             priority_map = {

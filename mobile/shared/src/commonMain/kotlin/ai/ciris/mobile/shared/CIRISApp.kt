@@ -633,15 +633,30 @@ fun CIRISApp(
                 // Keep timer running during backend polling
                 startupViewModel.setKeepTimerAlive(true)
 
-                // Wait for agent to reach WORK state
+                // Check for degraded mode first - skip WORK state wait if no LLM
                 // NOTE: Don't call setPhase() here - it would cancel this LaunchedEffect!
                 startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_waiting_agent"))
 
                 var agentReady = false
+                var inDegradedMode = false
                 var pollAttempts = 0
                 val maxPollAttempts = 150 // 30 seconds
                 var lastState = "UNKNOWN"
 
+                // Quick check for degraded mode via health endpoint
+                try {
+                    val health = apiClient.getSystemHealth()
+                    if (health.degradedMode) {
+                        PlatformLogger.i(TAG, " Degraded mode detected - no working LLM provider")
+                        startupViewModel.setStatus("Running in limited mode (no LLM)")
+                        inDegradedMode = true
+                        agentReady = true  // Skip waiting for WORK state
+                    }
+                } catch (e: Exception) {
+                    PlatformLogger.d(TAG, " Could not check degraded mode: ${e.message?.take(30)}")
+                }
+
+                // Only wait for WORK state if not in degraded mode
                 while (pollAttempts < maxPollAttempts && !agentReady) {
                     try {
                         val status = apiClient.getSystemStatus()
@@ -668,7 +683,9 @@ fun CIRISApp(
                     pollAttempts++
                 }
 
-                if (!agentReady) {
+                if (inDegradedMode) {
+                    startupViewModel.setStatus("Limited mode - configure LLM in Settings")
+                } else if (!agentReady) {
                     PlatformLogger.w(TAG, " Agent did not reach WORK state within timeout, proceeding anyway")
                     startupViewModel.setStatus("Agent ready (timeout)")
                 } else {
@@ -825,10 +842,25 @@ fun CIRISApp(
 
                                 // Poll for WORK state with timeout
                                 var agentReady = false
+                                var inDegradedMode = false
                                 var pollAttempts = 0
                                 val maxPollAttempts = 150 // 30 seconds (150 * 200ms)
                                 var lastState = "UNKNOWN"
 
+                                // Quick check for degraded mode via health endpoint
+                                try {
+                                    val health = apiClient.getSystemHealth()
+                                    if (health.degradedMode) {
+                                        PlatformLogger.i(TAG, " Degraded mode detected - no working LLM provider")
+                                        startupViewModel.setStatus("Running in limited mode (no LLM)")
+                                        inDegradedMode = true
+                                        agentReady = true  // Skip waiting for WORK state
+                                    }
+                                } catch (e: Exception) {
+                                    PlatformLogger.d(TAG, " Could not check degraded mode: ${e.message?.take(30)}")
+                                }
+
+                                // Only wait for WORK state if not in degraded mode
                                 while (pollAttempts < maxPollAttempts && !agentReady) {
                                     try {
                                         val status = apiClient.getSystemStatus()
@@ -1033,10 +1065,26 @@ fun CIRISApp(
                                                     // Handle new token with TokenManager for periodic refresh
                                                     tokenManager.handleNewToken(result.idToken, result.provider)
 
-                                                    // Wait for agent WORK state
+                                                    // Check for degraded mode first - skip WORK state wait if no LLM
                                                     loginStatusMessage = "Waiting for agent..."
                                                     var agentReady = false
+                                                    var inDegradedMode = false
                                                     var pollAttempts = 0
+
+                                                    // Quick check for degraded mode via health endpoint
+                                                    try {
+                                                        val health = apiClient.getSystemHealth()
+                                                        if (health.degradedMode) {
+                                                            PlatformLogger.i(TAG, " Degraded mode detected - no working LLM provider")
+                                                            loginStatusMessage = "Running in limited mode (no LLM)"
+                                                            inDegradedMode = true
+                                                            agentReady = true  // Skip waiting for WORK state
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        PlatformLogger.d(TAG, " Could not check degraded mode: ${e.message?.take(30)}")
+                                                    }
+
+                                                    // Only wait for WORK state if not in degraded mode
                                                     while (pollAttempts < 150 && !agentReady) {
                                                         try {
                                                             val status = apiClient.getSystemStatus()
@@ -1051,6 +1099,10 @@ fun CIRISApp(
                                                         }
                                                         kotlinx.coroutines.delay(200)
                                                         pollAttempts++
+                                                    }
+
+                                                    if (inDegradedMode) {
+                                                        loginStatusMessage = "Limited mode - configure LLM"
                                                     }
 
                                                     // Trigger data loading
@@ -1140,11 +1192,27 @@ fun CIRISApp(
                                     .onSuccess { PlatformLogger.i(TAG, " CIRIS token saved to secure storage") }
                                     .onFailure { e -> PlatformLogger.w(TAG, " Failed to save token: ${e.message}") }
 
-                                // Wait for agent WORK state
+                                // Check for degraded mode first - skip WORK state wait if no LLM
                                 PlatformLogger.i(TAG, " Local login successful, waiting for agent...")
                                 loginStatusMessage = "Waiting for agent..."
                                 var agentReady = false
+                                var inDegradedMode = false
                                 var pollAttempts = 0
+
+                                // Quick check for degraded mode via health endpoint
+                                try {
+                                    val health = apiClient.getSystemHealth()
+                                    if (health.degradedMode) {
+                                        PlatformLogger.i(TAG, " Degraded mode detected - no working LLM provider")
+                                        loginStatusMessage = "Running in limited mode (no LLM)"
+                                        inDegradedMode = true
+                                        agentReady = true  // Skip waiting for WORK state
+                                    }
+                                } catch (e: Exception) {
+                                    PlatformLogger.d(TAG, " Could not check degraded mode: ${e.message?.take(30)}")
+                                }
+
+                                // Only wait for WORK state if not in degraded mode
                                 while (pollAttempts < 150 && !agentReady) {
                                     try {
                                         val status = apiClient.getSystemStatus()
@@ -1159,6 +1227,10 @@ fun CIRISApp(
                                     }
                                     kotlinx.coroutines.delay(200)
                                     pollAttempts++
+                                }
+
+                                if (inDegradedMode) {
+                                    loginStatusMessage = "Limited mode - configure LLM"
                                 }
 
                                 // Trigger data loading

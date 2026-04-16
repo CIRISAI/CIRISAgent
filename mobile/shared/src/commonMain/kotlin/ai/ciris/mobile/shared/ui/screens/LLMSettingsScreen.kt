@@ -12,6 +12,7 @@ import ai.ciris.mobile.shared.ui.components.rememberLocalLlmDiscoveryState
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import ai.ciris.mobile.shared.viewmodels.DiscoveredLlmServer
 import ai.ciris.mobile.shared.viewmodels.LLMSettingsViewModel
+import ai.ciris.mobile.shared.viewmodels.LlmAdapterItem
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
@@ -93,10 +94,24 @@ fun LLMSettingsScreen(
 
     // Section expansion state from LLMSettingsViewModel
     val statusExpanded by llmViewModel.statusExpanded.collectAsState()
+    val adaptersExpanded by llmViewModel.adaptersExpanded.collectAsState()
     val providersExpanded by llmViewModel.providersExpanded.collectAsState()
+    val addProviderExpanded by llmViewModel.addProviderExpanded.collectAsState()
     val localServersExpanded by llmViewModel.localServersExpanded.collectAsState()
     val advancedExpanded by llmViewModel.advancedExpanded.collectAsState()
     var authExpanded by remember { mutableStateOf(false) }
+
+    // LLM-capable adapters
+    val llmAdapters by llmViewModel.llmAdapters.collectAsState()
+
+    // Provider delete confirmation
+    val providerPendingDelete by llmViewModel.providerPendingDelete.collectAsState()
+
+    // Operation state
+    val operationInProgress by llmViewModel.operationInProgress.collectAsState()
+
+    // CIRIS Services state
+    val cirisServicesEnabled by llmViewModel.cirisServicesEnabled.collectAsState()
 
     // On-device local inference capability
     val localInferenceCapability: LocalInferenceCapability = remember { probeLocalInferenceCapability() }
@@ -146,6 +161,40 @@ fun LLMSettingsScreen(
         }
     }
 
+    // Confirmation dialog for deleting system providers
+    if (providerPendingDelete != null) {
+        AlertDialog(
+            onDismissRequest = { llmViewModel.cancelDeleteProvider() },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+            title = { Text("Delete System Provider?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("\"${providerPendingDelete}\" is a CIRIS-managed provider.")
+                    Text(
+                        "Deleting it will disable CIRIS proxy functionality until you re-run the setup wizard.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { llmViewModel.confirmDeleteProvider() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { llmViewModel.cancelDeleteProvider() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -162,8 +211,20 @@ fun LLMSettingsScreen(
                     }
                 },
                 actions = {
+                    // Show loading indicator when operation in progress
+                    if (operationInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
                     IconButton(
-                        onClick = { viewModel.refresh() },
+                        onClick = {
+                            viewModel.refresh()
+                            llmViewModel.loadStatus()
+                        },
                         modifier = Modifier.testableClickable("btn_refresh") { viewModel.refresh() }
                     ) {
                         Icon(
@@ -205,7 +266,22 @@ fun LLMSettingsScreen(
                     isLoading = isLoadingLlmBus
                 )
 
-                // Section 2: Providers (Collapsible)
+                // Section 2: Adapters (Collapsible)
+                CollapsibleSection(
+                    title = "Adapters",
+                    subtitle = "${llmAdapters.size} loaded",
+                    icon = Icons.Filled.Extension,
+                    expanded = adaptersExpanded,
+                    onToggle = { llmViewModel.toggleAdaptersExpanded() }
+                ) {
+                    AdaptersContent(
+                        adapters = llmAdapters,
+                        llmViewModel = llmViewModel,
+                        operationInProgress = operationInProgress
+                    )
+                }
+
+                // Section 3: Providers (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_providers"),
                     subtitle = localizedString("mobile.llm_settings_providers_count", "count", llmProviders.size.toString()),
@@ -213,57 +289,30 @@ fun LLMSettingsScreen(
                     expanded = providersExpanded,
                     onToggle = { llmViewModel.toggleProvidersExpanded() }
                 ) {
-                    // Always show the registered providers list
+                    // Show registered providers with full CRUD
                     RegisteredProvidersContent(
                         isCirisProxy = isCirisProxy,
                         llmProviders = llmProviders,
                         llmViewModel = llmViewModel,
                         apiClient = apiClient,
-                        availableProviders = viewModel.availableProviders
+                        availableProviders = viewModel.availableProviders,
+                        cirisServicesEnabled = cirisServicesEnabled
                     )
-
-                    // Only show BYOK editing UI when not using CIRIS Proxy
-                    if (!isCirisProxy) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                        )
-                        ProvidersContent(
-                            viewModel = viewModel,
-                            llmProvider = llmProvider,
-                            llmModel = llmModel,
-                            llmBaseUrl = llmBaseUrl,
-                            apiKey = apiKey,
-                            apiKeyMasked = apiKeyMasked,
-                            availableModels = availableModels,
-                            discoveredServers = discoveredServers,
-                            selectedServer = selectedServer,
-                            isDiscovering = isDiscovering,
-                            showApiKey = showApiKey,
-                            isEditing = isEditing,
-                            isSaving = isSaving,
-                            llmConfig = llmConfig,
-                            onShowApiKeyChange = { showApiKey = it },
-                            onEditingChange = { isEditing = it }
-                        )
-                    }
                 }
 
-                // Section 3: Local Servers (Collapsible)
+                // Section 4: Add Provider (Collapsible)
                 CollapsibleSection(
-                    title = localizedString("mobile.llm_settings_local_servers"),
-                    subtitle = if (discoveredServers.isNotEmpty()) {
-                        localizedString("mobile.llm_settings_local_detected", "count", discoveredServers.size.toString())
-                    } else if (localInferenceCapability.isReady) {
-                        localizedString("mobile.llm_on_device_available")
-                    } else {
-                        "Run Discovery"
+                    title = "Add Provider",
+                    subtitle = when {
+                        discoveredServers.isNotEmpty() -> "${discoveredServers.size} server${if (discoveredServers.size > 1) "s" else ""} found"
+                        localInferenceCapability.isReady -> "On-device available"
+                        else -> "Local, Server, or Cloud"
                     },
-                    icon = Icons.Filled.Wifi,
-                    expanded = localServersExpanded,
-                    onToggle = { llmViewModel.toggleLocalServersExpanded() }
+                    icon = Icons.Filled.Add,
+                    expanded = addProviderExpanded,
+                    onToggle = { llmViewModel.toggleAddProviderExpanded() }
                 ) {
-                    LocalServersContent(
+                    AddProviderContent(
                         viewModel = viewModel,
                         llmViewModel = llmViewModel,
                         apiClient = apiClient,
@@ -272,11 +321,12 @@ fun LLMSettingsScreen(
                         isDiscovering = isDiscovering,
                         localInferenceCapability = localInferenceCapability,
                         discoveryState = discoveryState,
+                        availableProviders = viewModel.availableProviders,
                         onEditingChange = { isEditing = it }
                     )
                 }
 
-                // Section 4: Advanced Settings (Collapsible)
+                // Section 5: Advanced Settings (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_advanced"),
                     subtitle = llmBusStatus?.distributionStrategyLabel ?: localizedString("mobile.llm_distribution_latency"),
@@ -291,7 +341,7 @@ fun LLMSettingsScreen(
                     )
                 }
 
-                // Section 5: Authentication (Collapsible)
+                // Section 6: Authentication (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_auth"),
                     subtitle = localizedString("mobile.settings_ciris_access_token"),
@@ -478,6 +528,163 @@ private fun StatusItem(
 }
 
 // ============================================================================
+// Section 2: Adapters Content
+// ============================================================================
+
+/**
+ * Shows LLM-capable adapters with reload/remove CRUD operations.
+ */
+@Composable
+private fun AdaptersContent(
+    adapters: List<LlmAdapterItem>,
+    llmViewModel: LLMSettingsViewModel,
+    operationInProgress: Boolean
+) {
+    val semantic = SemanticColors.Default
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (adapters.isEmpty()) {
+            Text(
+                text = "No LLM-capable adapters loaded",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        } else {
+            adapters.forEach { adapter ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (adapter.isRunning)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        else
+                            semantic.surfaceError.copy(alpha = 0.3f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (adapter.isRunning)
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        else
+                            semantic.error.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (adapter.isRunning) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (adapter.isRunning) semantic.success else semantic.error
+                                )
+                                Column {
+                                    Text(
+                                        text = adapter.adapterId,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = adapter.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            // Status badge
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (adapter.isRunning)
+                                    semantic.surfaceSuccess
+                                else
+                                    semantic.surfaceError
+                            ) {
+                                Text(
+                                    text = if (adapter.isRunning) "Running" else "Stopped",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (adapter.isRunning) semantic.onSuccess else semantic.onError,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Adapter type chip
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = adapter.adapterType,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        // Action buttons
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { llmViewModel.reloadAdapter(adapter.adapterId) },
+                                enabled = !operationInProgress,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Reload", fontSize = 12.sp)
+                            }
+
+                            // Only show Remove for non-essential adapters
+                            if (adapter.adapterType !in listOf("api")) {
+                                OutlinedButton(
+                                    onClick = { llmViewModel.removeAdapter(adapter.adapterId) },
+                                    enabled = !operationInProgress,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = semantic.error
+                                    ),
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Remove", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Note about adapters vs providers
+        Text(
+            text = "Adapters register providers. Remove an adapter to remove all providers it registered.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
+    }
+}
+
+// ============================================================================
 // Collapsible Section Component
 // ============================================================================
 
@@ -570,7 +777,8 @@ private fun RegisteredProvidersContent(
     llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
     llmViewModel: LLMSettingsViewModel,
     apiClient: CIRISApiClient,
-    availableProviders: List<Pair<String, String>>
+    availableProviders: List<Pair<String, String>>,
+    cirisServicesEnabled: Boolean = true
 ) {
     val semantic = SemanticColors.Default
 
@@ -698,28 +906,128 @@ private fun RegisteredProvidersContent(
                             }
                         }
 
-                        // Delete button for runtime-added providers (not CIRIS providers)
-                        if (!provider.name.startsWith("ciris_")) {
-                            IconButton(
-                                onClick = { llmViewModel.deleteProvider(provider.name) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Remove provider",
-                                    tint = semantic.error,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                        // Delete button for all providers
+                        // System providers (ciris_primary, local_primary) show confirmation dialog
+                        IconButton(
+                            onClick = { llmViewModel.requestDeleteProvider(provider.name) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Remove provider",
+                                tint = semantic.error,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Add Provider Card
-        Spacer(Modifier.height(12.dp))
-        AddProviderCard(llmViewModel = llmViewModel, apiClient = apiClient, availableProviders = availableProviders)
+        // CIRIS Services Toggle Card
+        if (isCirisProxy) {
+            Spacer(Modifier.height(12.dp))
+            CirisServicesCard(
+                enabled = cirisServicesEnabled,
+                onDisable = { llmViewModel.disableCirisServices() },
+                onReenableInfo = { llmViewModel.showCirisServicesReenableInfo() }
+            )
+        }
+    }
+}
+
+/**
+ * Card for toggling CIRIS services on/off.
+ */
+@Composable
+private fun CirisServicesCard(
+    enabled: Boolean,
+    onDisable: () -> Unit,
+    onReenableInfo: () -> Unit
+) {
+    val semantic = SemanticColors.Default
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (enabled) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                    contentDescription = null,
+                    tint = if (enabled) semantic.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "CIRIS Services",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Text(
+                text = if (enabled)
+                    "Using CIRIS proxy for LLM requests"
+                else
+                    "CIRIS services are disabled. Using BYOK providers only.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (enabled) {
+                Text(
+                    text = "Disable to use only your own API keys. Both CIRIS providers will be removed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+
+                OutlinedButton(
+                    onClick = onDisable,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PowerOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Disable CIRIS Services")
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onReenableInfo,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("How to Re-enable")
+                }
+            }
+        }
     }
 }
 
@@ -1419,7 +1727,276 @@ private fun ProviderCard(
 }
 
 // ============================================================================
-// Section 3: Local Servers Content
+// Section 4: Add Provider Content (3 Cards)
+// ============================================================================
+
+/**
+ * Combined Add Provider section with 3 cards:
+ * 1. Local (On-Device) - For devices capable of local inference
+ * 2. Server (Network Discovery) - Find LLM servers on LAN
+ * 3. Cloud (API Key) - Add cloud provider with API key
+ */
+@Composable
+private fun AddProviderContent(
+    viewModel: SettingsViewModel,
+    llmViewModel: LLMSettingsViewModel,
+    apiClient: CIRISApiClient,
+    discoveredServers: List<DiscoveredLlmServer>,
+    selectedServer: DiscoveredLlmServer?,
+    isDiscovering: Boolean,
+    localInferenceCapability: LocalInferenceCapability,
+    discoveryState: ai.ciris.mobile.shared.ui.components.LocalLlmDiscoveryState,
+    availableProviders: List<Pair<String, String>>,
+    onEditingChange: (Boolean) -> Unit
+) {
+    val semantic = SemanticColors.Default
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Card 1: Local (On-Device)
+        AddProviderCardLocal(
+            localInferenceCapability = localInferenceCapability,
+            discoveryState = discoveryState,
+            apiClient = apiClient,
+            llmViewModel = llmViewModel
+        )
+
+        // Card 2: Server (Network Discovery)
+        AddProviderCardServer(
+            viewModel = viewModel,
+            llmViewModel = llmViewModel,
+            apiClient = apiClient,
+            discoveredServers = discoveredServers,
+            isDiscovering = isDiscovering,
+            localInferenceCapability = localInferenceCapability,
+            discoveryState = discoveryState,
+            onEditingChange = onEditingChange
+        )
+
+        // Card 3: Cloud (API Key)
+        AddProviderCard(
+            llmViewModel = llmViewModel,
+            apiClient = apiClient,
+            availableProviders = availableProviders
+        )
+    }
+}
+
+/**
+ * Card for adding on-device local inference.
+ */
+@Composable
+private fun AddProviderCardLocal(
+    localInferenceCapability: LocalInferenceCapability,
+    discoveryState: ai.ciris.mobile.shared.ui.components.LocalLlmDiscoveryState,
+    apiClient: CIRISApiClient,
+    llmViewModel: LLMSettingsViewModel
+) {
+    val semantic = SemanticColors.Default
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PhoneAndroid,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Local (On-Device)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Run inference directly on this device",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            if (localInferenceCapability.isReady) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = semantic.surfaceSuccess.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = semantic.success,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Device capable",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = semantic.success
+                        )
+                    }
+                }
+
+                Text(
+                    text = localInferenceCapability.reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                // On-device server start is handled by LocalLlmServerDiscovery below
+            } else if (localInferenceCapability.isComingSoon) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Coming Soon",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = localInferenceCapability.reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Requires 64-bit Android with 6GB+ RAM",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Card for discovering LLM servers on the network.
+ */
+@Composable
+private fun AddProviderCardServer(
+    viewModel: SettingsViewModel,
+    llmViewModel: LLMSettingsViewModel,
+    apiClient: CIRISApiClient,
+    discoveredServers: List<DiscoveredLlmServer>,
+    isDiscovering: Boolean,
+    localInferenceCapability: LocalInferenceCapability,
+    discoveryState: ai.ciris.mobile.shared.ui.components.LocalLlmDiscoveryState,
+    onEditingChange: (Boolean) -> Unit
+) {
+    val semantic = SemanticColors.Default
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Wifi,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Server (Network Discovery)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Find LLM servers on your local network",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Text(
+                text = "Supports Ollama, llama.cpp, vLLM, LM Studio",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+
+            // Use LocalLlmServerDiscovery for network servers
+            LocalLlmServerDiscovery(
+                state = discoveryState,
+                apiClient = apiClient,
+                localInferenceCapability = localInferenceCapability,
+                onServerSelected = { server ->
+                    viewModel.selectServer(server)
+                    onEditingChange(true)
+                },
+                onAddAsProvider = { server, selectedModel ->
+                    llmViewModel.addDiscoveredServerAsProvider(server, selectedModel = selectedModel)
+                },
+                primaryColor = MaterialTheme.colorScheme.primary,
+                surfaceColor = MaterialTheme.colorScheme.surfaceVariant,
+                textColor = MaterialTheme.colorScheme.onSurface,
+                secondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// ============================================================================
+// Local Servers Content (Legacy - kept for reference)
 // ============================================================================
 
 @Composable
@@ -1519,9 +2096,9 @@ private fun LocalServersContent(
                 viewModel.selectServer(server)
                 onEditingChange(true)
             },
-            onAddAsProvider = { server ->
+            onAddAsProvider = { server, selectedModel ->
                 // Add the discovered server as a provider to the LLM Bus
-                llmViewModel.addDiscoveredServerAsProvider(server)
+                llmViewModel.addDiscoveredServerAsProvider(server, selectedModel = selectedModel)
             },
             primaryColor = MaterialTheme.colorScheme.primary,
             surfaceColor = MaterialTheme.colorScheme.surfaceVariant,

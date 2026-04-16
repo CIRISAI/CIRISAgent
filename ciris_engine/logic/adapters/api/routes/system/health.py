@@ -36,23 +36,67 @@ AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 router = APIRouter()
 
 
-async def collect_system_warnings(request: Request) -> list[SystemWarning]:
-    """Collect system-level warnings that require user attention."""
+async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
+    """Check LLM provider availability and return (has_working_llm, warnings)."""
     warnings: list[SystemWarning] = []
+    has_working_llm = False
 
-    # Check for missing LLM provider
     from ciris_engine.logic.registries.base import get_global_registry
     from ciris_engine.schemas.runtime.enums import ServiceType
 
     registry = get_global_registry()
     llm_providers = registry._services.get(ServiceType.LLM, [])
+
     if not llm_providers:
+        # No LLM providers registered at all
+        logger.debug("check_llm_availability: No LLM providers registered - degraded_mode=True")
         warnings.append(SystemWarning(
             code="no_llm_provider",
             message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
             severity="error",
             action_url="/settings/llm",
         ))
+    else:
+        # Check if any provider is actually healthy
+        # Note: registry._services returns List[ServiceProvider], we need .instance for actual service
+        for service_provider in llm_providers:
+            provider_name = getattr(service_provider, 'name', str(service_provider))
+            # Get the actual service instance from the ServiceProvider wrapper
+            service = getattr(service_provider, 'instance', service_provider)
+            try:
+                if hasattr(service, 'is_healthy'):
+                    is_healthy = await service.is_healthy()
+                    if is_healthy:
+                        has_working_llm = True
+                        break
+                elif hasattr(service, 'healthy') and service.healthy:
+                    has_working_llm = True
+                    break
+            except Exception as e:
+                logger.debug(f"check_llm_availability: Provider '{provider_name}' check failed: {e}")
+
+        if not has_working_llm:
+            logger.debug(
+                f"check_llm_availability: All {len(llm_providers)} providers unhealthy - degraded_mode=True"
+            )
+            warnings.append(SystemWarning(
+                code="llm_providers_unhealthy",
+                message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
+                severity="warning",
+                action_url="/settings/llm",
+            ))
+
+    return has_working_llm, warnings
+
+
+async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:
+    """Collect system-level warnings and check degraded mode.
+
+    Returns (degraded_mode, warnings) tuple.
+    """
+    # Check LLM availability first
+    has_working_llm, llm_warnings = await check_llm_availability()
+    warnings = llm_warnings.copy()
 
     # Check for adapters needing re-authentication
     adapter_manager = getattr(request.app.state, "adapter_manager", None)
@@ -70,7 +114,9 @@ async def collect_system_warnings(request: Request) -> list[SystemWarning]:
         except Exception as e:
             logger.debug(f"Could not check adapter reauth status: {e}")
 
-    return warnings
+    # degraded_mode is True when NO working LLM is available
+    degraded_mode = not has_working_llm
+    return degraded_mode, warnings
 
 
 @router.get("/health")
@@ -91,8 +137,8 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     services = await collect_service_health(request)
     processor_healthy = await check_processor_health(request)
 
-    # Collect system warnings
-    warnings = await collect_system_warnings(request)
+    # Collect system warnings and check degraded mode
+    degraded_mode, warnings = await collect_system_warnings(request)
 
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)
@@ -106,6 +152,7 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
         cognitive_state=cognitive_state,
         timestamp=current_time,
         warnings=warnings,
+        degraded_mode=degraded_mode,
     )
 
     return SuccessResponse(data=response)

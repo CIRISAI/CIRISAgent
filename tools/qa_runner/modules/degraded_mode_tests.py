@@ -355,12 +355,13 @@ class DegradedModeTests:
 
             self.console.print(f"    [dim]Initial degraded_mode={initial_degraded}[/dim]")
 
-            # Add a local provider (simulating what mobile app does)
+            # Add the Jetson Nano provider (real local LLM on the network)
+            # This is the actual Jetson Nano running Ollama
             payload = {
                 "provider_id": "local",
-                "base_url": "http://127.0.0.1:11434/v1",
+                "base_url": "http://192.168.50.203:11434/v1",
                 "name": test_provider_name,
-                "model": "test-model",
+                "model": "gemma4:E2B",
                 "api_key": "local",
                 "priority": "normal",
             }

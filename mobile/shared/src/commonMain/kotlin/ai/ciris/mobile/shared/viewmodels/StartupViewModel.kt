@@ -363,6 +363,15 @@ class StartupViewModel(
                     showReadyAndComplete()
                     return
                 }
+
+                // Almost all services online (N-1) after sufficient polling - proceed
+                // This handles the "no LLM provider" case where LLM service won't start
+                // Wait at least 50 polls (10 seconds) to give time for the last service
+                if (online >= total - 1 && online > 0 && attempts >= 50) {
+                    PlatformLogger.i(TAG, "[STARTUP][SERVICE] $online/$total services started after ${attempts * 200}ms (proceeding without full count)")
+                    showReadyAndComplete()
+                    return
+                }
             }
 
             // Check health every 10 polls (2 seconds)

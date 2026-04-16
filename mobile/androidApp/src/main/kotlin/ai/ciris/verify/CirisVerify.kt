@@ -41,6 +41,9 @@ class CirisVerify {
             cirisDataDir.mkdirs()
             val cirisHome = File(context.filesDir, "ciris").absolutePath
 
+            // Get native library directory for executable binaries (llama-server, etc.)
+            val nativeLibDir = context.applicationInfo.nativeLibraryDir
+
             // IMPORTANT: Use android.system.Os.setenv() for native code to see the env vars
             // Java's System.getenv() reflection hack only affects Java code, not native!
             var nativeEnvSet = false
@@ -48,8 +51,10 @@ class CirisVerify {
                 // API 21+ direct call - this actually calls native setenv()
                 android.system.Os.setenv("CIRIS_DATA_DIR", cirisDataDir.absolutePath, true)
                 android.system.Os.setenv("CIRIS_HOME", cirisHome, true)
+                android.system.Os.setenv("CIRIS_NATIVE_LIB_DIR", nativeLibDir, true)
                 nativeEnvSet = true
                 Log.i(TAG, "Set CIRIS_DATA_DIR=${cirisDataDir.absolutePath} via Os.setenv (native)")
+                Log.i(TAG, "Set CIRIS_NATIVE_LIB_DIR=${nativeLibDir} via Os.setenv (native)")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to set env via Os.setenv: ${e.message}")
                 // Try reflection as fallback (for older API levels)
@@ -58,8 +63,10 @@ class CirisVerify {
                     val setenvMethod = osClass.getMethod("setenv", String::class.java, String::class.java, Boolean::class.javaPrimitiveType)
                     setenvMethod.invoke(null, "CIRIS_DATA_DIR", cirisDataDir.absolutePath, true)
                     setenvMethod.invoke(null, "CIRIS_HOME", cirisHome, true)
+                    setenvMethod.invoke(null, "CIRIS_NATIVE_LIB_DIR", nativeLibDir, true)
                     nativeEnvSet = true
                     Log.i(TAG, "Set CIRIS_DATA_DIR=${cirisDataDir.absolutePath} via Os.setenv (reflection)")
+                    Log.i(TAG, "Set CIRIS_NATIVE_LIB_DIR=${nativeLibDir} via Os.setenv (reflection)")
                 } catch (e2: Exception) {
                     Log.e(TAG, "Failed to set env via Os.setenv reflection: ${e2.message}")
                 }
@@ -75,7 +82,8 @@ class CirisVerify {
                 val writableEnv = field.get(env) as MutableMap<String, String>
                 writableEnv["CIRIS_DATA_DIR"] = cirisDataDir.absolutePath
                 writableEnv["CIRIS_HOME"] = cirisHome
-                Log.d(TAG, "Also set CIRIS_DATA_DIR in Java env map")
+                writableEnv["CIRIS_NATIVE_LIB_DIR"] = nativeLibDir
+                Log.d(TAG, "Also set CIRIS_DATA_DIR and CIRIS_NATIVE_LIB_DIR in Java env map")
             } catch (e: Exception) {
                 Log.w(TAG, "Could not set Java env map (non-critical): ${e.message}")
             }

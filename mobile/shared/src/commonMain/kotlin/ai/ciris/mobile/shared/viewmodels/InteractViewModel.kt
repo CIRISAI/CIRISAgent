@@ -3,6 +3,7 @@ package ai.ciris.mobile.shared.viewmodels
 import ai.ciris.api.models.DocumentPayload
 import ai.ciris.api.models.ImagePayload
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.SystemWarning
 import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.localization.LocalizationManager
@@ -283,6 +284,10 @@ class InteractViewModel(
     // Pending deferrals count for WA banner display
     private val _pendingDeferrals = MutableStateFlow(0)
     val pendingDeferrals: StateFlow<Int> = _pendingDeferrals.asStateFlow()
+
+    // System warnings (e.g., no LLM provider configured)
+    private val _systemWarnings = MutableStateFlow<List<SystemWarning>>(emptyList())
+    val systemWarnings: StateFlow<List<SystemWarning>> = _systemWarnings.asStateFlow()
 
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
@@ -869,6 +874,17 @@ class InteractViewModel(
                 }
             } catch (e: Exception) {
                 logDebug(method, "Failed to fetch WA status: ${e.message}")
+            }
+
+            // Fetch system warnings (e.g., no LLM provider)
+            try {
+                val systemHealth = apiClient.getSystemHealth()
+                _systemWarnings.value = systemHealth.warnings
+                if (systemHealth.warnings.isNotEmpty()) {
+                    logInfo(method, "System warnings: ${systemHealth.warnings.map { it.code }}")
+                }
+            } catch (e: Exception) {
+                logDebug(method, "Failed to fetch system health: ${e.message}")
             }
         } catch (e: Exception) {
             logWarn(method, "Health polling error: ${e.message}")

@@ -962,10 +962,12 @@ async def unload_adapter(
         else:
             # Persist the adapter disable to .env so it doesn't reload on restart
             adapter_type_or_id = result.adapter_type or adapter_id
+            # Sanitize for logging (prevent log injection)
+            safe_id = adapter_id.replace("\n", "").replace("\r", "")[:100]
             if disable_adapter_in_env(adapter_type_or_id):
-                logger.info(f"Adapter {adapter_id} disabled in .env for persistence")
+                logger.info("Adapter %s disabled in .env for persistence", safe_id)
             else:
-                logger.warning(f"Could not persist adapter {adapter_id} disable to .env")
+                logger.warning("Could not persist adapter %s disable to .env", safe_id)
 
         # Convert response
         response = AdapterOperationResult(

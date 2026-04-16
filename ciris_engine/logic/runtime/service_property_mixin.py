@@ -114,9 +114,9 @@ class ServicePropertyMixin:
     @property
     def task_scheduler(self) -> Optional["TaskSchedulerServiceProtocol"]:
         """Access to task scheduler service."""
-        if not self.service_initializer:
+        if not self.service_initializer:  # type: ignore[attr-defined]
             return None
-        return getattr(self.service_initializer, "task_scheduler_service", None)  # type: ignore[return-value]
+        return getattr(self.service_initializer, "task_scheduler_service", None)  # type: ignore[attr-defined]
 
     @property
     def authentication_service(self) -> Optional["AuthenticationServiceProtocol"]:

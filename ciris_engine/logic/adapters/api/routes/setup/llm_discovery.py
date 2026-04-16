@@ -630,8 +630,10 @@ def _get_android_llama_paths() -> list[str]:
 def _ensure_executable(path: str) -> bool:
     """Ensure a file has execute permission.
 
-    This is safe because we only call this on our own bundled binary
-    within the app's private data directory - not user-supplied paths.
+    Security: This is safe because:
+    1. We only call this on paths from _get_android_llama_paths() - our own bundled binary
+    2. The paths are hardcoded app-private directories, not user-supplied
+    3. We're adding execute permission to run our own llama.cpp server binary
 
     Returns True if the file is now executable, False otherwise.
     """
@@ -643,8 +645,10 @@ def _ensure_executable(path: str) -> bool:
 
     try:
         current_mode = os.stat(path).st_mode
-        # Add execute bits - safe because this is our own bundled binary
-        os.chmod(path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)  # noqa: S103
+        # Add execute bits for owner/group/other to run the binary
+        # NOSONAR: Safe - path is from hardcoded app-private paths, not user input
+        new_mode = current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod(path, new_mode)  # NOSONAR
         logger.info(f"[LLAMA_BINARY] Added execute permission to: {path}")
         return os.access(path, os.X_OK)
     except Exception as e:

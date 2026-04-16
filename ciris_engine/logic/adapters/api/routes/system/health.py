@@ -36,11 +36,32 @@ AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 router = APIRouter()
 
 
+async def _check_provider_health(service_provider: object) -> bool:
+    """Check if a single LLM provider is healthy.
+
+    Args:
+        service_provider: A ServiceProvider wrapper from the registry.
+
+    Returns:
+        True if the provider is healthy, False otherwise.
+    """
+    # Get the actual service instance from the ServiceProvider wrapper
+    service = getattr(service_provider, 'instance', service_provider)
+    provider_name = getattr(service_provider, 'name', str(service_provider))
+
+    try:
+        if hasattr(service, 'is_healthy'):
+            return bool(await service.is_healthy())
+        if hasattr(service, 'healthy'):
+            return bool(service.healthy)
+    except Exception as e:
+        logger.debug(f"Provider '{provider_name}' health check failed: {e}")
+
+    return False
+
+
 async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     """Check LLM provider availability and return (has_working_llm, warnings)."""
-    warnings: list[SystemWarning] = []
-    has_working_llm = False
-
     from ciris_engine.logic.registries.base import get_global_registry
     from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -48,45 +69,26 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     llm_providers = registry._services.get(ServiceType.LLM, [])
 
     if not llm_providers:
-        # No LLM providers registered at all
-        logger.debug("check_llm_availability: No LLM providers registered - degraded_mode=True")
-        warnings.append(SystemWarning(
+        logger.debug("No LLM providers registered - degraded_mode=True")
+        return False, [SystemWarning(
             code="no_llm_provider",
             message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
             severity="error",
             action_url="/settings/llm",
-        ))
-    else:
-        # Check if any provider is actually healthy
-        # Note: registry._services returns List[ServiceProvider], we need .instance for actual service
-        for service_provider in llm_providers:
-            provider_name = getattr(service_provider, 'name', str(service_provider))
-            # Get the actual service instance from the ServiceProvider wrapper
-            service = getattr(service_provider, 'instance', service_provider)
-            try:
-                if hasattr(service, 'is_healthy'):
-                    is_healthy = await service.is_healthy()
-                    if is_healthy:
-                        has_working_llm = True
-                        break
-                elif hasattr(service, 'healthy') and service.healthy:
-                    has_working_llm = True
-                    break
-            except Exception as e:
-                logger.debug(f"check_llm_availability: Provider '{provider_name}' check failed: {e}")
+        )]
 
-        if not has_working_llm:
-            logger.debug(
-                f"check_llm_availability: All {len(llm_providers)} providers unhealthy - degraded_mode=True"
-            )
-            warnings.append(SystemWarning(
-                code="llm_providers_unhealthy",
-                message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
-                severity="warning",
-                action_url="/settings/llm",
-            ))
+    # Check if any provider is healthy
+    for service_provider in llm_providers:
+        if await _check_provider_health(service_provider):
+            return True, []
 
-    return has_working_llm, warnings
+    logger.debug(f"All {len(llm_providers)} providers unhealthy - degraded_mode=True")
+    return False, [SystemWarning(
+        code="llm_providers_unhealthy",
+        message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
+        severity="warning",
+        action_url="/settings/llm",
+    )]
 
 
 async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:

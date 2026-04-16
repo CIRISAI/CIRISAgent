@@ -593,6 +593,65 @@ async def _start_llama_cpp_server(
         return _error_result(f"Failed to start llama.cpp: {str(e)}")
 
 
+def _get_android_llama_paths() -> list[str]:
+    """Get potential Android paths for the llama.cpp binary.
+
+    Returns paths in priority order: native lib dir first (most likely to work),
+    then CIRIS data dir, then common package paths.
+    """
+    import os
+
+    paths: list[str] = []
+
+    # BEST: Native library directory (where .so files can be executed)
+    native_lib_dir = os.environ.get("CIRIS_NATIVE_LIB_DIR", "")
+    if native_lib_dir:
+        paths.append(os.path.join(native_lib_dir, "libllama_server.so"))
+        logger.info(f"[LLAMA_BINARY] Will check native lib dir: {native_lib_dir}")
+
+    # FALLBACK: CIRIS data directory (may not be executable due to SELinux)
+    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+    if ciris_data_dir:
+        paths.append(os.path.join(ciris_data_dir, "bin", "llama-server"))
+        parent_dir = os.path.dirname(ciris_data_dir)
+        if parent_dir:
+            paths.append(os.path.join(parent_dir, "bin", "llama-server"))
+
+    # LAST RESORT: Common Android app data paths
+    for pkg in ["ai.ciris.mobile.debug", "ai.ciris.mobile"]:
+        paths.extend([
+            f"/data/data/{pkg}/files/bin/llama-server",
+            f"/data/data/{pkg}/files/ciris/bin/llama-server",
+        ])
+
+    return paths
+
+
+def _ensure_executable(path: str) -> bool:
+    """Ensure a file has execute permission.
+
+    This is safe because we only call this on our own bundled binary
+    within the app's private data directory - not user-supplied paths.
+
+    Returns True if the file is now executable, False otherwise.
+    """
+    import os
+    import stat
+
+    if os.access(path, os.X_OK):
+        return True
+
+    try:
+        current_mode = os.stat(path).st_mode
+        # Add execute bits - safe because this is our own bundled binary
+        os.chmod(path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)  # noqa: S103
+        logger.info(f"[LLAMA_BINARY] Added execute permission to: {path}")
+        return os.access(path, os.X_OK)
+    except Exception as e:
+        logger.warning(f"[LLAMA_BINARY] Could not chmod {path}: {e}")
+        return False
+
+
 def _find_llama_cpp_binary() -> Optional[str]:
     """Find the llama.cpp server binary.
 
@@ -601,52 +660,12 @@ def _find_llama_cpp_binary() -> Optional[str]:
     """
     import os
     import shutil
-    import platform
 
-    # Check for Android bundled binary first
-    # The binary is packaged as libllama_server.so in jniLibs and extracted to nativeLibraryDir
-    android_paths = []
-
-    # BEST OPTION: Check native library directory (where .so files can be executed)
-    native_lib_dir = os.environ.get("CIRIS_NATIVE_LIB_DIR", "")
-    if native_lib_dir:
-        # The binary is packaged as libllama_server.so to work with Android's library loading
-        android_paths.append(os.path.join(native_lib_dir, "libllama_server.so"))
-        logger.info(f"[LLAMA_BINARY] Will check native lib dir: {native_lib_dir}")
-
-    # FALLBACK: Try to find CIRIS data directory (set by Android app)
-    # Note: These may not be executable due to SELinux policy
-    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
-    if ciris_data_dir:
-        # Check in CIRIS_DATA_DIR/bin (if binary was moved there)
-        android_paths.append(os.path.join(ciris_data_dir, "bin", "llama-server"))
-        # Check in parent/bin (filesDir/bin - where Android extracts it)
-        parent_dir = os.path.dirname(ciris_data_dir)
-        if parent_dir:
-            android_paths.append(os.path.join(parent_dir, "bin", "llama-server"))
-
-    # Also check common Android app data paths (fallback only)
-    for pkg in ["ai.ciris.mobile.debug", "ai.ciris.mobile"]:
-        android_paths.extend([
-            f"/data/data/{pkg}/files/bin/llama-server",
-            f"/data/data/{pkg}/files/ciris/bin/llama-server",
-        ])
-
-    for path in android_paths:
-        if os.path.isfile(path):
-            # Try to ensure execute permission (may have been lost during copy/extract)
-            if not os.access(path, os.X_OK):
-                try:
-                    import stat
-                    current_mode = os.stat(path).st_mode
-                    os.chmod(path, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-                    logger.info(f"[LLAMA_BINARY] Added execute permission to: {path}")
-                except Exception as e:
-                    logger.warning(f"[LLAMA_BINARY] Could not chmod {path}: {e}")
-                    continue
-            if os.access(path, os.X_OK):
-                logger.info(f"[LLAMA_BINARY] Found Android bundled binary: {path}")
-                return path
+    # Check Android paths first
+    for path in _get_android_llama_paths():
+        if os.path.isfile(path) and _ensure_executable(path):
+            logger.info(f"[LLAMA_BINARY] Found Android bundled binary: {path}")
+            return path
 
     # Try common binary names in PATH
     for name in ["llama-server", "llama.cpp-server", "server"]:
@@ -654,7 +673,7 @@ def _find_llama_cpp_binary() -> Optional[str]:
         if binary:
             return binary
 
-    # Check common installation paths (desktop)
+    # Check common desktop installation paths
     common_paths = [
         "/usr/local/bin/llama-server",
         "/opt/llama.cpp/build/bin/llama-server",

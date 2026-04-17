@@ -187,5 +187,6 @@ class TestLiveLLMConfig:
             assert env.get("CIRIS_MOCK_LLM") == "false"
             assert env.get("CIRIS_LLM_PROVIDER") == "openai"
             assert env.get("OPENAI_API_KEY") == "sk-test-key"
-            assert env.get("OPENAI_MODEL_NAME") == "gpt-4o-mini"
+            # Model name is set via CIRIS_LLM_MODEL_NAME (used by service_initializer for all providers)
+            assert env.get("CIRIS_LLM_MODEL_NAME") == "gpt-4o-mini"
             assert env.get("OPENAI_API_BASE") == "https://api.openai.com/v1"

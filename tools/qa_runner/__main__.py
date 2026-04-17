@@ -116,6 +116,12 @@ Available modules:
         default="https://api.groq.com/openai/v1",
         help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
     )
+    parser.add_argument(
+        "--live-provider",
+        choices=["openai", "anthropic", "google"],
+        default=None,
+        help="LLM provider (auto-detected from base URL if not specified)",
+    )
 
     # Live Lens configuration (for accord_metrics tests)
     parser.add_argument(
@@ -303,6 +309,7 @@ def main():
     live_api_key = None
     live_model = None
     live_base_url = None
+    live_provider = None
     if args.live:
         key_path = Path(args.live_key_file).expanduser()
         if not key_path.exists():
@@ -316,10 +323,28 @@ def main():
                 sys.exit(1)
             live_model = args.live_model
             live_base_url = args.live_base_url
+
+            # Auto-detect provider from key file name or base URL if not specified
+            live_provider = args.live_provider
+            if not live_provider:
+                key_file_name = key_path.name.lower()
+                base_url_lower = live_base_url.lower() if live_base_url else ""
+
+                if "anthropic" in key_file_name or "anthropic" in base_url_lower:
+                    live_provider = "anthropic"
+                    # For native Anthropic, we don't use a base URL (SDK handles it)
+                    live_base_url = None
+                elif "google" in key_file_name or "gemini" in key_file_name or "generativelanguage.googleapis" in base_url_lower:
+                    live_provider = "google"
+                else:
+                    live_provider = "openai"  # Default to OpenAI/OpenAI-compatible
+
             print(f"🔑 Live mode enabled:")
+            print(f"   Provider: {live_provider}")
             print(f"   Key: {live_api_key[:10]}...{live_api_key[-4:]}")
             print(f"   Model: {live_model}")
-            print(f"   Base URL: {live_base_url}")
+            if live_base_url:
+                print(f"   Base URL: {live_base_url}")
         except Exception as e:
             print(f"❌ Failed to read API key: {e}")
             sys.exit(1)
@@ -367,6 +392,7 @@ def main():
         live_api_key=live_api_key,
         live_model=live_model,
         live_base_url=live_base_url,
+        live_provider=live_provider,
         # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
         # Live CIRISNode configuration (for cirisnode tests)

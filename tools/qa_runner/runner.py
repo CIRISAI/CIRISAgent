@@ -110,6 +110,7 @@ class QARunner:
                 live_api_key=self.config.live_api_key,
                 live_model=self.config.live_model,
                 live_base_url=self.config.live_base_url,
+                live_provider=self.config.live_provider,
                 # Live Lens configuration
                 live_lens=self.config.live_lens,
                 # Data management

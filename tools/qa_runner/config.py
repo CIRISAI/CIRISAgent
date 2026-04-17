@@ -161,6 +161,7 @@ class QAConfig:
     live_api_key: Optional[str] = None
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
+    live_provider: Optional[str] = None  # "openai", "anthropic", "google", or auto-detect from base_url
 
     # Live Lens configuration (--live-lens flag for accord_metrics tests)
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper

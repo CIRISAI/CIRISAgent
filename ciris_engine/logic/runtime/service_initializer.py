@@ -1106,10 +1106,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 metadata={"provider": "openai_secondary", "model": model_name, "base_url": base_url},
             )
 
-        # Register token refresh handler for secondary LLM (CIRIS proxy uses JWT auth)
-        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+        # Only register token refresh handler for CIRIS proxy secondaries
+        # Non-proxy secondaries use CIRIS_OPENAI_API_KEY_2 which isn't refreshed by Android
+        is_ciris_proxy = any(domain in base_url for domain in ("ciris.ai", "ciris-services"))
+        if is_ciris_proxy and self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
             self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
-            logger.info("Registered secondary LLM service token refresh handler")
+            logger.info("Registered secondary LLM service token refresh handler (CIRIS proxy)")
 
         logger.info(f"Secondary LLM service initialized: {model_name}")
 

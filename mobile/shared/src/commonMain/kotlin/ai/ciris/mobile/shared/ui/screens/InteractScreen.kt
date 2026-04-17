@@ -148,6 +148,11 @@ fun InteractScreen(
     val pendingDeferrals by viewModel.pendingDeferrals.collectAsState()
     val systemWarnings by viewModel.systemWarnings.collectAsState()
 
+    // Refresh trust status when screen becomes visible (handles app resume)
+    LaunchedEffect(Unit) {
+        viewModel.refreshTrustStatus()
+    }
+
     // Observe text input requests for test automation
     val textInputRequest by TestAutomation.textInputRequests.collectAsState()
     LaunchedEffect(textInputRequest) {
@@ -973,10 +978,13 @@ private fun TrustShield(
 ) {
     // TrustStatus.maxLevel now contains actual achieved level (calculated in ViewModel)
     val level = trustStatus.maxLevel
+    val isLoaded = trustStatus.isLoaded
     val isPending = trustStatus.levelPending  // True when waiting for device attestation
+    val isLoading = !isLoaded || isPending    // Show loading state until data is loaded
 
-    // When pending, use amber to indicate "in progress" state
+    // When pending/loading, use amber to indicate "in progress" state
     val shieldColor = when {
+        !isLoaded -> theme.trustDefault        // Not loaded yet - gray with spinner
         isPending -> theme.trustLevel4         // Attestation in progress - amber (provisional)
         level >= 5 -> theme.trustLevel5        // Identity Validated - green
         level == 4 -> theme.trustLevel4        // Agent Validated - amber
@@ -995,8 +1003,8 @@ private fun TrustShield(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            if (isPending) {
-                // Show spinner when attestation is pending
+            if (isLoading) {
+                // Show spinner when loading or attestation is pending
                 CircularProgressIndicator(
                     modifier = Modifier.size(12.dp),
                     strokeWidth = 1.5.dp,
@@ -1007,9 +1015,13 @@ private fun TrustShield(
                 Text(text = "🛡", fontSize = 12.sp)
             }
 
-            // Level text - show provisional indicator when pending
+            // Level text - show loading indicator when not loaded, provisional when pending
             Text(
-                text = if (isPending) "$level/5..." else "$level/5",
+                text = when {
+                    !isLoaded -> "…"           // Loading
+                    isPending -> "$level/5..."  // Attestation pending
+                    else -> "$level/5"          // Stable
+                },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = shieldColor

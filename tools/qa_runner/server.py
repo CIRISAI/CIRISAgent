@@ -644,15 +644,29 @@ class APIServerManager:
         if self.config.live_api_key:
             # Override any mock LLM settings from .env
             env["CIRIS_MOCK_LLM"] = "false"
-            env["CIRIS_LLM_PROVIDER"] = "openai"
-            env["OPENAI_API_KEY"] = self.config.live_api_key
-            self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
-        if self.config.live_base_url:
-            env["OPENAI_API_BASE"] = self.config.live_base_url
-            self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
-        if self.config.live_model:
-            env["OPENAI_MODEL_NAME"] = self.config.live_model
-            self.console.print(f"[cyan]🤖 Live LLM: OPENAI_MODEL_NAME={self.config.live_model}[/cyan]")
+
+            # Set provider-specific environment variables
+            provider = self.config.live_provider or "openai"
+            env["CIRIS_LLM_PROVIDER"] = provider
+
+            # Set model name using CIRIS_LLM_MODEL_NAME (read by service_initializer for all providers)
+            if self.config.live_model:
+                env["CIRIS_LLM_MODEL_NAME"] = self.config.live_model
+                self.console.print(f"[cyan]🤖 Live LLM: model={self.config.live_model}[/cyan]")
+
+            if provider == "anthropic":
+                env["ANTHROPIC_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan]🔑 Live LLM: ANTHROPIC_API_KEY set (native Anthropic SDK)[/cyan]")
+            elif provider == "google":
+                env["GOOGLE_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan]🔑 Live LLM: GOOGLE_API_KEY set (native Google SDK)[/cyan]")
+            else:
+                # OpenAI or OpenAI-compatible (Groq, OpenRouter, etc.)
+                env["OPENAI_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
+                if self.config.live_base_url:
+                    env["OPENAI_API_BASE"] = self.config.live_base_url
+                    self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
 
         # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:

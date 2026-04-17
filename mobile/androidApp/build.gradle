@@ -140,10 +140,10 @@ android {
 
     packaging {
         jniLibs {
-            // Use compressed native libraries for 16KB page size compatibility
-            // Required for Google Play submission on Android 15+ devices
+            // Extract native libraries to filesystem (required for Python ctypes)
+            // Libraries are 16KB page-aligned for Android 15+ compatibility
             // See: https://developer.android.com/guide/practices/page-sizes
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 }

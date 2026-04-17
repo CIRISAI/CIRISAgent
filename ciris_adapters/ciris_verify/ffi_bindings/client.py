@@ -300,20 +300,7 @@ class CIRISVerify:
                 "Ensure the native library is included in jniLibs."
             )
 
-        # 1. pip-installed ciris_verify — always correct platform
-        try:
-            import ciris_verify as cv_pkg
-            pkg_dir = Path(cv_pkg.__file__).parent
-            for suffix in [".dylib", ".so", ".dll"]:
-                candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
-                if candidate.exists():
-                    import logging
-                    logging.getLogger(__name__).info(f"[CIRISVerify] Using pip-installed library: {candidate}")
-                    return candidate
-        except (ImportError, AttributeError):
-            pass
-
-        # 2. Search default paths
+        # Search default paths
         system = platform.system()
         paths = DEFAULT_BINARY_PATHS.get(system, [])
 
@@ -322,15 +309,9 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        # 3. Check relative to this module (platform-aware suffix order)
+        # Also check relative to this module
         module_dir = Path(__file__).parent
-        if system == "Darwin":
-            suffixes = [".dylib", ".so", ".dll"]
-        elif system == "Windows":
-            suffixes = [".dll", ".so", ".dylib"]
-        else:
-            suffixes = [".so", ".dylib", ".dll"]
-        for suffix in suffixes:
+        for suffix in [".so", ".dylib", ".dll"]:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate
@@ -471,6 +452,11 @@ class CIRISVerify:
             # ciris_verify_delete_key(handle) -> i32
             self._lib.ciris_verify_delete_key.argtypes = [ctypes.c_void_p]
             self._lib.ciris_verify_delete_key.restype = ctypes.c_int
+
+            # ciris_verify_generate_key(handle) -> i32
+            # CRITICAL: Must be set or ctypes truncates 64-bit pointers to 32-bit!
+            self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
+            self._lib.ciris_verify_generate_key.restype = ctypes.c_int
 
             # ciris_verify_sign_ed25519(handle, data, data_len, sig_data, sig_len) -> i32
             self._lib.ciris_verify_sign_ed25519.argtypes = [
@@ -2385,11 +2371,6 @@ class CIRISVerify:
                 "generate_key not available in this library version. "
                 "Update to ciris-verify >= 1.1.16."
             )
-
-        # CRITICAL: This must be set or ctypes truncates 64-bit pointers to 32-bit!
-        # See docs/bugs/CIRIS_VERIFY_KEY_SEGFAULT.md for full explanation.
-        self._lib.ciris_verify_generate_key.argtypes = [ctypes.c_void_p]
-        self._lib.ciris_verify_generate_key.restype = ctypes.c_int
 
         ret = self._lib.ciris_verify_generate_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:

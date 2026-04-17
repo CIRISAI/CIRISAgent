@@ -175,21 +175,11 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
             return
         }
 
-        // SmartStartup: Check for orphan server from previous instance
+        // SmartStartup: Check for existing server from previous instance
         if (isOrphanServerRunning()) {
-            Log.i(TAG, "[SmartStartup] Detected orphan server - sending shutdown signal")
-            shutdownOrphanServer()
-            // Wait for orphan to die
-            var waitedMs = 0
-            while (waitedMs < 10000 && isOrphanServerRunning()) {
-                Thread.sleep(500)
-                waitedMs += 500
-            }
-            if (isOrphanServerRunning()) {
-                Log.w(TAG, "[SmartStartup] Orphan server still running after 10s - proceeding anyway")
-            } else {
-                Log.i(TAG, "[SmartStartup] Orphan server shut down after ${waitedMs}ms")
-            }
+            Log.i(TAG, "[SmartStartup] Detected existing server on :8080 - attaching to it")
+            serverStarted = true
+            return
         }
 
         try {

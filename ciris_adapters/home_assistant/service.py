@@ -63,6 +63,10 @@ class HAIntegrationService:
     - Camera frame extraction for vision processing
 
     SAFE DOMAIN: Home automation only. Medical capabilities are blocked.
+
+    Supervisor Mode:
+    When running as an HA addon, SUPERVISOR_TOKEN is automatically available
+    and the API is accessed via http://supervisor/core/api. No OAuth needed.
     """
 
     PROHIBITED_CAPABILITIES = {
@@ -85,12 +89,30 @@ class HAIntegrationService:
         "activity": HAEventType.CAMERA_ACTIVITY,
     }
 
+    # Supervisor API endpoint (when running as HA addon)
+    SUPERVISOR_API_URL = "http://supervisor/core/api"
+
+    @staticmethod
+    def is_supervisor_mode() -> bool:
+        """Check if running inside Home Assistant as an addon.
+
+        When running as an HA addon, the SUPERVISOR_TOKEN env var is
+        automatically injected by the HA Supervisor.
+        """
+        return bool(os.getenv("SUPERVISOR_TOKEN"))
+
     def __init__(self) -> None:
         """Initialize the Home Assistant integration service."""
         # HA configuration - NOTE: Token is fetched dynamically via property
         # to support OAuth flows where token is set after adapter initialization
         self._ha_url: Optional[str] = None
         self._ha_token: Optional[str] = None
+
+        # Check for supervisor mode (running as HA addon)
+        self._supervisor_mode = self.is_supervisor_mode()
+        if self._supervisor_mode:
+            logger.info("[HA] Running in SUPERVISOR MODE (HA addon)")
+            logger.info(f"[HA] Using Supervisor API: {self.SUPERVISOR_API_URL}")
 
         # Camera configuration
         self.go2rtc_url = os.getenv("GO2RTC_SERVER_URL", "http://127.0.0.1:8554")
@@ -123,9 +145,16 @@ class HAIntegrationService:
 
     @property
     def ha_url(self) -> str:
-        """Get HA URL - fetched dynamically from env or cached value."""
+        """Get HA URL - fetched dynamically from env or cached value.
+
+        In supervisor mode (HA addon), uses http://supervisor/core/api.
+        Otherwise uses HOME_ASSISTANT_URL env var or default.
+        """
         if self._ha_url:
             return self._ha_url
+        # Supervisor mode: use internal Supervisor API
+        if self._supervisor_mode:
+            return self.SUPERVISOR_API_URL.rstrip("/")
         return os.getenv("HOME_ASSISTANT_URL", "http://homeassistant.local:8123").rstrip("/")
 
     @ha_url.setter
@@ -137,11 +166,21 @@ class HAIntegrationService:
     def ha_token(self) -> Optional[str]:
         """Get HA token - fetched dynamically from env or cached value.
 
+        In supervisor mode, uses SUPERVISOR_TOKEN (auto-injected by HA).
+        Otherwise uses HOME_ASSISTANT_TOKEN from OAuth flow.
+
         This is critical for OAuth flows where the token is set via environment
         variable AFTER the service is initialized.
         """
         if self._ha_token:
             return self._ha_token
+        # Supervisor mode: use SUPERVISOR_TOKEN (auto-injected by HA)
+        if self._supervisor_mode:
+            token = os.getenv("SUPERVISOR_TOKEN")
+            if token:
+                logger.debug("[HA TOKEN] Using SUPERVISOR_TOKEN (addon mode)")
+            return token
+        # Normal mode: use OAuth token
         token = os.getenv("HOME_ASSISTANT_TOKEN")
         if token:
             logger.debug(
@@ -176,19 +215,26 @@ class HAIntegrationService:
         This is set when the refresh token is revoked/expired and a new OAuth
         flow is needed. The mobile app should show this on the adapters page.
 
+        In supervisor mode (HA addon), authentication is automatic via
+        SUPERVISOR_TOKEN, so re-auth is never required.
+
         Also returns True if no token is configured at all.
         """
+        # Supervisor mode: auth is automatic, never needs re-auth
+        if self._supervisor_mode:
+            logger.debug("[HA_NEEDS_REAUTH] Supervisor mode - auth is automatic")
+            return False
         # If explicitly flagged for reauth (e.g., token expired during operation)
         if self._needs_reauth:
-            logger.info(f"[HA_NEEDS_REAUTH] _needs_reauth=True, returning True")
+            logger.info("[HA_NEEDS_REAUTH] _needs_reauth=True, returning True")
             return True
         # Also need reauth if no token configured
         has_token = bool(self.ha_token)
         logger.info(f"[HA_NEEDS_REAUTH] _needs_reauth=False, ha_token exists={has_token}")
         if not self.ha_token:
-            logger.info(f"[HA_NEEDS_REAUTH] No token, returning True")
+            logger.info("[HA_NEEDS_REAUTH] No token, returning True")
             return True
-        logger.info(f"[HA_NEEDS_REAUTH] Has token, returning False")
+        logger.info("[HA_NEEDS_REAUTH] Has token, returning False")
         return False
 
     @property

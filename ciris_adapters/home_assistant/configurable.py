@@ -218,6 +218,7 @@ class HAConfigurableAdapter:
         """Discover Home Assistant instances.
 
         Supports:
+        - "supervisor": Detect HA addon mode (SUPERVISOR_TOKEN present)
         - "mdns" / "zeroconf": Use mDNS/Zeroconf discovery
         - "manual": Return empty list (user enters URL manually)
         - "env": Check environment variables
@@ -234,6 +235,13 @@ class HAConfigurableAdapter:
             return []
         elif discovery_type == "env":
             return self._discover_from_env()
+        elif discovery_type == "supervisor":
+            return self._discover_supervisor()
+
+        # Check supervisor mode FIRST (highest priority when running as HA addon)
+        supervisor_instance = self._discover_supervisor()
+        if supervisor_instance:
+            return supervisor_instance
 
         # All discovery paths (explicit "mdns"/"zeroconf" or default) try the
         # full chain: mDNS → hostname probe → env.  This ensures that when
@@ -245,6 +253,31 @@ class HAConfigurableAdapter:
         if not instances:
             instances = self._discover_from_env()
         return instances
+
+    def _discover_supervisor(self) -> List[Dict[str, Any]]:
+        """Check if running as HA addon with SUPERVISOR_TOKEN.
+
+        When running inside Home Assistant as an addon, the Supervisor
+        automatically injects SUPERVISOR_TOKEN for API access.
+        No OAuth flow is needed - we can use this token directly.
+        """
+        supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+        if supervisor_token:
+            logger.info("[HA SUPERVISOR] Detected SUPERVISOR_TOKEN - running as HA addon")
+            return [
+                {
+                    "id": "ha_supervisor",
+                    "label": "Home Assistant (Local Addon)",
+                    "description": "Running as Home Assistant addon - authentication automatic",
+                    "metadata": {
+                        "url": "http://supervisor/core/api",
+                        "source": "supervisor",
+                        "supervisor_mode": True,
+                        "oauth_required": False,  # No OAuth needed
+                    },
+                }
+            ]
+        return []
 
     async def _discover_mdns(self) -> List[Dict[str, Any]]:
         """Discover HA instances via mDNS/Zeroconf."""

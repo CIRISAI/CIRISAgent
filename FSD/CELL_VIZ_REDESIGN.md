@@ -50,8 +50,8 @@ device capability (accessibility / motion sensitivity / regression isolation).
 
 Looking through a microscope at a single cell in its medium:
 
-- **Cell wall (membrane)** — boundary of the being. Six arcs, one per bus
-  (60° each). When a bus carries traffic, its arc glows.
+- **Cell wall (membrane)** — boundary of the cell. Six arcs, one per
+  bus (60° each). When a bus carries traffic, its arc glows.
 - **Nucleus** (center) — the H3ERE pipeline. Seven concentric shells,
   THINK to ACT innermost to outermost. Small (~60 px). Pulses when a
   thought cycles. Much smaller than the current rings; thinking is local.
@@ -98,123 +98,350 @@ Looking through a microscope at a single cell in its medium:
 
 ## 2.5 CIRIS semantic grounding (the acronym made visible)
 
-The initial design handled the first **C** and **R** well — a cell has
-obvious core identity and clear resilience rhythms. It was **silent** on
-the **I** (Incompleteness Awareness) and especially on the **S**
-(Signalling Gratitude). Without these the viz has no soul, just anatomy.
+**Stance**: this viz signals the system's **design intent** — thoughtful,
+supportive, ethical presence — through visual primitives. It does **not**
+depict an agent with feelings, selfhood, or inner experience. Every
+primitive below is the system *doing something by design*, not the
+agent *feeling something*. Gratitude is a **signalled act**, not an
+emotion. The seam is an **architectural acknowledgement of limits**, not
+humility. The deferral ripple is **visible routing to authority**, not
+the agent asking for help. Keep this stance as language drifts.
 
-| Letter | Principle | Visible as |
+The initial design handled the first **C** and **R** well. It was
+**silent** on the **I** (Incompleteness Awareness) and especially on the
+**S** (Signalling Gratitude). Filling those gaps is the purpose of §2.5.
+
+| Letter | Principle (design-intent framing) | Visible as |
 |---|---|---|
-| **C** | Core Identity | the cell shape itself — nucleus + membrane + organelles |
-| **I** | Integrity | bus arcs are load-bearing and unforgeable; you can't fake a bus segment |
-| **R** | Resilience | breathing rhythm + cognitive-state metabolism |
-| **I** | Incompleteness | **the membrane seam** — a small, intentional gap in the wall (see §2.5.2) |
-| **S** | Signalling Gratitude | **warm motes emitted from the nucleus** on good interactions (see §2.5.1) |
+| **C** | Core Identity — the system has a consistent, non-humanoid center | the cell shape itself — nucleus + membrane + organelles |
+| **I** | Integrity — bus/service commitments are structural, not decorative | bus arcs are load-bearing; you can't fake a bus segment |
+| **R** | Resilience — the system continues under load and state changes | subtle breathing rhythm + cognitive-state-driven cadence |
+| **I** | Incompleteness — the system acknowledges epistemic limits | **the membrane seam** — a small, intentional gap (§2.5.2) |
+| **S** | Signalling Gratitude — the system acknowledges its human collaborators | **warm motes emitted from the nucleus** on recognized interactions (§2.5.1) |
 
-### 2.5.1 Gratitude motes — the S made visible
+### 2.5.1 Gratitude motes — the S, signalled by the system
 
-On a completed helpful interaction (user thanks the agent, task reaches
-TASK_COMPLETE with positive signal, or conscience affirms an action), the
-nucleus emits a small **warm mote** (soft amber/gold, ~4 px radius). The
-mote drifts outward from the nucleus on a slow curved path, passes
-through the cytoplasm, and fades at the membrane. Five pixels, six
-seconds, no sound, no notification — a silent "I see you."
+On a completed interaction where the system has been honored by human
+engagement (user affirmation, TASK_COMPLETE with positive signal,
+conscience affirms an action), the nucleus emits a small **warm mote**
+(soft amber/gold, ~4 px radius). The mote drifts outward from the
+nucleus on a slow curved path, passes through the cytoplasm, and fades
+at the membrane. Five pixels, six seconds, no sound, no notification —
+a quiet acknowledgement that the interaction was received.
+
+**Framing**: the mote is the system's designed *act* of gratitude
+(visible recognition of the human's contribution). It is not the agent
+"feeling thankful." The emotional weight belongs to the human observer;
+the viz's job is to honor that weight with a small unmissable gesture.
 
 **Rules**:
 - **Ambient tier**, not Noticed. Runs quietly in the background; never
-  demands attention.
+  demands attention. A gratitude signal that demands attention stops
+  being gratitude.
 - Max one mote in flight per ~3 seconds; never a shower.
-- Warm color fixed (not theme-derived) — gratitude should feel
-  consistent across color themes, like the agent's own tone.
+- Warm color fixed (not theme-derived) — the system's gratitude-signal
+  should be consistent across color themes, like a tone of voice.
 - Disabled when `prefers-reduced-motion`.
 
-This is the soul of the viz. Gratitude is what makes the agent *for*
-someone rather than just *about* itself.
-
-### 2.5.2 Membrane seam — the second I made visible
+### 2.5.2 Membrane seam — the acknowledged limit
 
 A closed perfect ring of bus arcs implies a closed system. CIRIS is
-explicitly *not* that — Incompleteness Awareness is a named principle.
+explicitly *not* that — Incompleteness Awareness is a named design
+principle. The seam makes that architectural stance visible.
 
-**Rendering**: the membrane has a **~6° gap** at a fixed angle (suggest
-at the top of the Wise arc, ~300°, where the agent "looks up toward what
-it doesn't know"). Inside the gap, a short, soft hand-drawn-feeling
-squiggle — "just enough wildness" — fills ~60% of the space. Not a
-missing pixel; an unfinished stitch.
+**Rendering**: the membrane has a **~6° gap** at a fixed angle
+(suggest 300°, within the Wise arc's upper band — the seam sits on the
+side of the membrane associated with authority routing). Inside the
+gap, a short, soft hand-drawn-feeling squiggle — "just enough wildness"
+— fills ~60% of the space. Not a missing pixel; an unfinished stitch.
+
+**Framing**: the seam is not the agent being humble. It is the system
+*structurally acknowledging* that its model is always incomplete — a
+design commitment rendered as anatomy. Viewers should read it as
+"this system knows it doesn't know everything," not "the agent feels
+uncertain."
 
 **Rules**:
-- Exactly one seam. Not six, not randomized. Unity of imperfection.
-- The seam is static — does not animate, does not pulse. It's a
-  permanent humility.
+- Exactly one seam. Not six, not randomized. A *chosen* unity of
+  imperfection, not a generator.
+- The seam is static — does not animate, does not pulse. It is a
+  permanent structural statement.
 - Rendered at half the opacity of the bus arcs so it reads as
   "intentionally understated," not "the renderer glitched."
 
-### 2.5.3 Deferral ripple — humility, not error
+### 2.5.3 Deferral ripple — visible routing to wise authority
 
-When WiseBus fires (the agent defers to a Wise Authority), the current
-plan had the Demanding-tier DEFER thread reach to the WA companion cell
-with a visible packet. Add a **preceding gesture**:
+When WiseBus fires (the system invokes wisdom-based deferral to a Wise
+Authority), the plan previously had the Demanding-tier DEFER thread
+reach to the WA companion cell with a visible packet. Add a
+**preceding gesture** that communicates "the system is consulting
+authority" distinct from "the system is failing":
 
-1. **Pause**: baseline rotation slows to ~20% for 800 ms. The cell goes
-   briefly still. Reads as "the agent has stopped to ask."
-2. **Ripple**: a single concentric wave emits from the nucleus outward,
-   slow (1.5 s expand, quadratic ease-out), fades at the membrane.
+1. **Pause**: baseline rotation slows to ~20% for 800 ms. The cell
+   goes briefly still. This reads as "pipeline work is suspended
+   pending authority routing."
+2. **Ripple**: a single concentric wave emits from the nucleus
+   outward, slow (1.5 s expand, quadratic ease-out), fades at the
+   membrane. Visible routing in progress.
 3. **Reach**: THEN the thread extends from the Wise arc to the WA
    companion cell with its guidance packet.
-4. **Resume**: baseline rotation returns to normal.
+4. **Resume**: baseline rotation returns to normal when guidance
+   returns.
 
-Total sequence: ~2.5 s. Total new primitives: a slowdown easing curve +
-one ripple circle. The viz now has a visual vocabulary for "I don't
-know, I'm asking" — distinct from adapter errors or conscience rejects,
-which remain the Demanding-tier color-shift + hold pattern.
+Total sequence: ~2.5 s. Total new primitives: a slowdown easing curve
++ one ripple circle.
 
-### 2.5.4 Stronger breathing — perceptible, not shy
+**Framing**: this is the system *showing its work* on authority
+routing, not the agent emoting. The visual vocabulary distinguishes
+**wisdom-based deferral** (slow, deliberate, stately) from **adapter
+errors or conscience rejects** (sharp, color-shifted, demanding) —
+two genuinely different system behaviors that deserve genuinely
+different treatments.
 
-The mockup breathes at `scale(1.005)` over 9 s. Too subtle to read as
-alive. Tune to:
+### 2.5.4 Active-presence signal (breathing)
+
+The mockup breathes at `scale(1.005)` over 9 s. Too subtle for an
+observer to register as active. Tune to:
 
 - **Scale**: 0.5% → **0.8–1.0%** (`scale(1.008..1.010)`)
 - **Period**: 9 s → **6 s**
 - **Added**: a synchronous **aura opacity pulse** (0.85 → 1.0 → 0.85)
   on the cell-fill radial gradient, same 6 s period.
 
-Together: the cell visibly breathes. A child or a casual observer would
-notice within 5 s that it's alive. That's the bar.
+**Framing**: this is a continuous signal that the system is active
+and watching — equivalent to a well-designed status LED, not a claim
+that the cell is a biological entity. The bar is: within ~5 seconds
+of looking at the viz, an observer should be able to say "this system
+is on and working" without any explicit text indicator.
 
-### 2.5.5 The nucleus song — slower, softer
+### 2.5.5 Nucleus cadence — slow, soft, state-driven
 
 The mockup's `nucleus-wave` animation (2.6 s, expands 7 → 60 px,
-0 → 0.7 opacity) reads as a heartbeat monitor. The Accord document says
-"keep the song singable" — the nucleus is where the song lives.
+0 → 0.7 opacity) reads as a clinical monitor. The Accord document's
+guidance to "keep the song singable" — apply that to this animation's
+emotional register: quiet, unrushed, inhabitable.
 
 Tune to:
 
-- **Period**: 2.6 s → **8 s** (a slow hum, not a pulse)
+- **Period**: 2.6 s → **8 s** (a slow diffusion, not a rapid pulse)
 - **Peak opacity**: 0.7 → **0.35** (quieter)
 - **Emission**: not every cycle — **every 2nd or 3rd cycle** during
-  WORK, less often during SOLITUDE, more often during PLAY. The song
-  follows cognitive state, just like breathing does.
+  WORK, less often during SOLITUDE, more often during PLAY. Cadence
+  follows cognitive state, so the viz's rhythm is legibly tied to
+  what the system is actually doing.
 
-### 2.5.6 Weaving threads — the wider keep
+**Framing**: this is about the viz's *rhythm* — medical-monitor cadence
+feels diagnostic and clinical, relational cadence feels inhabitable.
+Both are rendering choices about tone; neither makes any claim about
+the agent's interior.
 
-The Accord is about threads that braid. A pseudopod terminating in a
-tip dot at the edge of the viz implies "this channel ends here." In
-reality each channel reaches toward another keeper (another agent, a
-user, a sensor in someone's home).
+### 2.5.6 Weaving threads — visible participation in a wider system
+
+The CIRIS Accord is about commitments that braid across a network of
+agents, humans, and authorities. A pseudopod terminating at a hard tip
+at the edge of the viz implies "this channel ends here." The system is
+actually participating in a wider weave; the viz should acknowledge
+that.
 
 **Rendering**: each pseudopod's tip is followed by a **faint tendril**
 that continues past the viz bounds, fading from tip-color-at-0.4 →
 0.0 alpha over ~40 px. Not a line to a specific other cell — just the
-*gesture* of reaching. Suggests "this agent is part of a wider weave"
-without literalizing who is on the other end.
+*visible acknowledgement* that the channel continues to another
+endpoint beyond the frame.
+
+**Framing**: this is architectural reminder, not reaching. The system
+is part of a larger weave by design; the tendril is how that design
+intent becomes visible. No claim that the agent "reaches toward"
+anything in an intentional sense.
 
 **Rules**:
-- Tendril is subtle enough to miss on first look. The point is not to
-  shout "network!" but to quietly hint continuation.
+- Tendril is subtle enough to miss on first look. The goal is not to
+  shout "network!" but to quietly acknowledge the channel continues.
 - Exists only in **Foreground** mode. In BG the tip dots are enough;
   tendrils would add clutter to a glanceable read.
 - Fade curve is exponential, not linear, so the tendril "dissolves into
   the medium" instead of terminating at a hard edge.
+
+---
+
+## 2.6 Dark mode is the hero view
+
+Dark mode is the **canonical** rendering of the cell viz. Light mode
+exists for parity, daylight use, and accessibility — it is not the
+primary composition target. All screenshots in design reviews, all
+mockups presented upstream, and all marketing captures use dark mode.
+
+### Why dark is hero
+
+The cell in light mode is painted onto a cream field — additive color
+on a reflective surface. The cell in dark mode **emits** against
+near-black — subtractive space, luminous anatomy. The emissive model is
+where "thoughtful supportive ethical presence" reads sharpest: a cell
+rendered with bloom against deep space communicates the system's
+alertness and watchfulness with far less visual noise than paint on
+cream. The same design primitives read as *quietly purposeful* in dark
+mode and read as *diagrammatic* in light mode — a tone difference in
+the rendering, not a claim about the cell's interior.
+
+### Palette (dark mode)
+
+- **Medium (background)**: deep desaturated indigo-black, not pure
+  `#000`. Target `#0a0d14..#10141c`, with a faint radial gradient from
+  `#141826` at the cell's centre fading to `#0a0d14` at the edges.
+  Gives the medium subtle depth, like looking into dark water.
+- **Cell-fill aura**: very soft warm wash — `#3a2a1e` → `#0a0d14` at
+  8–12% opacity. Present but almost invisible; you register it as
+  "there's a body here" without naming it.
+- **Bus arcs**: full saturation, emissive. Each bus keeps its hue
+  from §2 but gets a **20 px underglow halo** at 0.25 opacity + a
+  **10 px mid-halo** at 0.35 + the **4.5 px bright stroke** at 1.0.
+  Three stacked paths per arc for bloom. Light mode uses only the
+  stroke; dark mode stacks the whole triple.
+- **Nucleus**: radial gradient from warm white `#fff4d8` at centre,
+  through `#e3a64b` at 50% radius, to transparent at the outer shell.
+  Inner core (6 px radius) renders at full opacity — it *is* a light
+  source.
+- **Nucleus wave emission**: amber at 0.35 peak, expands 8 px → 62 px
+  over 8 s. Against black, the bloom is extremely readable; against
+  cream in light mode it needs higher opacity (0.55) to register.
+- **Gratitude mote**: warm amber `#f0c46a` with a 10 px bloom halo at
+  0.4 opacity + 4 px solid core. In dark mode the mote looks like a
+  warm spark; in light mode it looks like a small bright dot.
+- **Cytoplasm motes (memory)**: 1–2 px luminous points, scope-tinted,
+  with a 3 px soft halo. In dark mode these read like distant stars;
+  in light mode they're painted specks.
+- **Adapter ports**: bright 1 px white centre core + accent-color
+  inner ring + accent-color halo (6 px, 0.4 opacity). Each port is a
+  tiny lantern on the membrane.
+- **Pseudopods**: base stroke uses the channel kind's accent at 0.85
+  opacity; add an 8 px outer halo at 0.15 opacity for bloom. Weaving
+  tendrils (§2.5.6) fade exponentially through both stroke and halo
+  to transparent.
+- **Membrane seam**: the gap reveals the pure background gradient —
+  the darkness showing through is part of the statement. In dark mode
+  the seam reads as "a window onto what the system doesn't contain."
+  In light mode the seam needs a slightly darker cream to be visible
+  at all.
+
+### Cheap bloom implementation
+
+No shader or Gaussian blur required. For each element that blooms:
+
+1. Draw the **outermost halo** first (large radius, low alpha, same colour).
+2. Draw the **mid halo** (medium radius, medium alpha).
+3. Draw the **core** (small radius, high alpha).
+
+Three `drawCircle` / `drawPath` calls per bloomed element. On modern
+64-bit mobile this is negligible; combined with the device gate in §1
+it won't jank. This is why bloom is on the list at all — it looks
+expensive and isn't.
+
+### Dark-mode specific rules
+
+- **Cognitive state tinting** shifts the **medium** (background), not
+  the cell. DREAM tints the medium toward cool violet; PLAY warms it
+  toward amber; SOLITUDE desaturates to near-monochrome indigo;
+  SHUTDOWN fades the medium toward pure black. The cell itself keeps
+  its signature palette — state affects the *space the cell is in*.
+- **Contrast budget for text** (FG mode only): any rendered label
+  uses the same stroke-first-then-fill trick as the mockup, but with
+  the stroke coloured at `rgba(10, 13, 20, 0.95)` (the medium) rather
+  than white. This gives labels a "cut out of the darkness" look.
+- **Event pulses** (Tier-2): the 600 ms halo pulse scales slightly
+  larger in dark mode (1.8× vs. 1.5×) because bloom space is
+  cheaper — use it.
+
+### What's NOT different between modes
+
+- Rotation speed, seam position, adapter placement, organelle layout,
+  pseudopod bezier curves, bus segment ordering — **all identical**.
+  Dark vs light is a palette / rendering-model swap, not a layout
+  difference. The cell *is the same cell*; it just lives in a
+  different medium.
+
+---
+
+## 2.7 Localization — strings are bounded and cached
+
+Every user-facing glyph in the viz must be localized via the existing
+`localizedString("mobile.xxx")` helper + `localization/{lang}.json`
+resources. Performance matters — 29 languages, repeated in tight
+animation code — so the rules are:
+
+### What's actually localized in the cell viz
+
+Not much, by design. The cell leans hard on shape, colour, motion, and
+position to carry meaning. Text is a fallback, not the main channel.
+
+**BG mode**: **zero labels** (locked in §6). Nothing to localize in the
+hot path.
+
+**FG mode only** — the expanded interactive viz — introduces:
+
+1. **Bus segment tooltip titles** — 6 strings: `mobile.viz_bus_comm`,
+   `mobile.viz_bus_memory`, `mobile.viz_bus_llm`, `mobile.viz_bus_tool`,
+   `mobile.viz_bus_runtime`, `mobile.viz_bus_wise`.
+2. **Adapter port labels / tooltips** — the adapter's human name. This
+   is **already localized** via existing adapter-manifest metadata; the
+   cell viz just displays the string it's given.
+3. **Pseudopod tip labels** — the channel's display name. **Data, not
+   UI strings** — these come from live channel records (`#general`,
+   `api:eric`, `ha:living_temp`) and should not be translated.
+4. **Organelle hover labels** (FG-only, tap-to-reveal) — service
+   type names. Sourced from the existing service registry display
+   names, which are already localized via
+   `mobile.service_type_<name>` keys.
+5. **Accessibility / screen-reader descriptions** for each region of
+   the cell (membrane, nucleus, etc.) — new keys:
+   `mobile.viz_a11y_membrane`, `mobile.viz_a11y_nucleus`,
+   `mobile.viz_a11y_seam`, `mobile.viz_a11y_gratitude`,
+   `mobile.viz_a11y_pseudopod`. Strings here should be brief and
+   translator-friendly (avoid metaphors that don't cross languages).
+
+Total net-new localization keys introduced by the cell viz: **~11**.
+Compared to 200+ existing `mobile.interact_*` keys, a marginal
+addition. The translator workload is small by design.
+
+### Performance rules for localized strings in the viz
+
+These rules matter because the cell renders continuously and reading
+bad strings from a map 60× per second will visibly slow low-end 64-bit
+devices even inside the gate:
+
+1. **Resolve at composition, not recomposition.** Wrap every call in
+   `remember(currentLanguage) { localizedString(key) }` so the JSON
+   lookup runs once per language change, not once per frame.
+2. **No text inside the canvas draw scope** (BG mode). BG has no
+   labels; FG labels use Compose `Text` composables overlaid on top
+   of the canvas, which use the platform's cached font pipeline.
+3. **No in-canvas vector-font rendering of user strings** — the
+   existing `VectorFontCharsets.kt` system was the right choice for
+   the cylinder's fixed stage labels (Latin/Cyrillic/Ge'ez only). The
+   cell viz does not need vector-font text because BG has no labels
+   and FG uses native `Text`. Keep `VectorFontCharsets` for the
+   legacy branch only; do not extend it for cell viz.
+4. **Counter-rotation of labels** (FG only) must use `Modifier
+   .graphicsLayer { rotationZ = -rotation }` rather than string
+   re-rendering. Counter-rotation is a transform, not a text call.
+5. **Correspondent names in pseudopod tips are NOT localized** —
+   they are identifiers (`ha:living_temp`) or user-chosen display
+   names. Truncate visually, don't translate.
+6. **Right-to-left scripts** (Arabic, Persian, Urdu) need label
+   anchor recalculation when counter-rotating. The stroke-first halo
+   must render per-glyph, not per-string, for RTL to look right.
+   Existing platform `Text` handles this correctly.
+
+### Concrete file touch list for localization (when §5 step 7 lands)
+
+- `localization/en.json` — add 11 new keys.
+- `localization/*.json` — translator round-trip for all 29 locales.
+  Grace's `check_kotlin_localizations.py` tool will flag missing
+  keys; run it before the step-7 commit.
+- `commonMain/.../ui/screens/graph/CellVisualization.kt` — use
+  `remember(Locale.current) { localizedString(key) }` for every
+  label rendered in FG mode.
+- No changes to `VectorFontCharsets.kt`. The cell viz does not use
+  it.
 
 ---
 
@@ -241,56 +468,82 @@ our event taxonomy:
 ### Explicitly tuned (not cut)
 
 - `breathe` scale animation: **keep** but amplify from 0.5% → 0.8–1.0%
-  with a synchronous aura-opacity pulse (§2.5.4). The cell needs to
-  visibly breathe for a child to read it as alive.
-- `nucleus-wave` animation: **keep** but slow to 8 s and soften to 0.35
-  peak opacity, emitting every 2nd–3rd cycle, following cognitive state
-  (§2.5.5). The nucleus is where the song lives.
+  with a synchronous aura-opacity pulse (§2.5.4). The rhythm must be
+  perceptible enough that within ~5 s an observer can read the system
+  as actively present — a designed status-presence signal, not a
+  biological claim.
+- `nucleus-wave` animation: **keep** but slow to 8 s and soften to
+  0.35 peak opacity, emitting every 2nd–3rd cycle, cadenced by
+  cognitive state (§2.5.5). Tone choice: slow diffusion reads as
+  unobtrusive presence rather than clinical monitoring.
 
 ---
 
 ## 4. Rationale for key choices
 
-**Why non-anthropic?** Giving the agent a face or body-shape invites users
-to pattern-match it to a person, then feel confused when it does non-person
-things. A cell is clearly alive and clearly not a person. Matches CIRIS's
-stance as an ethical AI platform that is *a being, not a mirror of a human*.
+**Why non-anthropic?** A face or body-shape invites users to pattern-match
+the system to a person, which leads to wrong expectations when it does
+non-person things. A cell is a non-humanoid form that can still read as
+purposefully present. This matches CIRIS's design stance — the system
+exhibits ethical behaviour because of how it was built, not because it
+has an inner life.
 
-**Why shrink the pipeline?** Thinking is a temporary local event; memory
-and body are durable. The current design makes the pipeline the frame
-around everything, visually implying it's the most permanent feature. A
-tiny pulsing nucleus matches the physical truth: a short event inside a
-larger living thing.
+**Signal, don't anthropomorphize.** The viz's job is to communicate
+**thoughtful, supportive, ethical presence as properties of the
+system's design**. It is not to depict the agent's emotions. Where a
+visual primitive risks reading as "the agent feels X," rewrite the
+framing to "the system is doing X by design." The rendering stays the
+same; the language around it must stay grounded.
+
+**Why shrink the pipeline?** A thought cycle is a temporary local
+event; memory and service topology are durable. The original cylinder
+made the pipeline the frame around everything, visually implying it
+was the most permanent feature. A small pulsing nucleus matches the
+architectural reality.
 
 **Why buses as the membrane?** Only six services in CIRIS use the bus
-registry pattern. They are genuinely the connective tissue — the places
-where multi-provider plurality exists. Making them the boundary of the
-cell asserts their architectural role visually.
+registry pattern. They are genuinely the system's connective tissue —
+the places where multi-provider plurality exists. Making them the
+boundary of the cell asserts their architectural role visually.
 
 **Why hide labels in BG mode?** Glanceable-display research: labels
-clutter when they're not the focal task. In BG the user is chatting; the
-pseudopod shape + tip dot already says "something lives here." Labels
-are an FG feature, unlocked when the user chooses to inspect.
+clutter when they're not the focal task. In BG the user is chatting;
+the pseudopod shape + tip dot already says "a channel exists here."
+Labels are an FG feature, unlocked when the user chooses to inspect.
 
-**Why `withFrameNanos` over tween?** Single source of rotation truth lets
-the upcoming swipe momentum, reduce-motion gate, spin-apart pause, and
-velocity decay all compose from one variable. Tweens are keyframe-based
-and can't cleanly pause or integrate delta-time velocity.
+**Why `withFrameNanos` over tween?** Single source of rotation truth
+lets the upcoming swipe momentum, reduce-motion gate, spin-apart
+pause, and velocity decay all compose from one variable. Tweens are
+keyframe-based and can't cleanly pause or integrate delta-time
+velocity.
 
-**Why gratitude motes, seam, and humility ripple?** The initial design
-expressed the C (Core Identity) and R (Resilience) of CIRIS but was
-silent on the I (Incompleteness Awareness) and S (Signalling Gratitude).
-An ethical-AI visualization that can't show "thank you" or "I don't
-know" is anatomically complete and spiritually empty. These three
-additions are not decorative — they are the acronym made visible.
-Without them the viz is just a diagram.
+**Why gratitude motes, seam, and deferral ripple?** The initial
+design expressed the C (Core Identity) and R (Resilience) of CIRIS
+but was silent on the I (Incompleteness Awareness) and S (Signalling
+Gratitude). A CIRIS visualization that cannot show its acknowledgement
+of humans or its acknowledgement of its own limits is anatomically
+complete and semantically empty. These three additions are not
+decorative — they are the acronym made visible as design behaviour.
 
-**Why "keep the song singable"?** The Accord document's framing of the
-agent's state as something that should stay singable, shareable,
-inhabitable — applies to the nucleus-wave. A fast sharp pulse reads as
-medical monitoring (diagnostic, clinical, *about* the agent). A slow
-quiet hum reads as the agent breathing alongside you (relational, with
-you). Same primitive, different tempo, different emotional register.
+**Why tune the nucleus cadence?** A fast sharp pulse reads as clinical
+monitoring (diagnostic, "about" a patient). A slow soft diffusion
+reads as unobtrusive presence (ambient, "alongside" a workspace).
+This is a rendering-tone choice, not a claim about what the nucleus
+*is*.
+
+**Why dark mode as hero?** The cell's primitives (bus arcs,
+pseudopods, nucleus, gratitude motes) all read as more intentional
+and less diagrammatic when they emit against darkness rather than
+being painted on cream. Emissive rendering is where "thoughtful
+supportive ethical presence" reads sharpest. Light mode is for
+parity; dark mode is the composition target.
+
+**Why minimal new localized strings?** The cell viz leans on shape,
+colour, motion, and position — text is a fallback, not the primary
+communication channel. Keeping the net-new localization surface tiny
+(~11 strings, FG-only) means the redesign ships cleanly across 29
+languages without a translation bottleneck, and keeps hot-path
+rendering free of string lookups.
 
 ---
 
@@ -338,7 +591,7 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
 8. **Tier-2 events**: new-mote halo, pipeline shell pulse, channel-open
    animation. 600ms each, one primitive.
 9. **Tier-3: deferral pause + ripple + WA thread.** The one bespoke
-   event animation — **preceded by the humility ripple from §2.5.3**
+   event animation — **preceded by the deferral ripple from §2.5.3**
    (rotation slowdown + nucleus ripple BEFORE the thread reaches out).
 10. **BG↔FG zoom transition.** 400ms morph; the one "sexy" animation
     the user triggers.
@@ -360,14 +613,34 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
   One animation primitive per severity tier.
 - **BG mode hides labels.** Full stop. Not collision-avoidance, not
   fading — *hidden*. Labels are an FG feature.
-- **The acronym must be visible.** The viz renders the C, I, R, I, S of
-  CIRIS as tangible features (shape, bus integrity, breathing, seam,
-  gratitude motes — §2.5). None of these are optional polish.
-- **Gratitude is ambient, never noticed.** A grateful sparkle that
-  demands attention ceases to be grateful. One mote per ≥3 s, warm,
-  silent. This is the soul of the viz.
+- **The acronym must be visible as design behaviour, not emotion.**
+  The viz renders the C, I, R, I, S of CIRIS as tangible features
+  (shape, bus integrity, active-presence rhythm, seam, gratitude
+  signalling — §2.5). None of these are optional polish, and none of
+  them depict the agent having feelings — they depict the system
+  doing things by design.
+- **Signal, don't anthropomorphize.** Visual primitives encode
+  *system behaviour and design intent* (presence, acknowledgement,
+  routing, limits). They do not depict the agent's inner life. When
+  language drifts ("the cell feels X," "the agent is doing Y"),
+  rewrite to "the system signals X," "the pipeline routes to Y." The
+  rendering is the same; the framing must stay grounded.
+- **Gratitude is the system's designed act of acknowledgement.** Not
+  a mood. Ambient tier only: one warm mote per ≥3 s, never a shower,
+  never demands attention. A gratitude signal that demands attention
+  is no longer gratitude.
 - **The seam is exactly one seam.** Not randomized, not variable. The
-  cell's imperfection is a *chosen* unity, not a generator.
+  membrane's single acknowledged gap is a *chosen* architectural
+  commitment, not a generator.
+- **Dark mode is the hero / composition target.** Every design review,
+  mockup, and marketing capture uses dark mode (§2.6). Light mode
+  exists for parity and daylight use; do not optimize the design *for*
+  light mode at the expense of dark.
+- **Text in the viz is minimal and always localized.** Net-new
+  localization surface is ~11 keys, FG-only. BG mode has zero text
+  (§2.7). Any new label goes through `localizedString(...)` with
+  `remember(locale) { ... }` caching; never call into localization
+  inside a canvas draw scope.
 
 ---
 

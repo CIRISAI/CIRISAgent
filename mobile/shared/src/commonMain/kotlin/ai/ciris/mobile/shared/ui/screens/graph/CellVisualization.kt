@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.cos
@@ -181,11 +182,41 @@ data class CellVizConfig(
     /** Breathing period in seconds (step 4 — active-presence rhythm). */
     val breathePeriodSec: Float = 6f,
 
-    /** Peak scale added on the breathe animation (0.008 = 0.8%). */
-    val breatheScaleAmp: Float = 0.010f,
+    /**
+     * Peak scale added on the breathe animation. 0.035 = 3.5% — clearly
+     * perceptible without feeling like the cell is gasping. At 1.8% the
+     * motion was too subtle for a casual observer to register that the
+     * system is active.
+     */
+    val breatheScaleAmp: Float = 0.035f,
 
-    /** Nucleus song period in seconds (step 4). */
-    val nucleusSongPeriodSec: Float = 8f,
+    /**
+     * Nucleus song period in seconds. 6 s gives a visible wave
+     * propagating outward every 6 s — unrushed but clearly alive.
+     */
+    val nucleusSongPeriodSec: Float = 6f,
+
+    /**
+     * Nucleus outer radius as a fraction of the membrane radius.
+     * 0.45 makes the pipeline area a meaningful, readable presence at
+     * the cell's centre — large enough that the shells and song waves
+     * are perceptible without competing with the membrane.
+     */
+    val nucleusRadiusFraction: Float = 0.45f,
+
+    /**
+     * Peak opacity of each emitted nucleus song wave. 0.50 makes each
+     * emitted wave clearly visible against the dark medium without
+     * flashing; lower values fade into ambient noise.
+     */
+    val nucleusSongPeakOpacity: Float = 0.50f,
+
+    /**
+     * Emit a song wave every Nth period. Default 1 (every cycle) at
+     * the default 8 s period gives one wave roughly every 8 s. Raise
+     * to 2 or 3 for a quieter hum.
+     */
+    val nucleusSongEmissionEveryN: Int = 1,
 ) {
     /**
      * Return a copy with every value forced into a safe range. Call
@@ -226,8 +257,11 @@ data class CellVizConfig(
             gratitudeCooldownSec      = gratitudeCooldownSec.coerceIn(0.5f, 60f),
             maxCaughtBubbles          = maxCaughtBubbles.coerceIn(0, 32),
             breathePeriodSec          = breathePeriodSec.coerceIn(2f, 30f),
-            breatheScaleAmp           = breatheScaleAmp.coerceIn(0f, 0.03f),
+            breatheScaleAmp           = breatheScaleAmp.coerceIn(0f, 0.06f),
             nucleusSongPeriodSec      = nucleusSongPeriodSec.coerceIn(2f, 30f),
+            nucleusRadiusFraction     = nucleusRadiusFraction.coerceIn(0.10f, 0.60f),
+            nucleusSongPeakOpacity    = nucleusSongPeakOpacity.coerceIn(0f, 1f),
+            nucleusSongEmissionEveryN = nucleusSongEmissionEveryN.coerceIn(1, 10),
         )
     }
 
@@ -476,29 +510,66 @@ fun CellVisualization(
         val centerX = size.width / 2f
         val centerY = size.height / 2f
         val membraneRadius = minOf(size.width, size.height) * cfg.membraneRadiusFraction
+        val nucleusRadius = membraneRadius * cfg.nucleusRadiusFraction
+
+        // Wall-clock-driven scalars.
+        //
+        // breathePhase is a continuous phase in radians that advances with
+        // time; the scale multiplier is a small sin-wave around 1.0. Aura
+        // opacity pulses in phase so "the cell body becomes slightly
+        // brighter as it expands" — the two cues reinforce each other.
+        val nowSec = nowMs.value / 1000f
+        val breathePhase = (nowSec / cfg.breathePeriodSec) * 2f * PI.toFloat()
+        val breatheScale = 1f + cfg.breatheScaleAmp * sin(breathePhase)
+        val breatheAuraAlpha = 0.85f + (cfg.breatheScaleAmp / 0.010f) * 0.15f *
+            (0.5f * (1f + sin(breathePhase)))  // 0.85..1.00 when amp=0.010
 
         drawMedium(isDarkMode, centerX, centerY)
-        drawCellBodyAura(isDarkMode, centerX, centerY, membraneRadius * 1.05f)
-        // Collect current opening ranges once per frame; pass through to
-        // the membrane draw which subtracts them from the bus arcs.
-        val openingRanges = openings.value
-            .flatMap { openingRanges(it, nowMs.value) }
-        drawMembrane(
-            rotationDeg = rotationDeg,
-            cx = centerX, cy = centerY,
-            radius = membraneRadius,
-            isDarkMode = isDarkMode,
-            cfg = cfg,
-            openingRanges = openingRanges,
-        )
-        drawAdapterPorts(
-            adaptersByBus = adaptersByBus,
-            rotationDeg = rotationDeg,
-            centerX = centerX, centerY = centerY,
-            membraneRadius = membraneRadius,
-            isDarkMode = isDarkMode,
-            cfg = cfg,
-        )
+
+        // Everything that IS the cell (not the medium around it) breathes
+        // together. A single scale transform applies uniformly.
+        scale(scaleX = breatheScale, scaleY = breatheScale,
+            pivot = Offset(centerX, centerY)) {
+            drawCellBodyAura(
+                isDarkMode = isDarkMode,
+                cx = centerX, cy = centerY,
+                radius = membraneRadius * 1.05f,
+                opacityMultiplier = breatheAuraAlpha,
+            )
+            // Collect current opening ranges once per frame; pass through to
+            // the membrane draw which subtracts them from the bus arcs.
+            val openingRanges = openings.value
+                .flatMap { openingRanges(it, nowMs.value) }
+            drawMembrane(
+                rotationDeg = rotationDeg,
+                cx = centerX, cy = centerY,
+                radius = membraneRadius,
+                isDarkMode = isDarkMode,
+                cfg = cfg,
+                openingRanges = openingRanges,
+            )
+            drawAdapterPorts(
+                adaptersByBus = adaptersByBus,
+                rotationDeg = rotationDeg,
+                centerX = centerX, centerY = centerY,
+                membraneRadius = membraneRadius,
+                isDarkMode = isDarkMode,
+                cfg = cfg,
+            )
+            drawNucleus(
+                cx = centerX, cy = centerY,
+                outerRadius = nucleusRadius,
+                isDarkMode = isDarkMode,
+            )
+            drawNucleusSong(
+                cx = centerX, cy = centerY,
+                nucleusOuterRadius = nucleusRadius,
+                membraneRadius = membraneRadius,
+                isDarkMode = isDarkMode,
+                cfg = cfg,
+                nowSec = nowSec,
+            )
+        }
     }
 }
 
@@ -578,17 +649,24 @@ private fun DrawScope.drawMedium(isDarkMode: Boolean, cx: Float, cy: Float) {
 /**
  * A faint warm glow centered on the cell, so you register "there's a
  * body here" without naming it. Intentionally almost invisible.
+ *
+ * [opacityMultiplier] is the breathe-driven opacity modulation: the aura
+ * brightens and dims in step with the cell's scale pulse so the two cues
+ * reinforce each other rather than fighting.
  */
 private fun DrawScope.drawCellBodyAura(
     isDarkMode: Boolean,
     cx: Float,
     cy: Float,
     radius: Float,
+    opacityMultiplier: Float = 1f,
 ) {
     val (inner, outer) = if (isDarkMode) {
-        Color(0xFF3A2A1E).copy(alpha = 0.12f) to Color(0xFF0A0D14).copy(alpha = 0f)
+        Color(0xFF3A2A1E).copy(alpha = 0.12f * opacityMultiplier) to
+            Color(0xFF0A0D14).copy(alpha = 0f)
     } else {
-        Color(0xFFFFFAF3).copy(alpha = 0.50f) to Color(0xFFD9C7B3).copy(alpha = 0f)
+        Color(0xFFFFFAF3).copy(alpha = 0.50f * opacityMultiplier) to
+            Color(0xFFD9C7B3).copy(alpha = 0f)
     }
     drawCircle(
         brush = Brush.radialGradient(
@@ -598,6 +676,152 @@ private fun DrawScope.drawCellBodyAura(
         ),
         radius = radius,
         center = Offset(cx, cy),
+    )
+}
+
+// =============================================================================
+// Nucleus + song — the cell's small, warm center
+// =============================================================================
+//
+// The pipeline lives here, not around the whole membrane. It's small
+// (cfg.nucleusRadiusFraction × membraneRadius, default 30%) and sits
+// dead-center. Seven thin concentric shells represent the H3ERE stages
+// (THINK..ACT); the shells do not individually animate in step 4, they
+// are the static anatomy. A slow "song" wave emits from the core every
+// Nth cycle — not a heartbeat, a hum.
+
+/**
+ * Radii of the 7 nucleus shells as fractions of the nucleus outer
+ * radius. Picked to be readable but not crowded; each shell is slightly
+ * thinner than the last as we move outward.
+ */
+private val NUCLEUS_SHELL_FRACTIONS = floatArrayOf(
+    0.25f, 0.35f, 0.45f, 0.55f, 0.65f, 0.78f, 0.92f,
+)
+
+/** Shell opacities, matched index-by-index to [NUCLEUS_SHELL_FRACTIONS]. */
+private val NUCLEUS_SHELL_OPACITIES = floatArrayOf(
+    0.40f, 0.42f, 0.42f, 0.38f, 0.32f, 0.24f, 0.16f,
+)
+
+/** Warm amber the nucleus emits — fixed, not theme-derived. */
+private val NUCLEUS_AMBER = Color(0xFFE3A64B)
+
+/**
+ * Draw the nucleus — a warm radial-gradient fill, 7 concentric shells,
+ * and a bright emissive core at the centre. Zero per-frame state; the
+ * nucleus is just static anatomy until a pipeline event lights it up
+ * (that wiring comes in step 6).
+ */
+private fun DrawScope.drawNucleus(
+    cx: Float,
+    cy: Float,
+    outerRadius: Float,
+    isDarkMode: Boolean,
+) {
+    if (outerRadius <= 1f) return
+    val center = Offset(cx, cy)
+
+    // Warm fill — a soft amber wash. We deliberately do NOT run pure
+    // white-amber at full opacity in the centre; the earlier version
+    // read as eye-searing against the indigo-black medium. Amber-only
+    // reads warm without hurting to look at.
+    val fillInner = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.38f else 0.25f)
+    val fillMid   = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.22f else 0.15f)
+    val fillOuter = NUCLEUS_AMBER.copy(alpha = 0f)
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(fillInner, fillMid, fillOuter),
+            center = center,
+            radius = outerRadius,
+        ),
+        radius = outerRadius,
+        center = center,
+    )
+
+    // Seven shells, thin strokes, slightly warmer amber than the fill so
+    // they read against the gradient.
+    val shellColor = NUCLEUS_AMBER
+    NUCLEUS_SHELL_FRACTIONS.forEachIndexed { i, frac ->
+        val r = outerRadius * frac
+        drawCircle(
+            color = shellColor.copy(alpha = NUCLEUS_SHELL_OPACITIES[i]),
+            radius = r,
+            center = center,
+            style = Stroke(width = 0.9f),
+        )
+    }
+
+    // Soft inner core. Amber (not white), no hard-edge core dot. A
+    // small warm centre of light that doesn't punch out of the scene.
+    val coreRadius = outerRadius * 0.10f
+    drawCircle(
+        color = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.35f else 0.25f),
+        radius = coreRadius * 2.2f,
+        center = center,
+    )
+    drawCircle(
+        color = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.70f else 0.55f),
+        radius = coreRadius,
+        center = center,
+    )
+}
+
+/**
+ * The nucleus "song" — a slow concentric wave emitted from the core
+ * every [CellVizConfig.nucleusSongEmissionEveryN] periods. The wave
+ * propagates from inside the nucleus outward through the cytoplasm,
+ * nearly reaching the membrane before dissolving.
+ *
+ * Design tuning:
+ *  - The wave travels WELL PAST the nucleus boundary (maxR = 0.85 ×
+ *    membraneRadius) so it's visible as an expanding ring against the
+ *    dark cytoplasm, not trapped inside the nucleus fill's amber glow.
+ *  - Stroke is thick (3.5 px in dark mode) so the ring reads clearly
+ *    at the low peak opacity.
+ *  - Envelope is half-sine so the wave swells in and fades out over
+ *    its cycle rather than hard-starting and hard-ending.
+ */
+private fun DrawScope.drawNucleusSong(
+    cx: Float,
+    cy: Float,
+    nucleusOuterRadius: Float,
+    membraneRadius: Float,
+    isDarkMode: Boolean,
+    cfg: CellVizConfig,
+    nowSec: Float,
+) {
+    if (cfg.nucleusSongPeakOpacity <= 0f) return
+    val period = cfg.nucleusSongPeriodSec
+    if (period <= 0f) return
+
+    // Which cycle are we in, and are we on an emission cycle?
+    val cycleCount = (nowSec / period).toInt()
+    if (cycleCount % cfg.nucleusSongEmissionEveryN != 0) return
+
+    val phase = ((nowSec % period) / period).coerceIn(0f, 1f)  // 0..1 within the cycle
+    // Half-sine envelope: ramps up, peaks at mid-cycle, ramps down.
+    val envelope = sin(phase * PI.toFloat())  // 0 → 1 → 0
+    val alphaScale = envelope.coerceIn(0f, 1f)
+    if (alphaScale < 0.02f) return
+
+    // Wave grows from the nucleus's inner region out toward the
+    // membrane — it travels through the cytoplasm, not just within the
+    // nucleus. This is what makes the pulse legible: the ring moves
+    // against the dark medium rather than being lost in the nucleus fill.
+    val minR = nucleusOuterRadius * 0.20f
+    val maxR = membraneRadius * 0.85f
+    val r = minR + (maxR - minR) * phase
+
+    val color = NUCLEUS_AMBER.copy(
+        alpha = (cfg.nucleusSongPeakOpacity * alphaScale).coerceIn(0f, 1f)
+    )
+    val strokeWidth = if (isDarkMode) 3.5f else 2.0f
+    drawCircle(
+        color = color,
+        radius = r,
+        center = Offset(cx, cy),
+        style = Stroke(width = strokeWidth),
     )
 }
 

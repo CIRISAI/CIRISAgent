@@ -650,7 +650,7 @@ rendering free of string lookups.
 
 ## 5. Build order (11 steps)
 
-Each step is a standalone commit. Steps 1–3 done; 4–11 pending.
+Each step is a standalone commit. Steps 1–4 done; 5–11 pending.
 
 1. **Device capability gate + user override.** ✅
    - `CellVizCapability` expect/actual. Android: 64-bit + ≥4 GB. iOS:

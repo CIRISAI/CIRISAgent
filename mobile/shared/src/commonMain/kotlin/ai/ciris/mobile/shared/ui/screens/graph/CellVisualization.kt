@@ -236,11 +236,12 @@ data class CellVizConfig(
     val nucleusRadiusFraction: Float = 0.45f,
 
     /**
-     * Peak opacity of each emitted nucleus song wave. 0.50 makes each
-     * emitted wave clearly visible against the dark medium without
-     * flashing; lower values fade into ambient noise.
+     * Peak opacity of each emitted nucleus song wave. 0.65 with the
+     * three-path bloom stack makes the wave unmistakable against a
+     * dense cytoplasm of motes in dark mode. Drop lower for a more
+     * ambient feel; 1.0 maxes out.
      */
-    val nucleusSongPeakOpacity: Float = 0.50f,
+    val nucleusSongPeakOpacity: Float = 0.65f,
 
     /**
      * Emit a song wave every Nth period. Default 1 (every cycle) at
@@ -948,16 +949,36 @@ private fun DrawScope.drawNucleusSong(
     val maxR = membraneRadius * 0.85f
     val r = minR + (maxR - minR) * phase
 
-    val color = NUCLEUS_AMBER.copy(
-        alpha = (cfg.nucleusSongPeakOpacity * alphaScale).coerceIn(0f, 1f)
-    )
-    val strokeWidth = if (isDarkMode) 3.5f else 2.0f
-    drawCircle(
-        color = color,
-        radius = r,
-        center = Offset(cx, cy),
-        style = Stroke(width = strokeWidth),
-    )
+    // Three-path bloom stack so the wave is unambiguous against a busy
+    // cytoplasm of motes. Two soft halos behind a bright core stroke.
+    // Against a thin stroke alone, motes visually drown out the ring —
+    // bloom widens the contrast zone around the core without blowing
+    // out brightness.
+    val center = Offset(cx, cy)
+    val alpha = (cfg.nucleusSongPeakOpacity * alphaScale).coerceIn(0f, 1f)
+    if (isDarkMode) {
+        drawCircle(
+            color = NUCLEUS_AMBER.copy(alpha = alpha * 0.22f),
+            radius = r, center = center,
+            style = Stroke(width = 22f),
+        )
+        drawCircle(
+            color = NUCLEUS_AMBER.copy(alpha = alpha * 0.45f),
+            radius = r, center = center,
+            style = Stroke(width = 11f),
+        )
+        drawCircle(
+            color = NUCLEUS_AMBER.copy(alpha = alpha),
+            radius = r, center = center,
+            style = Stroke(width = 4.5f),
+        )
+    } else {
+        drawCircle(
+            color = NUCLEUS_AMBER.copy(alpha = alpha),
+            radius = r, center = center,
+            style = Stroke(width = 2.5f),
+        )
+    }
 }
 
 /**

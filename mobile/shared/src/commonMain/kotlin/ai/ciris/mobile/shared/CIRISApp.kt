@@ -1389,6 +1389,7 @@ fun CIRISApp(
                 // Live background state from settings (collect before Scaffold for top bar)
                 val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
                 val colorTheme by settingsViewModel.colorTheme.collectAsState()
+                val forceClassicViz by settingsViewModel.forceClassicViz.collectAsState()
                 platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
                 Scaffold(
@@ -1479,6 +1480,7 @@ fun CIRISApp(
                         },
                         apiClient = apiClient,
                         liveBackgroundEnabled = liveBackgroundEnabled,
+                        forceClassicViz = forceClassicViz,
                         colorTheme = colorTheme,
                         isDarkMode = isDarkMode,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())

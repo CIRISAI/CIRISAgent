@@ -8,7 +8,9 @@ import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.localization.LocalizationManager
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
+import ai.ciris.mobile.shared.ui.screens.graph.AdapterOrbit
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
+import ai.ciris.mobile.shared.ui.screens.graph.orbitFor
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
@@ -34,7 +36,13 @@ import kotlinx.datetime.Clock
  */
 data class BubbleEmoji(
     val id: Long,
-    val emoji: String
+    val emoji: String,
+    // Short human-readable summary of the event that spawned this bubble.
+    // Lives only as long as the bubble is in flight (or caught).
+    val payload: String? = null,
+    // Absolute millis when the bubble should pop. Used so a tap handler can
+    // distinguish "in flight" (still interactive) from "already expired".
+    val expiresAtMs: Long = 0L
 )
 
 /**
@@ -152,6 +160,9 @@ class InteractViewModel(
         private const val MAX_BUBBLES = 8
         private const val BUBBLE_LIFETIME_MS = 2000L
         private const val MAX_TIMELINE_EVENTS = 100
+        // Bounded to keep caught-bubble memory within the 32-bit ARM budget.
+        // Worst case: MAX_CAUGHT_BUBBLES × ReasoningEvent.PAYLOAD_MAX_CHARS ≈ 3.8KB.
+        private const val MAX_CAUGHT_BUBBLES = 12
         private const val SSE_RECONNECT_BASE_MS = 1000L
         private const val SSE_RECONNECT_MAX_MS = 30000L
     }
@@ -235,6 +246,18 @@ class InteractViewModel(
     // Bubble emoji state - emojis float up from agent icon
     private val _bubbleEmojis = MutableStateFlow<List<BubbleEmoji>>(emptyList())
     val bubbleEmojis: StateFlow<List<BubbleEmoji>> = _bubbleEmojis.asStateFlow()
+
+    // Caught bubbles - user tapped a floating bubble to pin it.
+    // Payload survives past the 2s float window because the user explicitly asked.
+    // Capped at MAX_CAUGHT_BUBBLES to preserve the 32-bit ARM memory budget.
+    private val _caughtBubbles = MutableStateFlow<List<BubbleEmoji>>(emptyList())
+    val caughtBubbles: StateFlow<List<BubbleEmoji>> = _caughtBubbles.asStateFlow()
+
+    // Adapter orbits - the agent's "body" rendered as satellites around the
+    // memory/pipeline cylinder. Fetched once at screen mount; bounded by
+    // the number of loaded adapters (< 20 in practice).
+    private val _adapterOrbits = MutableStateFlow<List<AdapterOrbit>>(emptyList())
+    val adapterOrbits: StateFlow<List<AdapterOrbit>> = _adapterOrbits.asStateFlow()
 
     // Agent processing state for icon
     private val _agentProcessingState = MutableStateFlow(AgentProcessingState.IDLE)
@@ -375,6 +398,34 @@ class InteractViewModel(
         startSseStream()
         startFileInjectionObserver()
         fetchWalletStatus()
+        fetchAdapterOrbits()
+    }
+
+    /**
+     * Fetch the current adapter list and project each into an [AdapterOrbit]
+     * so the LiveGraphBackground can render them as satellites around the
+     * cylinder. One-shot — adapters don't change often and the cost is one
+     * API round-trip at screen mount.
+     */
+    private fun fetchAdapterOrbits() {
+        val method = "fetchAdapterOrbits"
+        viewModelScope.launch {
+            try {
+                val data = apiClient.listAdapters()
+                _adapterOrbits.value = data.adapters.mapIndexed { index, a ->
+                    orbitFor(
+                        id = a.adapterId,
+                        type = a.adapterType,
+                        index = index,
+                        isActive = a.isRunning
+                    )
+                }
+                logInfo(method, "Loaded ${_adapterOrbits.value.size} adapter orbits")
+            } catch (e: Exception) {
+                logError(method, "Failed to fetch adapters for orbits: ${e.message}")
+                // Leave list empty — LiveGraphBackground will just not draw satellites.
+            }
+        }
     }
 
     /**
@@ -1584,8 +1635,10 @@ class InteractViewModel(
                                 }
                             }
                             is ReasoningEvent.Emoji -> {
-                                // Add bubble emoji (floats up and disappears)
-                                addBubbleEmoji(event.emoji)
+                                // Add bubble emoji (floats up and disappears).
+                                // Pass the payload so the bubble becomes a tappable
+                                // carrier for the event's semantic summary.
+                                addBubbleEmoji(event.emoji, event.payload)
 
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
@@ -1621,11 +1674,18 @@ class InteractViewModel(
     }
 
     /**
-     * Add a bubble emoji that floats up
+     * Add a bubble emoji that floats up, optionally carrying a short payload.
+     *
+     * Payload is the event's semantic summary (e.g. "Speak · Hello!" or
+     * "→ tool:weather:current"). It lives only for the bubble's flight time,
+     * so memory use stays bounded at MAX_BUBBLES × PAYLOAD_MAX_CHARS.
+     * Users can "catch" a bubble mid-flight to promote its payload into the
+     * caughtBubbles list for longer inspection.
      */
-    private fun addBubbleEmoji(emoji: String) {
+    private fun addBubbleEmoji(emoji: String, payload: String? = null) {
         val bubbleId = bubbleIdCounter++
-        val bubble = BubbleEmoji(id = bubbleId, emoji = emoji)
+        val expiresAt = Clock.System.now().toEpochMilliseconds() + BUBBLE_LIFETIME_MS
+        val bubble = BubbleEmoji(id = bubbleId, emoji = emoji, payload = payload, expiresAtMs = expiresAt)
 
         // Add to list (keep max bubbles)
         _bubbleEmojis.value = (_bubbleEmojis.value + bubble).takeLast(MAX_BUBBLES)
@@ -1635,6 +1695,34 @@ class InteractViewModel(
             delay(BUBBLE_LIFETIME_MS)
             _bubbleEmojis.value = _bubbleEmojis.value.filter { it.id != bubbleId }
         }
+    }
+
+    /**
+     * Pin an in-flight bubble so its payload survives past the 2s float window.
+     *
+     * No-op if the bubble already expired, is unknown, or has no payload —
+     * catching an empty bubble would just create visual clutter.
+     */
+    fun catchBubble(id: Long) {
+        val b = _bubbleEmojis.value.firstOrNull { it.id == id } ?: return
+        if (b.payload.isNullOrBlank()) return
+        // Remove from in-flight and promote to caught
+        _bubbleEmojis.value = _bubbleEmojis.value.filter { it.id != id }
+        _caughtBubbles.value = (_caughtBubbles.value + b).takeLast(MAX_CAUGHT_BUBBLES)
+    }
+
+    /**
+     * Dismiss a previously-caught bubble.
+     */
+    fun dismissCaughtBubble(id: Long) {
+        _caughtBubbles.value = _caughtBubbles.value.filter { it.id != id }
+    }
+
+    /**
+     * Clear all caught bubbles.
+     */
+    fun clearCaughtBubbles() {
+        _caughtBubbles.value = emptyList()
     }
 
     /**

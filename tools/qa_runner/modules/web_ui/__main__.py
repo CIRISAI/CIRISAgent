@@ -37,11 +37,18 @@ Examples:
 
 import argparse
 import asyncio
+import glob
 import os
+import shutil
+import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
+
+import requests
 
 from .browser_helper import BrowserConfig, ensure_playwright_installed
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, check_desktop_app_running
@@ -296,6 +303,7 @@ Examples:
             "desktop",
             "desktop-login",
             "desktop-chat",
+            "desktop-up",
             "e2e",
             "setup",
             "interact",
@@ -336,6 +344,11 @@ Examples:
         type=int,
         default=8091,
         help="Desktop app test automation server port (default: 8091)",
+    )
+    parser.add_argument(
+        "--no-desktop",
+        action="store_true",
+        help="For desktop-up: start backend + setup admin, but don't launch the desktop app",
     )
     parser.add_argument(
         "--username",
@@ -496,6 +509,226 @@ def get_test_list(command: str, specific_tests: Optional[str]) -> Optional[List[
     return test_groups.get(command)
 
 
+TEST_ADMIN_USERNAME = "admin"
+TEST_ADMIN_PASSWORD = "qa_test_password_12345"
+
+
+def _kill_port(port: int) -> None:
+    """SIGKILL whatever is listening on a port."""
+    try:
+        out = subprocess.run(
+            ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        for pid in out.splitlines():
+            try:
+                os.kill(int(pid), 9)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _wipe_dev_data() -> None:
+    """Wipe every data location the CIRIS backend may use in dev mode.
+
+    The server picks paths from env/cwd, so both ~/ciris/data and the
+    repo-local data/ must be cleared. Signing key is preserved so
+    device identity survives across resets.
+    """
+    home_ciris = Path.home() / "ciris"
+    repo_root = Path(__file__).resolve().parents[4]
+    signing_key = home_ciris / "agent_signing.key"
+    key_backup = None
+    if signing_key.exists():
+        key_backup = signing_key.read_bytes()
+
+    for data_dir in [home_ciris / "data", repo_root / "data"]:
+        if data_dir.exists():
+            shutil.rmtree(data_dir, ignore_errors=True)
+            print(f"  🧹 wiped {data_dir}")
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Restore signing key
+    if key_backup:
+        signing_key.write_bytes(key_backup)
+        (repo_root / "data" / "agent_signing.key").write_bytes(key_backup)
+
+    # Rewrite minimal .env so the server doesn't re-enter first-run after setup completes
+    env_path = home_ciris / ".env"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text('CIRIS_CONFIGURED="true"\n')
+
+
+def _find_desktop_jar() -> Optional[Path]:
+    """Locate the built desktop uber jar."""
+    repo_root = Path(__file__).resolve().parents[4]
+    candidates = sorted(
+        glob.glob(str(repo_root / "mobile" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    return Path(candidates[0]) if candidates else None
+
+
+def _complete_setup(base_url: str, mock_llm: bool) -> bool:
+    """Call /v1/setup/complete to create the known-password admin user.
+
+    Mirrors qa_runner.server.APIServerManager._complete_qa_setup.
+    """
+    payload = {
+        "llm_provider": "mock" if mock_llm else "openai",
+        "llm_api_key": "test-key-for-qa",
+        "llm_model": "mock-model" if mock_llm else "gpt-4",
+        "template_id": "default",
+        "enabled_adapters": ["api"],
+        "adapter_config": {},
+        "admin_username": TEST_ADMIN_USERNAME,
+        "admin_password": TEST_ADMIN_PASSWORD,
+        "agent_port": int(base_url.rsplit(":", 1)[-1]),
+    }
+    try:
+        r = requests.post(f"{base_url}/v1/setup/complete", json=payload, timeout=30)
+        if r.status_code == 200:
+            return True
+        print(f"  ❌ /v1/setup/complete: {r.status_code} {r.text[:200]}")
+        return False
+    except Exception as e:
+        print(f"  ❌ /v1/setup/complete error: {e}")
+        return False
+
+
+async def run_desktop_up(args: argparse.Namespace) -> int:
+    """End-to-end: wipe → start backend in first-run → setup → launch desktop → login.
+
+    Leaves backend + desktop running so a human (or agent) can drive the UI.
+    This is the canonical repeatable path for getting a clean, logged-in
+    desktop app up.
+    """
+    from .server_manager import ServerConfig, ServerManager
+
+    print("🚀 CIRIS desktop-up")
+
+    # 1. Clean slate
+    print("[1/5] Stopping anything on 8080/8091 and wiping dev data...")
+    _kill_port(args.port)
+    _kill_port(args.desktop_port)
+    subprocess.run(["pkill", "-9", "-f", "CIRIS-macos"], capture_output=True)
+    subprocess.run(["pkill", "-9", "-f", "CIRIS-linux"], capture_output=True)
+    time.sleep(1)
+    _wipe_dev_data()
+
+    # 2. Start backend in first-run mode
+    # CIRIS_TESTING_MODE relaxes the setup validator that otherwise rejects 'admin'
+    os.environ["CIRIS_TESTING_MODE"] = "true"
+    print("[2/5] Starting backend (first-run mode, CIRIS_TESTING_MODE=true)...")
+    cfg = ServerConfig(
+        port=args.port,
+        mock_llm=args.mock_llm,
+        wipe_data=False,  # we already did it
+        first_run_mode=True,
+        startup_timeout=args.timeout,
+    )
+    server = ServerManager(cfg)
+    status = server.start()
+    if not status.running:
+        print(f"  ❌ backend failed: {status.error}")
+        return 1
+
+    # 3. Complete setup
+    print("[3/5] Completing setup wizard via /v1/setup/complete...")
+    if not _complete_setup(server.base_url, args.mock_llm):
+        server.stop()
+        return 1
+    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+
+    # Restart backend without CIRIS_FORCE_FIRST_RUN so /v1/setup/status
+    # returns is_first_run=false and the desktop goes to the Login screen,
+    # not the Setup wizard.
+    print("  🔄 restarting backend in configured mode...")
+    server.stop()
+    cfg2 = ServerConfig(
+        port=args.port,
+        mock_llm=args.mock_llm,
+        wipe_data=False,
+        first_run_mode=False,
+        startup_timeout=args.timeout,
+    )
+    server = ServerManager(cfg2)
+    status = server.start()
+    if not status.running:
+        print(f"  ❌ backend restart failed: {status.error}")
+        return 1
+
+    # 4. Launch desktop app
+    if not args.no_desktop:
+        print("[4/5] Launching desktop app (CIRIS_TEST_MODE=true)...")
+        jar = _find_desktop_jar()
+        if not jar:
+            print("  ❌ No desktop jar found — run: cd mobile && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+            server.stop()
+            return 1
+        env = os.environ.copy()
+        env["CIRIS_TEST_MODE"] = "true"
+        env["CIRIS_TEST_PORT"] = str(args.desktop_port)
+        env["CIRIS_API_URL"] = server.base_url
+        log_path = Path("/tmp") / "ciris_desktop_up.log"
+        with open(log_path, "w") as log:
+            subprocess.Popen(
+                ["java", "-jar", str(jar)],
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+        print(f"  logs: {log_path}")
+
+        # Wait for test server
+        deadline = time.time() + 60
+        server_url = f"http://localhost:{args.desktop_port}"
+        while time.time() < deadline:
+            try:
+                if requests.get(f"{server_url}/health", timeout=2).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(1)
+        else:
+            print("  ⚠️  desktop test server didn't come up; continuing anyway")
+
+        # 5. Log in via the UI
+        print("[5/5] Logging in via UI...")
+        helper = DesktopAppHelper(DesktopAppConfig(server_url=server_url))
+        await helper.start()
+        try:
+            await helper.wait_for_screen("Login", timeout=60000)
+            await helper.input_text("input_username", TEST_ADMIN_USERNAME)
+            await helper.input_text("input_password", TEST_ADMIN_PASSWORD)
+            await helper.click("btn_login_submit")
+            # Any post-login screen is success
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                s = await helper.get_screen()
+                if s and s != "Login":
+                    print(f"  ✅ logged in → {s}")
+                    break
+                await asyncio.sleep(0.5)
+            else:
+                print("  ⚠️  still on Login after 30s")
+        finally:
+            await helper.stop()
+    else:
+        print("[4/5] Skipping desktop launch (--no-desktop)")
+
+    print()
+    print(f"✅ Ready. Backend: {server.base_url}  Desktop test server: http://localhost:{args.desktop_port}")
+    print(f"   Admin: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+    print("   Processes left running — kill with: pkill -9 -f 'CIRIS-macos|main.py --adapter api'")
+    return 0
+
+
 async def run_desktop_tests(args: argparse.Namespace) -> int:
     """Run desktop app tests."""
     # Check if desktop app is running
@@ -556,7 +789,11 @@ async def main() -> int:
         list_tests()
         return 0
 
-    # Handle desktop commands
+    # Handle desktop-up (full orchestration: wipe → setup → launch → login)
+    if args.command == "desktop-up":
+        return await run_desktop_up(args)
+
+    # Handle desktop commands (connect to already-running app)
     if args.command.startswith("desktop"):
         return await run_desktop_tests(args)
 

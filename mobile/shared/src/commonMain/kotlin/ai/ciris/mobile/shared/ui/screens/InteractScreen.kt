@@ -15,6 +15,7 @@ import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.probeCellVizCapability
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlin.math.abs
@@ -114,6 +116,9 @@ fun InteractScreen(
     onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
+    // User override: when true, force the legacy cylinder viz regardless of
+    // device capability. Flipped via Settings → Use classic visualization.
+    forceClassicViz: Boolean = false,
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
     isDarkMode: Boolean = true,  // From brightness preference
     modifier: Modifier = Modifier
@@ -127,6 +132,8 @@ fun InteractScreen(
     val processingStatus by viewModel.processingStatus.collectAsState()
     val authError by viewModel.authError.collectAsState()
     val bubbleEmojis by viewModel.bubbleEmojis.collectAsState()
+    val caughtBubbles by viewModel.caughtBubbles.collectAsState()
+    val adapterOrbits by viewModel.adapterOrbits.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -275,33 +282,78 @@ fun InteractScreen(
             .fillMaxSize()
             .background(theme.background)
     ) {
-        // Live animated memory graph background (when enabled)
-        // Event trigger: timeline events trigger organic graph refreshes
-        // Opacity varies by visualization mode: BG=0.85, FG=1.0
+        // Live animated memory graph background (when enabled).
+        //
+        // Device gating: [probeCellVizCapability] decides whether this device
+        // should render the new "cell" visualization (64-bit + ≥4 GB RAM) or
+        // fall back to the legacy LiveGraphBackground (cylinder view). The
+        // legacy path is frozen — no new features land there, it just keeps
+        // CIRIS usable on constrained hardware.
+        //
+        // NOTE: both branches currently call the same composable. This is
+        // scaffolding — the isCapable=true branch will be swapped for the
+        // CellVisualization composable in a later commit once the cell
+        // primitives are built. The gate goes in first so every subsequent
+        // change can flip a single branch without touching Interact's layout.
+        val cellVizCap = remember { probeCellVizCapability() }
+        // Effective gate = capability AND user hasn't opted out.
+        val useCellViz = cellVizCap.isCapable && !forceClassicViz
+        LaunchedEffect(cellVizCap, forceClassicViz) {
+            PlatformLogger.i(
+                "InteractScreen",
+                "cell-viz gate: useCellViz=$useCellViz (capable=${cellVizCap.isCapable}, " +
+                    "forceClassic=$forceClassicViz, ram=${"%.1f".format(cellVizCap.totalRamGb)}GB, " +
+                    "reason=${cellVizCap.reason})"
+            )
+        }
         if (effectiveLiveBackground && apiClient != null) {
             val graphOpacity = when (visualizationMode) {
                 VisualizationMode.FOREGROUND -> 1.0f  // Full opacity in foreground mode
                 VisualizationMode.BACKGROUND -> 0.85f  // Subtle in background mode
                 VisualizationMode.OFF -> 0f  // Should not reach here
             }
-            LiveGraphBackground(
-                apiClient = apiClient,
-                modifier = Modifier.fillMaxSize(),
-                baseOpacity = graphOpacity,
-                eventTrigger = timelineEvents.size,  // New events trigger refresh
-                externalRotation = cylinderRotation,
-                externalTilt = verticalRotation,  // Vertical rotation for fidget mode (full 360)
-                spinEnergy = spinEnergy,
-                spinEnergyThreshold = spinEnergyThreshold,
-                onSpinApartTriggered = {
-                    // Reset energy after explosion
-                    spinEnergy = 0f
-                },
-                pipelineState = pipelineState,  // H3ERE scaffolding visualization
-                isForegroundMode = isFullscreenFidget,  // Thicker rings in foreground
-                ringColor = colorTheme.tertiary,  // Use theme's tertiary color for rings
-                colorTheme = colorTheme  // Pass theme for dynamic graph node coloring
-            )
+            if (useCellViz) {
+                // Capable device AND user hasn't opted out — will become
+                // CellVisualization in a follow-up commit. For now, render
+                // the legacy viz so this commit has no visible effect.
+                LiveGraphBackground(
+                    apiClient = apiClient,
+                    modifier = Modifier.fillMaxSize(),
+                    baseOpacity = graphOpacity,
+                    eventTrigger = timelineEvents.size,
+                    externalRotation = cylinderRotation,
+                    externalTilt = verticalRotation,
+                    spinEnergy = spinEnergy,
+                    spinEnergyThreshold = spinEnergyThreshold,
+                    onSpinApartTriggered = { spinEnergy = 0f },
+                    pipelineState = pipelineState,
+                    isForegroundMode = isFullscreenFidget,
+                    ringColor = colorTheme.tertiary,
+                    colorTheme = colorTheme,
+                    adapterOrbits = adapterOrbits,
+                    cognitiveState = agentStatus
+                )
+            } else {
+                // Low-end / 32-bit device — frozen legacy path. No orbits,
+                // no state-posture modulation — strip everything the new
+                // design added back out, so the legacy view stays the
+                // known-good cylinder it always was.
+                LiveGraphBackground(
+                    apiClient = apiClient,
+                    modifier = Modifier.fillMaxSize(),
+                    baseOpacity = graphOpacity,
+                    eventTrigger = timelineEvents.size,
+                    externalRotation = cylinderRotation,
+                    externalTilt = verticalRotation,
+                    spinEnergy = spinEnergy,
+                    spinEnergyThreshold = spinEnergyThreshold,
+                    onSpinApartTriggered = { spinEnergy = 0f },
+                    pipelineState = pipelineState,
+                    isForegroundMode = isFullscreenFidget,
+                    ringColor = colorTheme.tertiary,
+                    colorTheme = colorTheme
+                )
+            }
         }
 
         // Main content column with platform-specific keyboard padding
@@ -479,12 +531,28 @@ fun InteractScreen(
             EmojiLegendDialog(onDismiss = { viewModel.toggleLegend() })
         }
 
-        // Bubble overlay - floats up from bottom-left over the entire screen
+        // Bubble overlay - floats up from bottom-left over the entire screen.
+        // Tapping a bubble with a payload "catches" it into the caughtBubbles list.
         BubbleOverlay(
             bubbles = bubbleEmojis,
+            onCatch = { id -> viewModel.catchBubble(id) },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = 8.dp, bottom = 70.dp) // Align with agent icon position
+        )
+
+        // Caught bubbles panel — pinned payloads from in-flight bubbles the
+        // user tapped. Bounded (12 items × 160 chars) and dismissable.
+        CaughtBubblesPanel(
+            bubbles = caughtBubbles,
+            theme = theme,
+            onDismiss = { id -> viewModel.dismissCaughtBubble(id) },
+            onClearAll = { viewModel.clearCaughtBubbles() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 230.dp, end = 8.dp)
+                .widthIn(max = 280.dp)
+                .zIndex(50f)
         )
 
         // Note: ErrorToast, DebugIndicator, and DebugConsole removed for production release
@@ -2291,6 +2359,7 @@ private fun AgentStateIcon(
 @Composable
 private fun BubbleOverlay(
     bubbles: List<BubbleEmoji>,
+    onCatch: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -2300,19 +2369,27 @@ private fun BubbleOverlay(
         bubbles.forEach { bubble ->
             FullScreenFloatingBubble(
                 key = bubble.id,
-                emoji = bubble.emoji
+                emoji = bubble.emoji,
+                hasPayload = !bubble.payload.isNullOrBlank(),
+                onTap = { onCatch(bubble.id) }
             )
         }
     }
 }
 
 /**
- * A floating bubble that travels the full screen height
+ * A floating bubble that travels the full screen height.
+ *
+ * If [hasPayload] is true, a subtle halo hints the bubble is tappable —
+ * tapping it "catches" the bubble via [onTap] so the user can read its
+ * semantic summary before it floats off screen.
  */
 @Composable
 private fun FullScreenFloatingBubble(
     key: Long,
     emoji: String,
+    hasPayload: Boolean = false,
+    onTap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Animation state for this bubble
@@ -2345,6 +2422,22 @@ private fun FullScreenFloatingBubble(
     // Slight horizontal wobble for playfulness
     val wobble = kotlin.math.sin(animationProgress * 6f * 3.14159f).toFloat() * 8f
 
+    // Tappable when carrying a payload. A faint halo hints at it so users
+    // learn the affordance without any text.
+    val tappableModifier = if (hasPayload) {
+        Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTap
+            )
+            .background(
+                color = Color.White.copy(alpha = 0.15f),
+                shape = CircleShape
+            )
+            .padding(4.dp)
+    } else Modifier
+
     Text(
         text = emoji,
         fontSize = 28.sp,
@@ -2352,7 +2445,72 @@ private fun FullScreenFloatingBubble(
             .offset(x = wobble.dp, y = offsetY)
             .alpha(alpha)
             .zIndex(100f) // Ensure bubbles are on top
+            .then(tappableModifier)
     )
+}
+
+/**
+ * Panel showing bubbles the user has "caught" — clicking a floating bubble
+ * pins its payload here so it survives past the 2s float window.
+ *
+ * This is the pattern that lets the client expose rich SSE semantics
+ * without retaining unbounded event history: the UI only holds what the
+ * user explicitly chose to keep.
+ */
+@Composable
+private fun CaughtBubblesPanel(
+    bubbles: List<BubbleEmoji>,
+    theme: InteractTheme,
+    onDismiss: (Long) -> Unit,
+    onClearAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (bubbles.isEmpty()) return
+    Surface(
+        color = theme.surface,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.padding(horizontal = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Caught (${bubbles.size})",
+                    fontSize = 11.sp,
+                    color = theme.textSecondary
+                )
+                TextButton(
+                    onClick = onClearAll,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(text = "Clear", fontSize = 10.sp, color = theme.textMuted)
+                }
+            }
+            bubbles.takeLast(6).reversed().forEach { b ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                        .clickable { onDismiss(b.id) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = b.emoji, fontSize = 14.sp)
+                    Text(
+                        text = b.payload ?: "",
+                        fontSize = 11.sp,
+                        color = theme.textPrimary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -2608,6 +2766,20 @@ private fun EmojiLegendDialog(
                 LegendRow("💭", localizedString("mobile.interact_legend_idle"))
                 LegendRow("🔄", localizedString("mobile.interact_legend_processing_icon"))
                 LegendRow("⚪", localizedString("mobile.interact_legend_disconnected"))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Gestures — kept in the legend so the interact surface itself
+                // stays clean of nagging hint overlays.
+                Text(
+                    text = "Gestures",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LegendRow("↔️", "Swipe the background to spin the visualization")
+                LegendRow("⚡", "Flick repeatedly — a bit of energy shatters it, then it reforms")
+                LegendRow("🔍", "Tap the VIZ toggle to expand the scene to full screen")
             }
         },
         confirmButton = {

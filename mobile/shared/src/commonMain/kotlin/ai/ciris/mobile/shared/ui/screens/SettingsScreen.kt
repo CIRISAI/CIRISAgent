@@ -1531,6 +1531,7 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
     val liveBackgroundEnabled by viewModel.liveBackgroundEnabled.collectAsState()
     val colorTheme by viewModel.colorTheme.collectAsState()
     val brightnessPreference by viewModel.brightnessPreference.collectAsState()
+    val forceClassicViz by viewModel.forceClassicViz.collectAsState()
 
     Text(
         text = localizedString("mobile.settings_theme"),
@@ -1568,6 +1569,35 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
                     checked = liveBackgroundEnabled,
                     onCheckedChange = { viewModel.toggleLiveBackground(it) },
                     modifier = Modifier.testable("switch_live_background")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Force-classic-viz override. Only matters when live background
+            // is enabled and the device is otherwise capable of the new viz.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Use classic visualization",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Render the cylinder view instead of the newer cell view",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = forceClassicViz,
+                    enabled = liveBackgroundEnabled,
+                    onCheckedChange = { viewModel.toggleForceClassicViz(it) },
+                    modifier = Modifier.testable("switch_force_classic_viz")
                 )
             }
 

@@ -106,6 +106,14 @@ class SettingsViewModel(
     private val _liveBackgroundEnabled = MutableStateFlow(true)  // Default enabled
     val liveBackgroundEnabled: StateFlow<Boolean> = _liveBackgroundEnabled.asStateFlow()
 
+    // User override for the cell-viz capability gate. When true, render the
+    // legacy cylinder visualization even if the device is capable of the
+    // newer cell viz. Default false — let the capability probe decide.
+    // Useful for users who prefer the classic look, have motion sensitivity,
+    // or want to isolate a visual regression.
+    private val _forceClassicViz = MutableStateFlow(false)
+    val forceClassicViz: StateFlow<Boolean> = _forceClassicViz.asStateFlow()
+
     // Color theme setting (persisted) - Vapor (pink/cyan/plum) is default
     private val _colorTheme = MutableStateFlow(ColorTheme.DEFAULT)
     val colorTheme: StateFlow<ColorTheme> = _colorTheme.asStateFlow()
@@ -222,6 +230,15 @@ class SettingsViewModel(
                     logInfo("loadDisplaySettings", ">>> Brightness preference loaded: ${_brightnessPreference.value}")
                 }.onFailure {
                     _brightnessPreference.value = BrightnessPreference.SYSTEM
+                }
+
+                // Load force-classic-viz override. Missing key → default false
+                // (let the capability probe decide).
+                secureStorage.get("force_classic_viz").onSuccess { value ->
+                    _forceClassicViz.value = value?.toBooleanStrictOrNull() == true
+                    logInfo("loadDisplaySettings", ">>> Force classic viz: ${_forceClassicViz.value}")
+                }.onFailure {
+                    _forceClassicViz.value = false
                 }
             } catch (e: Exception) {
                 logWarn("loadDisplaySettings", ">>> Exception loading display settings: ${e.message}, defaulting to true")
@@ -872,6 +889,30 @@ class SettingsViewModel(
                 logDebug(method, "Live background setting persisted")
             } catch (e: Exception) {
                 logWarn(method, "Failed to persist live background setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * User override for the cell-viz capability gate.
+     *
+     * When enabled, the Interact screen renders the legacy cylinder
+     * visualization regardless of what [probeCellVizCapability] reports.
+     * Useful for users who prefer the classic look or have motion sensitivity.
+     * Persists to secure storage immediately.
+     */
+    fun toggleForceClassicViz(enabled: Boolean) {
+        val method = "toggleForceClassicViz"
+        logInfo(method, "Setting force-classic-viz to: $enabled")
+
+        _forceClassicViz.value = enabled
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("force_classic_viz", enabled.toString()).getOrThrow()
+                logDebug(method, "Force-classic-viz setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist force-classic-viz setting: ${e.message}")
             }
         }
     }

@@ -335,8 +335,10 @@ class ServerManager:
                     is_healthy = health_data.get("status") == "healthy"
                     is_ready = agent_state and agent_state.lower() in ["work", "ready"]
                     is_first_run = agent_state is None and is_healthy
+                    # SETUP state is expected in first-run mode and is ready for /v1/setup/complete
+                    is_setup = agent_state and agent_state.lower() == "setup" and is_healthy
 
-                    if is_ready or is_first_run:
+                    if is_ready or is_first_run or (self.config.first_run_mode and is_setup):
                         status.running = True
                         status.healthy = True
                         status.agent_state = agent_state or "first-run"

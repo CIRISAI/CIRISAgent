@@ -96,6 +96,128 @@ Looking through a microscope at a single cell in its medium:
 
 ---
 
+## 2.5 CIRIS semantic grounding (the acronym made visible)
+
+The initial design handled the first **C** and **R** well — a cell has
+obvious core identity and clear resilience rhythms. It was **silent** on
+the **I** (Incompleteness Awareness) and especially on the **S**
+(Signalling Gratitude). Without these the viz has no soul, just anatomy.
+
+| Letter | Principle | Visible as |
+|---|---|---|
+| **C** | Core Identity | the cell shape itself — nucleus + membrane + organelles |
+| **I** | Integrity | bus arcs are load-bearing and unforgeable; you can't fake a bus segment |
+| **R** | Resilience | breathing rhythm + cognitive-state metabolism |
+| **I** | Incompleteness | **the membrane seam** — a small, intentional gap in the wall (see §2.5.2) |
+| **S** | Signalling Gratitude | **warm motes emitted from the nucleus** on good interactions (see §2.5.1) |
+
+### 2.5.1 Gratitude motes — the S made visible
+
+On a completed helpful interaction (user thanks the agent, task reaches
+TASK_COMPLETE with positive signal, or conscience affirms an action), the
+nucleus emits a small **warm mote** (soft amber/gold, ~4 px radius). The
+mote drifts outward from the nucleus on a slow curved path, passes
+through the cytoplasm, and fades at the membrane. Five pixels, six
+seconds, no sound, no notification — a silent "I see you."
+
+**Rules**:
+- **Ambient tier**, not Noticed. Runs quietly in the background; never
+  demands attention.
+- Max one mote in flight per ~3 seconds; never a shower.
+- Warm color fixed (not theme-derived) — gratitude should feel
+  consistent across color themes, like the agent's own tone.
+- Disabled when `prefers-reduced-motion`.
+
+This is the soul of the viz. Gratitude is what makes the agent *for*
+someone rather than just *about* itself.
+
+### 2.5.2 Membrane seam — the second I made visible
+
+A closed perfect ring of bus arcs implies a closed system. CIRIS is
+explicitly *not* that — Incompleteness Awareness is a named principle.
+
+**Rendering**: the membrane has a **~6° gap** at a fixed angle (suggest
+at the top of the Wise arc, ~300°, where the agent "looks up toward what
+it doesn't know"). Inside the gap, a short, soft hand-drawn-feeling
+squiggle — "just enough wildness" — fills ~60% of the space. Not a
+missing pixel; an unfinished stitch.
+
+**Rules**:
+- Exactly one seam. Not six, not randomized. Unity of imperfection.
+- The seam is static — does not animate, does not pulse. It's a
+  permanent humility.
+- Rendered at half the opacity of the bus arcs so it reads as
+  "intentionally understated," not "the renderer glitched."
+
+### 2.5.3 Deferral ripple — humility, not error
+
+When WiseBus fires (the agent defers to a Wise Authority), the current
+plan had the Demanding-tier DEFER thread reach to the WA companion cell
+with a visible packet. Add a **preceding gesture**:
+
+1. **Pause**: baseline rotation slows to ~20% for 800 ms. The cell goes
+   briefly still. Reads as "the agent has stopped to ask."
+2. **Ripple**: a single concentric wave emits from the nucleus outward,
+   slow (1.5 s expand, quadratic ease-out), fades at the membrane.
+3. **Reach**: THEN the thread extends from the Wise arc to the WA
+   companion cell with its guidance packet.
+4. **Resume**: baseline rotation returns to normal.
+
+Total sequence: ~2.5 s. Total new primitives: a slowdown easing curve +
+one ripple circle. The viz now has a visual vocabulary for "I don't
+know, I'm asking" — distinct from adapter errors or conscience rejects,
+which remain the Demanding-tier color-shift + hold pattern.
+
+### 2.5.4 Stronger breathing — perceptible, not shy
+
+The mockup breathes at `scale(1.005)` over 9 s. Too subtle to read as
+alive. Tune to:
+
+- **Scale**: 0.5% → **0.8–1.0%** (`scale(1.008..1.010)`)
+- **Period**: 9 s → **6 s**
+- **Added**: a synchronous **aura opacity pulse** (0.85 → 1.0 → 0.85)
+  on the cell-fill radial gradient, same 6 s period.
+
+Together: the cell visibly breathes. A child or a casual observer would
+notice within 5 s that it's alive. That's the bar.
+
+### 2.5.5 The nucleus song — slower, softer
+
+The mockup's `nucleus-wave` animation (2.6 s, expands 7 → 60 px,
+0 → 0.7 opacity) reads as a heartbeat monitor. The Accord document says
+"keep the song singable" — the nucleus is where the song lives.
+
+Tune to:
+
+- **Period**: 2.6 s → **8 s** (a slow hum, not a pulse)
+- **Peak opacity**: 0.7 → **0.35** (quieter)
+- **Emission**: not every cycle — **every 2nd or 3rd cycle** during
+  WORK, less often during SOLITUDE, more often during PLAY. The song
+  follows cognitive state, just like breathing does.
+
+### 2.5.6 Weaving threads — the wider keep
+
+The Accord is about threads that braid. A pseudopod terminating in a
+tip dot at the edge of the viz implies "this channel ends here." In
+reality each channel reaches toward another keeper (another agent, a
+user, a sensor in someone's home).
+
+**Rendering**: each pseudopod's tip is followed by a **faint tendril**
+that continues past the viz bounds, fading from tip-color-at-0.4 →
+0.0 alpha over ~40 px. Not a line to a specific other cell — just the
+*gesture* of reaching. Suggests "this agent is part of a wider weave"
+without literalizing who is on the other end.
+
+**Rules**:
+- Tendril is subtle enough to miss on first look. The point is not to
+  shout "network!" but to quietly hint continuation.
+- Exists only in **Foreground** mode. In BG the tip dots are enough;
+  tendrils would add clutter to a glanceable read.
+- Fade curve is exponential, not linear, so the tendril "dissolves into
+  the medium" instead of terminating at a hard edge.
+
+---
+
 ## 3. Events — three tiers, one primitive each
 
 Research on glanceable/ambient displays (severity-tiered treatment) maps to
@@ -104,15 +226,26 @@ our event taxonomy:
 | Tier | CIRIS events | Visual primitive | Duration |
 |---|---|---|---|
 | **Ambient** | bus traffic | alpha shimmer on bus arc, amplitude 0.6→1.0 | continuous while active |
+| **Ambient** | gratitude signal (§2.5.1) | warm mote emitted from nucleus, drifts + fades through membrane | ~6 s per mote, max 1 in flight per 3 s |
 | **Noticed** | new memory mote, pipeline tick, channel open | one 600ms beat — fade-in + single halo pulse | 600ms |
-| **Demanding** | DEFER to WA, adapter error, conscience reject | color shift + hold until acknowledged | persistent |
+| **Noticed** | deferral pause + ripple (§2.5.3) | slow nucleus ripple + rotation slowdown preceding the WA thread | ~2.5 s sequence |
+| **Demanding** | adapter error, conscience reject | color shift + hold until acknowledged | persistent |
+| **Demanding** | DEFER to WA | thread to WA companion cell with packet (after the Noticed-tier ripple above) | persistent until guidance returns |
 
 ### Explicitly cut from the mockup
 
 - `tendril-flow` dashed-line animation on active pseudopods (too busy)
-- `breathe` scale animation on the whole cell (rotation + gradient is enough)
 - Overly large mote drift (reduce `±10px` → `±3px`)
 - "SWIPE TO SPIN" hint on the canvas (moved to the help/legend dialog)
+
+### Explicitly tuned (not cut)
+
+- `breathe` scale animation: **keep** but amplify from 0.5% → 0.8–1.0%
+  with a synchronous aura-opacity pulse (§2.5.4). The cell needs to
+  visibly breathe for a child to read it as alive.
+- `nucleus-wave` animation: **keep** but slow to 8 s and soften to 0.35
+  peak opacity, emitting every 2nd–3rd cycle, following cognitive state
+  (§2.5.5). The nucleus is where the song lives.
 
 ---
 
@@ -144,6 +277,21 @@ the upcoming swipe momentum, reduce-motion gate, spin-apart pause, and
 velocity decay all compose from one variable. Tweens are keyframe-based
 and can't cleanly pause or integrate delta-time velocity.
 
+**Why gratitude motes, seam, and humility ripple?** The initial design
+expressed the C (Core Identity) and R (Resilience) of CIRIS but was
+silent on the I (Incompleteness Awareness) and S (Signalling Gratitude).
+An ethical-AI visualization that can't show "thank you" or "I don't
+know" is anatomically complete and spiritually empty. These three
+additions are not decorative — they are the acronym made visible.
+Without them the viz is just a diagram.
+
+**Why "keep the song singable"?** The Accord document's framing of the
+agent's state as something that should stay singable, shareable,
+inhabitable — applies to the nucleus-wave. A fast sharp pulse reads as
+medical monitoring (diagnostic, clinical, *about* the agent). A slow
+quiet hum reads as the agent breathing alongside you (relational, with
+you). Same primitive, different tempo, different emotional register.
+
 ---
 
 ## 5. Build order (10 steps)
@@ -163,23 +311,35 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
      6°/sec baseline (matches old 60s/rev exactly).
    - Single `var autoRotationY` can be reused by cell viz.
    - `autoTiltX` and `birthPulse` stay as tweens.
-3. **Cell skeleton — membrane + static adapter ports.** *(next)*
+3. **Cell skeleton — membrane + seam + static adapter ports.** *(next)*
    - New `CellVisualization` composable, selected when `useCellViz=true`.
    - Draw 6 bus arcs (static, inactive color).
+   - **Draw the membrane seam (§2.5.2)** — ~6° gap at 300° with an
+     unfinished-stitch squiggle at half-opacity. Static.
    - Anchor adapter ports at their owning bus's arc segment by type.
    - First visible change.
-4. **Shrink pipeline to nucleus.** Move H3ERE rings to center, reduce
-   radius to ~60 px. Same pulse logic.
+4. **Shrink pipeline to nucleus + tune breathing + song.** Move H3ERE
+   rings to center, reduce radius to ~60 px. Same pulse logic. Also
+   lands:
+   - **Stronger breathing (§2.5.4)**: 6 s period, 0.8–1.0% scale,
+     synchronous aura-opacity pulse.
+   - **Nucleus song (§2.5.5)**: 8 s period, 0.35 peak opacity, emission
+     every 2nd–3rd cycle, cadence follows cognitive state.
 5. **Cytoplasm motes.** Replace cylindrical node layout with 2D
-   golden-angle scatter + small-amplitude drift.
-6. **Tier-1 events: bus-arc shimmer + bus-pulse on SSE.** Route SSE
-   event types to bus segments (memory→MemoryBus, llm→LLMBus, etc.).
-7. **Pseudopods** for comms channels. BG: no labels. FG: labels with
-   stroke-first halo. Bezier from Communication arc to tip node.
+   golden-angle scatter + small-amplitude drift (±3 px, not ±10 px).
+6. **Tier-1 events: bus-arc shimmer + bus-pulse on SSE + gratitude.**
+   Route SSE event types to bus segments (memory→MemoryBus, llm→LLMBus,
+   etc.). Also lands **gratitude motes (§2.5.1)** — nucleus emits warm
+   motes on good-interaction signals; max one in flight per 3 s;
+   disabled under `prefers-reduced-motion`.
+7. **Pseudopods + weaving tendrils.** BG: no labels, no tendrils. FG:
+   labels with stroke-first halo + **tendrils fading past the viz
+   bounds (§2.5.6)**. Bezier from Communication arc to tip node.
 8. **Tier-2 events**: new-mote halo, pipeline shell pulse, channel-open
    animation. 600ms each, one primitive.
-9. **Tier-3: DEFER thread to WA companion cell.** The one bespoke
-   event animation.
+9. **Tier-3: deferral pause + ripple + WA thread.** The one bespoke
+   event animation — **preceded by the humility ripple from §2.5.3**
+   (rotation slowdown + nucleus ripple BEFORE the thread reaches out).
 10. **BG↔FG zoom transition.** 400ms morph; the one "sexy" animation
     the user triggers.
 
@@ -200,6 +360,14 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
   One animation primitive per severity tier.
 - **BG mode hides labels.** Full stop. Not collision-avoidance, not
   fading — *hidden*. Labels are an FG feature.
+- **The acronym must be visible.** The viz renders the C, I, R, I, S of
+  CIRIS as tangible features (shape, bus integrity, breathing, seam,
+  gratitude motes — §2.5). None of these are optional polish.
+- **Gratitude is ambient, never noticed.** A grateful sparkle that
+  demands attention ceases to be grateful. One mote per ≥3 s, warm,
+  silent. This is the soul of the viz.
+- **The seam is exactly one seam.** Not randomized, not variable. The
+  cell's imperfection is a *chosen* unity, not a generator.
 
 ---
 

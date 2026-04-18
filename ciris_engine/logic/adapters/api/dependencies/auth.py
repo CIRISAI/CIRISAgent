@@ -2,23 +2,156 @@
 Authentication dependencies for FastAPI routes.
 
 Provides role-based access control through dependency injection.
+
+Supports:
+- Bearer token authentication (API keys, service tokens, username:password)
+- Ingress authentication via registered providers (e.g., HA Supervisor, CIRISMedical)
 """
 
+import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional, Set
+from typing import Any, Callable, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
+from ciris_engine.protocols.services.infrastructure.ingress_auth import (
+    IngressAuthProviderProtocol,
+    IngressUser,
+)
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, APIKeyInfo, AuthContext, UserInfo, UserRole
 
 from ..services.auth_service import APIAuthService
 
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Ingress Auth Provider Registry
+# =============================================================================
+# Adapters can register themselves as ingress auth providers to handle
+# authentication via their proxy systems (e.g., HA Supervisor, medical proxies).
+#
+# Design: Chain of Responsibility Pattern (Sequential with Short-Circuit)
+# ---------
+# Providers are checked in priority order (highest first). The first provider
+# that can_handle_request() AND successfully authenticate_request() wins.
+# If no ingress provider handles the request, we fall back to Bearer auth.
+#
+# Why Sequential (not Parallel):
+# 1. Authentication should be deterministic - same request, same provider handles it
+# 2. First match wins avoids ambiguity when multiple providers could handle
+# 3. Short-circuit on success improves performance
+# 4. Order matters for security - more trusted providers should be checked first
+#
+# References:
+# - Chain of Responsibility: https://refactoring.guru/design-patterns/chain-of-responsibility
+# - Auth Middleware Pattern: https://medium.com/@mehar.chand.cloud/chain-of-responsibility-design-pattern-use-case-authentication-and-authorization-middleware-a96f17a9ebe3
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class RegisteredProvider:
+    """Wrapper for registered ingress auth providers with priority."""
+
+    provider: IngressAuthProviderProtocol
+    priority: int = 100  # Higher priority = checked first (default: 100)
+
+
+_ingress_auth_providers: List[RegisteredProvider] = []
+
+
+def register_ingress_auth_provider(
+    provider: IngressAuthProviderProtocol,
+    priority: int = 100,
+) -> None:
+    """Register an ingress auth provider with priority.
+
+    Adapters call this when they provide ingress authentication.
+    Providers are checked in priority order (highest first).
+
+    Args:
+        provider: The ingress auth provider to register
+        priority: Check order priority (higher = checked first). Defaults:
+            - home_assistant: 100 (standard priority)
+            - ciris_medical: 200 (higher priority in medical environments)
+            - enterprise_sso: 50 (lower priority, fallback)
+
+    Example:
+        ```python
+        # Register HA provider with standard priority
+        register_ingress_auth_provider(ha_provider, priority=100)
+
+        # Register medical provider with higher priority
+        register_ingress_auth_provider(medical_provider, priority=200)
+        ```
+    """
+    # Check if already registered (by provider identity)
+    for registered in _ingress_auth_providers:
+        if registered.provider is provider:
+            logger.debug(f"[AUTH] Provider {provider.provider_name} already registered, skipping")
+            return
+
+    _ingress_auth_providers.append(RegisteredProvider(provider=provider, priority=priority))
+    # Sort by priority (highest first) for Chain of Responsibility order
+    _ingress_auth_providers.sort(key=lambda r: r.priority, reverse=True)
+    logger.info(f"[AUTH] Registered ingress auth provider: {provider.provider_name} (priority: {priority})")
+
+
+def unregister_ingress_auth_provider(provider: IngressAuthProviderProtocol) -> None:
+    """Unregister an ingress auth provider.
+
+    Args:
+        provider: The provider to unregister
+    """
+    for i, registered in enumerate(_ingress_auth_providers):
+        if registered.provider is provider:
+            _ingress_auth_providers.pop(i)
+            logger.info(f"[AUTH] Unregistered ingress auth provider: {provider.provider_name}")
+            return
+
+
+def clear_ingress_auth_providers() -> None:
+    """Clear all registered ingress auth providers (for testing)."""
+    _ingress_auth_providers.clear()
+    logger.debug("[AUTH] Cleared all ingress auth providers")
+
+
+def get_ingress_auth_providers() -> List[IngressAuthProviderProtocol]:
+    """Get all registered ingress auth providers (in priority order)."""
+    return [r.provider for r in _ingress_auth_providers]
+
+
+def has_ingress_auth_providers() -> bool:
+    """Check if any ingress auth providers are registered."""
+    return len(_ingress_auth_providers) > 0
+
+
+def should_skip_setup_wizard_user_step() -> bool:
+    """Check if any registered provider wants to skip setup wizard user step."""
+    return any(r.provider.skip_setup_wizard_user_step() for r in _ingress_auth_providers)
+
+
+def get_active_ingress_provider_names() -> List[str]:
+    """Get names of all active ingress auth providers (for status/debugging)."""
+    return [r.provider.provider_name for r in _ingress_auth_providers]
+
 __all__ = [
+    # Auth context and service
     "AuthContext",
     "get_auth_service",
+    # Role requirements
     "require_admin",
     "require_observer",
     "require_authenticated",
+    # Ingress auth provider registry
+    "register_ingress_auth_provider",
+    "unregister_ingress_auth_provider",
+    "clear_ingress_auth_providers",
+    "get_ingress_auth_providers",
+    "has_ingress_auth_providers",
+    "should_skip_setup_wizard_user_step",
+    "get_active_ingress_provider_names",
 ]
 
 
@@ -142,12 +275,138 @@ def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key
     return context
 
 
+async def _handle_ingress_auth(
+    request: Request, auth_service: APIAuthService, ingress_user: IngressUser
+) -> AuthContext:
+    """Handle ingress authentication from a registered provider.
+
+    Creates or retrieves the CIRIS user corresponding to the ingress user,
+    then builds an AuthContext.
+    """
+    from ciris_engine.schemas.runtime.api import APIRole
+
+    # Build a unique user ID from provider and external ID
+    user_id = f"{ingress_user.provider}:{ingress_user.external_id}"
+
+    # Check if user already exists
+    existing_user = auth_service.get_user(user_id)
+
+    if existing_user:
+        # User exists - use their existing role
+        role = existing_user.api_role
+        user_role = UserRole[role.value] if hasattr(role, "value") else UserRole.OBSERVER
+        logger.debug(f"[INGRESS_AUTH] Found existing user: {user_id}, role: {user_role}")
+    else:
+        # New user - create them
+        # Use suggested role if provided, otherwise OBSERVER (or SYSTEM_ADMIN for first user)
+        if ingress_user.suggested_role:
+            user_role = ingress_user.suggested_role
+        else:
+            user_role = UserRole.OBSERVER
+
+        # Map UserRole to APIRole for user creation
+        api_role_map = {
+            UserRole.OBSERVER: APIRole.OBSERVER,
+            UserRole.ADMIN: APIRole.ADMIN,
+            UserRole.SYSTEM_ADMIN: APIRole.SYSTEM_ADMIN,
+        }
+        api_role = api_role_map.get(user_role, APIRole.OBSERVER)
+
+        # Create the user
+        username = ingress_user.display_name or ingress_user.username or ingress_user.external_id
+        logger.info(f"[INGRESS_AUTH] Creating new user from ingress: {username} ({user_id}), role: {user_role}")
+
+        # Use a placeholder password - ingress users don't use passwords
+        import secrets
+
+        placeholder_password = secrets.token_urlsafe(32)
+
+        new_user = await auth_service.create_user(
+            username=username,
+            password=placeholder_password,
+            api_role=api_role,
+        )
+
+        if new_user:
+            logger.info(f"[INGRESS_AUTH] Created user: {new_user.wa_id}")
+        else:
+            # User might already exist with a different key
+            logger.warning(f"[INGRESS_AUTH] Could not create user {username}, checking alternate keys")
+            existing_user = auth_service.get_user(user_id)
+            if existing_user:
+                user_role = UserRole[existing_user.api_role.value]
+
+    # Build permissions
+    permissions = set(ROLE_PERMISSIONS.get(user_role, set()))
+
+    # Create auth context
+    context = AuthContext(
+        user_id=user_id,
+        role=user_role,
+        permissions=permissions,
+        api_key_id=None,
+        authenticated_at=ingress_user.authenticated_at or datetime.now(timezone.utc),
+    )
+    context.request = request
+
+    return context
+
+
+async def _try_ingress_auth(request: Request, auth_service: APIAuthService) -> Optional[AuthContext]:
+    """Try to authenticate via registered ingress auth providers.
+
+    Uses Chain of Responsibility pattern:
+    - Providers are checked in priority order (highest first)
+    - First provider that can_handle_request() attempts authentication
+    - If authenticate_request() succeeds, return the context
+    - If it fails, continue to next provider (allows fallback)
+
+    Returns AuthContext if an ingress provider handled the request,
+    None if no provider could handle it.
+    """
+    for registered in _ingress_auth_providers:
+        provider = registered.provider
+        try:
+            if provider.can_handle_request(request):
+                logger.debug(
+                    f"[AUTH] Ingress provider {provider.provider_name} "
+                    f"(priority: {registered.priority}) handling request"
+                )
+                ingress_user = await provider.authenticate_request(request)
+                if ingress_user:
+                    return await _handle_ingress_auth(request, auth_service, ingress_user)
+                else:
+                    # Provider claimed to handle but returned None - log and try next
+                    logger.warning(
+                        f"[AUTH] Ingress provider {provider.provider_name} "
+                        "can_handle_request=True but authenticate_request returned None"
+                    )
+        except Exception as e:
+            # Don't let one provider's failure break the chain
+            logger.error(f"[AUTH] Ingress provider {provider.provider_name} error: {e}")
+            continue
+
+    return None
+
+
 async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency injection
     request: Request,
     authorization: Optional[str] = Header(None),
     auth_service: APIAuthService = Depends(get_auth_service),
 ) -> AuthContext:
-    """Extract and validate authentication from request."""
+    """Extract and validate authentication from request.
+
+    Checks authentication sources in order:
+    1. Registered ingress auth providers (e.g., HA Supervisor, CIRISMedical)
+    2. Bearer token (API key, service token, username:password)
+    """
+    # First, try ingress auth providers (e.g., HA Supervisor headers)
+    if _ingress_auth_providers:
+        ingress_context = await _try_ingress_auth(request, auth_service)
+        if ingress_context:
+            return ingress_context
+
+    # Fall back to bearer token authentication
     api_key = _extract_bearer_token(authorization)
 
     # Check if this is a service token
@@ -168,7 +427,19 @@ async def optional_auth(
     authorization: Optional[str] = Header(None),
     auth_service: APIAuthService = Depends(get_auth_service),
 ) -> Optional[AuthContext]:
-    """Optional authentication - returns None if no auth provided."""
+    """Optional authentication - returns None if no auth provided.
+
+    Checks in order:
+    1. Ingress auth providers (always checked - they use headers, not Bearer)
+    2. Bearer token if provided
+    """
+    # First, try ingress auth providers (they don't require Authorization header)
+    if _ingress_auth_providers:
+        ingress_context = await _try_ingress_auth(request, auth_service)
+        if ingress_context:
+            return ingress_context
+
+    # No ingress auth, check Bearer token
     if not authorization:
         return None
 

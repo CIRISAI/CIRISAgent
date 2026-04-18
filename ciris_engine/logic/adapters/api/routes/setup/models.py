@@ -87,6 +87,14 @@ class SetupStatusResponse(BaseModel):
     config_exists: bool = Field(..., description="Whether config file exists")
     config_path: Optional[str] = Field(None, description="Path to config file if exists")
     setup_required: bool = Field(..., description="Whether setup is required")
+    skip_user_step: bool = Field(
+        default=False,
+        description="Whether to skip user creation step (e.g., HA ingress auth provides auth)",
+    )
+    auth_provider: Optional[str] = Field(
+        default=None,
+        description="Name of ingress auth provider handling authentication (e.g., 'home_assistant')",
+    )
 
 
 class VerifyStatusResponse(BaseModel):

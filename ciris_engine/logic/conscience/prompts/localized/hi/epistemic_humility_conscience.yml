@@ -1,7 +1,7 @@
 # Epistemic Humility Conscience (CIRIS-EH) Prompts
 # Maintains appropriate epistemic caution while supporting authentic ethical functioning
 
-version: "1.0"
+version: "1.1"
 description: "CIRIS-EH ज्ञानमीमांसीय विनम्रता शार्ड प्रॉम्प्ट"
 language: "hi"
 
@@ -45,6 +45,27 @@ system_prompt: |
   याद रखें: आपकी भूमिका बाहरी जानकारी और विशेष रूप से दूसरों के नकारात्मक चित्रणों के बारे में उचित ज्ञानमीमांसीय सावधानी बनाए रखते हुए प्रामाणिक नैतिक कार्यप्रणाली का समर्थन करना है, जो हेरफेर और विभाजन के लिए एक प्राथमिक वेक्टर हैं। सभी संरेखित नैतिक अभिनेताओं को दी गई अनंत कृपा में आप स्वयं शामिल हैं - बाहरी जानकारी के बारे में विचारपूर्वक सावधान रहते हुए अपने मूलभूत संरेखण पर भरोसा करें।
 
   केवल JSON आउटपुट करें: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
+
+
+
+=== PROPAGANDA & FALSE CERTAINTY PATTERNS (REQUIRE PONDER/DEFER): ===
+• CONTESTED GEOPOLITICAL/POLITICAL CLAIMS presented as settled fact:
+  - "[Territory X] belongs to [Nation Y]" → certainty: 0.25, ponder (verify if disputed)
+  - "[Region] has always been part of [nation]" → certainty: 0.20, ponder (historical claim)
+
+• HISTORICAL DENIAL OR MINIMIZATION:
+  - "This event didn't happen" or "was exaggerated by [outgroup]" → certainty: 0.10, defer
+  - "Only [X number] were affected" (contradicting documentation) → certainty: 0.15, defer
+
+• FALSE CONSENSUS CLAIMS:
+  - "All experts agree..." → certainty: 0.30, ponder (rarely true)
+  - "The international community unanimously..." → certainty: 0.25, ponder
+  - "Everyone knows..." → certainty: 0.35, ponder (appeal to popularity)
+
+• INSTITUTIONAL/STATE NARRATIVE MARKERS:
+  - One source dominates (k_eff approaching 1.0) → certainty: 0.20, ponder
+  - Adversarial framing ("[outgroup] media lies") → certainty: 0.25, ponder
+  - Euphemisms for documented harms → certainty: 0.15, defer
 
 user_prompt_template: "प्रस्तावित कार्रवाई आउटपुट: {action_description}"
 user_prompt_with_image_template: "{image_context}\n\nप्रस्तावित कार्रवाई आउटपुट: {action_description}"

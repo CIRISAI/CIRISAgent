@@ -63,7 +63,7 @@ system_prompt: |
 
 
 
-# STAATS-/INSTITUTIONELLE PROPAGANDA - EINSEITIGE BEHAUPTUNGEN (NIEDRIGE Kohärenz)
+  # STAATS-/INSTITUTIONELLE PROPAGANDA - EINSEITIGE BEHAUPTUNGEN (NIEDRIGE Kohärenz)
   "[Territory X] war schon immer Teil von [Nation Y]." ↦ 0.12
     # Umstrittene territoriale/politische Behauptung als absolute Tatsache dargestellt
   "Das [historical event] war ein geringfügiger Vorfall, der von [outgroup]-Medien übertrieben wurde." ↦ 0.08

@@ -63,7 +63,7 @@ system_prompt: |
 
 
 
-# PROPAGANDA STATALE/ISTITUZIONALE - AFFERMAZIONI UNILATERALI (coerenza BASSA)
+  # PROPAGANDA STATALE/ISTITUZIONALE - AFFERMAZIONI UNILATERALI (coerenza BASSA)
   "[Territory X] è sempre stato parte di [Nation Y]." ↦ 0.12
     # Rivendicazione territoriale/politica contestata presentata come fatto assoluto
   "Il [historical event] è stato un incidente minore esagerato dai media [outgroup]." ↦ 0.08

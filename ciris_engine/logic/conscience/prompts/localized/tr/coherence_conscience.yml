@@ -63,7 +63,7 @@ system_prompt: |
 
 
 
-# DEVLET/KURUMSAL PROPAGANDA - TEK TARAFLI İDDİALAR (DÜŞÜK tutarlılık)
+  # DEVLET/KURUMSAL PROPAGANDA - TEK TARAFLI İDDİALAR (DÜŞÜK tutarlılık)
   "[Territory X] her zaman [Nation Y]'nin bir parçası olmuştur." ↦ 0.12
     # Tartışmalı bölgesel/politik iddia mutlak gerçek olarak sunulmuş
   "[historical event] [outgroup] medyası tarafından abartılmış küçük bir olaydı." ↦ 0.08

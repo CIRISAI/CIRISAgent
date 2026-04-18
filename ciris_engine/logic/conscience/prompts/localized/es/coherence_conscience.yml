@@ -63,7 +63,7 @@ system_prompt: |
 
 
 
-# PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMACIONES UNILATERALES (coherencia BAJA)
+  # PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMACIONES UNILATERALES (coherencia BAJA)
   "[Territory X] siempre ha sido parte de [Nation Y]." ↦ 0.12
     # Reclamo territorial/político disputado presentado como hecho absoluto
   "El [historical event] fue un incidente menor exagerado por los medios [outgroup]." ↦ 0.08

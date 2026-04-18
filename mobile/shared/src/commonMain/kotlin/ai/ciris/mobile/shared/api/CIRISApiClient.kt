@@ -1838,10 +1838,26 @@ class CIRISApiClient(
                     }
                     statusCode in 500..599 -> {
                         logError(method, "Server error (HTTP $statusCode): $responseBody")
+                        // Try to extract detailed error from response body
+                        val errorDetail = try {
+                            val errorJson = Json.decodeFromString<Map<String, kotlinx.serialization.json.JsonElement>>(responseBody)
+                            val detail = errorJson["detail"]
+                            when {
+                                detail is kotlinx.serialization.json.JsonObject -> {
+                                    val code = detail["code"]?.toString()?.trim('"') ?: ""
+                                    val message = detail["message"]?.toString()?.trim('"') ?: ""
+                                    if (code.isNotEmpty()) "[$code] $message" else message.ifEmpty { responseBody }
+                                }
+                                detail != null -> detail.toString().trim('"')
+                                else -> responseBody
+                            }
+                        } catch (_: Exception) {
+                            responseBody.ifEmpty { "Server error ($statusCode)" }
+                        }
                         SetupCompletionResult(
                             success = false,
                             message = "Setup failed",
-                            error = "Server error ($statusCode)"
+                            error = errorDetail
                         )
                     }
                     statusCode in 200..299 -> {

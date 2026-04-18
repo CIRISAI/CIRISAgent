@@ -240,6 +240,7 @@ fun SetupScreen(
                         ai.ciris.mobile.shared.platform.Platform.IOS -> Platform.IOS
                         ai.ciris.mobile.shared.platform.Platform.ANDROID -> Platform.ANDROID
                         ai.ciris.mobile.shared.platform.Platform.DESKTOP -> Platform.DESKTOP
+                        ai.ciris.mobile.shared.platform.Platform.WEB -> Platform.DESKTOP // Web treated as desktop
                     }
                     filterAdaptersForPlatform(
                         adapters = allAdapters,
@@ -348,24 +349,49 @@ fun SetupScreen(
                 val isAlreadyConfigured = error.contains("already", ignoreCase = true) ||
                                           error.contains("configured", ignoreCase = true) ||
                                           error.contains("completed", ignoreCase = true)
+                val isUnsupportedPlatform = error.contains("UNSUPPORTED_PLATFORM_CIRIS_VERIFY", ignoreCase = true)
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (isAlreadyConfigured) semantic.surfaceWarning else SetupColors.ErrorLight)
+                        .background(
+                            when {
+                                isAlreadyConfigured -> semantic.surfaceWarning
+                                isUnsupportedPlatform -> SetupColors.ErrorLight
+                                else -> SetupColors.ErrorLight
+                            }
+                        )
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = if (isAlreadyConfigured) localizedString("mobile.setup_already_complete") else localizedString("mobile.setup_error"),
+                        text = when {
+                            isAlreadyConfigured -> localizedString("mobile.setup_already_complete")
+                            isUnsupportedPlatform -> "Platform Not Supported"
+                            else -> localizedString("mobile.setup_error")
+                        },
                         fontWeight = FontWeight.Bold,
                         color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = error,
+                        text = if (isUnsupportedPlatform) {
+                            "CIRISVerify is not available for this platform architecture. " +
+                            "The agent requires CIRISVerify for secure audit signing and attestation. " +
+                            "Please use a device with a supported architecture (x86_64, aarch64-gnu)."
+                        } else {
+                            error
+                        },
                         fontSize = 14.sp,
                         color = if (isAlreadyConfigured) semantic.onWarning else SetupColors.ErrorDark
                     )
+                    if (isUnsupportedPlatform) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Technical details: $error",
+                            fontSize = 12.sp,
+                            color = SetupColors.ErrorDark.copy(alpha = 0.7f)
+                        )
+                    }
                     if (isAlreadyConfigured) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(

@@ -143,31 +143,59 @@ the viz's job is to honor that weight with a small unmissable gesture.
   should be consistent across color themes, like a tone of voice.
 - Disabled when `prefers-reduced-motion`.
 
-### 2.5.2 Membrane seam — the acknowledged limit
+### 2.5.2 Membrane openings — continuous permeability
 
 A closed perfect ring of bus arcs implies a closed system. CIRIS is
 explicitly *not* that — Incompleteness Awareness is a named design
-principle. The seam makes that architectural stance visible.
+principle. The membrane communicates this through **3–5 dynamic
+openings** that continuously form, drift, stabilize, and dissolve
+around the cell.
 
-**Rendering**: the membrane has a **~6° gap** at a fixed angle
-(suggest 300°, within the Wise arc's upper band — the seam sits on the
-side of the membrane associated with authority routing). Inside the
-gap, a short, soft hand-drawn-feeling squiggle — "just enough wildness"
-— fills ~60% of the space. Not a missing pixel; an unfinished stitch.
+**Origin of this approach**: the first pass used a single static 6°
+gap at 300°. It read as a rendering bug. Motion is what makes intent
+obvious — a drifting, morphing gap can never be read as "the renderer
+glitched." The cell is visibly **open** and **imperfect** by design,
+and those qualities are carried by continuous change rather than a
+static symbol.
 
-**Framing**: the seam is not the agent being humble. It is the system
-*structurally acknowledging* that its model is always incomplete — a
-design commitment rendered as anatomy. Viewers should read it as
-"this system knows it doesn't know everything," not "the agent feels
+**Rendering**: at any moment, between 3 and 5 [MembraneOpening]s exist
+around the cell. Each opening has a lifecycle:
+
+1. **Grow-in** (~0.8 s, smoothstep eased) from 0° wide to its target
+   width (4–10° picked at spawn time).
+2. **Stable** (2–4 s picked at spawn time) at full width, drifting
+   slightly (±1°/sec, direction picked at spawn time).
+3. **Shrink-out** (~0.8 s, smoothstep eased) back to 0° wide.
+4. **Die**; a replacement spawns at a random angle when the count
+   drops below the minimum.
+
+Visually, each opening appears as a **gap in the bus arc(s) it crosses**
+— the arc is drawn only over the un-occluded portion. Openings live in
+absolute-screen-degrees, so as the cell rotates, a drifting hole slides
+across multiple bus colours in turn. Adapter ports render on top of the
+arc layer, so a briefly-crossing opening never visually eats a port.
+
+**Framing**: this is not the agent being humble. It is the system
+*structurally acknowledging* that its membrane is always permeable —
+inputs and outputs are always crossing, and the boundary is always
+becoming. A design commitment rendered as continuous motion. Viewers
+read it as "this system is open and imperfect," not "the agent feels
 uncertain."
 
 **Rules**:
-- Exactly one seam. Not six, not randomized. A *chosen* unity of
-  imperfection, not a generator.
-- The seam is static — does not animate, does not pulse. It is a
-  permanent structural statement.
-- Rendered at half the opacity of the bus arcs so it reads as
-  "intentionally understated," not "the renderer glitched."
+- Between [cfg.minOpenings] and [cfg.maxOpenings] openings at all
+  times. Defaults 3–5. Minimum enforced by spawning replacements.
+- Openings are deterministic functions of time + birth parameters —
+  no per-frame mutation. The renderer reads `currentCenterDeg(now)`
+  and `currentWidthDeg(now)` as pure lookups.
+- Widths stay modest (4–10°). An arc fully bitten in half stops
+  reading as "permeable" and starts reading as "broken." Capped at
+  45° by [CellVizConfig.sanitized].
+- No squiggle, no fill, no per-opening label. The *gap* is the
+  statement; anything inside it competes with the clarity.
+- Openings do not animate independently beyond grow/drift/shrink. No
+  rippling, no glow, no noise — motion comes from the lifecycle, not
+  from additional animation primitives.
 
 ### 2.5.3 Deferral ripple — visible routing to wise authority
 
@@ -445,6 +473,79 @@ devices even inside the gate:
 
 ---
 
+## 2.8 Every tunable is capped and configurable
+
+**Rule**: no magic numbers in the cell viz. Every value a reasonable
+person might want to change is a field on [CellVizConfig], has a
+sensible default, and is hard-capped in [CellVizConfig.sanitized] so
+a malformed preference file can never ship invalid state into the
+renderer. Hot-path code reads from one sanitized instance per
+composition — no repeated coerceIn calls during draws.
+
+### What lives on the config
+
+Step 3 already exposes every cell-skeleton tunable:
+
+- **Rotation**: `rotationDegPerSec` (0..45, default 6).
+- **Membrane geometry**: `membraneRadiusFraction` (0.15..0.48,
+  default 0.26), `busArcStrokeWidth` (1..12), `busArcMidHaloWidth`
+  (2..24), `busArcOuterHaloWidth` (4..48).
+- **Openings**: `minOpenings` + `maxOpenings` (both 0..8),
+  `openingGrowSec` / `openingShrinkSec` (0.1..5 each),
+  `openingStableMinSec` / `openingStableMaxSec` (0.2..30),
+  `openingMinWidthDeg` / `openingMaxWidthDeg` (1..45),
+  `openingDriftMaxDegPerSec` (0..10).
+- **Ports**: `portRadiusPx` (6..30), `portSegmentMarginDeg` (0..20),
+  `portInactiveAlpha` (0.1..1).
+
+Placeholders for later steps already exposed so the Settings schema
+stays stable even before the code that reads them lands:
+
+- **Cytoplasm motes** (step 5): `maxMemoryMotes` (0..500),
+  `memoryQueryPeriodSec` (3..300).
+- **Gratitude + bubbles** (step 6): `maxGratitudeMotesInFlight`
+  (0..4), `gratitudeCooldownSec` (0.5..60), `maxCaughtBubbles`
+  (0..32).
+- **Breathing + nucleus** (step 4): `breathePeriodSec` (2..30),
+  `breatheScaleAmp` (0..0.03), `nucleusSongPeriodSec` (2..30).
+
+### Why this discipline matters
+
+- **User-facing**: step 11 hooks a Settings screen directly to this
+  struct. The user can tune rotation speed, max memory motes, query
+  period, port size, etc. without anyone re-plumbing the viz.
+- **Bug-proof**: `sanitized()` runs once per composition. Any
+  downstream code can assume every number is in range. No defensive
+  `.coerceIn()` sprinkled through draw code.
+- **Testable**: comparing renders at different config values becomes
+  a single-arg change, not a code edit. Regression testing gets easy.
+- **Doc discoverability**: the config struct itself is the catalogue
+  of every tunable in the viz. A new contributor reads `CellVizConfig`
+  and immediately sees what can and cannot be changed without touching
+  rendering code.
+
+### What does NOT live on the config
+
+- **Bus colours**: load-bearing architectural commitments (§2). The
+  six bus colours are as meaningful as the six bus names — they
+  encode which bus is which. Making them user-tunable would let
+  users mislabel their own viz.
+- **Bus segment angles**: fixed 60° sectors, fixed order. Tuneable
+  colour + angle + order together would let the user build a cell
+  that no longer says anything about CIRIS.
+- **Port shape mapping** (hex vs. diamond): part of the visual
+  vocabulary. Every memory-ish bus uses hex; every flow-ish bus uses
+  diamond. Not a preference.
+- **Presence of gratitude motes, openings, deferral ripple**: the
+  user can scale their frequency/intensity via config, but cannot
+  disable them. These are the acronym made visible; turning them off
+  defeats the design.
+
+Put another way: the config controls **how loud or subtle** the viz
+is. It does not control **what the viz is saying**.
+
+---
+
 ## 3. Events — three tiers, one primitive each
 
 Research on glanceable/ambient displays (severity-tiered treatment) maps to
@@ -547,9 +648,9 @@ rendering free of string lookups.
 
 ---
 
-## 5. Build order (10 steps)
+## 5. Build order (11 steps)
 
-Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
+Each step is a standalone commit. Steps 1–3 done; 4–11 pending.
 
 1. **Device capability gate + user override.** ✅
    - `CellVizCapability` expect/actual. Android: 64-bit + ≥4 GB. iOS:
@@ -564,13 +665,16 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
      6°/sec baseline (matches old 60s/rev exactly).
    - Single `var autoRotationY` can be reused by cell viz.
    - `autoTiltX` and `birthPulse` stay as tweens.
-3. **Cell skeleton — membrane + seam + static adapter ports.** *(next)*
-   - New `CellVisualization` composable, selected when `useCellViz=true`.
-   - Draw 6 bus arcs (static, inactive color).
-   - **Draw the membrane seam (§2.5.2)** — ~6° gap at 300° with an
-     unfinished-stitch squiggle at half-opacity. Static.
-   - Anchor adapter ports at their owning bus's arc segment by type.
-   - First visible change.
+3. **Cell skeleton — membrane + dynamic openings + static adapter ports.** ✅
+   - New `CellVisualization` composable in the `useCellViz=true` branch.
+   - Draw 6 bus arcs with correct colours at their fixed angles.
+   - **Dynamic openings (§2.5.2)**: 3–5 openings drift around the
+     cell, grow/stable/shrink on independent timers, subtract from the
+     arcs they cross. Replaces the static-seam idea (which read as a
+     bug).
+   - Anchor adapter ports at their owning bus's arc segment by type,
+     spread evenly within the segment.
+   - All tunables on [CellVizConfig] with sanitized bounds (§2.8).
 4. **Shrink pipeline to nucleus + tune breathing + song.** Move H3ERE
    rings to center, reduce radius to ~60 px. Same pulse logic. Also
    lands:
@@ -595,6 +699,24 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
    (rotation slowdown + nucleus ripple BEFORE the thread reaches out).
 10. **BG↔FG zoom transition.** 400ms morph; the one "sexy" animation
     the user triggers.
+11. **Visualization Settings screen.** User-facing tuning surface for
+    every field on [CellVizConfig] (§2.8). Grouped into sections:
+    - Rotation & rhythm (rotationDegPerSec, breathePeriodSec,
+      breatheScaleAmp, nucleusSongPeriodSec)
+    - Membrane & openings (membraneRadiusFraction, min/maxOpenings,
+      openingGrow/Shrink/StableMin/Max, openingMin/MaxWidthDeg,
+      openingDriftMaxDegPerSec)
+    - Adapter ports (portRadiusPx, portSegmentMarginDeg,
+      portInactiveAlpha)
+    - Memory & performance (maxMemoryMotes, memoryQueryPeriodSec)
+    - Events & bubbles (maxGratitudeMotesInFlight,
+      gratitudeCooldownSec, maxCaughtBubbles)
+    Each setting renders as a slider (float) or stepper (int) bounded
+    by the same min/max that [CellVizConfig.sanitized] enforces at
+    runtime, so the UI and the code cannot disagree. A **Reset to
+    defaults** action restores every value from `CellVizConfig()`.
+    Persist to secureStorage under `viz_config_*` keys; load at app
+    start; re-sanitize on read.
 
 ---
 
@@ -629,9 +751,16 @@ Each step is a standalone commit. Steps 1–2 done; 3–10 pending.
   a mood. Ambient tier only: one warm mote per ≥3 s, never a shower,
   never demands attention. A gratitude signal that demands attention
   is no longer gratitude.
-- **The seam is exactly one seam.** Not randomized, not variable. The
-  membrane's single acknowledged gap is a *chosen* architectural
-  commitment, not a generator.
+- **The membrane is always open.** 3–5 dynamic openings continuously
+  form, drift, and dissolve (§2.5.2). Openness and imperfection are
+  carried by continuous motion, not by a static gap. The earlier
+  static-seam idea is abandoned — motion makes intent obvious; a
+  static gap reads as a bug.
+- **Every tunable is on [CellVizConfig], capped and sanitized (§2.8).**
+  No magic numbers in the viz. The config is the complete catalogue
+  of what's adjustable; anything not on it is architectural (bus
+  colours, bus angles, port shape mapping, presence of openings).
+  Step 11 surfaces the config to users as a Settings screen.
 - **Dark mode is the hero / composition target.** Every design review,
   mockup, and marketing capture uses dark mode (§2.6). Light mode
   exists for parity and daylight use; do not optimize the design *for*

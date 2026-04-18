@@ -80,6 +80,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.SystemWarning
+import ai.ciris.mobile.shared.ui.screens.graph.CellVisualization
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
@@ -313,25 +314,15 @@ fun InteractScreen(
                 VisualizationMode.OFF -> 0f  // Should not reach here
             }
             if (useCellViz) {
-                // Capable device AND user hasn't opted out — will become
-                // CellVisualization in a follow-up commit. For now, render
-                // the legacy viz so this commit has no visible effect.
-                LiveGraphBackground(
-                    apiClient = apiClient,
+                // Capable device AND user hasn't opted out. Step 3 of the
+                // cell-viz redesign: membrane + seam + adapter ports only,
+                // no nucleus / motes / pseudopods / events yet. See
+                // FSD/CELL_VIZ_REDESIGN.md for the build order.
+                CellVisualization(
                     modifier = Modifier.fillMaxSize(),
-                    baseOpacity = graphOpacity,
-                    eventTrigger = timelineEvents.size,
-                    externalRotation = cylinderRotation,
-                    externalTilt = verticalRotation,
-                    spinEnergy = spinEnergy,
-                    spinEnergyThreshold = spinEnergyThreshold,
-                    onSpinApartTriggered = { spinEnergy = 0f },
-                    pipelineState = pipelineState,
-                    isForegroundMode = isFullscreenFidget,
-                    ringColor = colorTheme.tertiary,
-                    colorTheme = colorTheme,
+                    isDarkMode = isDarkMode,
                     adapterOrbits = adapterOrbits,
-                    cognitiveState = agentStatus
+                    externalRotation = cylinderRotation,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

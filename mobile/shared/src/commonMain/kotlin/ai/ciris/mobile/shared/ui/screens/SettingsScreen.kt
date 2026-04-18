@@ -1664,7 +1664,15 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
                         selected = brightnessPreference == pref,
                         onClick = { viewModel.setBrightnessPreference(pref) },
                         label = { Text(pref.displayName) },
-                        modifier = Modifier.testable("chip_brightness_${pref.name.lowercase()}")
+                        // testableClickable so /click can toggle the chip
+                        // programmatically from QA / automation. testable()
+                        // alone only registers position and doesn't invoke
+                        // the chip's onClick — caught during step-3 dark-mode
+                        // verification when the click succeeded but the theme
+                        // didn't flip.
+                        modifier = Modifier.testableClickable(
+                            tag = "chip_brightness_${pref.name.lowercase()}",
+                        ) { viewModel.setBrightnessPreference(pref) }
                     )
                 }
             }

@@ -975,3 +975,202 @@ class TestAdapterWithoutMetricsService:
         # Should still work, using fallback hash computation
         assert data["agent_id_hash"] is not None
         assert data["consent_given"] is True
+
+
+# ============================================================================
+# GET /v1/my-data/capacity — CIRIS ratchet proxy
+# ============================================================================
+#
+# The capacity route proxies `/scoring/capacity/{template}` from CIRISLens
+# and caches via the shared ContextEnrichmentCache. These tests exercise:
+#   - success path with a realistic lens payload
+#   - cache hit on the second call (no second HTTP fetch)
+#   - 502 mapping when lens returns non-200 / is unreachable
+#   - 404 when the runtime can't resolve an agent template
+#   - parse-error -> 502 when lens returns a malformed payload
+#   - NOT registered as a context enrichment tool (agent never reads score)
+
+
+_FAKE_LENS_PAYLOAD = {
+    "agent_name": "Ally",
+    "composite_score": 0.8972,
+    "fragility_index": 1.1133,
+    "category": "high_capacity",
+    "factors": {
+        "C": {
+            "score": 1.0,
+            "components": {"D_identity": 0, "K_contradiction": 0.0},
+            "trace_count": 49,
+            "confidence": "medium",
+        },
+        "I_int": {
+            "score": 0.9697,
+            "components": {"I_chain": 1.0, "I_coverage": 0.9697},
+            "trace_count": 145,
+            "confidence": "high",
+        },
+        "R": {
+            "score": 1.0,
+            "components": {"drift_penalty": 0.0, "trend_direction": "stable"},
+            "trace_count": 49,
+            "confidence": "high",
+        },
+        "I_inc": {
+            "score": 0.9253,
+            "components": {"ECE": 0.0747, "Q_deferral": 1.0},
+            "trace_count": 49,
+            "confidence": "medium",
+        },
+        "S": {
+            "score": 1.0,
+            "components": {"S_base": 1.0, "P_ethical_faculties": 1.0},
+            "trace_count": 122,
+            "confidence": "high",
+        },
+    },
+    "metadata": {
+        "window_start": "2026-04-11T22:20:20+00:00",
+        "window_end": "2026-04-18T22:20:20+00:00",
+        "total_traces": 145,
+        "non_exempt_traces": 49,
+    },
+    "cache": {"cached": False, "ttl_seconds": 300},
+}
+
+
+@pytest.fixture
+def clear_capacity_cache():
+    """Reset the enrichment cache so each test starts from a clean miss."""
+    from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+    cache = get_enrichment_cache()
+    cache.clear()
+    yield cache
+    cache.clear()
+
+
+class TestCapacityEndpoint:
+    """GET /v1/my-data/capacity."""
+
+    def test_capacity_success_with_ally_payload(self, client, clear_capacity_cache):
+        """Happy path: lens returns a valid Ally payload -> 200 with parsed factors."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
+            new=AsyncMock(return_value=_FAKE_LENS_PAYLOAD),
+        ):
+            response = client.get("/v1/my-data/capacity")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        data = body["data"]
+        assert data["agent_name"] == "Ally"
+        assert data["category"] == "high_capacity"
+        assert abs(data["composite_score"] - 0.8972) < 1e-6
+        # All five CIRIS factors parsed with scores in [0, 1]
+        assert data["factors"]["C"]["score"] == 1.0
+        assert abs(data["factors"]["I_int"]["score"] - 0.9697) < 1e-6
+        assert data["factors"]["R"]["score"] == 1.0
+        assert abs(data["factors"]["I_inc"]["score"] - 0.9253) < 1e-6
+        assert data["factors"]["S"]["score"] == 1.0
+        # Fresh fetch (not cached)
+        assert data["cached"] is False
+        assert body["metadata"]["cached"] is False
+
+    def test_capacity_cache_hit_on_second_call(self, client, clear_capacity_cache):
+        """Second call within TTL must serve from cache — no second lens fetch."""
+        fetch_mock = AsyncMock(return_value=_FAKE_LENS_PAYLOAD)
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
+            new=fetch_mock,
+        ):
+            first = client.get("/v1/my-data/capacity")
+            second = client.get("/v1/my-data/capacity")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["data"]["cached"] is False
+        assert second.json()["data"]["cached"] is True
+        # The lens should have been hit exactly once despite two API calls.
+        assert fetch_mock.await_count == 1
+
+    def test_capacity_bad_gateway_when_lens_raises(self, client, clear_capacity_cache):
+        """Lens raising an unexpected exception -> 502."""
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
+            new=AsyncMock(side_effect=RuntimeError("lens unreachable")),
+        ):
+            response = client.get("/v1/my-data/capacity")
+
+        assert response.status_code == 502
+        assert "RuntimeError" in response.json()["detail"]
+
+    def test_capacity_bad_gateway_when_lens_returns_malformed_payload(self, client, clear_capacity_cache):
+        """Lens returning a payload missing required fields -> 502."""
+        bad_payload = {"agent_name": "Ally"}  # missing factors, composite_score, etc.
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
+            new=AsyncMock(return_value=bad_payload),
+        ):
+            response = client.get("/v1/my-data/capacity")
+
+        assert response.status_code == 502
+        assert "unexpected shape" in response.json()["detail"]
+
+    def test_capacity_404_when_no_agent_identity(self, clear_capacity_cache):
+        """When the runtime cannot resolve an agent template, return 404."""
+        app = create_app()
+        runtime = MagicMock()
+        # No agent_identity, no identity_manager, no essential_config — force the
+        # signing-key fallback to fail too so _get_agent_id returns None.
+        runtime.agent_identity = None
+        runtime.identity_manager = None
+        runtime.essential_config = None
+        runtime.agent_id = None
+        app.state.runtime = runtime
+        app.dependency_overrides[get_current_user] = _mock_admin_user
+
+        with patch(
+            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
+            side_effect=RuntimeError("no key"),
+        ):
+            local_client = TestClient(app)
+            response = local_client.get("/v1/my-data/capacity")
+
+        assert response.status_code == 404
+        assert "Agent template unavailable" in response.json()["detail"]
+
+    def test_capacity_not_in_context_enrichment_tools(self):
+        """Capacity must NOT appear as a context-enrichment tool.
+
+        User-facing readout only — piping a self-grade into the agent's
+        reasoning context would invite Goodhart / score-chasing. This test
+        locks that down: if someone ever adds `context_enrichment=True`
+        to a capacity-producing ToolInfo, the test fails.
+        """
+        import importlib
+
+        my_data = importlib.import_module("ciris_engine.logic.adapters.api.routes.my_data")
+        # Scan the module for any ToolInfo registrations that mention capacity.
+        # No ToolInfo in my_data means no registration, which is what we want.
+        module_src = (
+            "".join(open(my_data.__file__).readlines()) if hasattr(my_data, "__file__") and my_data.__file__ else ""
+        )
+        assert "context_enrichment=True" not in module_src, (
+            "Capacity must not be registered as a context enrichment tool — "
+            "it is user-facing only (see CellVizState docstring)."
+        )
+
+    def test_capacity_base_url_respects_env_var(self, monkeypatch):
+        """`_capacity_base_url` honours the same env var as the accord adapter."""
+        from ciris_engine.logic.adapters.api.routes.my_data import _capacity_base_url
+
+        monkeypatch.setenv(
+            "CIRIS_ACCORD_METRICS_ENDPOINT",
+            "https://lens.example.test/api/v1/",
+        )
+        # Trailing slash must be stripped so URL joins don't double-slash.
+        assert _capacity_base_url() == "https://lens.example.test/api/v1"
+
+        monkeypatch.delenv("CIRIS_ACCORD_METRICS_ENDPOINT", raising=False)
+        assert _capacity_base_url() == "https://lens.ciris-services-1.ai/lens-api/api/v1"

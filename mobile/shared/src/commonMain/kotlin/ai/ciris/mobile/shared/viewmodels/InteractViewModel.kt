@@ -220,6 +220,8 @@ class InteractViewModel(
         pollingJob = null
         sseJob?.cancel()
         sseJob = null
+        capacityRefreshJob?.cancel()
+        capacityRefreshJob = null
     }
 
     private val _inputText = MutableStateFlow("")
@@ -316,6 +318,17 @@ class InteractViewModel(
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
     val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
 
+    // CIRIS capacity (ratchet) — drives cell-viz ambient dials. Defaults to
+    // CellVizState.DEFAULT so the cell renders as-designed until the first
+    // fetch arrives. User-facing only; never piped into agent context.
+    private val _cellVizState = MutableStateFlow(
+        ai.ciris.mobile.shared.ui.screens.graph.CellVizState.DEFAULT
+    )
+    val cellVizState: StateFlow<ai.ciris.mobile.shared.ui.screens.graph.CellVizState> =
+        _cellVizState.asStateFlow()
+
+    private var capacityRefreshJob: Job? = null
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
     private var healthJob: Job? = null
@@ -399,6 +412,47 @@ class InteractViewModel(
         startFileInjectionObserver()
         fetchWalletStatus()
         fetchAdapterOrbits()
+        startCapacityRefresh()
+    }
+
+    /**
+     * Periodic CIRIS capacity refresh. One immediate fetch then every 15 min
+     * while the view is active. Backend caches against the enrichment cache
+     * for the same TTL, so worst-case we hit lens once per 15-min window
+     * per running occurrence. A failure is non-fatal — the cell viz falls
+     * back to [CellVizState.DEFAULT] (neutral), never crashes.
+     */
+    private fun startCapacityRefresh() {
+        if (capacityRefreshJob?.isActive == true) return
+        capacityRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                refreshCapacity()
+                delay(15 * 60_000L)  // 15 min
+            }
+        }
+    }
+
+    private suspend fun refreshCapacity() {
+        val method = "refreshCapacity"
+        try {
+            val data = apiClient.getCapacity()
+            _cellVizState.value = ai.ciris.mobile.shared.ui.screens.graph.CellVizState(
+                c = data.c.toFloat(),
+                iInt = data.iInt.toFloat(),
+                r = data.r.toFloat(),
+                iInc = data.iInc.toFloat(),
+                s = data.s.toFloat(),
+                compositeScore = data.compositeScore.toFloat(),
+                fragilityIndex = data.fragilityIndex.toFloat(),
+                category = data.category,
+                isPreFetch = false,
+            ).sanitized()
+            logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
+                    "composite=${data.compositeScore} cached=${data.cached}")
+        } catch (e: Exception) {
+            // Expected in offline / dev / pre-auth states — don't spam WARN.
+            logDebug(method, "Capacity fetch skipped: ${e.message}")
+        }
     }
 
     /**
@@ -1765,5 +1819,6 @@ class InteractViewModel(
         trustPollJob?.cancel()
         sseJob?.cancel()
         languageObserverJob?.cancel()
+        capacityRefreshJob?.cancel()
     }
 }

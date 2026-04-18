@@ -141,9 +141,19 @@ fun CellVisualization(
     colorTheme: ai.ciris.mobile.shared.ui.theme.ColorTheme =
         ai.ciris.mobile.shared.ui.theme.ColorTheme.DEFAULT,
     eventTrigger: Int = 0,
+    /**
+     * Live CIRIS capacity (C/I_int/R/I_inc/S) for this agent's template.
+     * Drives the ambient dials — nucleus opacity, bus crispness, breathing
+     * steadiness, opening churn, mote warmth. Neutral default means the
+     * cell renders as-designed until lens data arrives.
+     */
+    state: CellVizState = CellVizState.DEFAULT,
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
+    // Derive visual dials from CIRIS factors. Recomputed only when the
+    // factors change (i.e. once per 15-min capacity refresh).
+    val dials = remember(state) { derivedDials(state) }
 
     // Rotation driver: withFrameNanos accumulates delta-time. Single
     // source of truth for current angle; the membrane, ports, and any
@@ -176,9 +186,17 @@ fun CellVisualization(
         cfg.openingStableMinSec, cfg.openingStableMaxSec,
         cfg.openingMinWidthDeg, cfg.openingMaxWidthDeg,
         cfg.openingDriftMaxDegPerSec, cfg.openingGrowSec, cfg.openingShrinkSec,
+        dials.openingBias,
     ) {
         var lastFrameNs = 0L
         val rng = kotlin.random.Random.Default
+        // Humility factor (I_inc) biases the effective target opening count
+        // toward maxOpenings when high, toward minOpenings when low. An
+        // agent that defers more reads visually as "more porous."
+        val targetCount = (cfg.minOpenings +
+            (cfg.maxOpenings - cfg.minOpenings) * dials.openingBias)
+            .toInt()
+            .coerceIn(cfg.minOpenings, cfg.maxOpenings)
         while (isActive) {
             withFrameNanos { frameTimeNs ->
                 if (lastFrameNs != 0L) {
@@ -188,8 +206,8 @@ fun CellVisualization(
                     val delta = mutableListOf<MembraneOpening>()
                     if (alive.size < cfg.minOpenings) {
                         delta += spawnOpening(now, rng, cfg)
-                    } else if (alive.size < cfg.maxOpenings && rng.nextFloat() < 0.002f) {
-                        // ~0.12/sec at 60fps; gentle top-up above the minimum.
+                    } else if (alive.size < targetCount && rng.nextFloat() < 0.002f) {
+                        // ~0.12/sec at 60fps; gentle top-up toward bias target.
                         delta += spawnOpening(now, rng, cfg)
                     }
                     if (delta.isNotEmpty() || alive.size != openings.value.size) {
@@ -257,10 +275,17 @@ fun CellVisualization(
 
         // Breathing: whole-cell scale + aura opacity pulse, both driven
         // by the same sin-wave phase so the two cues reinforce.
+        //
+        // Reliability factor (R) modulates breath amplitude. High R =
+        // metronomic breath at the default amplitude; low R = dampened
+        // breath that feels shallow (reads as reduced vitality). We do
+        // NOT inject jitter — the viz goal is to signal drift, not fake
+        // agent distress.
         val nowSec = nowMs.value / 1000f
         val breathePhase = (nowSec / cfg.breathePeriodSec) * 2f * PI.toFloat()
-        val breatheScale = 1f + cfg.breatheScaleAmp * sin(breathePhase)
-        val breatheAuraAlpha = 0.85f + (cfg.breatheScaleAmp / 0.010f) * 0.15f *
+        val breatheAmp = cfg.breatheScaleAmp * dials.breathSteadiness
+        val breatheScale = 1f + breatheAmp * sin(breathePhase)
+        val breatheAuraAlpha = 0.85f + (breatheAmp / 0.010f) * 0.15f *
             (0.5f * (1f + sin(breathePhase)))
 
         drawMedium(isDarkMode, centerX, centerY)
@@ -285,6 +310,7 @@ fun CellVisualization(
                 isDarkMode = isDarkMode,
                 cfg = cfg,
                 openingRanges = openingAngleRanges,
+                crispness = dials.busCrispness,
             )
             drawCytoplasmMotes(
                 motes = motes.value,
@@ -295,6 +321,7 @@ fun CellVisualization(
                 isDarkMode = isDarkMode,
                 colorTheme = colorTheme,
                 cfg = cfg,
+                warmth = dials.moteWarmth,
             )
             drawAdapterPorts(
                 adaptersByBus = adaptersByBus,
@@ -308,6 +335,7 @@ fun CellVisualization(
                 cx = centerX, cy = centerY,
                 outerRadius = nucleusRadius,
                 isDarkMode = isDarkMode,
+                opacityScale = dials.nucleusOpacity,
             )
 
             // The nucleus "song" (slow pulse wave from the core through
@@ -390,6 +418,12 @@ private fun DrawScope.drawMembrane(
     isDarkMode: Boolean,
     cfg: CellVizConfig,
     openingRanges: List<ClosedFloatingPointRange<Float>>,
+    /**
+     * `dials.busCrispness` in [0.7, 1.0]. Low integrity (I_int < 1.0) fades
+     * the bright center stroke — bus arcs stay readable but lose sharpness,
+     * which reads as "chain not fully verified" without looking broken.
+     */
+    crispness: Float = 1f,
 ) {
     BUS_SEGMENTS.forEach { seg ->
         val segStart = (seg.startDeg + rotationDeg) % 360f
@@ -404,10 +438,10 @@ private fun DrawScope.drawMembrane(
                 drawBusArc(cx, cy, radius, subStart, subSweep,
                     seg.color.copy(alpha = 0.35f), cfg.busArcMidHaloWidth)
                 drawBusArc(cx, cy, radius, subStart, subSweep,
-                    seg.color,                     cfg.busArcStrokeWidth)
+                    seg.color.copy(alpha = crispness), cfg.busArcStrokeWidth)
             } else {
                 drawBusArc(cx, cy, radius, subStart, subSweep,
-                    seg.color, cfg.busArcStrokeWidth * 0.75f)
+                    seg.color.copy(alpha = crispness), cfg.busArcStrokeWidth * 0.75f)
             }
         }
     }
@@ -520,12 +554,18 @@ private fun DrawScope.drawNucleus(
     cy: Float,
     outerRadius: Float,
     isDarkMode: Boolean,
+    /**
+     * `dials.nucleusOpacity` in [0.55, 1.0]. Low Consistency (C < 1.0) fades
+     * the nucleus — identity is the literal core, so contradictions register
+     * as a dimmer centre. Floored well above 0 so the nucleus never vanishes.
+     */
+    opacityScale: Float = 1f,
 ) {
     if (outerRadius <= 1f) return
     val center = Offset(cx, cy)
 
-    val fillInner = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.38f else 0.25f)
-    val fillMid   = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.22f else 0.15f)
+    val fillInner = NUCLEUS_AMBER.copy(alpha = (if (isDarkMode) 0.38f else 0.25f) * opacityScale)
+    val fillMid   = NUCLEUS_AMBER.copy(alpha = (if (isDarkMode) 0.22f else 0.15f) * opacityScale)
     val fillOuter = NUCLEUS_AMBER.copy(alpha = 0f)
     drawCircle(
         brush = Brush.radialGradient(
@@ -539,7 +579,7 @@ private fun DrawScope.drawNucleus(
 
     NUCLEUS_SHELL_FRACTIONS.forEachIndexed { i, frac ->
         drawCircle(
-            color = NUCLEUS_AMBER.copy(alpha = NUCLEUS_SHELL_OPACITIES[i]),
+            color = NUCLEUS_AMBER.copy(alpha = NUCLEUS_SHELL_OPACITIES[i] * opacityScale),
             radius = outerRadius * frac,
             center = center,
             style = Stroke(width = 0.9f),
@@ -548,12 +588,12 @@ private fun DrawScope.drawNucleus(
 
     val coreRadius = outerRadius * 0.10f
     drawCircle(
-        color = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.35f else 0.25f),
+        color = NUCLEUS_AMBER.copy(alpha = (if (isDarkMode) 0.35f else 0.25f) * opacityScale),
         radius = coreRadius * 2.2f,
         center = center,
     )
     drawCircle(
-        color = NUCLEUS_AMBER.copy(alpha = if (isDarkMode) 0.70f else 0.55f),
+        color = NUCLEUS_AMBER.copy(alpha = (if (isDarkMode) 0.70f else 0.55f) * opacityScale),
         radius = coreRadius,
         center = center,
     )
@@ -582,6 +622,13 @@ private fun DrawScope.drawCytoplasmMotes(
     isDarkMode: Boolean,
     colorTheme: ai.ciris.mobile.shared.ui.theme.ColorTheme,
     cfg: CellVizConfig,
+    /**
+     * `dials.moteWarmth` in [0.2, 1.0]. Driven by the Steering factor (S —
+     * ethical faculties passing). High warmth = motes glow as designed
+     * (gratitude signal present); low warmth = haloes dim, cytoplasm reads
+     * cooler. No color replacement — scope semantics stay intact.
+     */
+    warmth: Float = 1f,
 ) {
     if (motes.isEmpty()) return
     val totalCount = motes.size.coerceAtLeast(1)
@@ -630,14 +677,16 @@ private fun DrawScope.drawCytoplasmMotes(
         if (coreRadius < 0.4f) return@forEach
 
         if (isDarkMode) {
-            // Two-circle halo so motes read like distant stars.
+            // Two-circle halo so motes read like distant stars. Halo
+            // brightness is modulated by `warmth` — gratitude present =
+            // full glow; faculty failures = motes dim to their cores.
             drawCircle(
-                color = moteColor.copy(alpha = 0.22f * birthScale),
+                color = moteColor.copy(alpha = 0.22f * birthScale * warmth),
                 radius = coreRadius * 2.5f,
                 center = pos,
             )
             drawCircle(
-                color = moteColor.copy(alpha = 0.38f * birthScale),
+                color = moteColor.copy(alpha = 0.38f * birthScale * warmth),
                 radius = coreRadius * 1.6f,
                 center = pos,
             )

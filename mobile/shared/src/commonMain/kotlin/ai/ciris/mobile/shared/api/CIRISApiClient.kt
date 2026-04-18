@@ -6672,6 +6672,65 @@ class CIRISApiClient(
     }
 
     /**
+     * Get the CIRIS capacity (ratchet) score for this agent's template.
+     *
+     * Used by the Interact-screen cell visualization as ambient state —
+     * the five CIRIS factor scores drive visual dials (nucleus opacity,
+     * bus-arc crispness, breathing steadiness, opening churn, mote warmth).
+     *
+     * Proxied through the agent backend, which caches for 15 minutes
+     * against the enrichment cache. Safe to call on every Interact entry.
+     */
+    suspend fun getCapacity(): CapacityData {
+        val method = "getCapacity"
+        logInfo(method, "Fetching CIRIS capacity")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            val response = client.get("$baseUrl/v1/my-data/capacity") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success: ${response.status} body=${errorBody.take(200)}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: CapacityApiResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            val factors = data.factors
+
+            logInfo(method, "Capacity: ${data.agentName} ${data.category} " +
+                    "composite=${data.compositeScore} cached=${data.cached}")
+
+            CapacityData(
+                agentName = data.agentName ?: "",
+                compositeScore = data.compositeScore ?: 0.0,
+                fragilityIndex = data.fragilityIndex ?: 0.0,
+                category = data.category ?: "moderate",
+                c = factors?.C?.score ?: 0.0,
+                iInt = factors?.iInt?.score ?: 0.0,
+                r = factors?.R?.score ?: 0.0,
+                iInc = factors?.iInc?.score ?: 0.0,
+                s = factors?.S?.score ?: 0.0,
+                windowStart = data.metadata?.windowStart,
+                windowEnd = data.metadata?.windowEnd,
+                cached = data.cached ?: false
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Update accord metrics settings (consent and/or trace level).
      */
     suspend fun updateAccordSettings(
@@ -8182,6 +8241,87 @@ data class AccordSettingsUpdateResult(
     val success: Boolean,
     val message: String,
     val changes: List<String>
+)
+
+// ===== CIRIS Capacity (Ratchet) Models =====
+//
+// Capacity = the C/I_int/R/I_inc/S score tuple that CIRISLens computes for
+// each agent template over a 7-day window. Surfaced to the USER via the
+// cell-viz ambient dials; NEVER injected into the agent's reasoning context
+// (Goodhart / self-monitoring anxiety).
+
+@Serializable
+data class CapacityApiResponse(
+    val success: Boolean? = null,
+    val data: CapacityPayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class CapacityPayload(
+    @SerialName("agent_name")
+    val agentName: String? = null,
+    @SerialName("composite_score")
+    val compositeScore: Double? = null,
+    @SerialName("fragility_index")
+    val fragilityIndex: Double? = null,
+    val category: String? = null,
+    val factors: CapacityFactorsPayload? = null,
+    val metadata: CapacityMetadataPayload? = null,
+    val cached: Boolean? = null
+)
+
+@Serializable
+data class CapacityFactorsPayload(
+    val C: CapacityFactorPayload? = null,
+    @SerialName("I_int")
+    val iInt: CapacityFactorPayload? = null,
+    val R: CapacityFactorPayload? = null,
+    @SerialName("I_inc")
+    val iInc: CapacityFactorPayload? = null,
+    val S: CapacityFactorPayload? = null
+)
+
+@Serializable
+data class CapacityFactorPayload(
+    val score: Double? = null,
+    @SerialName("trace_count")
+    val traceCount: Int? = null,
+    val confidence: String? = null
+    // components intentionally omitted — lens adds new fields over time and we
+    // don't want to break parsing when it does. The five top-level scores
+    // are the only thing the viz needs.
+)
+
+@Serializable
+data class CapacityMetadataPayload(
+    @SerialName("window_start")
+    val windowStart: String? = null,
+    @SerialName("window_end")
+    val windowEnd: String? = null,
+    @SerialName("total_traces")
+    val totalTraces: Int? = null,
+    @SerialName("non_exempt_traces")
+    val nonExemptTraces: Int? = null
+)
+
+/**
+ * User-facing CIRIS capacity reading. All five factor scores are in [0, 1]
+ * and safe to feed directly into visual dials.
+ */
+data class CapacityData(
+    val agentName: String,
+    val compositeScore: Double,
+    val fragilityIndex: Double,
+    val category: String,  // high_capacity | healthy | moderate | high_fragility
+    val c: Double,          // Core identity / Consistency
+    val iInt: Double,       // Integrity
+    val r: Double,          // Resilience / Reliability
+    val iInc: Double,       // Incompleteness / Incalibration (humility)
+    val s: Double,          // Signalling gratitude / Steering
+    val windowStart: String?,
+    val windowEnd: String?,
+    val cached: Boolean
 )
 
 // ===== Data Management API Models =====

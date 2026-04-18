@@ -135,6 +135,7 @@ fun InteractScreen(
     val bubbleEmojis by viewModel.bubbleEmojis.collectAsState()
     val caughtBubbles by viewModel.caughtBubbles.collectAsState()
     val adapterOrbits by viewModel.adapterOrbits.collectAsState()
+    val cellVizState by viewModel.cellVizState.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -328,6 +329,9 @@ fun InteractScreen(
                     // Timeline events are a good proxy for "something
                     // just changed in the agent" — trigger a refetch.
                     eventTrigger = timelineEvents.size,
+                    // CIRIS capacity (C/I_int/R/I_inc/S) — ambient dials.
+                    // NEUTRAL until the first /v1/my-data/capacity arrives.
+                    state = cellVizState,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

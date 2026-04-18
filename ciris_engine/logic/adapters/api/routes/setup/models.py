@@ -384,6 +384,14 @@ class SetupCompleteRequest(BaseModel):
     )
     oauth_email: Optional[str] = Field(None, description="OAuth email address from the provider.")
 
+    # External auth - skip user creation entirely when auth is handled externally
+    # (e.g., Home Assistant ingress auth, CIRISMedical enterprise auth)
+    skip_user_creation: bool = Field(
+        default=False,
+        description="Skip user creation when authentication is handled by external system "
+        "(e.g., Home Assistant ingress, enterprise SSO). Users are created on-demand when they first authenticate.",
+    )
+
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
 

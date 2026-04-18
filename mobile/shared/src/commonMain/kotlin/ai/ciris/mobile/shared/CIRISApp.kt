@@ -302,7 +302,8 @@ fun CIRISApp(
     googleSignInCallback: GoogleSignInCallback? = null,
     purchaseLauncher: PurchaseLauncher? = null,
     deviceAttestationCallback: DeviceAttestationCallback? = null,
-    onTokenUpdated: ((String) -> Unit)? = null
+    onTokenUpdated: ((String) -> Unit)? = null,
+    isHAAddonMode: Boolean = false
 ) {
     val TAG = "CIRISApp"
 
@@ -524,6 +525,10 @@ fun CIRISApp(
     }
     // SetupViewModel needs to survive configuration changes and app backgrounding
     val setupViewModel: SetupViewModel = viewModel { SetupViewModel() }
+    // Set HA addon mode if running in Home Assistant addon context
+    if (isHAAddonMode) {
+        setupViewModel.setHAAddonMode(true)
+    }
     val interactViewModel: InteractViewModel = viewModel {
         InteractViewModel(apiClient)
     }
@@ -723,9 +728,17 @@ fun CIRISApp(
                 startupViewModel.onErrorDetected("Backend unreachable. Please restart the app.")
                 return@LaunchedEffect
             } else if (isFirstRun == true) {
-                // First run - show login screen first
-                platformLog(TAG, "[INFO] First run detected, navigating to Login")
-                currentScreen = Screen.Login
+                // First run
+                if (isHAAddonMode) {
+                    // HA Addon mode - skip login, go directly to setup
+                    // HA handles auth via SUPERVISOR_TOKEN
+                    platformLog(TAG, "[INFO] First run in HA Addon mode, skipping login, navigating to Setup")
+                    currentScreen = Screen.Setup
+                } else {
+                    // Normal mode - show login screen first
+                    platformLog(TAG, "[INFO] First run detected, navigating to Login")
+                    currentScreen = Screen.Login
+                }
             } else {
                 // Not first run - try to load stored token and check if valid/refresh if needed
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")

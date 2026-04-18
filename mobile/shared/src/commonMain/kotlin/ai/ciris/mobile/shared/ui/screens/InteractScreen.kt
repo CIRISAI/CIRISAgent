@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import ai.ciris.mobile.shared.platform.FilePickerDialog
@@ -1331,23 +1332,36 @@ private fun ChatMessageList(
 ) {
     val listState = rememberLazyListState()
 
-    LazyColumn(
-        state = listState,
+    // Use BoxWithConstraints to calculate responsive bubble width
+    // Phone (<600.dp): 85%, Tablet (600-900.dp): 70%, Desktop (>900.dp): 55%
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .then(if (transparentBackground) Modifier else Modifier.background(Color(0xFFF3F4F6)))
-            .padding(8.dp),
-        reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Use distinctBy to prevent duplicate key crashes if same ID appears twice
-        items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
-            when (message.type) {
-                MessageType.USER -> UserChatBubble(message)
-                MessageType.AGENT -> AgentChatBubble(message)
-                MessageType.SYSTEM -> SystemMessage(message)
-                MessageType.ERROR -> ErrorMessage(message)
-                MessageType.ACTION -> ActionBubble(message)
+        val bubbleMaxWidth = when {
+            maxWidth < 600.dp -> maxWidth * 0.85f
+            maxWidth < 900.dp -> maxWidth * 0.70f
+            else -> maxWidth * 0.55f
+        }.coerceIn(200.dp, 600.dp)  // Min 200dp, max 600dp
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            reverseLayout = true,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Use distinctBy to prevent duplicate key crashes if same ID appears twice
+            items(messages.reversed().distinctBy { it.id }, key = { it.id }) { message ->
+                when (message.type) {
+                    MessageType.USER -> UserChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.AGENT -> AgentChatBubble(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.SYSTEM -> SystemMessage(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.ERROR -> ErrorMessage(message, bubbleMaxWidth = bubbleMaxWidth)
+                    MessageType.ACTION -> ActionBubble(message, bubbleMaxWidth = bubbleMaxWidth)
+                }
             }
         }
     }
@@ -1366,7 +1380,11 @@ private fun ChatMessageList(
  * From item_chat_user.xml
  */
 @Composable
-private fun UserChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+private fun UserChatBubble(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1375,7 +1393,7 @@ private fun UserChatBubble(message: ChatMessage, modifier: Modifier = Modifier) 
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .widthIn(max = bubbleMaxWidth)
                 .background(
                     color = Color(0xFF2563EB), // Blue from chat_bubble_user.xml
                     shape = RoundedCornerShape(
@@ -1432,7 +1450,11 @@ private fun UserChatBubble(message: ChatMessage, modifier: Modifier = Modifier) 
  * From item_chat_agent.xml
  */
 @Composable
-private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+private fun AgentChatBubble(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1441,7 +1463,7 @@ private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier)
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .widthIn(max = bubbleMaxWidth)
                 .background(
                     color = Color.White,
                     shape = RoundedCornerShape(
@@ -1498,7 +1520,11 @@ private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier)
  * Styled with light blue/gray background and info styling
  */
 @Composable
-private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
+private fun SystemMessage(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1508,7 +1534,7 @@ private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
         Surface(
             shape = RoundedCornerShape(8.dp),
             color = Color(0xFFE0F2FE), // Light blue info background
-            modifier = Modifier.widthIn(max = 280.dp)
+            modifier = Modifier.widthIn(max = bubbleMaxWidth)
         ) {
             Row(
                 modifier = Modifier.padding(8.dp),
@@ -1536,7 +1562,11 @@ private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
  * Styled with light red/orange background and warning styling
  */
 @Composable
-private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
+private fun ErrorMessage(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    bubbleMaxWidth: Dp = 280.dp  // Default for backwards compat
+) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1546,7 +1576,7 @@ private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
         Surface(
             shape = RoundedCornerShape(8.dp),
             color = Color(0xFFFEE2E2), // Light red error background
-            modifier = Modifier.widthIn(max = 280.dp)
+            modifier = Modifier.widthIn(max = bubbleMaxWidth)
         ) {
             Row(
                 modifier = Modifier.padding(8.dp),
@@ -1574,7 +1604,11 @@ private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
  * Supports all 10 action types: SPEAK, TOOL, OBSERVE, MEMORIZE, RECALL, FORGET, REJECT, PONDER, DEFER, TASK_COMPLETE
  */
 @Composable
-private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+private fun ActionBubble(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    bubbleMaxWidth: Dp = 320.dp  // Default for backwards compat (slightly wider for structured content)
+) {
     var isExpanded by remember { mutableStateOf(false) }
     val actionDetails = message.actionDetails
     val actionType = actionDetails?.actionType
@@ -1594,6 +1628,9 @@ private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
         null -> Triple(Color(0xFFF5F5F5), Color(0xFF6B7280), Color(0xFFE5E5E5))  // Gray fallback
     }
 
+    // Action bubbles get extra width for structured content
+    val actionBubbleWidth = (bubbleMaxWidth + 40.dp).coerceAtMost(700.dp)
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1604,7 +1641,7 @@ private fun ActionBubble(message: ChatMessage, modifier: Modifier = Modifier) {
             onClick = { isExpanded = !isExpanded },
             shape = RoundedCornerShape(8.dp),
             color = bgColor,
-            modifier = Modifier.widthIn(max = 320.dp)
+            modifier = Modifier.widthIn(max = actionBubbleWidth)
         ) {
             Column(
                 modifier = Modifier.padding(10.dp)

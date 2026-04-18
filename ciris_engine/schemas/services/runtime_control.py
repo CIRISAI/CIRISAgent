@@ -933,6 +933,12 @@ class FinalizeActionStepData(BaseStepData):
     epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
+    # === CONSCIENCE PROMPTS (for localization validation) ===
+    entropy_prompt: Optional[str] = Field(None, description="User prompt used for entropy evaluation")
+    coherence_prompt: Optional[str] = Field(None, description="User prompt used for coherence evaluation")
+    optimization_veto_prompt: Optional[str] = Field(None, description="User prompt used for optimization veto")
+    epistemic_humility_prompt: Optional[str] = Field(None, description="User prompt used for epistemic humility")
+
 
 class PerformActionStepData(BaseStepData):
     """Step data for PERFORM_ACTION step."""

@@ -113,6 +113,19 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(setupMode = mode)
     }
 
+    // ========== Home Assistant Addon Mode ==========
+
+    /**
+     * Enable Home Assistant addon mode.
+     * In this mode:
+     * - Login is skipped (HA handles auth via SUPERVISOR_TOKEN)
+     * - User creation is skipped (ACCOUNT_AND_CONFIRMATION step)
+     * - Flow: WELCOME → PREFERENCES → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
+     */
+    fun setHAAddonMode(enabled: Boolean) {
+        _state.value = _state.value.copy(isHAAddonMode = enabled)
+    }
+
     /**
      * Select the on-device Gemma 4 provider inside BYOK mode.
      *
@@ -415,6 +428,16 @@ class SetupViewModel : ViewModel() {
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
+        } else if (currentState.isHAAddonMode) {
+            // HA Addon flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → COMPLETE
+            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth via SUPERVISOR_TOKEN)
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.PREFERENCES
+                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
         } else {
             // Normal flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
             when (currentState.currentStep) {
@@ -446,6 +469,17 @@ class SetupViewModel : ViewModel() {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.NODE_AUTH -> SetupStep.WELCOME
                 SetupStep.PREFERENCES -> SetupStep.NODE_AUTH
+                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
+                else -> SetupStep.WELCOME
+            }
+        } else if (currentState.isHAAddonMode) {
+            // HA Addon flow: COMPLETE → OPTIONAL_FEATURES → LLM → PREFERENCES → WELCOME
+            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth)
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.PREFERENCES -> SetupStep.WELCOME
                 SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES

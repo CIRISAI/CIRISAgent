@@ -314,15 +314,20 @@ fun InteractScreen(
                 VisualizationMode.OFF -> 0f  // Should not reach here
             }
             if (useCellViz) {
-                // Capable device AND user hasn't opted out. Step 3 of the
-                // cell-viz redesign: membrane + seam + adapter ports only,
-                // no nucleus / motes / pseudopods / events yet. See
-                // FSD/CELL_VIZ_REDESIGN.md for the build order.
+                // Capable device AND user hasn't opted out. Steps 3-5 of
+                // the cell-viz redesign: membrane + dynamic openings +
+                // adapter ports + nucleus + song + cytoplasm motes.
+                // See FSD/CELL_VIZ_REDESIGN.md for the full build order.
                 CellVisualization(
                     modifier = Modifier.fillMaxSize(),
                     isDarkMode = isDarkMode,
                     adapterOrbits = adapterOrbits,
                     externalRotation = cylinderRotation,
+                    apiClient = apiClient,
+                    colorTheme = colorTheme,
+                    // Timeline events are a good proxy for "something
+                    // just changed in the agent" — trigger a refetch.
+                    eventTrigger = timelineEvents.size,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

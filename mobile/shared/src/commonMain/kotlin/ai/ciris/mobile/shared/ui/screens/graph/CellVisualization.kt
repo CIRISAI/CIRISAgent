@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens.graph
 
+import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.ui.theme.getScopeColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -170,6 +172,35 @@ data class CellVizConfig(
      */
     val memoryQueryPeriodSec: Float = 15f,
 
+    /**
+     * Hours of recent graph history to load for motes (step 5).
+     * 24 matches the legacy LiveGraphBackground behaviour — last
+     * day's worth of activity.
+     */
+    val memoryLoadWindowHours: Int = 24,
+
+    /** Base radius of a single cytoplasm mote in pixels. */
+    val moteRadiusPx: Float = 2.4f,
+
+    /**
+     * Peak drift amplitude in pixels. Each mote oscillates with its
+     * own phase/frequency within this envelope — small enough to feel
+     * ambient, large enough to register as "alive" (plan §3).
+     */
+    val moteDriftAmpPx: Float = 3f,
+
+    /**
+     * Reference drift period in seconds. Individual motes pick slightly
+     * different frequencies so they don't drift in lockstep.
+     */
+    val moteDriftPeriodSec: Float = 12f,
+
+    /**
+     * Birth animation duration (ms). New motes fade in with a soft
+     * white halo pulse over this window.
+     */
+    val moteBirthMs: Long = 1500L,
+
     /** Max gratitude motes in flight at once (step 6). */
     val maxGratitudeMotesInFlight: Int = 1,
 
@@ -253,6 +284,11 @@ data class CellVizConfig(
             portInactiveAlpha         = portInactiveAlpha.coerceIn(0.1f, 1f),
             maxMemoryMotes            = maxMemoryMotes.coerceIn(0, 500),
             memoryQueryPeriodSec      = memoryQueryPeriodSec.coerceIn(3f, 300f),
+            memoryLoadWindowHours     = memoryLoadWindowHours.coerceIn(1, 168),
+            moteRadiusPx              = moteRadiusPx.coerceIn(0.5f, 12f),
+            moteDriftAmpPx            = moteDriftAmpPx.coerceIn(0f, 20f),
+            moteDriftPeriodSec        = moteDriftPeriodSec.coerceIn(2f, 60f),
+            moteBirthMs               = moteBirthMs.coerceIn(0L, 6000L),
             maxGratitudeMotesInFlight = maxGratitudeMotesInFlight.coerceIn(0, 4),
             gratitudeCooldownSec      = gratitudeCooldownSec.coerceIn(0.5f, 60f),
             maxCaughtBubbles          = maxCaughtBubbles.coerceIn(0, 32),
@@ -378,6 +414,37 @@ private fun smoothstep(t: Float): Float {
     return x * x * (3f - 2f * x)
 }
 
+// -----------------------------------------------------------------------------
+// Cytoplasm motes — the memory graph, visible in the cell
+// -----------------------------------------------------------------------------
+//
+// Every node in the last [cfg.memoryLoadWindowHours] hours of the memory
+// graph renders as a small luminous mote drifting in the cytoplasm —
+// the region between the nucleus and the membrane. Positions are
+// deterministic functions of (stable index, time); no per-frame
+// mutation of mote fields.
+//
+// Positioning uses the golden-angle scatter (φ ≈ 137.508°) so motes
+// distribute evenly without visible banding or clustering. Radial
+// distance is sqrt-based so each equal-area ring contains roughly the
+// same number of motes — uniform 2D density, not concentrated near the
+// nucleus.
+
+/**
+ * One node from the memory graph, laid out as a drifting mote.
+ *
+ * The `stableIndex` is what determines this mote's angular + radial
+ * placement via the golden-angle formula. Preserving the same index
+ * across refreshes means a node doesn't "teleport" around the cell
+ * when neighbouring nodes appear or disappear — it breathes in place.
+ */
+private data class CytoplasmMote(
+    val id: String,
+    val scope: ai.ciris.api.models.GraphScope,
+    val stableIndex: Int,
+    val birthTimeMs: Long,
+)
+
 /**
  * Map an adapter's type string onto the bus that owns it. Step-3 only
  * needs the 1-to-1 type→bus mapping; per-adapter positioning within a
@@ -436,6 +503,16 @@ fun CellVisualization(
     adapterOrbits: List<AdapterOrbit> = emptyList(),
     externalRotation: Float = 0f,
     config: CellVizConfig = CellVizConfig.DEFAULT,
+    // Optional — when present, cytoplasm motes populate from the live
+    // memory graph. Null means "render the cell empty of motes", which
+    // is a legitimate state (e.g. during startup) and should not crash.
+    apiClient: ai.ciris.mobile.shared.api.CIRISApiClient? = null,
+    colorTheme: ai.ciris.mobile.shared.ui.theme.ColorTheme =
+        ai.ciris.mobile.shared.ui.theme.ColorTheme.DEFAULT,
+    // Incremented by the caller when something happened that might have
+    // changed the memory graph (SSE events, explicit refresh). Wired in
+    // step 6; step 5 just fetches once at mount.
+    eventTrigger: Int = 0,
 ) {
     // Take the config once per composition (effectively per param change)
     // so every draw reads the same sanitized values.
@@ -506,6 +583,54 @@ fun CellVisualization(
         adapterOrbits.groupBy { adapterBus(it.type) }
     }
 
+    // --- Cytoplasm motes (memory graph) ---------------------------------
+    //
+    // Fetch once at mount + whenever eventTrigger changes. Each mote
+    // keeps a stableIndex across refreshes so existing nodes don't
+    // teleport when neighbours appear or disappear — they just fade in
+    // (birth halo) or fade out (removed). Total count bounded by
+    // cfg.maxMemoryMotes; server-side `limit` caps the fetch matching.
+    val motes = remember { mutableStateOf(emptyList<CytoplasmMote>()) }
+    // Preserved indices for stable positioning across refreshes.
+    val moteIndexById = remember { mutableMapOf<String, Int>() }
+    val nextMoteIndex = remember { mutableStateOf(0) }
+
+    LaunchedEffect(apiClient, eventTrigger, cfg.maxMemoryMotes,
+        cfg.memoryLoadWindowHours) {
+        val client = apiClient ?: return@LaunchedEffect
+        try {
+            val graph = client.getGraphData(
+                hours = cfg.memoryLoadWindowHours,
+                scope = null,
+                nodeType = null,
+                limit = cfg.maxMemoryMotes,
+                includeMetrics = false,
+            )
+            val nowMsLocal = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            val known = moteIndexById.keys.toSet()
+            val newMotes = graph.nodes.map { node ->
+                val existingIdx = moteIndexById[node.id]
+                val idx = existingIdx ?: nextMoteIndex.value.also {
+                    moteIndexById[node.id] = it
+                    nextMoteIndex.value = it + 1
+                }
+                val isNew = existingIdx == null && known.isNotEmpty()
+                CytoplasmMote(
+                    id = node.id,
+                    scope = node.scope,
+                    stableIndex = idx,
+                    birthTimeMs = if (isNew) nowMsLocal else 0L,
+                )
+            }
+            motes.value = newMotes
+        } catch (e: Exception) {
+            PlatformLogger.w(
+                "CellVisualization",
+                "getGraphData failed: ${e.message}; cytoplasm will render empty",
+            )
+        }
+    }
+
     Canvas(modifier = modifier) {
         val centerX = size.width / 2f
         val centerY = size.height / 2f
@@ -547,6 +672,16 @@ fun CellVisualization(
                 isDarkMode = isDarkMode,
                 cfg = cfg,
                 openingRanges = openingRanges,
+            )
+            drawCytoplasmMotes(
+                motes = motes.value,
+                cx = centerX, cy = centerY,
+                nucleusRadius = nucleusRadius,
+                membraneRadius = membraneRadius,
+                nowMs = nowMs.value,
+                isDarkMode = isDarkMode,
+                colorTheme = colorTheme,
+                cfg = cfg,
             )
             drawAdapterPorts(
                 adaptersByBus = adaptersByBus,
@@ -1037,6 +1172,122 @@ private fun DrawScope.drawPort(
         style = Stroke(width = 1.3f),
     )
 }
+
+/**
+ * Draw the cytoplasm motes — memory graph nodes as small luminous
+ * points drifting between the nucleus and the membrane.
+ *
+ * Positioning formula per mote (deterministic, no stored state):
+ *  - baseAngleDeg = stableIndex × 137.508 (golden angle) mod 360
+ *  - baseRadialFrac = sqrt((stableIndex + 0.5) / totalCount)
+ *     → uniform 2D density (each equal-area ring has ~equal motes)
+ *  - radial = lerp(nucleusRadius × 1.10, membraneRadius × 0.92, frac)
+ *  - driftX = sin(t × wX + phaseX) × amp
+ *  - driftY = cos(t × wY + phaseY) × amp
+ *
+ * Per-mote frequencies and phases come from the stableIndex so every
+ * mote drifts a little differently — the cloud looks alive without
+ * any mote mutating its own state.
+ *
+ * Newly-born motes fade in over [cfg.moteBirthMs] with a brief white
+ * halo, then settle into ambient rendering.
+ */
+private fun DrawScope.drawCytoplasmMotes(
+    motes: List<CytoplasmMote>,
+    cx: Float,
+    cy: Float,
+    nucleusRadius: Float,
+    membraneRadius: Float,
+    nowMs: Long,
+    isDarkMode: Boolean,
+    colorTheme: ai.ciris.mobile.shared.ui.theme.ColorTheme,
+    cfg: CellVizConfig,
+) {
+    if (motes.isEmpty()) return
+    val totalCount = motes.size.coerceAtLeast(1)
+    val innerRadial = nucleusRadius * 1.10f
+    val outerRadial = membraneRadius * 0.92f
+    if (outerRadial <= innerRadial) return
+
+    val nowSec = nowMs / 1000f
+    val driftOmega = if (cfg.moteDriftPeriodSec > 0f)
+        (2f * PI.toFloat()) / cfg.moteDriftPeriodSec
+    else 0f
+
+    motes.forEach { mote ->
+        val idx = mote.stableIndex
+
+        // Base position via golden-angle scatter + sqrt radial.
+        val angleDeg = ((idx.toFloat() * GOLDEN_ANGLE_DEG) % 360f + 360f) % 360f
+        val radialFrac = kotlin.math.sqrt((idx + 0.5f) / totalCount.toFloat())
+            .coerceIn(0f, 1f)
+        val r = innerRadial + (outerRadial - innerRadial) * radialFrac
+        val angleRad = angleDeg.toDouble() * PI / 180.0
+        val bx = cx + r * cos(angleRad).toFloat()
+        val by = cy + r * sin(angleRad).toFloat()
+
+        // Per-mote drift. Derived from index so it's deterministic.
+        // Each mote gets a unique (phase, freq-multiplier) without any
+        // RNG call in the hot path.
+        val phaseX = (idx * 0.7531f) % (2f * PI.toFloat())
+        val phaseY = (idx * 1.2847f) % (2f * PI.toFloat())
+        val wX = driftOmega * (0.85f + 0.30f * ((idx * 31) % 17) / 17f)
+        val wY = driftOmega * (0.80f + 0.40f * ((idx * 53) % 19) / 19f)
+        val dx = sin(nowSec * wX + phaseX) * cfg.moteDriftAmpPx
+        val dy = cos(nowSec * wY + phaseY) * cfg.moteDriftAmpPx
+
+        val pos = Offset(bx + dx, by + dy)
+
+        // Birth animation — fade-in + brief bright halo.
+        val birthAge = if (mote.birthTimeMs > 0L) nowMs - mote.birthTimeMs else Long.MAX_VALUE
+        val birthProgress = if (cfg.moteBirthMs > 0L)
+            (birthAge.toFloat() / cfg.moteBirthMs).coerceIn(0f, 1f)
+        else 1f
+        val birthScale = smoothstep(birthProgress)  // 0 → 1
+
+        // Scope-tinted color from the current theme. getScopeColor picks
+        // the right accent so motes recolor when the user changes theme.
+        val moteColor = colorTheme.getScopeColor(mote.scope)
+
+        // Core dot — small, solid-ish. Alpha scaled by birth progress.
+        val coreRadius = cfg.moteRadiusPx * birthScale
+        if (coreRadius < 0.4f) return@forEach
+
+        if (isDarkMode) {
+            // Soft halo in dark mode so motes read like distant stars,
+            // not painted specks. Two stacked circles — no shader.
+            drawCircle(
+                color = moteColor.copy(alpha = 0.22f * birthScale),
+                radius = coreRadius * 2.5f,
+                center = pos,
+            )
+            drawCircle(
+                color = moteColor.copy(alpha = 0.38f * birthScale),
+                radius = coreRadius * 1.6f,
+                center = pos,
+            )
+        }
+        drawCircle(
+            color = moteColor.copy(alpha = (if (isDarkMode) 0.95f else 0.70f) * birthScale),
+            radius = coreRadius,
+            center = pos,
+        )
+
+        // Birth halo — a single white ring pulse over the birth window.
+        if (birthProgress < 1f) {
+            val haloAlpha = (1f - birthProgress) * 0.85f
+            drawCircle(
+                color = Color.White.copy(alpha = haloAlpha),
+                radius = coreRadius * (2.8f + 1.5f * birthProgress),
+                center = pos,
+                style = Stroke(width = 1.2f),
+            )
+        }
+    }
+}
+
+/** Golden angle in degrees — 137.508° ≈ 360° × (1 − 1/φ) where φ is the golden ratio. */
+private const val GOLDEN_ANGLE_DEG = 137.50776f
 
 // -----------------------------------------------------------------------------
 // Geometry helpers — no Compose dependencies, trivial math

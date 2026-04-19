@@ -112,6 +112,8 @@ def mock_auth_service() -> MagicMock:
     service = MagicMock()
     service.get_user = MagicMock(return_value=None)
     service.create_user = AsyncMock(return_value=MagicMock(wa_id="test-user-id"))
+    # list_users returns empty list by default (simulating first user scenario)
+    service.list_users = AsyncMock(return_value=[])
     return service
 
 
@@ -388,7 +390,10 @@ class TestUserCreation:
 
     @pytest.mark.asyncio
     async def test_new_user_created_with_suggested_role(self, mock_request, mock_auth_service):
-        """Test that new users are created with the suggested role."""
+        """Test that new users are created with the suggested role (when not first user)."""
+        # Simulate existing users in system so first-user check doesn't trigger
+        mock_auth_service.list_users = AsyncMock(return_value=[("existing_id", MagicMock())])
+
         ingress_user = IngressUser(
             external_id="newuser123",
             provider="test",
@@ -404,8 +409,29 @@ class TestUserCreation:
         mock_auth_service.create_user.assert_called_once()
         call_args = mock_auth_service.create_user.call_args
         assert call_args.kwargs["username"] == "New User"
-        # Role should be ADMIN
+        # Role should be ADMIN (suggested role, not SYSTEM_ADMIN since not first user)
         assert context.role == UserRole.ADMIN
+
+    @pytest.mark.asyncio
+    async def test_first_user_gets_system_admin(self, mock_request, mock_auth_service):
+        """Test that first user in system gets SYSTEM_ADMIN regardless of suggested role."""
+        # No existing users - first user scenario
+        mock_auth_service.list_users = AsyncMock(return_value=[])
+
+        ingress_user = IngressUser(
+            external_id="firstuser",
+            provider="test",
+            username="First User",
+            suggested_role=UserRole.OBSERVER,  # Even OBSERVER gets upgraded to SYSTEM_ADMIN
+        )
+        provider = MockIngressProvider("test", auth_result=ingress_user)
+        register_ingress_auth_provider(provider)
+
+        context = await _try_ingress_auth(mock_request, mock_auth_service)
+
+        # User should be created with SYSTEM_ADMIN (first user)
+        mock_auth_service.create_user.assert_called_once()
+        assert context.role == UserRole.SYSTEM_ADMIN
 
     @pytest.mark.asyncio
     async def test_existing_user_preserves_role(self, mock_request, mock_auth_service):

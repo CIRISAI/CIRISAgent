@@ -298,8 +298,17 @@ async def _handle_ingress_auth(
         logger.debug(f"[INGRESS_AUTH] Found existing user: {user_id}, role: {user_role}")
     else:
         # New user - create them
-        # Use suggested role if provided, otherwise OBSERVER (or SYSTEM_ADMIN for first user)
-        if ingress_user.suggested_role:
+        # Check if this is the FIRST user in the system - they should be SYSTEM_ADMIN
+        # This is more reliable than the provider's suggested_role flag which can be
+        # consumed by non-user-creating requests (health checks, etc.)
+        existing_users = await auth_service.list_users()
+        is_first_user = len(existing_users) == 0
+
+        if is_first_user:
+            # First user in the system gets SYSTEM_ADMIN
+            user_role = UserRole.SYSTEM_ADMIN
+            logger.info(f"[INGRESS_AUTH] First user in system - granting SYSTEM_ADMIN to {user_id}")
+        elif ingress_user.suggested_role:
             user_role = ingress_user.suggested_role
         else:
             user_role = UserRole.OBSERVER

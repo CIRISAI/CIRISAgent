@@ -18,6 +18,7 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.probeCellVizCapability
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -1172,25 +1173,40 @@ private fun CapacityBadge(
     modifier: Modifier = Modifier,
 ) {
     val isLoaded = !state.isPreFetch
-    val badgeColor = when {
-        !isLoaded -> theme.trustDefault
-        state.category == "high_capacity" -> theme.trustLevel5
-        state.category == "healthy" -> theme.trustLevel5
-        state.category == "moderate" -> theme.trustLevel4
-        state.category == "high_fragility" -> theme.trustLevelLow
+    // Colour is keyed to the LOCAL score when available — that's the
+    // signal the user is actively steering on this device. Fleet is
+    // context. Falls back to the fleet category when no local data.
+    val localScore = state.localScore
+    val effectiveCategory = when {
+        !isLoaded -> null
+        localScore == null -> state.category
+        localScore >= 0.85f -> "healthy"
+        localScore >= 0.65f -> "moderate"
+        else -> "high_fragility"
+    }
+    val badgeColor = when (effectiveCategory) {
+        "high_capacity", "healthy" -> theme.trustLevel5
+        "moderate" -> theme.trustLevel4
+        "high_fragility" -> theme.trustLevelLow
         else -> theme.trustDefault
     }
 
     // Two-decimal fixed-width score. Avoid String.format (JVM-only in
     // commonMain); use integer math to produce "0.90", "1.00", "0.38".
-    val scoreText = if (!isLoaded) {
-        "…"
-    } else {
-        val hundredths = (state.compositeScore.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
+    fun fmt(v: Float): String {
+        val hundredths = (v.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
         val whole = hundredths / 100
         val frac = hundredths % 100
         val fracStr = if (frac < 10) "0$frac" else "$frac"
-        "$whole.$fracStr"
+        return "$whole.$fracStr"
+    }
+    // Local first (user steers this), fleet second. Single dot, single
+    // pill — we do NOT add a second LED or a shield silhouette, to keep
+    // the badge visually distinct from the adjacent Trust shield.
+    val scoreText = when {
+        !isLoaded -> "…"
+        localScore != null -> "${fmt(localScore)} · ${fmt(state.compositeScore)}"
+        else -> fmt(state.compositeScore)
     }
 
     Surface(
@@ -3037,23 +3053,27 @@ private fun VisualizationLegendButton(
             }
         }
 
-        // Question mark button - larger and more visible
+        // Subtle help pill — was previously a 56dp bubble with a chunky
+        // ExtraBold "?" that read as a generic Material FAB. Smaller
+        // (40dp), thin accent border instead of heavy shadow, SemiBold
+        // instead of ExtraBold so it sits as a secondary control rather
+        // than competing with the cell viz for attention.
         Surface(
             onClick = onToggle,
             shape = CircleShape,
-            color = theme.surface.copy(alpha = 0.95f),
-            shadowElevation = 4.dp,
-            modifier = Modifier.size(56.dp)
+            color = theme.surface.copy(alpha = 0.70f),
+            border = BorderStroke(1.dp, theme.textAccent.copy(alpha = 0.45f)),
+            modifier = Modifier.size(40.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
                 Text(
                     text = "?",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = theme.textAccent
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = theme.textAccent,
                 )
             }
         }

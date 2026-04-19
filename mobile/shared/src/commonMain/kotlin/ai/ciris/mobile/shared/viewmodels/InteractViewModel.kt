@@ -505,10 +505,51 @@ class InteractViewModel(
         }
     }
 
+    /**
+     * Compute and write a per-occurrence local capacity score into
+     * [_cellVizState] using the health signals the client already polls.
+     * Minimal, efficient, NOT a trust signal (trust = device attestation,
+     * capacity = behavioural/coherence health). See §5a in
+     * FSD/CELL_VIZ_REDESIGN.md and the Coherence Collapse Analysis paper.
+     *
+     * Called from:
+     *  - status poll (services_online / services_total)
+     *  - llmHealth update (provider healthy / not)
+     *  - refreshCapacity (so fleet+local land together)
+     *
+     * No backend call. No new state fields beyond [CellVizState.localScore].
+     */
+    private fun recomputeLocalScore() {
+        val lastStatus = _lastSystemStatus
+        val serviceFrac = if (lastStatus != null && lastStatus.services_total > 0) {
+            lastStatus.services_online.toFloat() / lastStatus.services_total.toFloat()
+        } else null
+        val llm = _llmHealth.value
+        val llmFrac: Float? = when {
+            llm.provider == "unknown" -> null
+            llm.isHealthy -> 1f
+            else -> 0f
+        }
+        val newLocal = ai.ciris.mobile.shared.ui.screens.graph
+            .computeLocalScore(serviceFrac, llmFrac)
+        val prev = _cellVizState.value
+        if (prev.localScore != newLocal) {
+            _cellVizState.value = prev.copy(localScore = newLocal).sanitized()
+        }
+    }
+
+    // Most recent SystemStatus snapshot, kept as a field for the local-score
+    // recomputation (the status poll otherwise consumes + discards it).
+    // Stale reads across coroutines are benign: recomputeLocalScore is
+    // called on every write to either input, so worst case we do one
+    // extra recompute with the old value.
+    private var _lastSystemStatus: ai.ciris.mobile.shared.models.SystemStatus? = null
+
     private suspend fun refreshCapacity() {
         val method = "refreshCapacity"
         try {
             val data = apiClient.getCapacity()
+            val prevLocal = _cellVizState.value.localScore
             _cellVizState.value = ai.ciris.mobile.shared.ui.screens.graph.CellVizState(
                 c = data.c.toFloat(),
                 iInt = data.iInt.toFloat(),
@@ -519,6 +560,10 @@ class InteractViewModel(
                 fragilityIndex = data.fragilityIndex.toFloat(),
                 category = data.category,
                 isPreFetch = false,
+                // Preserve the already-computed local score across fleet
+                // refreshes. recomputeLocalScore() will overwrite it on
+                // the next status / LLM poll anyway.
+                localScore = prevLocal,
             ).sanitized()
             logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
                     "composite=${data.compositeScore} cached=${data.cached}")
@@ -829,6 +874,8 @@ class InteractViewModel(
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
+                    _lastSystemStatus = status
+                    recomputeLocalScore()
                     val wasConnected = _isConnected.value
                     _isConnected.value = status.status == "healthy"
 
@@ -985,6 +1032,7 @@ class InteractViewModel(
                     model = config.model,
                     isCirisProxy = config.isCirisProxy
                 )
+                recomputeLocalScore()
                 logDebug(method, "LLM health from API: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
                 configLoaded = true
 
@@ -2125,9 +2173,19 @@ class InteractViewModel(
                 } catch (e: Exception) {
                     logDebug("fetchSelectionDetail", "poll error: ${e.message}")
                     if (!isActive) break
-                    _selectionDetail.value = SelectionDetail.Error(
-                        summaryLine = "Couldn't fetch detail: ${e.message ?: e::class.simpleName}",
-                    )
+                    // Friendlier message for the common case — a node
+                    // that was in the timeline at viz load but has
+                    // since rotated out of the window returns 404 when
+                    // the user taps. Don't scare the user with the
+                    // raw HTTP code.
+                    val msg = e.message ?: e::class.simpleName ?: "unknown error"
+                    val friendly = when {
+                        msg.contains("404") -> "This node is no longer available"
+                        msg.contains("401") || msg.contains("403") ->
+                            "Sign-in required to view this detail"
+                        else -> "Couldn't fetch detail: $msg"
+                    }
+                    _selectionDetail.value = SelectionDetail.Error(summaryLine = friendly)
                 }
                 // Nucleus shells read the SSE ring buffer on every tick
                 // too so newly-arrived events show up without a manual

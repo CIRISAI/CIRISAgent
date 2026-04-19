@@ -464,12 +464,19 @@ fun InteractScreen(
 
         // Chat messages container with empty state (from fragment_interact.xml:127-190)
         // Horizontal swipe rotates the background cylinder (fidget spin!)
+        // — but ONLY in BG mode. FG is "pause and explore", so the parent
+        // swipe-to-spin gesture must yield to the cell viz's own pan/zoom
+        // gestures. Without this gate, detectHorizontalDragGestures on the
+        // parent Box captures and `consume()`s pointer events before they
+        // can reach the Canvas's detectTransformGestures / scroll handler.
+        val swipeSpinActive = liveBackgroundEnabled &&
+            visualizationMode != VisualizationMode.FOREGROUND
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(liveBackgroundEnabled) {
-                    if (liveBackgroundEnabled) {
+                .pointerInput(swipeSpinActive) {
+                    if (swipeSpinActive) {
                         detectHorizontalDragGestures(
                             onDragStart = {
                                 isDraggingHorizontal = true

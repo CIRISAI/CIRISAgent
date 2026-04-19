@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
@@ -220,7 +222,14 @@ fun CellVisualization(
     // this flag each frame and skip state advancement when true. We
     // still run the frame loop (cheaper than disposing / reattaching
     // LaunchedEffects on every mode change) but every driver no-ops.
-    val isFrozen = showSignalChannels
+    //
+    // `rememberUpdatedState` is load-bearing here: the frame loop
+    // launched once via LaunchedEffect and its closure captures by
+    // reference. Without rememberUpdatedState, toggling the mode
+    // later leaves the loop reading the STALE isFrozen from the
+    // launch-time composition. Symptom: FG selected, animation keeps
+    // running. Read `.value` every frame to pick up the current mode.
+    val frozenState = rememberUpdatedState(showSignalChannels)
 
     // FG pan + zoom. Values apply via graphicsLayer on the Canvas so
     // all inner drawing (ring, ports, motes, nucleus, channels) moves
@@ -246,7 +255,7 @@ fun CellVisualization(
         var lastFrameNs = 0L
         while (isActive) {
             withFrameNanos { frameTimeNs ->
-                if (lastFrameNs != 0L && !isFrozen) {
+                if (lastFrameNs != 0L && !frozenState.value) {
                     val dSec = (frameTimeNs - lastFrameNs) / 1_000_000_000f
                     autoRotationDeg =
                         (autoRotationDeg + cfg.rotationDegPerSec * dSec) % 360f
@@ -282,7 +291,7 @@ fun CellVisualization(
             .coerceIn(cfg.minOpenings, cfg.maxOpenings)
         while (isActive) {
             withFrameNanos { frameTimeNs ->
-                if (lastFrameNs != 0L && !isFrozen) {
+                if (lastFrameNs != 0L && !frozenState.value) {
                     val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     nowMs.value = now
                     val alive = openings.value.filterNot { it.isDead(now) }
@@ -353,6 +362,12 @@ fun CellVisualization(
     // Apply pan + zoom via graphicsLayer when in FG so the entire diagram
     // (frozen) can be explored. Gestures are only wired in FG so BG stays
     // a passive glance surface — no accidental zooms while scrolling chat.
+    //
+    // Two handlers stack here because Compose's detectTransformGestures
+    // is touch-oriented (pinch, multi-touch pan) and doesn't fire on
+    // mouse-wheel scroll. Desktop users zoom by wheel, so we handle
+    // PointerEventType.Scroll directly; pinch + single-pointer drag
+    // stay on detectTransformGestures for touch parity.
     val canvasModifier = if (showSignalChannels) {
         modifier
             .graphicsLayer(
@@ -362,10 +377,29 @@ fun CellVisualization(
                 translationY = panY,
             )
             .pointerInput(Unit) {
+                // Touch: pinch + drag.
                 detectTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(0.8f, 3.0f)
                     panX += pan.x
                     panY += pan.y
+                }
+            }
+            .pointerInput(Unit) {
+                // Desktop: mouse wheel → zoom. Scroll.y is positive when
+                // the wheel rolls toward the user (zoom out) on most
+                // platforms; flip the sign so "scroll up" zooms in.
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) {
+                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                            if (delta != 0f) {
+                                scale = (scale * (1f - delta * 0.08f))
+                                    .coerceIn(0.8f, 3.0f)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
                 }
             }
     } else {

@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.screens.graph
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.ui.theme.getScopeColor
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -265,6 +267,21 @@ fun CellVisualization(
             scale = 1f; panX = 0f; panY = 0f
         }
     }
+
+    // Step 10: BG↔FG mode-change morph. A short scale animation
+    // applied in draw at the outer uniform-scale block so the whole
+    // cell (not just its visual layer) nudges between a subtle 0.95×
+    // ambient size in BG and 1.00× inspect size in FG. 400ms tween
+    // per FSD/CELL_VIZ_REDESIGN.md §18 Step 10 — the one "sexy"
+    // animation the user triggers. This is independent of the user's
+    // own pan/zoom (which lives on graphicsLayer); the modeScale
+    // composes multiplicatively inside the draw scope so both the
+    // breath and this morph play nicely with it.
+    val modeScale by animateFloatAsState(
+        targetValue = if (showSignalChannels) 1.00f else 0.95f,
+        animationSpec = tween(durationMillis = 400),
+        label = "cellModeScale",
+    )
 
     // Rotation driver: withFrameNanos accumulates delta-time. Single
     // source of truth for current angle; the membrane, ports, and any
@@ -624,8 +641,12 @@ fun CellVisualization(
         drawMedium(isDarkMode, centerX, centerY)
 
         // Everything inside the cell scales uniformly; medium does not.
+        // breatheScale (continuous) × modeScale (400ms BG↔FG morph, §18
+        // Step 10) compose multiplicatively so the breath keeps going
+        // during the mode transition rather than snapping.
+        val bodyScale = breatheScale * modeScale
         scale(
-            scaleX = breatheScale, scaleY = breatheScale,
+            scaleX = bodyScale, scaleY = bodyScale,
             pivot = Offset(centerX, centerY),
         ) {
             drawCellBodyAura(

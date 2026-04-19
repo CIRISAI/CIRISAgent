@@ -121,13 +121,26 @@ fun main() {
             // for Ktor's grace period or the Python subprocess to
             // tear down. Shutdown work is already registered via the
             // JVM shutdown hook (see addShutdownHook above) and runs
-            // on exit. Blocking here for 3+ seconds is what made the
-            // macOS red close button feel broken — users had to use
-            // the File > Quit menu to get out.
+            // on exit.
+            //
+            // BUT: exitApplication() alone isn't enough to kill the
+            // JVM if there are stuck non-daemon threads (Ktor test
+            // server accept loop, Python subprocess watchers, etc.).
+            // The JVM would keep living invisibly. Force-exit on a
+            // short watchdog so the app ALWAYS dies when the user
+            // clicks the red close button.
             Thread {
                 runCatching { testServer?.stop() }
             }.also { it.isDaemon = true }.start()
             exitApplication()
+            Thread {
+                try { Thread.sleep(1500) } catch (_: InterruptedException) {}
+                // If we're still alive 1.5 s later, force-exit. This
+                // runs the JVM shutdown hooks (pythonRuntime.shutdown)
+                // on the way out, so the Python subprocess still gets
+                // cleaned up correctly.
+                System.exit(0)
+            }.also { it.isDaemon = true }.start()
         },
         title = "CIRIS Agent",
         state = windowState,

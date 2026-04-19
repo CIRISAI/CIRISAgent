@@ -860,4 +860,107 @@ class CellVizModelTest {
         assertEquals(2_500L, GRATITUDE_MOTE_DURATION_MS)
         assertEquals(3_000L, GRATITUDE_COOLDOWN_MS)
     }
+
+    // =========================================================================
+    // PipelineStage.glowIntensity — shell activation decay
+    // =========================================================================
+
+    @Test
+    fun `stage that has never activated has zero glow`() {
+        val stage = PipelineStage(
+            eventType = "thought_start",
+            labelKey = "pipeline_label_think",
+            label = "THINK",
+            color = androidx.compose.ui.graphics.Color(0xFF60A5FA),
+            activatedAtMs = 0L,
+        )
+        assertEquals(0f, stage.glowIntensity(nowMs = 100_000L), 1e-4f)
+    }
+
+    @Test
+    fun `stage glow is near 1 immediately after activation`() {
+        val activated = 1_000L
+        val stage = PipelineStage(
+            eventType = "thought_start",
+            labelKey = "pipeline_label_think",
+            label = "THINK",
+            color = androidx.compose.ui.graphics.Color(0xFF60A5FA),
+            activatedAtMs = activated,
+        )
+        assertEquals(1f, stage.glowIntensity(nowMs = activated), 1e-4f)
+    }
+
+    @Test
+    fun `stage glow returns zero after the glow window expires`() {
+        val activated = 1_000L
+        val stage = PipelineStage(
+            eventType = "aspdma_result",
+            labelKey = "pipeline_label_select",
+            label = "SELECT",
+            color = androidx.compose.ui.graphics.Color(0xFFA78BFA),
+            activatedAtMs = activated,
+        )
+        assertEquals(
+            0f,
+            stage.glowIntensity(nowMs = activated + PipelineStage.GLOW_DURATION_MS),
+            1e-4f,
+        )
+        assertEquals(
+            0f,
+            stage.glowIntensity(nowMs = activated + PipelineStage.GLOW_DURATION_MS + 500L),
+            1e-4f,
+        )
+    }
+
+    @Test
+    fun `stage glow decays monotonically across its window`() {
+        // activatedAtMs=0 is the sentinel for "never activated"; use a real
+        // timestamp so every sample is inside an actual glow window.
+        val activated = 1_000L
+        val stage = PipelineStage(
+            eventType = "action_result",
+            labelKey = "pipeline_label_act",
+            label = "ACT",
+            color = androidx.compose.ui.graphics.Color(0xFF4ADE80),
+            activatedAtMs = activated,
+        )
+        var last = Float.POSITIVE_INFINITY
+        for (dt in 0L until PipelineStage.GLOW_DURATION_MS step 100L) {
+            val g = stage.glowIntensity(nowMs = activated + dt)
+            assertTrue(g <= last + 1e-4f, "non-monotonic at dt=$dt: prev=$last this=$g")
+            assertTrue(g in 0f..1f, "glow out of [0,1]: $g at dt=$dt")
+            last = g
+        }
+    }
+
+    @Test
+    fun `TSASPDMA boost scales the glow peak above 1`() {
+        // activatedAtMs=0 is the sentinel for "never activated"; use a real
+        // timestamp so glowIntensity doesn't early-return zero.
+        val activated = 1_000L
+        val boosted = PipelineStage(
+            eventType = "aspdma_result",
+            labelKey = "pipeline_label_select",
+            label = "SELECT",
+            color = androidx.compose.ui.graphics.Color(0xFFA78BFA),
+            activatedAtMs = activated,
+            glowBoost = PipelineStage.TSASPDMA_BOOST,
+        )
+        val peak = boosted.glowIntensity(nowMs = activated)
+        assertEquals(PipelineStage.TSASPDMA_BOOST, peak, 1e-4f)
+        assertTrue(peak > 1f, "boosted peak should exceed 1.0, got $peak")
+    }
+
+    @Test
+    fun `stage glow handles negative elapsed time without throwing`() {
+        val stage = PipelineStage(
+            eventType = "thought_start",
+            labelKey = "pipeline_label_think",
+            label = "THINK",
+            color = androidx.compose.ui.graphics.Color(0xFF60A5FA),
+            activatedAtMs = 5_000L,
+        )
+        // If the clock skews or stage is activated-in-the-future, return 0.
+        assertEquals(0f, stage.glowIntensity(nowMs = 3_000L), 1e-4f)
+    }
 }

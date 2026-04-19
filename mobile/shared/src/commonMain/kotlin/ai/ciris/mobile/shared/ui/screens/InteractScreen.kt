@@ -338,6 +338,8 @@ fun InteractScreen(
                     busPulses = busPulses,
                     // Gratitude motes ejected from the nucleus on task_complete.
                     gratitudePulses = gratitudePulses,
+                    // H3ERE pipeline state lights matching nucleus shells.
+                    pipelineState = pipelineState,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

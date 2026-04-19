@@ -170,6 +170,27 @@ data class PipelineState(
 }
 
 /**
+ * Current glow intensity for a pipeline stage in `[0, glowBoost]`, given
+ * the wall-clock time `nowMs`. Zero when never activated or after the
+ * glow window has expired. Decays via `1 - smoothstep(t)` so the ring
+ * pulses sharply on activation then fades naturally.
+ *
+ * Pure: no Compose dependency, no state, only reads the data class.
+ * The cell viz uses this to brighten the nucleus shell corresponding
+ * to each stage — shell i glows when stage i fires.
+ */
+fun PipelineStage.glowIntensity(nowMs: Long): Float {
+    if (activatedAtMs <= 0L) return 0f
+    val elapsed = (nowMs - activatedAtMs).toFloat()
+    if (elapsed < 0f || elapsed >= PipelineStage.GLOW_DURATION_MS) return 0f
+    val t = elapsed / PipelineStage.GLOW_DURATION_MS.toFloat()
+    // smoothstep(t) is 0 at t=0 and 1 at t=1, so (1 - smoothstep(t))
+    // decays from 1 → 0 naturally. Multiply by glowBoost so TSASPDMA
+    // re-activations peak 1.6× brighter.
+    return (1f - smoothstep(t)) * glowBoost
+}
+
+/**
  * Projected scaffolding point on the cylinder surface.
  */
 data class ScaffoldPoint(

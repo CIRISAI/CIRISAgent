@@ -164,6 +164,14 @@ fun CellVisualization(
      * ViewModel so the signal stays meaningful.
      */
     gratitudePulses: List<GratitudePulse> = emptyList(),
+    /**
+     * H3ERE pipeline state — each of the 7 stages lights the matching
+     * nucleus shell when the corresponding SSE event fires. Innermost
+     * shell = thought_start; outermost = action_result, so a new
+     * thought round visually radiates from the core toward the
+     * membrane as the pipeline progresses.
+     */
+    pipelineState: PipelineState = PipelineState(),
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
@@ -367,11 +375,19 @@ fun CellVisualization(
                 isDarkMode = isDarkMode,
                 cfg = cfg,
             )
+            // Pipeline stage → shell glow intensities. Computed once per
+            // composition (cheap — 7 floats) and passed into drawNucleus
+            // rather than threading PipelineState directly, so drawNucleus
+            // stays a dumb renderer.
+            val shellGlow = FloatArray(NUCLEUS_SHELL_FRACTIONS.size) { i ->
+                pipelineState.stages.getOrNull(i)?.glowIntensity(nowMsLocal) ?: 0f
+            }
             drawNucleus(
                 cx = centerX, cy = centerY,
                 outerRadius = nucleusRadius,
                 isDarkMode = isDarkMode,
                 opacityScale = dials.nucleusOpacity,
+                shellGlow = shellGlow,
             )
 
             // Gratitude motes — drawn AFTER the nucleus so they appear
@@ -638,6 +654,13 @@ private fun DrawScope.drawNucleus(
      * as a dimmer centre. Floored well above 0 so the nucleus never vanishes.
      */
     opacityScale: Float = 1f,
+    /**
+     * Per-shell glow intensity in `[0, ~1.6]` (the upper bound accounts
+     * for TSASPDMA boost). Index i corresponds to [NUCLEUS_SHELL_FRACTIONS]
+     * at index i. An all-zero array renders the nucleus in its ambient
+     * state — safe default.
+     */
+    shellGlow: FloatArray = FloatArray(NUCLEUS_SHELL_FRACTIONS.size),
 ) {
     if (outerRadius <= 1f) return
     val center = Offset(cx, cy)
@@ -656,11 +679,17 @@ private fun DrawScope.drawNucleus(
     )
 
     NUCLEUS_SHELL_FRACTIONS.forEachIndexed { i, frac ->
+        val baseAlpha = NUCLEUS_SHELL_OPACITIES[i] * opacityScale
+        val glow = shellGlow.getOrNull(i)?.coerceIn(0f, 1.6f) ?: 0f
+        // Activated shells get a brighter stroke AND a thicker line so
+        // the pulse is legible even on small-screen rendering.
+        val alpha = (baseAlpha + glow * 0.70f).coerceAtMost(1f)
+        val width = 0.9f + glow * 1.3f
         drawCircle(
-            color = NUCLEUS_AMBER.copy(alpha = NUCLEUS_SHELL_OPACITIES[i] * opacityScale),
+            color = NUCLEUS_AMBER.copy(alpha = alpha),
             radius = outerRadius * frac,
             center = center,
-            style = Stroke(width = 0.9f),
+            style = Stroke(width = width),
         )
     }
 

@@ -821,6 +821,20 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
         healthy = sum(1 for h in health_results if h)
         k_eff_frac = healthy / total
 
+        # ρ: effective pairwise correlation between constraints. True
+        # ρ needs a rolling per-service health time-series with pairwise
+        # Pearson coefficients — a follow-up. For now we use a cheap
+        # in-snapshot proxy: a single failure is normal operational
+        # variance (ρ ≈ 0); many services failing *simultaneously* is
+        # correlated systemic stress (ρ → 1). Linear ramp on the
+        # excess-over-one failures.
+        failures = total - healthy
+        if total <= 1:
+            rho = 0.0
+        else:
+            rho = max(0.0, min(1.0, (failures - 1) / (total - 1)))
+        rho_complement = 1.0 - rho
+
         # λ: strictness is active when the Wise Authority service is
         # healthy. The H3ERE Conscience Module is baked into the thought
         # processor itself (not a standalone service), so "agent running"
@@ -839,7 +853,6 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
         # --- σ from recent task_complete positive moments ------------------
         sigma = await _sigma_from_positive_moments(request)
 
-        rho_complement = 1.0  # 22-service microarchitecture; no ρ measurement yet
         j = k_eff_frac * rho_complement * lam * sigma
         j = max(0.0, min(1.0, j))
 

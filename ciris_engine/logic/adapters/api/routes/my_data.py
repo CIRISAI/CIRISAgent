@@ -1016,14 +1016,15 @@ async def get_capacity(
     # agent instance ID (e.g., "agent-c1303b26541d"). The template name is
     # what lens aggregates scores by. Default to "Ally" for CIRIS proxy mode.
     runtime = getattr(request.app.state, "runtime", None)
-    template = None
+    template: str = "Ally"
     if runtime:
         essential = getattr(runtime, "essential_config", None)
         if essential:
-            template = getattr(essential, "agent_name", None)
-    # Fallback to "Ally" for CIRIS proxy mode (most common case)
-    if not template:
-        template = "Ally"
+            agent_name = getattr(essential, "agent_name", None)
+            # Ensure we have an actual string, not a Mock object
+            if agent_name and isinstance(agent_name, str):
+                template = agent_name
+    if template == "Ally":
         logger.info(f"[capacity] Using default template 'Ally' for lens lookup")
 
     # --- Local-only: skip the lens hop entirely -----------------------------

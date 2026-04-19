@@ -684,6 +684,49 @@ Each step is a standalone commit. Steps 1–5 done; 6–11 pending.
      every 2nd–3rd cycle, cadence follows cognitive state.
 5. **Cytoplasm motes.** Replace cylindrical node layout with 2D
    golden-angle scatter + small-amplitude drift (±3 px, not ±10 px).
+
+**5a. CIRIS capacity ratchet — ambient dials + clear badge.** ✅ (mostly)
+   Inserted out-of-order because the lens `/scoring/capacity/{template}`
+   endpoint gave us a first-party data source tied directly to the CIRIS
+   acronym (C, I_int, R, I_inc, S). The cell viz and the at-a-glance
+   badge together *are* the coherence ratchet rendered for the user.
+
+   Shipped (commits `0aabb8d9e`, `62daccef3`):
+   - `GET /v1/my-data/capacity` agent-backend proxy (cached 15 min in
+     the existing `ContextEnrichmentCache`). Explicitly NOT registered
+     as a context enrichment tool — the agent must never read its own
+     score (Goodhart / self-monitoring anxiety).
+   - KMP `getCapacity()` + `CellVizState` pure model + `derivedDials()`
+     mapping the five factors to ambient visual dials:
+     C → nucleus opacity, I_int → bus crispness, R → breath steadiness,
+     I_inc → opening bias, S → mote warmth. Floors keep fragile agents
+     recognisable.
+   - `CapacityBadge` pill next to the Trust shield: filled status dot
+     (category colour, green/amber/red mirroring Trust semantics) +
+     2-decimal composite score. Non-clickable in this pass.
+   - 13 pure KMP tests + 7 backend tests, all green.
+
+   **TODO — flesh out the badge to pair local + fleet scores.**
+   The current badge surfaces the *template-aggregate* score from lens
+   (Ally across everyone running Ally). A user wants to see how *their*
+   instance is doing too, not only the family average. Plan:
+   - Backend: compute a **local** CIRIS capacity score from this
+     occurrence's own signed-trace history (reuse the same five-factor
+     formulas as the lens scoring service). Exposed via either
+     `GET /v1/my-data/capacity?scope=local|fleet|both` (preferred) or a
+     sibling `/v1/my-data/capacity/local` endpoint. Cache similarly.
+   - Client: badge renders both — e.g. `● 0.92 · 0.90` where the first
+     value is *this* agent's local score and the second is the template
+     fleet average. Colour reflects local (the one the user is steering).
+     Tooltip / click opens a dialog showing the full 5-factor breakdown
+     for both scopes side by side.
+   - Non-goal: do NOT feed the local score into agent context — same
+     Goodhart guardrail as the fleet score.
+   - Ambient dials stay wired to the *local* score once available
+     (falls back to fleet if local trace count is too small to compute
+     a stable score — threshold TBD, likely n ≥ 20 for C/I_int,
+     n ≥ 50 for R/I_inc).
+
 6. **Tier-1 events: bus-arc shimmer + bus-pulse on SSE + gratitude.**
    Route SSE event types to bus segments (memory→MemoryBus, llm→LLMBus,
    etc.). Also lands **gratitude motes (§2.5.1)** — nucleus emits warm

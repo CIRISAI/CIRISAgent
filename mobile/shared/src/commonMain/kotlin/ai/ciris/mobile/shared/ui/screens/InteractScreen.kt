@@ -224,7 +224,9 @@ fun InteractScreen(
     // Effective live background: enabled when visualization mode is not OFF
     val effectiveLiveBackground = visualizationMode != VisualizationMode.OFF
 
-    // Full-screen fidget mode when FOREGROUND
+    // Legacy alias kept for the cylinder-viz path (LiveGraphBackground's
+    // isForegroundMode param). With cell viz, FG is "interactive inspect",
+    // not a fidget — no Column alpha trick, no overlay drag-to-spin.
     val isFullscreenFidget = visualizationMode == VisualizationMode.FOREGROUND
 
     // Multi-axis rotation for fidget mode (vertical spin - full 360 rotation)
@@ -341,105 +343,25 @@ fun InteractScreen(
                     "reason=${cellVizCap.reason})"
             )
         }
-        if (effectiveLiveBackground && apiClient != null) {
-            val graphOpacity = when (visualizationMode) {
-                VisualizationMode.FOREGROUND -> 1.0f  // Full opacity in foreground mode
-                VisualizationMode.BACKGROUND -> 0.85f  // Subtle in background mode
-                VisualizationMode.OFF -> 0f  // Should not reach here
-            }
-            if (useCellViz) {
-                // Capable device AND user hasn't opted out. Steps 3-5 of
-                // the cell-viz redesign: membrane + dynamic openings +
-                // adapter ports + nucleus + song + cytoplasm motes.
-                // See FSD/CELL_VIZ_REDESIGN.md for the full build order.
-                //
-                // zIndex boost in FG brings the Canvas on top of the chat
-                // Column so pointer events (click/drag/wheel) reach its
-                // pointerInputs instead of being absorbed by the chat
-                // area's hit chain. In BG the cell stays behind the chat
-                // at z=0 as before.
-                CellVisualization(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(
-                            if (visualizationMode == VisualizationMode.FOREGROUND) 10f else 0f,
-                        ),
-                    isDarkMode = isDarkMode,
-                    adapterOrbits = adapterOrbits,
-                    externalRotation = cylinderRotation,
-                    // Re-sanitize on read — slider bounds and renderer
-                    // bounds share a single source of truth (the clamp
-                    // calls inside sanitized), so the worst a broken
-                    // preference can do is land at a bounded extreme.
-                    config = cellVizConfig.sanitized(),
-                    apiClient = apiClient,
-                    colorTheme = colorTheme,
-                    // Timeline events are a good proxy for "something
-                    // just changed in the agent" — trigger a refetch.
-                    eventTrigger = timelineEvents.size,
-                    // CIRIS capacity (C/I_int/R/I_inc/S) — ambient dials.
-                    // NEUTRAL until the first /v1/my-data/capacity arrives.
-                    state = cellVizState,
-                    // Tier-1 events: bus-arc shimmer pulses from SSE.
-                    busPulses = busPulses,
-                    // Gratitude motes ejected from the nucleus on task_complete.
-                    gratitudePulses = gratitudePulses,
-                    // H3ERE pipeline state lights matching nucleus shells.
-                    pipelineState = pipelineState,
-                    // Signal channels (adapter wiring leader lines) only
-                    // surface in Foreground mode — BG stays glanceable.
-                    showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
-                    // FG selection: tap → ViewModel → live detail panel.
-                    onSelection = { kind -> viewModel.setSelection(kind) },
-                    selection = selectionKind,
-                )
-            } else {
-                // Low-end / 32-bit device — frozen legacy path. No orbits,
-                // no state-posture modulation — strip everything the new
-                // design added back out, so the legacy view stays the
-                // known-good cylinder it always was.
-                LiveGraphBackground(
-                    apiClient = apiClient,
-                    modifier = Modifier.fillMaxSize(),
-                    baseOpacity = graphOpacity,
-                    eventTrigger = timelineEvents.size,
-                    externalRotation = cylinderRotation,
-                    externalTilt = verticalRotation,
-                    spinEnergy = spinEnergy,
-                    spinEnergyThreshold = spinEnergyThreshold,
-                    onSpinApartTriggered = { spinEnergy = 0f },
-                    pipelineState = pipelineState,
-                    isForegroundMode = isFullscreenFidget,
-                    ringColor = colorTheme.tertiary,
-                    colorTheme = colorTheme
-                )
-            }
-        }
+        // NOTE: CellVisualization / LiveGraphBackground are NOT rendered
+        // here at the outer Box. They render INSIDE the chat-area Box
+        // further down in the main Column — see the big Box with
+        // Modifier.weight(1f). Rationale: Compose Desktop Canvas does not
+        // respect zIndex against sibling Columns (the Canvas overdraws
+        // chrome regardless of declared z). By making the viz a child of
+        // the chat-area Box, normal Compose layout keeps the status bar,
+        // FG detail panel, banners, and input bar above it by default —
+        // no zIndex gymnastics, no painful layering bugs.
 
-        // Main content column with platform-specific keyboard padding
-        // Note: In fullscreen fidget mode, we hide the UI by setting alpha to 0
-        // instead of using early return (which breaks Compose recomposition)
-        // Android: Uses imePadding() for proper keyboard avoidance
-        // iOS: No-op - native keyboard avoidance handles this automatically
-        //
-        // Layered sibling-of-cell-viz layout:
-        //   - BG: Column z=0, cell viz z=0. Column paints on top; chat
-        //     messages / status bar sit over the ambient cell.
-        //   - FG: Column z=20, cell viz z=10. Cell sits above chat so
-        //     its pointer-inputs capture gestures, but the status bar
-        //     (inside the Column) is ABOVE the cell so the VIZ toggle,
-        //     CapacityBadge, and trust shield stay tappable.
-        //   The chat area Box's pointerInput is already gated off in
-        //   FG (swipeSpinModifier = Modifier), so the Column doesn't
-        //   consume gesture events meant for the cell — only the
-        //   status bar's own clickable Surfaces consume their own taps.
-        val columnZIndex = if (visualizationMode == VisualizationMode.FOREGROUND) 20f else 0f
+        // Main content column with platform-specific keyboard padding.
+        // Structure (top → bottom):
+        //   StatusBar | FgDetailPanel? | banners | BubbleNet | chat-area Box (cell viz + optional chat) | input
+        // The cell viz lives INSIDE the chat-area Box so Compose's normal
+        // layout keeps all chrome above it. No zIndex needed.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .platformImePadding()
-                .alpha(if (isFullscreenFidget) 0f else 1f)  // Hide in fullscreen fidget mode
-                .zIndex(columnZIndex)
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -570,13 +492,62 @@ fun InteractScreen(
                 .fillMaxWidth()
                 .then(swipeSpinModifier)
         ) {
-            if (messages.isEmpty() && !isLoading) {
-                EmptyStateView(
-                    transparentBackground = liveBackgroundEnabled,
-                    isDarkMode = isDarkMode,
-                )
-            } else {
-                ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+            // Cell viz / legacy cylinder renders as the BACKGROUND of the
+            // chat area. matchParentSize() fills this Box's bounds without
+            // influencing its measurement — lets weight(1f) drive height.
+            if (effectiveLiveBackground && apiClient != null) {
+                if (useCellViz) {
+                    CellVisualization(
+                        modifier = Modifier.matchParentSize(),
+                        isDarkMode = isDarkMode,
+                        adapterOrbits = adapterOrbits,
+                        externalRotation = cylinderRotation,
+                        config = cellVizConfig.sanitized(),
+                        apiClient = apiClient,
+                        colorTheme = colorTheme,
+                        eventTrigger = timelineEvents.size,
+                        state = cellVizState,
+                        busPulses = busPulses,
+                        gratitudePulses = gratitudePulses,
+                        pipelineState = pipelineState,
+                        showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
+                        onSelection = { kind -> viewModel.setSelection(kind) },
+                        selection = selectionKind,
+                    )
+                } else {
+                    val graphOpacity = when (visualizationMode) {
+                        VisualizationMode.FOREGROUND -> 1.0f
+                        VisualizationMode.BACKGROUND -> 0.85f
+                        VisualizationMode.OFF -> 0f
+                    }
+                    LiveGraphBackground(
+                        apiClient = apiClient,
+                        modifier = Modifier.matchParentSize(),
+                        baseOpacity = graphOpacity,
+                        eventTrigger = timelineEvents.size,
+                        externalRotation = cylinderRotation,
+                        externalTilt = verticalRotation,
+                        spinEnergy = spinEnergy,
+                        spinEnergyThreshold = spinEnergyThreshold,
+                        onSpinApartTriggered = { spinEnergy = 0f },
+                        pipelineState = pipelineState,
+                        isForegroundMode = isFullscreenFidget,
+                        ringColor = colorTheme.tertiary,
+                        colorTheme = colorTheme,
+                    )
+                }
+            }
+            // In BG: chat/empty-state renders OVER the ambient viz.
+            // In FG: chat is suppressed so the viz is the whole middle area.
+            if (visualizationMode != VisualizationMode.FOREGROUND) {
+                if (messages.isEmpty() && !isLoading) {
+                    EmptyStateView(
+                        transparentBackground = liveBackgroundEnabled,
+                        isDarkMode = isDarkMode,
+                    )
+                } else {
+                    ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+                }
             }
         }
 
@@ -659,75 +630,9 @@ fun InteractScreen(
 
         // Note: ErrorToast, DebugIndicator, and DebugConsole removed for production release
 
-        // Fullscreen fidget mode overlay - on top of everything when active
-        // Uses conditional visibility instead of early return to avoid breaking Compose recomposition
-        if (isFullscreenFidget) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Transparent)  // Transparent - graph shows through
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { isDraggingHorizontal = true },
-                            onDragEnd = { isDraggingHorizontal = false },
-                            onDragCancel = { isDraggingHorizontal = false },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                val rotationSensitivity = 0.5f
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                cylinderRotation += deltaRotation
-                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                val rotationSensitivity = 0.5f
-                                // Reversed: drag down = rotate forward (positive)
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                verticalRotation += deltaRotation
-                                verticalVelocity = verticalVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-            ) {
-                // X button to exit fullscreen fidget mode - top right corner
-                IconButton(
-                    onClick = { visualizationMode = VisualizationMode.BACKGROUND },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = theme.surface.copy(alpha = 0.7f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = localizedString("mobile.interact_exit_fullscreen"),
-                        tint = theme.textPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Legend button INSIDE fullscreen overlay so it receives touch events
-                // Same position as BG mode for consistency
-                VisualizationLegendButton(
-                    isExpanded = showVizLegend,
-                    onToggle = { showVizLegend = !showVizLegend },
-                    theme = theme,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 140.dp)
-                )
-            }
-        }
-
-        // Visualization legend button for BG mode (outside fullscreen overlay)
-        if (visualizationMode == VisualizationMode.BACKGROUND) {
+        // Legend button (BG + FG). Anchored to the outer Box's BottomEnd
+        // so it sits above the cell viz and input bar in both modes.
+        if (visualizationMode != VisualizationMode.OFF) {
             VisualizationLegendButton(
                 isExpanded = showVizLegend,
                 onToggle = { showVizLegend = !showVizLegend },

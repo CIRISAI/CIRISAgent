@@ -202,6 +202,63 @@ fun gratitudeMoteFrame(pulse: GratitudePulse, nowMs: Long): GratitudeMoteFrame? 
 fun canEmitGratitude(lastEmissionMs: Long, nowMs: Long): Boolean =
     lastEmissionMs <= 0L || (nowMs - lastEmissionMs) >= GRATITUDE_COOLDOWN_MS
 
+
+// =============================================================================
+// Signal channels — adapter-port → label leader lines (non-biological)
+// =============================================================================
+//
+// Earlier drafts called these "pseudopods" or "tendrils"; renamed because
+// biological metaphors leak anthropomorphism into a viz that's trying to
+// stay out of that frame. These are wires / circuit traces / infographic
+// leader lines, nothing that reaches or grows.
+
+/** Duration of one full signal-packet traversal along a channel, in ms. */
+const val CHANNEL_PACKET_PERIOD_MS: Long = 2_000L
+
+/** How far past the label the channel continues to fade out, in px. */
+const val CHANNEL_FADE_PAST_LABEL_PX: Float = 40f
+
+/** Fraction of the membrane radius to reach past the edge for labels. */
+const val CHANNEL_LABEL_OFFSET_FRACTION: Float = 0.28f
+
+/**
+ * Kinematic state of one signal channel's travelling packet. The packet
+ * travels linearly from [startMs]; its position along the channel is
+ * `((nowMs - startMs) % period) / period`. Alpha peaks at mid-traversal
+ * and fades at both ends so the packet feels like a pulse, not a
+ * constantly-lit tracer.
+ *
+ * Null means the packet is in its between-cycles quiet period (we render
+ * the line without a packet dot).
+ */
+data class ChannelPacket(
+    /** Position along the line in [0, 1] — 0 = port end, 1 = label end. */
+    val t: Float,
+    /** Packet alpha in [0, 1]. */
+    val alpha: Float,
+)
+
+/**
+ * Sample the travelling-packet state at [nowMs] given a channel's
+ * [startMs] anchor. Returns null when the cycle is in its quiet phase
+ * so the caller can skip the packet draw.
+ *
+ * Packets travel for 60 % of the period and then rest for 40 % — the
+ * quiet gap is what makes consecutive packets read as discrete events
+ * rather than a continuous streak.
+ */
+fun channelPacketAt(startMs: Long, nowMs: Long): ChannelPacket? {
+    if (nowMs < startMs) return null
+    val phase = ((nowMs - startMs) % CHANNEL_PACKET_PERIOD_MS).toFloat() /
+        CHANNEL_PACKET_PERIOD_MS.toFloat()
+    val activeFraction = 0.60f
+    if (phase >= activeFraction) return null
+    val t = (phase / activeFraction).coerceIn(0f, 1f)
+    // Bell curve — rises fast, peaks mid-travel, drops off.
+    val alpha = (1f - kotlin.math.abs(t - 0.5f) * 2f).coerceAtLeast(0f)
+    return ChannelPacket(t = t, alpha = alpha)
+}
+
 // =============================================================================
 // Membrane openings — dynamic apertures
 // =============================================================================

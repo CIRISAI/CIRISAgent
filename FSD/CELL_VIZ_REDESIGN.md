@@ -263,32 +263,43 @@ feels diagnostic and clinical, relational cadence feels inhabitable.
 Both are rendering choices about tone; neither makes any claim about
 the agent's interior.
 
-### 2.5.6 Weaving threads — visible participation in a wider system
+### 2.5.6 Signal channels — visible participation in a wider system
+
+> **Language note (2026-04-18):** earlier drafts called these
+> "pseudopods" / "tendrils" / "weaving threads". All three borrow from
+> biology, which is itself a form of anthropomorphism we're trying to
+> stay out of (the cell metaphor is load-bearing but we don't have to
+> compound the biomorphism). Renamed to **signal channels** — they're
+> wires, not extensions of living tissue.
 
 The CIRIS Accord is about commitments that braid across a network of
-agents, humans, and authorities. A pseudopod terminating at a hard tip
-at the edge of the viz implies "this channel ends here." The system is
-actually participating in a wider weave; the viz should acknowledge
+agents, humans, and authorities. A channel terminating at a hard tip at
+the edge of the viz implies "this connection ends here." The system is
+actually participating in a wider network; the viz should acknowledge
 that.
 
-**Rendering**: each pseudopod's tip is followed by a **faint tendril**
-that continues past the viz bounds, fading from tip-color-at-0.4 →
-0.0 alpha over ~40 px. Not a line to a specific other cell — just the
-*visible acknowledgement* that the channel continues to another
-endpoint beyond the frame.
+**Rendering**: each adapter port emits a **thin radial leader line**
+toward a label position just beyond the membrane, bus-coloured with a
+subtle outward fade. Past the label, the line continues for ~40 px
+fading from ~0.4 → 0.0 alpha as a quiet *"this channel continues
+elsewhere"* marker. Optionally a small bright dot travels outward along
+the line once every ~2 s — a signal packet, not a reaching gesture.
 
-**Framing**: this is architectural reminder, not reaching. The system
-is part of a larger weave by design; the tendril is how that design
-intent becomes visible. No claim that the agent "reaches toward"
-anything in an intentional sense.
+**Framing**: this is a wiring diagram, not an organism. The line is
+straight or very gently curved, not a sinuous biological arc. The
+packet is a discrete particle travelling at constant velocity, not a
+flowing bloom. All language in code/comments/UI refers to *signal*,
+*channel*, *trace*, *line* — never *tendril*, *reach*, *feeler*,
+*arm*, *tongue*, etc.
 
 **Rules**:
-- Tendril is subtle enough to miss on first look. The goal is not to
-  shout "network!" but to quietly acknowledge the channel continues.
-- Exists only in **Foreground** mode. In BG the tip dots are enough;
-  tendrils would add clutter to a glanceable read.
-- Fade curve is exponential, not linear, so the tendril "dissolves into
-  the medium" instead of terminating at a hard edge.
+- Fade past the label is subtle enough to miss on first look. The
+  goal is not to shout "network!" but to quietly acknowledge the
+  channel continues beyond the frame.
+- Exists only in **Foreground** mode. In BG, ports alone carry the
+  bus/adapter signal and labels would add clutter to a glanceable read.
+- Fade curve is exponential, not linear, so the line dissolves into
+  the medium instead of terminating at a hard edge.
 
 ---
 
@@ -732,9 +743,14 @@ Each step is a standalone commit. Steps 1–5 done; 6–11 pending.
    etc.). Also lands **gratitude motes (§2.5.1)** — nucleus emits warm
    motes on good-interaction signals; max one in flight per 3 s;
    disabled under `prefers-reduced-motion`.
-7. **Pseudopods + weaving tendrils.** BG: no labels, no tendrils. FG:
-   labels with stroke-first halo + **tendrils fading past the viz
-   bounds (§2.5.6)**. Bezier from Communication arc to tip node.
+7. **Signal channels + adapter labels.** Non-biological replacement for
+   the earlier "pseudopod / tendril" language (§2.5.6). BG: no labels,
+   no channels. FG: thin radial leader line from each adapter port to
+   a label just beyond the membrane, stroke-first halo for dark-mode
+   text readability, exponential fade continuing ~40 px past the label
+   so the channel "dissolves into the medium" rather than hitting a
+   hard stop. Optional travelling-packet dot (one cycle per ~2 s) to
+   signal live connectivity — a wiring diagram, not a reach.
 8. **Tier-2 events**: new-mote halo, pipeline shell pulse, channel-open
    animation. 600ms each, one primitive.
 9. **Tier-3: deferral pause + ripple + WA thread.** The one bespoke

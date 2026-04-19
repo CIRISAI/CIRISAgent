@@ -963,4 +963,75 @@ class CellVizModelTest {
         // If the clock skews or stage is activated-in-the-future, return 0.
         assertEquals(0f, stage.glowIntensity(nowMs = 3_000L), 1e-4f)
     }
+
+    // =========================================================================
+    // Signal channels — packet kinematics (non-biological metaphor)
+    // =========================================================================
+
+    @Test
+    fun `channel packet is null before its start time`() {
+        assertEquals(null, channelPacketAt(startMs = 100L, nowMs = 50L))
+    }
+
+    @Test
+    fun `channel packet is null during the quiet phase of each cycle`() {
+        // Active fraction is 60% of the period; remaining 40% is quiet.
+        val quietStart = (CHANNEL_PACKET_PERIOD_MS * 0.65).toLong()
+        val quietEnd = CHANNEL_PACKET_PERIOD_MS - 1L
+        for (t in quietStart..quietEnd step 50L) {
+            assertEquals(
+                null,
+                channelPacketAt(startMs = 0L, nowMs = t),
+                "expected quiet at t=$t",
+            )
+        }
+    }
+
+    @Test
+    fun `channel packet traverses from port to label across the active window`() {
+        val start = 0L
+        val atPort = channelPacketAt(start, nowMs = 0L)!!
+        val atMid = channelPacketAt(start, nowMs = (CHANNEL_PACKET_PERIOD_MS * 0.30).toLong())!!
+        val nearLabel = channelPacketAt(start, nowMs = (CHANNEL_PACKET_PERIOD_MS * 0.59).toLong())!!
+
+        assertTrue(atPort.t < 0.05f, "packet should start near port, t=${atPort.t}")
+        assertTrue(atMid.t in 0.35f..0.65f, "packet should be mid-travel, t=${atMid.t}")
+        assertTrue(nearLabel.t > 0.95f, "packet should be near label, t=${nearLabel.t}")
+    }
+
+    @Test
+    fun `channel packet alpha peaks mid-travel and tapers at both ends`() {
+        val start = 0L
+        val atPort = channelPacketAt(start, nowMs = 0L)!!
+        val atMid = channelPacketAt(start, nowMs = (CHANNEL_PACKET_PERIOD_MS * 0.30).toLong())!!
+        val nearLabel = channelPacketAt(start, nowMs = (CHANNEL_PACKET_PERIOD_MS * 0.59).toLong())!!
+
+        assertTrue(atMid.alpha > atPort.alpha + 0.2f, "alpha should peak mid-travel")
+        assertTrue(atMid.alpha > nearLabel.alpha + 0.2f, "alpha should drop near label end")
+        assertTrue(atMid.alpha <= 1f, "alpha capped at 1")
+        assertTrue(atPort.alpha >= 0f && nearLabel.alpha >= 0f, "alphas non-negative")
+    }
+
+    @Test
+    fun `channel packets repeat across multiple cycles`() {
+        val start = 0L
+        val firstCycle = channelPacketAt(start, nowMs = (CHANNEL_PACKET_PERIOD_MS * 0.30).toLong())!!
+        val secondCycle = channelPacketAt(
+            start,
+            nowMs = (CHANNEL_PACKET_PERIOD_MS * 1.30).toLong(),
+        )!!
+        // Same phase offset, same state.
+        assertEquals(firstCycle.t, secondCycle.t, 1e-3f)
+        assertEquals(firstCycle.alpha, secondCycle.alpha, 1e-3f)
+    }
+
+    @Test
+    fun `channel constants lock the non-biological design parameters`() {
+        // 2 s period, 40 px fade tail, 28% of membrane radius offset for
+        // the label — these collectively set the "wiring diagram" feel.
+        // Changing any of them shifts the read; make it deliberate.
+        assertEquals(2_000L, CHANNEL_PACKET_PERIOD_MS)
+        assertEquals(40f, CHANNEL_FADE_PAST_LABEL_PX)
+        assertEquals(0.28f, CHANNEL_LABEL_OFFSET_FRACTION)
+    }
 }

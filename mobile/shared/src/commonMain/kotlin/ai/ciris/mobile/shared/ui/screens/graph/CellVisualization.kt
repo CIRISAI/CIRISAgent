@@ -194,6 +194,13 @@ fun CellVisualization(
      * membrane as the pipeline progresses.
      */
     pipelineState: PipelineState = PipelineState(),
+    /**
+     * When true, render signal channels (leader lines + labels) from
+     * each adapter port outward past the membrane. Non-biological:
+     * these are wiring diagrams, not reaching tendrils. Only enabled
+     * in Foreground viz mode — BG/OFF keep the glanceable read.
+     */
+    showSignalChannels: Boolean = false,
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
@@ -432,6 +439,21 @@ fun CellVisualization(
             // failed to make it reliably read as *moving* against the
             // dense mote cloud. Rhythmic signalling is now carried by
             // breathing + the per-event pulses landing in step 6.
+        }
+
+        // Signal channels extend *past* the membrane — render outside
+        // the breath scale so they feel like fixed external wiring
+        // rather than part of the cell's own pulsing anatomy.
+        if (showSignalChannels && adapterOrbits.isNotEmpty()) {
+            drawSignalChannels(
+                adaptersByBus = adaptersByBus,
+                rotationDeg = rotationDeg,
+                cx = centerX, cy = centerY,
+                membraneRadius = membraneRadius,
+                nowMs = nowMs.value,
+                isDarkMode = isDarkMode,
+                cfg = cfg,
+            )
         }
     }
 }
@@ -729,6 +751,130 @@ private fun DrawScope.drawNucleus(
         radius = coreRadius,
         center = center,
     )
+}
+
+/**
+ * Draw signal channels — thin radial leader lines from each adapter
+ * port outward to a label anchor just past the membrane, then fading
+ * exponentially past the label to suggest the connection continues
+ * beyond the frame.
+ *
+ * Deliberately non-biological: straight lines, no curves, no pulsing
+ * bulges. The travelling packet (a small bright dot riding the line)
+ * is a signal metaphor, not a flowing one — constant velocity, discrete
+ * bell-curve alpha.
+ *
+ * In screen coordinates (outside the cell's breath scale) so the
+ * wiring feels like external infrastructure rather than tissue.
+ */
+private fun DrawScope.drawSignalChannels(
+    adaptersByBus: Map<CellBus, List<AdapterOrbit>>,
+    rotationDeg: Float,
+    cx: Float,
+    cy: Float,
+    membraneRadius: Float,
+    nowMs: Long,
+    isDarkMode: Boolean,
+    cfg: CellVizConfig,
+) {
+    val labelRadius = membraneRadius * (1f + CHANNEL_LABEL_OFFSET_FRACTION)
+    val fadeTailPx = CHANNEL_FADE_PAST_LABEL_PX
+
+    BUS_SEGMENTS.forEach { seg ->
+        val adapters = adaptersByBus[seg.bus] ?: return@forEach
+        if (adapters.isEmpty()) return@forEach
+
+        adapters.forEachIndexed { index, adapter ->
+            val angleDeg = spreadAngle(
+                segmentStartDeg = seg.startDeg,
+                segmentEndDeg = seg.endDeg,
+                index = index,
+                total = adapters.size,
+                marginDeg = cfg.portSegmentMarginDeg,
+            )
+            val effectiveDeg = (angleDeg + rotationDeg) % 360f
+            val portPos = polar(cx, cy, membraneRadius, effectiveDeg)
+            val labelPos = polar(cx, cy, labelRadius, effectiveDeg)
+            val angleRad = effectiveDeg.toDouble() * PI / 180.0
+            val tailEnd = Offset(
+                x = labelPos.x + fadeTailPx * cos(angleRad).toFloat(),
+                y = labelPos.y + fadeTailPx * sin(angleRad).toFloat(),
+            )
+
+            val baseAlpha = if (adapter.isActive) 1f else cfg.portInactiveAlpha
+
+            // 1. Main leader line: port → label
+            drawLine(
+                color = seg.color.copy(alpha = 0.60f * baseAlpha),
+                start = portPos,
+                end = labelPos,
+                strokeWidth = 1.4f,
+            )
+
+            // 2. Fade tail: label → past the edge, exponentially fading.
+            //    Rendered as 6 short segments with decreasing alpha so
+            //    the "dissolves into medium" curve reads without needing
+            //    a gradient brush (cheap on 32-bit ARM).
+            val tailSegments = 6
+            val tailStartAlpha = 0.35f * baseAlpha
+            for (i in 0 until tailSegments) {
+                val t0 = i.toFloat() / tailSegments
+                val t1 = (i + 1).toFloat() / tailSegments
+                val segStart = Offset(
+                    x = labelPos.x + (tailEnd.x - labelPos.x) * t0,
+                    y = labelPos.y + (tailEnd.y - labelPos.y) * t0,
+                )
+                val segEnd = Offset(
+                    x = labelPos.x + (tailEnd.x - labelPos.x) * t1,
+                    y = labelPos.y + (tailEnd.y - labelPos.y) * t1,
+                )
+                // Exponential fade: alpha at segment midpoint.
+                val tMid = (t0 + t1) * 0.5f
+                val fadeMul = kotlin.math.exp(-2.5f * tMid)
+                drawLine(
+                    color = seg.color.copy(alpha = tailStartAlpha * fadeMul),
+                    start = segStart,
+                    end = segEnd,
+                    strokeWidth = 1.2f,
+                )
+            }
+
+            // 3. Travelling signal packet — dot sliding from port to
+            //    label over the active phase of the cycle. Uses the
+            //    adapter id's hash as a phase offset so packets on
+            //    different channels don't lockstep.
+            val phaseOffset = (adapter.id.hashCode().toLong() and 0xFFFFL)
+            val packet = channelPacketAt(
+                startMs = -phaseOffset,
+                nowMs = nowMs,
+            )
+            if (packet != null && baseAlpha > 0.5f) {
+                val px = portPos.x + (labelPos.x - portPos.x) * packet.t
+                val py = portPos.y + (labelPos.y - portPos.y) * packet.t
+                val packetCenter = Offset(px, py)
+                if (isDarkMode) {
+                    drawCircle(
+                        color = seg.color.copy(alpha = 0.30f * packet.alpha),
+                        radius = 4.5f,
+                        center = packetCenter,
+                    )
+                }
+                drawCircle(
+                    color = seg.color.copy(alpha = 0.95f * packet.alpha),
+                    radius = 2.2f,
+                    center = packetCenter,
+                )
+            }
+
+            // Text labels (adapter id → label anchor) deliberately
+            // deferred to a follow-up commit. Rendering from DrawScope
+            // needs a text measurer + paint plumbed through from the
+            // Composable layer (FG-only text uses a different font
+            // pipeline than the membrane-inline text in the rest of
+            // the viz). Landing the leader lines + packets first so
+            // the visual spine is reviewable on its own.
+        }
+    }
 }
 
 /**

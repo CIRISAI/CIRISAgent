@@ -340,6 +340,9 @@ fun InteractScreen(
                     gratitudePulses = gratitudePulses,
                     // H3ERE pipeline state lights matching nucleus shells.
                     pipelineState = pipelineState,
+                    // Signal channels (adapter wiring leader lines) only
+                    // surface in Foreground mode — BG stays glanceable.
+                    showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

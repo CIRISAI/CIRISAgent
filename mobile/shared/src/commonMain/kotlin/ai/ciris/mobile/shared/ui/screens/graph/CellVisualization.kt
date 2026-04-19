@@ -410,8 +410,47 @@ fun CellVisualization(
 
     val canvasModifier = if (showSignalChannels) {
         modifier
-            // Tap → hit-test → onSelection. Runs BEFORE graphicsLayer so
-            // tap coordinates match the Canvas' own draw coordinates.
+            // Pan + pinch (touch) + scroll-wheel (desktop). graphicsLayer
+            // must come BEFORE the tap pointerInput so that Compose
+            // automatically inverse-transforms tap coordinates into the
+            // Canvas' local draw-coordinate space. Otherwise a pan/zoom
+            // moves the drawn cell on screen but leaves tap.x/y in the
+            // untransformed layout space, causing clicks to land on
+            // where the cell USED to be. Order matters.
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = panX,
+                translationY = panY,
+            )
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
+                    panX += pan.x
+                    panY += pan.y
+                }
+            }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) {
+                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                            if (delta != 0f) {
+                                scale = (scale * (1f - delta * 0.08f))
+                                    .coerceIn(0.8f, 3.0f)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+            }
+            // Tap → hit-test → onSelection. Runs AFTER graphicsLayer so
+            // tap.x / tap.y arrive in the Canvas' local draw-coordinate
+            // space (inverse-transformed for us by Compose). The hit
+            // test uses size.width / size.height for cx, cy, mr, nr —
+            // which are ALSO in untransformed layout space — so the two
+            // now match regardless of current pan/zoom.
             // Key is Unit — rotationDeg / adaptersByBus / cfg would cause
             // the pointerInput to cancel+restart every frame (rotationDeg
             // changes 60×/s in BG), which kills in-progress tap detection.
@@ -542,40 +581,6 @@ fun CellVisualization(
                     )
                     val xFrac = if (size.width > 0) tap.x / size.width else 0.5f
                     onSelectionSnap.value(hit, xFrac)
-                }
-            }
-            // Pan + pinch (touch) + scroll-wheel (desktop). graphicsLayer
-            // was previously dangerous because cell viz was a SIBLING of
-            // the main Column and the compositing layer broke sibling
-            // zIndex. Now the viz lives INSIDE the chat-area Box, so its
-            // compositing only affects its own subtree — chrome in the
-            // outer Column is unaffected by layout. Restored.
-            .graphicsLayer(
-                scaleX = scale,
-                scaleY = scale,
-                translationX = panX,
-                translationY = panY,
-            )
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
-                    panX += pan.x
-                    panY += pan.y
-                }
-            }
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Scroll) {
-                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                            if (delta != 0f) {
-                                scale = (scale * (1f - delta * 0.08f))
-                                    .coerceIn(0.8f, 3.0f)
-                                event.changes.forEach { it.consume() }
-                            }
-                        }
-                    }
                 }
             }
     } else {

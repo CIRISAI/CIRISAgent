@@ -336,6 +336,17 @@ class InteractViewModel(
     val busPulses: StateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.BusPulse>> =
         _busPulses.asStateFlow()
 
+    // Tier-1 gratitude motes — warm ejections from the nucleus on
+    // task_complete events. Gated by a 3 s cooldown (see canEmitGratitude)
+    // so the signal stays meaningful; anything more frequent would blur
+    // into ambient noise.
+    private val _gratitudePulses =
+        MutableStateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse>>(emptyList())
+    val gratitudePulses: StateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse>> =
+        _gratitudePulses.asStateFlow()
+
+    private var lastGratitudeMs: Long = 0L
+
     private var capacityRefreshJob: Job? = null
 
     private var pollingJob: Job? = null
@@ -1719,7 +1730,7 @@ class InteractViewModel(
                                     fetchAndAddLatestAction(actionType)
                                     // Tier-1 event: route the action to its bus.
                                     // task_complete returns null here — it fires a
-                                    // gratitude mote instead (commit 6b).
+                                    // gratitude mote instead.
                                     val actionBus = ai.ciris.mobile.shared.ui.screens.graph
                                         .busFromEventType(
                                             eventType = "action_result",
@@ -1727,6 +1738,11 @@ class InteractViewModel(
                                         )
                                     if (actionBus != null) {
                                         addBusPulse(actionBus)
+                                    } else if (actionType.name.contains("task_complete", ignoreCase = true)) {
+                                        // Signal-not-anthropomorphize: the mote says
+                                        // "the system closed a loop cleanly", not
+                                        // "the agent is happy".
+                                        addGratitudePulse()
                                     }
                                 }
 
@@ -1775,6 +1791,33 @@ class InteractViewModel(
         viewModelScope.launch {
             delay(ai.ciris.mobile.shared.ui.screens.graph.BUS_PULSE_DURATION_MS)
             _busPulses.value = _busPulses.value.filter { it.startMs != now || it.bus != bus }
+        }
+    }
+
+    /**
+     * Emit a gratitude mote from the nucleus, if the cooldown allows.
+     * Fired on `task_complete` — never on every SPEAK/TOOL action, so
+     * the signal reads as "task landed" rather than ambient motion.
+     *
+     * The mote's angle is randomised so consecutive emissions don't
+     * stack along the same ray. Self-expires after
+     * [GRATITUDE_MOTE_DURATION_MS].
+     */
+    private fun addGratitudePulse() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (!ai.ciris.mobile.shared.ui.screens.graph.canEmitGratitude(lastGratitudeMs, now)) {
+            return
+        }
+        lastGratitudeMs = now
+        val angle = kotlin.random.Random.Default.nextFloat() * 360f
+        val pulse = ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse(
+            startMs = now,
+            angleDeg = angle,
+        )
+        _gratitudePulses.value = (_gratitudePulses.value + pulse).takeLast(4)
+        viewModelScope.launch {
+            delay(pulse.durationMs)
+            _gratitudePulses.value = _gratitudePulses.value.filter { it.startMs != now }
         }
     }
 

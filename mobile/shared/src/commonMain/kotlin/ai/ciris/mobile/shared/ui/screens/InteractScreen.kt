@@ -137,6 +137,7 @@ fun InteractScreen(
     val adapterOrbits by viewModel.adapterOrbits.collectAsState()
     val cellVizState by viewModel.cellVizState.collectAsState()
     val busPulses by viewModel.busPulses.collectAsState()
+    val gratitudePulses by viewModel.gratitudePulses.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -335,6 +336,8 @@ fun InteractScreen(
                     state = cellVizState,
                     // Tier-1 events: bus-arc shimmer pulses from SSE.
                     busPulses = busPulses,
+                    // Gratitude motes ejected from the nucleus on task_complete.
+                    gratitudePulses = gratitudePulses,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

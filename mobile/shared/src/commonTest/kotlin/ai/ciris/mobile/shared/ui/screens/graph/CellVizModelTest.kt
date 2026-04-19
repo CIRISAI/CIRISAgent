@@ -759,4 +759,105 @@ class CellVizModelTest {
         // drive-by edit.
         assertEquals(600L, BUS_PULSE_DURATION_MS)
     }
+
+    // =========================================================================
+    // Gratitude motes — kinematics + cooldown
+    // =========================================================================
+
+    @Test
+    fun `gratitude mote returns null outside its life window`() {
+        val pulse = GratitudePulse(startMs = 1_000L, angleDeg = 42f)
+        assertEquals(null, gratitudeMoteFrame(pulse, nowMs = 999L))
+        assertEquals(null, gratitudeMoteFrame(pulse, nowMs = 1_000L + pulse.durationMs))
+        assertEquals(null, gratitudeMoteFrame(pulse, nowMs = 1_000L + pulse.durationMs + 500L))
+    }
+
+    @Test
+    fun `gratitude mote alpha peaks at the end of the attack phase`() {
+        val pulse = GratitudePulse(startMs = 0L, angleDeg = 0f)
+        // Attack is the first 15% of life.
+        val attackEndMs = (pulse.durationMs * 0.15f).toLong()
+        val peak = gratitudeMoteFrame(pulse, nowMs = attackEndMs)!!
+        assertTrue(peak.alpha > 0.95f, "expected alpha near 1 at attack end, got ${peak.alpha}")
+
+        val justBefore = gratitudeMoteFrame(pulse, nowMs = attackEndMs / 2L)!!
+        assertTrue(
+            justBefore.alpha < peak.alpha,
+            "alpha should ramp up during attack, got ${justBefore.alpha} then ${peak.alpha}",
+        )
+    }
+
+    @Test
+    fun `gratitude mote alpha fades back to zero at life end`() {
+        val pulse = GratitudePulse(startMs = 0L, angleDeg = 0f)
+        val lateFrame = gratitudeMoteFrame(pulse, nowMs = (pulse.durationMs * 0.99f).toLong())!!
+        assertTrue(lateFrame.alpha < 0.1f, "expected alpha near 0 near end, got ${lateFrame.alpha}")
+    }
+
+    @Test
+    fun `gratitude mote travels outward monotonically`() {
+        val pulse = GratitudePulse(startMs = 0L, angleDeg = 90f)
+        var lastRadial = -1f
+        for (t in 0L..pulse.durationMs step 50L) {
+            val frame = gratitudeMoteFrame(pulse, nowMs = t) ?: break
+            assertTrue(
+                frame.radialFrac >= lastRadial - 1e-4f,
+                "radialFrac must not move backwards: t=$t last=$lastRadial this=${frame.radialFrac}",
+            )
+            assertTrue(frame.radialFrac in 0f..0.85f, "radialFrac out of [0, 0.85]: ${frame.radialFrac}")
+            lastRadial = frame.radialFrac
+        }
+    }
+
+    @Test
+    fun `gratitude mote stops short of the membrane so it never overlaps bus arcs`() {
+        val pulse = GratitudePulse(startMs = 0L, angleDeg = 0f)
+        // At the very end of its travel the mote should cap at 0.85, not 1.0.
+        val endFrame = gratitudeMoteFrame(pulse, nowMs = (pulse.durationMs * 0.99f).toLong())!!
+        assertTrue(endFrame.radialFrac <= 0.85f + 1e-3f, "got ${endFrame.radialFrac}")
+    }
+
+    @Test
+    fun `gratitude mote size bumps mid-life then returns`() {
+        val pulse = GratitudePulse(startMs = 0L, angleDeg = 0f)
+        val start = gratitudeMoteFrame(pulse, nowMs = 0L)!!
+        val mid = gratitudeMoteFrame(pulse, nowMs = pulse.durationMs / 2L)!!
+        val late = gratitudeMoteFrame(pulse, nowMs = (pulse.durationMs * 0.95f).toLong())!!
+        assertTrue(mid.sizeScale > start.sizeScale, "size should grow past start")
+        assertTrue(mid.sizeScale > late.sizeScale, "size should fall after mid-life")
+        assertTrue(mid.sizeScale in 1.2f..1.31f, "bump in expected range: ${mid.sizeScale}")
+    }
+
+    // -------------------------------------------------------------------------
+    // Cooldown gate — canEmitGratitude
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `canEmitGratitude allows first emission with no history`() {
+        assertTrue(canEmitGratitude(lastEmissionMs = 0L, nowMs = 100L))
+    }
+
+    @Test
+    fun `canEmitGratitude blocks emissions within the cooldown window`() {
+        val last = 10_000L
+        assertTrue(!canEmitGratitude(last, nowMs = last + 1L))
+        assertTrue(!canEmitGratitude(last, nowMs = last + 1_500L))
+        assertTrue(!canEmitGratitude(last, nowMs = last + GRATITUDE_COOLDOWN_MS - 1L))
+    }
+
+    @Test
+    fun `canEmitGratitude allows emission exactly at the cooldown boundary`() {
+        val last = 10_000L
+        assertTrue(canEmitGratitude(last, nowMs = last + GRATITUDE_COOLDOWN_MS))
+    }
+
+    @Test
+    fun `gratitude constants lock down their design-doc values`() {
+        // 2500 ms life + 3000 ms cooldown were chosen so a task completion
+        // reliably signals as a discrete event (short enough to fade before
+        // the next one lands, long enough to register). Drifting these
+        // drifts the feel; make the change deliberate.
+        assertEquals(2_500L, GRATITUDE_MOTE_DURATION_MS)
+        assertEquals(3_000L, GRATITUDE_COOLDOWN_MS)
+    }
 }

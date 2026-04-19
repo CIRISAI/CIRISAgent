@@ -157,6 +157,13 @@ fun CellVisualization(
      * `busPulseIntensity(pulse, nowMs)` to compute per-frame brightness.
      */
     busPulses: List<BusPulse> = emptyList(),
+    /**
+     * Tier-1 gratitude motes — warm ejections from the nucleus that
+     * drift toward (but not quite reaching) the membrane. Fired on
+     * `task_complete` events, gated by [GRATITUDE_COOLDOWN_MS] in the
+     * ViewModel so the signal stays meaningful.
+     */
+    gratitudePulses: List<GratitudePulse> = emptyList(),
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
@@ -366,6 +373,21 @@ fun CellVisualization(
                 isDarkMode = isDarkMode,
                 opacityScale = dials.nucleusOpacity,
             )
+
+            // Gratitude motes — drawn AFTER the nucleus so they appear
+            // emerging from it, but BEFORE adapter ports so they don't
+            // flash over port interactions. Inside the breath-scaled
+            // group so each mote inherits the cell's gentle pulsing.
+            if (gratitudePulses.isNotEmpty()) {
+                drawGratitudeMotes(
+                    pulses = gratitudePulses,
+                    cx = centerX, cy = centerY,
+                    nucleusRadius = nucleusRadius,
+                    membraneRadius = membraneRadius,
+                    nowMs = nowMsLocal,
+                    isDarkMode = isDarkMode,
+                )
+            }
 
             // The nucleus "song" (slow pulse wave from the core through
             // the cytoplasm) was removed after repeated tuning attempts
@@ -653,6 +675,68 @@ private fun DrawScope.drawNucleus(
         radius = coreRadius,
         center = center,
     )
+}
+
+/**
+ * Draw active gratitude motes. Each mote emerges from the nucleus
+ * center, drifts outward along its angle, swells at mid-life, then
+ * fades. See [GratitudePulse] + [gratitudeMoteFrame] for the kinematic
+ * model — this function is purely the rendering adapter.
+ *
+ * Warm-amber, not scope-coloured, because gratitude is a system-level
+ * signal, not a property of any specific memory node.
+ */
+private fun DrawScope.drawGratitudeMotes(
+    pulses: List<GratitudePulse>,
+    cx: Float,
+    cy: Float,
+    nucleusRadius: Float,
+    membraneRadius: Float,
+    nowMs: Long,
+    isDarkMode: Boolean,
+) {
+    // Travel distance: from the nucleus outer edge almost to the
+    // membrane — leaves a comfortable gap so motes don't slam into
+    // the arcs and visually collide with bus shimmers.
+    val travelRange = (membraneRadius * 0.92f) - nucleusRadius
+    if (travelRange <= 0f) return
+
+    // Base visual size — a bit larger than cytoplasm motes so gratitude
+    // reads as "different" on sight, not just "same mote but amber".
+    val baseRadius = 3.5f
+
+    pulses.forEach { pulse ->
+        val frame = gratitudeMoteFrame(pulse, nowMs) ?: return@forEach
+        val radialPx = nucleusRadius + travelRange * frame.radialFrac
+        val angleRad = pulse.angleDeg.toDouble() * PI / 180.0
+        val px = cx + radialPx * cos(angleRad).toFloat()
+        val py = cy + radialPx * sin(angleRad).toFloat()
+        val center = Offset(px, py)
+        val r = baseRadius * frame.sizeScale
+
+        // Warm-amber core (re-uses the nucleus palette so the mote
+        // reads as material ejected from the nucleus, same substance).
+        if (isDarkMode) {
+            // Outer glow for dark mode — distant-lantern quality.
+            drawCircle(
+                color = NUCLEUS_AMBER.copy(alpha = 0.22f * frame.alpha),
+                radius = r * 3.0f,
+                center = center,
+            )
+            drawCircle(
+                color = NUCLEUS_AMBER.copy(alpha = 0.40f * frame.alpha),
+                radius = r * 1.7f,
+                center = center,
+            )
+        }
+        drawCircle(
+            color = NUCLEUS_AMBER.copy(
+                alpha = (if (isDarkMode) 0.95f else 0.70f) * frame.alpha,
+            ),
+            radius = r,
+            center = center,
+        )
+    }
 }
 
 /**

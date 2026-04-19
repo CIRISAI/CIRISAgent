@@ -117,6 +117,92 @@ fun busPulseIntensity(pulse: BusPulse, nowMs: Long): Float {
 }
 
 // =============================================================================
+// Gratitude motes — Tier-1 signal for "task complete" / good interaction
+// =============================================================================
+//
+// One of the load-bearing CIRIS-acronym signals (§2.5.1 "Signalling
+// Gratitude"). Emitted by the nucleus toward the membrane on a task
+// completion event, bounded by a 3 s cooldown so it stays special and
+// never interferes with ambient mote drift. Drawn warm-amber regardless
+// of scope colour since it's about the *system*, not a node.
+
+/** Duration of a gratitude mote's life, in milliseconds. */
+const val GRATITUDE_MOTE_DURATION_MS: Long = 2500L
+
+/**
+ * Minimum gap between consecutive gratitude emissions. The user must be
+ * able to tell "oh, something good just happened" — firing them on
+ * every tick would make the signal noise.
+ */
+const val GRATITUDE_COOLDOWN_MS: Long = 3000L
+
+/**
+ * One in-flight gratitude mote. Travels outward from the nucleus at
+ * [angleDeg], expanding slightly at mid-life, fading at the end.
+ * Pure data — rendering math is in [gratitudeMoteFrame].
+ */
+data class GratitudePulse(
+    val startMs: Long,
+    /** Direction the mote travels, in degrees (Compose convention). */
+    val angleDeg: Float,
+    val durationMs: Long = GRATITUDE_MOTE_DURATION_MS,
+)
+
+/**
+ * Per-frame state of a gratitude mote at time [nowMs]. Returns null
+ * when the mote has expired, so the rendering loop can skip it cheaply.
+ *
+ * Kinematic model:
+ *   - radialFrac smoothsteps 0→0.85 across the life (never quite
+ *     reaches the membrane — the mote is "of" the cell, not "leaving"
+ *     it). 0.85 gives a visible halt short of the membrane openings.
+ *   - sizeScale bumps to 1.3× at mid-life then returns to 1.0 at end —
+ *     creates a gentle "breathe" feel.
+ *   - alpha fades in fast (0→1 over first 15%) and out slowly (1→0
+ *     across the remaining 85%), so the mote registers sharply and
+ *     dissolves gracefully.
+ */
+data class GratitudeMoteFrame(
+    /** Life progress in [0, 1]. */
+    val t: Float,
+    /** Fraction of the nucleus-to-membrane distance traversed, in [0, 0.85]. */
+    val radialFrac: Float,
+    /** Draw alpha in [0, 1]. */
+    val alpha: Float,
+    /** Multiplier on the mote's base radius, roughly in [1.0, 1.3]. */
+    val sizeScale: Float,
+)
+
+/** Kinematic sample of [pulse] at [nowMs], or null if expired. */
+fun gratitudeMoteFrame(pulse: GratitudePulse, nowMs: Long): GratitudeMoteFrame? {
+    val elapsed = (nowMs - pulse.startMs).toFloat()
+    if (elapsed < 0f || elapsed >= pulse.durationMs) return null
+
+    val t = (elapsed / pulse.durationMs.toFloat()).coerceIn(0f, 1f)
+    val radialFrac = smoothstep(t) * 0.85f
+
+    val attackCut = 0.15f
+    val alpha = if (t < attackCut) {
+        (t / attackCut)  // fast attack
+    } else {
+        1f - (t - attackCut) / (1f - attackCut)  // slow release
+    }.coerceIn(0f, 1f)
+
+    // Triangular bump peaking at t=0.5, returning to 1.0 at endpoints.
+    val midBump = 1f - kotlin.math.abs(t - 0.5f) * 2f
+    val sizeScale = 1f + 0.30f * midBump.coerceAtLeast(0f)
+
+    return GratitudeMoteFrame(t = t, radialFrac = radialFrac, alpha = alpha, sizeScale = sizeScale)
+}
+
+/**
+ * Enforce the minimum 3 s gap between emissions. Returns true if a new
+ * gratitude mote is allowed to spawn now.
+ */
+fun canEmitGratitude(lastEmissionMs: Long, nowMs: Long): Boolean =
+    lastEmissionMs <= 0L || (nowMs - lastEmissionMs) >= GRATITUDE_COOLDOWN_MS
+
+// =============================================================================
 // Membrane openings — dynamic apertures
 // =============================================================================
 //

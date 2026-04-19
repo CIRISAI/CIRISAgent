@@ -3,6 +3,8 @@ package ai.ciris.mobile.shared.ui.screens.graph
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.ui.theme.getScopeColor
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -196,6 +198,14 @@ fun CellVisualization(
      */
     gratitudePulses: List<GratitudePulse> = emptyList(),
     /**
+     * Tier-3 deferral-ripple start timestamp (epoch ms), or null if no
+     * ripple is in flight. Set by the ViewModel on a DEFER action and
+     * cleared ~2.5 s later. The renderer draws a single concentric wave
+     * expanding from nucleus → membrane over 1.5 s (quadratic ease-out)
+     * and fades at the membrane. FSD §2.5.3 + §18 Step 9.
+     */
+    deferralRippleStartMs: Long? = null,
+    /**
      * H3ERE pipeline state — each of the 7 stages lights the matching
      * nucleus shell when the corresponding SSE event fires. Innermost
      * shell = thought_start; outermost = action_result, so a new
@@ -218,9 +228,13 @@ fun CellVisualization(
     /**
      * Invoked in FG mode when the user taps a selectable element.
      * The `SelectionKind?` is null when the tap lands in dead space,
-     * which the caller should treat as a deselect. BG never calls this.
+     * which the caller should treat as a deselect. `tapXFraction` is
+     * the tap's horizontal position as a 0..1 fraction of the canvas
+     * width — callers use this to anchor the detail panel on the
+     * opposite side (so the panel never covers what you just tapped).
+     * BG never calls this.
      */
-    onSelection: (SelectionKind?) -> Unit = {},
+    onSelection: (SelectionKind?, Float) -> Unit = { _, _ -> },
     /**
      * Current selection — drives any "selected" visual affordance
      * (outline, fade of non-selected, etc.). Not used yet for visual
@@ -262,20 +276,55 @@ fun CellVisualization(
         }
     }
 
+    // Step 10: BG↔FG mode-change morph. A short scale animation
+    // applied in draw at the outer uniform-scale block so the whole
+    // cell (not just its visual layer) nudges between a subtle 0.95×
+    // ambient size in BG and 1.00× inspect size in FG. 400ms tween
+    // per FSD/CELL_VIZ_REDESIGN.md §18 Step 10 — the one "sexy"
+    // animation the user triggers. This is independent of the user's
+    // own pan/zoom (which lives on graphicsLayer); the modeScale
+    // composes multiplicatively inside the draw scope so both the
+    // breath and this morph play nicely with it.
+    val modeScale by animateFloatAsState(
+        targetValue = if (showSignalChannels) 1.00f else 0.95f,
+        animationSpec = tween(durationMillis = 400),
+        label = "cellModeScale",
+    )
+
     // Rotation driver: withFrameNanos accumulates delta-time. Single
     // source of truth for current angle; the membrane, ports, and any
     // future rotating element all derive from it. Frozen in FG so the
     // user's pointer target (a port, a label) doesn't move out from
     // under their finger mid-tap.
     var autoRotationDeg by remember { mutableStateOf(0f) }
+    // Read the ripple timestamp every frame so the 800ms rotation-slowdown
+    // that precedes the ripple (§2.5.3) tracks state without restarting
+    // the frame loop. Value updates are cheap; the loop itself stays
+    // keyed on rotationDegPerSec only.
+    val rippleStartSnap = rememberUpdatedState(deferralRippleStartMs)
     LaunchedEffect(cfg.rotationDegPerSec) {
         var lastFrameNs = 0L
         while (isActive) {
             withFrameNanos { frameTimeNs ->
                 if (lastFrameNs != 0L && !frozenState.value) {
                     val dSec = (frameTimeNs - lastFrameNs) / 1_000_000_000f
-                    autoRotationDeg =
-                        (autoRotationDeg + cfg.rotationDegPerSec * dSec) % 360f
+                    // §2.5.3 Pause: baseline rotation slows to ~20% for
+                    // the first 800 ms of a deferral ripple — reads as
+                    // "pipeline work suspended pending authority routing"
+                    // distinct from routine bus traffic.
+                    val rippleStart = rippleStartSnap.value
+                    val rotationScale = if (rippleStart != null) {
+                        // Wall-clock on both sides — rippleStart comes
+                        // from Clock.System.now() in the ViewModel; can't
+                        // compare against frameTimeNs (monotonic).
+                        val nowWallMs = kotlinx.datetime.Clock.System
+                            .now().toEpochMilliseconds()
+                        val elapsedMs = nowWallMs - rippleStart
+                        if (elapsedMs in 0L..RIPPLE_PAUSE_MS) 0.2f else 1.0f
+                    } else 1.0f
+                    autoRotationDeg = (
+                        autoRotationDeg + cfg.rotationDegPerSec * dSec * rotationScale
+                    ) % 360f
                 }
                 lastFrameNs = frameTimeNs
             }
@@ -406,8 +455,47 @@ fun CellVisualization(
 
     val canvasModifier = if (showSignalChannels) {
         modifier
-            // Tap → hit-test → onSelection. Runs BEFORE graphicsLayer so
-            // tap coordinates match the Canvas' own draw coordinates.
+            // Pan + pinch (touch) + scroll-wheel (desktop). graphicsLayer
+            // must come BEFORE the tap pointerInput so that Compose
+            // automatically inverse-transforms tap coordinates into the
+            // Canvas' local draw-coordinate space. Otherwise a pan/zoom
+            // moves the drawn cell on screen but leaves tap.x/y in the
+            // untransformed layout space, causing clicks to land on
+            // where the cell USED to be. Order matters.
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = panX,
+                translationY = panY,
+            )
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
+                    panX += pan.x
+                    panY += pan.y
+                }
+            }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) {
+                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                            if (delta != 0f) {
+                                scale = (scale * (1f - delta * 0.08f))
+                                    .coerceIn(0.8f, 3.0f)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+            }
+            // Tap → hit-test → onSelection. Runs AFTER graphicsLayer so
+            // tap.x / tap.y arrive in the Canvas' local draw-coordinate
+            // space (inverse-transformed for us by Compose). The hit
+            // test uses size.width / size.height for cx, cy, mr, nr —
+            // which are ALSO in untransformed layout space — so the two
+            // now match regardless of current pan/zoom.
             // Key is Unit — rotationDeg / adaptersByBus / cfg would cause
             // the pointerInput to cancel+restart every frame (rotationDeg
             // changes 60×/s in BG), which kills in-progress tap detection.
@@ -536,16 +624,21 @@ fun CellVisualization(
                             "cx=${cx.toInt()} cy=${cy.toInt()} mr=${mr.toInt()} nr=${nr.toInt()} " +
                             "ports=${ports.size} motes=${selMotes.size}",
                     )
-                    onSelectionSnap.value(hit)
+                    // tap.x here is in POST-inverse-transform (canvas-local)
+                    // coordinates — correct for hit-testing against draw
+                    // coords above, but wrong for the panel anchor hint,
+                    // which needs to reflect where the user *visually*
+                    // tapped on screen so the panel can open on the
+                    // opposite side. Forward-transform back to screen
+                    // coords using the current scale + pan.
+                    val cxL = size.width / 2f
+                    val screenX = (tap.x - cxL) * scale + cxL + panX
+                    val xFrac = if (size.width > 0)
+                        (screenX / size.width).coerceIn(0f, 1f)
+                    else 0.5f
+                    onSelectionSnap.value(hit, xFrac)
                 }
             }
-            // graphicsLayer + pan/zoom handlers REMOVED. The compositing
-            // layer was causing the Column's status bar + detail panel
-            // to visually disappear in FG even though zIndex should have
-            // kept them on top. Selection (tap) is the primary FG
-            // interaction — pan/zoom can return later via a different
-            // mechanism (e.g. draw-time scaling) that doesn't force a
-            // render layer.
     } else {
         modifier
     }
@@ -576,8 +669,12 @@ fun CellVisualization(
         drawMedium(isDarkMode, centerX, centerY)
 
         // Everything inside the cell scales uniformly; medium does not.
+        // breatheScale (continuous) × modeScale (400ms BG↔FG morph, §18
+        // Step 10) compose multiplicatively so the breath keeps going
+        // during the mode transition rather than snapping.
+        val bodyScale = breatheScale * modeScale
         scale(
-            scaleX = breatheScale, scaleY = breatheScale,
+            scaleX = bodyScale, scaleY = bodyScale,
             pivot = Offset(centerX, centerY),
         ) {
             drawCellBodyAura(
@@ -664,6 +761,28 @@ fun CellVisualization(
                     nowMs = nowMsLocal,
                     isDarkMode = isDarkMode,
                 )
+            }
+
+            // Tier-3: deferral ripple. Single concentric wave nucleus →
+            // membrane over 1.5 s, quadratic ease-out, alpha fades at
+            // the membrane. "Visible routing to wise authority" — a
+            // distinct gesture from routine bus traffic.
+            deferralRippleStartMs?.let { startMs ->
+                val elapsedMs = nowMsLocal - startMs
+                if (elapsedMs in 0L..RIPPLE_DURATION_MS) {
+                    val t = elapsedMs.toFloat() / RIPPLE_DURATION_MS.toFloat()
+                    // Quadratic ease-out: fast start, soft stop at the membrane.
+                    val eased = 1f - (1f - t) * (1f - t)
+                    val radius = nucleusRadius + (membraneRadius - nucleusRadius) * eased
+                    // Alpha fades as the wave nears the membrane.
+                    val alpha = (1f - t) * 0.55f
+                    drawCircle(
+                        color = Color(0xFFE0A0FF).copy(alpha = alpha),
+                        radius = radius,
+                        center = Offset(centerX, centerY),
+                        style = Stroke(width = 2.5f),
+                    )
+                }
             }
 
             // The nucleus "song" (slow pulse wave from the core through

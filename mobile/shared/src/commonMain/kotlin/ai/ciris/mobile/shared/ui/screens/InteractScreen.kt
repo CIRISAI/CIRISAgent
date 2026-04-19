@@ -46,6 +46,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -146,6 +147,8 @@ fun InteractScreen(
     val gratitudePulses by viewModel.gratitudePulses.collectAsState()
     val selectionKind by viewModel.selectionKind.collectAsState()
     val selectionDetail by viewModel.selectionDetail.collectAsState()
+    val selectionAnchorX by viewModel.selectionAnchorX.collectAsState()
+    val deferralRippleStartMs by viewModel.deferralRippleStartMs.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -386,21 +389,10 @@ fun InteractScreen(
                 theme = theme
             )
 
-            // FG selection detail panel. Renders immediately below the
-            // status bar when the user taps a selectable element on the
-            // cell (only in FG — selection is cleared on BG entry).
-            val sel = selectionKind
-            if (visualizationMode == VisualizationMode.FOREGROUND && sel != null) {
-                FgDetailPanel(
-                    selection = sel,
-                    detail = selectionDetail,
-                    theme = theme,
-                    onDismiss = { viewModel.setSelection(null) },
-                    onOpenLLMSettings = onOpenLLMSettings,
-                    onOpenWiseAuthority = onOpenWiseAuthority,
-                    onOpenSystem = onOpenSystem,
-                )
-            }
+            // FG detail panel is rendered as a side overlay INSIDE the
+            // chat-area Box (see below) rather than inline here, so it
+            // anchors left/right based on where the user tapped instead
+            // of always taking the full width under the status bar.
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
@@ -494,6 +486,10 @@ fun InteractScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                // clipToBounds so the cell viz's graphicsLayer pan/zoom
+                // can't paint outside this Box — otherwise a FG drag
+                // translates the Canvas up into the status bar area.
+                .clipToBounds()
                 .then(swipeSpinModifier)
         ) {
             // Cell viz / legacy cylinder renders as the BACKGROUND of the
@@ -513,9 +509,10 @@ fun InteractScreen(
                         state = cellVizState,
                         busPulses = busPulses,
                         gratitudePulses = gratitudePulses,
+                        deferralRippleStartMs = deferralRippleStartMs,
                         pipelineState = pipelineState,
                         showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
-                        onSelection = { kind -> viewModel.setSelection(kind) },
+                        onSelection = { kind, xFrac -> viewModel.setSelection(kind, xFrac) },
                         selection = selectionKind,
                     )
                 } else {
@@ -551,6 +548,33 @@ fun InteractScreen(
                     )
                 } else {
                     ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+                }
+            }
+
+            // FG selection detail panel — side overlay. Anchors on the
+            // OPPOSITE side of where the user tapped so the panel never
+            // covers what you just selected. tap on the right half =>
+            // panel appears on the left, and vice-versa.
+            val sel = selectionKind
+            val anchorX = selectionAnchorX
+            if (visualizationMode == VisualizationMode.FOREGROUND && sel != null) {
+                val panelAlign = if (anchorX >= 0.5f) Alignment.CenterStart
+                    else Alignment.CenterEnd
+                Box(
+                    modifier = Modifier
+                        .align(panelAlign)
+                        .fillMaxWidth(0.42f)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    FgDetailPanel(
+                        selection = sel,
+                        detail = selectionDetail,
+                        theme = theme,
+                        onDismiss = { viewModel.setSelection(null) },
+                        onOpenLLMSettings = onOpenLLMSettings,
+                        onOpenWiseAuthority = onOpenWiseAuthority,
+                        onOpenSystem = onOpenSystem,
+                    )
                 }
             }
         }
@@ -3182,11 +3206,7 @@ private fun FgDetailPanel(
                     MoteBody(detail = d, theme = theme)
                 }
                 is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Gratitude -> {
-                    Text(
-                        text = d.summaryLine,
-                        fontSize = 12.sp,
-                        color = theme.textSecondary,
-                    )
+                    GratitudeBody(detail = d, theme = theme)
                 }
             }
         }
@@ -3408,6 +3428,30 @@ private fun MoteBody(
                 color = theme.textMuted,
                 lineHeight = 13.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun GratitudeBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Gratitude,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = detail.summaryLine,
+            fontSize = 12.sp,
+            color = theme.textSecondary,
+        )
+        if (detail.recentCompletions.isNotEmpty()) {
+            detail.recentCompletions.forEach { line ->
+                Text(
+                    text = "• $line",
+                    fontSize = 11.sp,
+                    color = theme.textPrimary,
+                    lineHeight = 14.sp,
+                )
+            }
         }
     }
 }

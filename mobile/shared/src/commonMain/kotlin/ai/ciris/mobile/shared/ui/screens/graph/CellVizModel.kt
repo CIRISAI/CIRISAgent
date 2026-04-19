@@ -137,6 +137,21 @@ const val GRATITUDE_MOTE_DURATION_MS: Long = 2500L
 const val GRATITUDE_COOLDOWN_MS: Long = 3000L
 
 /**
+ * Tier-3 deferral-ripple expansion duration. A single concentric wave
+ * expands from nucleus → membrane over this span, quadratic ease-out,
+ * alpha fading at the membrane. FSD §2.5.3 specifies 1.5 s.
+ */
+const val RIPPLE_DURATION_MS: Long = 1500L
+
+/**
+ * Deferral-ripple pre-ripple rotation slowdown window. FSD §2.5.3
+ * step 1: baseline rotation slows to ~20% for 800 ms so the cell
+ * reads as "briefly still, consulting authority" before the ripple
+ * itself emits.
+ */
+const val RIPPLE_PAUSE_MS: Long = 800L
+
+/**
  * One in-flight gratitude mote. Travels outward from the nucleus at
  * [angleDeg], expanding slightly at mid-life, fading at the end.
  * Pure data — rendering math is in [gratitudeMoteFrame].

@@ -1,5 +1,0 @@
-maturin>=1.0.0
-setuptools-rust>=1.0.0
-wheel
-cffi
-briefcase

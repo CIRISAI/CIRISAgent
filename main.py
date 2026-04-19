@@ -39,9 +39,41 @@ except ImportError:
 # This must happen early because CIRISVerify (verifier_singleton) requires it.
 # Supports: Linux, macOS, Windows, WSL, Android, iOS, Docker/managed deployments
 # =============================================================================
-from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env
+from ciris_engine.logic.utils.path_resolution import (
+    ensure_ciris_home_env,
+    is_android,
+    is_development_mode,
+    is_ios,
+    is_managed,
+)
 
 _ciris_home = ensure_ciris_home_env()
+
+# =============================================================================
+# Early startup environment logging (printed to STDOUT for visibility)
+# =============================================================================
+import sys as _sys
+
+_platform_flags = []
+if is_android():
+    _platform_flags.append("Android")
+if is_ios():
+    _platform_flags.append("iOS")
+if is_managed():
+    _platform_flags.append("Managed")
+if is_development_mode():
+    _platform_flags.append("Development")
+if not _platform_flags:
+    _platform_flags.append("Installed")
+
+_supervisor_token = "detected" if os.environ.get("SUPERVISOR_TOKEN") else "not found"
+_ha_addon = "yes" if os.environ.get("SUPERVISOR_TOKEN") else "no"
+
+print(f"[CIRIS STARTUP] Platform: {', '.join(_platform_flags)}")
+print(f"[CIRIS STARTUP] OS: {_sys.platform}")
+print(f"[CIRIS STARTUP] CIRIS_HOME: {_ciris_home}")
+print(f"[CIRIS STARTUP] HA Addon Mode: {_ha_addon} (SUPERVISOR_TOKEN: {_supervisor_token})")
+del _platform_flags, _supervisor_token, _ha_addon, _sys
 
 import asyncio
 import atexit

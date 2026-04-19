@@ -341,8 +341,7 @@ class WeatherToolService:
             self._default_location_string = user_location.location_string
             self._location_source = "user_setup"
             logger.info(
-                f"Location refreshed: {user_location.location_string} "
-                f"({self._default_lat}, {self._default_lon})"
+                f"Location refreshed: {user_location.location_string} " f"({self._default_lat}, {self._default_lon})"
             )
         else:
             # No coordinates available
@@ -587,6 +586,100 @@ class WeatherToolService:
 
         return None
 
+    # WMO weather interpretation codes used by Open-Meteo.
+    # https://open-meteo.com/en/docs — "Weather variable documentation".
+    _WMO_CODES: Dict[int, tuple[str, str]] = {
+        0: ("Clear", "Clear sky"),
+        1: ("Mainly clear", "Mainly clear sky"),
+        2: ("Partly cloudy", "Partly cloudy"),
+        3: ("Overcast", "Overcast"),
+        45: ("Fog", "Fog"),
+        48: ("Fog", "Depositing rime fog"),
+        51: ("Drizzle", "Light drizzle"),
+        53: ("Drizzle", "Moderate drizzle"),
+        55: ("Drizzle", "Dense drizzle"),
+        56: ("Freezing drizzle", "Light freezing drizzle"),
+        57: ("Freezing drizzle", "Dense freezing drizzle"),
+        61: ("Rain", "Slight rain"),
+        63: ("Rain", "Moderate rain"),
+        65: ("Rain", "Heavy rain"),
+        66: ("Freezing rain", "Light freezing rain"),
+        67: ("Freezing rain", "Heavy freezing rain"),
+        71: ("Snow", "Slight snowfall"),
+        73: ("Snow", "Moderate snowfall"),
+        75: ("Snow", "Heavy snowfall"),
+        77: ("Snow", "Snow grains"),
+        80: ("Rain showers", "Slight rain showers"),
+        81: ("Rain showers", "Moderate rain showers"),
+        82: ("Rain showers", "Violent rain showers"),
+        85: ("Snow showers", "Slight snow showers"),
+        86: ("Snow showers", "Heavy snow showers"),
+        95: ("Thunderstorm", "Thunderstorm"),
+        96: ("Thunderstorm", "Thunderstorm with slight hail"),
+        99: ("Thunderstorm", "Thunderstorm with heavy hail"),
+    }
+
+    async def _get_open_meteo_weather(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
+        """Get weather from Open-Meteo — free, no API key, worldwide coverage.
+
+        Fills the gap left by NOAA (US-only) and OpenWeatherMap (requires key).
+        Especially relevant for deployments in Ethiopia and other regions where
+        neither NOAA nor an OWM subscription is an option.
+
+        Returns the same dict shape as the NOAA/OWM helpers so `_execute_current`
+        doesn't need to know which provider served the data.
+        """
+        try:
+            params: dict[str, str | float] = {
+                "latitude": lat,
+                "longitude": lon,
+                "current": (
+                    "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                    "precipitation,weather_code,wind_speed_10m,wind_direction_10m"
+                ),
+                "temperature_unit": "fahrenheit",
+                "wind_speed_unit": "mph",
+                "timezone": "UTC",
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status != 200:
+                        return None
+                    data = await response.json()
+                    current = data.get("current") or {}
+                    if not current:
+                        return None
+
+                    code = int(current.get("weather_code", -1))
+                    short, detailed = self._WMO_CODES.get(code, ("Unknown", f"WMO code {code}"))
+                    wind_speed_mph = current.get("wind_speed_10m", 0)
+                    wind_dir_deg = current.get("wind_direction_10m", 0)
+                    temp = current.get("temperature_2m", 0)
+                    feels = current.get("apparent_temperature", temp)
+                    precip_mm = current.get("precipitation", 0) or 0
+
+                    return {
+                        "temperature": round(temp),
+                        "temperature_unit": "F",
+                        "wind_speed": f"{round(wind_speed_mph)} mph",
+                        "wind_direction": self._degrees_to_cardinal(wind_dir_deg),
+                        "short_forecast": short,
+                        "detailed_forecast": detailed,
+                        # Open-Meteo's `current` field doesn't give a probability;
+                        # report actual precipitation amount as a coarse signal.
+                        "precipitation_chance": 100 if precip_mm > 0 else 0,
+                        "humidity": current.get("relative_humidity_2m", 0),
+                        "feels_like": round(feels),
+                    }
+        except Exception as e:
+            logger.warning(f"Open-Meteo fallback failed: {e}")
+
+        return None
+
     def _extract_precipitation_chance(self, text: str) -> int:
         """Extract precipitation percentage from forecast text."""
         match = re.search(r"(\d+)\s*percent chance", text.lower())
@@ -687,10 +780,19 @@ class WeatherToolService:
                 "state": grid_data.get("state", ""),
             }
 
-        # Fallback to OpenWeatherMap if NOAA fails
+        # Fallback to OpenWeatherMap if NOAA fails and a key is configured.
         if not weather_data:
             weather_data = await self._get_owm_weather(lat_float, lon_float)
-            source = "OpenWeatherMap"
+            if weather_data:
+                source = "OpenWeatherMap"
+
+        # Final fallback: Open-Meteo — no API key, worldwide coverage.
+        # This is what actually serves agents deployed outside the US without
+        # an OWM subscription (e.g. Ethiopia).
+        if not weather_data:
+            weather_data = await self._get_open_meteo_weather(lat_float, lon_float)
+            if weather_data:
+                source = "Open-Meteo"
 
         if not weather_data:
             return ToolExecutionResult(

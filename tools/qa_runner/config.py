@@ -53,6 +53,7 @@ class QAModule(Enum):
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
+    MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -113,9 +114,9 @@ class QAConfig:
     api_port: int = 8080  # Default API port (matches DEFAULT_API_PORT in constants.py)
 
     # Authentication
-    # QA runner always wipes data and uses setup wizard to create admin user
-    # with these known credentials (CIRIS_TEST_MODE allows "admin" username)
-    admin_username: str = "admin"
+    # QA runner always wipes data and uses setup wizard to create test user
+    # with these known credentials
+    admin_username: str = "jeff"
     admin_password: str = "qa_test_password_12345"
 
     # OAuth test user configuration (for billing integration tests)

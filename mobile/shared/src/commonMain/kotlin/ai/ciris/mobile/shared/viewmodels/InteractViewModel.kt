@@ -8,7 +8,9 @@ import ai.ciris.mobile.shared.api.ReasoningEvent
 import ai.ciris.mobile.shared.localization.LocalizationHelper
 import ai.ciris.mobile.shared.localization.LocalizationManager
 import ai.ciris.mobile.shared.api.ReasoningStreamClient
+import ai.ciris.mobile.shared.ui.screens.graph.AdapterOrbit
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
+import ai.ciris.mobile.shared.ui.screens.graph.orbitFor
 import ai.ciris.mobile.shared.auth.TokenManager
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
@@ -34,7 +36,13 @@ import kotlinx.datetime.Clock
  */
 data class BubbleEmoji(
     val id: Long,
-    val emoji: String
+    val emoji: String,
+    // Short human-readable summary of the event that spawned this bubble.
+    // Lives only as long as the bubble is in flight (or caught).
+    val payload: String? = null,
+    // Absolute millis when the bubble should pop. Used so a tap handler can
+    // distinguish "in flight" (still interactive) from "already expired".
+    val expiresAtMs: Long = 0L
 )
 
 /**
@@ -152,8 +160,19 @@ class InteractViewModel(
         private const val MAX_BUBBLES = 8
         private const val BUBBLE_LIFETIME_MS = 2000L
         private const val MAX_TIMELINE_EVENTS = 100
+        // Bounded to keep caught-bubble memory within the 32-bit ARM budget.
+        // Worst case: MAX_CAUGHT_BUBBLES × ReasoningEvent.PAYLOAD_MAX_CHARS ≈ 3.8KB.
+        private const val MAX_CAUGHT_BUBBLES = 12
         private const val SSE_RECONNECT_BASE_MS = 1000L
         private const val SSE_RECONNECT_MAX_MS = 30000L
+        /** Max recent SSE events retained per pipeline stage (ring buffer). */
+        private const val STAGE_EVENT_BUFFER = 5
+        /** 1 Hz poll cadence for selected-element detail fetches. */
+        // FG selection detail poll cadence. Slowed from 1s to 2s after
+        // 429s from the agent backend — 0.5 Hz is still fast enough for
+        // "live" feel on stage-event streams while halving request
+        // pressure on endpoints that feed multiple selection kinds.
+        private const val SELECTION_POLL_INTERVAL_MS = 2000L
     }
 
     // Device attestation callback for triggering Play Integrity at startup
@@ -209,6 +228,8 @@ class InteractViewModel(
         pollingJob = null
         sseJob?.cancel()
         sseJob = null
+        capacityRefreshJob?.cancel()
+        capacityRefreshJob = null
     }
 
     private val _inputText = MutableStateFlow("")
@@ -235,6 +256,18 @@ class InteractViewModel(
     // Bubble emoji state - emojis float up from agent icon
     private val _bubbleEmojis = MutableStateFlow<List<BubbleEmoji>>(emptyList())
     val bubbleEmojis: StateFlow<List<BubbleEmoji>> = _bubbleEmojis.asStateFlow()
+
+    // Caught bubbles - user tapped a floating bubble to pin it.
+    // Payload survives past the 2s float window because the user explicitly asked.
+    // Capped at MAX_CAUGHT_BUBBLES to preserve the 32-bit ARM memory budget.
+    private val _caughtBubbles = MutableStateFlow<List<BubbleEmoji>>(emptyList())
+    val caughtBubbles: StateFlow<List<BubbleEmoji>> = _caughtBubbles.asStateFlow()
+
+    // Adapter orbits - the agent's "body" rendered as satellites around the
+    // memory/pipeline cylinder. Fetched once at screen mount; bounded by
+    // the number of loaded adapters (< 20 in practice).
+    private val _adapterOrbits = MutableStateFlow<List<AdapterOrbit>>(emptyList())
+    val adapterOrbits: StateFlow<List<AdapterOrbit>> = _adapterOrbits.asStateFlow()
 
     // Agent processing state for icon
     private val _agentProcessingState = MutableStateFlow(AgentProcessingState.IDLE)
@@ -292,6 +325,82 @@ class InteractViewModel(
     // File attachments for current message
     private val _attachedFiles = MutableStateFlow<List<PickedFile>>(emptyList())
     val attachedFiles: StateFlow<List<PickedFile>> = _attachedFiles.asStateFlow()
+
+    // CIRIS capacity (ratchet) — drives cell-viz ambient dials. Defaults to
+    // CellVizState.DEFAULT so the cell renders as-designed until the first
+    // fetch arrives. User-facing only; never piped into agent context.
+    private val _cellVizState = MutableStateFlow(
+        ai.ciris.mobile.shared.ui.screens.graph.CellVizState.DEFAULT
+    )
+    val cellVizState: StateFlow<ai.ciris.mobile.shared.ui.screens.graph.CellVizState> =
+        _cellVizState.asStateFlow()
+
+    // Tier-1 events — bus-arc shimmers on SSE activity. Bounded to a small
+    // ring of recent pulses; each self-expires after BUS_PULSE_DURATION_MS
+    // via the launched coroutine in [addBusPulse]. Passing the full list
+    // to Compose lets multiple concurrent pulses coexist (memory + llm
+    // firing on the same thought step is common).
+    private val _busPulses = MutableStateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.BusPulse>>(emptyList())
+    val busPulses: StateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.BusPulse>> =
+        _busPulses.asStateFlow()
+
+    // Tier-1 gratitude motes — warm ejections from the nucleus on
+    // task_complete events. Gated by a 3 s cooldown (see canEmitGratitude)
+    // so the signal stays meaningful; anything more frequent would blur
+    // into ambient noise.
+    private val _gratitudePulses =
+        MutableStateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse>>(emptyList())
+    val gratitudePulses: StateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse>> =
+        _gratitudePulses.asStateFlow()
+
+    private var lastGratitudeMs: Long = 0L
+
+    // Tier-3 deferral ripple — single concentric wave from nucleus outward
+    // on every DEFER action (routing to Wise Authority). Start-timestamp
+    // null when idle; set to the event-time on DEFER, cleared ~2.5s later.
+    // FSD §2.5.3 + §18 Step 9. The pre-ripple "pause" (rotation slowdown
+    // 800ms) is a follow-up — it needs the external rotation driver to
+    // read this state too, which this StateFlow makes possible.
+    private val _deferralRippleStartMs = MutableStateFlow<Long?>(null)
+    val deferralRippleStartMs: StateFlow<Long?> = _deferralRippleStartMs.asStateFlow()
+
+    // Per-stage SSE ring buffer — the data source for the "tap a nucleus
+    // shell and see the most recent rationales" demo scenario. Keyed by
+    // SSE event_type, capped at STAGE_EVENT_BUFFER capacity per type so
+    // memory stays bounded (<= 7 × 5 × ~200 chars ≈ 7 KB worst case).
+    //
+    // Updated on every ReasoningEvent.Emoji so the buffer always holds
+    // the last K events for each stage, independent of FG/BG mode.
+    private val _stageEvents = MutableStateFlow<Map<String, List<StageEvent>>>(emptyMap())
+    val stageEvents: StateFlow<Map<String, List<StageEvent>>> = _stageEvents.asStateFlow()
+
+    // Current FG selection. Null = nothing selected. Only settable from
+    // CellVisualization's tap handler; cleared on every FG → BG
+    // transition so re-entering FG starts fresh.
+    private val _selectionKind =
+        MutableStateFlow<ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?>(null)
+    val selectionKind: StateFlow<ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?> =
+        _selectionKind.asStateFlow()
+
+    // Polled detail for whatever is currently selected. The poll job
+    // swaps endpoints based on `_selectionKind` and writes the raw
+    // JSON-parsed body here for the panel composable to render.
+    private val _selectionDetail = MutableStateFlow<SelectionDetail?>(null)
+    val selectionDetail: StateFlow<SelectionDetail?> = _selectionDetail.asStateFlow()
+
+    /**
+     * Horizontal position of the selected element as a 0..1 fraction of
+     * the cell viz canvas width. The FG detail panel reads this to
+     * anchor itself on the OPPOSITE side — tap on the right, panel
+     * appears on the left (and vice-versa) so the user always sees what
+     * they tapped.
+     */
+    private val _selectionAnchorX = MutableStateFlow(0.5f)
+    val selectionAnchorX: StateFlow<Float> = _selectionAnchorX.asStateFlow()
+
+    private var selectionPollJob: Job? = null
+
+    private var capacityRefreshJob: Job? = null
 
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
@@ -375,6 +484,123 @@ class InteractViewModel(
         startSseStream()
         startFileInjectionObserver()
         fetchWalletStatus()
+        fetchAdapterOrbits()
+        startCapacityRefresh()
+    }
+
+    /**
+     * Periodic CIRIS capacity refresh. One immediate fetch then every 15 min
+     * while the view is active. Backend caches against the enrichment cache
+     * for the same TTL, so worst-case we hit lens once per 15-min window
+     * per running occurrence. A failure is non-fatal — the cell viz falls
+     * back to [CellVizState.DEFAULT] (neutral), never crashes.
+     */
+    private fun startCapacityRefresh() {
+        if (capacityRefreshJob?.isActive == true) return
+        capacityRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                refreshCapacity()
+                delay(15 * 60_000L)  // 15 min
+            }
+        }
+    }
+
+    /**
+     * Compute and write a per-occurrence local capacity score into
+     * [_cellVizState] using the health signals the client already polls.
+     * Minimal, efficient, NOT a trust signal (trust = device attestation,
+     * capacity = behavioural/coherence health). See §5a in
+     * FSD/CELL_VIZ_REDESIGN.md and the Coherence Collapse Analysis paper.
+     *
+     * Called from:
+     *  - status poll (services_online / services_total)
+     *  - llmHealth update (provider healthy / not)
+     *  - refreshCapacity (so fleet+local land together)
+     *
+     * No backend call. No new state fields beyond [CellVizState.localScore].
+     */
+    private fun recomputeLocalScore() {
+        val lastStatus = _lastSystemStatus
+        val serviceFrac = if (lastStatus != null && lastStatus.services_total > 0) {
+            lastStatus.services_online.toFloat() / lastStatus.services_total.toFloat()
+        } else null
+        val llm = _llmHealth.value
+        val llmFrac: Float? = when {
+            llm.provider == "unknown" -> null
+            llm.isHealthy -> 1f
+            else -> 0f
+        }
+        val newLocal = ai.ciris.mobile.shared.ui.screens.graph
+            .computeLocalScore(serviceFrac, llmFrac)
+        val prev = _cellVizState.value
+        if (prev.localScore != newLocal) {
+            _cellVizState.value = prev.copy(localScore = newLocal).sanitized()
+        }
+    }
+
+    // Most recent SystemStatus snapshot, kept as a field for the local-score
+    // recomputation (the status poll otherwise consumes + discards it).
+    // Stale reads across coroutines are benign: recomputeLocalScore is
+    // called on every write to either input, so worst case we do one
+    // extra recompute with the old value.
+    private var _lastSystemStatus: ai.ciris.mobile.shared.models.SystemStatus? = null
+
+    private suspend fun refreshCapacity() {
+        val method = "refreshCapacity"
+        try {
+            val data = apiClient.getCapacity()
+            // Prefer backend-authoritative local score when present (the
+            // CCA proxy over runtime signals lives in my_data.py
+            // _compute_local_capacity). Fall back to the client-side
+            // computation (recomputeLocalScore) for backward compat
+            // with older backends or pre-fetch state.
+            val prevLocal = _cellVizState.value.localScore
+            val local = data.localScore?.toFloat() ?: prevLocal
+            _cellVizState.value = ai.ciris.mobile.shared.ui.screens.graph.CellVizState(
+                c = data.c.toFloat(),
+                iInt = data.iInt.toFloat(),
+                r = data.r.toFloat(),
+                iInc = data.iInc.toFloat(),
+                s = data.s.toFloat(),
+                compositeScore = data.compositeScore.toFloat(),
+                fragilityIndex = data.fragilityIndex.toFloat(),
+                category = data.category,
+                isPreFetch = false,
+                localScore = local,
+            ).sanitized()
+            logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
+                    "composite=${data.compositeScore} cached=${data.cached}")
+        } catch (e: Exception) {
+            // Expected in offline / dev / pre-auth states — don't spam WARN.
+            logDebug(method, "Capacity fetch skipped: ${e.message}")
+        }
+    }
+
+    /**
+     * Fetch the current adapter list and project each into an [AdapterOrbit]
+     * so the LiveGraphBackground can render them as satellites around the
+     * cylinder. One-shot — adapters don't change often and the cost is one
+     * API round-trip at screen mount.
+     */
+    private fun fetchAdapterOrbits() {
+        val method = "fetchAdapterOrbits"
+        viewModelScope.launch {
+            try {
+                val data = apiClient.listAdapters()
+                _adapterOrbits.value = data.adapters.mapIndexed { index, a ->
+                    orbitFor(
+                        id = a.adapterId,
+                        type = a.adapterType,
+                        index = index,
+                        isActive = a.isRunning
+                    )
+                }
+                logInfo(method, "Loaded ${_adapterOrbits.value.size} adapter orbits")
+            } catch (e: Exception) {
+                logError(method, "Failed to fetch adapters for orbits: ${e.message}")
+                // Leave list empty — LiveGraphBackground will just not draw satellites.
+            }
+        }
     }
 
     /**
@@ -651,6 +877,8 @@ class InteractViewModel(
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
+                    _lastSystemStatus = status
+                    recomputeLocalScore()
                     val wasConnected = _isConnected.value
                     _isConnected.value = status.status == "healthy"
 
@@ -807,6 +1035,7 @@ class InteractViewModel(
                     model = config.model,
                     isCirisProxy = config.isCirisProxy
                 )
+                recomputeLocalScore()
                 logDebug(method, "LLM health from API: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
                 configLoaded = true
 
@@ -1582,10 +1811,24 @@ class InteractViewModel(
                                     _pipelineState.value = _pipelineState.value
                                         .activate(event.eventType, now)
                                 }
+                                // Tier-1 event: route non-action pipeline steps
+                                // to their owning bus so the matching arc shimmers.
+                                val pulseBus = ai.ciris.mobile.shared.ui.screens.graph
+                                    .busFromEventType(event.eventType, action = null)
+                                if (pulseBus != null) {
+                                    addBusPulse(pulseBus)
+                                }
                             }
                             is ReasoningEvent.Emoji -> {
-                                // Add bubble emoji (floats up and disappears)
-                                addBubbleEmoji(event.emoji)
+                                // Add bubble emoji (floats up and disappears).
+                                // Pass the payload so the bubble becomes a tappable
+                                // carrier for the event's semantic summary.
+                                addBubbleEmoji(event.emoji, event.payload)
+
+                                // Record into the per-stage ring buffer so the
+                                // nucleus-shell selection panel can show recent
+                                // rationales / conscience values without a poll.
+                                recordStageEvent(event)
 
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
@@ -1594,6 +1837,30 @@ class InteractViewModel(
                                 val actionType = ActionType.fromEmoji(event.emoji)
                                 if (actionType != null) {
                                     fetchAndAddLatestAction(actionType)
+                                    // Tier-1 event: route the action to its bus.
+                                    // task_complete returns null here — it fires a
+                                    // gratitude mote instead.
+                                    val actionBus = ai.ciris.mobile.shared.ui.screens.graph
+                                        .busFromEventType(
+                                            eventType = "action_result",
+                                            action = actionType.name,
+                                        )
+                                    if (actionBus != null) {
+                                        addBusPulse(actionBus)
+                                    } else if (actionType.name.contains("task_complete", ignoreCase = true)) {
+                                        // Signal-not-anthropomorphize: the mote says
+                                        // "the system closed a loop cleanly", not
+                                        // "the agent is happy".
+                                        addGratitudePulse()
+                                    }
+                                    // Tier-3: DEFER → visible routing to wise
+                                    // authority. Fire the nucleus ripple in
+                                    // addition to the bus pulse; the ripple is
+                                    // what distinguishes "consulting authority"
+                                    // from "routine bus traffic".
+                                    if (actionType == ActionType.DEFER) {
+                                        triggerDeferralRipple()
+                                    }
                                 }
 
                                 // Update processing state and status text
@@ -1621,11 +1888,79 @@ class InteractViewModel(
     }
 
     /**
-     * Add a bubble emoji that floats up
+     * Add a bubble emoji that floats up, optionally carrying a short payload.
+     *
+     * Payload is the event's semantic summary (e.g. "Speak · Hello!" or
+     * "→ tool:weather:current"). It lives only for the bubble's flight time,
+     * so memory use stays bounded at MAX_BUBBLES × PAYLOAD_MAX_CHARS.
+     * Users can "catch" a bubble mid-flight to promote its payload into the
+     * caughtBubbles list for longer inspection.
      */
-    private fun addBubbleEmoji(emoji: String) {
+    /**
+     * Spawn a bus-arc shimmer pulse. Auto-expires after the pulse
+     * duration so the list never grows unbounded. Up to ~8 concurrent
+     * pulses feels crowded; beyond that we drop the oldest.
+     */
+    private fun addBusPulse(bus: ai.ciris.mobile.shared.ui.screens.graph.CellBus) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val pulse = ai.ciris.mobile.shared.ui.screens.graph.BusPulse(bus, now)
+        _busPulses.value = (_busPulses.value + pulse).takeLast(8)
+        viewModelScope.launch {
+            delay(ai.ciris.mobile.shared.ui.screens.graph.BUS_PULSE_DURATION_MS)
+            _busPulses.value = _busPulses.value.filter { it.startMs != now || it.bus != bus }
+        }
+    }
+
+    /**
+     * Emit a gratitude mote from the nucleus, if the cooldown allows.
+     * Fired on `task_complete` — never on every SPEAK/TOOL action, so
+     * the signal reads as "task landed" rather than ambient motion.
+     *
+     * The mote's angle is randomised so consecutive emissions don't
+     * stack along the same ray. Self-expires after
+     * [GRATITUDE_MOTE_DURATION_MS].
+     */
+    private fun addGratitudePulse() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (!ai.ciris.mobile.shared.ui.screens.graph.canEmitGratitude(lastGratitudeMs, now)) {
+            return
+        }
+        lastGratitudeMs = now
+        val angle = kotlin.random.Random.Default.nextFloat() * 360f
+        val pulse = ai.ciris.mobile.shared.ui.screens.graph.GratitudePulse(
+            startMs = now,
+            angleDeg = angle,
+        )
+        _gratitudePulses.value = (_gratitudePulses.value + pulse).takeLast(4)
+        viewModelScope.launch {
+            delay(pulse.durationMs)
+            _gratitudePulses.value = _gratitudePulses.value.filter { it.startMs != now }
+        }
+    }
+
+    /**
+     * Tier-3 deferral ripple — fires on DEFER actions. The nucleus emits
+     * a single concentric wave outward (renderer owns the expand + ease-
+     * out). We only need to stamp a start timestamp; the renderer reads
+     * it every frame and stops drawing when the 1.5 s animation is done.
+     * The state is cleared after 2.5 s (spec total) so follow-on DEFERs
+     * restart cleanly instead of stacking.
+     */
+    private fun triggerDeferralRipple() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        _deferralRippleStartMs.value = now
+        viewModelScope.launch {
+            delay(2500)
+            if (_deferralRippleStartMs.value == now) {
+                _deferralRippleStartMs.value = null
+            }
+        }
+    }
+
+    private fun addBubbleEmoji(emoji: String, payload: String? = null) {
         val bubbleId = bubbleIdCounter++
-        val bubble = BubbleEmoji(id = bubbleId, emoji = emoji)
+        val expiresAt = Clock.System.now().toEpochMilliseconds() + BUBBLE_LIFETIME_MS
+        val bubble = BubbleEmoji(id = bubbleId, emoji = emoji, payload = payload, expiresAtMs = expiresAt)
 
         // Add to list (keep max bubbles)
         _bubbleEmojis.value = (_bubbleEmojis.value + bubble).takeLast(MAX_BUBBLES)
@@ -1635,6 +1970,34 @@ class InteractViewModel(
             delay(BUBBLE_LIFETIME_MS)
             _bubbleEmojis.value = _bubbleEmojis.value.filter { it.id != bubbleId }
         }
+    }
+
+    /**
+     * Pin an in-flight bubble so its payload survives past the 2s float window.
+     *
+     * No-op if the bubble already expired, is unknown, or has no payload —
+     * catching an empty bubble would just create visual clutter.
+     */
+    fun catchBubble(id: Long) {
+        val b = _bubbleEmojis.value.firstOrNull { it.id == id } ?: return
+        if (b.payload.isNullOrBlank()) return
+        // Remove from in-flight and promote to caught
+        _bubbleEmojis.value = _bubbleEmojis.value.filter { it.id != id }
+        _caughtBubbles.value = (_caughtBubbles.value + b).takeLast(MAX_CAUGHT_BUBBLES)
+    }
+
+    /**
+     * Dismiss a previously-caught bubble.
+     */
+    fun dismissCaughtBubble(id: Long) {
+        _caughtBubbles.value = _caughtBubbles.value.filter { it.id != id }
+    }
+
+    /**
+     * Clear all caught bubbles.
+     */
+    fun clearCaughtBubbles() {
+        _caughtBubbles.value = emptyList()
     }
 
     /**
@@ -1668,6 +2031,318 @@ class InteractViewModel(
         _timelineEvents.value = emptyList()
     }
 
+    // =========================================================================
+    // FG selection + per-stage ring buffer + 1 Hz poll
+    //
+    // See FSD §12 — the detail panel in FG reads live agent data for the
+    // element the user tapped. Nucleus shells use a client-side SSE
+    // ring buffer (no poll), everything else polls @ 1 Hz while selected.
+    // =========================================================================
+
+    /** One entry in the per-stage SSE ring buffer. */
+    data class StageEvent(
+        val eventType: String,
+        val emoji: String,
+        val timestampMs: Long,
+        /** Truncated semantic summary (<= 160 chars per ReasoningEvent). */
+        val payload: String?,
+    )
+
+    /**
+     * Parsed live data for whatever is currently selected in FG.
+     * Kind-tagged so the panel composable can render the right shape.
+     */
+    sealed interface SelectionDetail {
+        /** One-line status line common to every variant. */
+        val summaryLine: String
+
+        data class AdapterPort(
+            override val summaryLine: String,
+            val adapterId: String,
+            val adapterType: String,
+            val isRunning: Boolean,
+            val messagesProcessed: Int,
+            val errorsCount: Int,
+            val lastError: String?,
+            val lastActivity: String?,
+            /** Queue depth if available (null = not yet surfaced). */
+            val queueSize: Int?,
+        ) : SelectionDetail
+
+        data class BusArc(
+            override val summaryLine: String,
+            val bus: ai.ciris.mobile.shared.ui.screens.graph.CellBus,
+            val messagesSent: Long,
+            val averageLatencyMs: Double,
+            val errorsLastHour: Int,
+            val queueDepth: Int,
+            /** LLM bus only: per-provider detail. Empty for other buses. */
+            val llmProviders: List<LLMProviderRow> = emptyList(),
+        ) : SelectionDetail
+
+        data class LLMProviderRow(
+            val name: String,
+            val healthy: Boolean,
+            val priority: String,
+            val circuitBreakerState: String,  // "closed" / "open" / "half_open"
+            val failureCount: Int,
+            val rateLimited: Boolean,
+        )
+
+        data class NucleusShell(
+            override val summaryLine: String,
+            val stageIndex: Int,
+            val stageLabel: String,
+            val eventType: String,
+            val recentEvents: List<StageEvent>,
+        ) : SelectionDetail
+
+        data class NucleusCore(
+            override val summaryLine: String,
+            val cognitiveState: String,
+            val systemStatus: String,
+            val servicesOnline: Int,
+            val servicesTotal: Int,
+        ) : SelectionDetail
+
+        data class Mote(
+            override val summaryLine: String,
+            val nodeId: String,
+            val scope: String,
+            val nodeType: String?,
+            val attributesJson: String?,
+        ) : SelectionDetail
+
+        data class Gratitude(
+            override val summaryLine: String,
+            val recentCompletions: List<String>,
+        ) : SelectionDetail
+
+        data class Loading(override val summaryLine: String = "Loading…") : SelectionDetail
+
+        data class Error(override val summaryLine: String) : SelectionDetail
+    }
+
+    private fun recordStageEvent(event: ReasoningEvent.Emoji) {
+        val entry = StageEvent(
+            eventType = event.eventType,
+            emoji = event.emoji,
+            timestampMs = Clock.System.now().toEpochMilliseconds(),
+            payload = event.payload,
+        )
+        _stageEvents.value = _stageEvents.value.toMutableMap().apply {
+            val list = (get(event.eventType).orEmpty() + entry).takeLast(STAGE_EVENT_BUFFER)
+            put(event.eventType, list)
+        }
+    }
+
+    /**
+     * Set the current FG selection. Starts / cancels / swaps the 1 Hz
+     * poll job so we never poll endpoints for elements the user isn't
+     * looking at.
+     */
+    fun setSelection(
+        kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?,
+        anchorXFraction: Float = 0.5f,
+    ) {
+        val prev = _selectionKind.value
+        _selectionKind.value = kind
+        _selectionAnchorX.value = anchorXFraction.coerceIn(0f, 1f)
+        // No change → keep the existing poll running.
+        if (prev == kind) return
+
+        selectionPollJob?.cancel()
+        selectionPollJob = null
+        _selectionDetail.value = null
+        if (kind == null) return
+
+        _selectionDetail.value = SelectionDetail.Loading()
+        selectionPollJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    val fresh = fetchSelectionDetail(kind)
+                    // Cooperative cancel check: a rapid tap sequence can
+                    // cancel this job while an HTTP call is in flight.
+                    // Don't write the stale value after cancel — that's
+                    // what used to wedge the UI on "Loading…" and
+                    // occasionally trigger a fatal coroutine wrap.
+                    if (!isActive) break
+                    _selectionDetail.value = fresh
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Rethrow — coroutine hygiene rule: never swallow
+                    // CancellationException, it must propagate so the
+                    // coroutine unwinds cleanly.
+                    throw e
+                } catch (e: Exception) {
+                    logDebug("fetchSelectionDetail", "poll error: ${e.message}")
+                    if (!isActive) break
+                    // Friendlier message for the common case — a node
+                    // that was in the timeline at viz load but has
+                    // since rotated out of the window returns 404 when
+                    // the user taps. Don't scare the user with the
+                    // raw HTTP code.
+                    val msg = e.message ?: e::class.simpleName ?: "unknown error"
+                    val friendly = when {
+                        msg.contains("404") -> "This node is no longer available"
+                        msg.contains("401") || msg.contains("403") ->
+                            "Sign-in required to view this detail"
+                        else -> "Couldn't fetch detail: $msg"
+                    }
+                    _selectionDetail.value = SelectionDetail.Error(summaryLine = friendly)
+                }
+                // Nucleus shells read the SSE ring buffer on every tick
+                // too so newly-arrived events show up without a manual
+                // refresh. For HTTP-backed kinds this is the rate cap.
+                kotlinx.coroutines.delay(SELECTION_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun fetchSelectionDetail(
+        kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind,
+    ): SelectionDetail = when (kind) {
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort -> {
+            val details = apiClient.getAdapterDetails(kind.adapterId)
+            SelectionDetail.AdapterPort(
+                summaryLine = "${kind.adapterType}:${kind.adapterId.take(12)} • " +
+                    (if (details.isRunning) "running" else "stopped"),
+                adapterId = kind.adapterId,
+                adapterType = kind.adapterType,
+                isRunning = details.isRunning,
+                messagesProcessed = details.metrics?.messagesProcessed ?: 0,
+                errorsCount = details.metrics?.errorsCount ?: 0,
+                lastError = details.metrics?.lastError,
+                lastActivity = details.lastActivity,
+                // Adapter-level queue depth isn't surfaced yet.
+                queueSize = null,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.BusArc -> {
+            // LLM bus gets rich per-provider detail from the existing
+            // /v1/system/llm/status + /v1/system/llm/providers endpoints.
+            // Other buses fall back to the bus-name summary until a
+            // per-bus telemetry endpoint is wired.
+            if (kind.bus == ai.ciris.mobile.shared.ui.screens.graph.CellBus.LLM) {
+                val status = try { apiClient.getLlmBusStatus() } catch (_: Exception) { null }
+                val providers = try { apiClient.getLlmProviders() } catch (_: Exception) { emptyList() }
+                val providerRows = providers.map { p ->
+                    SelectionDetail.LLMProviderRow(
+                        name = p.name,
+                        healthy = p.healthy,
+                        priority = p.priorityLabel,
+                        circuitBreakerState = p.circuitBreaker.state.name.lowercase(),
+                        failureCount = p.circuitBreaker.failureCount,
+                        rateLimited = p.metrics.isRateLimited,
+                    )
+                }
+                SelectionDetail.BusArc(
+                    summaryLine = if (status != null) {
+                        "LLM • ${status.providersAvailable}/${status.providersTotal} providers • " +
+                            "${status.totalRequests} req • ${status.circuitBreakersSummary}"
+                    } else "LLM bus",
+                    bus = kind.bus,
+                    messagesSent = status?.totalRequests?.toLong() ?: 0L,
+                    averageLatencyMs = status?.averageLatencyMs?.toDouble() ?: 0.0,
+                    errorsLastHour = status?.failedRequests ?: 0,
+                    queueDepth = status?.providersRateLimited ?: 0,
+                    llmProviders = providerRows,
+                )
+            } else {
+                // Non-LLM buses — pull per-bus operational telemetry from
+                // /v1/telemetry/unified?category=buses. Keyed by backend
+                // bus name (``memory_bus``, ``communication_bus``, ...).
+                val telem = try { apiClient.getBusTelemetry() } catch (_: Exception) { emptyMap() }
+                val key = when (kind.bus) {
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.COMM -> "communication_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.MEMORY -> "memory_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.TOOL -> "tool_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.WISE -> "wise_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.RUNTIME -> "runtime_control_bus"
+                    else -> ""
+                }
+                val t = telem[key]
+                SelectionDetail.BusArc(
+                    summaryLine = if (t != null) {
+                        val health = if (t.healthy) "healthy" else "degraded"
+                        "${kind.bus.name} • $health • ${t.messagesSent} msg"
+                    } else "${kind.bus.name} bus",
+                    bus = kind.bus,
+                    messagesSent = t?.messagesSent ?: 0L,
+                    averageLatencyMs = t?.averageLatencyMs ?: 0.0,
+                    errorsLastHour = t?.errorsLastHour ?: 0,
+                    queueDepth = t?.queueDepth ?: 0,
+                )
+            }
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell -> {
+            val recent = _stageEvents.value[kind.eventType].orEmpty()
+            SelectionDetail.NucleusShell(
+                summaryLine = kind.eventType.replace('_', ' ')
+                    .replaceFirstChar { it.uppercase() } + " • ${recent.size} recent",
+                stageIndex = kind.stageIndex,
+                stageLabel = kind.eventType.replace('_', ' ').uppercase(),
+                eventType = kind.eventType,
+                recentEvents = recent,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusCore -> {
+            val status = apiClient.getSystemStatus()
+            val cog = status.cognitive_state ?: "unknown"
+            SelectionDetail.NucleusCore(
+                summaryLine = "$cog • ${status.services_online}/${status.services_total} services",
+                cognitiveState = cog,
+                systemStatus = status.status,
+                servicesOnline = status.services_online,
+                servicesTotal = status.services_total,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.CytoplasmMote -> {
+            val node = apiClient.getMemoryNode(kind.nodeId)
+            SelectionDetail.Mote(
+                summaryLine = "${node.type} • ${node.scope}",
+                nodeId = kind.nodeId,
+                scope = kind.scope,
+                nodeType = node.type,
+                attributesJson = node.attributesJson,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.SignalChannel -> {
+            // A channel is the correspondent-facing surface of a port —
+            // same data source.
+            fetchSelectionDetail(
+                ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort(
+                    adapterId = kind.adapterId,
+                    adapterType = "",
+                    bus = kind.bus,
+                )
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.GratitudeMote -> {
+            // Latest completed tasks from the audit trail. We filter by
+            // event_type=handler_action_task_complete (see
+            // HANDLER_ACTION_TASK_COMPLETE in audit/core.py) and pull
+            // only the most recent 5 — this is the "signalled gratitude"
+            // surface, not a full history view.
+            val audits = try {
+                apiClient.getAuditEntries(
+                    eventType = "handler_action_task_complete",
+                    limit = 5,
+                )
+            } catch (_: Exception) { null }
+            val rows = audits?.entries.orEmpty().map { e ->
+                val desc = e.context?.description ?: e.context?.entityId ?: e.id
+                val ts = e.timestamp.take(19).replace('T', ' ')
+                "$ts • $desc"
+            }
+            SelectionDetail.Gratitude(
+                summaryLine = if (rows.isEmpty()) {
+                    "No recent task completions"
+                } else "${rows.size} recent task${if (rows.size == 1) "" else "s"} completed",
+                recentCompletions = rows,
+            )
+        }
+    }
+
     override fun onCleared() {
         logInfo("onCleared", "ViewModel cleared, cancelling jobs")
         super.onCleared()
@@ -1677,5 +2352,7 @@ class InteractViewModel(
         trustPollJob?.cancel()
         sseJob?.cancel()
         languageObserverJob?.cancel()
+        capacityRefreshJob?.cancel()
+        selectionPollJob?.cancel()
     }
 }

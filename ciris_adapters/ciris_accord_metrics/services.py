@@ -855,6 +855,13 @@ class AccordMetricsService:
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
 
+        # CRITICAL: Require explicit consent_timestamp - server returns 422 without it
+        if not self._consent_timestamp:
+            raise RuntimeError(
+                "Cannot send events: consent_timestamp is not set. "
+                "Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var or provide consent_timestamp in config."
+            )
+
         # Build early warning correlation metadata (only include non-empty values)
         correlation_metadata: Dict[str, str] = {}
         if self._deployment_region:
@@ -1039,6 +1046,12 @@ class AccordMetricsService:
             logger.info(f"📡 SENDING CONNECTED EVENT to {url}")
             logger.info(f"   Event type: {event_type}")
             logger.info(f"   Agent hash: {self._agent_id_hash}")
+
+            # CRITICAL: Require explicit consent_timestamp
+            if not self._consent_timestamp:
+                logger.error("❌ Cannot send connected event: consent_timestamp is not set")
+                logger.error("   Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var")
+                return
 
             # Wrap as a standard event batch
             batch_payload: Dict[str, Any] = {
@@ -1703,10 +1716,37 @@ class AccordMetricsService:
         """
         logger.debug(f"Received WBD event for thought {request.thought_id}")
 
-        # Build anonymized event
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+
+        # Build minimal trace for WBD event (CIRISLens requires trace field)
+        wbd_trace: Dict[str, Any] = {
+            "trace_id": f"wbd_{request.thought_id}_{now.strftime('%Y%m%d%H%M%S')}",
+            "thought_id": request.thought_id,
+            "task_id": request.task_id,
+            "agent_id_hash": self._agent_id_hash or "unknown",
+            "started_at": now_iso,
+            "completed_at": now_iso,
+            "trace_level": TraceDetailLevel.GENERIC.value,
+            "components": [
+                {
+                    "component_type": "action",
+                    "event_type": "WISDOM_BASED_DEFERRAL",
+                    "timestamp": now_iso,
+                    "data": {
+                        "action": "defer",
+                        "reason_truncated": request.reason[:200] if request.reason else None,
+                        "defer_until": request.defer_until.isoformat() if request.defer_until else None,
+                    },
+                }
+            ],
+        }
+
+        # Build anonymized event with required trace field
         wbd_event: Dict[str, Any] = {
             "event_type": "wbd_deferral",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "trace": wbd_trace,
+            "timestamp": now_iso,
             "agent_id": self._agent_id_hash or "unknown",
             "thought_id": request.thought_id,
             "task_id": request.task_id,

@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "अंतर्ज्ञान DMA - CCA k_eff सूत्र आणि फेज वर्गीकरण लागू करते"
-version: "1.0"
+version: "1.1"
 
 # CIRIS करार संदर्भ म्हणून समाविष्ट करा
 accord_header: true

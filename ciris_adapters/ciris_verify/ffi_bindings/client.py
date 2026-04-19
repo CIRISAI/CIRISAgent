@@ -4,44 +4,40 @@ This module provides a high-level Python interface to the CIRISVerify
 Rust binary via C FFI. It handles JSON encoding/decoding and type conversion.
 """
 
-import os
-import json
-import ctypes
 import asyncio
+import ctypes
 import hashlib
+import json
+import os
 import platform
 import socket
-from pathlib import Path
-from typing import Optional, Set
-from datetime import datetime, timezone
+import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional, Set, Tuple
 
+from .exceptions import AttestationInProgressError, BinaryNotFoundError, BinaryTamperedError, CommunicationError
+from .exceptions import TimeoutError as CIRISTimeoutError
+from .exceptions import VerificationFailedError
 from .types import (
-    LicenseStatus,
-    LicenseTier,
-    LicenseDetails,
-    MandatoryDisclosure,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    CapabilityCheckResult,
-    FileIntegrityResult,
-    HardwareType,
-    ValidationStatus,
-    SourceDetails,
     AttestationData,
-    PythonModuleHashes,
-    PythonIntegrityResult,
-    SecurityAdvisory,
-    HardwareLimitation,
+    CapabilityCheckResult,
+    DisclosureSeverity,
+    FileIntegrityResult,
     HardwareInfo,
-)
-from .exceptions import (
-    BinaryNotFoundError,
-    BinaryTamperedError,
-    VerificationFailedError,
-    TimeoutError as CIRISTimeoutError,
-    CommunicationError,
-    AttestationInProgressError,
+    HardwareLimitation,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    SecurityAdvisory,
+    SourceDetails,
+    ValidationStatus,
 )
 
 # FFI error codes
@@ -68,6 +64,290 @@ DEFAULT_BINARY_PATHS = {
         # The actual path is resolved at runtime via _find_ios_framework()
     ],
 }
+
+
+# Mach-O magic bytes (macOS / iOS). Includes universal (fat) binaries.
+_MACHO_MAGICS = (
+    b"\xfe\xed\xfa\xce",  # Mach-O 32 BE
+    b"\xfe\xed\xfa\xcf",  # Mach-O 64 BE
+    b"\xce\xfa\xed\xfe",  # Mach-O 32 LE
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64 LE (arm64 / x86_64)
+    b"\xca\xfe\xba\xbe",  # Mach-O Universal (fat)
+    b"\xbe\xba\xfe\xca",  # Mach-O Universal reversed
+)
+_ELF_MAGIC = (b"\x7fELF",)  # Linux / *BSD / Android
+_PE_MAGICS = (b"MZ\x90\x00", b"MZ\x00\x00", b"MZ")  # Windows PE
+
+# Per-OS allowed magic bytes. A binary whose magic is not in the expected
+# set for `platform.system()` is rejected by `_verify_binary_integrity`
+# before ctypes.CDLL is even attempted — this produces a clear error
+# instead of the confusing "dlopen: incompatible architecture" that
+# otherwise bubbles up through the attestation stack as a timeout.
+_EXPECTED_MAGICS_BY_SYSTEM = {
+    "Darwin": _MACHO_MAGICS,
+    "iOS": _MACHO_MAGICS,
+    "Linux": _ELF_MAGIC,
+    "Android": _ELF_MAGIC,
+    "Windows": _PE_MAGICS,
+}
+
+
+def _platform_suffix_order(system: str) -> List[str]:
+    """Return the preferred native-library suffix order for a given OS.
+
+    The OS's native suffix comes FIRST so that a repo containing binaries
+    for multiple platforms (checked-in `.so` + locally-built `.dylib`, for
+    example) loads the one that will actually `dlopen` on the host.
+    Non-native suffixes are kept as trailing fallbacks for rare cross-
+    compile / manual-copy cases, but the arch check in
+    `_verify_binary_integrity` will reject them if they do get picked.
+    """
+    if system == "Darwin":
+        return [".dylib", ".so", ".dll"]
+    if system == "Windows":
+        return [".dll", ".so", ".dylib"]
+    # Linux + anything else POSIX (treat .so as native)
+    return [".so", ".dylib", ".dll"]
+
+
+# ---------------------------------------------------------------------------
+# Host-arch / libc detection (robust cross-platform binary loading)
+# ---------------------------------------------------------------------------
+#
+# These helpers identify *which* native binary variant will actually `dlopen`
+# on the current host. The naive assumption "file exists + magic is valid =
+# can load" breaks in at least two real scenarios that have caused prod
+# incidents:
+#
+#   (a) macOS dev machine with both a Linux `.so` (from the repo) and a
+#       locally-built `.dylib` side-by-side in the ffi_bindings dir. Loader
+#       picks `.so` first, ctypes fails with a cryptic "incompatible
+#       architecture" error that surfaces upstream as an attestation timeout.
+#
+#   (b) Home Assistant add-on (Alpine / musl libc) with a glibc-built ELF.
+#       The magic bytes match (both are ELF), but the dynamic linker can't
+#       resolve glibc-specific symbols. Same user-visible symptom: timeout.
+#
+# The strategy below is: detect the host's libc, tag each candidate binary
+# with its required libc (if we can tell from its interpreter string), and
+# refuse to load mismatched pairs BEFORE ctypes.CDLL runs.
+
+
+def _detect_host_libc() -> str:
+    """Return `"musl"`, `"glibc"`, or `"unknown"` for the current Linux host.
+
+    Not meaningful on non-Linux hosts; callers should guard with
+    `platform.system() == "Linux"`.
+    """
+    # Fast path: PEP 11 / packaging's heuristic from `ldd --version`.
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["ldd", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        blob = (result.stdout or "") + (result.stderr or "")
+        if "musl" in blob.lower():
+            return "musl"
+        if "glibc" in blob.lower() or "gnu libc" in blob.lower():
+            return "glibc"
+    except Exception:
+        pass
+
+    # Filesystem fallback: presence of the glibc dynamic linker is the
+    # simplest positive signal when `ldd` isn't in PATH (rare minimal
+    # containers strip it). Absence strongly suggests musl.
+    glibc_markers = (
+        "/lib64/ld-linux-x86-64.so.2",
+        "/lib/ld-linux-x86-64.so.2",
+        "/lib/ld-linux-aarch64.so.1",
+        "/lib64/ld-linux-aarch64.so.1",
+    )
+    musl_markers = (
+        "/lib/ld-musl-x86_64.so.1",
+        "/lib/ld-musl-aarch64.so.1",
+    )
+    for m in musl_markers:
+        if Path(m).exists():
+            return "musl"
+    for m in glibc_markers:
+        if Path(m).exists():
+            return "glibc"
+    return "unknown"
+
+
+def _elf_required_libc(path: Path) -> str:
+    """Inspect an ELF binary to see which libc it wants.
+
+    Returns `"musl"`, `"glibc"`, or `"unknown"`. Implementation scans the
+    first 64KB of the file for the interpreter / NEEDED strings — cheap,
+    doesn't require external tools, and correct for every real-world
+    wheel we ship.
+    """
+    try:
+        with open(path, "rb") as f:
+            blob = f.read(65536)
+    except OSError:
+        return "unknown"
+
+    # PT_INTERP strings are embedded as plain ASCII near the top of the
+    # file. Checking for the substring is sufficient — we don't need to
+    # parse program headers for a yes/no answer.
+    if b"ld-musl" in blob or b"libc.musl-" in blob:
+        return "musl"
+    if b"ld-linux" in blob or b"libc.so.6" in blob:
+        return "glibc"
+    return "unknown"
+
+
+def _binary_is_compatible(path: Path, system: str) -> Optional[str]:
+    """Return None if `path` can be loaded on the current host, else a reason.
+
+    The returned reason is human-readable and embedded in the final error
+    message if no candidate is compatible, so the user can tell *why* each
+    binary was skipped (e.g. "wrong OS: Mach-O on Linux host").
+    """
+    try:
+        with open(path, "rb") as f:
+            magic = f.read(4)
+    except OSError as e:
+        return f"cannot read: {e}"
+
+    if not magic:
+        return "empty file"
+
+    # OS check (magic vs host).
+    expected_for_os = _EXPECTED_MAGICS_BY_SYSTEM.get(system)
+    if expected_for_os is not None and not any(magic.startswith(m[: len(magic)]) for m in expected_for_os):
+        fmt = (
+            "Mach-O"
+            if any(magic.startswith(m[: len(magic)]) for m in _MACHO_MAGICS)
+            else (
+                "ELF"
+                if magic.startswith(_ELF_MAGIC[0])
+                else "PE" if any(magic.startswith(m[: len(magic)]) for m in _PE_MAGICS) else f"unknown ({magic.hex()})"
+            )
+        )
+        return f"wrong OS: {fmt} binary on {system} host"
+
+    # Linux libc compatibility: glibc<->musl can't mix. Skip if the host
+    # is unknown (don't guess) or the binary's needs are unknown (could be
+    # static / permissive — let the load attempt decide).
+    if system in ("Linux", "Android") and magic.startswith(_ELF_MAGIC[0]):
+        host_libc = _detect_host_libc()
+        bin_libc = _elf_required_libc(path)
+        if host_libc != "unknown" and bin_libc != "unknown" and host_libc != bin_libc:
+            return f"wrong libc: binary needs {bin_libc}, host is {host_libc}"
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Pip-installed binary search
+# ---------------------------------------------------------------------------
+#
+# CIRISVerify can ship as a standalone wheel (e.g. for dev installs or
+# musl-specific HA builds) separate from the main agent package. Scan
+# installed wheels for binaries we recognise. importlib.metadata works
+# even when the wheel isn't importable (no __init__.py, pure data wheel).
+
+
+# Package names that may ship libciris_verify_ffi.* as wheel data.
+_CIRIS_VERIFY_PACKAGE_CANDIDATES: Tuple[str, ...] = (
+    "ciris-verify",
+    "ciris_verify",
+    "ciris-verify-ffi",
+    "ciris_verify_ffi",
+    "ciris-agent",
+    "ciris_agent",
+)
+
+
+def _find_pip_installed_binaries() -> List[Path]:
+    """Return every `libciris_verify_ffi.*` the filesystem exposes via pip.
+
+    Order is stable but unsorted across Python versions — callers are
+    expected to apply `_binary_is_compatible` to filter. Never raises.
+    """
+    found: List[Path] = []
+    seen: Set[Path] = set()
+
+    def _add(p: Path) -> None:
+        try:
+            resolved = p.resolve()
+        except OSError:
+            return
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        found.append(p)
+
+    # 1. importlib.metadata: iterate known package names.
+    try:
+        try:
+            from importlib.metadata import PackageNotFoundError
+            from importlib.metadata import files as _pkg_files
+        except ImportError:  # pragma: no cover — pre-3.8 fallback
+            from importlib_metadata import PackageNotFoundError
+            from importlib_metadata import files as _pkg_files  # type: ignore
+
+        for pkg in _CIRIS_VERIFY_PACKAGE_CANDIDATES:
+            try:
+                entries = _pkg_files(pkg) or []
+            except PackageNotFoundError:
+                continue
+            except Exception:
+                continue
+            for entry in entries:
+                name = entry.name
+                if name.startswith("libciris_verify_ffi") and (
+                    name.endswith((".so", ".dylib", ".dll")) or ".so." in name  # versioned libs e.g. libfoo.so.1
+                ):
+                    try:
+                        _add(Path(entry.locate()))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    # 2. Direct site-packages scan — catches wheels that don't list their
+    # binary in RECORD (rare but seen with custom packaging pipelines).
+    try:
+        import site
+
+        search_dirs: List[Path] = []
+        for d in site.getsitepackages():
+            search_dirs.append(Path(d))
+        user_site = site.getusersitepackages()
+        if user_site:
+            search_dirs.append(Path(user_site))
+        # Also virtualenv site-packages via sys.path (best-effort).
+        for p in sys.path:
+            if p and "site-packages" in p:
+                search_dirs.append(Path(p))
+
+        for root in search_dirs:
+            if not root.is_dir():
+                continue
+            # Don't walk the entire tree; stop at 3 levels deep. Wheels
+            # put native libs at the package root or one level down.
+            for glob_pattern in (
+                "libciris_verify_ffi.*",
+                "*/libciris_verify_ffi.*",
+                "*/*/libciris_verify_ffi.*",
+            ):
+                for match in root.glob(glob_pattern):
+                    if match.is_file() and match.name != "libciris_verify_ffi.fwork":
+                        _add(match)
+    except Exception:
+        pass
+
+    return found
+
 
 # Map Rust LicenseStatus enum variants (serde string serialization) to Python IntEnum
 _RUST_STATUS_MAP = {
@@ -201,6 +481,7 @@ class CIRISVerify:
         # Check for Chaquopy-specific marker
         try:
             import java  # noqa: F401
+
             return True
         except ImportError:
             pass
@@ -245,11 +526,13 @@ class CIRISVerify:
         Java context to get nativeLibraryDir.
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Use Chaquopy's Java context to get nativeLibraryDir
         try:
             from java import jclass
+
             context = jclass("com.chaquo.python.Python").getPlatform().getApplication()
             native_lib_dir = context.getApplicationInfo().nativeLibraryDir
             logger.info(f"[CIRISVerify] Android nativeLibraryDir: {native_lib_dir}")
@@ -273,12 +556,38 @@ class CIRISVerify:
         return None
 
     def _find_binary(self, explicit_path: Optional[str]) -> Path:
-        """Find CIRISVerify binary."""
+        """Find the right CIRISVerify binary for this host.
+
+        Discovery strategy (first compatible match wins):
+          1. `explicit_path` — trust the caller (no compat check).
+          2. `CIRIS_VERIFY_BINARY_PATH` env var — same as explicit.
+          3. iOS framework (app bundle).
+          4. Android jniLibs (Chaquopy nativeLibraryDir).
+          5. For Linux/macOS/Windows: gather candidates from
+             `DEFAULT_BINARY_PATHS`, pip-installed wheels, and the
+             module-local dir (suffix ordered platform-native first),
+             filter by `_binary_is_compatible`, return the first pass.
+
+        If existing files are found but NONE are compatible with this
+        host, a `BinaryNotFoundError` is raised whose message lists
+        every rejected path and the reason (wrong OS, wrong libc, etc.)
+        — the fix for the symptom where the loader silently picks an
+        incompatible binary and attestation times out instead of
+        erroring clearly.
+        """
         if explicit_path:
             path = Path(explicit_path)
             if path.exists():
                 return path
             raise BinaryNotFoundError(explicit_path)
+
+        # Env-var override — parallels CIRIS_IOS_FRAMEWORK_PATH.
+        env_path = os.environ.get("CIRIS_VERIFY_BINARY_PATH")
+        if env_path:
+            path = Path(env_path)
+            if path.exists():
+                return path
+            raise BinaryNotFoundError(f"CIRIS_VERIFY_BINARY_PATH points at missing file: {env_path}")
 
         # iOS-specific framework search
         if self._is_ios():
@@ -286,8 +595,7 @@ class CIRISVerify:
             if ios_path:
                 return ios_path
             raise BinaryNotFoundError(
-                "CIRISVerify.framework not found in app bundle. "
-                "Ensure CIRISVerify.xcframework is linked in Xcode."
+                "CIRISVerify.framework not found in app bundle. " "Ensure CIRISVerify.xcframework is linked in Xcode."
             )
 
         # Android-specific library search (Chaquopy)
@@ -296,53 +604,112 @@ class CIRISVerify:
             if android_path:
                 return android_path
             raise BinaryNotFoundError(
-                "libciris_verify_ffi.so not found on Android. "
-                "Ensure the native library is included in jniLibs."
+                "libciris_verify_ffi.so not found on Android. " "Ensure the native library is included in jniLibs."
             )
 
-        # Search default paths
         system = platform.system()
-        paths = DEFAULT_BINARY_PATHS.get(system, [])
 
-        for path_str in paths:
-            path = Path(path_str)
-            if path.exists():
-                return path
+        # Candidate enumeration — ordered by preference. Duplicates are
+        # de-duplicated below.
+        candidates: List[Path] = []
 
-        # Also check relative to this module
+        #   1. System install paths (distro package or /usr/local)
+        for path_str in DEFAULT_BINARY_PATHS.get(system, []):
+            candidates.append(Path(path_str))
+
+        #   2. Pip-installed wheels
+        candidates.extend(_find_pip_installed_binaries())
+
+        #   3. Module-local, platform-native suffix first. For Linux also
+        #      prefer a `-musl` / `-gnu` variant when the host's libc is
+        #      known, so shipping multiple ELF builds in one wheel is
+        #      robust (see HA / Alpine scenario).
         module_dir = Path(__file__).parent
-        for suffix in [".so", ".dylib", ".dll"]:
-            candidate = module_dir / f"libciris_verify_ffi{suffix}"
-            if candidate.exists():
-                return candidate
+        libc_variants: List[str] = []
+        if system in ("Linux", "Android"):
+            host_libc = _detect_host_libc()
+            if host_libc == "musl":
+                libc_variants = ["-musl", ""]  # -musl wins, bare name fallback
+            elif host_libc == "glibc":
+                libc_variants = ["-gnu", ""]
+            else:
+                libc_variants = [""]
+        else:
+            libc_variants = [""]
 
-        raise BinaryNotFoundError(f"Searched: {paths}")
+        for suffix in _platform_suffix_order(system):
+            for libc_tag in libc_variants:
+                candidates.append(module_dir / f"libciris_verify_ffi{libc_tag}{suffix}")
+
+        # De-duplicate while preserving order.
+        seen: Set[Path] = set()
+        unique_candidates: List[Path] = []
+        for c in candidates:
+            try:
+                key = c.resolve() if c.exists() else c
+            except OSError:
+                key = c
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_candidates.append(c)
+
+        # Filter in two passes so the error message can list rejected
+        # paths alongside the reason for each.
+        existing = [p for p in unique_candidates if p.exists()]
+        rejected: List[Tuple[Path, str]] = []
+        for p in existing:
+            reason = _binary_is_compatible(p, system)
+            if reason is None:
+                return p
+            rejected.append((p, reason))
+
+        if rejected:
+            detail = "; ".join(f"{p} ({r})" for p, r in rejected)
+            raise BinaryNotFoundError(
+                f"No compatible CIRISVerify binary for {system} host. " f"Found but rejected: {detail}"
+            )
+        raise BinaryNotFoundError(f"No CIRISVerify binary found. Searched: " f"{[str(p) for p in unique_candidates]}")
 
     def _verify_binary_integrity(self) -> None:
-        """Verify binary hasn't been tampered with."""
+        """Verify binary hasn't been tampered with and matches this platform.
+
+        Two checks:
+          1. Magic bytes correspond to a real native-library format (not
+             random data or a text file masquerading as a binary).
+          2. The magic corresponds to *this* platform's expected format —
+             a Linux ELF on macOS, or a macOS Mach-O on Linux, would load
+             neither quickly nor clearly; rejecting them here gives a
+             useful error instead of a confusing dlopen / timeout later.
+        """
         try:
             with open(self._binary_path, "rb") as f:
                 magic = f.read(4)
-                if not magic:
-                    raise BinaryTamperedError("Empty binary file")
-
-                valid_magic = [
-                    b"\x7fELF",           # ELF
-                    b"\xfe\xed\xfa\xce",  # Mach-O 32 BE
-                    b"\xfe\xed\xfa\xcf",  # Mach-O 64 BE
-                    b"\xce\xfa\xed\xfe",  # Mach-O 32 LE
-                    b"\xcf\xfa\xed\xfe",  # Mach-O 64 LE (macOS/iOS arm64)
-                    b"\xca\xfe\xba\xbe",  # Mach-O Universal
-                    b"!\x0a<arch>",       # Static library (ar archive)
-                    b"MZ\x90\x00",        # PE
-                    b"MZ\x00\x00",        # PE variant
-                ]
-
-                if not any(magic.startswith(m[:len(magic)]) for m in valid_magic):
-                    raise BinaryTamperedError(f"Invalid binary magic: {magic.hex()}")
-
         except (OSError, IOError) as e:
             raise BinaryTamperedError(f"Cannot read binary: {e}")
+
+        if not magic:
+            raise BinaryTamperedError("Empty binary file")
+
+        all_known_magics = _ELF_MAGIC + _MACHO_MAGICS + _PE_MAGICS + (b"!\x0a<arch>",)
+        if not any(magic.startswith(m[: len(magic)]) for m in all_known_magics):
+            raise BinaryTamperedError(f"Invalid binary magic: {magic.hex()}")
+
+        # Platform-arch check: reject a binary whose magic doesn't match
+        # the current OS's expected format. This is the regression-proof
+        # gate — even if file-system search ever returns a cross-platform
+        # binary, load is refused with a message that points at the real
+        # cause instead of the generic "dlopen failed".
+        system = platform.system()
+        expected = _EXPECTED_MAGICS_BY_SYSTEM.get(system)
+        if expected is not None and not any(magic.startswith(m[: len(magic)]) for m in expected):
+            raise BinaryTamperedError(
+                f"Binary at {self._binary_path} has magic {magic.hex()} "
+                f"which is not a valid {system} native library format. "
+                f"This usually means a cross-platform binary is being "
+                f"loaded on the wrong host (e.g. a Linux .so on macOS). "
+                f"Check that the correct {system} build is present."
+            )
 
     def _load_library(self) -> None:
         """Load the shared library and set up FFI bindings."""
@@ -359,45 +726,45 @@ class CIRISVerify:
         # NOTE: response_data is JSON text (no null bytes), but use c_void_p for
         # consistency with other output pointer patterns.
         self._lib.ciris_verify_get_status.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.c_char_p,                    # request_data (JSON bytes, input)
-            ctypes.c_size_t,                    # request_len
-            ctypes.POINTER(ctypes.c_void_p),    # response_data (out)
-            ctypes.POINTER(ctypes.c_size_t),    # response_len (out)
+            ctypes.c_void_p,  # handle
+            ctypes.c_char_p,  # request_data (JSON bytes, input)
+            ctypes.c_size_t,  # request_len
+            ctypes.POINTER(ctypes.c_void_p),  # response_data (out)
+            ctypes.POINTER(ctypes.c_size_t),  # response_len (out)
         ]
         self._lib.ciris_verify_get_status.restype = ctypes.c_int
 
         # ciris_verify_check_capability(handle, capability, action, required_tier, allowed) -> i32
         self._lib.ciris_verify_check_capability.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.c_char_p,                    # capability
-            ctypes.c_char_p,                    # action
-            ctypes.c_int,                       # required_tier
-            ctypes.POINTER(ctypes.c_int),       # allowed (out)
+            ctypes.c_void_p,  # handle
+            ctypes.c_char_p,  # capability
+            ctypes.c_char_p,  # action
+            ctypes.c_int,  # required_tier
+            ctypes.POINTER(ctypes.c_int),  # allowed (out)
         ]
         self._lib.ciris_verify_check_capability.restype = ctypes.c_int
 
         # ciris_verify_check_agent_integrity(handle, manifest_data, manifest_len,
         #   agent_root, spot_check_count, response_data, response_len) -> i32
         self._lib.ciris_verify_check_agent_integrity.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.c_char_p,                    # manifest_data (JSON bytes, input)
-            ctypes.c_size_t,                    # manifest_len
-            ctypes.c_char_p,                    # agent_root (null-terminated path, input)
-            ctypes.c_uint32,                    # spot_check_count (0 = full)
-            ctypes.POINTER(ctypes.c_void_p),    # response_data (out)
-            ctypes.POINTER(ctypes.c_size_t),    # response_len (out)
+            ctypes.c_void_p,  # handle
+            ctypes.c_char_p,  # manifest_data (JSON bytes, input)
+            ctypes.c_size_t,  # manifest_len
+            ctypes.c_char_p,  # agent_root (null-terminated path, input)
+            ctypes.c_uint32,  # spot_check_count (0 = full)
+            ctypes.POINTER(ctypes.c_void_p),  # response_data (out)
+            ctypes.POINTER(ctypes.c_size_t),  # response_len (out)
         ]
         self._lib.ciris_verify_check_agent_integrity.restype = ctypes.c_int
 
         # ciris_verify_sign(handle, data, data_len, sig_data, sig_len) -> i32
         # NOTE: Use c_void_p for output sig_data — c_char_p truncates at null bytes.
         self._lib.ciris_verify_sign.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.c_char_p,                    # data (input, null-terminated OK)
-            ctypes.c_size_t,                    # data_len
-            ctypes.POINTER(ctypes.c_void_p),    # signature_data (out)
-            ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+            ctypes.c_void_p,  # handle
+            ctypes.c_char_p,  # data (input, null-terminated OK)
+            ctypes.c_size_t,  # data_len
+            ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
+            ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
         ]
         self._lib.ciris_verify_sign.restype = ctypes.c_int
 
@@ -405,21 +772,21 @@ class CIRISVerify:
         # NOTE: Use c_void_p (not c_char_p) for output data pointers because
         # c_char_p truncates at null bytes, and public keys contain 0x00 bytes.
         self._lib.ciris_verify_get_public_key.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.POINTER(ctypes.c_void_p),    # key_data (out)
-            ctypes.POINTER(ctypes.c_size_t),    # key_len (out)
-            ctypes.POINTER(ctypes.c_void_p),    # algorithm (out)
-            ctypes.POINTER(ctypes.c_size_t),    # algorithm_len (out)
+            ctypes.c_void_p,  # handle
+            ctypes.POINTER(ctypes.c_void_p),  # key_data (out)
+            ctypes.POINTER(ctypes.c_size_t),  # key_len (out)
+            ctypes.POINTER(ctypes.c_void_p),  # algorithm (out)
+            ctypes.POINTER(ctypes.c_size_t),  # algorithm_len (out)
         ]
         self._lib.ciris_verify_get_public_key.restype = ctypes.c_int
 
         # ciris_verify_export_attestation(handle, challenge, challenge_len, proof_data, proof_len) -> i32
         self._lib.ciris_verify_export_attestation.argtypes = [
-            ctypes.c_void_p,                    # handle
-            ctypes.c_char_p,                    # challenge (input)
-            ctypes.c_size_t,                    # challenge_len
-            ctypes.POINTER(ctypes.c_void_p),    # proof_data (out)
-            ctypes.POINTER(ctypes.c_size_t),    # proof_len (out)
+            ctypes.c_void_p,  # handle
+            ctypes.c_char_p,  # challenge (input)
+            ctypes.c_size_t,  # challenge_len
+            ctypes.POINTER(ctypes.c_void_p),  # proof_data (out)
+            ctypes.POINTER(ctypes.c_size_t),  # proof_len (out)
         ]
         self._lib.ciris_verify_export_attestation.restype = ctypes.c_int
 
@@ -460,25 +827,26 @@ class CIRISVerify:
 
             # ciris_verify_sign_ed25519(handle, data, data_len, sig_data, sig_len) -> i32
             self._lib.ciris_verify_sign_ed25519.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.c_char_p,                    # data
-                ctypes.c_size_t,                    # data_len
-                ctypes.POINTER(ctypes.c_void_p),    # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # data
+                ctypes.c_size_t,  # data_len
+                ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
             ]
             self._lib.ciris_verify_sign_ed25519.restype = ctypes.c_int
 
             # ciris_verify_get_ed25519_public_key(handle, key_data, key_len) -> i32
             self._lib.ciris_verify_get_ed25519_public_key.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_void_p),    # key_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # key_len (out)
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_void_p),  # key_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # key_len (out)
             ]
             self._lib.ciris_verify_get_ed25519_public_key.restype = ctypes.c_int
 
             self._has_ed25519_support = True
         except AttributeError:
             import logging
+
             logging.getLogger(__name__).info(
                 "[CIRISVerify] Ed25519 key functions not available in this library version"
             )
@@ -486,9 +854,9 @@ class CIRISVerify:
         # ciris_verify_get_diagnostics (optional - added in 0.4.3)
         try:
             self._lib.ciris_verify_get_diagnostics.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_void_p),    # diag_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # diag_len (out)
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_void_p),  # diag_data (out)
+                ctypes.POINTER(ctypes.c_size_t),  # diag_len (out)
             ]
             self._lib.ciris_verify_get_diagnostics.restype = ctypes.c_int
         except AttributeError:
@@ -497,12 +865,12 @@ class CIRISVerify:
         # ciris_verify_audit_trail (optional - added in 0.6.16)
         try:
             self._lib.ciris_verify_audit_trail.argtypes = [
-                ctypes.c_void_p,                    # handle (can be null)
-                ctypes.c_char_p,                    # db_path
-                ctypes.c_char_p,                    # jsonl_path (optional)
-                ctypes.c_char_p,                    # portal_key_id (optional)
-                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
+                ctypes.c_void_p,  # handle (can be null)
+                ctypes.c_char_p,  # db_path
+                ctypes.c_char_p,  # jsonl_path (optional)
+                ctypes.c_char_p,  # portal_key_id (optional)
+                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
             ]
             self._lib.ciris_verify_audit_trail.restype = ctypes.c_int
             self._has_audit_trail_support = True
@@ -513,11 +881,11 @@ class CIRISVerify:
         # Full unified attestation running all 5 levels
         try:
             self._lib.ciris_verify_run_attestation.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.c_char_p,                    # request_json (input)
-                ctypes.c_size_t,                    # request_len
-                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # request_json (input)
+                ctypes.c_size_t,  # request_len
+                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
             ]
             self._lib.ciris_verify_run_attestation.restype = ctypes.c_int
             self._has_run_attestation_support = True
@@ -528,10 +896,10 @@ class CIRISVerify:
         # Report device attestation failure (Play Integrity / App Attest token acquisition failed)
         try:
             self._lib.ciris_verify_device_attestation_failed.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.c_char_p,                    # platform ("android" or "ios")
-                ctypes.c_int,                       # error_code
-                ctypes.c_char_p,                    # error_message (nullable)
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # platform ("android" or "ios")
+                ctypes.c_int,  # error_code
+                ctypes.c_char_p,  # error_message (nullable)
             ]
             self._lib.ciris_verify_device_attestation_failed.restype = ctypes.c_int
             self._has_device_attestation_failed_support = True
@@ -542,25 +910,25 @@ class CIRISVerify:
         # Save manifests with hardware signature for offline L1
         try:
             self._lib.ciris_verify_save_manifest_cache.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.c_char_p,                    # binary_manifest_json
-                ctypes.c_size_t,                    # binary_manifest_len
-                ctypes.c_char_p,                    # function_manifest_json (nullable)
-                ctypes.c_size_t,                    # function_manifest_len
-                ctypes.c_char_p,                    # build_record_json (nullable)
-                ctypes.c_size_t,                    # build_record_len
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # binary_manifest_json
+                ctypes.c_size_t,  # binary_manifest_len
+                ctypes.c_char_p,  # function_manifest_json (nullable)
+                ctypes.c_size_t,  # function_manifest_len
+                ctypes.c_char_p,  # build_record_json (nullable)
+                ctypes.c_size_t,  # build_record_len
             ]
             self._lib.ciris_verify_save_manifest_cache.restype = ctypes.c_int
 
             self._lib.ciris_verify_load_manifest_cache.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
             ]
             self._lib.ciris_verify_load_manifest_cache.restype = ctypes.c_int
 
             self._lib.ciris_verify_manifest_cache_exists.argtypes = [
-                ctypes.c_void_p,                    # handle (can be null)
+                ctypes.c_void_p,  # handle (can be null)
             ]
             self._lib.ciris_verify_manifest_cache_exists.restype = ctypes.c_int
             self._has_manifest_cache_support = True
@@ -571,22 +939,22 @@ class CIRISVerify:
         # Get hardware information and security limitations
         try:
             self._lib.ciris_verify_get_hardware_info.argtypes = [
-                ctypes.c_void_p,                    # handle (can be null)
+                ctypes.c_void_p,  # handle (can be null)
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json
-                ctypes.POINTER(ctypes.c_size_t),   # result_len
+                ctypes.POINTER(ctypes.c_size_t),  # result_len
             ]
             self._lib.ciris_verify_get_hardware_info.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_hardware_info_android.argtypes = [
-                ctypes.c_void_p,                    # handle (can be null)
-                ctypes.c_char_p,                    # hardware
-                ctypes.c_char_p,                    # board
-                ctypes.c_char_p,                    # manufacturer
-                ctypes.c_char_p,                    # model
-                ctypes.c_char_p,                    # security_patch
-                ctypes.c_char_p,                    # fingerprint
+                ctypes.c_void_p,  # handle (can be null)
+                ctypes.c_char_p,  # hardware
+                ctypes.c_char_p,  # board
+                ctypes.c_char_p,  # manufacturer
+                ctypes.c_char_p,  # model
+                ctypes.c_char_p,  # security_patch
+                ctypes.c_char_p,  # fingerprint
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json
-                ctypes.POINTER(ctypes.c_size_t),   # result_len
+                ctypes.POINTER(ctypes.c_size_t),  # result_len
             ]
             self._lib.ciris_verify_get_hardware_info_android.restype = ctypes.c_int
             self._has_hardware_info_support = True
@@ -599,8 +967,8 @@ class CIRISVerify:
             # Callback signature: void callback(int level, const char* target, const char* message)
             # Level: 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=TRACE
             self._log_callback_type = ctypes.CFUNCTYPE(
-                None,           # return type (void)
-                ctypes.c_int,   # level
+                None,  # return type (void)
+                ctypes.c_int,  # level
                 ctypes.c_char_p,  # target
                 ctypes.c_char_p,  # message
             )
@@ -618,72 +986,72 @@ class CIRISVerify:
         # Derive secp256k1 public key for EVM wallet
         try:
             self._lib.ciris_verify_derive_secp256k1_pubkey.argtypes = [
-                ctypes.c_void_p,                    # handle
+                ctypes.c_void_p,  # handle
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # pubkey_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # pubkey_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # pubkey_len (out)
             ]
             self._lib.ciris_verify_derive_secp256k1_pubkey.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_evm_address.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),     # pubkey
-                ctypes.c_size_t,                    # pubkey_len
+                ctypes.POINTER(ctypes.c_uint8),  # pubkey
+                ctypes.c_size_t,  # pubkey_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # address_len (out)
             ]
             self._lib.ciris_verify_get_evm_address.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_evm_address_checksummed.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),     # pubkey
-                ctypes.c_size_t,                    # pubkey_len
-                ctypes.POINTER(ctypes.c_char_p),    # address_str (out)
-                ctypes.POINTER(ctypes.c_size_t),    # address_str_len (out)
+                ctypes.POINTER(ctypes.c_uint8),  # pubkey
+                ctypes.c_size_t,  # pubkey_len
+                ctypes.POINTER(ctypes.c_char_p),  # address_str (out)
+                ctypes.POINTER(ctypes.c_size_t),  # address_str_len (out)
             ]
             self._lib.ciris_verify_get_evm_address_checksummed.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_secp256k1.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_uint8),     # message_hash
-                ctypes.c_size_t,                    # hash_len
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_uint8),  # message_hash
+                ctypes.c_size_t,  # hash_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
             ]
             self._lib.ciris_verify_sign_secp256k1.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_evm_transaction.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_uint8),     # tx_hash
-                ctypes.c_size_t,                    # hash_len
-                ctypes.c_uint64,                    # chain_id
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_uint8),  # tx_hash
+                ctypes.c_size_t,  # hash_len
+                ctypes.c_uint64,  # chain_id
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
             ]
             self._lib.ciris_verify_sign_evm_transaction.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_typed_data.argtypes = [
-                ctypes.c_void_p,                    # handle
-                ctypes.POINTER(ctypes.c_uint8),     # domain_hash
-                ctypes.c_size_t,                    # domain_len
-                ctypes.POINTER(ctypes.c_uint8),     # message_hash
-                ctypes.c_size_t,                    # message_len
+                ctypes.c_void_p,  # handle
+                ctypes.POINTER(ctypes.c_uint8),  # domain_hash
+                ctypes.c_size_t,  # domain_len
+                ctypes.POINTER(ctypes.c_uint8),  # message_hash
+                ctypes.c_size_t,  # message_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
             ]
             self._lib.ciris_verify_sign_typed_data.restype = ctypes.c_int
 
             self._lib.ciris_verify_recover_evm_address.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),     # message_hash
-                ctypes.c_size_t,                    # hash_len
-                ctypes.POINTER(ctypes.c_uint8),     # signature
-                ctypes.c_size_t,                    # signature_len
+                ctypes.POINTER(ctypes.c_uint8),  # message_hash
+                ctypes.c_size_t,  # hash_len
+                ctypes.POINTER(ctypes.c_uint8),  # signature
+                ctypes.c_size_t,  # signature_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
-                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # address_len (out)
             ]
             self._lib.ciris_verify_recover_evm_address.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_wallet_info.argtypes = [
-                ctypes.c_void_p,                    # handle
+                ctypes.c_void_p,  # handle
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
+                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
             ]
             self._lib.ciris_verify_get_wallet_info.restype = ctypes.c_int
 
@@ -761,24 +1129,24 @@ class CIRISVerify:
         """Clean up resources."""
         # Clear log callback first to prevent calls during destruction
         # Use getattr to handle partial initialization
-        if getattr(self, '_has_log_callback_support', False) and getattr(self, '_lib', None):
+        if getattr(self, "_has_log_callback_support", False) and getattr(self, "_lib", None):
             try:
                 # Pass null function pointer to disable callback
-                log_cb_type = getattr(self, '_log_callback_type', None)
+                log_cb_type = getattr(self, "_log_callback_type", None)
                 if log_cb_type:
                     null_callback = ctypes.cast(None, log_cb_type)
                     self._lib.ciris_verify_set_log_callback(null_callback)
             except Exception:
                 pass
         # Clear the reference after FFI call
-        if hasattr(self, '_active_log_callback'):
+        if hasattr(self, "_active_log_callback"):
             self._active_log_callback = None
-        if getattr(self, '_handle', None) and getattr(self, '_lib', None):
+        if getattr(self, "_handle", None) and getattr(self, "_lib", None):
             try:
                 self._lib.ciris_verify_destroy(self._handle)
             except Exception:
                 pass
-        if getattr(self, '_executor', None):
+        if getattr(self, "_executor", None):
             self._executor.shutdown(wait=False)
 
     def set_log_callback(self, callback=None, level: int = 3):
@@ -802,6 +1170,7 @@ class CIRISVerify:
         """
         if not self._has_log_callback_support:
             import warnings
+
             warnings.warn("Log callback not supported in this library version (requires 0.9.1+)")
             return
 
@@ -908,14 +1277,14 @@ class CIRISVerify:
             dns_us_reachable=dns_us.get("reachable", False),
             dns_eu_reachable=dns_eu.get("reachable", False),
             https_reachable=https_src.get("reachable", False),
-            validation_status=_RUST_VALIDATION_MAP.get(
-                overall_str, ValidationStatus.VALIDATION_ERROR
+            validation_status=_RUST_VALIDATION_MAP.get(overall_str, ValidationStatus.VALIDATION_ERROR),
+            sources_agreeing=sum(
+                [
+                    dns_us.get("valid", False),
+                    dns_eu.get("valid", False),
+                    https_src.get("valid", False),
+                ]
             ),
-            sources_agreeing=sum([
-                dns_us.get("valid", False),
-                dns_eu.get("valid", False),
-                https_src.get("valid", False),
-            ]),
             # Error details (added in v0.6.6)
             dns_us_error=dns_us.get("error_details") or dns_us.get("error"),
             dns_us_error_category=dns_us.get("error_category"),
@@ -997,10 +1366,7 @@ class CIRISVerify:
             )
         else:
             reason_text = f"Reason: {reason} " if reason else ""
-            return (
-                f"CRITICAL: License verification failed. {reason_text}"
-                "Agent capabilities are severely restricted."
-            )
+            return f"CRITICAL: License verification failed. {reason_text}" "Agent capabilities are severely restricted."
 
     async def get_license_status(
         self,
@@ -1062,7 +1428,7 @@ class CIRISVerify:
                 self._handle,
                 capability.encode("utf-8"),
                 b"",  # action (default empty)
-                0,    # required_tier (default 0)
+                0,  # required_tier (default 0)
                 ctypes.byref(result),
             )
 
@@ -1435,9 +1801,9 @@ class CIRISVerify:
             result_len = ctypes.c_size_t()
 
             # Encode paths as C strings
-            db_path_bytes = db_path.encode('utf-8')
-            jsonl_path_bytes = jsonl_path.encode('utf-8') if jsonl_path else None
-            portal_key_bytes = portal_key_id.encode('utf-8') if portal_key_id else None
+            db_path_bytes = db_path.encode("utf-8")
+            jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
+            portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
 
             ret = self._lib.ciris_verify_audit_trail(
                 self._handle,
@@ -1494,9 +1860,9 @@ class CIRISVerify:
         result_len = ctypes.c_size_t()
 
         # Encode paths as C strings
-        db_path_bytes = db_path.encode('utf-8')
-        jsonl_path_bytes = jsonl_path.encode('utf-8') if jsonl_path else None
-        portal_key_bytes = portal_key_id.encode('utf-8') if portal_key_id else None
+        db_path_bytes = db_path.encode("utf-8")
+        jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
+        portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
 
         ret = self._lib.ciris_verify_audit_trail(
             self._handle,
@@ -1804,9 +2170,7 @@ class CIRISVerify:
             VerificationFailedError: If the call fails.
         """
         if not self.has_device_attestation_failed_support:
-            raise RuntimeError(
-                "device_attestation_failed not available in this library version (requires >= 1.5.3)"
-            )
+            raise RuntimeError("device_attestation_failed not available in this library version (requires >= 1.5.3)")
 
         if platform not in ("android", "ios"):
             raise ValueError("platform must be 'android' or 'ios'")
@@ -1822,9 +2186,7 @@ class CIRISVerify:
         )
 
         if ret != 0:
-            raise VerificationFailedError(
-                ret, f"device_attestation_failed failed with code {ret}"
-            )
+            raise VerificationFailedError(ret, f"device_attestation_failed failed with code {ret}")
 
     async def device_attestation_failed(
         self,
@@ -2110,29 +2472,35 @@ class CIRISVerify:
                 elif "VulnerableSoC" in lim:
                     vuln = lim["VulnerableSoC"]
                     advisory = vuln.get("advisory", {})
-                    limitations.append(HardwareLimitation(
-                        limitation_type="VulnerableSoC",
-                        manufacturer=vuln.get("manufacturer"),
-                        advisory=SecurityAdvisory(
-                            cve=advisory.get("cve", ""),
-                            title=advisory.get("title", ""),
-                            impact=advisory.get("impact", ""),
-                            software_patchable=advisory.get("software_patchable", False),
-                            min_patch_level=advisory.get("min_patch_level"),
-                        ),
-                    ))
+                    limitations.append(
+                        HardwareLimitation(
+                            limitation_type="VulnerableSoC",
+                            manufacturer=vuln.get("manufacturer"),
+                            advisory=SecurityAdvisory(
+                                cve=advisory.get("cve", ""),
+                                title=advisory.get("title", ""),
+                                impact=advisory.get("impact", ""),
+                                software_patchable=advisory.get("software_patchable", False),
+                                min_patch_level=advisory.get("min_patch_level"),
+                            ),
+                        )
+                    )
                 elif "WeakTEE" in lim:
-                    limitations.append(HardwareLimitation(
-                        limitation_type="WeakTEE",
-                        reason=lim["WeakTEE"].get("reason"),
-                    ))
+                    limitations.append(
+                        HardwareLimitation(
+                            limitation_type="WeakTEE",
+                            reason=lim["WeakTEE"].get("reason"),
+                        )
+                    )
                 elif "OutdatedPatchLevel" in lim:
                     patch = lim["OutdatedPatchLevel"]
-                    limitations.append(HardwareLimitation(
-                        limitation_type="OutdatedPatchLevel",
-                        current_patch=patch.get("current"),
-                        minimum_patch=patch.get("minimum_required"),
-                    ))
+                    limitations.append(
+                        HardwareLimitation(
+                            limitation_type="OutdatedPatchLevel",
+                            current_patch=patch.get("current"),
+                            minimum_patch=patch.get("minimum_required"),
+                        )
+                    )
 
         return HardwareInfo(
             platform=data.get("platform", "unknown"),
@@ -2249,9 +2617,7 @@ class CIRISVerify:
                 attestation = verifier.attestation_with_challenge(challenge)
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_await_key_registration"):
@@ -2281,6 +2647,7 @@ class CIRISVerify:
 
         if result_ptr.value:
             import json
+
             result_json = result_ptr.value.decode("utf-8")
             self._lib.ciris_verify_free_string(result_ptr)
             return json.loads(result_json)
@@ -2304,9 +2671,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_has_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("has_key")
@@ -2323,9 +2688,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         ret = self._lib.ciris_verify_delete_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("delete_key")
@@ -2361,15 +2724,12 @@ class CIRISVerify:
             # attestation["key_attestation"]["key_type"] == "ephemeral"
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_generate_key"):
             raise NotImplementedError(
-                "generate_key not available in this library version. "
-                "Update to ciris-verify >= 1.1.16."
+                "generate_key not available in this library version. " "Update to ciris-verify >= 1.1.16."
             )
 
         ret = self._lib.ciris_verify_generate_key(self._handle)
@@ -2395,9 +2755,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
 
@@ -2432,9 +2790,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError(
-                "Ed25519 key functions not available in this library version."
-            )
+            raise NotImplementedError("Ed25519 key functions not available in this library version.")
         key_data = ctypes.c_void_p()
         key_len = ctypes.c_size_t()
 
@@ -2512,7 +2868,7 @@ class CIRISVerify:
             CommunicationError: If wallet info retrieval fails.
             VerificationFailedError: If no Ed25519 key is loaded.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         result_json = ctypes.POINTER(ctypes.c_uint8)()
@@ -2549,7 +2905,7 @@ class CIRISVerify:
             CommunicationError: If derivation fails.
             VerificationFailedError: If no Ed25519 key is loaded.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         pubkey_data = ctypes.POINTER(ctypes.c_uint8)()
@@ -2589,7 +2945,7 @@ class CIRISVerify:
             CommunicationError: If address derivation fails.
             ValueError: If pubkey is not 65 bytes.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if pubkey is None:
@@ -2634,7 +2990,7 @@ class CIRISVerify:
             CommunicationError: If address derivation fails.
             ValueError: If pubkey is not 65 bytes.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if pubkey is None:
@@ -2677,7 +3033,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If message_hash is not 32 bytes.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(message_hash) != 32:
@@ -2721,7 +3077,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If tx_hash is not 32 bytes.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(tx_hash) != 32:
@@ -2766,7 +3122,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If hashes are not 32 bytes.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(domain_hash) != 32:
@@ -2814,7 +3170,7 @@ class CIRISVerify:
             CommunicationError: If recovery fails (invalid signature).
             ValueError: If arguments are wrong length.
         """
-        if not getattr(self, '_has_wallet_support', False):
+        if not getattr(self, "_has_wallet_support", False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(message_hash) != 32:
@@ -2868,16 +3224,12 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
         if len(seed) != 32:
             raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
 
         key_id_bytes = key_id.encode("utf-8")
-        ret = self._lib.ciris_verify_store_named_key(
-            self._handle, key_id_bytes, seed, len(seed)
-        )
+        ret = self._lib.ciris_verify_store_named_key(self._handle, key_id_bytes, seed, len(seed))
 
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("store_named_key")
@@ -2899,9 +3251,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
 
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
@@ -2919,9 +3269,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("sign_with_named_key")
         if ret != 0:
-            raise VerificationFailedError(
-                ret, f"sign_with_named_key failed with code {ret}"
-            )
+            raise VerificationFailedError(ret, f"sign_with_named_key failed with code {ret}")
 
         try:
             return ctypes.string_at(sig_data.value, sig_len.value)
@@ -2943,9 +3291,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_has_named_key(self._handle, key_id_bytes)
@@ -2968,9 +3314,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_delete_named_key(self._handle, key_id_bytes)
@@ -2994,9 +3338,7 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
 
         pk_data = ctypes.c_void_p()
         pk_len = ctypes.c_size_t()
@@ -3012,9 +3354,7 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("get_named_key_public")
         if ret != 0:
-            raise VerificationFailedError(
-                ret, f"get_named_key_public failed with code {ret}"
-            )
+            raise VerificationFailedError(ret, f"get_named_key_public failed with code {ret}")
 
         try:
             return ctypes.string_at(pk_data.value, pk_len.value)
@@ -3034,14 +3374,10 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError(
-                "Named key functions not available (library version < 1.5.0)"
-            )
+            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
 
         json_out = ctypes.c_char_p()
-        ret = self._lib.ciris_verify_list_named_keys(
-            self._handle, ctypes.byref(json_out)
-        )
+        ret = self._lib.ciris_verify_list_named_keys(self._handle, ctypes.byref(json_out))
 
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("list_named_keys")
@@ -3162,10 +3498,7 @@ class MockCIRISVerify(CIRISVerify):
         """
         # Standard operations are always allowed, even in community mode
         cap_lower = capability.lower()
-        is_standard = (
-            cap_lower.startswith("standard:")
-            or cap_lower.startswith("tool:")
-        )
+        is_standard = cap_lower.startswith("standard:") or cap_lower.startswith("tool:")
 
         if not self._mock_status.allows_licensed_operation():
             if is_standard:
@@ -3223,6 +3556,7 @@ class MockCIRISVerify(CIRISVerify):
         # Use a mock Ed25519 signing key
         if not hasattr(self, "_mock_private_key"):
             from cryptography.hazmat.primitives.asymmetric import ed25519
+
             self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
             self._mock_public_key = self._mock_private_key.public_key()
 
@@ -3235,10 +3569,12 @@ class MockCIRISVerify(CIRISVerify):
         """Mock get_public_key — returns software Ed25519 key."""
         if not hasattr(self, "_mock_private_key"):
             from cryptography.hazmat.primitives.asymmetric import ed25519
+
             self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
             self._mock_public_key = self._mock_private_key.public_key()
 
         from cryptography.hazmat.primitives import serialization
+
         key_bytes = self._mock_public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
@@ -3286,13 +3622,17 @@ class MockCIRISVerify(CIRISVerify):
                 "https": {"reachable": True, "valid": True},
             },
             "audit_trail": None,  # Skipped in mock
-            "python_integrity": {
-                "valid": True,
-                "modules_checked": python_hashes.module_count if python_hashes else 0,
-                "modules_passed": python_hashes.module_count if python_hashes else 0,
-                "modules_failed": 0,
-                "total_hash_valid": True,
-            } if python_hashes else None,
+            "python_integrity": (
+                {
+                    "valid": True,
+                    "modules_checked": python_hashes.module_count if python_hashes else 0,
+                    "modules_passed": python_hashes.module_count if python_hashes else 0,
+                    "modules_failed": 0,
+                    "total_hash_valid": True,
+                }
+                if python_hashes
+                else None
+            ),
             "registry_key_status": "active" if key_fingerprint else "not_checked",
             "checks_passed": 3,
             "checks_total": 3,
@@ -3335,13 +3675,17 @@ class MockCIRISVerify(CIRISVerify):
                 "https": {"reachable": True, "valid": True},
             },
             "audit_trail": None,
-            "python_integrity": {
-                "valid": True,
-                "modules_checked": python_hashes.module_count if python_hashes else 0,
-                "modules_passed": python_hashes.module_count if python_hashes else 0,
-                "modules_failed": 0,
-                "total_hash_valid": True,
-            } if python_hashes else None,
+            "python_integrity": (
+                {
+                    "valid": True,
+                    "modules_checked": python_hashes.module_count if python_hashes else 0,
+                    "modules_passed": python_hashes.module_count if python_hashes else 0,
+                    "modules_failed": 0,
+                    "total_hash_valid": True,
+                }
+                if python_hashes
+                else None
+            ),
             "registry_key_status": "active" if key_fingerprint else "not_checked",
             "checks_passed": 3,
             "checks_total": 3,

@@ -302,7 +302,8 @@ fun CIRISApp(
     googleSignInCallback: GoogleSignInCallback? = null,
     purchaseLauncher: PurchaseLauncher? = null,
     deviceAttestationCallback: DeviceAttestationCallback? = null,
-    onTokenUpdated: ((String) -> Unit)? = null
+    onTokenUpdated: ((String) -> Unit)? = null,
+    isHAAddonMode: Boolean = false
 ) {
     val TAG = "CIRISApp"
 
@@ -395,6 +396,7 @@ fun CIRISApp(
             // DataManagement and LLMSettings go back to Interact (main screen)
             is Screen.DataManagement -> Screen.Interact
             is Screen.LLMSettings -> Screen.Interact
+            is Screen.VizSettings -> Screen.Settings
 
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
@@ -524,6 +526,10 @@ fun CIRISApp(
     }
     // SetupViewModel needs to survive configuration changes and app backgrounding
     val setupViewModel: SetupViewModel = viewModel { SetupViewModel() }
+    // Set HA addon mode if running in Home Assistant addon context
+    if (isHAAddonMode) {
+        setupViewModel.setHAAddonMode(true)
+    }
     val interactViewModel: InteractViewModel = viewModel {
         InteractViewModel(apiClient)
     }
@@ -723,9 +729,17 @@ fun CIRISApp(
                 startupViewModel.onErrorDetected("Backend unreachable. Please restart the app.")
                 return@LaunchedEffect
             } else if (isFirstRun == true) {
-                // First run - show login screen first
-                platformLog(TAG, "[INFO] First run detected, navigating to Login")
-                currentScreen = Screen.Login
+                // First run
+                if (isHAAddonMode) {
+                    // HA Addon mode - skip login, go directly to setup
+                    // HA handles auth via SUPERVISOR_TOKEN
+                    platformLog(TAG, "[INFO] First run in HA Addon mode, skipping login, navigating to Setup")
+                    currentScreen = Screen.Setup
+                } else {
+                    // Normal mode - show login screen first
+                    platformLog(TAG, "[INFO] First run detected, navigating to Login")
+                    currentScreen = Screen.Login
+                }
             } else {
                 // Not first run - try to load stored token and check if valid/refresh if needed
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")
@@ -1376,6 +1390,8 @@ fun CIRISApp(
                 // Live background state from settings (collect before Scaffold for top bar)
                 val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
                 val colorTheme by settingsViewModel.colorTheme.collectAsState()
+                val forceClassicViz by settingsViewModel.forceClassicViz.collectAsState()
+                val cellVizConfig by settingsViewModel.cellVizConfig.collectAsState()
                 platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
                 Scaffold(
@@ -1466,8 +1482,10 @@ fun CIRISApp(
                         },
                         apiClient = apiClient,
                         liveBackgroundEnabled = liveBackgroundEnabled,
+                        forceClassicViz = forceClassicViz,
                         colorTheme = colorTheme,
                         isDarkMode = isDarkMode,
+                        cellVizConfig = cellVizConfig,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -1502,6 +1520,10 @@ fun CIRISApp(
                     onNavigateToLLMSettings = {
                         PlatformLogger.i("CIRISApp", "[Settings] Navigating to LLM Settings")
                         currentScreen = Screen.LLMSettings
+                    },
+                    onNavigateToVizSettings = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to Viz Settings")
+                        currentScreen = Screen.VizSettings
                     }
                 )
             }
@@ -1515,6 +1537,16 @@ fun CIRISApp(
                     onNavigateBack = {
                         PlatformLogger.i(TAG, "[Screen.LLMSettings] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.VizSettings -> {
+                VizSettingsScreen(
+                    viewModel = settingsViewModel,
+                    onBack = {
+                        PlatformLogger.i(TAG, "[Screen.VizSettings] Navigating back to Settings")
+                        currentScreen = Screen.Settings
                     }
                 )
             }
@@ -3248,6 +3280,7 @@ private sealed class Screen {
     object SkillStudio : Screen()
     object DataManagement : Screen()
     object LLMSettings : Screen()
+    object VizSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
 }

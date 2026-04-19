@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "DMA สัญชาตญาณ - ใช้สูตร k_eff ของ CCA และการจำแนกเฟส"
-version: "1.0"
+version: "1.1"
 
 # รวมข้อตกลง CIRIS เป็นบริบท
 accord_header: true

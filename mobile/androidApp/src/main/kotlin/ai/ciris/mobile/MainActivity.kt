@@ -18,6 +18,7 @@ import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
+import ai.ciris.mobile.shared.platform.initCellVizProbe
 import ai.ciris.mobile.shared.platform.initLocalInferenceProbe
 import ai.ciris.mobile.shared.platform.initUrlOpener
 import ai.ciris.mobile.shared.diagnostics.NetworkDiagnosticsAndroid
@@ -96,6 +97,11 @@ class MainActivity : ComponentActivity() {
         // Initialize local-inference capability probe (needs app context to
         // query ActivityManager for RAM size).
         initLocalInferenceProbe(this)
+
+        // Initialize cell-viz capability probe (same pattern — needs app
+        // context to read RAM / ABI before the Interact screen decides
+        // which visualization to render).
+        initCellVizProbe(this)
 
         // Initialize Python runtime (Chaquopy)
         if (!Python.isStarted()) {

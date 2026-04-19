@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CIRIS · Cell — phone-first</title>
+<style>
+:root {
+  --bg-0: #05070d;
+  --bg-1: #0d1426;
+  --cyto: #0a0f1c;
+  --text: #d6dcee;
+  --dim:  #6e7a99;
+  --faint:#353c52;
+
+  --comm:    #4fd1c5;
+  --memory:  #b794f6;
+  --llm:     #63b3ed;
+  --tool:    #f6ad55;
+  --runtime: #fc8181;
+  --wise:    #f6e05e;
+  --nucleus: #ffc97a;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: #1b1f2b;
+  color: var(--text);
+  font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+  font-weight: 400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 28px 12px;
+  min-height: 100vh;
+}
+
+.frame-caption {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: #9aa3bd;
+  text-transform: uppercase;
+}
+
+/* Samsung J7: 720x1280 native @ ~2dpr → 360x640 CSS. Draw to true scale. */
+.phone {
+  width: 360px;
+  height: 640px;
+  max-width: 100vw;
+  max-height: calc(100vh - 120px);
+  background: var(--bg-0);
+  border-radius: 28px;
+  box-shadow: 0 1px 0 #2a2f3e inset, 0 0 0 8px #111522, 0 12px 40px rgba(0,0,0,0.55);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Status row — thin, low visual weight */
+.status {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.status .agent {
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+.status .agent-state {
+  color: var(--comm);
+  margin-left: 6px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+.status .env {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+/* SVG fills remaining space */
+.canvas-wrap { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+svg { width: 100%; height: 100%; display: block; }
+
+/* State strip at bottom — reads as a clear card */
+.strip {
+  height: 112px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(255,255,255,0.09);
+  background: #0c1122;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+.strip-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.pill .pd {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--c, var(--dim));
+  box-shadow: 0 0 8px var(--c, var(--dim));
+}
+.pill.muted { color: var(--dim); background: rgba(255,255,255,0.04); }
+.strip-buses {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  margin-top: 0;
+}
+.bus-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 0 5px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: all 0.2s;
+}
+.bus-chip.live {
+  border-color: rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.1);
+}
+.bus-chip .cd {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+}
+.bus-chip.live .cd { animation: cdPulse 1.8s ease-in-out infinite; }
+.bus-chip .cl {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.bus-chip.live .cl { color: var(--text); }
+
+/* Device frame note */
+.notes {
+  max-width: 560px;
+  font-size: 12px;
+  color: #9aa3bd;
+  line-height: 1.6;
+  text-align: center;
+}
+.notes code { background: #2a2f3e; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+
+/* ---- animations, restrained for J7 GPU ---- */
+@keyframes cdPulse {
+  0%,100% { opacity: 0.55; transform: scale(1); }
+  50%     { opacity: 1;    transform: scale(1.25); }
+}
+@keyframes breathe {
+  0%,100% { transform: scale(1); }
+  50%     { transform: scale(1.006); }
+}
+@keyframes nucleusPulse {
+  0%,100% { opacity: 0.45; }
+  50%     { opacity: 1;    }
+}
+@keyframes nucleusWave {
+  0%   { r: 7;  opacity: 0;   }
+  20%  {        opacity: 0.8; }
+  100% { r: 48; opacity: 0;   }
+}
+@keyframes busLive {
+  0%,100% { stroke-opacity: 0.5; }
+  50%     { stroke-opacity: 1;   }
+}
+@keyframes tendrilFlow {
+  to { stroke-dashoffset: -30; }
+}
+@keyframes moteDrift {
+  0%,100% { transform: translate(0,0); }
+  50%     { transform: translate(var(--dx), var(--dy)); }
+}
+@keyframes tipPulse {
+  0%,100% { opacity: 0.55; }
+  50%     { opacity: 1;    }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+}
+
+/* SVG classes */
+.bus-arc       { fill: none; stroke-linecap: butt; opacity: 0.8; }
+.bus-arc.live  { animation: busLive 2.4s ease-in-out infinite; }
+.bus-arc-halo  { fill: none; stroke-linecap: butt; opacity: 0.18; }
+.port-body     { stroke-width: 1.3; }
+.nucleus-shell { fill: none; stroke: var(--nucleus); stroke-width: 0.8; }
+.nucleus-core  { fill: var(--nucleus); animation: nucleusPulse 3.2s ease-in-out infinite; }
+.nucleus-wave  { fill: none; stroke: var(--nucleus); stroke-width: 0.8; animation: nucleusWave 2.6s ease-out infinite; }
+.mote          { fill: #a5b3d0; opacity: 0.55; }
+.mote-mem      { fill: var(--memory); opacity: 0.85; }
+.tendril       { fill: none; stroke-linecap: round; }
+.tendril-flow  { stroke-dasharray: 3 5; animation: tendrilFlow 2.2s linear infinite; }
+.ch-label      { font-family: -apple-system, "Inter", system-ui; font-size: 10px; font-weight: 500; letter-spacing: 0.02em; fill: var(--text); }
+.ch-label.dim  { fill: var(--dim); font-weight: 400; }
+.wa-ring       { fill: none; stroke: var(--wise); }
+</style>
+</head>
+<body>
+
+<p class="frame-caption">Samsung J7 · 360 × 640 CSS px · actual size</p>
+
+<div class="phone">
+  <!-- Top status row -->
+  <div class="status">
+    <div>
+      <span class="agent">datum</span><span class="agent-state">WORK</span>
+    </div>
+    <div class="env">NYC · 11° · 14:32</div>
+  </div>
+
+  <!-- Cell canvas -->
+  <div class="canvas-wrap">
+    <svg viewBox="0 0 360 520" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <radialGradient id="cellFill" cx="45%" cy="40%" r="70%">
+          <stop offset="0%"  stop-color="#192240" stop-opacity="0.6"/>
+          <stop offset="70%" stop-color="#0a1122" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#05080f" stop-opacity="0.15"/>
+        </radialGradient>
+        <radialGradient id="nucleusFill" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"  stop-color="#fff2d0" stop-opacity="0.75"/>
+          <stop offset="60%" stop-color="#e8bf83" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#b37a2a" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- Cytoplasm motes behind cell drawn first via cell group below -->
+
+      <g id="cell" transform="translate(180,260)" style="animation: breathe 9s ease-in-out infinite; transform-box: fill-box; transform-origin: center;">
+        <!-- cell body fill -->
+        <circle r="130" fill="url(#cellFill)" />
+
+        <!-- cytoplasm motes -->
+        <g id="motes"></g>
+
+        <!-- organelles (22 services) -->
+        <g id="organelles"></g>
+
+        <!-- nucleus H3ERE -->
+        <g id="nucleus">
+          <circle r="42" fill="url(#nucleusFill)" opacity="0.7"/>
+          <!-- 7 shells (H3ERE stages) drawn tight so they read as a pupil, not a target -->
+          <circle r="10" class="nucleus-shell" opacity="0.25"/>
+          <circle r="14" class="nucleus-shell" opacity="0.3"/>
+          <circle r="18" class="nucleus-shell" opacity="0.35"/>
+          <circle r="22" class="nucleus-shell" opacity="0.4"/>
+          <circle r="26" class="nucleus-shell" opacity="0.35"/>
+          <circle r="30" class="nucleus-shell" opacity="0.28"/>
+          <circle r="34" class="nucleus-shell" opacity="0.2"/>
+          <circle r="4"  class="nucleus-core"/>
+          <circle       class="nucleus-wave"/>
+        </g>
+
+        <!-- membrane: 6 bus arcs -->
+        <g id="membrane"></g>
+
+        <!-- adapter ports embedded in membrane -->
+        <g id="ports"></g>
+      </g>
+
+      <!-- pseudopods — drawn in screen space so labels don't get cropped -->
+      <g id="pseudopods"></g>
+
+      <!-- WA indicator: small gold satellite up top -->
+      <g id="wa" transform="translate(300, 50)">
+        <circle r="18" fill="#0a1020" class="wa-ring" stroke-width="1.4" opacity="0.9"/>
+        <circle r="18" fill="none" stroke="var(--wise)" stroke-width="5" opacity="0.18"/>
+        <circle r="4"  fill="var(--wise)" style="animation: tipPulse 2.4s ease-in-out infinite;"/>
+        <text y="35" text-anchor="middle" style="font-size:9px;letter-spacing:0.2em;fill:var(--wise);opacity:0.8">WA</text>
+      </g>
+      <path id="waThread" fill="none" stroke="var(--wise)" stroke-width="1" opacity="0.45"
+            stroke-dasharray="2 4" />
+    </svg>
+  </div>
+
+  <!-- Bottom state strip -->
+  <div class="strip">
+    <div class="strip-row">
+      <span class="pill"><span class="pd" style="--c:var(--comm)"></span>5 channels</span>
+      <span class="pill muted">1.2k memory</span>
+      <span class="pill muted">3d 11h</span>
+    </div>
+    <div class="strip-buses" id="busChips"></div>
+  </div>
+</div>
+
+<p class="notes">
+  Tap any element in the real viz to reveal its name. Labels are hidden at rest so the cell reads clearly at this scale.
+</p>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t, a={}) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); return n; };
+const rad = d => d * Math.PI/180;
+const pxy = (r, a) => ({ x: r*Math.cos(rad(a)), y: r*Math.sin(rad(a)) });
+
+/* Cell geometry — kept tight for 360 px width */
+const R = 130;
+
+/* Buses: semantic placement */
+const BUSES = [
+  { id:'wise',    a:[240,300], color:'var(--wise)',    short:'W',  live:false },
+  { id:'runtime', a:[300,360], color:'var(--runtime)', short:'R',  live:false },
+  { id:'tool',    a:[0,  60],  color:'var(--tool)',    short:'T',  live:true  },
+  { id:'llm',     a:[60, 120], color:'var(--llm)',     short:'L',  live:true  },
+  { id:'memory',  a:[120,180], color:'var(--memory)',  short:'M',  live:true  },
+  { id:'comm',    a:[180,240], color:'var(--comm)',    short:'C',  live:true  },
+];
+
+/* MEMBRANE */
+const membrane = document.getElementById('membrane');
+BUSES.forEach(b => {
+  const [a1, a2] = b.a;
+  const p1 = pxy(R, a1), p2 = pxy(R, a2);
+  const d  = `M ${p1.x.toFixed(1)},${p1.y.toFixed(1)} A ${R},${R} 0 0 1 ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+
+  /* layered glow via stacked strokes — avoids filter:blur for J7 GPU */
+  membrane.appendChild(el('path', { d, stroke: b.color, 'stroke-width': 14, class: 'bus-arc-halo' }));
+  membrane.appendChild(el('path', { d, stroke: b.color, 'stroke-width': 8,  class: 'bus-arc-halo', opacity: 0.28 }));
+  membrane.appendChild(el('path', { d, stroke: b.color, 'stroke-width': 3.5,
+                                    class: 'bus-arc' + (b.live ? ' live' : '') }));
+});
+
+/* ADAPTER PORTS — larger, no rest labels, diamond = action, hex = storage/authority */
+const ports = document.getElementById('ports');
+const ADAPTERS = [
+  /* Communication */
+  { bus:'comm',    a: 195, shape:'diamond', size: 9 },   // api
+  { bus:'comm',    a: 215, shape:'diamond', size: 9 },   // discord
+  { bus:'comm',    a: 233, shape:'diamond', size: 7 },   // cli
+  /* Tool */
+  { bus:'tool',    a: 20,  shape:'diamond', size: 9 },   // wallet
+  { bus:'tool',    a: 45,  shape:'diamond', size: 10 },  // home-assistant
+  /* Wise */
+  { bus:'wise',    a: 258, shape:'hex',     size: 8 },   // wa
+  { bus:'wise',    a: 282, shape:'hex',     size: 8 },   // cirisnode
+  /* LLM */
+  { bus:'llm',     a: 78,  shape:'diamond', size: 9 },   // openai
+  { bus:'llm',     a: 103, shape:'diamond', size: 9 },   // anthropic
+  /* Memory */
+  { bus:'memory',  a: 150, shape:'hex',     size: 9 },   // sqlite
+  /* Runtime */
+  { bus:'runtime', a: 330, shape:'diamond', size: 8 },   // api-ctrl
+];
+
+function diamondPts(cx, cy, a, s) {
+  const out = pxy(1, a), tan = { x:-out.y, y:out.x };
+  return [
+    [cx + s*0.9*out.x, cy + s*0.9*out.y],
+    [cx + s*1.05*tan.x, cy + s*1.05*tan.y],
+    [cx - s*1.2*out.x, cy - s*1.2*out.y],
+    [cx - s*1.05*tan.x, cy - s*1.05*tan.y],
+  ];
+}
+function hexPts(cx, cy, a, s) {
+  const out = pxy(1, a), tan = { x:-out.y, y:out.x };
+  const pts = [];
+  for (let i=0; i<6; i++) {
+    const ang = rad(60*i - 30);
+    const lx = s*Math.cos(ang), ly = s*Math.sin(ang);
+    pts.push([cx + lx*out.x + ly*tan.x, cy + lx*out.y + ly*tan.y]);
+  }
+  return pts;
+}
+
+ADAPTERS.forEach(ad => {
+  const c = `var(--${ad.bus})`;
+  const pos = pxy(R, ad.a);
+  const pts = (ad.shape === 'hex' ? hexPts : diamondPts)(pos.x, pos.y, ad.a, ad.size);
+  const ptsStr = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  /* outer halo */
+  ports.appendChild(el('polygon', { points: ptsStr, fill: c, opacity: 0.18 }));
+  /* body */
+  ports.appendChild(el('polygon', { points: ptsStr, fill: '#0a1020', stroke: c, class: 'port-body' }));
+  /* core dot */
+  ports.appendChild(el('circle', { cx: pos.x, cy: pos.y, r: ad.size*0.3, fill: c, opacity: 0.9 }));
+});
+
+/* ORGANELLES — 22 services, fixed-seed scatter, no rest labels */
+const organelles = document.getElementById('organelles');
+const SERVICES = [
+  ...Array(7).fill({shape:'hex',    color:'var(--memory)'}),
+  ...Array(4).fill({shape:'circle', color:'#9ab1d8'}),
+  ...Array(4).fill({shape:'square', color:'#d8a599'}),
+  ...Array(4).fill({shape:'tri',    color:'#e6c884'}),
+  ...Array(2).fill({shape:'dia',    color:'var(--llm)'}),
+  ...Array(1).fill({shape:'pent',   color:'var(--tool)'}),
+];
+/* golden-angle scatter between nucleus radius and membrane */
+function scatter(n, rMin, rMax) {
+  const phi = 137.508, out = [];
+  for (let i=0; i<n; i++) {
+    const a  = (i * phi + 40) % 360;
+    const rr = rMin + (rMax - rMin) * Math.sqrt((i + 0.5) / n);
+    out.push({ x: rr*Math.cos(rad(a)), y: rr*Math.sin(rad(a)) });
+  }
+  return out;
+}
+const orgPts = scatter(SERVICES.length, 48, 110);
+
+function drawOrg(parent, s, p) {
+  const sz = s.shape === 'hex' ? 5 : s.shape === 'square' ? 4.2 : 4.8;
+  const common = { fill:'#0a1020', stroke:s.color, 'stroke-width':1 };
+  let node;
+  switch (s.shape) {
+    case 'hex': {
+      const pts = [];
+      for (let i=0; i<6; i++) {
+        const a = rad(60*i);
+        pts.push(`${(p.x + sz*Math.cos(a)).toFixed(1)},${(p.y + sz*Math.sin(a)).toFixed(1)}`);
+      }
+      node = el('polygon', { ...common, points: pts.join(' ') });
+      break;
+    }
+    case 'circle': node = el('circle', { ...common, cx: p.x, cy: p.y, r: sz }); break;
+    case 'square': node = el('rect',   { ...common, x: p.x-sz, y: p.y-sz, width: sz*2, height: sz*2 }); break;
+    case 'tri': {
+      const pts = [];
+      for (let i=0; i<3; i++) {
+        const a = rad(120*i - 90);
+        pts.push(`${(p.x + sz*Math.cos(a)).toFixed(1)},${(p.y + sz*Math.sin(a)).toFixed(1)}`);
+      }
+      node = el('polygon', { ...common, points: pts.join(' ') });
+      break;
+    }
+    case 'dia':
+      node = el('polygon', { ...common, points:
+        `${p.x},${p.y-sz} ${p.x+sz},${p.y} ${p.x},${p.y+sz} ${p.x-sz},${p.y}` });
+      break;
+    case 'pent': {
+      const pts = [];
+      for (let i=0; i<5; i++) {
+        const a = rad(72*i - 90);
+        pts.push(`${(p.x + sz*Math.cos(a)).toFixed(1)},${(p.y + sz*Math.sin(a)).toFixed(1)}`);
+      }
+      node = el('polygon', { ...common, points: pts.join(' ') });
+      break;
+    }
+  }
+  parent.appendChild(node);
+  parent.appendChild(el('circle', { cx: p.x, cy: p.y, r: sz*0.25, fill: s.color, opacity: 0.9 }));
+}
+SERVICES.forEach((s,i) => drawOrg(organelles, s, orgPts[i]));
+
+/* CYTOPLASM MOTES — fewer at this scale */
+const motesG = document.getElementById('motes');
+const MOTE_N = 14;
+let seed = 7;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+for (let i=0; i<MOTE_N; i++) {
+  const a = rnd() * 360;
+  const rr = 45 + rnd() * 75;
+  const p = { x: rr*Math.cos(rad(a)), y: rr*Math.sin(rad(a)) };
+  const dx = (rnd()-0.5)*8, dy = (rnd()-0.5)*8;
+  const dur = 7 + rnd()*7;
+  const isRecent = rnd() < 0.22;
+  const r = 0.7 + rnd() * 0.9;
+  const g = el('g', { style: `animation: moteDrift ${dur.toFixed(1)}s ease-in-out ${(rnd()*dur).toFixed(1)}s infinite; --dx:${dx.toFixed(1)}px; --dy:${dy.toFixed(1)}px;` });
+  g.appendChild(el('circle', { cx: p.x.toFixed(1), cy: p.y.toFixed(1), r, class: isRecent ? 'mote mote-mem' : 'mote' }));
+  motesG.appendChild(g);
+}
+
+/* PSEUDOPODS — in screen coords so labels fit.
+   Anchor on the CommunicationBus arc (left side of cell).
+   Keep tendrils SHORT; dense clusters collapse into one fat tentacle. */
+const pseudo = document.getElementById('pseudopods');
+const CELL_X = 180, CELL_Y = 260;
+const CHANNELS = [
+  { a: 188, kind:'discord',    label:'#general',       active:true  },
+  { a: 206, kind:'api',        label:'api:eric',       active:true  },
+  { a: 222, kind:'ha-cluster', label:'ha · 18 sensors',active:true, cluster:true },
+  { a: 238, kind:'discord',    label:'dm:alice',       active:false },
+];
+const kindColor = { discord:'#7d8ffc', api:'var(--comm)', ha:'#41bdf5', 'ha-cluster':'#41bdf5', cli:'#8aa0c7' };
+
+CHANNELS.forEach(ch => {
+  /* anchor on wall (in cell-local then translated to screen) */
+  const pA = pxy(R, ch.a);
+  const anchor = { x: CELL_X + pA.x, y: CELL_Y + pA.y };
+  /* tip extends outward by a short amount, constrained inside canvas */
+  const tipLen = ch.cluster ? 42 : 34;
+  const tOut = pxy(tipLen, ch.a);
+  let tip = { x: anchor.x + tOut.x, y: anchor.y + tOut.y };
+  /* control points for an organic S-curve */
+  const c1 = { x: anchor.x + tOut.x*0.35, y: anchor.y + tOut.y*0.35 - 4 };
+  const c2 = { x: anchor.x + tOut.x*0.75, y: anchor.y + tOut.y*0.75 + 4 };
+  const d  = `M ${anchor.x.toFixed(1)},${anchor.y.toFixed(1)} C ${c1.x.toFixed(1)},${c1.y.toFixed(1)} ${c2.x.toFixed(1)},${c2.y.toFixed(1)} ${tip.x.toFixed(1)},${tip.y.toFixed(1)}`;
+
+  const col = kindColor[ch.kind] || 'var(--comm)';
+  const w   = ch.cluster ? 3 : 1.6;
+
+  /* layered glow */
+  pseudo.appendChild(el('path', { d, stroke: col, 'stroke-width': w*3, class: 'tendril', opacity: 0.18 }));
+  /* base */
+  pseudo.appendChild(el('path', { d, stroke: col, 'stroke-width': w, class: 'tendril', opacity: ch.active ? 0.85 : 0.4 }));
+  /* flow overlay for active */
+  if (ch.active) {
+    pseudo.appendChild(el('path', { d, stroke: col, 'stroke-width': w*0.9, class: 'tendril tendril-flow', opacity: 0.9 }));
+  }
+
+  /* tip node */
+  const tipR = ch.cluster ? 6 : 3.5;
+  pseudo.appendChild(el('circle', { cx: tip.x, cy: tip.y, r: tipR+1.5, fill: col, opacity: 0.22 }));
+  pseudo.appendChild(el('circle', { cx: tip.x, cy: tip.y, r: tipR, fill: '#0a1020', stroke: col, 'stroke-width': 1.3 }));
+  pseudo.appendChild(el('circle', { cx: tip.x, cy: tip.y, r: tipR*0.45, fill: col, style: ch.active ? 'animation: tipPulse 1.8s ease-in-out infinite;' : '' }));
+
+  /* label — placed to the LEFT of the tip since all are on left side */
+  const labelX = tip.x - tipR - 6;
+  const labelY = tip.y + 3;
+  pseudo.appendChild(el('text', {
+    x: labelX.toFixed(1), y: labelY.toFixed(1),
+    'text-anchor': 'end',
+    class: ch.active ? 'ch-label' : 'ch-label dim'
+  })).textContent = ch.label;
+});
+
+/* WA thread — from top of cell (wise segment midpoint 270°) to WA badge */
+const wThread = document.getElementById('waThread');
+const wAnchor = pxy(R, 285); // slight offset so it starts on the wise segment, not dead center
+const ws = { x: CELL_X + wAnchor.x, y: CELL_Y + wAnchor.y };
+const we = { x: 300, y: 66 };  // WA badge bottom
+const wc1 = { x: ws.x + 20, y: ws.y - 30 };
+const wc2 = { x: we.x - 10, y: we.y + 30 };
+wThread.setAttribute('d', `M ${ws.x.toFixed(1)},${ws.y.toFixed(1)} C ${wc1.x.toFixed(1)},${wc1.y.toFixed(1)} ${wc2.x.toFixed(1)},${wc2.y.toFixed(1)} ${we.x.toFixed(1)},${we.y.toFixed(1)}`);
+
+/* BUS CHIPS in bottom strip */
+const chipMap = { comm:'comm', mem:'memory', llm:'llm', tool:'tool', run:'runtime', wise:'wise' };
+const CHIP_DEFS = [
+  { id:'comm', label:'COMM', color:'var(--comm)',    live:true  },
+  { id:'mem',  label:'MEM',  color:'var(--memory)',  live:true  },
+  { id:'llm',  label:'LLM',  color:'var(--llm)',     live:true  },
+  { id:'tool', label:'TOOL', color:'var(--tool)',    live:true  },
+  { id:'run',  label:'RUN',  color:'var(--runtime)', live:false },
+  { id:'wise', label:'WISE', color:'var(--wise)',    live:false },
+];
+const chips = document.getElementById('busChips');
+CHIP_DEFS.forEach(c => {
+  const div = document.createElement('div');
+  div.className = 'bus-chip' + (c.live ? ' live' : '');
+  div.innerHTML = `<span class="cd" style="--c:${c.color}"></span><span class="cl">${c.label}</span>`;
+  chips.appendChild(div);
+});
+</script>
+
+</body>
+</html>

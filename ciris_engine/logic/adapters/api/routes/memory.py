@@ -755,17 +755,30 @@ async def recall_by_id(
     SECURITY: OBSERVER users can only access nodes they created or participated in.
     """
     try:
-        # Use recall method with a query for the specific node
+        # Use recall method with a query for the specific node.
+        # Node IDs are globally unique, but the MemoryQuery requires a
+        # scope — we probe scopes in usage-order so a typical LOCAL node
+        # resolves in one query and cross-scope nodes (e.g. the singleton
+        # ``agent/identity`` in the IDENTITY scope) still resolve.
         from ciris_engine.schemas.services.operations import MemoryQuery
 
-        query = MemoryQuery(
-            node_id=node_id,
-            scope=GraphScope.LOCAL,
-            type=None,
-            include_edges=True,  # Include edges for detail view
-            depth=1,
-        )
-        nodes = await memory_service.recall(query)
+        nodes = []
+        for probe_scope in (
+            GraphScope.LOCAL,
+            GraphScope.IDENTITY,
+            GraphScope.ENVIRONMENT,
+            GraphScope.COMMUNITY,
+        ):
+            query = MemoryQuery(
+                node_id=node_id,
+                scope=probe_scope,
+                type=None,
+                include_edges=True,  # Include edges for detail view
+                depth=1,
+            )
+            nodes = await memory_service.recall(query)
+            if nodes:
+                break
         if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
@@ -801,7 +814,7 @@ async def recall_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{node_id}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
+@router.get("/{node_id:path}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
 async def get_node(
     request: Request,
     auth: AuthObserverDep,
@@ -812,5 +825,11 @@ async def get_node(
     Get a specific node by ID.
 
     Standard RESTful endpoint for node retrieval.
+
+    Uses `{node_id:path}` so IDs containing forward slashes
+    (e.g. ``agent/identity``, hardcoded in
+    ``ciris_engine/logic/persistence/models/identity.py``) route
+    correctly. Without ``:path`` FastAPI splits the URL at the slash
+    and the route never matches.
     """
     return await recall_by_id(request, auth, memory_service, node_id)

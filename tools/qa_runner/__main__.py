@@ -75,6 +75,7 @@ Available modules:
   accord_metrics - Accord metrics trace capture and signing
   cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
+  model_eval      - Model quality evaluation with tough questions (requires --live)
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -177,7 +178,7 @@ Available modules:
     )
 
     # Authentication
-    parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
+    parser.add_argument("--username", default="jeff", help="Test username (default: jeff)")
     parser.add_argument(
         "--password",
         default="__auto_detect__",
@@ -336,8 +337,16 @@ def main():
                     live_base_url = None
                 elif "google" in key_file_name or "gemini" in key_file_name or "generativelanguage.googleapis" in base_url_lower:
                     live_provider = "google"
+                elif "openrouter" in key_file_name or "openrouter.ai" in base_url_lower:
+                    live_provider = "openrouter"
+                elif "groq" in key_file_name or "groq.com" in base_url_lower:
+                    live_provider = "groq"
+                elif "together" in key_file_name or "together" in base_url_lower:
+                    live_provider = "together"
+                elif base_url_lower and base_url_lower != "https://api.openai.com/v1":
+                    live_provider = "openai_compatible"
                 else:
-                    live_provider = "openai"  # Default to OpenAI/OpenAI-compatible
+                    live_provider = "openai"
 
             print(f"🔑 Live mode enabled:")
             print(f"   Provider: {live_provider}")
@@ -348,6 +357,11 @@ def main():
         except Exception as e:
             print(f"❌ Failed to read API key: {e}")
             sys.exit(1)
+
+    # --live implies --live-lens (always use real Lens server with live LLM)
+    if args.live and not args.live_lens:
+        args.live_lens = True
+        print("   ✅ Auto-enabling --live-lens (real Lens server for accord traces)")
 
     # QA runner ALWAYS wipes data to ensure clean state and use setup wizard
     # This ensures predictable test behavior with a known admin user/password

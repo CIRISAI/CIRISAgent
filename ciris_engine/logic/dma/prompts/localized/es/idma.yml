@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "Intuition DMA - aplica la fórmula k_eff de CCA y clasificación de fase"
-version: "1.0"
+version: "1.1"
 
 # Include the CIRIS Accord as context
 accord_header: true

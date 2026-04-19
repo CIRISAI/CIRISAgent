@@ -23,6 +23,7 @@ SAFE DOMAIN: Home automation only. Medical/health capabilities are prohibited.
 from .adapter import Adapter, HomeAssistantAdapter
 from .communication_service import HACommunicationService
 from .configurable import HAConfigurableAdapter
+from .ingress_auth import HAIngressAuthProvider, get_ha_ingress_auth_provider
 from .schemas import (
     CameraAnalysisResult,
     CameraFrame,
@@ -49,6 +50,9 @@ __all__ = [
     "HAIntegrationService",
     # Configurable adapter
     "HAConfigurableAdapter",
+    # Ingress authentication (HA Supervisor mode)
+    "HAIngressAuthProvider",
+    "get_ha_ingress_auth_provider",
     # Schemas
     "DetectionEvent",
     "CameraFrame",

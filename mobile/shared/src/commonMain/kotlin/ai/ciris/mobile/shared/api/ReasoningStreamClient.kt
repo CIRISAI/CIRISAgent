@@ -109,6 +109,37 @@ class ReasoningStreamClient(
         }
     }
 
+    /**
+     * Extract a compact one-line summary of an SSE event for the bubble payload.
+     *
+     * Returns null when nothing useful can be said about the event — in that case
+     * the floating bubble falls back to just its emoji.
+     *
+     * The returned string is hard-capped at [ReasoningEvent.PAYLOAD_MAX_CHARS] so
+     * the client never holds a runaway string from a noisy SSE burst.
+     */
+    private fun extractPayload(eventType: String, event: JsonObject): String? {
+        fun s(key: String): String? = event[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+
+        val raw: String? = when (eventType) {
+            "thought_start" -> s("thought_content") ?: s("content")
+            "snapshot_and_context" -> s("context_summary") ?: s("task_description")
+            "dma_results" -> s("csdma_conclusion") ?: s("pdma_conclusion")
+            "idma_result" -> s("tension") ?: s("conclusion")
+            "aspdma_result" -> s("selected_action")?.let { "→ $it" }
+            "tsaspdma_result" -> s("refined_tool") ?: s("selected_tool")?.let { "tool: $it" }
+            "conscience_result" -> s("reason") ?: s("status")?.let { "conscience: $it" }
+            "action_result" -> {
+                val action = s("action_executed") ?: "?"
+                val detail = s("content") ?: s("message") ?: s("tool_name") ?: s("result_summary")
+                if (detail != null) "$action · $detail" else action
+            }
+            else -> null
+        }
+
+        return raw?.trim()?.take(ReasoningEvent.PAYLOAD_MAX_CHARS)
+    }
+
     private fun parseEvents(jsonStr: String): List<ReasoningEvent> {
         val result = mutableListOf<ReasoningEvent>()
 
@@ -154,7 +185,13 @@ class ReasoningStreamClient(
                     isNewThought = eventType == "thought_start"
                 ))
 
-                result.add(ReasoningEvent.Emoji(emoji, eventType, isComplete))
+                // Extract a compact human-readable payload summary.
+                // Intentionally small — bounded at PAYLOAD_MAX_CHARS — so the
+                // bubble can carry it in-flight without us retaining the full
+                // SSE event in memory.
+                val payload = extractPayload(eventType, event)
+
+                result.add(ReasoningEvent.Emoji(emoji, eventType, isComplete, payload))
             }
         } catch (e: Exception) {
             PlatformLogger.d("SSE"," JSON parse error: ${e.message}")
@@ -173,8 +210,17 @@ sealed class ReasoningEvent {
     data class Emoji(
         val emoji: String,
         val eventType: String,
-        val isComplete: Boolean = false
+        val isComplete: Boolean = false,
+        // Compact, pre-truncated human-readable summary of the event.
+        // Carried only for the bubble's lifetime; caller decides whether to retain.
+        // Hard-capped at PAYLOAD_MAX_CHARS at parse time so worst-case memory
+        // is MAX_BUBBLES × PAYLOAD_MAX_CHARS — fits 32-bit ARM budget.
+        val payload: String? = null
     ) : ReasoningEvent()
+
+    companion object {
+        const val PAYLOAD_MAX_CHARS = 160
+    }
 
     /**
      * Raw pipeline step event for scaffolding visualization.

@@ -9,6 +9,25 @@ import kotlinx.serialization.Serializable
  */
 
 // ============================================================================
+// Generic per-bus telemetry snapshot (non-LLM buses)
+// ============================================================================
+
+/**
+ * Minimal shape needed by the FG BusArc detail panel for COMM / MEMORY /
+ * TOOL / WISE / RUNTIME_CONTROL buses. LLM has a richer endpoint
+ * ([LlmBusStatus] + [LlmProviderStatus]); this is for the others.
+ *
+ * Sourced from `/v1/telemetry/unified?category=buses&view=operational`.
+ */
+data class BusTelemetrySnapshot(
+    val healthy: Boolean = true,
+    val messagesSent: Long = 0L,
+    val averageLatencyMs: Double = 0.0,
+    val queueDepth: Int = 0,
+    val errorsLastHour: Int = 0,
+)
+
+// ============================================================================
 // Enums
 // ============================================================================
 

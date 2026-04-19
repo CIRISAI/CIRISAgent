@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "DMA Ìmọ̀lára - lo fọ́múlà k_eff CCA àti ìpínyà ìgbòǹgbò"
-version: "1.0"
+version: "1.1"
 
 # Ṣàfikún Àdéhùn CIRIS gẹ́gẹ́ bí àyíká
 accord_header: true

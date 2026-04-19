@@ -33,6 +33,16 @@ data class CellVizState(
     val category: String = "healthy",
     /** True when the viewmodel has never successfully fetched capacity yet. */
     val isPreFetch: Boolean = true,
+    /**
+     * Per-occurrence local capacity score in `[0, 1]`, computed on-device
+     * from live service + LLM health signals the client already polls.
+     * `null` = not yet available, render fleet only. Minimal, efficient,
+     * and explicitly NOT a trust signal — trust = device attestation,
+     * capacity = behavioural/coherence health. See §5a TODO in
+     * CELL_VIZ_REDESIGN and the Coherence Collapse Analysis paper
+     * (J = k_eff · (1 − ρ) · λ · σ).
+     */
+    val localScore: Float? = null,
 ) {
     /**
      * Clamp every factor into `[0, 1]`. Lens returns values in that range, but
@@ -47,6 +57,7 @@ data class CellVizState(
         s = s.coerceIn(0f, 1f),
         compositeScore = compositeScore.coerceIn(0f, 1f),
         fragilityIndex = fragilityIndex.coerceAtLeast(0f),
+        localScore = localScore?.coerceIn(0f, 1f),
     )
 
     companion object {
@@ -116,6 +127,41 @@ data class CellVizDials(
  * high-fragility agent should still render as a recognisable cell, just
  * with reduced vitality across these dials.
  */
+/**
+ * Compute a per-occurrence local capacity score in `[0, 1]` from the live
+ * signals the client already polls. This is a deliberately minimal CCA
+ * approximation (J = k_eff · (1 − ρ) · λ · σ) — we don't have ρ, λ, σ as
+ * separate scalars at the mobile layer, so we use the two health fractions
+ * as proxies for the scale + sustainability terms and constant 1.0 for
+ * the others. It's "good enough" for a demo-worthy live dial; backend can
+ * return a proper J later via `/v1/my-data/capacity?scope=local`.
+ *
+ * Inputs:
+ *  - `serviceHealthFrac` in `[0, 1]` — fraction of core services healthy
+ *    from `/v1/system/health` (proxies for k_eff).
+ *  - `llmHealthFrac` in `[0, 1]` — fraction of LLM providers healthy with
+ *    closed circuit breakers (proxies for σ, sustainability).
+ *
+ * Returns null when neither signal has arrived yet (so the badge renders
+ * fleet-only rather than a spurious 0).
+ *
+ * Intentionally NOT a trust signal — trust is device attestation, this is
+ * behavioural/coherence health. Same guardrail as fleet: never fed to the
+ * agent's own context (Goodhart).
+ */
+fun computeLocalScore(
+    serviceHealthFrac: Float?,
+    llmHealthFrac: Float?,
+): Float? {
+    if (serviceHealthFrac == null && llmHealthFrac == null) return null
+    val svc = (serviceHealthFrac ?: 1f).coerceIn(0f, 1f)
+    val llm = (llmHealthFrac ?: 1f).coerceIn(0f, 1f)
+    // 60/40 weighting: core services are the primary constraint fabric,
+    // LLM providers are one sustainability channel. Both floor at modest
+    // values so a single-provider agent doesn't read as "broken."
+    return (0.6f * svc + 0.4f * llm).coerceIn(0f, 1f)
+}
+
 fun derivedDials(state: CellVizState): CellVizDials {
     val s = state.sanitized()
 

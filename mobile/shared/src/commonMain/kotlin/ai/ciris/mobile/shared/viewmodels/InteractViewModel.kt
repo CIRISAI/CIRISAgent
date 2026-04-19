@@ -505,10 +505,51 @@ class InteractViewModel(
         }
     }
 
+    /**
+     * Compute and write a per-occurrence local capacity score into
+     * [_cellVizState] using the health signals the client already polls.
+     * Minimal, efficient, NOT a trust signal (trust = device attestation,
+     * capacity = behavioural/coherence health). See §5a in
+     * FSD/CELL_VIZ_REDESIGN.md and the Coherence Collapse Analysis paper.
+     *
+     * Called from:
+     *  - status poll (services_online / services_total)
+     *  - llmHealth update (provider healthy / not)
+     *  - refreshCapacity (so fleet+local land together)
+     *
+     * No backend call. No new state fields beyond [CellVizState.localScore].
+     */
+    private fun recomputeLocalScore() {
+        val lastStatus = _lastSystemStatus
+        val serviceFrac = if (lastStatus != null && lastStatus.services_total > 0) {
+            lastStatus.services_online.toFloat() / lastStatus.services_total.toFloat()
+        } else null
+        val llm = _llmHealth.value
+        val llmFrac: Float? = when {
+            llm.provider == "unknown" -> null
+            llm.isHealthy -> 1f
+            else -> 0f
+        }
+        val newLocal = ai.ciris.mobile.shared.ui.screens.graph
+            .computeLocalScore(serviceFrac, llmFrac)
+        val prev = _cellVizState.value
+        if (prev.localScore != newLocal) {
+            _cellVizState.value = prev.copy(localScore = newLocal).sanitized()
+        }
+    }
+
+    // Most recent SystemStatus snapshot, kept as a field for the local-score
+    // recomputation (the status poll otherwise consumes + discards it).
+    // Stale reads across coroutines are benign: recomputeLocalScore is
+    // called on every write to either input, so worst case we do one
+    // extra recompute with the old value.
+    private var _lastSystemStatus: ai.ciris.mobile.shared.models.SystemStatus? = null
+
     private suspend fun refreshCapacity() {
         val method = "refreshCapacity"
         try {
             val data = apiClient.getCapacity()
+            val prevLocal = _cellVizState.value.localScore
             _cellVizState.value = ai.ciris.mobile.shared.ui.screens.graph.CellVizState(
                 c = data.c.toFloat(),
                 iInt = data.iInt.toFloat(),
@@ -519,6 +560,10 @@ class InteractViewModel(
                 fragilityIndex = data.fragilityIndex.toFloat(),
                 category = data.category,
                 isPreFetch = false,
+                // Preserve the already-computed local score across fleet
+                // refreshes. recomputeLocalScore() will overwrite it on
+                // the next status / LLM poll anyway.
+                localScore = prevLocal,
             ).sanitized()
             logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
                     "composite=${data.compositeScore} cached=${data.cached}")
@@ -829,6 +874,8 @@ class InteractViewModel(
                 pollCount++
                 try {
                     val status = apiClient.getSystemStatus()
+                    _lastSystemStatus = status
+                    recomputeLocalScore()
                     val wasConnected = _isConnected.value
                     _isConnected.value = status.status == "healthy"
 
@@ -985,6 +1032,7 @@ class InteractViewModel(
                     model = config.model,
                     isCirisProxy = config.isCirisProxy
                 )
+                recomputeLocalScore()
                 logDebug(method, "LLM health from API: provider=${config.provider}, isCirisProxy=${config.isCirisProxy}")
                 configLoaded = true
 

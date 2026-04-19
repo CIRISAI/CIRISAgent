@@ -1172,25 +1172,40 @@ private fun CapacityBadge(
     modifier: Modifier = Modifier,
 ) {
     val isLoaded = !state.isPreFetch
-    val badgeColor = when {
-        !isLoaded -> theme.trustDefault
-        state.category == "high_capacity" -> theme.trustLevel5
-        state.category == "healthy" -> theme.trustLevel5
-        state.category == "moderate" -> theme.trustLevel4
-        state.category == "high_fragility" -> theme.trustLevelLow
+    // Colour is keyed to the LOCAL score when available — that's the
+    // signal the user is actively steering on this device. Fleet is
+    // context. Falls back to the fleet category when no local data.
+    val localScore = state.localScore
+    val effectiveCategory = when {
+        !isLoaded -> null
+        localScore == null -> state.category
+        localScore >= 0.85f -> "healthy"
+        localScore >= 0.65f -> "moderate"
+        else -> "high_fragility"
+    }
+    val badgeColor = when (effectiveCategory) {
+        "high_capacity", "healthy" -> theme.trustLevel5
+        "moderate" -> theme.trustLevel4
+        "high_fragility" -> theme.trustLevelLow
         else -> theme.trustDefault
     }
 
     // Two-decimal fixed-width score. Avoid String.format (JVM-only in
     // commonMain); use integer math to produce "0.90", "1.00", "0.38".
-    val scoreText = if (!isLoaded) {
-        "…"
-    } else {
-        val hundredths = (state.compositeScore.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
+    fun fmt(v: Float): String {
+        val hundredths = (v.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
         val whole = hundredths / 100
         val frac = hundredths % 100
         val fracStr = if (frac < 10) "0$frac" else "$frac"
-        "$whole.$fracStr"
+        return "$whole.$fracStr"
+    }
+    // Local first (user steers this), fleet second. Single dot, single
+    // pill — we do NOT add a second LED or a shield silhouette, to keep
+    // the badge visually distinct from the adjacent Trust shield.
+    val scoreText = when {
+        !isLoaded -> "…"
+        localScore != null -> "${fmt(localScore)} · ${fmt(state.compositeScore)}"
+        else -> fmt(state.compositeScore)
     }
 
     Surface(

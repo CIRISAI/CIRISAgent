@@ -343,8 +343,18 @@ fun InteractScreen(
                 // the cell-viz redesign: membrane + dynamic openings +
                 // adapter ports + nucleus + song + cytoplasm motes.
                 // See FSD/CELL_VIZ_REDESIGN.md for the full build order.
+                //
+                // zIndex boost in FG brings the Canvas on top of the chat
+                // Column so pointer events (click/drag/wheel) reach its
+                // pointerInputs instead of being absorbed by the chat
+                // area's hit chain. In BG the cell stays behind the chat
+                // at z=0 as before.
                 CellVisualization(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(
+                            if (visualizationMode == VisualizationMode.FOREGROUND) 10f else 0f,
+                        ),
                     isDarkMode = isDarkMode,
                     adapterOrbits = adapterOrbits,
                     externalRotation = cylinderRotation,
@@ -399,11 +409,25 @@ fun InteractScreen(
         // instead of using early return (which breaks Compose recomposition)
         // Android: Uses imePadding() for proper keyboard avoidance
         // iOS: No-op - native keyboard avoidance handles this automatically
+        //
+        // Layered sibling-of-cell-viz layout:
+        //   - BG: Column z=0, cell viz z=0. Column paints on top; chat
+        //     messages / status bar sit over the ambient cell.
+        //   - FG: Column z=20, cell viz z=10. Cell sits above chat so
+        //     its pointer-inputs capture gestures, but the status bar
+        //     (inside the Column) is ABOVE the cell so the VIZ toggle,
+        //     CapacityBadge, and trust shield stay tappable.
+        //   The chat area Box's pointerInput is already gated off in
+        //   FG (swipeSpinModifier = Modifier), so the Column doesn't
+        //   consume gesture events meant for the cell — only the
+        //   status bar's own clickable Surfaces consume their own taps.
+        val columnZIndex = if (visualizationMode == VisualizationMode.FOREGROUND) 20f else 0f
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .platformImePadding()
                 .alpha(if (isFullscreenFidget) 0f else 1f)  // Hide in fullscreen fidget mode
+                .zIndex(columnZIndex)
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -487,35 +511,36 @@ fun InteractScreen(
         // can reach the Canvas's detectTransformGestures / scroll handler.
         val swipeSpinActive = liveBackgroundEnabled &&
             visualizationMode != VisualizationMode.FOREGROUND
+        // Only attach pointerInput when the gesture is actually active.
+        // `Modifier.pointerInput { if (false) ... }` still registers a
+        // pointer-event scope in the hit chain and appears to block
+        // propagation to z-siblings below (cell viz Canvas). Using
+        // `Modifier.then(...)` with a conditional Modifier means NO
+        // pointerInput exists in FG — events pass cleanly through to
+        // the Canvas underneath.
+        val swipeSpinModifier = if (swipeSpinActive) {
+            Modifier.pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { isDraggingHorizontal = true },
+                    onDragEnd = { isDraggingHorizontal = false },
+                    onDragCancel = { isDraggingHorizontal = false },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val rotationSensitivity = 0.5f
+                        val deltaRotation = dragAmount * rotationSensitivity
+                        cylinderRotation += deltaRotation
+                        rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
+                    }
+                )
+            }
+        } else {
+            Modifier
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(swipeSpinActive) {
-                    if (swipeSpinActive) {
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                isDraggingHorizontal = true
-                                // Don't zero velocity here - let momentum continue until actual drag
-                            },
-                            onDragEnd = {
-                                isDraggingHorizontal = false
-                            },
-                            onDragCancel = {
-                                isDraggingHorizontal = false
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                // Horizontal drag rotates the cylinder
-                                val rotationSensitivity = 0.5f  // Degrees per pixel
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                cylinderRotation += deltaRotation
-                                // Blend new velocity with existing momentum for smoother feel
-                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-                }
+                .then(swipeSpinModifier)
         ) {
             if (messages.isEmpty() && !isLoading) {
                 EmptyStateView(

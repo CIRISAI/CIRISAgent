@@ -291,7 +291,14 @@ fun CellVisualization(
             .coerceIn(cfg.minOpenings, cfg.maxOpenings)
         while (isActive) {
             withFrameNanos { frameTimeNs ->
-                if (lastFrameNs != 0L && !frozenState.value) {
+                // Time keeps flowing even in FG — breathing, opening
+                // morph, mote drift, bus shimmer, gratitude motes, and
+                // nucleus shell glow all read `nowMs.value` and would
+                // visibly freeze if we gated it on isFrozen. Only the
+                // ring *rotation* freezes in FG (below, and in the
+                // cylinderRotation momentum loop in InteractScreen) —
+                // everything else continues to live.
+                if (lastFrameNs != 0L) {
                     val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     nowMs.value = now
                     val alive = openings.value.filterNot { it.isDead(now) }

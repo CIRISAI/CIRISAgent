@@ -25,6 +25,26 @@ fun main() {
     // Set macOS application name (menu bar + dock)
     System.setProperty("apple.awt.application.name", "CIRIS Agent")
 
+    // Set macOS Dock icon. painterResource("icon.png") on the Window
+    // only controls the title-bar icon — the Dock, Cmd-Tab switcher,
+    // and app-bundle representation need the JVM's AWT Taskbar API.
+    // Without this, raw `java -jar …` launches show the default Java
+    // coffee-cup icon in the Dock. Works on macOS Big Sur+.
+    runCatching {
+        val iconStream = object {}.javaClass.classLoader.getResourceAsStream("icon.png")
+        if (iconStream != null) {
+            val image = javax.imageio.ImageIO.read(iconStream)
+            if (image != null && java.awt.Taskbar.isTaskbarSupported()) {
+                val taskbar = java.awt.Taskbar.getTaskbar()
+                if (taskbar.isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
+                    taskbar.iconImage = image
+                }
+            }
+        }
+    }.onFailure { e ->
+        println("[Desktop] Could not set Dock icon: ${e.message}")
+    }
+
     // Initialize localization directory for development
     // Try to find the localization directory relative to the project root
     val localizationPaths = listOf(
@@ -76,8 +96,16 @@ fun main() {
 
     Window(
         onCloseRequest = {
-            testServer?.stop()
-            pythonRuntime.shutdown()
+            // Quit immediately — do NOT block the UI thread waiting
+            // for Ktor's grace period or the Python subprocess to
+            // tear down. Shutdown work is already registered via the
+            // JVM shutdown hook (see addShutdownHook above) and runs
+            // on exit. Blocking here for 3+ seconds is what made the
+            // macOS red close button feel broken — users had to use
+            // the File > Quit menu to get out.
+            Thread {
+                runCatching { testServer?.stop() }
+            }.also { it.isDaemon = true }.start()
             exitApplication()
         },
         title = "CIRIS Agent",

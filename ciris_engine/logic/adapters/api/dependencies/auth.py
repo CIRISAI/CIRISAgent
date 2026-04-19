@@ -338,6 +338,25 @@ async def _handle_ingress_auth(
 
         if new_user:
             logger.info(f"[INGRESS_AUTH] Created user: {new_user.wa_id}")
+            # CRITICAL: Also store user under provider:external_id key for future lookups
+            # The user was stored under wa_id by create_user, but ingress lookups use provider:external_id
+            auth_service._users[user_id] = new_user
+            logger.info(f"[INGRESS_AUTH] Stored user under ingress key: {user_id}")
+
+            # Link OAuth identity to WA certificate so it persists across restarts
+            try:
+                await auth_service.link_user_oauth(
+                    wa_id=new_user.wa_id,
+                    provider=ingress_user.provider,
+                    external_id=ingress_user.external_id,
+                    account_name=username,
+                    metadata={"ingress_auth": "true"},
+                    primary=True,
+                )
+                logger.info(f"[INGRESS_AUTH] Linked ingress identity to WA: {new_user.wa_id}")
+            except Exception as link_err:
+                # Non-fatal - user can still authenticate this session
+                logger.warning(f"[INGRESS_AUTH] Failed to link ingress identity: {link_err}")
         else:
             # User might already exist with a different key
             logger.warning(f"[INGRESS_AUTH] Could not create user {username}, checking alternate keys")

@@ -555,8 +555,13 @@ class TestHAIngressProvider:
             assert ingress_user.display_name == "Home Owner"
 
     @pytest.mark.asyncio
-    async def test_ha_provider_first_user_is_admin(self, ha_request):
-        """Test first HA user gets SYSTEM_ADMIN role."""
+    async def test_ha_provider_no_suggested_role(self, ha_request):
+        """Test HA provider returns None for suggested_role.
+
+        The first-user SYSTEM_ADMIN grant is handled authoritatively in auth.py
+        via database check (len(existing_users) == 0), not in the provider.
+        This prevents privilege escalation via restart attacks and race conditions.
+        """
         with patch.dict(os.environ, {"SUPERVISOR_TOKEN": "test-token"}):
             from ciris_adapters.home_assistant.ingress_auth import HAIngressAuthProvider
 
@@ -564,24 +569,31 @@ class TestHAIngressProvider:
 
             ingress_user = await provider.authenticate_request(ha_request)
 
-            assert ingress_user.suggested_role == UserRole.SYSTEM_ADMIN
+            # Provider should NOT set suggested_role - auth.py handles this via DB check
+            assert ingress_user.suggested_role is None
 
     @pytest.mark.asyncio
-    async def test_ha_provider_subsequent_users_default_role(self, ha_request):
-        """Test subsequent HA users get default role (no suggested role)."""
+    async def test_ha_provider_consistent_role_across_requests(self, ha_request):
+        """Test HA provider returns consistent None role for all requests.
+
+        Previously, an in-memory flag would be consumed by the first request
+        (even a health check), causing subsequent users to not get SYSTEM_ADMIN.
+        Now all role assignment is done in auth.py via database check.
+        """
         with patch.dict(os.environ, {"SUPERVISOR_TOKEN": "test-token"}):
             from ciris_adapters.home_assistant.ingress_auth import HAIngressAuthProvider
 
             provider = HAIngressAuthProvider()
 
             # First user
-            await provider.authenticate_request(ha_request)
+            ingress_user1 = await provider.authenticate_request(ha_request)
 
             # Second user
             ha_request.headers["X-Remote-User-Id"] = "ha-user-second"
             ingress_user2 = await provider.authenticate_request(ha_request)
 
-            # Second user should not have suggested admin role
+            # Both should have None - role is assigned in auth.py
+            assert ingress_user1.suggested_role is None
             assert ingress_user2.suggested_role is None
 
     def test_ha_provider_skips_setup_wizard(self):

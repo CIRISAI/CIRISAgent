@@ -21,7 +21,6 @@ References:
 - Security: "Only connections from 172.30.32.2 must be allowed"
 """
 
-import ipaddress
 import logging
 import os
 from datetime import datetime, timezone
@@ -76,8 +75,10 @@ class HAIngressAuthProvider(IngressAuthProviderProtocol):
             trust_all_ips: If True, skip IP verification (for testing only!)
         """
         self._supervisor_mode = bool(os.getenv("SUPERVISOR_TOKEN"))
-        self._first_user_created = False
         self._trust_all_ips = trust_all_ips
+        # NOTE: _first_user_created flag was REMOVED - it reset on restart and could
+        # be consumed by non-user-creating requests. The authoritative first-user
+        # check is done in auth.py via database query (len(existing_users) == 0).
 
         if self._supervisor_mode:
             logger.info("[HA_INGRESS_AUTH] Supervisor mode detected - ingress auth enabled")
@@ -112,24 +113,12 @@ class HAIngressAuthProvider(IngressAuthProviderProtocol):
             logger.warning("[HA_INGRESS_AUTH] No client IP available - rejecting request")
             return False
 
-        # Check against trusted IPs
-        try:
-            client_addr = ipaddress.ip_address(client_ip)
-
-            # Check exact match with trusted IPs
-            if client_ip in HA_SUPERVISOR_IPS:
-                logger.debug(f"[HA_INGRESS_AUTH] Trusted IP: {client_ip}")
-                return True
-
-            # Check if it's in the HA addon network range (172.30.32.0/23)
-            ha_network = ipaddress.ip_network("172.30.32.0/23")
-            if client_addr in ha_network:
-                logger.debug(f"[HA_INGRESS_AUTH] IP in HA network: {client_ip}")
-                return True
-
-        except ValueError as e:
-            logger.warning(f"[HA_INGRESS_AUTH] Invalid IP address '{client_ip}': {e}")
-            return False
+        # Check against trusted IPs - ONLY exact matches allowed
+        # SECURITY: Per HA docs, only 172.30.32.2 (Supervisor) should be trusted
+        # The /23 network check was removed as it's too permissive
+        if client_ip in HA_SUPERVISOR_IPS:
+            logger.debug(f"[HA_INGRESS_AUTH] Trusted IP: {client_ip}")
+            return True
 
         logger.warning(f"[HA_INGRESS_AUTH] Untrusted IP rejected: {client_ip}")
         return False
@@ -179,13 +168,10 @@ class HAIngressAuthProvider(IngressAuthProviderProtocol):
         display_name = request.headers.get(HA_REMOTE_USER_DISPLAY_NAME)
         ingress_path = request.headers.get(HA_INGRESS_PATH)
 
-        # Determine suggested role
-        # First user from HA should be admin (they own the HA instance)
-        suggested_role: Optional[UserRole] = None
-        if not self._first_user_created:
-            suggested_role = UserRole.SYSTEM_ADMIN
-            self._first_user_created = True
-            logger.info(f"[HA_INGRESS_AUTH] First user {user_id[:8]}... will be granted SYSTEM_ADMIN")
+        # NOTE: suggested_role is intentionally None here. The first-user check
+        # is done authoritatively in auth.py via database query (checking if
+        # len(existing_users) == 0). This prevents privilege escalation via
+        # restart attacks and race conditions with non-user-creating requests.
 
         ingress_user = IngressUser(
             external_id=user_id,
@@ -193,7 +179,7 @@ class HAIngressAuthProvider(IngressAuthProviderProtocol):
             username=username,
             display_name=display_name or username,
             email=None,  # HA doesn't provide email in ingress headers
-            suggested_role=suggested_role,
+            suggested_role=None,  # First-user role determined by DB check in auth.py
             metadata={
                 "ingress_path": ingress_path,
                 "ha_user_id": user_id,

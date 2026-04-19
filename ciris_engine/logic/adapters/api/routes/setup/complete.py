@@ -855,9 +855,21 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
 
     # FALLBACK: Check for HA ingress headers directly if in supervisor mode
     # This handles first-run setup where HA adapter isn't loaded yet
+    # SECURITY: Only trust headers from the HA Supervisor IP (172.30.32.2)
     if os.getenv("SUPERVISOR_TOKEN"):
         ha_user_id = request.headers.get("X-Remote-User-Id")
         if ha_user_id:
+            # Verify request comes from trusted HA Supervisor IP
+            client_ip = request.client.host if request.client else None
+            trusted_ips = {"172.30.32.2", "127.0.0.1", "::1"}  # Supervisor + localhost for dev
+
+            if client_ip not in trusted_ips:
+                logger.warning(
+                    f"[SETUP] Rejecting HA ingress headers from untrusted IP: {client_ip} "
+                    f"(trusted: {trusted_ips})"
+                )
+                return None, None, None
+
             display_name = request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name")
             # HA doesn't provide email in ingress headers
             logger.info(f"[SETUP] Detected HA ingress user (direct): home_assistant:{ha_user_id} ({display_name})")

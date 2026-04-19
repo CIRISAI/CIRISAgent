@@ -630,7 +630,7 @@ class WeatherToolService:
         doesn't need to know which provider served the data.
         """
         try:
-            params = {
+            params: dict[str, str | float] = {
                 "latitude": lat,
                 "longitude": lon,
                 "current": (

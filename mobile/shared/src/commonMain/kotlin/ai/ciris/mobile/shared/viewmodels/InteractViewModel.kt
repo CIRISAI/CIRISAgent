@@ -168,7 +168,11 @@ class InteractViewModel(
         /** Max recent SSE events retained per pipeline stage (ring buffer). */
         private const val STAGE_EVENT_BUFFER = 5
         /** 1 Hz poll cadence for selected-element detail fetches. */
-        private const val SELECTION_POLL_INTERVAL_MS = 1000L
+        // FG selection detail poll cadence. Slowed from 1s to 2s after
+        // 429s from the agent backend — 0.5 Hz is still fast enough for
+        // "live" feel on stage-event streams while halving request
+        // pressure on endpoints that feed multiple selection kinds.
+        private const val SELECTION_POLL_INTERVAL_MS = 2000L
     }
 
     // Device attestation callback for triggering Play Integrity at startup
@@ -374,6 +378,16 @@ class InteractViewModel(
     // JSON-parsed body here for the panel composable to render.
     private val _selectionDetail = MutableStateFlow<SelectionDetail?>(null)
     val selectionDetail: StateFlow<SelectionDetail?> = _selectionDetail.asStateFlow()
+
+    /**
+     * Horizontal position of the selected element as a 0..1 fraction of
+     * the cell viz canvas width. The FG detail panel reads this to
+     * anchor itself on the OPPOSITE side — tap on the right, panel
+     * appears on the left (and vice-versa) so the user always sees what
+     * they tapped.
+     */
+    private val _selectionAnchorX = MutableStateFlow(0.5f)
+    val selectionAnchorX: StateFlow<Float> = _selectionAnchorX.asStateFlow()
 
     private var selectionPollJob: Job? = null
 
@@ -2040,9 +2054,13 @@ class InteractViewModel(
      * poll job so we never poll endpoints for elements the user isn't
      * looking at.
      */
-    fun setSelection(kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?) {
+    fun setSelection(
+        kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?,
+        anchorXFraction: Float = 0.5f,
+    ) {
         val prev = _selectionKind.value
         _selectionKind.value = kind
+        _selectionAnchorX.value = anchorXFraction.coerceIn(0f, 1f)
         // No change → keep the existing poll running.
         if (prev == kind) return
 
@@ -2093,19 +2111,45 @@ class InteractViewModel(
             )
         }
         is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.BusArc -> {
-            // Bus-level telemetry (per-bus messages/latency/errors/queue)
-            // and the LLM providers endpoint aren't wired in the KMP
-            // client yet — that's deferred to a follow-up commit. For
-            // now the panel shows the bus identity + signals that
-            // richer live data is in-progress, rather than faking it.
-            SelectionDetail.BusArc(
-                summaryLine = "${kind.bus.name} bus",
-                bus = kind.bus,
-                messagesSent = 0L,
-                averageLatencyMs = 0.0,
-                errorsLastHour = 0,
-                queueDepth = 0,
-            )
+            // LLM bus gets rich per-provider detail from the existing
+            // /v1/system/llm/status + /v1/system/llm/providers endpoints.
+            // Other buses fall back to the bus-name summary until a
+            // per-bus telemetry endpoint is wired.
+            if (kind.bus == ai.ciris.mobile.shared.ui.screens.graph.CellBus.LLM) {
+                val status = try { apiClient.getLlmBusStatus() } catch (_: Exception) { null }
+                val providers = try { apiClient.getLlmProviders() } catch (_: Exception) { emptyList() }
+                val providerRows = providers.map { p ->
+                    SelectionDetail.LLMProviderRow(
+                        name = p.name,
+                        healthy = p.healthy,
+                        priority = p.priorityLabel,
+                        circuitBreakerState = p.circuitBreaker.state.name.lowercase(),
+                        failureCount = p.circuitBreaker.failureCount,
+                        rateLimited = p.metrics.isRateLimited,
+                    )
+                }
+                SelectionDetail.BusArc(
+                    summaryLine = if (status != null) {
+                        "LLM • ${status.providersAvailable}/${status.providersTotal} providers • " +
+                            "${status.totalRequests} req • ${status.circuitBreakersSummary}"
+                    } else "LLM bus",
+                    bus = kind.bus,
+                    messagesSent = status?.totalRequests?.toLong() ?: 0L,
+                    averageLatencyMs = status?.averageLatencyMs?.toDouble() ?: 0.0,
+                    errorsLastHour = status?.failedRequests ?: 0,
+                    queueDepth = status?.providersRateLimited ?: 0,
+                    llmProviders = providerRows,
+                )
+            } else {
+                SelectionDetail.BusArc(
+                    summaryLine = "${kind.bus.name} bus",
+                    bus = kind.bus,
+                    messagesSent = 0L,
+                    averageLatencyMs = 0.0,
+                    errorsLastHour = 0,
+                    queueDepth = 0,
+                )
+            }
         }
         is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell -> {
             val recent = _stageEvents.value[kind.eventType].orEmpty()
@@ -2151,13 +2195,27 @@ class InteractViewModel(
             )
         }
         is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.GratitudeMote -> {
-            // Audit-query backed task-completion list is deferred to a
-            // follow-up (needs a new API method). Empty list for now;
-            // summaryLine makes the in-progress state legible, not
-            // silently-broken.
+            // Latest completed tasks from the audit trail. We filter by
+            // event_type=handler_action_task_complete (see
+            // HANDLER_ACTION_TASK_COMPLETE in audit/core.py) and pull
+            // only the most recent 5 — this is the "signalled gratitude"
+            // surface, not a full history view.
+            val audits = try {
+                apiClient.getAuditEntries(
+                    eventType = "handler_action_task_complete",
+                    limit = 5,
+                )
+            } catch (_: Exception) { null }
+            val rows = audits?.entries.orEmpty().map { e ->
+                val desc = e.context?.description ?: e.context?.entityId ?: e.id
+                val ts = e.timestamp.take(19).replace('T', ' ')
+                "$ts • $desc"
+            }
             SelectionDetail.Gratitude(
-                summaryLine = "Recent signalled gratitude (in progress)",
-                recentCompletions = emptyList(),
+                summaryLine = if (rows.isEmpty()) {
+                    "No recent task completions"
+                } else "${rows.size} recent task${if (rows.size == 1) "" else "s"} completed",
+                recentCompletions = rows,
             )
         }
     }

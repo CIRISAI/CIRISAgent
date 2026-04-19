@@ -218,9 +218,13 @@ fun CellVisualization(
     /**
      * Invoked in FG mode when the user taps a selectable element.
      * The `SelectionKind?` is null when the tap lands in dead space,
-     * which the caller should treat as a deselect. BG never calls this.
+     * which the caller should treat as a deselect. `tapXFraction` is
+     * the tap's horizontal position as a 0..1 fraction of the canvas
+     * width — callers use this to anchor the detail panel on the
+     * opposite side (so the panel never covers what you just tapped).
+     * BG never calls this.
      */
-    onSelection: (SelectionKind?) -> Unit = {},
+    onSelection: (SelectionKind?, Float) -> Unit = { _, _ -> },
     /**
      * Current selection — drives any "selected" visual affordance
      * (outline, fade of non-selected, etc.). Not used yet for visual
@@ -536,16 +540,44 @@ fun CellVisualization(
                             "cx=${cx.toInt()} cy=${cy.toInt()} mr=${mr.toInt()} nr=${nr.toInt()} " +
                             "ports=${ports.size} motes=${selMotes.size}",
                     )
-                    onSelectionSnap.value(hit)
+                    val xFrac = if (size.width > 0) tap.x / size.width else 0.5f
+                    onSelectionSnap.value(hit, xFrac)
                 }
             }
-            // graphicsLayer + pan/zoom handlers REMOVED. The compositing
-            // layer was causing the Column's status bar + detail panel
-            // to visually disappear in FG even though zIndex should have
-            // kept them on top. Selection (tap) is the primary FG
-            // interaction — pan/zoom can return later via a different
-            // mechanism (e.g. draw-time scaling) that doesn't force a
-            // render layer.
+            // Pan + pinch (touch) + scroll-wheel (desktop). graphicsLayer
+            // was previously dangerous because cell viz was a SIBLING of
+            // the main Column and the compositing layer broke sibling
+            // zIndex. Now the viz lives INSIDE the chat-area Box, so its
+            // compositing only affects its own subtree — chrome in the
+            // outer Column is unaffected by layout. Restored.
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = panX,
+                translationY = panY,
+            )
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
+                    panX += pan.x
+                    panY += pan.y
+                }
+            }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Scroll) {
+                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                            if (delta != 0f) {
+                                scale = (scale * (1f - delta * 0.08f))
+                                    .coerceIn(0.8f, 3.0f)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                }
+            }
     } else {
         modifier
     }

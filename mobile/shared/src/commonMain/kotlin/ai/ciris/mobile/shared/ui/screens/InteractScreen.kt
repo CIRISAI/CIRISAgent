@@ -136,6 +136,7 @@ fun InteractScreen(
     val caughtBubbles by viewModel.caughtBubbles.collectAsState()
     val adapterOrbits by viewModel.adapterOrbits.collectAsState()
     val cellVizState by viewModel.cellVizState.collectAsState()
+    val busPulses by viewModel.busPulses.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -332,6 +333,8 @@ fun InteractScreen(
                     // CIRIS capacity (C/I_int/R/I_inc/S) — ambient dials.
                     // NEUTRAL until the first /v1/my-data/capacity arrives.
                     state = cellVizState,
+                    // Tier-1 events: bus-arc shimmer pulses from SSE.
+                    busPulses = busPulses,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,

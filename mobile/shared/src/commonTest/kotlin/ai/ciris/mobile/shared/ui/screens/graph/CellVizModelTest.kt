@@ -608,4 +608,155 @@ class CellVizModelTest {
         assertContains(values, CellBus.WISE)
         assertEquals(6, values.size)
     }
+
+    // =========================================================================
+    // busFromEventType — Tier-1 event routing
+    // =========================================================================
+
+    @Test
+    fun `pipeline stages route to their owning bus`() {
+        assertEquals(CellBus.LLM, busFromEventType("thought_start"))
+        assertEquals(CellBus.LLM, busFromEventType("dma_results"))
+        assertEquals(CellBus.LLM, busFromEventType("idma_result"))
+        assertEquals(CellBus.LLM, busFromEventType("aspdma_result"))
+        assertEquals(CellBus.TOOL, busFromEventType("tsaspdma_result"))
+        assertEquals(CellBus.WISE, busFromEventType("conscience_result"))
+        assertEquals(CellBus.MEMORY, busFromEventType("snapshot_and_context"))
+    }
+
+    @Test
+    fun `action_result routes on verb, not event_type alone`() {
+        assertEquals(
+            CellBus.MEMORY,
+            busFromEventType("action_result", action = "memorize"),
+        )
+        assertEquals(
+            CellBus.MEMORY,
+            busFromEventType("action_result", action = "RECALL"),
+        )
+        assertEquals(
+            CellBus.MEMORY,
+            busFromEventType("action_result", action = "forget"),
+        )
+        assertEquals(
+            CellBus.COMM,
+            busFromEventType("action_result", action = "speak"),
+        )
+        assertEquals(
+            CellBus.COMM,
+            busFromEventType("action_result", action = "observe"),
+        )
+        assertEquals(
+            CellBus.TOOL,
+            busFromEventType("action_result", action = "tool"),
+        )
+        assertEquals(
+            CellBus.WISE,
+            busFromEventType("action_result", action = "defer"),
+        )
+        assertEquals(
+            CellBus.LLM,
+            busFromEventType("action_result", action = "ponder"),
+        )
+        assertEquals(
+            CellBus.RUNTIME,
+            busFromEventType("action_result", action = "reject"),
+        )
+    }
+
+    @Test
+    fun `task_complete returns null so it fires a gratitude mote instead`() {
+        assertEquals(
+            null,
+            busFromEventType("action_result", action = "task_complete"),
+        )
+    }
+
+    @Test
+    fun `unknown event types return null`() {
+        assertEquals(null, busFromEventType("mystery_event"))
+        assertEquals(null, busFromEventType("action_result", action = "warp_speed"))
+        // Missing action on action_result shouldn't misroute to a bus.
+        assertEquals(null, busFromEventType("action_result", action = null))
+    }
+
+    @Test
+    fun `action casing does not affect routing`() {
+        assertEquals(
+            CellBus.COMM,
+            busFromEventType("action_result", action = "SPEAK"),
+        )
+        assertEquals(
+            CellBus.COMM,
+            busFromEventType("action_result", action = "Speak"),
+        )
+    }
+
+    @Test
+    fun `action substring matching handles decorated names`() {
+        // ActionType.fromEmoji(...) may produce names like "SPEAK" or the
+        // event may carry "action.speak" / "speak_action" — the helper
+        // uses substring match so any of those land on the same bus.
+        assertEquals(
+            CellBus.COMM,
+            busFromEventType("action_result", action = "action.speak"),
+        )
+        assertEquals(
+            CellBus.TOOL,
+            busFromEventType("action_result", action = "tool_use"),
+        )
+    }
+
+    // =========================================================================
+    // busPulseIntensity — decay curve for shimmer
+    // =========================================================================
+
+    @Test
+    fun `busPulseIntensity is 1_0 at spawn and 0 past duration`() {
+        val pulse = BusPulse(CellBus.LLM, startMs = 1_000L)
+        assertEquals(1f, busPulseIntensity(pulse, nowMs = 1_000L), 1e-4f)
+        // At exactly the duration boundary, intensity is 0.
+        assertEquals(
+            0f,
+            busPulseIntensity(pulse, nowMs = 1_000L + BUS_PULSE_DURATION_MS),
+            1e-4f,
+        )
+        assertEquals(
+            0f,
+            busPulseIntensity(pulse, nowMs = 1_000L + BUS_PULSE_DURATION_MS + 500L),
+            1e-4f,
+        )
+    }
+
+    @Test
+    fun `busPulseIntensity decays monotonically inside the pulse window`() {
+        val pulse = BusPulse(CellBus.MEMORY, startMs = 0L)
+        var last = Float.POSITIVE_INFINITY
+        for (t in 0L until BUS_PULSE_DURATION_MS step 30L) {
+            val intensity = busPulseIntensity(pulse, nowMs = t)
+            assertTrue(
+                intensity <= last + 1e-4f,
+                "non-monotonic at t=$t: prev=$last this=$intensity",
+            )
+            assertTrue(intensity >= 0f && intensity <= 1f, "out of range at t=$t")
+            last = intensity
+        }
+    }
+
+    @Test
+    fun `busPulseIntensity handles negative elapsed time gracefully`() {
+        // If clocks skew or a pulse is scheduled in the future, don't
+        // return a nonsense value or throw.
+        val pulse = BusPulse(CellBus.WISE, startMs = 1_000L)
+        assertEquals(0f, busPulseIntensity(pulse, nowMs = 500L), 1e-4f)
+    }
+
+    @Test
+    fun `BUS_PULSE_DURATION_MS is a perceptually tuned constant`() {
+        // Locking this down as a contract — 600ms is the design-doc
+        // duration; changing it moves the "shimmer feels snappy vs
+        // sluggish" dial and should be a deliberate decision, not a
+        // drive-by edit.
+        assertEquals(600L, BUS_PULSE_DURATION_MS)
+    }
 }

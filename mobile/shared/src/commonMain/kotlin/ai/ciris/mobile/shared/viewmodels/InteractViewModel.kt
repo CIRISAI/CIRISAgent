@@ -327,6 +327,15 @@ class InteractViewModel(
     val cellVizState: StateFlow<ai.ciris.mobile.shared.ui.screens.graph.CellVizState> =
         _cellVizState.asStateFlow()
 
+    // Tier-1 events — bus-arc shimmers on SSE activity. Bounded to a small
+    // ring of recent pulses; each self-expires after BUS_PULSE_DURATION_MS
+    // via the launched coroutine in [addBusPulse]. Passing the full list
+    // to Compose lets multiple concurrent pulses coexist (memory + llm
+    // firing on the same thought step is common).
+    private val _busPulses = MutableStateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.BusPulse>>(emptyList())
+    val busPulses: StateFlow<List<ai.ciris.mobile.shared.ui.screens.graph.BusPulse>> =
+        _busPulses.asStateFlow()
+
     private var capacityRefreshJob: Job? = null
 
     private var pollingJob: Job? = null
@@ -1687,6 +1696,13 @@ class InteractViewModel(
                                     _pipelineState.value = _pipelineState.value
                                         .activate(event.eventType, now)
                                 }
+                                // Tier-1 event: route non-action pipeline steps
+                                // to their owning bus so the matching arc shimmers.
+                                val pulseBus = ai.ciris.mobile.shared.ui.screens.graph
+                                    .busFromEventType(event.eventType, action = null)
+                                if (pulseBus != null) {
+                                    addBusPulse(pulseBus)
+                                }
                             }
                             is ReasoningEvent.Emoji -> {
                                 // Add bubble emoji (floats up and disappears).
@@ -1701,6 +1717,17 @@ class InteractViewModel(
                                 val actionType = ActionType.fromEmoji(event.emoji)
                                 if (actionType != null) {
                                     fetchAndAddLatestAction(actionType)
+                                    // Tier-1 event: route the action to its bus.
+                                    // task_complete returns null here — it fires a
+                                    // gratitude mote instead (commit 6b).
+                                    val actionBus = ai.ciris.mobile.shared.ui.screens.graph
+                                        .busFromEventType(
+                                            eventType = "action_result",
+                                            action = actionType.name,
+                                        )
+                                    if (actionBus != null) {
+                                        addBusPulse(actionBus)
+                                    }
                                 }
 
                                 // Update processing state and status text
@@ -1736,6 +1763,21 @@ class InteractViewModel(
      * Users can "catch" a bubble mid-flight to promote its payload into the
      * caughtBubbles list for longer inspection.
      */
+    /**
+     * Spawn a bus-arc shimmer pulse. Auto-expires after the pulse
+     * duration so the list never grows unbounded. Up to ~8 concurrent
+     * pulses feels crowded; beyond that we drop the oldest.
+     */
+    private fun addBusPulse(bus: ai.ciris.mobile.shared.ui.screens.graph.CellBus) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val pulse = ai.ciris.mobile.shared.ui.screens.graph.BusPulse(bus, now)
+        _busPulses.value = (_busPulses.value + pulse).takeLast(8)
+        viewModelScope.launch {
+            delay(ai.ciris.mobile.shared.ui.screens.graph.BUS_PULSE_DURATION_MS)
+            _busPulses.value = _busPulses.value.filter { it.startMs != now || it.bus != bus }
+        }
+    }
+
     private fun addBubbleEmoji(emoji: String, payload: String? = null) {
         val bubbleId = bubbleIdCounter++
         val expiresAt = Clock.System.now().toEpochMilliseconds() + BUBBLE_LIFETIME_MS

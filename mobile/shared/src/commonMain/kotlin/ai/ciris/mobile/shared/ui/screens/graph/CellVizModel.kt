@@ -54,6 +54,68 @@ internal fun adapterBus(type: String): CellBus = when (type.lowercase()) {
     else -> CellBus.TOOL
 }
 
+/**
+ * Route an SSE reasoning-stream event to the bus that best represents
+ * "where the work is happening". Used by Tier-1 bus-arc shimmer — when
+ * an event arrives, the matching bus briefly brightens.
+ *
+ * Not every event has a clean bus home: `thought_start` kicks off LLM
+ * reasoning, `conscience_result` is ethical evaluation (WISE), and
+ * `task_complete` is signalled via a gratitude mote rather than a bus
+ * shimmer (see §2.5.1), so it returns null here.
+ *
+ * @param eventType SSE event_type from `ReasoningStreamClient`.
+ * @param action Optional action verb (observe/speak/tool/...) when
+ *   the event is an `action_result` — needed to distinguish MEMORY
+ *   (memorize/recall/forget) from COMM (speak/observe) etc.
+ */
+fun busFromEventType(eventType: String, action: String? = null): CellBus? = when {
+    // Action results — dispatch on the verb.
+    eventType == "action_result" -> action?.lowercase()?.let { a ->
+        when {
+            "memorize" in a || "recall" in a || "forget" in a -> CellBus.MEMORY
+            "speak" in a || "observe" in a -> CellBus.COMM
+            "tool" in a -> CellBus.TOOL
+            "defer" in a -> CellBus.WISE
+            "ponder" in a -> CellBus.LLM      // self-directed reasoning
+            "reject" in a -> CellBus.RUNTIME  // control response
+            "task_complete" in a -> null      // → gratitude mote instead
+            else -> null
+        }
+    }
+    // Reasoning pipeline stages.
+    eventType == "snapshot_and_context" -> CellBus.MEMORY  // context gathered from graph
+    eventType == "thought_start" -> CellBus.LLM
+    eventType == "dma_results" -> CellBus.LLM
+    eventType == "idma_result" -> CellBus.LLM
+    eventType == "aspdma_result" -> CellBus.LLM
+    eventType == "tsaspdma_result" -> CellBus.TOOL  // tool-specific refinement
+    eventType == "conscience_result" -> CellBus.WISE
+    else -> null
+}
+
+/**
+ * A transient brightness boost applied to one bus arc, in response to
+ * an SSE event landing on that bus. Pure data — the rendering layer
+ * reads [startMs] to compute decay.
+ */
+data class BusPulse(val bus: CellBus, val startMs: Long)
+
+/** Duration of a bus-arc shimmer, in milliseconds. */
+const val BUS_PULSE_DURATION_MS: Long = 600L
+
+/**
+ * Returns 0.0..1.0 intensity of a bus pulse at time [nowMs].
+ * 1.0 at spawn, decays smoothly to 0 over [BUS_PULSE_DURATION_MS].
+ */
+fun busPulseIntensity(pulse: BusPulse, nowMs: Long): Float {
+    val elapsed = (nowMs - pulse.startMs).toFloat()
+    if (elapsed < 0f || elapsed >= BUS_PULSE_DURATION_MS) return 0f
+    // Fast attack, slow release — 1 - smoothstep gives a natural decay.
+    val t = elapsed / BUS_PULSE_DURATION_MS.toFloat()
+    return 1f - smoothstep(t)
+}
+
 // =============================================================================
 // Membrane openings — dynamic apertures
 // =============================================================================

@@ -31,6 +31,34 @@ object CIRISColors {
 
     // Navigation colors (for future use)
     val NavSignetLight = Color(0xFF5DD3D8)      // Lighter signet for dark toolbar
+
+    // ---------------------------------------------------------------------
+    // Cell-visualization bus palette (load-bearing — see FSD §2).
+    // ---------------------------------------------------------------------
+    //
+    // These are the six membrane-arc colours. They are architectural (each
+    // bus always has the same colour regardless of user theme) and
+    // intentionally chosen to avoid reading as the Google Material
+    // primary palette (blue / yellow / red / green) that earlier drafts
+    // drifted into.
+    //
+    // Design constraints:
+    //   - COMM / LLM anchor on brand tokens (SignetTeal, AccentCyan)
+    //     so the most-frequently-firing buses ARE the brand.
+    //   - TOOL / WISE use warm tones from outside Google's primary range:
+    //     rust + brass, not orange + yellow.
+    //   - RUNTIME shifts red toward magenta, away from Google red.
+    //   - MEMORY keeps cool violet, saturated into the brand family.
+    //
+    // Hue distribution on the wheel is intentionally non-uniform (the big
+    // gap between violet → rust skips the bright-yellow zone) so the
+    // ring doesn't geometrically echo Material's four-primary layout.
+    val BusComm = Color(0xFF419CA0)             // Exact brand SignetTeal
+    val BusLLM = Color(0xFF22C0E8)              // Derived from AccentCyan, toned
+    val BusMemory = Color(0xFF7A6FD6)           // Cool violet — brand-adjacent
+    val BusTool = Color(0xFFC96A38)             // Burnt rust — industrial, not Google orange
+    val BusWise = Color(0xFFB08A3E)             // Vintage brass — wisdom patina, not Google yellow
+    val BusRuntime = Color(0xFFE14B7F)          // Magenta-rose — alarm without Google red
 }
 
 /**

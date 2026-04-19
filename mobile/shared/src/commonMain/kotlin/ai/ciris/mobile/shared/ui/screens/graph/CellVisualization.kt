@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens.graph
 
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.ui.theme.getScopeColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -66,15 +67,17 @@ internal data class BusSegment(
 /**
  * Canonical bus layout — order matters only for iteration; each segment
  * owns a fixed 60° range of the membrane. Colours are load-bearing
- * (see FSD/CELL_VIZ_REDESIGN.md §2) and must not be made user-tunable.
+ * (see FSD/CELL_VIZ_REDESIGN.md §2) and sourced from the CIRIS brand
+ * palette so the ring sits inside the brand system instead of drifting
+ * into Google Material primaries.
  */
 internal val BUS_SEGMENTS: List<BusSegment> = listOf(
-    BusSegment(CellBus.TOOL,    startDeg = 0f,   endDeg = 60f,  color = Color(0xFFD98A2D)),
-    BusSegment(CellBus.LLM,     startDeg = 60f,  endDeg = 120f, color = Color(0xFF3D86D9)),
-    BusSegment(CellBus.MEMORY,  startDeg = 120f, endDeg = 180f, color = Color(0xFF8B5FD6)),
-    BusSegment(CellBus.COMM,    startDeg = 180f, endDeg = 240f, color = Color(0xFF2DA89C)),
-    BusSegment(CellBus.WISE,    startDeg = 240f, endDeg = 300f, color = Color(0xFFC9A52A)),
-    BusSegment(CellBus.RUNTIME, startDeg = 300f, endDeg = 360f, color = Color(0xFFD8554E)),
+    BusSegment(CellBus.TOOL,    startDeg = 0f,   endDeg = 60f,  color = CIRISColors.BusTool),
+    BusSegment(CellBus.LLM,     startDeg = 60f,  endDeg = 120f, color = CIRISColors.BusLLM),
+    BusSegment(CellBus.MEMORY,  startDeg = 120f, endDeg = 180f, color = CIRISColors.BusMemory),
+    BusSegment(CellBus.COMM,    startDeg = 180f, endDeg = 240f, color = CIRISColors.BusComm),
+    BusSegment(CellBus.WISE,    startDeg = 240f, endDeg = 300f, color = CIRISColors.BusWise),
+    BusSegment(CellBus.RUNTIME, startDeg = 300f, endDeg = 360f, color = CIRISColors.BusRuntime),
 )
 
 // -----------------------------------------------------------------------------
@@ -148,6 +151,12 @@ fun CellVisualization(
      * cell renders as-designed until lens data arrives.
      */
     state: CellVizState = CellVizState.DEFAULT,
+    /**
+     * Tier-1 bus-arc shimmer pulses. Each pulse decays over
+     * [BUS_PULSE_DURATION_MS]; the rendering layer reads
+     * `busPulseIntensity(pulse, nowMs)` to compute per-frame brightness.
+     */
+    busPulses: List<BusPulse> = emptyList(),
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
@@ -303,6 +312,19 @@ fun CellVisualization(
             )
             val openingAngleRanges = openings.value
                 .flatMap { openingRanges(it, nowMs.value) }
+            // Aggregate per-bus shimmer intensity so drawMembrane adds a
+            // simple brightness boost. O(buses × pulses) but both are tiny.
+            val nowMsLocal = nowMs.value
+            val busShimmer: Map<CellBus, Float> = if (busPulses.isEmpty()) {
+                emptyMap()
+            } else {
+                busPulses
+                    .asSequence()
+                    .map { it.bus to busPulseIntensity(it, nowMsLocal) }
+                    .filter { (_, intensity) -> intensity > 0f }
+                    .groupBy({ it.first }, { it.second })
+                    .mapValues { (_, xs) -> xs.max() }
+            }
             drawMembrane(
                 rotationDeg = rotationDeg,
                 cx = centerX, cy = centerY,
@@ -311,6 +333,7 @@ fun CellVisualization(
                 cfg = cfg,
                 openingRanges = openingAngleRanges,
                 crispness = dials.busCrispness,
+                shimmer = busShimmer,
             )
             drawCytoplasmMotes(
                 motes = motes.value,
@@ -424,11 +447,20 @@ private fun DrawScope.drawMembrane(
      * which reads as "chain not fully verified" without looking broken.
      */
     crispness: Float = 1f,
+    /**
+     * Per-bus shimmer intensity in [0, 1]. When > 0, the matching arc
+     * renders an extra bright overlay stroke, fading out over
+     * [BUS_PULSE_DURATION_MS]. Layered on top of the normal 3-path
+     * bloom stack so the shimmer reads as "event just fired here"
+     * without replacing the steady-state colour.
+     */
+    shimmer: Map<CellBus, Float> = emptyMap(),
 ) {
     BUS_SEGMENTS.forEach { seg ->
         val segStart = (seg.startDeg + rotationDeg) % 360f
         val segEnd   = (seg.endDeg   + rotationDeg) % 360f
         val subArcs = subtractRangesFromArc(segStart, segEnd, openingRanges)
+        val pulse = shimmer[seg.bus] ?: 0f
 
         subArcs.forEach { (subStart, subSweep) ->
             if (subSweep <= 0.5f) return@forEach
@@ -439,9 +471,27 @@ private fun DrawScope.drawMembrane(
                     seg.color.copy(alpha = 0.35f), cfg.busArcMidHaloWidth)
                 drawBusArc(cx, cy, radius, subStart, subSweep,
                     seg.color.copy(alpha = crispness), cfg.busArcStrokeWidth)
+                if (pulse > 0f) {
+                    // Bright white-tinted overlay. Width grows with pulse
+                    // so the shimmer feels thicker at peak then thins as
+                    // it fades. Colour leans toward the bus tint so each
+                    // bus keeps its identity under the flash.
+                    drawBusArc(
+                        cx, cy, radius, subStart, subSweep,
+                        seg.color.copy(alpha = 0.85f * pulse),
+                        cfg.busArcStrokeWidth * (1.2f + 0.6f * pulse),
+                    )
+                }
             } else {
                 drawBusArc(cx, cy, radius, subStart, subSweep,
                     seg.color.copy(alpha = crispness), cfg.busArcStrokeWidth * 0.75f)
+                if (pulse > 0f) {
+                    drawBusArc(
+                        cx, cy, radius, subStart, subSweep,
+                        seg.color.copy(alpha = 0.85f * pulse),
+                        cfg.busArcStrokeWidth * (1.2f + 0.6f * pulse),
+                    )
+                }
             }
         }
     }

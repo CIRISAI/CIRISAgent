@@ -25,6 +25,27 @@ fun main() {
     // Set macOS application name (menu bar + dock)
     System.setProperty("apple.awt.application.name", "CIRIS Agent")
 
+    // Robust crash guards — we have zero ANRs in prod on both app stores
+    // and desktop should match. A single unhandled exception in a
+    // coroutine / Compose callback / AWT event should NEVER wedge the UI
+    // or kill the JVM silently.
+    //
+    // 1) JVM-wide fallback: anything that escapes every catch block
+    //    ends up here. Log it; do not let the thread die quietly.
+    Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+        System.err.println(
+            "[DesktopCrashGuard] UNCAUGHT on ${thread.name}: ${error::class.qualifiedName}: ${error.message}"
+        )
+        error.printStackTrace(System.err)
+    }
+    // 2) AWT EDT-specific handler (Swing dispatches exceptions through
+    //    sun.awt.exception.handler when set as a system property). If the
+    //    EDT hits a fatal error we still want the app to keep running.
+    System.setProperty(
+        "sun.awt.exception.handler",
+        "ai.ciris.desktop.AwtExceptionHandler"
+    )
+
     // Set macOS Dock icon. painterResource("icon.png") on the Window
     // only controls the title-bar icon — the Dock, Cmd-Tab switcher,
     // and app-bundle representation need the JVM's AWT Taskbar API.

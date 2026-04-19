@@ -2109,19 +2109,29 @@ class InteractViewModel(
         selectionPollJob = viewModelScope.launch {
             while (isActive) {
                 try {
-                    _selectionDetail.value = fetchSelectionDetail(kind)
+                    val fresh = fetchSelectionDetail(kind)
+                    // Cooperative cancel check: a rapid tap sequence can
+                    // cancel this job while an HTTP call is in flight.
+                    // Don't write the stale value after cancel — that's
+                    // what used to wedge the UI on "Loading…" and
+                    // occasionally trigger a fatal coroutine wrap.
+                    if (!isActive) break
+                    _selectionDetail.value = fresh
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Rethrow — coroutine hygiene rule: never swallow
+                    // CancellationException, it must propagate so the
+                    // coroutine unwinds cleanly.
+                    throw e
                 } catch (e: Exception) {
                     logDebug("fetchSelectionDetail", "poll error: ${e.message}")
+                    if (!isActive) break
                     _selectionDetail.value = SelectionDetail.Error(
                         summaryLine = "Couldn't fetch detail: ${e.message ?: e::class.simpleName}",
                     )
                 }
                 // Nucleus shells read the SSE ring buffer on every tick
                 // too so newly-arrived events show up without a manual
-                // refresh. For HTTP-backed kinds the 1 s cadence is the
-                // cap — fetchSelectionDetail short-circuits if nothing
-                // obvious has changed (not strictly needed; polls are
-                // cheap and the 1Hz cap is fine).
+                // refresh. For HTTP-backed kinds this is the rate cap.
                 kotlinx.coroutines.delay(SELECTION_POLL_INTERVAL_MS)
             }
         }

@@ -1098,16 +1098,19 @@ class TestCapacityEndpoint:
         # The lens should have been hit exactly once despite two API calls.
         assert fetch_mock.await_count == 1
 
-    def test_capacity_bad_gateway_when_lens_raises(self, client, clear_capacity_cache):
-        """Lens raising an unexpected exception -> 502."""
+    def test_capacity_fallback_to_local_when_lens_raises(self, client, clear_capacity_cache):
+        """Lens raising an unexpected exception -> graceful fallback to local-only."""
         with patch(
             "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
             new=AsyncMock(side_effect=RuntimeError("lens unreachable")),
         ):
             response = client.get("/v1/my-data/capacity")
 
-        assert response.status_code == 502
-        assert "RuntimeError" in response.json()["detail"]
+        # Graceful fallback: return 200 with local-only capacity
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "local" in data["message"].lower() or "lens unavailable" in data["message"].lower()
 
     def test_capacity_bad_gateway_when_lens_returns_malformed_payload(self, client, clear_capacity_cache):
         """Lens returning a payload missing required fields -> 502."""
@@ -1121,8 +1124,8 @@ class TestCapacityEndpoint:
         assert response.status_code == 502
         assert "unexpected shape" in response.json()["detail"]
 
-    def test_capacity_404_when_no_agent_identity(self, clear_capacity_cache):
-        """When the runtime cannot resolve an agent template, return 404."""
+    def test_capacity_uses_ally_default_when_no_agent_identity(self, clear_capacity_cache):
+        """When the runtime cannot resolve an agent template, use 'Ally' as default."""
         app = create_app()
         runtime = MagicMock()
         # No agent_identity, no identity_manager, no essential_config — force the
@@ -1141,8 +1144,10 @@ class TestCapacityEndpoint:
             local_client = TestClient(app)
             response = local_client.get("/v1/my-data/capacity")
 
-        assert response.status_code == 404
-        assert "Agent template unavailable" in response.json()["detail"]
+        # Graceful behavior: use "Ally" as default template, return 200
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
 
     def test_capacity_not_in_context_enrichment_tools(self):
         """Capacity must NOT appear as a context-enrichment tool.

@@ -5,13 +5,13 @@ import androidx.compose.runtime.Composable
 @Composable
 actual fun FilePickerDialog(
     show: Boolean,
-    fileExtensions: List<String>,
-    onFileSelected: (String?) -> Unit,
+    mimeTypes: List<String>,
+    onFilePicked: (PickedFile) -> Unit,
     onDismiss: () -> Unit
 ) {
     // TODO: Implement using HTML file input element
+    // For now, dismiss immediately as web file picking requires HTML input element integration
     if (show) {
-        onFileSelected(null)
         onDismiss()
     }
 }

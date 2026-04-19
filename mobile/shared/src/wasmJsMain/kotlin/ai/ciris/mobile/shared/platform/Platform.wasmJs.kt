@@ -5,7 +5,7 @@ import kotlinx.browser.window
 actual fun getPlatform(): Platform = Platform.WEB
 
 actual fun platformLog(tag: String, message: String) {
-    console.log("[$tag] $message")
+    println("[$tag] $message")
 }
 
 actual fun getDeviceDebugInfo(): String {

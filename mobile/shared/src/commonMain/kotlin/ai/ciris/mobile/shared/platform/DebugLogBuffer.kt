@@ -14,12 +14,13 @@ data class DebugLogEntry(
     val tag: String,
     val message: String
 ) {
-    val emoji: String get() = when (level) {
-        "DEBUG" -> "🔍"
-        "INFO" -> "ℹ️"
-        "WARN" -> "⚠️"
-        "ERROR" -> "❌"
-        else -> "📝"
+    // ASCII symbols for cross-platform WASM/Skia compatibility
+    val symbol: String get() = when (level) {
+        "DEBUG" -> "[D]"
+        "INFO" -> "[i]"
+        "WARN" -> "[!]"
+        "ERROR" -> "[X]"
+        else -> "[.]"
     }
 
     val formattedTime: String get() {

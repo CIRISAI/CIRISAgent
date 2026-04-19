@@ -20,22 +20,23 @@ data class ChatMessage(
 
 /**
  * The 10 CIRIS action types (verbs).
+ * Uses ASCII symbols for cross-platform WASM/Skia compatibility.
  */
 @Serializable
-enum class ActionType(val emoji: String, val auditEventType: String, val displayName: String) {
-    SPEAK("💬", "speak", "Speak"),
-    TOOL("🔧", "tool", "Tool"),
-    OBSERVE("👀", "observe", "Observe"),
-    MEMORIZE("💾", "memorize", "Memorize"),
-    RECALL("🔍", "recall", "Recall"),
-    FORGET("🗑️", "forget", "Forget"),
-    REJECT("❌", "reject", "Reject"),
-    PONDER("💭", "ponder", "Ponder"),
-    DEFER("⏸️", "defer", "Defer"),
-    TASK_COMPLETE("✅", "task_complete", "Task Complete");
+enum class ActionType(val symbol: String, val auditEventType: String, val displayName: String) {
+    SPEAK("[>]", "speak", "Speak"),
+    TOOL("[T]", "tool", "Tool"),
+    OBSERVE("[o]", "observe", "Observe"),
+    MEMORIZE("[+]", "memorize", "Memorize"),
+    RECALL("[?]", "recall", "Recall"),
+    FORGET("[-]", "forget", "Forget"),
+    REJECT("[x]", "reject", "Reject"),
+    PONDER("[.]", "ponder", "Ponder"),
+    DEFER("[|]", "defer", "Defer"),
+    TASK_COMPLETE("[v]", "task_complete", "Task Complete");
 
     companion object {
-        fun fromEmoji(emoji: String): ActionType? = entries.find { it.emoji == emoji }
+        fun fromSymbol(symbol: String): ActionType? = entries.find { it.symbol == symbol }
         fun fromAuditEventType(eventType: String): ActionType? {
             val normalizedType = eventType.lowercase()
             return entries.find {

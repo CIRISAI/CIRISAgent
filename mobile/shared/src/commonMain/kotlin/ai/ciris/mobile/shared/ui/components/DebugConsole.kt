@@ -57,7 +57,7 @@ fun DebugIndicator(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = if (errorCount > 0) "🐛" else "📋",
+                text = if (errorCount > 0) "[!]" else "[L]",
                 fontSize = 14.sp
             )
             Text(
@@ -111,7 +111,7 @@ fun ErrorToast(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "❌", fontSize = 16.sp)
+                Text(text = "[X]", fontSize = 16.sp)
                 Text(
                     text = latestError ?: "",
                     fontSize = 12.sp,
@@ -182,7 +182,7 @@ fun DebugConsole(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "🐛 Debug Console",
+                            text = "[D] Debug Console",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -255,22 +255,22 @@ fun DebugConsole(
                     FilterChip(
                         selected = selectedFilter == "ERROR",
                         onClick = { selectedFilter = if (selectedFilter == "ERROR") null else "ERROR" },
-                        label = "❌ Errors"
+                        label = "[X] Errors"
                     )
                     FilterChip(
                         selected = selectedFilter == "WARN",
                         onClick = { selectedFilter = if (selectedFilter == "WARN") null else "WARN" },
-                        label = "⚠️ Warnings"
+                        label = "[!] Warnings"
                     )
                     FilterChip(
                         selected = selectedFilter == "INFO",
                         onClick = { selectedFilter = if (selectedFilter == "INFO") null else "INFO" },
-                        label = "ℹ️ Info"
+                        label = "[i] Info"
                     )
                     FilterChip(
                         selected = selectedFilter == "DEBUG",
                         onClick = { selectedFilter = if (selectedFilter == "DEBUG") null else "DEBUG" },
-                        label = "🔍 Debug"
+                        label = "[D] Debug"
                     )
                 }
 
@@ -392,9 +392,9 @@ private fun LogEntryRow(
                     color = Color(0xFF6B7280),
                     fontFamily = FontFamily.Monospace
                 )
-                // Emoji
+                // Symbol
                 Text(
-                    text = entry.emoji,
+                    text = entry.symbol,
                     fontSize = 12.sp
                 )
                 // Tag

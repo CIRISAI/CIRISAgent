@@ -1858,8 +1858,8 @@ class InteractViewModel(
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
 
-                                // Check if this is one of the 10 CIRIS action emojis
-                                val actionType = ActionType.fromEmoji(event.emoji)
+                                // Check if this is one of the 10 CIRIS action symbols
+                                val actionType = ActionType.fromSymbol(event.emoji)
                                 if (actionType != null) {
                                     fetchAndAddLatestAction(actionType)
                                     // Tier-1 event: route the action to its bus.

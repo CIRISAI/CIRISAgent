@@ -343,7 +343,7 @@ fun InteractScreen(
             PlatformLogger.i(
                 "InteractScreen",
                 "cell-viz gate: useCellViz=$useCellViz (capable=${cellVizCap.isCapable}, " +
-                    "forceClassic=$forceClassicViz, ram=${"%.1f".format(cellVizCap.totalRamGb)}GB, " +
+                    "forceClassic=$forceClassicViz, ram=${(cellVizCap.totalRamGb * 10).toInt() / 10.0}GB, " +
                     "reason=${cellVizCap.reason})"
             )
         }
@@ -921,7 +921,7 @@ private fun LlmHealthIndicator(
         // Provider name - 6 char max for compact layout
         val displayName = when {
             health.provider == "unknown" -> "..."
-            isMockLlm -> "⚠MOCK"
+            isMockLlm -> "[!]MOCK"
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"
             health.provider == "anthropic" -> "Anthr"
@@ -971,8 +971,8 @@ private fun CreditsIndicator(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
-            // Fire emoji for credits
-            Text(text = "🔥", fontSize = 10.sp)
+            // Credits indicator
+            Text(text = "$", fontSize = 10.sp)
 
             // Credits count - prioritize showing what's available
             // Priority: paid credits > free uses > daily free uses > 0 with renewal time
@@ -983,7 +983,7 @@ private fun CreditsIndicator(
                 else -> {
                     // Show renewal time when out of credits
                     val hoursUntil = credits.hoursUntilRenewal()
-                    if (hoursUntil > 0) "⏰${hoursUntil}h" else "0"
+                    if (hoursUntil > 0) "[t]${hoursUntil}h" else "0"
                 }
             }
             val creditsColor = when {
@@ -1368,7 +1368,7 @@ private fun AIWarningBanner(
     modifier: Modifier = Modifier
 ) {
     Text(
-        text = "⚠️ " + localizedString("mobile.interact_hallucination_warning"),
+        text = "[!] " + localizedString("mobile.interact_hallucination_warning"),
         modifier = modifier
             .fillMaxWidth()
             .background(theme.warningBackground)
@@ -1400,7 +1400,7 @@ private fun PendingDeferralsBanner(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "📋",
+            text = "[>]",
             fontSize = 14.sp
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -1444,9 +1444,9 @@ private fun SystemWarningBanner(
         else -> Color(0xFF2563EB)
     }
     val icon = when (warning.severity) {
-        "error" -> "⚠️"
-        "warning" -> "⚡"
-        else -> "ℹ️"
+        "error" -> "[!]"
+        "warning" -> "[*]"
+        else -> "[i]"
     }
 
     Row(
@@ -1775,7 +1775,7 @@ private fun SystemMessage(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "\u2139\uFE0F", // ℹ️ info icon
+                    text = "[i]", // info icon (ASCII for WASM/Skia)
                     fontSize = 14.sp
                 )
                 SelectionContainer {
@@ -1817,7 +1817,7 @@ private fun ErrorMessage(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "\u26A0\uFE0F", // ⚠️ warning icon
+                    text = "[!]", // warning icon (ASCII for WASM/Skia)
                     fontSize = 14.sp
                 )
                 SelectionContainer {
@@ -1884,8 +1884,8 @@ private fun ActionBubble(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Action emoji
-                    Text(text = actionType?.emoji ?: "❓", fontSize = 16.sp)
+                    // Action symbol (ASCII for WASM/Skia)
+                    Text(text = actionType?.symbol ?: "[?]", fontSize = 16.sp)
 
                     // Action name and subtitle
                     Column(modifier = Modifier.weight(1f)) {
@@ -2861,13 +2861,13 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("🤔", localizedString("mobile.interact_legend_thought_start"))
-                LegendRow("📋", localizedString("mobile.interact_legend_snapshot"))
-                LegendRow("⚖️", localizedString("mobile.interact_legend_dma"))
-                LegendRow("〰️", localizedString("mobile.interact_legend_idma"))
-                LegendRow("🎯", localizedString("mobile.interact_legend_action_selection"))
-                LegendRow("🔧", localizedString("mobile.interact_legend_tsaspdma"))
-                LegendRow("🧭", localizedString("mobile.interact_legend_conscience"))
+                LegendRow("[?]", localizedString("mobile.interact_legend_thought_start"))
+                LegendRow("[>]", localizedString("mobile.interact_legend_snapshot"))
+                LegendRow("[~]", localizedString("mobile.interact_legend_dma"))
+                LegendRow("[i]", localizedString("mobile.interact_legend_idma"))
+                LegendRow("[*]", localizedString("mobile.interact_legend_action_selection"))
+                LegendRow("[T]", localizedString("mobile.interact_legend_tsaspdma"))
+                LegendRow("[@]", localizedString("mobile.interact_legend_conscience"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2878,9 +2878,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("👀", localizedString("mobile.interact_legend_observe"))
-                LegendRow("💬", localizedString("mobile.interact_legend_speak"))
-                LegendRow("🔧", localizedString("mobile.interact_legend_tool"))
+                LegendRow("[o]", localizedString("mobile.interact_legend_observe"))
+                LegendRow("[>]", localizedString("mobile.interact_legend_speak"))
+                LegendRow("[T]", localizedString("mobile.interact_legend_tool"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2891,9 +2891,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("❌", localizedString("mobile.interact_legend_reject"))
-                LegendRow("💭", localizedString("mobile.interact_legend_ponder"))
-                LegendRow("⏸️", localizedString("mobile.interact_legend_defer"))
+                LegendRow("[x]", localizedString("mobile.interact_legend_reject"))
+                LegendRow("[.]", localizedString("mobile.interact_legend_ponder"))
+                LegendRow("[|]", localizedString("mobile.interact_legend_defer"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2904,9 +2904,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("💾", localizedString("mobile.interact_legend_memorize"))
-                LegendRow("🔍", localizedString("mobile.interact_legend_recall"))
-                LegendRow("🗑️", localizedString("mobile.interact_legend_forget"))
+                LegendRow("[+]", localizedString("mobile.interact_legend_memorize"))
+                LegendRow("[?]", localizedString("mobile.interact_legend_recall"))
+                LegendRow("[-]", localizedString("mobile.interact_legend_forget"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2917,7 +2917,7 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("✅", localizedString("mobile.interact_legend_task_complete"))
+                LegendRow("[v]", localizedString("mobile.interact_legend_task_complete"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2928,9 +2928,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("💭", localizedString("mobile.interact_legend_idle"))
-                LegendRow("🔄", localizedString("mobile.interact_legend_processing_icon"))
-                LegendRow("⚪", localizedString("mobile.interact_legend_disconnected"))
+                LegendRow("[.]", localizedString("mobile.interact_legend_idle"))
+                LegendRow("[~]", localizedString("mobile.interact_legend_processing_icon"))
+                LegendRow("[o]", localizedString("mobile.interact_legend_disconnected"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2942,9 +2942,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("↔️", "Swipe the background to spin the visualization")
-                LegendRow("⚡", "Flick repeatedly — a bit of energy shatters it, then it reforms")
-                LegendRow("🔍", "Tap the VIZ toggle to expand the scene to full screen")
+                LegendRow("<->", "Swipe the background to spin the visualization")
+                LegendRow("[!]", "Flick repeatedly — a bit of energy shatters it, then it reforms")
+                LegendRow("[+]", "Tap the VIZ toggle to expand the scene to full screen")
             }
         },
         confirmButton = {

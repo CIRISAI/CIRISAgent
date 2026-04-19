@@ -316,7 +316,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_identity"),
         hint = localizedString("mobile.skill_card_identity_hint"),
-        emoji = "🏷️",
+        emoji = "[#]",
         initiallyExpanded = true
     ) {
         SimpleField(localizedString("mobile.skill_field_name"), preview.name)
@@ -329,7 +329,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_tools"),
         hint = localizedString("mobile.skill_card_tools_hint"),
-        emoji = "🔧",
+        emoji = "[T]",
         initiallyExpanded = true
     ) {
         if (preview.tools.isNotEmpty()) {
@@ -420,7 +420,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_behavior"),
         hint = localizedString("mobile.skill_card_behavior_hint"),
-        emoji = "🛡️",
+        emoji = "[S]",
         initiallyExpanded = false
     ) {
         SimpleField(
@@ -514,7 +514,7 @@ private fun ResultContent(
         WorkshopCard(
             title = localizedString("mobile.skill_card_tools"),
             hint = localizedString("mobile.skill_build_success_hint"),
-            emoji = "🔧",
+            emoji = "[T]",
             initiallyExpanded = true
         ) {
             result.toolsCreated.forEach { tool ->

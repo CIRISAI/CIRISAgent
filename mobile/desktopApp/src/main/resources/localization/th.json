@@ -7,6 +7,10 @@
   "setup": {
     "welcome_title": "Welcome to CIRIS",
     "welcome_desc": "CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.",
+    "quick_title": "การตั้งค่าด่วน",
+    "quick_desc": "คุณลงชื่อเข้าใช้ด้วย {provider} บริการ CIRIS AI ใช้งานได้ กำหนดค่าตัวเลือกเพิ่มเติมด้านล่าง",
+    "quick_ciris_active": "บริการ CIRIS AI ใช้งานได้",
+    "quick_ciris_desc": "บัญชีของคุณมีการเข้าถึง CIRIS AI ไม่จำเป็นต้องตั้งค่าเพิ่มเติม",
     "prefs_title": "Your Preferences",
     "prefs_desc": "Help CIRIS communicate with you in your preferred language. Location is optional and helps provide relevant บริบท.",
     "prefs_language_label": "Preferred Language",
@@ -31,10 +35,14 @@
     "confirm_desc": "Review your configuration and complete setup.",
     "continue": "Continue",
     "back": "Back",
-    "next": "Next",
-    "finish": "Finish Setup",
+    "byok_mode_desc": "กำหนดค่าผู้ให้บริการ LLM ของคุณเพื่อดำเนินการต่อ",
+    "byok_mode_title": "นำคีย์ของคุณเอง",
+    "ciris_mode_desc": "บริการ AI ของ CIRIS รวมอยู่ในบัญชีของคุณ",
+    "ciris_mode_title": "โหมด CIRIS ทำงาน",
     "complete_message": "Setup completed สำเร็จfully. Starting เอเจนต์ processor...",
-    "error_runtime": "Runtime not available - cannot complete setup"
+    "error_runtime": "Runtime not available - cannot complete setup",
+    "finish": "Finish Setup",
+    "next": "Next"
   },
   "agent": {
     "greeting": "Hello! How can I help you today?",
@@ -1520,6 +1528,8 @@
     "tickets_status_progress": "In Progress",
     "login_error_invalid_credentials": "Invalid username or password. Please try again.",
     "login_error_connection": "Cannot connect to server. Please check your connection.",
+    "login_error_google_config": "การลงชื่อเข้าใช้ล้มเหลว โปรดอัปเดต Google Play Services และลองอีกครั้ง",
+    "login_error_cancelled": "การลงชื่อเข้าใช้ถูกยกเลิก โปรดลองอีกครั้ง",
     "skill_workshop": "Skill ทำงานshop",
     "skill_workshop_desc": "Create, import, and manage skills for your เอเจนต์.",
     "skill_studio": "Skill Studio",

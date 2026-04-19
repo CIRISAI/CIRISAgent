@@ -49,11 +49,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.derivedStateOf
@@ -699,7 +701,7 @@ private fun WelcomeStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "ℹ️ ${localizedString("mobile.setup_what_ciris")}",
+                    text = "[i] ${localizedString("mobile.setup_what_ciris")}",
                     color = SetupColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -1532,7 +1534,7 @@ private fun LlmConfigurationStep(
                             .testableClickable("input_llm_model") { modelExpanded = !modelExpanded },
                         trailingIcon = {
                             if (selectedModel?.cirisRecommended == true) {
-                                Text("★", color = SetupColors.Primary, fontSize = 16.sp)
+                                Icon(Icons.Default.Star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1584,7 +1586,7 @@ private fun LlmConfigurationStep(
                                                     color = SetupColors.SuccessLight
                                                 ) {
                                                     Text(
-                                                        "★ Best",
+                                                        "[*] Best",
                                                         fontSize = 10.sp,
                                                         color = SetupColors.SuccessDark,
                                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -1620,7 +1622,7 @@ private fun LlmConfigurationStep(
                 }
 
                 Text(
-                    text = "★ = " + localizedString("mobile.setup_configured"), // Using "Configured" as best match for "Recommended"
+                    text = "[*] =" + localizedString("mobile.setup_configured"), // Using "Configured" as best match for "Recommended"
                     color = SetupColors.TextSecondary,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(top = 4.dp)
@@ -2211,7 +2213,7 @@ private fun BenefitRow(text: String) {
         modifier = Modifier.padding(vertical = 2.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Text("✓", color = SetupColors.SuccessDark, fontSize = 12.sp)
+        Icon(Icons.Default.Check, contentDescription = null, tint = SetupColors.SuccessDark, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = text,
@@ -3260,7 +3262,7 @@ private fun PreferencesStep(
                 modifier = Modifier.padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "ℹ️", fontSize = 16.sp)
+                Text(text = "[i]", fontSize = 16.sp)
                 Text(
                     text = localizedString("mobile.setup_location_note"),
                     fontSize = 12.sp,

@@ -1094,9 +1094,13 @@ async def get_capacity(
         )
 
     local_score: Optional[float] = None
-    local_cat: Optional[str] = None
+    local_category: Optional[str] = None
     if scope_norm == "both":
-        local_score, local_cat = await _compute_local_capacity(request)
+        local_score, local_category = await _compute_local_capacity(request)
+
+    # At this point payload cannot be None: either cache hit or successful fetch
+    # (lens_failed returns early above)
+    assert payload is not None, "payload should be set after lens fetch or cache hit"
 
     try:
         parsed = CapacityResponse(
@@ -1108,7 +1112,7 @@ async def get_capacity(
             metadata=CapacityMetadata(**payload.get("metadata", {})),
             cached=served_from_cache,
             local_score=local_score,
-            local_category=local_cat,
+            local_category=local_category,
         )
     except Exception as e:
         logger.error(f"[capacity] Could not parse lens payload for {template}: {e}")

@@ -2,17 +2,30 @@
 
 This module tests the psutil-compatible interface used by the Android app
 where the real psutil cannot be used due to native compilation requirements.
+
+These tests only run on Android (Chaquopy environment).
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Import the module under test
-from android.app.src.main.python import psutil
+# Skip entire module on non-Android platforms
+pytestmark = pytest.mark.skipif(
+    "android" not in sys.modules and not os.path.exists("/data/data"),
+    reason="Android psutil tests only run on Android",
+)
+
+try:
+    # Import the module under test (only available on Android)
+    from android.app.src.main.python import psutil
+except ImportError:
+    # Create a dummy module for type checking on non-Android
+    psutil = None  # type: ignore[assignment]
 
 
 class TestReadProcFile:

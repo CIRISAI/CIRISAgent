@@ -59,17 +59,18 @@ data class AdapterOrbit(
  * the same place — predictability matters for the "body" metaphor.
  */
 fun orbitFor(id: String, type: String, index: Int = 0, isActive: Boolean = true): AdapterOrbit {
+    // ASCII symbols for WASM/Skia compatibility
     val (glyph, altitude) = when (type.lowercase()) {
-        "api" -> "🌐" to 0.55f         // High — the agent's public voice
-        "discord" -> "💬" to 0.40f
-        "home_assistant", "ha" -> "🏠" to 0.25f
-        "weather" -> "🌦️" to 0.70f     // Highest — a window to the sky
-        "navigation", "nav" -> "🧭" to -0.25f
-        "wallet" -> "💰" to -0.55f     // Low — a pocket
-        "cirisverify" -> "🛡️" to -0.70f  // Deepest — foundational trust
-        "reddit" -> "👽" to 0.10f
-        "mcp" -> "🔌" to -0.10f
-        else -> "⚙️" to (((index % 5) - 2) * 0.15f)
+        "api" -> "[A]" to 0.55f         // High — the agent's public voice
+        "discord" -> "[D]" to 0.40f
+        "home_assistant", "ha" -> "[H]" to 0.25f
+        "weather" -> "[W]" to 0.70f     // Highest — a window to the sky
+        "navigation", "nav" -> "[N]" to -0.25f
+        "wallet" -> "[$]" to -0.55f     // Low — a pocket
+        "cirisverify" -> "[V]" to -0.70f  // Deepest — foundational trust
+        "reddit" -> "[R]" to 0.10f
+        "mcp" -> "[M]" to -0.10f
+        else -> "[*]" to (((index % 5) - 2) * 0.15f)
     }
     // Stable phase derived from id so reloads don't teleport the glyph
     val phase = ((id.hashCode() and 0xFFFF).toFloat() / 0xFFFF) * 2f * PI.toFloat()

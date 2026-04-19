@@ -658,7 +658,7 @@ private fun TrustSecurityCard(
                             }
                         ) {
                             Text(
-                                text = "📋 Copy",
+                                text = "[>] Copy",
                                 fontSize = 10.sp,
                                 color = Color(0xFF9CA3AF),
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

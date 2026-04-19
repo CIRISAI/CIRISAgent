@@ -7,6 +7,10 @@
   "setup": {
     "welcome_title": "Káàbọ̀ sí CIRIS",
     "welcome_desc": "CIRIS jẹ́ olùrànlọ́wọ́ AI tó ní ìwà-rere tó ń ṣiṣẹ́ lórí ẹ̀rọ rẹ. Àwọn ìbánisọ̀rọ̀ àti dátà rẹ wà ní ìkọ̀kọ̀.",
+    "quick_title": "Ètò Kíákíá",
+    "quick_desc": "O ti wọlé pẹ̀lú {provider}. Àwọn iṣẹ́ CIRIS AI ń ṣiṣẹ́. Ṣètò àwọn ẹ̀yàn tí o fẹ́ ní ìsàlẹ̀.",
+    "quick_ciris_active": "Àwọn Iṣẹ́ CIRIS AI Ń Ṣiṣẹ́",
+    "quick_ciris_desc": "Àkọọ́lẹ̀ rẹ kó ìwọlé sí CIRIS AI. Kò sí ètò mìíràn tí ó nílò.",
     "prefs_title": "Àwọn Ìfẹ́ràn Rẹ",
     "prefs_desc": "Ràn CIRIS lọ́wọ́ láti bá ọ sọ̀rọ̀ ní èdè tí o fẹ́ràn. Ibùdó jẹ́ ìfẹ́, ó sì ràn lọ́wọ́ láti pèsè àyíká tó bá mu.",
     "prefs_language_label": "Èdè tí o Fẹ́ràn",
@@ -34,7 +38,11 @@
     "next": "Tókàn",
     "finish": "Parí Ìṣètò",
     "complete_message": "Ìṣètò ti parí dáradára. Ó ń bẹ̀rẹ̀ olùṣàmúlò aṣojú...",
-    "error_runtime": "Àsìkò-ṣiṣẹ́ kò sí - kò lè parí ìṣètò"
+    "error_runtime": "Àsìkò-ṣiṣẹ́ kò sí - kò lè parí ìṣètò",
+    "byok_mode_title": "Ẹ Mú Tìrẹ Ló",
+    "byok_mode_desc": "Ṣètò olùpèsè LLM rẹ láti tẹ̀síwájú",
+    "ciris_mode_title": "Ìṣọ́wọ́ CIRIS Ń Ṣiṣẹ́",
+    "ciris_mode_desc": "Àwọn iṣẹ́ AI CIRIS pẹ̀lú àkọọ́lẹ̀ rẹ"
   },
   "agent": {
     "greeting": "Báwo! Báwo ni mo ṣe lè ràn ọ́ lọ́wọ́ lónìí?",
@@ -1520,6 +1528,8 @@
     "tickets_status_progress": "In Progress",
     "login_error_invalid_credentials": "Invalid username or password. Please try again.",
     "login_error_connection": "Cannot connect to server. Please check your connection.",
+    "login_error_google_config": "Wiwọ̀ lọ́ ṣiṣẹ́ pẹ̀lẹ̀. Jọ̀wọ́ tun Awọn Iṣẹ́ Google Play ṣe ati gbìyànjú lẹ̀ẹ̀kan si.",
+    "login_error_cancelled": "Wiwọ̀ ti ẹ. Jọ̀wọ́ gbìyànjú lẹ̀ẹ̀kan si.",
     "skill_workshop": "Skill Workshop",
     "skill_workshop_desc": "Create, import, and manage skills for your agent.",
     "skill_studio": "Skill Studio",

@@ -13,7 +13,8 @@ import kotlinx.serialization.json.*
 
 /**
  * SSE client for reasoning stream events.
- * Connects to /v1/system/runtime/reasoning-stream and emits emoji events.
+ * Connects to /v1/system/runtime/reasoning-stream and emits symbol events.
+ * Uses ASCII symbols instead of emoji for cross-platform WASM/Skia compatibility.
  */
 class ReasoningStreamClient(
     private val baseUrl: String,
@@ -21,41 +22,41 @@ class ReasoningStreamClient(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    // Event type to emoji mapping
-    private val eventEmojis = mapOf(
-        "thought_start" to "🤔",
-        "snapshot_and_context" to "📋",
-        "dma_results" to "⚖️",
-        "idma_result" to "〰️",       // Intuition DMA - seismograph trace sensing fragility in reasoning (k_eff/CCA)
-        "aspdma_result" to "🎯",
-        "tsaspdma_result" to "🔧",   // Tool-Specific ASPDMA - wrench for tool parameter refinement
-        "conscience_result" to "🧭",
-        "action_result" to "⚡"
+    // Event type to symbol mapping (ASCII-safe for WASM/Skia)
+    private val eventSymbols = mapOf(
+        "thought_start" to "[?]",
+        "snapshot_and_context" to "[>]",
+        "dma_results" to "[~]",
+        "idma_result" to "[i]",       // Intuition DMA - sensing fragility in reasoning (k_eff/CCA)
+        "aspdma_result" to "[*]",
+        "tsaspdma_result" to "[T]",   // Tool-Specific ASPDMA - tool parameter refinement
+        "conscience_result" to "[@]",
+        "action_result" to "[!]"
     )
 
-    // All 10 action verbs with their emojis
+    // All 10 action verbs with their symbols (ASCII-safe for WASM/Skia)
     // External: observe, speak, tool
     // Control: reject, ponder, defer
     // Memory: memorize, recall, forget
     // Terminal: task_complete
-    private fun getActionEmoji(action: String?): String {
+    private fun getActionSymbol(action: String?): String {
         return when {
-            action == null -> "⚡"
+            action == null -> "[!]"
             // External actions
-            action.contains("observe") -> "👀"
-            action.contains("speak") -> "💬"
-            action.contains("tool") -> "🔧"
+            action.contains("observe") -> "[o]"
+            action.contains("speak") -> "[>]"
+            action.contains("tool") -> "[T]"
             // Control responses
-            action.contains("reject") -> "❌"
-            action.contains("ponder") -> "💭"
-            action.contains("defer") -> "⏸️"
+            action.contains("reject") -> "[x]"
+            action.contains("ponder") -> "[.]"
+            action.contains("defer") -> "[|]"
             // Memory operations
-            action.contains("memorize") -> "💾"
-            action.contains("recall") -> "🔍"
-            action.contains("forget") -> "🗑️"
+            action.contains("memorize") -> "[+]"
+            action.contains("recall") -> "[?]"
+            action.contains("forget") -> "[-]"
             // Terminal
-            action.contains("task_complete") -> "✅"
-            else -> "⚡"
+            action.contains("task_complete") -> "[v]"
+            else -> "[!]"
         }
     }
 
@@ -161,16 +162,16 @@ class ReasoningStreamClient(
                 val event = eventElem.jsonObject
                 val eventType = event["event_type"]?.jsonPrimitive?.content ?: continue
 
-                val emoji = when (eventType) {
+                val symbol = when (eventType) {
                     "action_result" -> {
                         val action = event["action_executed"]?.jsonPrimitive?.content
-                        getActionEmoji(action)
+                        getActionSymbol(action)
                     }
                     "aspdma_result" -> {
                         val action = event["selected_action"]?.jsonPrimitive?.content
-                        if (action != null) "🎯" else eventEmojis[eventType] ?: "⏳"
+                        if (action != null) "[*]" else eventSymbols[eventType] ?: "[.]"
                     }
-                    else -> eventEmojis[eventType] ?: "⏳"
+                    else -> eventSymbols[eventType] ?: "[.]"
                 }
 
                 // Check if this is a completion event (task_complete or reject)
@@ -191,7 +192,7 @@ class ReasoningStreamClient(
                 // SSE event in memory.
                 val payload = extractPayload(eventType, event)
 
-                result.add(ReasoningEvent.Emoji(emoji, eventType, isComplete, payload))
+                result.add(ReasoningEvent.Emoji(symbol, eventType, isComplete, payload))
             }
         } catch (e: Exception) {
             PlatformLogger.d("SSE"," JSON parse error: ${e.message}")

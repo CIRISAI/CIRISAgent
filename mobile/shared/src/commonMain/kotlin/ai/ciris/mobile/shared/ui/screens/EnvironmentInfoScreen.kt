@@ -692,7 +692,7 @@ private fun parseEnrichmentData(json: String): ParsedEnrichmentData {
     val kvPairs = extractKeyValuePairs(trimmed)
     if (kvPairs.isNotEmpty() && kvPairs.size <= 10) {
         val success = kvPairs.any { it.first == "success" && it.second == "true" }
-        val summary = if (success) "✓ Success" else "${kvPairs.size} fields"
+        val summary = if (success) "[v] Success" else "${kvPairs.size} fields"
         return ParsedEnrichmentData.KeyValueData(kvPairs, summary)
     }
 
@@ -1072,23 +1072,23 @@ private fun getJsonSummary(value: String, isJson: Boolean): String {
             trimmed.contains("\"tool_name\"") -> {
                 val toolName = extractJsonString(trimmed, "tool_name")
                 val success = trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true")
-                val status = if (success) "✓" else "⚠"
+                val status = if (success) "[v]" else "[!]"
                 "$status Tool: $toolName"
             }
             // Players list: {"success":true, "players":[...]}
             trimmed.contains("\"players\"") -> {
                 val count = trimmed.split("\"entity_id\"").size - 1
-                "✓ $count player(s) found"
+                "[v] $count player(s) found"
             }
             // Generic success response
             trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true") -> {
                 val desc = extractJsonString(trimmed, "description")
-                if (desc.isNotEmpty()) "✓ $desc" else "✓ Success"
+                if (desc.isNotEmpty()) "[v] $desc" else "[v] Success"
             }
             // Error response
             trimmed.contains("\"error\"") -> {
                 val error = extractJsonString(trimmed, "error")
-                "⚠ Error: ${error.take(50)}"
+                "[!] Error: ${error.take(50)}"
             }
             // Array response
             trimmed.startsWith("[") -> {

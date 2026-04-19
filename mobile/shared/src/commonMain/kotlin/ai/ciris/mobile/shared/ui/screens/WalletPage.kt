@@ -18,7 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -339,7 +342,7 @@ private fun ExperimentalWarningCard() {
             verticalAlignment = Alignment.Top
         ) {
             Text(
-                text = "⚠️",
+                text = "[!]",
                 fontSize = 24.sp
             )
             Column(
@@ -372,7 +375,7 @@ private fun PaymasterStatusCard(
         paymasterEnabled && keyConfigured -> {
             // Gasless transfers enabled
             Quadruple(
-                "⛽✓",
+                "Gas[v]",
                 localizedString("mobile.wallet_paymaster_active"),
                 SemanticColors.Default.surfaceSuccess,
                 SemanticColors.Default.onSuccess
@@ -381,7 +384,7 @@ private fun PaymasterStatusCard(
         paymasterEnabled && !keyConfigured -> {
             // Paymaster enabled but no key - show warning
             Quadruple(
-                "⛽⚠",
+                "Gas[!]",
                 localizedString("mobile.wallet_paymaster_key_missing"),
                 SemanticColors.Default.surfaceWarning,
                 SemanticColors.Default.onWarning
@@ -589,7 +592,7 @@ private fun WalletAddressCard(address: String, network: String) {
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (showCopied) "✓ ${localizedString("mobile.common_copy")}!" else "📋 ${localizedString("mobile.common_copy")}",
+                        text = if (showCopied) "[v] ${localizedString("mobile.common_copy")}!" else "[>] ${localizedString("mobile.common_copy")}",
                         fontSize = 12.sp
                     )
                 }
@@ -887,9 +890,9 @@ private fun TransactionHistoryCard(transactions: List<TransactionSummary>) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Direction icon
+                        // Direction icon (ASCII for WASM/Skia)
                         Text(
-                            text = if (tx.type == "send") "↗️" else "↙️",
+                            text = if (tx.type == "send") "->" else "<-",
                             fontSize = 16.sp
                         )
                         Column {
@@ -1036,9 +1039,9 @@ private fun WalletTransferCard(
                 trailingIcon = {
                     when {
                         isValidatingAddress -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        addressValidation?.valid == true && addressValidation?.checksumValid == true -> Text("✓", color = SemanticColors.Default.success, fontSize = 18.sp)
-                        addressValidation?.valid == true && addressValidation?.checksumValid == false -> Text("⚠", color = SemanticColors.Default.warning, fontSize = 18.sp)
-                        addressValidation?.valid == false -> Text("✗", color = SemanticColors.Default.error, fontSize = 18.sp)
+                        addressValidation?.valid == true && addressValidation?.checksumValid == true -> Icon(Icons.Default.Check, contentDescription = "Valid", tint = SemanticColors.Default.success, modifier = Modifier.size(20.dp))
+                        addressValidation?.valid == true && addressValidation?.checksumValid == false -> Icon(Icons.Default.Warning, contentDescription = "Warning", tint = SemanticColors.Default.warning, modifier = Modifier.size(20.dp))
+                        addressValidation?.valid == false -> Icon(Icons.Default.Close, contentDescription = "Invalid", tint = SemanticColors.Default.error, modifier = Modifier.size(20.dp))
                         else -> {}
                     }
                 },
@@ -1047,16 +1050,28 @@ private fun WalletTransferCard(
                         // Show validation status
                         when {
                             addressValidation?.isZeroAddress == true -> {
-                                Text("⚠ Zero address - funds will be burned!", color = SemanticColors.Default.error, fontSize = 10.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = SemanticColors.Default.error, modifier = Modifier.size(12.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Zero address - funds will be burned!", color = SemanticColors.Default.error, fontSize = 10.sp)
+                                }
                             }
                             addressValidation?.checksumValid == false && addressValidation?.computedChecksum != null -> {
-                                Text("⚠ Invalid checksum. Use: ${addressValidation?.computedChecksum}", color = SemanticColors.Default.warning, fontSize = 10.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = SemanticColors.Default.warning, modifier = Modifier.size(12.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Invalid checksum. Use: ${addressValidation?.computedChecksum}", color = SemanticColors.Default.warning, fontSize = 10.sp)
+                                }
                             }
                             addressValidation?.error != null -> {
                                 Text(addressValidation?.error ?: "", color = SemanticColors.Default.error, fontSize = 10.sp)
                             }
                             addressValidation?.checksumValid == true -> {
-                                Text("✓ Valid EIP-55 checksum", color = SemanticColors.Default.success, fontSize = 10.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = SemanticColors.Default.success, modifier = Modifier.size(12.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Valid EIP-55 checksum", color = SemanticColors.Default.success, fontSize = 10.sp)
+                                }
                             }
                         }
                     }
@@ -1086,7 +1101,7 @@ private fun WalletTransferCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("⚠", fontSize = 20.sp)
+                        Icon(Icons.Default.Warning, contentDescription = "Warning", modifier = Modifier.size(20.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Possible Duplicate",

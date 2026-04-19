@@ -1329,9 +1329,9 @@ private fun L1Content(status: VerifyStatusResponse) {
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
     val isSoftwareOnly = !hasHardwareStorage
     val keyIcon = when {
-        isSoftwareOnly -> "⚠️"  // Warning for software-only
-        status.hardwareBacked -> "🔐"  // Hardware-backed
-        else -> "🔑"  // Unknown/software
+        isSoftwareOnly -> "[!]"  // Warning for software-only
+        status.hardwareBacked -> "[K]"  // Hardware-backed
+        else -> "[k]"  // Unknown/software
     }
     val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
     val displayValue = if (isSoftwareOnly) {
@@ -1349,7 +1349,7 @@ private fun L1Content(status: VerifyStatusResponse) {
     if (hasHardwareStorage) {
         DetailSubtext("✓ Ed25519 key wrapped by hardware-stored AES key")
     } else if (isSoftwareOnly) {
-        DetailSubtext("⚠️ No hardware security module - keys protected by OS only")
+        DetailSubtext("[!] No hardware security module - keys protected by OS only")
     }
     status.ed25519Fingerprint?.let {
         DetailSubtext("Fingerprint: ${it.take(20)}...")
@@ -1357,7 +1357,7 @@ private fun L1Content(status: VerifyStatusResponse) {
 
     // Target
     val target = status.targetTriple ?: "${status.platformArch ?: "?"}-${status.platformOs?.lowercase() ?: "?"}"
-    DetailRow(icon = "📦", label = "Registry Target", value = target, ok = true)
+    DetailRow(icon = "[P]", label = "Registry Target", value = target, ok = true)
 
     // Binary self-check (iOS: __TEXT segment hash; other platforms: full binary hash)
     val binaryOk = status.binarySelfCheck == "verified"
@@ -1450,7 +1450,7 @@ private fun L2Content(
 
     // Platform
     DetailRow(
-        icon = if (isTpm) "🖥️" else "📱",
+        icon = if (isTpm) "[PC]" else "[M]",
         label = "Platform",
         value = "${status.platformOs ?: "?"} • ${status.platformArch ?: "?"}",
         ok = true
@@ -1958,7 +1958,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "⚠️ TAMPERING: Disk ≠ Agent Hash (${diskAgentMismatch.size}):",
+                    text = "[!] TAMPERING: Disk != Agent Hash (${diskAgentMismatch.size}):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFDC2626)
@@ -2260,7 +2260,7 @@ private fun DetailSubtext(text: String) {
 
 /**
  * Expandable explanation dropdown for each attestation tier.
- * Shows "ℹ️ What is this?" header that expands to show detailed explanation.
+ * Shows "[i] What is this?" header that expands to show detailed explanation.
  */
 @Composable
 private fun ExplanationDropdown(
@@ -2292,7 +2292,7 @@ private fun ExplanationDropdown(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "ℹ️", fontSize = 12.sp)
+                Text(text = "[i]", fontSize = 12.sp)
                 Text(
                     text = title,
                     fontSize = 11.sp,
@@ -2622,7 +2622,7 @@ private fun DiagnosticsLogCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "📋", fontSize = 16.sp)
+                    Text(text = "[>]", fontSize = 16.sp)
                     Text(
                         text = if (expanded) "▼ Verify Log" else "▶ Verify Log",
                         fontWeight = FontWeight.Medium

@@ -1261,9 +1261,9 @@ private fun AddProviderCard(
                             readOnly = true,
                             label = { Text("Model") },
                             trailingIcon = {
-                                Row {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (displayModel?.cirisRecommended == true) {
-                                        Text("★", color = MaterialTheme.colorScheme.primary)
+                                        Icon(Icons.Default.Star, contentDescription = "Recommended", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     }
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded)
                                 }
@@ -1312,7 +1312,7 @@ private fun AddProviderCard(
                                                     color = MaterialTheme.colorScheme.primaryContainer
                                                 ) {
                                                     Text(
-                                                        "★ Best",
+                                                        "[*] Best",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                                     )
@@ -1342,7 +1342,7 @@ private fun AddProviderCard(
                     }
 
                     Text(
-                        text = "★ = Recommended for CIRIS",
+                        text = "[*] = Recommended for CIRIS",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)

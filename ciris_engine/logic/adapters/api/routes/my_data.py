@@ -12,10 +12,11 @@ for data sent to the CIRISLens repository via the accord metrics adapter.
 """
 
 import hashlib
+import asyncio
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -762,54 +763,83 @@ def _capacity_base_url() -> str:
     ).rstrip("/")
 
 
-def _compute_local_capacity(request: Request) -> Tuple[float, str]:
+async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
     """Compute this occurrence's local CIRIS capacity as a score in [0, 1].
 
-    Implements a deliberately minimal CCA approximation (Coherence Collapse
-    Analysis, Moore 2026):
+    Implements the CCA formula (Coherence Collapse Analysis, Moore 2026):
 
         J = k_eff · (1 − ρ) · λ · σ
 
-    with runtime-cheap proxies for each term:
+    with runtime signals for each term:
 
-      * ``k_eff`` = fraction of healthy services (the 22-service microarchitecture
-        is the ρ↓ intervention per Table 5, so we approximate k directly).
+      * ``k_eff`` = fraction of healthy services from the service registry
+        (the 22-service microarchitecture is the ρ↓ intervention per
+        Table 5, so we approximate k directly rather than track ρ).
       * ``(1 − ρ)`` = 1.0 constant. Modular services are architecturally
-        independent; refining this requires cross-service covariance tracking.
-      * ``λ`` = 1.0 if the conscience + WA services are healthy, else 0.7.
-        Tracks "are the ethical faculties actively enforcing constraints."
-      * ``σ`` = 1.0. Uptime/sustainability doesn't have a cheap proxy at
-        this layer; left as neutral until we wire the gratitude emission
-        rate or credit balance.
+        independent; refining this requires cross-service covariance
+        tracking which we don't have yet.
+      * ``λ`` = strictness — 1.0 if conscience + wise_authority are both
+        present AND healthy, else 0.7. Tracks whether the ethical
+        faculties are actively enforcing constraints.
+      * ``σ`` = sustainability, now grounded in ``handler_action_task_complete``
+        audit records in the last hour. Each successful task completion
+        is a "positive moment" per the Accord; emission rate above the
+        target threshold = σ at full; silence = σ at floor. Matches the
+        "gratitude token system" per Table 5 (CIRIS Agent mapping).
 
-    Returns (score_in_unit_interval, category_label). Runs in microseconds;
-    no I/O, no DB queries. Not registered as a context-enrichment tool —
-    agent must never read its own score (same Goodhart guardrail as fleet).
+    Returns (score_in_unit_interval, category_label). Async because the
+    audit service's ``query_audit_trail`` is async; the whole call is
+    still ~ms-scale (one bounded-row query + an in-memory registry walk).
+
+    Anti-Goodhart guardrail unchanged: never fed to the agent's own
+    context, never cached in ``ContextEnrichmentCache``.
     """
     try:
         svc_registry = getattr(request.app.state, "service_registry", None)
         if svc_registry is None:
-            # Runtime not yet fully initialized — return a neutral 1.0 so
-            # the cell viz renders "as designed" rather than punishing
-            # the user for transient pre-warm state.
             return 1.0, "healthy"
 
+        # --- k_eff + λ probes (service registry walk) ----------------------
         services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
         total = max(1, len(services))
-        healthy = sum(
-            1
-            for s in services
-            if getattr(s, "healthy", True) or (hasattr(s, "is_healthy") and s.is_healthy())
+
+        async def _probe_healthy(s: Any) -> bool:
+            try:
+                is_healthy = getattr(s, "is_healthy", None)
+                if callable(is_healthy):
+                    result = is_healthy()
+                    if hasattr(result, "__await__"):
+                        return bool(await result)
+                    return bool(result)
+                return bool(getattr(s, "healthy", True))
+            except Exception:
+                return False
+
+        health_results = await asyncio.gather(
+            *(_probe_healthy(s) for s in services), return_exceptions=False
         )
+        healthy = sum(1 for h in health_results if h)
         k_eff_frac = healthy / total
 
-        # λ probe: conscience + wise_authority services healthy?
-        required_for_lambda = {"conscience", "wise_authority"}
-        present = {getattr(s, "service_name", getattr(s, "name", "")).lower() for s in services}
-        lam = 1.0 if required_for_lambda.issubset(present) else 0.7
+        # λ: strictness is active when the Wise Authority service is
+        # healthy. The H3ERE Conscience Module is baked into the thought
+        # processor itself (not a standalone service), so "agent running"
+        # implies conscience is on — we only need to verify WA is
+        # present + healthy for the deferral channel.
+        lam = 0.7
+        for s, h in zip(services, health_results):
+            if not h:
+                continue
+            class_name = type(s).__name__.lower()
+            svc_name = getattr(s, "service_name", "").lower()
+            if "wiseauthority" in class_name or "wise_authority" in svc_name:
+                lam = 1.0
+                break
 
-        rho_complement = 1.0
-        sigma = 1.0
+        # --- σ from recent task_complete positive moments ------------------
+        sigma = await _sigma_from_positive_moments(request)
+
+        rho_complement = 1.0  # 22-service microarchitecture; no ρ measurement yet
         j = k_eff_frac * rho_complement * lam * sigma
         j = max(0.0, min(1.0, j))
 
@@ -818,10 +848,66 @@ def _compute_local_capacity(request: Request) -> Tuple[float, str]:
         )
         return j, category
     except Exception as e:
-        # Never fail the request because local computation hit an edge case —
-        # return neutral so the fleet score still flows.
         logger.debug(f"[capacity] local compute failed, returning neutral: {type(e).__name__}: {e}")
         return 1.0, "healthy"
+
+
+def _count_recent_task_completes_sqlite(hours: int = 1) -> int:
+    """Count ``task_complete`` events in the audit SQLite DB over the last
+    ``hours`` hours. Synchronous; called via run_in_executor.
+
+    The graph-memory audit store (``audit_service.query_audit_trail``) does
+    not receive handler-action events — those land in the signed audit log
+    at ``data/ciris_audit.db`` (``/v1/audit/entries`` queries all three
+    sources and merges). For σ we only need the cheap rate signal, so we
+    query SQLite directly with a COUNT.
+    """
+    import sqlite3
+
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        db_path = str(get_data_dir() / "ciris_audit.db")
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0) as conn:
+            cur = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE event_type = ? AND event_timestamp >= ?",
+                ("task_complete", since),
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] SQLite audit count failed: {type(e).__name__}: {e}")
+        return 0
+
+
+async def _sigma_from_positive_moments(request: Request) -> float:
+    """σ (sustainability) proxied by the ``task_complete`` rate.
+
+    The Accord models task completion as a *positive moment* — the system
+    closed a loop cleanly, which is the CIRIS "gratitude token" signal
+    and the closest cheap proxy we have for the CCA σ term (maintenance
+    capacity / sustainable operation).
+
+    Mapping over the last hour:
+      * 0 completions   → σ = 0.30 (floor — idle is not fragile)
+      * 1 completion    → σ ≈ 0.53
+      * ≥ 3 completions → σ = 1.00 (target rate)
+
+    Linear ramp. One bounded COUNT on the audit SQLite DB, ~ms, run in
+    the default executor so we never block the event loop. Degrades to
+    the floor on any error.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        successes = await loop.run_in_executor(None, _count_recent_task_completes_sqlite, 1)
+        logger.debug(f"[capacity.sigma] {successes} task_complete(s) in last 1h")
+        floor = 0.30
+        target = 3
+        return max(floor, min(1.0, floor + (1.0 - floor) * (successes / target)))
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] probe failed, returning floor: {type(e).__name__}: {e}")
+        return 0.30
 
 
 async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
@@ -900,7 +986,7 @@ async def get_capacity(
 
     # --- Local-only: skip the lens hop entirely -----------------------------
     if scope_norm == "local":
-        local_j, local_cat = _compute_local_capacity(request)
+        local_j, local_cat = await _compute_local_capacity(request)
         neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
         parsed = CapacityResponse(
             agent_name=template,
@@ -942,7 +1028,7 @@ async def get_capacity(
     local_score: Optional[float] = None
     local_cat: Optional[str] = None
     if scope_norm == "both":
-        local_score, local_cat = _compute_local_capacity(request)
+        local_score, local_cat = await _compute_local_capacity(request)
 
     try:
         parsed = CapacityResponse(

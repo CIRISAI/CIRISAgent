@@ -396,6 +396,7 @@ fun CIRISApp(
             // DataManagement and LLMSettings go back to Interact (main screen)
             is Screen.DataManagement -> Screen.Interact
             is Screen.LLMSettings -> Screen.Interact
+            is Screen.VizSettings -> Screen.Settings
 
             // All other screens go back to Interact (main screen)
             else -> Screen.Interact
@@ -1390,6 +1391,7 @@ fun CIRISApp(
                 val liveBackgroundEnabled by settingsViewModel.liveBackgroundEnabled.collectAsState()
                 val colorTheme by settingsViewModel.colorTheme.collectAsState()
                 val forceClassicViz by settingsViewModel.forceClassicViz.collectAsState()
+                val cellVizConfig by settingsViewModel.cellVizConfig.collectAsState()
                 platformLog(TAG, "[CIRISApp] >>> liveBackgroundEnabled=$liveBackgroundEnabled, apiClient=${if (apiClient != null) "present" else "NULL"}")
 
                 Scaffold(
@@ -1483,6 +1485,7 @@ fun CIRISApp(
                         forceClassicViz = forceClassicViz,
                         colorTheme = colorTheme,
                         isDarkMode = isDarkMode,
+                        cellVizConfig = cellVizConfig,
                         modifier = Modifier.padding(top = paddingValues.calculateTopPadding())
                     )
                 }
@@ -1517,6 +1520,10 @@ fun CIRISApp(
                     onNavigateToLLMSettings = {
                         PlatformLogger.i("CIRISApp", "[Settings] Navigating to LLM Settings")
                         currentScreen = Screen.LLMSettings
+                    },
+                    onNavigateToVizSettings = {
+                        PlatformLogger.i("CIRISApp", "[Settings] Navigating to Viz Settings")
+                        currentScreen = Screen.VizSettings
                     }
                 )
             }
@@ -1530,6 +1537,16 @@ fun CIRISApp(
                     onNavigateBack = {
                         PlatformLogger.i(TAG, "[Screen.LLMSettings] Navigating back to Interact")
                         currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.VizSettings -> {
+                VizSettingsScreen(
+                    viewModel = settingsViewModel,
+                    onBack = {
+                        PlatformLogger.i(TAG, "[Screen.VizSettings] Navigating back to Settings")
+                        currentScreen = Screen.Settings
                     }
                 )
             }
@@ -3263,6 +3280,7 @@ private sealed class Screen {
     object SkillStudio : Screen()
     object DataManagement : Screen()
     object LLMSettings : Screen()
+    object VizSettings : Screen()
     object Help : Screen()
     object ServerConnection : Screen()
 }

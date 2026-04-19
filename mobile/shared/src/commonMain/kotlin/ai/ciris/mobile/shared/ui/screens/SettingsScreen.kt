@@ -78,6 +78,7 @@ fun SettingsScreen(
     onResetSetup: () -> Unit,  // Callback to restart app after reset
     onNavigateToDataManagement: () -> Unit = {},  // Navigate to Data Management screen
     onNavigateToLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
+    onNavigateToVizSettings: () -> Unit = {},  // Navigate to Visualization Settings screen
     modifier: Modifier = Modifier
 ) {
     // Core state
@@ -303,6 +304,49 @@ fun SettingsScreen(
 
                 // Display Settings Section
                 DisplaySettingsSection(viewModel = viewModel)
+
+                // Visualization tuning entry — opens a dedicated screen for
+                // every tunable on CellVizConfig (FSD/CELL_VIZ_REDESIGN.md §5
+                // step 11). Kept as a simple navigation row rather than
+                // embedded sliders — the viz surface is large enough that
+                // inlining would bury the rest of the settings.
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToVizSettings() }
+                        .testableClickable("btn_viz_settings") { onNavigateToVizSettings() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Visualization",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Rotation, breathing, openings, ports, motes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.ArrowForward,
+                            contentDescription = "Open visualization settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 

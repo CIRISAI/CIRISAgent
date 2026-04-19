@@ -81,6 +81,7 @@ import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.SystemWarning
 import ai.ciris.mobile.shared.ui.screens.graph.CellVisualization
+import ai.ciris.mobile.shared.ui.screens.graph.CellVizConfig
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
@@ -122,6 +123,11 @@ fun InteractScreen(
     forceClassicViz: Boolean = false,
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
     isDarkMode: Boolean = true,  // From brightness preference
+    // Cell-viz tuning config (FSD/CELL_VIZ_REDESIGN.md §2.8 + step 11).
+    // Defaults to the built-in sanitized config; SettingsViewModel hydrates
+    // the real value from secure storage and passes it through here so the
+    // Visualization Settings sliders take effect live.
+    cellVizConfig: CellVizConfig = CellVizConfig.DEFAULT,
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -326,6 +332,11 @@ fun InteractScreen(
                     isDarkMode = isDarkMode,
                     adapterOrbits = adapterOrbits,
                     externalRotation = cylinderRotation,
+                    // Re-sanitize on read — slider bounds and renderer
+                    // bounds share a single source of truth (the clamp
+                    // calls inside sanitized), so the worst a broken
+                    // preference can do is land at a bounded extreme.
+                    config = cellVizConfig.sanitized(),
                     apiClient = apiClient,
                     colorTheme = colorTheme,
                     // Timeline events are a good proxy for "something

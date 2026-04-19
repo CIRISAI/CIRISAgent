@@ -396,34 +396,60 @@ fun CellVisualization(
     // Canvas' Modifier.onSizeChanged.
     val canvasSize = remember { mutableStateOf(IntSize.Zero) }
 
+    // Snapshots the tap handler needs to read at tap time. Wrapping in
+    // rememberUpdatedState so the pointerInput (Unit-keyed to avoid
+    // frame-restart) reads the current values without restarting.
+    val rotationSnap = rememberUpdatedState(rotationDeg)
+    val adaptersSnap = rememberUpdatedState(adaptersByBus)
+    val cfgSnap = rememberUpdatedState(cfg)
+    val onSelectionSnap = rememberUpdatedState(onSelection)
+
     val canvasModifier = if (showSignalChannels) {
         modifier
             // Tap → hit-test → onSelection. Runs BEFORE graphicsLayer so
             // tap coordinates match the Canvas' own draw coordinates.
-            .pointerInput(rotationDeg, adaptersByBus, cfg) {
+            // Key is Unit — rotationDeg / adaptersByBus / cfg would cause
+            // the pointerInput to cancel+restart every frame (rotationDeg
+            // changes 60×/s in BG), which kills in-progress tap detection.
+            // Read the latest values via rememberUpdatedState inside.
+            .pointerInput(Unit) {
                 detectTapGestures { tap ->
+                    PlatformLogger.i(
+                        "CellVisualization",
+                        "[FG tap] received at (${tap.x.toInt()}, ${tap.y.toInt()})",
+                    )
                     val size = canvasSize.value
-                    if (size.width == 0 || size.height == 0) return@detectTapGestures
+                    if (size.width == 0 || size.height == 0) {
+                        PlatformLogger.w(
+                            "CellVisualization",
+                            "[FG tap] canvasSize is zero — skipping",
+                        )
+                        return@detectTapGestures
+                    }
+                    // Read current values via the rememberUpdatedState snaps.
+                    val curCfg = cfgSnap.value
+                    val curRotation = rotationSnap.value
+                    val curAdapters = adaptersSnap.value
                     val cx = size.width / 2f
                     val cy = size.height / 2f
                     val mr = minOf(size.width, size.height).toFloat() *
-                        cfg.membraneRadiusFraction
-                    val nr = mr * cfg.nucleusRadiusFraction
+                        curCfg.membraneRadiusFraction
+                    val nr = mr * curCfg.nucleusRadiusFraction
 
                     // Re-derive port positions using the same formulas as
                     // drawAdapterPorts so hit coordinates align exactly.
                     val ports = buildList<SelectionPort> {
                         BUS_SEGMENTS.forEach { seg ->
-                            val adapters = adaptersByBus[seg.bus] ?: return@forEach
+                            val adapters = curAdapters[seg.bus] ?: return@forEach
                             adapters.forEachIndexed { idx, adapter ->
                                 val angleDeg = spreadAngle(
                                     segmentStartDeg = seg.startDeg,
                                     segmentEndDeg = seg.endDeg,
                                     index = idx,
                                     total = adapters.size,
-                                    marginDeg = cfg.portSegmentMarginDeg,
+                                    marginDeg = curCfg.portSegmentMarginDeg,
                                 )
-                                val effective = (angleDeg + rotationDeg) % 360f
+                                val effective = (angleDeg + curRotation) % 360f
                                 val pos = polar(cx, cy, mr, effective)
                                 add(
                                     SelectionPort(
@@ -445,8 +471,8 @@ fun CellVisualization(
                     val innerRadial = nr * 1.10f
                     val outerRadial = mr * 0.92f
                     val nowSec = nowMs.value / 1000f
-                    val driftOmega = if (cfg.moteDriftPeriodSec > 0f)
-                        (2f * PI.toFloat()) / cfg.moteDriftPeriodSec else 0f
+                    val driftOmega = if (curCfg.moteDriftPeriodSec > 0f)
+                        (2f * PI.toFloat()) / curCfg.moteDriftPeriodSec else 0f
                     val selMotes = if (outerRadial <= innerRadial) emptyList()
                     else liveMotes.map { m ->
                         val idx = m.stableIndex
@@ -462,8 +488,8 @@ fun CellVisualization(
                         val pY = (idx * 1.2847f) % (2f * PI.toFloat())
                         val wX = driftOmega * (0.85f + 0.30f * ((idx * 31) % 17) / 17f)
                         val wY = driftOmega * (0.80f + 0.40f * ((idx * 53) % 19) / 19f)
-                        val dx = sin(nowSec * wX + pX) * cfg.moteDriftAmpPx
-                        val dy = cos(nowSec * wY + pY) * cfg.moteDriftAmpPx
+                        val dx = sin(nowSec * wX + pX) * curCfg.moteDriftAmpPx
+                        val dy = cos(nowSec * wY + pY) * curCfg.moteDriftAmpPx
                         SelectionMote(
                             nodeId = m.id,
                             scope = m.scope.toString(),
@@ -490,13 +516,27 @@ fun CellVisualization(
                         layout = SelectionLayout(
                             centerX = cx, centerY = cy,
                             membraneRadius = mr, nucleusRadius = nr,
-                            rotationDeg = rotationDeg,
+                            rotationDeg = curRotation,
                         ),
                         ports = ports,
                         motes = selMotes,
                         shellEventTypes = shellEventTypes,
                     )
-                    onSelection(hit)
+                    PlatformLogger.i(
+                        "CellVisualization",
+                        "[FG tap] hit = ${hit?.let { it::class.simpleName + "(" + when (it) {
+                            is SelectionKind.AdapterPort -> "${it.adapterType}:${it.adapterId}"
+                            is SelectionKind.BusArc -> it.bus.name
+                            is SelectionKind.NucleusShell -> "${it.stageIndex}:${it.eventType}"
+                            is SelectionKind.NucleusCore -> "core"
+                            is SelectionKind.CytoplasmMote -> it.nodeId.take(12)
+                            is SelectionKind.SignalChannel -> it.adapterId
+                            is SelectionKind.GratitudeMote -> "gratitude"
+                        } + ")"} ?: "null(miss)"} " +
+                            "cx=${cx.toInt()} cy=${cy.toInt()} mr=${mr.toInt()} nr=${nr.toInt()} " +
+                            "ports=${ports.size} motes=${selMotes.size}",
+                    )
+                    onSelectionSnap.value(hit)
                 }
             }
             .graphicsLayer(

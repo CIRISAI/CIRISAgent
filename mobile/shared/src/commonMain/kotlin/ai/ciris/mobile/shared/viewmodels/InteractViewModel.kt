@@ -2248,13 +2248,29 @@ class InteractViewModel(
                     llmProviders = providerRows,
                 )
             } else {
+                // Non-LLM buses — pull per-bus operational telemetry from
+                // /v1/telemetry/unified?category=buses. Keyed by backend
+                // bus name (``memory_bus``, ``communication_bus``, ...).
+                val telem = try { apiClient.getBusTelemetry() } catch (_: Exception) { emptyMap() }
+                val key = when (kind.bus) {
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.COMM -> "communication_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.MEMORY -> "memory_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.TOOL -> "tool_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.WISE -> "wise_bus"
+                    ai.ciris.mobile.shared.ui.screens.graph.CellBus.RUNTIME -> "runtime_control_bus"
+                    else -> ""
+                }
+                val t = telem[key]
                 SelectionDetail.BusArc(
-                    summaryLine = "${kind.bus.name} bus",
+                    summaryLine = if (t != null) {
+                        val health = if (t.healthy) "healthy" else "degraded"
+                        "${kind.bus.name} • $health • ${t.messagesSent} msg"
+                    } else "${kind.bus.name} bus",
                     bus = kind.bus,
-                    messagesSent = 0L,
-                    averageLatencyMs = 0.0,
-                    errorsLastHour = 0,
-                    queueDepth = 0,
+                    messagesSent = t?.messagesSent ?: 0L,
+                    averageLatencyMs = t?.averageLatencyMs ?: 0.0,
+                    errorsLastHour = t?.errorsLastHour ?: 0,
+                    queueDepth = t?.queueDepth ?: 0,
                 )
             }
         }

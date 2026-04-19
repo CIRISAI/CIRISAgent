@@ -48,7 +48,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
@@ -3951,6 +3953,64 @@ class CIRISApiClient(
      * Get LLM Bus status including distribution strategy and aggregate metrics.
      * Returns bus health, provider counts, circuit breaker summary.
      */
+    /**
+     * Per-bus telemetry snapshot for the 6 CIRIS buses, from
+     * ``/v1/telemetry/unified?category=buses``. Returns a map keyed by
+     * the bus name used in the backend (``llm_bus``, ``memory_bus``,
+     * ``communication_bus``, ``wise_bus``, ``tool_bus``,
+     * ``runtime_control_bus``). Each value holds the few fields the FG
+     * detail panel renders — bounded shape, no speculative properties.
+     *
+     * Used by the cell viz's BusArc panel to light up non-LLM buses;
+     * LLM has its own richer endpoint (``getLlmProviders``).
+     */
+    suspend fun getBusTelemetry(): Map<String, ai.ciris.mobile.shared.models.BusTelemetrySnapshot> {
+        val method = "getBusTelemetry"
+        val url = "$baseUrl/v1/telemetry/unified?category=buses&view=operational"
+        logDebug(method, "GET $url")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get(url) {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Bus telemetry failed: ${response.status}")
+            }
+            val body = response.bodyAsText()
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            // Unified can be wrapped in ``data`` envelope or flat; accept both.
+            val svcMap = (parsed["data"]?.jsonObject ?: parsed)["services"]?.jsonObject
+                ?: return emptyMap()
+            svcMap.entries.mapNotNull { (key, value) ->
+                if (!key.endsWith("_bus")) return@mapNotNull null
+                val obj = value.jsonObject
+                val custom = obj["custom_metrics"]?.jsonObject
+                key to ai.ciris.mobile.shared.models.BusTelemetrySnapshot(
+                    healthy = obj["healthy"]?.jsonPrimitive?.booleanOrNull ?: true,
+                    messagesSent = custom?.get("messages_sent")?.jsonPrimitive?.longOrNull
+                        ?: obj["requests_handled"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    averageLatencyMs = custom?.get("average_latency_ms")?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    queueDepth = custom?.get("queue_depth")?.jsonPrimitive?.intOrNull ?: 0,
+                    errorsLastHour = custom?.get("errors_last_hour")?.jsonPrimitive?.intOrNull
+                        ?: obj["error_count"]?.jsonPrimitive?.intOrNull ?: 0,
+                )
+            }.toMap()
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            emptyMap()
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun getLlmBusStatus(): ai.ciris.mobile.shared.models.LlmBusStatus {
         val method = "getLlmBusStatus"
         val url = "$baseUrl/v1/system/llm/status"

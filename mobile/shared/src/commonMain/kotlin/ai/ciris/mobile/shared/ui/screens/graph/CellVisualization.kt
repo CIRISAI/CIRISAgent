@@ -198,6 +198,14 @@ fun CellVisualization(
      */
     gratitudePulses: List<GratitudePulse> = emptyList(),
     /**
+     * Tier-3 deferral-ripple start timestamp (epoch ms), or null if no
+     * ripple is in flight. Set by the ViewModel on a DEFER action and
+     * cleared ~2.5 s later. The renderer draws a single concentric wave
+     * expanding from nucleus → membrane over 1.5 s (quadratic ease-out)
+     * and fades at the membrane. FSD §2.5.3 + §18 Step 9.
+     */
+    deferralRippleStartMs: Long? = null,
+    /**
      * H3ERE pipeline state — each of the 7 stages lights the matching
      * nucleus shell when the corresponding SSE event fires. Innermost
      * shell = thought_start; outermost = action_result, so a new
@@ -733,6 +741,28 @@ fun CellVisualization(
                     nowMs = nowMsLocal,
                     isDarkMode = isDarkMode,
                 )
+            }
+
+            // Tier-3: deferral ripple. Single concentric wave nucleus →
+            // membrane over 1.5 s, quadratic ease-out, alpha fades at
+            // the membrane. "Visible routing to wise authority" — a
+            // distinct gesture from routine bus traffic.
+            deferralRippleStartMs?.let { startMs ->
+                val elapsedMs = nowMsLocal - startMs
+                if (elapsedMs in 0L..RIPPLE_DURATION_MS) {
+                    val t = elapsedMs.toFloat() / RIPPLE_DURATION_MS.toFloat()
+                    // Quadratic ease-out: fast start, soft stop at the membrane.
+                    val eased = 1f - (1f - t) * (1f - t)
+                    val radius = nucleusRadius + (membraneRadius - nucleusRadius) * eased
+                    // Alpha fades as the wave nears the membrane.
+                    val alpha = (1f - t) * 0.55f
+                    drawCircle(
+                        color = Color(0xFFE0A0FF).copy(alpha = alpha),
+                        radius = radius,
+                        center = Offset(centerX, centerY),
+                        style = Stroke(width = 2.5f),
+                    )
+                }
             }
 
             // The nucleus "song" (slow pulse wave from the core through

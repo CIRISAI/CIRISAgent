@@ -147,6 +147,7 @@ fun InteractScreen(
     val selectionKind by viewModel.selectionKind.collectAsState()
     val selectionDetail by viewModel.selectionDetail.collectAsState()
     val selectionAnchorX by viewModel.selectionAnchorX.collectAsState()
+    val deferralRippleStartMs by viewModel.deferralRippleStartMs.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -503,6 +504,7 @@ fun InteractScreen(
                         state = cellVizState,
                         busPulses = busPulses,
                         gratitudePulses = gratitudePulses,
+                        deferralRippleStartMs = deferralRippleStartMs,
                         pipelineState = pipelineState,
                         showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
                         onSelection = { kind, xFrac -> viewModel.setSelection(kind, xFrac) },

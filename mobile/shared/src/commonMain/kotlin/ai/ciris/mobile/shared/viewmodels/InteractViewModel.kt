@@ -355,6 +355,15 @@ class InteractViewModel(
 
     private var lastGratitudeMs: Long = 0L
 
+    // Tier-3 deferral ripple — single concentric wave from nucleus outward
+    // on every DEFER action (routing to Wise Authority). Start-timestamp
+    // null when idle; set to the event-time on DEFER, cleared ~2.5s later.
+    // FSD §2.5.3 + §18 Step 9. The pre-ripple "pause" (rotation slowdown
+    // 800ms) is a follow-up — it needs the external rotation driver to
+    // read this state too, which this StateFlow makes possible.
+    private val _deferralRippleStartMs = MutableStateFlow<Long?>(null)
+    val deferralRippleStartMs: StateFlow<Long?> = _deferralRippleStartMs.asStateFlow()
+
     // Per-stage SSE ring buffer — the data source for the "tap a nucleus
     // shell and see the most recent rationales" demo scenario. Keyed by
     // SSE event_type, capped at STAGE_EVENT_BUFFER capacity per type so
@@ -1793,6 +1802,14 @@ class InteractViewModel(
                                         // "the agent is happy".
                                         addGratitudePulse()
                                     }
+                                    // Tier-3: DEFER → visible routing to wise
+                                    // authority. Fire the nucleus ripple in
+                                    // addition to the bus pulse; the ripple is
+                                    // what distinguishes "consulting authority"
+                                    // from "routine bus traffic".
+                                    if (actionType == ActionType.DEFER) {
+                                        triggerDeferralRipple()
+                                    }
                                 }
 
                                 // Update processing state and status text
@@ -1867,6 +1884,25 @@ class InteractViewModel(
         viewModelScope.launch {
             delay(pulse.durationMs)
             _gratitudePulses.value = _gratitudePulses.value.filter { it.startMs != now }
+        }
+    }
+
+    /**
+     * Tier-3 deferral ripple — fires on DEFER actions. The nucleus emits
+     * a single concentric wave outward (renderer owns the expand + ease-
+     * out). We only need to stamp a start timestamp; the renderer reads
+     * it every frame and stops drawing when the 1.5 s animation is done.
+     * The state is cleared after 2.5 s (spec total) so follow-on DEFERs
+     * restart cleanly instead of stacking.
+     */
+    private fun triggerDeferralRipple() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        _deferralRippleStartMs.value = now
+        viewModelScope.launch {
+            delay(2500)
+            if (_deferralRippleStartMs.value == now) {
+                _deferralRippleStartMs.value = null
+            }
         }
     }
 

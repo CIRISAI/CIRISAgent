@@ -387,12 +387,18 @@ async def _create_setup_users(
     logger.info(f"CIRIS_USER_CREATE: ingress_user_id = {ingress_user_id}")
     logger.info(f"CIRIS_USER_CREATE: ingress_user_name = {ingress_user_name}")
 
-    # Skip user creation when external auth is handling authentication
-    # (e.g., Home Assistant ingress, CIRISMedical enterprise SSO)
-    # BUT we still AUTO-MINT a WA and create founding partnership for the
-    # ingress user who completed setup - they need ROOT authority
-    if setup.skip_user_creation:
-        logger.info("CIRIS_USER_CREATE: External auth active - auto-minting WA for setup user")
+    # IMPORTANT: If we have an ingress user completing setup, they ARE the admin
+    # Don't create a separate "ha_admin" user - use the ingress identity directly
+    # This prevents identity fragmentation (two separate users for same person)
+    use_ingress_user = ingress_user_id is not None
+
+    # Skip regular user creation when:
+    # 1. External auth is handling authentication (skip_user_creation=True)
+    # 2. We have an ingress user completing setup (use their identity)
+    # In both cases, AUTO-MINT a WA for the ingress user with ROOT authority
+    if setup.skip_user_creation or use_ingress_user:
+        reason = "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected: {ingress_user_id}"
+        logger.info(f"CIRIS_USER_CREATE: Skipping regular user creation ({reason}) - auto-minting WA for ingress user")
         # Still need to ensure system WA exists for agent operations
         time_service = TimeService()
         await time_service.start()
@@ -420,6 +426,24 @@ async def _create_setup_users(
                     role=WARole.ROOT,
                 )
                 logger.info(f"CIRIS_USER_CREATE: ✅ Auto-minted WA: {wa_cert.wa_id} (name={wa_name}, role=ROOT)")
+
+                # Link ingress identity to WA so lookups by provider:external_id work
+                # ingress_user_id format: "provider:external_id" (e.g., "home_assistant:abc123")
+                if ":" in ingress_user_id:
+                    provider, external_id = ingress_user_id.split(":", 1)
+                    try:
+                        await auth_service.link_oauth_identity(
+                            wa_id=wa_cert.wa_id,
+                            provider=provider,
+                            external_id=external_id,
+                            account_name=wa_name,
+                            metadata={"ingress_setup": "true"},
+                            primary=True,
+                        )
+                        logger.info(f"CIRIS_USER_CREATE: ✅ Linked ingress identity {ingress_user_id} to WA {wa_cert.wa_id}")
+                    except Exception as link_err:
+                        # Non-fatal - log but continue (founding partnership is more important)
+                        logger.warning(f"CIRIS_USER_CREATE: ⚠️ Failed to link ingress identity: {link_err}")
 
                 # Create founding partnership for the ingress user
                 logger.info(f"CIRIS_USER_CREATE: Creating founding partnership for: {ingress_user_id}")

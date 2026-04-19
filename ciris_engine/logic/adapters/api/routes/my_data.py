@@ -13,8 +13,10 @@ for data sent to the CIRISLens repository via the accord metrics adapter.
 
 import hashlib
 import logging
+import os
+import threading
 from datetime import datetime, timezone
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -90,6 +92,51 @@ class AccordSettingsUpdate(BaseModel):
         None,
         description="Update consent state. Setting to false stops all trace collection.",
     )
+
+
+class CapacityFactor(BaseModel):
+    """A single CIRIS capacity factor from CIRISLens scoring."""
+
+    score: float = Field(..., description="Factor score in [0, 1]")
+    components: Dict[str, Any] = Field(default_factory=dict, description="Sub-component values")
+    trace_count: int = Field(0, description="Number of traces contributing to this score")
+    confidence: str = Field("low", description="Confidence level: low | medium | high")
+
+
+class CapacityFactors(BaseModel):
+    """The five CIRIS acronym factors: Consistency, Integrity, Reliability, Incalibration, Steering."""
+
+    C: CapacityFactor = Field(..., description="Core identity / Consistency")
+    I_int: CapacityFactor = Field(..., description="Integrity (signing, chain verification)")
+    R: CapacityFactor = Field(..., description="Resilience / Reliability (drift stability)")
+    I_inc: CapacityFactor = Field(..., description="Incompleteness / Incalibration (humility, deferral)")
+    S: CapacityFactor = Field(..., description="Signalling gratitude / Steering (ethical faculties)")
+
+
+class CapacityMetadata(BaseModel):
+    """Metadata describing the scoring window."""
+
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
+    total_traces: int = 0
+    non_exempt_traces: int = 0
+
+
+class CapacityResponse(BaseModel):
+    """User-facing CIRIS capacity reading for the current agent's template.
+
+    Driven by CIRISLens fleet scoring. Presented to the user via the cell
+    visualization — intentionally NOT exposed to the agent's own reasoning
+    context to avoid score-chasing / self-monitoring anxiety.
+    """
+
+    agent_name: str = Field(..., description="Template name this score is for (e.g. Ally, Scout)")
+    composite_score: float = Field(..., description="Aggregate CIRIS score in [0, 1]")
+    fragility_index: float = Field(..., description="Higher = more fragile; unbounded")
+    category: str = Field(..., description="high_capacity | healthy | moderate | high_fragility")
+    factors: CapacityFactors = Field(..., description="Per-factor breakdown")
+    metadata: CapacityMetadata = Field(default_factory=CapacityMetadata)
+    cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +678,170 @@ async def update_accord_settings(
         data={"changes": changes},
         message=f"Settings updated: {', '.join(changes)}",
         metadata={"timestamp": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CIRIS capacity (ratchet) proxy
+# ---------------------------------------------------------------------------
+#
+# Cache discipline: this route uses its OWN module-level TTL dict rather
+# than the shared `ContextEnrichmentCache`. The enrichment cache is tied
+# into the agent's context pipeline AND exposed via /v1/system/environment
+# (the "Context Enrichment" screen in the UI), so entries there implicitly
+# count as "things the agent sees about itself". Capacity is explicitly
+# user-facing only — the agent must never read its own score (Goodhart /
+# self-monitoring). Isolating to a local cache keeps the anti-Goodhart
+# gate structural, not incidental.
+#
+# Pattern mirrors `CirisBillingProvider._cache` (dict[str, tuple[value,
+# expiry]] + manual expiry check) — the standard local-TTL idiom in this
+# repo.
+
+
+_CAPACITY_CACHE_TTL_SECONDS = 900.0  # 15 min — matches the 7-day lens scoring window cadence
+_CAPACITY_CACHE: Dict[str, Tuple[Dict[str, Any], datetime]] = {}
+_CAPACITY_CACHE_LOCK = threading.Lock()
+
+
+def _capacity_cache_get(template: str) -> Optional[Dict[str, Any]]:
+    """Return the cached lens payload for `template` if still fresh, else None.
+
+    Thread-safe and side-effect-free except for evicting expired entries.
+    """
+    now = datetime.now(timezone.utc)
+    with _CAPACITY_CACHE_LOCK:
+        hit = _CAPACITY_CACHE.get(template)
+        if hit is None:
+            return None
+        payload, expiry = hit
+        if now >= expiry:
+            # Evict expired entry so the dict doesn't grow unbounded over
+            # long-running deployments (one per template, but still).
+            _CAPACITY_CACHE.pop(template, None)
+            return None
+        return payload
+
+
+def _capacity_cache_set(template: str, payload: Dict[str, Any]) -> None:
+    """Store `payload` for `template` with a TTL-based expiry."""
+    from datetime import timedelta
+
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=_CAPACITY_CACHE_TTL_SECONDS)
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE[template] = (payload, expiry)
+
+
+def _capacity_cache_clear() -> None:
+    """Clear the capacity cache — used by tests to get clean starts."""
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE.clear()
+
+
+def _capacity_base_url() -> str:
+    """Base URL for CIRISLens capacity scoring endpoints.
+
+    Defaults to the public production lens. Same env var as the accord metrics
+    adapter so operators have a single knob to redirect both streams.
+    """
+    return os.getenv(
+        "CIRIS_ACCORD_METRICS_ENDPOINT",
+        "https://lens.ciris-services-1.ai/lens-api/api/v1",
+    ).rstrip("/")
+
+
+async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
+    """Call CIRISLens for a template's capacity record. Raises on non-200."""
+    import aiohttp
+
+    url = f"{_capacity_base_url()}/scoring/capacity/{template}"
+    timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"CIRISLens returned {resp.status} for capacity/{template}: {body[:200]}",
+                )
+            return await resp.json()  # type: ignore[no-any-return]
+
+
+@router.get(
+    "/capacity",
+    responses={
+        404: {"description": "Agent template unavailable"},
+        502: {"description": "CIRISLens unreachable or returned an error"},
+    },
+)
+async def get_capacity(
+    current_user: CurrentUserDep,
+    request: Request,
+) -> StandardResponse:
+    """
+    Get the current CIRIS capacity (C/I_int/R/I_inc/S) for this agent's template.
+
+    Data flows:
+        CIRISLens fleet scoring
+            -> proxy fetch here (cached 15 min in a route-local TTL dict)
+            -> KMP client /v1/my-data/capacity
+            -> cell visualization ambient state (user-facing)
+
+    Anti-Goodhart guardrails (structural, not incidental):
+      - NOT registered as a context enrichment tool.
+      - NOT stored in the shared ContextEnrichmentCache — that cache is
+        also surfaced via /v1/system/environment ("Context Enrichment"
+        screen), which would leak the agent's own score into its own
+        view of its environment. Uses a module-local TTL dict instead.
+
+    The signed audit history is the real coherence ratchet; this is just
+    the viewing angle for the human.
+    """
+    template = _get_agent_id(request)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent template unavailable — runtime not fully initialized.",
+        )
+
+    served_from_cache = True
+    payload = _capacity_cache_get(template)
+    if payload is None:
+        served_from_cache = False
+        try:
+            payload = await _fetch_capacity_from_lens(template)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[capacity] Lens fetch failed for template={template}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach CIRISLens: {type(e).__name__}",
+            )
+        _capacity_cache_set(template, payload)
+
+    try:
+        parsed = CapacityResponse(
+            agent_name=payload.get("agent_name", template),
+            composite_score=float(payload.get("composite_score", 0.0)),
+            fragility_index=float(payload.get("fragility_index", 0.0)),
+            category=str(payload.get("category", "moderate")),
+            factors=CapacityFactors(**payload["factors"]),
+            metadata=CapacityMetadata(**payload.get("metadata", {})),
+            cached=served_from_cache,
+        )
+    except Exception as e:
+        logger.error(f"[capacity] Could not parse lens payload for {template}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"CIRISLens returned an unexpected shape: {type(e).__name__}",
+        )
+
+    return StandardResponse(
+        success=True,
+        data=parsed.model_dump(),
+        message=f"CIRIS capacity for template {template}: {parsed.category} (score={parsed.composite_score:.3f})",
+        metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": served_from_cache},
     )
 
 

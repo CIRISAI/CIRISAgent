@@ -78,6 +78,7 @@ fun SettingsScreen(
     onResetSetup: () -> Unit,  // Callback to restart app after reset
     onNavigateToDataManagement: () -> Unit = {},  // Navigate to Data Management screen
     onNavigateToLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
+    onNavigateToVizSettings: () -> Unit = {},  // Navigate to Visualization Settings screen
     modifier: Modifier = Modifier
 ) {
     // Core state
@@ -303,6 +304,49 @@ fun SettingsScreen(
 
                 // Display Settings Section
                 DisplaySettingsSection(viewModel = viewModel)
+
+                // Visualization tuning entry — opens a dedicated screen for
+                // every tunable on CellVizConfig (FSD/CELL_VIZ_REDESIGN.md §5
+                // step 11). Kept as a simple navigation row rather than
+                // embedded sliders — the viz surface is large enough that
+                // inlining would bury the rest of the settings.
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToVizSettings() }
+                        .testableClickable("btn_viz_settings") { onNavigateToVizSettings() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Visualization",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Rotation, breathing, openings, ports, motes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Filled.ArrowForward,
+                            contentDescription = "Open visualization settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
@@ -1531,6 +1575,7 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
     val liveBackgroundEnabled by viewModel.liveBackgroundEnabled.collectAsState()
     val colorTheme by viewModel.colorTheme.collectAsState()
     val brightnessPreference by viewModel.brightnessPreference.collectAsState()
+    val forceClassicViz by viewModel.forceClassicViz.collectAsState()
 
     Text(
         text = localizedString("mobile.settings_theme"),
@@ -1568,6 +1613,35 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
                     checked = liveBackgroundEnabled,
                     onCheckedChange = { viewModel.toggleLiveBackground(it) },
                     modifier = Modifier.testable("switch_live_background")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Force-classic-viz override. Only matters when live background
+            // is enabled and the device is otherwise capable of the new viz.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Use classic visualization",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "Render the cylinder view instead of the newer cell view",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = forceClassicViz,
+                    enabled = liveBackgroundEnabled,
+                    onCheckedChange = { viewModel.toggleForceClassicViz(it) },
+                    modifier = Modifier.testable("switch_force_classic_viz")
                 )
             }
 
@@ -1634,7 +1708,15 @@ private fun DisplaySettingsSection(viewModel: SettingsViewModel) {
                         selected = brightnessPreference == pref,
                         onClick = { viewModel.setBrightnessPreference(pref) },
                         label = { Text(pref.displayName) },
-                        modifier = Modifier.testable("chip_brightness_${pref.name.lowercase()}")
+                        // testableClickable so /click can toggle the chip
+                        // programmatically from QA / automation. testable()
+                        // alone only registers position and doesn't invoke
+                        // the chip's onClick — caught during step-3 dark-mode
+                        // verification when the click succeeded but the theme
+                        // didn't flip.
+                        modifier = Modifier.testableClickable(
+                            tag = "chip_brightness_${pref.name.lowercase()}",
+                        ) { viewModel.setBrightnessPreference(pref) }
                     )
                 }
             }

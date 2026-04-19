@@ -15,6 +15,7 @@ import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
 import ai.ciris.mobile.shared.platform.PlatformLogger
+import ai.ciris.mobile.shared.platform.probeCellVizCapability
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlin.math.abs
@@ -78,6 +80,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.api.SystemWarning
+import ai.ciris.mobile.shared.ui.screens.graph.CellVisualization
+import ai.ciris.mobile.shared.ui.screens.graph.CellVizConfig
 import ai.ciris.mobile.shared.ui.screens.graph.GraphColors
 import ai.ciris.mobile.shared.ui.screens.graph.LiveGraphBackground
 import ai.ciris.mobile.shared.ui.screens.graph.PipelineState
@@ -114,8 +118,16 @@ fun InteractScreen(
     onOpenWiseAuthority: () -> Unit = {},  // Navigate to WA/deferrals screen
     apiClient: CIRISApiClient? = null,  // For live background
     liveBackgroundEnabled: Boolean = false,  // From settings
+    // User override: when true, force the legacy cylinder viz regardless of
+    // device capability. Flipped via Settings → Use classic visualization.
+    forceClassicViz: Boolean = false,
     colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Color theme from settings
     isDarkMode: Boolean = true,  // From brightness preference
+    // Cell-viz tuning config (FSD/CELL_VIZ_REDESIGN.md §2.8 + step 11).
+    // Defaults to the built-in sanitized config; SettingsViewModel hydrates
+    // the real value from secure storage and passes it through here so the
+    // Visualization Settings sliders take effect live.
+    cellVizConfig: CellVizConfig = CellVizConfig.DEFAULT,
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -127,6 +139,13 @@ fun InteractScreen(
     val processingStatus by viewModel.processingStatus.collectAsState()
     val authError by viewModel.authError.collectAsState()
     val bubbleEmojis by viewModel.bubbleEmojis.collectAsState()
+    val caughtBubbles by viewModel.caughtBubbles.collectAsState()
+    val adapterOrbits by viewModel.adapterOrbits.collectAsState()
+    val cellVizState by viewModel.cellVizState.collectAsState()
+    val busPulses by viewModel.busPulses.collectAsState()
+    val gratitudePulses by viewModel.gratitudePulses.collectAsState()
+    val selectionKind by viewModel.selectionKind.collectAsState()
+    val selectionDetail by viewModel.selectionDetail.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -195,10 +214,19 @@ fun InteractScreen(
         }
     }
 
+    // Leaving FG clears any live selection so re-entering is fresh.
+    LaunchedEffect(visualizationMode) {
+        if (visualizationMode != VisualizationMode.FOREGROUND) {
+            viewModel.setSelection(null)
+        }
+    }
+
     // Effective live background: enabled when visualization mode is not OFF
     val effectiveLiveBackground = visualizationMode != VisualizationMode.OFF
 
-    // Full-screen fidget mode when FOREGROUND
+    // Legacy alias kept for the cylinder-viz path (LiveGraphBackground's
+    // isForegroundMode param). With cell viz, FG is "interactive inspect",
+    // not a fidget — no Column alpha trick, no overlay drag-to-spin.
     val isFullscreenFidget = visualizationMode == VisualizationMode.FOREGROUND
 
     // Multi-axis rotation for fidget mode (vertical spin - full 360 rotation)
@@ -224,10 +252,26 @@ fun InteractScreen(
     val energyDecayRate = 0.92f  // Energy decays faster when not spinning fast
     val energyGainMultiplier = 0.15f  // How much velocity contributes to energy (reduced for more flicks needed)
 
-    // Momentum animation loop for cylinder spin and tilt
+    // Momentum animation loop for cylinder spin and tilt. In FG mode
+    // the whole loop short-circuits and velocity is zeroed — FG is
+    // "pause and explore", so any residual spin from BG must stop
+    // the moment the user flips modes. `rememberUpdatedState` keeps
+    // the loop reading the CURRENT visualization mode rather than the
+    // launch-time capture.
+    val vizModeState = rememberUpdatedState(visualizationMode)
     LaunchedEffect(Unit) {
         while (isActive) {
             kotlinx.coroutines.delay(16)  // ~60 FPS
+
+            if (vizModeState.value == VisualizationMode.FOREGROUND) {
+                // Kill momentum instantly so re-entering BG later doesn't
+                // resume with stale velocity. Don't advance rotation; a
+                // dedicated FG rotate gesture (TODO: 2-finger rotate) is
+                // the only way to spin the cell in this mode.
+                rotationVelocity = 0f
+                spinEnergy = 0f
+                continue
+            }
 
             // Horizontal spin momentum
             if (abs(rotationVelocity) > 0.1f) {
@@ -275,45 +319,49 @@ fun InteractScreen(
             .fillMaxSize()
             .background(theme.background)
     ) {
-        // Live animated memory graph background (when enabled)
-        // Event trigger: timeline events trigger organic graph refreshes
-        // Opacity varies by visualization mode: BG=0.85, FG=1.0
-        if (effectiveLiveBackground && apiClient != null) {
-            val graphOpacity = when (visualizationMode) {
-                VisualizationMode.FOREGROUND -> 1.0f  // Full opacity in foreground mode
-                VisualizationMode.BACKGROUND -> 0.85f  // Subtle in background mode
-                VisualizationMode.OFF -> 0f  // Should not reach here
-            }
-            LiveGraphBackground(
-                apiClient = apiClient,
-                modifier = Modifier.fillMaxSize(),
-                baseOpacity = graphOpacity,
-                eventTrigger = timelineEvents.size,  // New events trigger refresh
-                externalRotation = cylinderRotation,
-                externalTilt = verticalRotation,  // Vertical rotation for fidget mode (full 360)
-                spinEnergy = spinEnergy,
-                spinEnergyThreshold = spinEnergyThreshold,
-                onSpinApartTriggered = {
-                    // Reset energy after explosion
-                    spinEnergy = 0f
-                },
-                pipelineState = pipelineState,  // H3ERE scaffolding visualization
-                isForegroundMode = isFullscreenFidget,  // Thicker rings in foreground
-                ringColor = colorTheme.tertiary,  // Use theme's tertiary color for rings
-                colorTheme = colorTheme  // Pass theme for dynamic graph node coloring
+        // Live animated memory graph background (when enabled).
+        //
+        // Device gating: [probeCellVizCapability] decides whether this device
+        // should render the new "cell" visualization (64-bit + ≥4 GB RAM) or
+        // fall back to the legacy LiveGraphBackground (cylinder view). The
+        // legacy path is frozen — no new features land there, it just keeps
+        // CIRIS usable on constrained hardware.
+        //
+        // NOTE: both branches currently call the same composable. This is
+        // scaffolding — the isCapable=true branch will be swapped for the
+        // CellVisualization composable in a later commit once the cell
+        // primitives are built. The gate goes in first so every subsequent
+        // change can flip a single branch without touching Interact's layout.
+        val cellVizCap = remember { probeCellVizCapability() }
+        // Effective gate = capability AND user hasn't opted out.
+        val useCellViz = cellVizCap.isCapable && !forceClassicViz
+        LaunchedEffect(cellVizCap, forceClassicViz) {
+            PlatformLogger.i(
+                "InteractScreen",
+                "cell-viz gate: useCellViz=$useCellViz (capable=${cellVizCap.isCapable}, " +
+                    "forceClassic=$forceClassicViz, ram=${"%.1f".format(cellVizCap.totalRamGb)}GB, " +
+                    "reason=${cellVizCap.reason})"
             )
         }
+        // NOTE: CellVisualization / LiveGraphBackground are NOT rendered
+        // here at the outer Box. They render INSIDE the chat-area Box
+        // further down in the main Column — see the big Box with
+        // Modifier.weight(1f). Rationale: Compose Desktop Canvas does not
+        // respect zIndex against sibling Columns (the Canvas overdraws
+        // chrome regardless of declared z). By making the viz a child of
+        // the chat-area Box, normal Compose layout keeps the status bar,
+        // FG detail panel, banners, and input bar above it by default —
+        // no zIndex gymnastics, no painful layering bugs.
 
-        // Main content column with platform-specific keyboard padding
-        // Note: In fullscreen fidget mode, we hide the UI by setting alpha to 0
-        // instead of using early return (which breaks Compose recomposition)
-        // Android: Uses imePadding() for proper keyboard avoidance
-        // iOS: No-op - native keyboard avoidance handles this automatically
+        // Main content column with platform-specific keyboard padding.
+        // Structure (top → bottom):
+        //   StatusBar | FgDetailPanel? | banners | BubbleNet | chat-area Box (cell viz + optional chat) | input
+        // The cell viz lives INSIDE the chat-area Box so Compose's normal
+        // layout keeps all chrome above it. No zIndex needed.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .platformImePadding()
-                .alpha(if (isFullscreenFidget) 0f else 1f)  // Hide in fullscreen fidget mode
         ) {
             // Enhanced status bar with LLM health, credits, and trust shield
             EnhancedStatusBar(
@@ -323,6 +371,7 @@ fun InteractScreen(
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
                 walletStatus = walletStatus,
+                cellVizState = cellVizState,
                 visualizationMode = visualizationMode,
                 onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
@@ -337,10 +386,30 @@ fun InteractScreen(
                 theme = theme
             )
 
+            // FG selection detail panel. Renders immediately below the
+            // status bar when the user taps a selectable element on the
+            // cell (only in FG — selection is cleared on BG entry).
+            val sel = selectionKind
+            if (visualizationMode == VisualizationMode.FOREGROUND && sel != null) {
+                FgDetailPanel(
+                    selection = sel,
+                    detail = selectionDetail,
+                    theme = theme,
+                    onDismiss = { viewModel.setSelection(null) },
+                    onOpenLLMSettings = onOpenLLMSettings,
+                    onOpenWiseAuthority = onOpenWiseAuthority,
+                    onOpenSystem = onOpenSystem,
+                )
+            }
+
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
-        // AI Warning banner (from fragment_interact.xml:65-76)
-        AIWarningBanner(theme = theme)
+        // AI Warning banner — hidden in FG so the cell viz gets a clean
+        // inspect area. The warning is a BG-only ambient reminder; in FG
+        // the user is actively reasoning-about-agent-state, not chatting.
+        if (visualizationMode != VisualizationMode.FOREGROUND) {
+            AIWarningBanner(theme = theme)
+        }
 
         // Pending deferrals banner - shows when there are human review requests waiting
         if (pendingDeferrals > 0) {
@@ -389,40 +458,100 @@ fun InteractScreen(
 
         // Chat messages container with empty state (from fragment_interact.xml:127-190)
         // Horizontal swipe rotates the background cylinder (fidget spin!)
+        // — but ONLY in BG mode. FG is "pause and explore", so the parent
+        // swipe-to-spin gesture must yield to the cell viz's own pan/zoom
+        // gestures. Without this gate, detectHorizontalDragGestures on the
+        // parent Box captures and `consume()`s pointer events before they
+        // can reach the Canvas's detectTransformGestures / scroll handler.
+        val swipeSpinActive = liveBackgroundEnabled &&
+            visualizationMode != VisualizationMode.FOREGROUND
+        // Only attach pointerInput when the gesture is actually active.
+        // `Modifier.pointerInput { if (false) ... }` still registers a
+        // pointer-event scope in the hit chain and appears to block
+        // propagation to z-siblings below (cell viz Canvas). Using
+        // `Modifier.then(...)` with a conditional Modifier means NO
+        // pointerInput exists in FG — events pass cleanly through to
+        // the Canvas underneath.
+        val swipeSpinModifier = if (swipeSpinActive) {
+            Modifier.pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { isDraggingHorizontal = true },
+                    onDragEnd = { isDraggingHorizontal = false },
+                    onDragCancel = { isDraggingHorizontal = false },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        val rotationSensitivity = 0.5f
+                        val deltaRotation = dragAmount * rotationSensitivity
+                        cylinderRotation += deltaRotation
+                        rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
+                    }
+                )
+            }
+        } else {
+            Modifier
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(liveBackgroundEnabled) {
-                    if (liveBackgroundEnabled) {
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                isDraggingHorizontal = true
-                                // Don't zero velocity here - let momentum continue until actual drag
-                            },
-                            onDragEnd = {
-                                isDraggingHorizontal = false
-                            },
-                            onDragCancel = {
-                                isDraggingHorizontal = false
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                // Horizontal drag rotates the cylinder
-                                val rotationSensitivity = 0.5f  // Degrees per pixel
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                cylinderRotation += deltaRotation
-                                // Blend new velocity with existing momentum for smoother feel
-                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-                }
+                .then(swipeSpinModifier)
         ) {
-            if (messages.isEmpty() && !isLoading) {
-                EmptyStateView(transparentBackground = liveBackgroundEnabled)
-            } else {
-                ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+            // Cell viz / legacy cylinder renders as the BACKGROUND of the
+            // chat area. matchParentSize() fills this Box's bounds without
+            // influencing its measurement — lets weight(1f) drive height.
+            if (effectiveLiveBackground && apiClient != null) {
+                if (useCellViz) {
+                    CellVisualization(
+                        modifier = Modifier.matchParentSize(),
+                        isDarkMode = isDarkMode,
+                        adapterOrbits = adapterOrbits,
+                        externalRotation = cylinderRotation,
+                        config = cellVizConfig.sanitized(),
+                        apiClient = apiClient,
+                        colorTheme = colorTheme,
+                        eventTrigger = timelineEvents.size,
+                        state = cellVizState,
+                        busPulses = busPulses,
+                        gratitudePulses = gratitudePulses,
+                        pipelineState = pipelineState,
+                        showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
+                        onSelection = { kind -> viewModel.setSelection(kind) },
+                        selection = selectionKind,
+                    )
+                } else {
+                    val graphOpacity = when (visualizationMode) {
+                        VisualizationMode.FOREGROUND -> 1.0f
+                        VisualizationMode.BACKGROUND -> 0.85f
+                        VisualizationMode.OFF -> 0f
+                    }
+                    LiveGraphBackground(
+                        apiClient = apiClient,
+                        modifier = Modifier.matchParentSize(),
+                        baseOpacity = graphOpacity,
+                        eventTrigger = timelineEvents.size,
+                        externalRotation = cylinderRotation,
+                        externalTilt = verticalRotation,
+                        spinEnergy = spinEnergy,
+                        spinEnergyThreshold = spinEnergyThreshold,
+                        onSpinApartTriggered = { spinEnergy = 0f },
+                        pipelineState = pipelineState,
+                        isForegroundMode = isFullscreenFidget,
+                        ringColor = colorTheme.tertiary,
+                        colorTheme = colorTheme,
+                    )
+                }
+            }
+            // In BG: chat/empty-state renders OVER the ambient viz.
+            // In FG: chat is suppressed so the viz is the whole middle area.
+            if (visualizationMode != VisualizationMode.FOREGROUND) {
+                if (messages.isEmpty() && !isLoading) {
+                    EmptyStateView(
+                        transparentBackground = liveBackgroundEnabled,
+                        isDarkMode = isDarkMode,
+                    )
+                } else {
+                    ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
+                }
             }
         }
 
@@ -479,85 +608,35 @@ fun InteractScreen(
             EmojiLegendDialog(onDismiss = { viewModel.toggleLegend() })
         }
 
-        // Bubble overlay - floats up from bottom-left over the entire screen
+        // Bubble overlay - floats up from bottom-left over the entire screen.
+        // Tapping a bubble with a payload "catches" it into the caughtBubbles list.
         BubbleOverlay(
             bubbles = bubbleEmojis,
+            onCatch = { id -> viewModel.catchBubble(id) },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(start = 8.dp, bottom = 70.dp) // Align with agent icon position
         )
 
+        // Caught bubbles panel — pinned payloads from in-flight bubbles the
+        // user tapped. Bounded (12 items × 160 chars) and dismissable.
+        CaughtBubblesPanel(
+            bubbles = caughtBubbles,
+            theme = theme,
+            onDismiss = { id -> viewModel.dismissCaughtBubble(id) },
+            onClearAll = { viewModel.clearCaughtBubbles() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 230.dp, end = 8.dp)
+                .widthIn(max = 280.dp)
+                .zIndex(50f)
+        )
+
         // Note: ErrorToast, DebugIndicator, and DebugConsole removed for production release
 
-        // Fullscreen fidget mode overlay - on top of everything when active
-        // Uses conditional visibility instead of early return to avoid breaking Compose recomposition
-        if (isFullscreenFidget) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Transparent)  // Transparent - graph shows through
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { isDraggingHorizontal = true },
-                            onDragEnd = { isDraggingHorizontal = false },
-                            onDragCancel = { isDraggingHorizontal = false },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                val rotationSensitivity = 0.5f
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                cylinderRotation += deltaRotation
-                                rotationVelocity = rotationVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                val rotationSensitivity = 0.5f
-                                // Reversed: drag down = rotate forward (positive)
-                                val deltaRotation = dragAmount * rotationSensitivity
-                                verticalRotation += deltaRotation
-                                verticalVelocity = verticalVelocity * 0.3f + deltaRotation * 0.7f
-                            }
-                        )
-                    }
-            ) {
-                // X button to exit fullscreen fidget mode - top right corner
-                IconButton(
-                    onClick = { visualizationMode = VisualizationMode.BACKGROUND },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .size(48.dp)
-                        .background(
-                            color = theme.surface.copy(alpha = 0.7f),
-                            shape = CircleShape
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = localizedString("mobile.interact_exit_fullscreen"),
-                        tint = theme.textPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                // Legend button INSIDE fullscreen overlay so it receives touch events
-                // Same position as BG mode for consistency
-                VisualizationLegendButton(
-                    isExpanded = showVizLegend,
-                    onToggle = { showVizLegend = !showVizLegend },
-                    theme = theme,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 140.dp)
-                )
-            }
-        }
-
-        // Visualization legend button for BG mode (outside fullscreen overlay)
-        if (visualizationMode == VisualizationMode.BACKGROUND) {
+        // Legend button (BG + FG). Anchored to the outer Box's BottomEnd
+        // so it sits above the cell viz and input bar in both modes.
+        if (visualizationMode != VisualizationMode.OFF) {
             VisualizationLegendButton(
                 isExpanded = showVizLegend,
                 onToggle = { showVizLegend = !showVizLegend },
@@ -587,6 +666,7 @@ private fun EnhancedStatusBar(
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
     walletStatus: WalletStatus,
+    cellVizState: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
     visualizationMode: VisualizationMode,
     onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
@@ -659,6 +739,15 @@ private fun EnhancedStatusBar(
                     theme = theme
                 )
 
+                // CIRIS capacity (ratchet) badge — composite C/I_int/R/I_inc/S
+                // score for this agent's template. Sits next to trust so the
+                // two "at a glance" health signals (attestation + behavior)
+                // live together.
+                CapacityBadge(
+                    state = cellVizState,
+                    theme = theme
+                )
+
                 // Trust shield
                 TrustShield(
                     trustStatus = trustStatus,
@@ -698,7 +787,10 @@ private fun EnhancedStatusBar(
                         VisualizationMode.FOREGROUND -> theme.statusConnected.copy(alpha = 0.2f)
                         VisualizationMode.BACKGROUND -> theme.textAccent.copy(alpha = 0.15f)
                         VisualizationMode.OFF -> Color.Transparent
-                    }
+                    },
+                    modifier = Modifier.testableClickable("btn_viz_mode_toggle") {
+                        onVisualizationToggle()
+                    },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1032,6 +1124,90 @@ private fun TrustShield(
 }
 
 /**
+ * CIRIS capacity (ratchet) badge — the clear, at-a-glance companion to
+ * the ambient cell-viz dials. Sits immediately beside the Trust shield
+ * so the two system-health signals (attestation + behaviour) are read
+ * together.
+ *
+ * Colour scheme mirrors the Trust shield so "green / amber / red" means
+ * the same thing in both:
+ *   - high_capacity   → green  (L5-equivalent)
+ *   - healthy         → green  (strong but with room)
+ *   - moderate        → amber  (L4-equivalent)
+ *   - high_fragility  → red    (low-L-equivalent)
+ *   - pre-fetch       → gray   (no data yet — same treatment as trust)
+ *
+ * The per-factor detail lives in the cell viz itself (ambient dials +
+ * multi-coloured nucleus shells). The badge is intentionally a single
+ * status LED so the chrome row stays scannable.
+ */
+@Composable
+private fun CapacityBadge(
+    state: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier,
+) {
+    val isLoaded = !state.isPreFetch
+    val badgeColor = when {
+        !isLoaded -> theme.trustDefault
+        state.category == "high_capacity" -> theme.trustLevel5
+        state.category == "healthy" -> theme.trustLevel5
+        state.category == "moderate" -> theme.trustLevel4
+        state.category == "high_fragility" -> theme.trustLevelLow
+        else -> theme.trustDefault
+    }
+
+    // Two-decimal fixed-width score. Avoid String.format (JVM-only in
+    // commonMain); use integer math to produce "0.90", "1.00", "0.38".
+    val scoreText = if (!isLoaded) {
+        "…"
+    } else {
+        val hundredths = (state.compositeScore.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
+        val whole = hundredths / 100
+        val frac = hundredths % 100
+        val fracStr = if (frac < 10) "0$frac" else "$frac"
+        "$whole.$fracStr"
+    }
+
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = badgeColor.copy(alpha = 0.15f),
+        modifier = modifier.testable("capacity_badge"),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            if (!isLoaded) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = badgeColor,
+                )
+            } else {
+                // Filled status dot — reads as a signal LED, not a heartbeat
+                // or other anthropomorphic metaphor. Same shape as the
+                // Connection-status dot earlier in the bar so the visual
+                // language is consistent.
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(color = badgeColor, shape = CircleShape),
+                )
+            }
+
+            Text(
+                text = scoreText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = badgeColor,
+            )
+        }
+    }
+}
+
+/**
  * Legacy connection status bar with shutdown controls
  * From fragment_interact.xml:10-63
  */
@@ -1274,8 +1450,27 @@ private fun SystemWarningBanner(
 @Composable
 private fun EmptyStateView(
     modifier: Modifier = Modifier,
-    transparentBackground: Boolean = false
+    transparentBackground: Boolean = false,
+    isDarkMode: Boolean = false,
 ) {
+    // When the background is transparent, text sits directly on top of the
+    // cell viz. In dark mode that means dark-on-dark — so we flip the
+    // title/subtitle to high-contrast light colours. The earlier hard-coded
+    // gray values were chosen for light mode and became unreadable once
+    // dark mode became the hero view (see FSD §2.6).
+    val onTransparentDark = transparentBackground && isDarkMode
+    val titleColor = if (onTransparentDark) Color(0xFFF5F5F7) else Color(0xFF1F2937)
+    val subtitleColor = when {
+        onTransparentDark -> Color(0xFFD1D5DB)              // light slate
+        transparentBackground -> Color(0xFF4B5563)          // light mode on viz
+        else -> Color(0xFF6B7280)                           // opaque card
+    }
+    val hintColor = when {
+        onTransparentDark -> Color(0xFF5DD3D8)              // NavSignetLight — readable on dark
+        transparentBackground -> Color(0xFF0E7490)          // darker cyan on light viz
+        else -> Color(0xFF419CA0)                           // brand teal on opaque card
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1296,7 +1491,7 @@ private fun EmptyStateView(
             text = localizedString("mobile.interact_welcome_title"),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (transparentBackground) Color(0xFF1F2937) else Color(0xFF1F2937),  // Dark text for readability
+            color = titleColor,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -1304,7 +1499,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_subtitle"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color(0xFF4B5563) else Color(0xFF6B7280),  // Darker gray for readability
+            color = subtitleColor,
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -1312,7 +1507,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_hint"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color(0xFF0E7490) else Color(0xFF419CA0),  // Darker cyan for readability
+            color = hintColor,
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -2291,6 +2486,7 @@ private fun AgentStateIcon(
 @Composable
 private fun BubbleOverlay(
     bubbles: List<BubbleEmoji>,
+    onCatch: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -2300,19 +2496,27 @@ private fun BubbleOverlay(
         bubbles.forEach { bubble ->
             FullScreenFloatingBubble(
                 key = bubble.id,
-                emoji = bubble.emoji
+                emoji = bubble.emoji,
+                hasPayload = !bubble.payload.isNullOrBlank(),
+                onTap = { onCatch(bubble.id) }
             )
         }
     }
 }
 
 /**
- * A floating bubble that travels the full screen height
+ * A floating bubble that travels the full screen height.
+ *
+ * If [hasPayload] is true, a subtle halo hints the bubble is tappable —
+ * tapping it "catches" the bubble via [onTap] so the user can read its
+ * semantic summary before it floats off screen.
  */
 @Composable
 private fun FullScreenFloatingBubble(
     key: Long,
     emoji: String,
+    hasPayload: Boolean = false,
+    onTap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Animation state for this bubble
@@ -2345,6 +2549,22 @@ private fun FullScreenFloatingBubble(
     // Slight horizontal wobble for playfulness
     val wobble = kotlin.math.sin(animationProgress * 6f * 3.14159f).toFloat() * 8f
 
+    // Tappable when carrying a payload. A faint halo hints at it so users
+    // learn the affordance without any text.
+    val tappableModifier = if (hasPayload) {
+        Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTap
+            )
+            .background(
+                color = Color.White.copy(alpha = 0.15f),
+                shape = CircleShape
+            )
+            .padding(4.dp)
+    } else Modifier
+
     Text(
         text = emoji,
         fontSize = 28.sp,
@@ -2352,7 +2572,72 @@ private fun FullScreenFloatingBubble(
             .offset(x = wobble.dp, y = offsetY)
             .alpha(alpha)
             .zIndex(100f) // Ensure bubbles are on top
+            .then(tappableModifier)
     )
+}
+
+/**
+ * Panel showing bubbles the user has "caught" — clicking a floating bubble
+ * pins its payload here so it survives past the 2s float window.
+ *
+ * This is the pattern that lets the client expose rich SSE semantics
+ * without retaining unbounded event history: the UI only holds what the
+ * user explicitly chose to keep.
+ */
+@Composable
+private fun CaughtBubblesPanel(
+    bubbles: List<BubbleEmoji>,
+    theme: InteractTheme,
+    onDismiss: (Long) -> Unit,
+    onClearAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (bubbles.isEmpty()) return
+    Surface(
+        color = theme.surface,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.padding(horizontal = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Caught (${bubbles.size})",
+                    fontSize = 11.sp,
+                    color = theme.textSecondary
+                )
+                TextButton(
+                    onClick = onClearAll,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(text = "Clear", fontSize = 10.sp, color = theme.textMuted)
+                }
+            }
+            bubbles.takeLast(6).reversed().forEach { b ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp)
+                        .clickable { onDismiss(b.id) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = b.emoji, fontSize = 14.sp)
+                    Text(
+                        text = b.payload ?: "",
+                        fontSize = 11.sp,
+                        color = theme.textPrimary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -2608,6 +2893,20 @@ private fun EmojiLegendDialog(
                 LegendRow("💭", localizedString("mobile.interact_legend_idle"))
                 LegendRow("🔄", localizedString("mobile.interact_legend_processing_icon"))
                 LegendRow("⚪", localizedString("mobile.interact_legend_disconnected"))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Gestures — kept in the legend so the interact surface itself
+                // stays clean of nagging hint overlays.
+                Text(
+                    text = "Gestures",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LegendRow("↔️", "Swipe the background to spin the visualization")
+                LegendRow("⚡", "Flick repeatedly — a bit of energy shatters it, then it reforms")
+                LegendRow("🔍", "Tap the VIZ toggle to expand the scene to full screen")
             }
         },
         confirmButton = {
@@ -2772,6 +3071,368 @@ private fun VisualizationLegendItem(
             text = description,
             fontSize = 9.sp,
             color = theme.textMuted
+        )
+    }
+}
+
+/**
+ * FG detail panel — the transparency surface that opens when the user
+ * taps a selectable element on the frozen cell diagram in Foreground
+ * mode (FSD §12). Renders a compact summary of *this* element's live
+ * state alongside a deeplink to the existing full-detail screen (e.g.
+ * Adapters, Memory, System, LLM Settings) for drill-in.
+ *
+ * Framing discipline (per CIRIS accord):
+ *   - Transparency by default — the element's live fields are visible,
+ *     not hidden behind expert toggles.
+ *   - Incompleteness is first-class — a NucleusShell with no recent
+ *     events reads as "no recent activity" not as an error.
+ *   - No anthropomorphizing. Panels narrate *what the system did by
+ *     design*, never what the agent "feels" or "wants".
+ *   - No surveillance framing — never "monitoring" / "tracking" /
+ *     "profile" language for adapter channels.
+ *
+ * Hosts the kind-tagged content below the chat-bar area so it shares
+ * vertical rhythm with the existing Interact chrome. A close button
+ * dismisses back to the plain cell view.
+ */
+@Composable
+private fun FgDetailPanel(
+    selection: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind,
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail?,
+    theme: InteractTheme,
+    onDismiss: () -> Unit,
+    onOpenLLMSettings: () -> Unit,
+    onOpenWiseAuthority: () -> Unit,
+    onOpenSystem: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = theme.surface.copy(alpha = 0.96f),
+        shadowElevation = if (theme.isDark) 0.dp else 4.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Header row: kind label + dismiss button.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = kindLabel(selection),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = theme.textPrimary,
+                )
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Transparent,
+                    modifier = Modifier.testableClickable("btn_fg_detail_close") { onDismiss() },
+                ) {
+                    Text(
+                        text = "✕",
+                        fontSize = 14.sp,
+                        color = theme.textMuted,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            // Body — kind-specific rendering against the live detail.
+            when (val d = detail) {
+                null, is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Loading -> {
+                    Text(
+                        text = d?.summaryLine ?: "Loading…",
+                        fontSize = 12.sp,
+                        color = theme.textSecondary,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Error -> {
+                    Text(
+                        text = d.summaryLine,
+                        fontSize = 12.sp,
+                        color = theme.statusDisconnected,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.AdapterPort -> {
+                    AdapterPortBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.BusArc -> {
+                    BusArcBody(
+                        detail = d,
+                        theme = theme,
+                        onOpenLLMSettings = onOpenLLMSettings,
+                        onOpenWiseAuthority = onOpenWiseAuthority,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusShell -> {
+                    NucleusShellBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusCore -> {
+                    NucleusCoreBody(detail = d, theme = theme, onOpenSystem = onOpenSystem)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Mote -> {
+                    MoteBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Gratitude -> {
+                    Text(
+                        text = d.summaryLine,
+                        fontSize = 12.sp,
+                        color = theme.textSecondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun kindLabel(kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind): String = when (kind) {
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort ->
+        "Adapter · ${kind.adapterType}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.BusArc ->
+        "${kind.bus.name} bus"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell ->
+        "Pipeline stage · ${kind.eventType.replace('_', ' ')}"
+    ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusCore ->
+        "Agent core"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.CytoplasmMote ->
+        "Memory node · ${kind.scope}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.SignalChannel ->
+        "Signal channel · ${kind.bus.name}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.GratitudeMote ->
+        "Signalled gratitude"
+}
+
+@Composable
+private fun AdapterPortBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.AdapterPort,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "id", value = detail.adapterId, theme = theme)
+        DetailRow(
+            label = "status",
+            value = if (detail.isRunning) "running" else "stopped",
+            theme = theme,
+        )
+        DetailRow(label = "messages", value = "${detail.messagesProcessed}", theme = theme)
+        if (detail.errorsCount > 0) {
+            DetailRow(
+                label = "errors",
+                value = "${detail.errorsCount}",
+                theme = theme,
+                valueColor = theme.statusDisconnected,
+            )
+        }
+        detail.lastError?.let {
+            DetailRow(label = "last error", value = it.take(80), theme = theme,
+                valueColor = theme.statusDisconnected)
+        }
+        detail.lastActivity?.let {
+            DetailRow(label = "last activity", value = it, theme = theme)
+        }
+    }
+}
+
+@Composable
+private fun BusArcBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.BusArc,
+    theme: InteractTheme,
+    onOpenLLMSettings: () -> Unit,
+    onOpenWiseAuthority: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (detail.llmProviders.isNotEmpty()) {
+            Text(
+                text = "${detail.llmProviders.size} provider(s)",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.textPrimary,
+            )
+            detail.llmProviders.forEach { p ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (p.healthy) theme.statusConnected
+                                    else theme.statusDisconnected,
+                                shape = CircleShape,
+                            ),
+                    )
+                    Text(text = p.name, fontSize = 11.sp, color = theme.textPrimary)
+                    Text(
+                        text = "· cb=${p.circuitBreakerState}",
+                        fontSize = 10.sp,
+                        color = theme.textMuted,
+                    )
+                    if (p.rateLimited) {
+                        Text(
+                            text = "· rate-limited",
+                            fontSize = 10.sp,
+                            color = theme.trustLevel4,
+                        )
+                    }
+                }
+            }
+        } else {
+            DetailRow(label = "messages sent", value = "${detail.messagesSent}", theme = theme)
+            DetailRow(
+                label = "avg latency",
+                value = "${detail.averageLatencyMs.toInt()} ms",
+                theme = theme,
+            )
+            DetailRow(label = "queue", value = "${detail.queueDepth}", theme = theme)
+            if (detail.errorsLastHour > 0) {
+                DetailRow(
+                    label = "errors/h",
+                    value = "${detail.errorsLastHour}",
+                    theme = theme,
+                    valueColor = theme.statusDisconnected,
+                )
+            }
+        }
+
+        // Deeplink to the matching full screen.
+        val (label, action) = when (detail.bus) {
+            ai.ciris.mobile.shared.ui.screens.graph.CellBus.LLM ->
+                "Open LLM settings" to onOpenLLMSettings
+            ai.ciris.mobile.shared.ui.screens.graph.CellBus.WISE ->
+                "Open Wise Authority" to onOpenWiseAuthority
+            else -> null to null
+        }
+        if (label != null && action != null) {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = theme.textAccent.copy(alpha = 0.15f),
+                modifier = Modifier.testableClickable("btn_fg_detail_open") { action() },
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = theme.textAccent,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NucleusShellBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusShell,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (detail.recentEvents.isEmpty()) {
+            Text(
+                text = "No recent activity on this stage.",
+                fontSize = 12.sp,
+                color = theme.textMuted,
+            )
+        } else {
+            detail.recentEvents.asReversed().forEach { ev ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(text = ev.emoji, fontSize = 14.sp)
+                    Text(
+                        text = ev.payload ?: "(no payload)",
+                        fontSize = 11.sp,
+                        color = theme.textPrimary,
+                        lineHeight = 14.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NucleusCoreBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusCore,
+    theme: InteractTheme,
+    onOpenSystem: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "cognitive state", value = detail.cognitiveState, theme = theme)
+        DetailRow(label = "system", value = detail.systemStatus, theme = theme)
+        DetailRow(
+            label = "services",
+            value = "${detail.servicesOnline}/${detail.servicesTotal}",
+            theme = theme,
+        )
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = theme.textAccent.copy(alpha = 0.15f),
+            modifier = Modifier.testableClickable("btn_fg_detail_open_system") { onOpenSystem() },
+        ) {
+            Text(
+                text = "Open system",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.textAccent,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoteBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Mote,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "id", value = detail.nodeId.take(24), theme = theme)
+        DetailRow(label = "type", value = detail.nodeType ?: "—", theme = theme)
+        DetailRow(label = "scope", value = detail.scope, theme = theme)
+        detail.attributesJson?.let {
+            Text(
+                text = it.take(300),
+                fontSize = 10.sp,
+                color = theme.textMuted,
+                lineHeight = 13.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    theme: InteractTheme,
+    valueColor: Color? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = theme.textMuted,
+            modifier = Modifier.width(100.dp),
+        )
+        Text(
+            text = value,
+            fontSize = 11.sp,
+            color = valueColor ?: theme.textPrimary,
         )
     }
 }

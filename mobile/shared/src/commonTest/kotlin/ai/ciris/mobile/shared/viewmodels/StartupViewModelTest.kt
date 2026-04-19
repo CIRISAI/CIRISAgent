@@ -501,6 +501,52 @@ class FakeCIRISApiClient : CIRISApiClientProtocol {
         )
     }
 
+    override suspend fun getContextEnrichment(): ContextEnrichmentResponse =
+        ContextEnrichmentResponse(
+            entries = emptyMap(),
+            stats = EnrichmentCacheStatsData(
+                entries = 0,
+                hits = 0,
+                misses = 0,
+                hitRatePct = 0.0,
+                startupPopulated = false,
+            ),
+        )
+
+    override suspend fun queryEnvironmentItems(): List<EnvironmentGraphNodeData> = emptyList()
+
+    override suspend fun createEnvironmentItem(
+        name: String,
+        category: String,
+        quantity: Int,
+        condition: String,
+        notes: String?,
+    ): EnvironmentGraphNodeData = EnvironmentGraphNodeData(
+        id = "stub",
+        type = "environment",
+        attributes = emptyMap(),
+        createdAt = null,
+        communityShared = false,
+    )
+
+    override suspend fun deleteEnvironmentItem(nodeId: String): Boolean = true
+
+    override suspend fun getCountries(): CountriesResponse =
+        CountriesResponse(countries = emptyList(), count = 0)
+
+    override suspend fun searchLocations(
+        query: String,
+        countryCode: String?,
+        limit: Int,
+    ): LocationSearchResponse =
+        LocationSearchResponse(results = emptyList(), query = query, count = 0)
+
+    override suspend fun updateUserLocation(location: LocationResultData): UpdateLocationResult =
+        UpdateLocationResult(success = true, message = "ok", locationDisplay = "")
+
+    override suspend fun getCurrentLocation(): CurrentLocationData =
+        CurrentLocationData(configured = false)
+
     override fun close() {
         // No-op for testing
     }

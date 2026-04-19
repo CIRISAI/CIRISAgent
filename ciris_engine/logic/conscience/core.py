@@ -247,12 +247,13 @@ class EntropyConscience(_BaseConscience):
 
         # Inline the entropy evaluation
         entropy = 0.1  # Default safe value
+        entropy_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] EntropyConscience: Image context detected, using textual metadata")
-            messages = self._create_entropy_messages(text, image_context)
+            messages, entropy_user_prompt = self._create_entropy_messages(text, image_context)
             if hasattr(sink, "llm"):
                 entropy_eval, _ = await sink.llm.call_llm_structured(
                     messages=messages,
@@ -286,11 +287,16 @@ class EntropyConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             entropy_score=entropy,
+            entropy_prompt=entropy_user_prompt,
             check_timestamp=ts_datetime,
         )
 
-    def _create_entropy_messages(self, text: str, image_context: Optional[str] = None) -> List[LLMMessage]:
-        """Create messages for entropy evaluation with optional image context metadata."""
+    def _create_entropy_messages(self, text: str, image_context: Optional[str] = None) -> tuple[List[LLMMessage], str]:
+        """Create messages for entropy evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
         loader = get_conscience_prompt_loader()
         system_prompt = loader.get_system_prompt("entropy_conscience")
         user_prompt = loader.get_user_prompt("entropy_conscience", image_context=image_context, text=text)
@@ -299,7 +305,7 @@ class EntropyConscience(_BaseConscience):
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class CoherenceConscience(_BaseConscience):
@@ -337,12 +343,13 @@ class CoherenceConscience(_BaseConscience):
 
         # Inline the coherence evaluation
         coherence = 0.9  # Default safe value
+        coherence_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
-            messages = self._create_coherence_messages(text, image_context)
+            messages, coherence_user_prompt = self._create_coherence_messages(text, image_context)
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await sink.llm.call_llm_structured(
                     messages=messages,
@@ -376,11 +383,16 @@ class CoherenceConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             coherence_score=coherence,
+            coherence_prompt=coherence_user_prompt,
             check_timestamp=ts_datetime,
         )
 
-    def _create_coherence_messages(self, text: str, image_context: Optional[str] = None) -> List[LLMMessage]:
-        """Create messages for coherence evaluation with optional image context metadata."""
+    def _create_coherence_messages(self, text: str, image_context: Optional[str] = None) -> tuple[List[LLMMessage], str]:
+        """Create messages for coherence evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
         loader = get_conscience_prompt_loader()
         system_prompt = loader.get_system_prompt("coherence_conscience")
         user_prompt = loader.get_user_prompt("coherence_conscience", image_context=image_context, text=text)
@@ -389,7 +401,7 @@ class CoherenceConscience(_BaseConscience):
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class OptimizationVetoConscience(_BaseConscience):
@@ -415,7 +427,7 @@ class OptimizationVetoConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] OptimizationVetoConscience: Image context detected, using textual metadata")
-        messages = self._create_optimization_veto_messages(action_desc, image_context)
+        messages, opt_veto_user_prompt = self._create_optimization_veto_messages(action_desc, image_context)
 
         try:
             if hasattr(sink, "llm"):
@@ -467,13 +479,18 @@ class OptimizationVetoConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             optimization_veto_check=result,
+            optimization_veto_prompt=opt_veto_user_prompt,
             check_timestamp=ts_datetime,
         )
 
     def _create_optimization_veto_messages(
         self, action_description: str, image_context: Optional[str] = None
-    ) -> List[LLMMessage]:
-        """Create messages for optimization veto evaluation with optional image context metadata."""
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for optimization veto evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
         loader = get_conscience_prompt_loader()
         system_prompt = loader.get_system_prompt("optimization_veto_conscience")
         user_prompt = loader.get_user_prompt(
@@ -484,7 +501,7 @@ class OptimizationVetoConscience(_BaseConscience):
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class EpistemicHumilityConscience(_BaseConscience):
@@ -510,7 +527,7 @@ class EpistemicHumilityConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
-        messages = self._create_epistemic_humility_messages(desc, image_context)
+        messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(desc, image_context)
 
         try:
             if hasattr(sink, "llm"):
@@ -564,13 +581,18 @@ class EpistemicHumilityConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             epistemic_humility_check=result,
+            epistemic_humility_prompt=epistemic_humility_user_prompt,
             check_timestamp=ts_datetime,
         )
 
     def _create_epistemic_humility_messages(
         self, action_description: str, image_context: Optional[str] = None
-    ) -> List[LLMMessage]:
-        """Create messages for balanced epistemic humility evaluation with optional image context metadata."""
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for balanced epistemic humility evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
         loader = get_conscience_prompt_loader()
         system_prompt = loader.get_system_prompt("epistemic_humility_conscience")
         user_prompt = loader.get_user_prompt(
@@ -581,4 +603,4 @@ class EpistemicHumilityConscience(_BaseConscience):
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt

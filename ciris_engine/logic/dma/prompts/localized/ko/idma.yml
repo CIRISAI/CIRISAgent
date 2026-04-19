@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "Intuition DMA - CCA k_eff 공식 및 단계 분류 적용"
-version: "1.0"
+version: "1.1"
 
 # CIRIS Accord를 컨텍스트로 포함
 accord_header: true

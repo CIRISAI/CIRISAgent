@@ -34,6 +34,52 @@ private const val BIRTH_ANIMATION_DURATION_MS = 2000L  // 2 seconds for new node
 private const val EVENT_REFRESH_DELAY_MS = 1500L  // Delay after event before refresh (let DB settle)
 
 /**
+ * Lightweight descriptor of an adapter rendered as an orbiting satellite
+ * around the memory/pipeline cylinder. The adapters are the agent's body —
+ * Discord is an ear, the API is a mouth, weather is a window, wallet is a pocket.
+ *
+ * Only fields actually used by the background are carried. Memory footprint
+ * per adapter: ~80 bytes, bounded by adapter count (< 20 in practice).
+ */
+data class AdapterOrbit(
+    val id: String,            // Unique adapter id
+    val type: String,          // e.g. "weather", "navigation", "wallet"
+    val glyph: String,         // Single emoji that represents this limb
+    val altitude: Float,       // Vertical position on cylinder, -1..1 (0 = equator)
+    val phase: Float,          // Starting angle in radians
+    val orbitSpeed: Float = 1f,  // Multiplier on base rotation speed
+    val isActive: Boolean = true  // Whether the adapter is currently running
+)
+
+/**
+ * Pick a glyph + altitude for an adapter based on its type.
+ *
+ * Altitudes spread adapter orbits vertically so they don't visually collide.
+ * Each type gets a stable altitude so the same adapter always appears in
+ * the same place — predictability matters for the "body" metaphor.
+ */
+fun orbitFor(id: String, type: String, index: Int = 0, isActive: Boolean = true): AdapterOrbit {
+    val (glyph, altitude) = when (type.lowercase()) {
+        "api" -> "🌐" to 0.55f         // High — the agent's public voice
+        "discord" -> "💬" to 0.40f
+        "home_assistant", "ha" -> "🏠" to 0.25f
+        "weather" -> "🌦️" to 0.70f     // Highest — a window to the sky
+        "navigation", "nav" -> "🧭" to -0.25f
+        "wallet" -> "💰" to -0.55f     // Low — a pocket
+        "cirisverify" -> "🛡️" to -0.70f  // Deepest — foundational trust
+        "reddit" -> "👽" to 0.10f
+        "mcp" -> "🔌" to -0.10f
+        else -> "⚙️" to (((index % 5) - 2) * 0.15f)
+    }
+    // Stable phase derived from id so reloads don't teleport the glyph
+    val phase = ((id.hashCode() and 0xFFFF).toFloat() / 0xFFFF) * 2f * PI.toFloat()
+    return AdapterOrbit(
+        id = id, type = type, glyph = glyph,
+        altitude = altitude, phase = phase, isActive = isActive
+    )
+}
+
+/**
  * Safe color copy that clamps alpha to valid range [0, 1].
  * Prevents crashes from invalid color values in animations.
  */
@@ -77,8 +123,44 @@ fun LiveGraphBackground(
     pipelineState: PipelineState = PipelineState(),  // H3ERE pipeline scaffolding state
     isForegroundMode: Boolean = false,  // Thicker rings and more visible scaffolding
     ringColor: Color = Color(0xFFE54D2E),  // Default: tomato9 tertiary color
-    colorTheme: ColorTheme = ColorTheme.DEFAULT  // Theme for graph node colors
+    colorTheme: ColorTheme = ColorTheme.DEFAULT,  // Theme for graph node colors
+    // Adapter satellites orbiting the cylinder — the agent's "body".
+    // Empty list = no adapters rendered (backward-compatible).
+    adapterOrbits: List<AdapterOrbit> = emptyList(),
+    // Current cognitive state ("WORK"/"DREAM"/...) — drives the egg's "posture":
+    // rotation speed, color tint, and node alpha modulate so the agent's state
+    // is readable directly from the scene without reading a text badge.
+    cognitiveState: String? = null
 ) {
+    // --- Cognitive state → visual posture ---------------------------------
+    // Treat the egg as the agent; let the state shape how it moves and feels.
+    val state = cognitiveState?.uppercase()
+    // 1.0 = baseline (60s full rotation); >1 = faster; <1 = slower.
+    val stateSpinMultiplier = when (state) {
+        "WAKEUP" -> 2.0f       // lively birth
+        "PLAY" -> 1.8f
+        "WORK" -> 1.0f         // baseline
+        "SOLITUDE" -> 0.35f    // contemplative
+        "DREAM" -> 0.15f       // drifting, elsewhere
+        "SHUTDOWN" -> 0.10f
+        else -> 1.0f
+    }
+    // Modulates the alpha of memory nodes + rings — lets the whole scene fade
+    // down in introspective states.
+    val statePresence = when (state) {
+        "DREAM" -> 0.65f
+        "SOLITUDE" -> 0.80f
+        "SHUTDOWN" -> 0.50f
+        else -> 1.0f
+    }
+    // Per-state tint blended into the ring base color; null = no tint.
+    val stateTint: Color? = when (state) {
+        "DREAM" -> Color(0xFFA78BFA)   // soft violet
+        "PLAY" -> Color(0xFFFBBF24)    // warm yellow
+        "SOLITUDE" -> Color(0xFF64748B) // slate — muted, quiet
+        "SHUTDOWN" -> Color(0xFFEF4444) // red — fading
+        else -> null
+    }
     // Composable entry - no logging here (recomposes every frame)
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -126,22 +208,41 @@ fun LiveGraphBackground(
         }
     }
 
-    // Continuous rotation animation (base automatic rotation)
+    // Frame-driven baseline rotation.
+    //
+    // Replaces the previous infiniteTransition tween with a single withFrameNanos
+    // driver. Behaviour is identical at stateSpinMultiplier=1.0 (6°/sec, 60s full
+    // revolution), but now:
+    //
+    //   - rotation is a single source of truth the upcoming cell viz can share
+    //   - the loop naturally respects delta time, so a dropped frame doesn't
+    //     produce a visible "stutter" the way tween keyframes can
+    //   - future enhancements (reduce-motion, swipe-momentum decay, pause on
+    //     spin-apart) become trivial to add without re-plumbing the animation
+    //
+    // The infiniteTransition is kept around for autoTiltX + birthPulse because
+    // those two still fit the tween idiom cleanly.
     val infiniteTransition = rememberInfiniteTransition(label = "rotation")
 
-    // Primary rotation around Y-axis (horizontal spin) - automatic
-    val autoRotationY by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 60000, easing = LinearEasing),  // 60 seconds per rotation
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotationY"
-    )
+    var autoRotationY by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        var lastFrameNs = 0L
+        while (isActive) {
+            withFrameNanos { frameTimeNs ->
+                if (lastFrameNs != 0L) {
+                    val deltaSec = (frameTimeNs - lastFrameNs) / 1_000_000_000f
+                    // 6 °/sec = 360° per 60 sec, matches the old tween exactly.
+                    autoRotationY = (autoRotationY + 6f * deltaSec) % 360f
+                }
+                lastFrameNs = frameTimeNs
+            }
+        }
+    }
 
-    // Combined rotation: auto + external (swipe) rotation
-    val rotationY = autoRotationY + externalRotation
+    // Combined rotation: auto + external (swipe) rotation.
+    // The state multiplier scales the visible angle — DREAM drifts, PLAY accelerates.
+    // % 360 avoids huge values after many rotations.
+    val rotationY = ((autoRotationY * stateSpinMultiplier) % 360f) + externalRotation
 
     // Secondary tilt on X-axis (gentle rocking) + external tilt from gestures
     val autoTiltX by infiniteTransition.animateFloat(
@@ -278,6 +379,19 @@ fun LiveGraphBackground(
                 val cylinderHeight = size.height * 0.6f
                 val currentTimeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
 
+                // Apply cognitive-state modulation to the scene's overall presence
+                // and the inactive ring color. Keeps the visual vocabulary of state
+                // consistent across memory nodes, pipeline rings, and satellites.
+                val effOpacity = baseOpacity * statePresence
+                val effRingColor = if (stateTint != null) {
+                    Color(
+                        red = ringColor.red * 0.55f + stateTint.red * 0.45f,
+                        green = ringColor.green * 0.55f + stateTint.green * 0.45f,
+                        blue = ringColor.blue * 0.55f + stateTint.blue * 0.45f,
+                        alpha = 1f
+                    )
+                } else ringColor
+
                 // Draw H3ERE pipeline scaffolding (behind everything)
                 drawPipelineScaffolding(
                     pipelineState = pipelineState,
@@ -288,9 +402,9 @@ fun LiveGraphBackground(
                     cylinderRadius = cylinderRadius * 1.15f,  // Slightly larger than node cylinder
                     cylinderHeight = cylinderHeight,
                     currentTimeMs = currentTimeMs,
-                    baseOpacity = baseOpacity,
+                    baseOpacity = effOpacity,
                     isForegroundMode = isForegroundMode,
-                    ringColor = ringColor  // Use theme's tertiary color
+                    ringColor = effRingColor  // State-modulated inactive ring color
                 )
 
                 // Project and draw nodes (with optional spin apart explosion)
@@ -320,7 +434,7 @@ fun LiveGraphBackground(
                             drawBackgroundEdge(
                                 source = source,
                                 target = target,
-                                baseOpacity = baseOpacity
+                                baseOpacity = effOpacity
                             )
                         }
                     }
@@ -336,10 +450,26 @@ fun LiveGraphBackground(
 
                     drawBackgroundNode(
                         projected = projected,
-                        baseOpacity = baseOpacity,
+                        baseOpacity = effOpacity,
                         colorTheme = colorTheme,
                         birthProgress = birthProgress,
                         birthPulse = if (birthProgress < 1f) birthPulse else 0f
+                    )
+                }
+
+                // Draw adapter satellites orbiting the cylinder — the agent's body.
+                // These are drawn last so they sit above the memory/pipeline layers,
+                // making the agent's "limbs" the most visible moving element.
+                if (adapterOrbits.isNotEmpty()) {
+                    drawAdapterOrbits(
+                        orbits = adapterOrbits,
+                        rotationY = rotationY,
+                        rotationX = rotationX,
+                        centerX = centerX,
+                        centerY = centerY,
+                        cylinderRadius = cylinderRadius * 1.35f,  // Further out than the scaffolding
+                        cylinderHeight = cylinderHeight,
+                        baseOpacity = effOpacity
                     )
                 }
             }
@@ -529,6 +659,119 @@ private fun DrawScope.drawBackgroundNode(
             radius = scaledRadius * 0.4f,
             center = Offset(projected.x, projected.y)
         )
+    }
+}
+
+/**
+ * Per-adapter accent color. Keeps the body-part metaphor legible without
+ * requiring emoji-glyph rendering inside Canvas (which is expensive / brittle
+ * across KMP targets on 32-bit ARM).
+ */
+private fun adapterAccent(type: String): Color = when (type.lowercase()) {
+    "api" -> Color(0xFF60A5FA)               // sky blue — voice
+    "discord" -> Color(0xFF5865F2)           // discord brand
+    "home_assistant", "ha" -> Color(0xFF41BDF5)
+    "weather" -> Color(0xFFFBBF24)           // warm sun
+    "navigation", "nav" -> Color(0xFF34D399) // green — wayfinding
+    "wallet" -> Color(0xFFF59E0B)            // gold
+    "cirisverify" -> Color(0xFFA78BFA)       // violet — trust
+    "reddit" -> Color(0xFFFF4500)
+    "mcp" -> Color(0xFF94A3B8)
+    else -> Color(0xFFE5E7EB)
+}
+
+/**
+ * Draw adapter satellites orbiting the cylinder at their designated altitudes.
+ *
+ * Each satellite:
+ * - Traces a faint orbit ring at its altitude (gives the viewer a sense of the
+ *   constellation even when the satellite is behind the cylinder)
+ * - Renders as a pulsing colored dot at the orbit's current rotated position
+ * - Dims/gets smaller when on the back side (perspective cue)
+ *
+ * Cost is O(adapters × orbitSegments). Orbit segment count is tiny (12)
+ * so the whole pass is negligible even on low-end devices.
+ */
+private fun DrawScope.drawAdapterOrbits(
+    orbits: List<AdapterOrbit>,
+    rotationY: Float,
+    rotationX: Float,
+    centerX: Float,
+    centerY: Float,
+    cylinderRadius: Float,
+    cylinderHeight: Float,
+    baseOpacity: Float
+) {
+    val rotYRad = (rotationY.toDouble() * PI / 180.0).toFloat()
+    val rotXRad = (rotationX.toDouble() * PI / 180.0).toFloat()
+    val perspective = 800f
+
+    // Project a point at (theta, altitude) on the adapter's orbit ring.
+    fun project(theta: Float, altitude: Float): Triple<Float, Float, Float> {
+        val x3d = cos(theta) * cylinderRadius
+        val z3d = sin(theta) * cylinderRadius
+        val y3dBase = altitude * cylinderHeight / 2f
+        val y3d = (y3dBase * cos(rotXRad) - z3d * sin(rotXRad))
+        val zR = (y3dBase * sin(rotXRad) + z3d * cos(rotXRad))
+        val scale = perspective / (perspective + zR)
+        return Triple(centerX + x3d * scale, centerY + y3d * scale, zR)
+    }
+
+    orbits.forEach { orbit ->
+        val accent = adapterAccent(orbit.type)
+
+        // Faint orbit path — 12 segments, per-segment depth alpha so the
+        // back half is dimmer than the front (same trick as pipeline rings).
+        val segments = 12
+        for (i in 0 until segments) {
+            val t1 = (i.toFloat() / segments) * 2f * PI.toFloat()
+            val t2 = ((i + 1).toFloat() / segments) * 2f * PI.toFloat()
+            val (x1, y1, z1) = project(t1, orbit.altitude)
+            val (x2, y2, z2) = project(t2, orbit.altitude)
+            val frontFactor1 = (perspective / (perspective + z1)).coerceIn(0.3f, 1.5f)
+            val frontFactor2 = (perspective / (perspective + z2)).coerceIn(0.3f, 1.5f)
+            val segAlpha = ((frontFactor1 + frontFactor2) / 2f * baseOpacity * 0.12f).coerceIn(0f, 1f)
+            if (segAlpha > 0.01f) {
+                drawLine(
+                    color = accent.safeAlpha(segAlpha),
+                    start = Offset(x1, y1),
+                    end = Offset(x2, y2),
+                    strokeWidth = 1.5f
+                )
+            }
+        }
+
+        // Satellite dot — its theta is driven by the global rotationY plus
+        // the adapter's stable phase, so each adapter orbits at the same
+        // speed as the cylinder (which reads as "attached to the body").
+        val satTheta = rotYRad + orbit.phase
+        val (sx, sy, sz) = project(satTheta, orbit.altitude)
+        val depthScale = (perspective / (perspective + sz)).coerceIn(0.4f, 1.4f)
+        val isOnFront = sz < 0f  // Front half of cylinder
+        val coreAlpha = (baseOpacity * if (isOnFront) 1f else 0.45f).coerceIn(0f, 1f)
+        val activeMultiplier = if (orbit.isActive) 1f else 0.35f
+        val radius = 7f * depthScale
+
+        // Soft halo (slightly bigger, much more transparent)
+        drawCircle(
+            color = accent.safeAlpha((coreAlpha * 0.35f * activeMultiplier).coerceIn(0f, 1f)),
+            radius = radius * 2.0f,
+            center = Offset(sx, sy)
+        )
+        // Core dot
+        drawCircle(
+            color = accent.safeAlpha((coreAlpha * activeMultiplier).coerceIn(0f, 1f)),
+            radius = radius,
+            center = Offset(sx, sy)
+        )
+        // Tiny white pip for contrast on dark backgrounds (only front-facing)
+        if (isOnFront && orbit.isActive) {
+            drawCircle(
+                color = Color.White.safeAlpha((baseOpacity * 0.8f).coerceIn(0f, 1f)),
+                radius = radius * 0.35f,
+                center = Offset(sx, sy)
+            )
+        }
     }
 }
 

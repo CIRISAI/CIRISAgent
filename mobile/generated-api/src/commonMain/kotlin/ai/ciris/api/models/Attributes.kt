@@ -114,8 +114,13 @@ data class Attributes (
     /* Configuration key (unique within scope) */
     @SerialName(value = "key") val key: kotlin.String? = null,
 
-    /* Numeric value of the metric */
-    @SerialName(value = "value") val `value`: kotlin.Double? = null,
+    /* Value of the attribute — can be numeric (metrics), string, or a
+       structured object (config nodes use {"string_value": ..., "int_value": ...}).
+       Typed as JsonElement to tolerate all shapes; callers that need a
+       specific form should decode from this. MANUAL PATCH: OpenAPI spec
+       declares this as number but runtime returns union — do not let
+       regeneration revert this. */
+    @SerialName(value = "value") val `value`: kotlinx.serialization.json.JsonElement? = null,
 
     /* What this configuration controls */
     @SerialName(value = "description") val description: kotlin.String? = null,

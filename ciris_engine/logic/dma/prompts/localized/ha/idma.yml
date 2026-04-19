@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "Basira DMA - yana amfani da dabaran k_eff na CCA da rarraba mataki"
-version: "1.0"
+version: "1.1"
 
 # Haɗa Yarjejeniyar CIRIS a matsayin mahalli
 accord_header: true

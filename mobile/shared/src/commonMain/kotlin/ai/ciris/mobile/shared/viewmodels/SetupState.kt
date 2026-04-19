@@ -258,6 +258,10 @@ data class SetupFormState(
     // WELCOME → NODE_AUTH → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
     val isNodeFlow: Boolean = false,
 
+    // Home Assistant addon mode: skips login and user creation
+    // Flow: WELCOME → PREFERENCES → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
+    val isHAAddonMode: Boolean = false,
+
     // Device auth state (Connect to Node flow)
     val deviceAuth: DeviceAuthState = DeviceAuthState(),
 

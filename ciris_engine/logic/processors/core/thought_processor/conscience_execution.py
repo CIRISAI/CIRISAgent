@@ -181,6 +181,12 @@ class ConscienceExecutionPhase:
         optimization_veto_result: Optional[OptimizationVetoResult] = None
         epistemic_humility_result: Optional[EpistemicHumilityResult] = None
 
+        # Conscience prompts (for localization validation/streaming)
+        entropy_prompt: Optional[str] = None
+        coherence_prompt: Optional[str] = None
+        optimization_veto_prompt: Optional[str] = None
+        epistemic_humility_prompt: Optional[str] = None
+
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
             conscience = entry.conscience
@@ -212,6 +218,9 @@ class ConscienceExecutionPhase:
                     threshold=0.4,  # Default threshold from ConscienceConfig
                     message=result.reason or f"Entropy: {result.entropy_score:.2f}",
                 )
+                # Capture prompt for localization validation
+                if result.entropy_prompt:
+                    entropy_prompt = result.entropy_prompt
             if result.coherence_score is not None:
                 coherence_level = result.coherence_score
                 # Capture full coherence check result
@@ -221,12 +230,21 @@ class ConscienceExecutionPhase:
                     threshold=0.6,  # Default threshold from ConscienceConfig
                     message=result.reason or f"Coherence: {result.coherence_score:.2f}",
                 )
+                # Capture prompt for localization validation
+                if result.coherence_prompt:
+                    coherence_prompt = result.coherence_prompt
             if result.optimization_veto_check is not None:
                 optimization_veto_result = result.optimization_veto_check
+                # Capture prompt for localization validation
+                if result.optimization_veto_prompt:
+                    optimization_veto_prompt = result.optimization_veto_prompt
             if result.epistemic_humility_check is not None:
                 epistemic_humility_result = result.epistemic_humility_check
                 uncertainty_acknowledged = True
                 reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
+                # Capture prompt for localization validation
+                if result.epistemic_humility_prompt:
+                    epistemic_humility_prompt = result.epistemic_humility_prompt
 
             # Capture bypass guardrail results
             if result.thought_depth_triggered is not None:
@@ -343,6 +361,11 @@ class ConscienceExecutionPhase:
             coherence_check=coherence_check_result,
             optimization_veto_check=optimization_veto_result,
             epistemic_humility_check=epistemic_humility_result,
+            # Conscience prompts for localization validation/streaming
+            entropy_prompt=entropy_prompt,
+            coherence_prompt=coherence_prompt,
+            optimization_veto_prompt=optimization_veto_prompt,
+            epistemic_humility_prompt=epistemic_humility_prompt,
         )
         return application_result
 

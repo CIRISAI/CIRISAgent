@@ -113,6 +113,19 @@ class SetupViewModel : ViewModel() {
         _state.value = _state.value.copy(setupMode = mode)
     }
 
+    // ========== Home Assistant Addon Mode ==========
+
+    /**
+     * Enable Home Assistant addon mode.
+     * In this mode:
+     * - Login is skipped (HA handles auth via SUPERVISOR_TOKEN)
+     * - User creation is skipped (ACCOUNT_AND_CONFIRMATION step)
+     * - Flow: WELCOME → PREFERENCES → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
+     */
+    fun setHAAddonMode(enabled: Boolean) {
+        _state.value = _state.value.copy(isHAAddonMode = enabled)
+    }
+
     /**
      * Select the on-device Gemma 4 provider inside BYOK mode.
      *
@@ -415,6 +428,16 @@ class SetupViewModel : ViewModel() {
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
+        } else if (currentState.isHAAddonMode) {
+            // HA Addon flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → COMPLETE
+            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth via SUPERVISOR_TOKEN)
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.PREFERENCES
+                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
+                else -> SetupStep.COMPLETE
+            }
         } else {
             // Normal flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
             when (currentState.currentStep) {
@@ -446,6 +469,17 @@ class SetupViewModel : ViewModel() {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.NODE_AUTH -> SetupStep.WELCOME
                 SetupStep.PREFERENCES -> SetupStep.NODE_AUTH
+                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
+                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
+                SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
+                else -> SetupStep.WELCOME
+            }
+        } else if (currentState.isHAAddonMode) {
+            // HA Addon flow: COMPLETE → OPTIONAL_FEATURES → LLM → PREFERENCES → WELCOME
+            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth)
+            when (currentState.currentStep) {
+                SetupStep.WELCOME -> SetupStep.WELCOME
+                SetupStep.PREFERENCES -> SetupStep.WELCOME
                 SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
                 SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
@@ -1461,7 +1495,16 @@ class SetupViewModel : ViewModel() {
 
             // For BYOK mode, we still need OAuth fields if user authenticated via OAuth
             // This allows OAuth users to use their own API keys while still using OAuth for login
+            // HA addon mode is treated as external auth (SUPERVISOR_TOKEN) - no password needed
             val isOAuthUser = currentState.isGoogleAuth && currentState.googleUserId != null
+            val isExternalAuthUser = isOAuthUser || currentState.isHAAddonMode
+
+            // Determine the effective OAuth provider
+            val effectiveOAuthProvider = when {
+                currentState.isHAAddonMode -> "home_assistant"
+                isOAuthUser -> currentState.oauthProvider
+                else -> null
+            }
 
             CompleteSetupRequest(
                 llm_provider = providerId,
@@ -1478,16 +1521,16 @@ class SetupViewModel : ViewModel() {
                 // Admin account (auto-generated)
                 system_admin_password = adminPassword,
 
-                // User account - OAuth users get auto-generated username, local users provide their own
-                admin_username = if (isOAuthUser) {
-                    "oauth_${currentState.oauthProvider}_user"
-                } else {
-                    currentState.username.ifEmpty { "admin" }
+                // User account - external auth users get auto-generated username, local users provide their own
+                admin_username = when {
+                    currentState.isHAAddonMode -> "ha_admin"
+                    isOAuthUser -> "oauth_${currentState.oauthProvider}_user"
+                    else -> currentState.username.ifEmpty { "admin" }
                 },
-                admin_password = if (isOAuthUser) null else currentState.userPassword,
+                admin_password = if (isExternalAuthUser) null else currentState.userPassword,
 
-                // OAuth fields - include if user authenticated via OAuth (even in BYOK mode)
-                oauth_provider = if (isOAuthUser) currentState.oauthProvider else null,
+                // OAuth fields - include for any external auth (OAuth or HA addon)
+                oauth_provider = effectiveOAuthProvider,
                 oauth_external_id = if (isOAuthUser) currentState.googleUserId else null,
                 oauth_email = if (isOAuthUser) currentState.googleEmail else null,
 

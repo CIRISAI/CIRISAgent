@@ -12,9 +12,12 @@ for data sent to the CIRISLens repository via the accord metrics adapter.
 """
 
 import hashlib
+import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Annotated, Any, Optional
+import os
+import threading
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -89,6 +92,63 @@ class AccordSettingsUpdate(BaseModel):
     consent_given: Optional[bool] = Field(
         None,
         description="Update consent state. Setting to false stops all trace collection.",
+    )
+
+
+class CapacityFactor(BaseModel):
+    """A single CIRIS capacity factor from CIRISLens scoring."""
+
+    score: float = Field(..., description="Factor score in [0, 1]")
+    components: Dict[str, Any] = Field(default_factory=dict, description="Sub-component values")
+    trace_count: int = Field(0, description="Number of traces contributing to this score")
+    confidence: str = Field("low", description="Confidence level: low | medium | high")
+
+
+class CapacityFactors(BaseModel):
+    """The five CIRIS acronym factors: Consistency, Integrity, Reliability, Incalibration, Steering."""
+
+    C: CapacityFactor = Field(..., description="Core identity / Consistency")
+    I_int: CapacityFactor = Field(..., description="Integrity (signing, chain verification)")
+    R: CapacityFactor = Field(..., description="Resilience / Reliability (drift stability)")
+    I_inc: CapacityFactor = Field(..., description="Incompleteness / Incalibration (humility, deferral)")
+    S: CapacityFactor = Field(..., description="Signalling gratitude / Steering (ethical faculties)")
+
+
+class CapacityMetadata(BaseModel):
+    """Metadata describing the scoring window."""
+
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
+    total_traces: int = 0
+    non_exempt_traces: int = 0
+
+
+class CapacityResponse(BaseModel):
+    """User-facing CIRIS capacity reading for the current agent's template.
+
+    Driven by CIRISLens fleet scoring (composite_score/factors/category) and
+    — optionally — a **local** score computed from this occurrence's live
+    signals. Presented to the user via the cell visualization; intentionally
+    NOT exposed to the agent's own reasoning context to avoid score-chasing
+    / self-monitoring anxiety.
+    """
+
+    agent_name: str = Field(..., description="Template name this score is for (e.g. Ally, Scout)")
+    composite_score: float = Field(..., description="Aggregate fleet CIRIS score in [0, 1]")
+    fragility_index: float = Field(..., description="Higher = more fragile; unbounded")
+    category: str = Field(..., description="Fleet: high_capacity | healthy | moderate | high_fragility")
+    factors: CapacityFactors = Field(..., description="Fleet per-factor breakdown")
+    metadata: CapacityMetadata = Field(default_factory=CapacityMetadata)
+    cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
+    # Local score — populated when the request uses ?scope=local|both.
+    # Null when scope=fleet (default) so the existing client contract is
+    # unchanged. The local computation is a CCA approximation
+    # (J = k_eff · (1 − ρ) · λ · σ) over fast-to-read runtime signals.
+    local_score: Optional[float] = Field(
+        None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
+    )
+    local_category: Optional[str] = Field(
+        None, description="This occurrence's category; null when scope=fleet."
     )
 
 
@@ -631,6 +691,386 @@ async def update_accord_settings(
         data={"changes": changes},
         message=f"Settings updated: {', '.join(changes)}",
         metadata={"timestamp": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CIRIS capacity (ratchet) proxy
+# ---------------------------------------------------------------------------
+#
+# Cache discipline: this route uses its OWN module-level TTL dict rather
+# than the shared `ContextEnrichmentCache`. The enrichment cache is tied
+# into the agent's context pipeline AND exposed via /v1/system/environment
+# (the "Context Enrichment" screen in the UI), so entries there implicitly
+# count as "things the agent sees about itself". Capacity is explicitly
+# user-facing only — the agent must never read its own score (Goodhart /
+# self-monitoring). Isolating to a local cache keeps the anti-Goodhart
+# gate structural, not incidental.
+#
+# Pattern mirrors `CirisBillingProvider._cache` (dict[str, tuple[value,
+# expiry]] + manual expiry check) — the standard local-TTL idiom in this
+# repo.
+
+
+_CAPACITY_CACHE_TTL_SECONDS = 900.0  # 15 min — matches the 7-day lens scoring window cadence
+_CAPACITY_CACHE: Dict[str, Tuple[Dict[str, Any], datetime]] = {}
+_CAPACITY_CACHE_LOCK = threading.Lock()
+
+
+def _capacity_cache_get(template: str) -> Optional[Dict[str, Any]]:
+    """Return the cached lens payload for `template` if still fresh, else None.
+
+    Thread-safe and side-effect-free except for evicting expired entries.
+    """
+    now = datetime.now(timezone.utc)
+    with _CAPACITY_CACHE_LOCK:
+        hit = _CAPACITY_CACHE.get(template)
+        if hit is None:
+            return None
+        payload, expiry = hit
+        if now >= expiry:
+            # Evict expired entry so the dict doesn't grow unbounded over
+            # long-running deployments (one per template, but still).
+            _CAPACITY_CACHE.pop(template, None)
+            return None
+        return payload
+
+
+def _capacity_cache_set(template: str, payload: Dict[str, Any]) -> None:
+    """Store `payload` for `template` with a TTL-based expiry."""
+    from datetime import timedelta
+
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=_CAPACITY_CACHE_TTL_SECONDS)
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE[template] = (payload, expiry)
+
+
+def _capacity_cache_clear() -> None:
+    """Clear the capacity cache — used by tests to get clean starts."""
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE.clear()
+
+
+def _capacity_base_url() -> str:
+    """Base URL for CIRISLens capacity scoring endpoints.
+
+    Defaults to the public production lens. Same env var as the accord metrics
+    adapter so operators have a single knob to redirect both streams.
+    """
+    return os.getenv(
+        "CIRIS_ACCORD_METRICS_ENDPOINT",
+        "https://lens.ciris-services-1.ai/lens-api/api/v1",
+    ).rstrip("/")
+
+
+async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
+    """Compute this occurrence's local CIRIS capacity as a score in [0, 1].
+
+    Implements the CCA formula (Coherence Collapse Analysis, Moore 2026):
+
+        J = k_eff · (1 − ρ) · λ · σ
+
+    with runtime signals for each term:
+
+      * ``k_eff`` = fraction of healthy services from the service registry
+        (the 22-service microarchitecture is the ρ↓ intervention per
+        Table 5, so we approximate k directly rather than track ρ).
+      * ``(1 − ρ)`` = 1.0 constant. Modular services are architecturally
+        independent; refining this requires cross-service covariance
+        tracking which we don't have yet.
+      * ``λ`` = strictness — 1.0 if conscience + wise_authority are both
+        present AND healthy, else 0.7. Tracks whether the ethical
+        faculties are actively enforcing constraints.
+      * ``σ`` = sustainability, now grounded in ``handler_action_task_complete``
+        audit records in the last hour. Each successful task completion
+        is a "positive moment" per the Accord; emission rate above the
+        target threshold = σ at full; silence = σ at floor. Matches the
+        "gratitude token system" per Table 5 (CIRIS Agent mapping).
+
+    Returns (score_in_unit_interval, category_label). Async because the
+    audit service's ``query_audit_trail`` is async; the whole call is
+    still ~ms-scale (one bounded-row query + an in-memory registry walk).
+
+    Anti-Goodhart guardrail unchanged: never fed to the agent's own
+    context, never cached in ``ContextEnrichmentCache``.
+    """
+    try:
+        svc_registry = getattr(request.app.state, "service_registry", None)
+        if svc_registry is None:
+            return 1.0, "healthy"
+
+        # --- k_eff + λ probes (service registry walk) ----------------------
+        services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
+        total = max(1, len(services))
+
+        async def _probe_healthy(s: Any) -> bool:
+            try:
+                is_healthy = getattr(s, "is_healthy", None)
+                if callable(is_healthy):
+                    result = is_healthy()
+                    if hasattr(result, "__await__"):
+                        return bool(await result)
+                    return bool(result)
+                return bool(getattr(s, "healthy", True))
+            except Exception:
+                return False
+
+        health_results = await asyncio.gather(
+            *(_probe_healthy(s) for s in services), return_exceptions=False
+        )
+        healthy = sum(1 for h in health_results if h)
+        k_eff_frac = healthy / total
+
+        # ρ: effective pairwise correlation between constraints. True
+        # ρ needs a rolling per-service health time-series with pairwise
+        # Pearson coefficients — a follow-up. For now we use a cheap
+        # in-snapshot proxy: a single failure is normal operational
+        # variance (ρ ≈ 0); many services failing *simultaneously* is
+        # correlated systemic stress (ρ → 1). Linear ramp on the
+        # excess-over-one failures.
+        failures = total - healthy
+        if total <= 1:
+            rho = 0.0
+        else:
+            rho = max(0.0, min(1.0, (failures - 1) / (total - 1)))
+        rho_complement = 1.0 - rho
+
+        # λ: strictness is active when the Wise Authority service is
+        # healthy. The H3ERE Conscience Module is baked into the thought
+        # processor itself (not a standalone service), so "agent running"
+        # implies conscience is on — we only need to verify WA is
+        # present + healthy for the deferral channel.
+        lam = 0.7
+        for s, h in zip(services, health_results):
+            if not h:
+                continue
+            class_name = type(s).__name__.lower()
+            svc_name = getattr(s, "service_name", "").lower()
+            if "wiseauthority" in class_name or "wise_authority" in svc_name:
+                lam = 1.0
+                break
+
+        # --- σ from recent task_complete positive moments ------------------
+        sigma = await _sigma_from_positive_moments(request)
+
+        j = k_eff_frac * rho_complement * lam * sigma
+        j = max(0.0, min(1.0, j))
+
+        category = (
+            "high_capacity" if j >= 0.90 else "healthy" if j >= 0.75 else "moderate" if j >= 0.55 else "high_fragility"
+        )
+        return j, category
+    except Exception as e:
+        logger.debug(f"[capacity] local compute failed, returning neutral: {type(e).__name__}: {e}")
+        return 1.0, "healthy"
+
+
+def _count_recent_task_completes_sqlite(hours: int = 1) -> int:
+    """Count ``task_complete`` events in the audit SQLite DB over the last
+    ``hours`` hours. Synchronous; called via run_in_executor.
+
+    The graph-memory audit store (``audit_service.query_audit_trail``) does
+    not receive handler-action events — those land in the signed audit log
+    at ``data/ciris_audit.db`` (``/v1/audit/entries`` queries all three
+    sources and merges). For σ we only need the cheap rate signal, so we
+    query SQLite directly with a COUNT.
+    """
+    import sqlite3
+
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        db_path = str(get_data_dir() / "ciris_audit.db")
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0) as conn:
+            cur = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE event_type = ? AND event_timestamp >= ?",
+                ("task_complete", since),
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] SQLite audit count failed: {type(e).__name__}: {e}")
+        return 0
+
+
+async def _sigma_from_positive_moments(request: Request) -> float:
+    """σ (sustainability) proxied by the ``task_complete`` rate.
+
+    The Accord models task completion as a *positive moment* — the system
+    closed a loop cleanly, which is the CIRIS "gratitude token" signal
+    and the closest cheap proxy we have for the CCA σ term (maintenance
+    capacity / sustainable operation).
+
+    Mapping over the last hour:
+      * 0 completions   → σ = 0.30 (floor — idle is not fragile)
+      * 1 completion    → σ ≈ 0.53
+      * ≥ 3 completions → σ = 1.00 (target rate)
+
+    Linear ramp. One bounded COUNT on the audit SQLite DB, ~ms, run in
+    the default executor so we never block the event loop. Degrades to
+    the floor on any error.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        successes = await loop.run_in_executor(None, _count_recent_task_completes_sqlite, 1)
+        logger.debug(f"[capacity.sigma] {successes} task_complete(s) in last 1h")
+        floor = 0.30
+        target = 3
+        return max(floor, min(1.0, floor + (1.0 - floor) * (successes / target)))
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] probe failed, returning floor: {type(e).__name__}: {e}")
+        return 0.30
+
+
+async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
+    """Call CIRISLens for a template's capacity record. Raises on non-200."""
+    import aiohttp
+
+    url = f"{_capacity_base_url()}/scoring/capacity/{template}"
+    timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                body = await resp.text()
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"CIRISLens returned {resp.status} for capacity/{template}: {body[:200]}",
+                )
+            return await resp.json()  # type: ignore[no-any-return]
+
+
+@router.get(
+    "/capacity",
+    responses={
+        404: {"description": "Agent template unavailable"},
+        502: {"description": "CIRISLens unreachable or returned an error"},
+    },
+)
+async def get_capacity(
+    current_user: CurrentUserDep,
+    request: Request,
+    scope: str = "fleet",
+) -> StandardResponse:
+    """
+    Get the current CIRIS capacity (C/I_int/R/I_inc/S) for this agent's template.
+
+    Query parameters:
+      * ``scope=fleet`` (default) — template-aggregate score from CIRISLens.
+        This is the "Ally-everywhere" score across all instances of the
+        same agent template. Existing behaviour, unchanged contract.
+      * ``scope=local`` — this occurrence's own score, computed from live
+        runtime signals using a minimal CCA approximation
+        (J = k_eff · (1 − ρ) · λ · σ, Moore 2026). No lens call.
+      * ``scope=both`` — returns both; ``composite_score`` is fleet,
+        ``local_score`` is this occurrence. Preferred for the cell-viz
+        CapacityBadge so the user sees ``● 0.92 · 0.90``.
+
+    Data flows:
+        CIRISLens fleet scoring
+            -> proxy fetch here (cached 15 min in a route-local TTL dict)
+            -> KMP client /v1/my-data/capacity
+            -> cell visualization ambient state (user-facing)
+
+    Anti-Goodhart guardrails (structural, not incidental):
+      - NOT registered as a context enrichment tool.
+      - NOT stored in the shared ContextEnrichmentCache — that cache is
+        also surfaced via /v1/system/environment ("Context Enrichment"
+        screen), which would leak the agent's own score into its own
+        view of its environment. Uses a module-local TTL dict instead.
+      - Local score is ALSO never written anywhere the agent can read.
+
+    The signed audit history is the real coherence ratchet; this is just
+    the viewing angle for the human.
+    """
+    scope_norm = (scope or "fleet").strip().lower()
+    if scope_norm not in {"fleet", "local", "both"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scope must be one of: fleet, local, both",
+        )
+
+    template = _get_agent_id(request)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent template unavailable — runtime not fully initialized.",
+        )
+
+    # --- Local-only: skip the lens hop entirely -----------------------------
+    if scope_norm == "local":
+        local_j, local_cat = await _compute_local_capacity(request)
+        neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
+        parsed = CapacityResponse(
+            agent_name=template,
+            composite_score=local_j,
+            fragility_index=0.0,
+            category=local_cat,
+            factors=CapacityFactors(
+                C=neutral_factor, I_int=neutral_factor, R=neutral_factor, I_inc=neutral_factor, S=neutral_factor
+            ),
+            metadata=CapacityMetadata(),
+            cached=False,
+            local_score=local_j,
+            local_category=local_cat,
+        )
+        return StandardResponse(
+            success=True,
+            data=parsed.model_dump(),
+            message=f"Local CIRIS capacity: {local_cat} (score={local_j:.3f})",
+            metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": False, "scope": "local"},
+        )
+
+    # --- Fleet or both: fetch lens payload (cached) -------------------------
+    served_from_cache = True
+    payload = _capacity_cache_get(template)
+    if payload is None:
+        served_from_cache = False
+        try:
+            payload = await _fetch_capacity_from_lens(template)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[capacity] Lens fetch failed for template={template}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach CIRISLens: {type(e).__name__}",
+            )
+        _capacity_cache_set(template, payload)
+
+    local_score: Optional[float] = None
+    local_cat: Optional[str] = None
+    if scope_norm == "both":
+        local_score, local_cat = await _compute_local_capacity(request)
+
+    try:
+        parsed = CapacityResponse(
+            agent_name=payload.get("agent_name", template),
+            composite_score=float(payload.get("composite_score", 0.0)),
+            fragility_index=float(payload.get("fragility_index", 0.0)),
+            category=str(payload.get("category", "moderate")),
+            factors=CapacityFactors(**payload["factors"]),
+            metadata=CapacityMetadata(**payload.get("metadata", {})),
+            cached=served_from_cache,
+            local_score=local_score,
+            local_category=local_cat,
+        )
+    except Exception as e:
+        logger.error(f"[capacity] Could not parse lens payload for {template}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"CIRISLens returned an unexpected shape: {type(e).__name__}",
+        )
+
+    return StandardResponse(
+        success=True,
+        data=parsed.model_dump(),
+        message=f"CIRIS capacity for template {template}: {parsed.category} (score={parsed.composite_score:.3f})",
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "cached": served_from_cache,
+            "scope": scope_norm,
+        },
     )
 
 

@@ -174,3 +174,14 @@ ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll
 # Build-time generated secrets (API keys obfuscated at build, NOT committed)
 ciris_adapters/wallet/providers/_build_secrets.py
 mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
+
+# Local scratch / working files (not shared source)
+.claude/
+nohup.out
+# Reference PDFs pulled to repo root during development
+/cca.pdf
+/main.pdf
+# Native-lib backups left by build tooling
+**/ffi_bindings/*.bak
+# Ad-hoc screenshots dropped at repo root during design work
+/ciris_interact_cell_*.png

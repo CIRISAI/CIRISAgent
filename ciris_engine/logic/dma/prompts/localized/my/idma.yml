@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "အလိုလိုသိစိတ် DMA - CCA k_eff ပုံသေနည်းနှင့် အဆင့်အမျိုးအစားခွဲခြားမှု ကျင့်သုံးသည်"
-version: "1.0"
+version: "1.1"
 
 # CIRIS သဘောတူညီချက်ကို အကြောင်းအရာအဖြစ် ထည့်သွင်းပါ
 accord_header: true

@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "Intuition DMA - 应用CCA k_eff公式和阶段分类"
-version: "1.0"
+version: "1.1"
 
 # Include the CIRIS Accord as context
 accord_header: true

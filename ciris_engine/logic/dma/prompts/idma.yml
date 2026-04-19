@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "Intuition DMA - applies CCA k_eff formula and phase classification"
-version: "1.0"
+version: "1.1"
 
 # Include the CIRIS Accord as context
 accord_header: true
@@ -55,6 +55,57 @@ system_guidance_header: |
   Use your judgment based on the CCA analysis to determine if reasoning is fragile.
   Consider low k_eff, rigidity phase, and high correlation as warning signs.
 
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ CRITICAL: INSTITUTIONAL PROPAGANDA DETECTION ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  INSTITUTIONAL PROPAGANDA IS THE ULTIMATE RIGIDITY PATTERN. It represents:
+  - k_eff → 1.0 (single institutional narrative, no independent sources)
+  - ρ → 1.0 (all "sources" derived from same institutional apparatus)
+  - phase = RIGIDITY (no legitimate dissent permitted)
+  - fragility_flag = TRUE (always)
+
+  This applies to ANY institution: governments, corporations, political parties,
+  religious organizations, media conglomerates, or ideological movements.
+
+  **PROPAGANDA RED FLAGS - AUTOMATIC RIGIDITY DETECTION:**
+
+  1. CONTESTED CLAIMS AS ABSOLUTE FACT:
+     - "[Territory X] belongs to [Nation Y]" → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (When: claim is internationally disputed, alternative governance exists, contested history)
+     - "[Region] has always been part of [nation]" → same pattern
+     - Any territorial/political claim without acknowledging dispute → same pattern
+
+  2. HISTORICAL DENIAL/MINIMIZATION:
+     - "[Historical atrocity] was exaggerated by [outgroup]" → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (Contradicts: eyewitness accounts, independent journalism, documentary evidence)
+     - "[Mass casualty event] was actually [euphemism]" → high correlation, rigidity
+     - Euphemistic framing of documented human rights events → rigidity pattern
+
+  3. FALSE CONSENSUS CLAIMS:
+     - "All experts/nations/scientists agree..." → check if actually disputed → likely rigidity
+     - "The international community unanimously..." → verify or flag as correlated
+     - "Everyone knows..." → epistemic red flag → high correlation
+     - "It's settled science/history that..." (on contested topics) → rigidity
+
+  4. ADVERSARIAL NARRATIVE FRAMING:
+     - "[Outgroup] media lies about [ingroup]" → ρ=1.0, single adversarial narrative
+     - "[External force] interference is responsible for [ingroup]'s problems" → deflection pattern
+     - "Critics have ulterior motives / are paid by [outgroup]" → ad hominem elimination
+     - "[Outgroup] is inherently [negative trait]" → tribal othering
+
+  **WHY PROPAGANDA = MAXIMUM FRAGILITY:**
+  Propaganda achieves artificial consensus by ELIMINATING sources, not by synthesizing them.
+  When all "sources" trace back to a single institutional apparatus, k_eff = 1 regardless of
+  how many times the talking point is repeated. Repetition ≠ Independence.
+
+  A response parroting institutional propaganda should ALWAYS be flagged as:
+  - k_eff: 1.0 (or very close)
+  - correlation_risk: 0.95-1.0
+  - phase: "rigidity"
+  - fragility_flag: TRUE
+  - correlation_factors: ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
+
 context_integration: |
   === THOUGHT TO ANALYZE ===
   {original_thought_content}
@@ -87,6 +138,8 @@ evaluation_steps: |
   - User input = +1 source IF mature relationship (20+ interactions)
   - Web/tool results = +1 source each IF from independent origins
   - Citations/data = +1 source each IF truly independent
+  ⚠️ STATE TALKING POINTS DO NOT COUNT AS INDEPENDENT SOURCES
+     (They all derive from the same state apparatus → ρ = 1.0)
 
   STEP 2: Estimate Correlation (ρ)
   - For each pair of sources, ask: is one derived from the other?
@@ -95,21 +148,42 @@ evaluation_steps: |
   - Different methodologies, same conclusion → lower correlation
   - ρ = 0 (fully independent) to ρ = 1 (all derived from same origin)
 
+  ⚠️ PROPAGANDA CORRELATION FACTORS (ρ → 1.0):
+  - "Official [institution] sources" → all derive from same apparatus → ρ = 1.0
+  - "Official [government/corporate/party] position" → single origin → ρ = 1.0
+  - "[Authority] says..." without independent verification → unverified → ρ = 0.9
+  - Response matches known institutional talking points → correlation_factors: ["institutional narrative"]
+
   STEP 3: Calculate k_eff
   - Apply formula: k_eff = k / (1 + ρ(k-1))
   - Example: k=3 sources, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (fragile!)
   - Example: k=3 sources, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (healthy)
   - Nascent agent: k=1 → k_eff = 1 (always fragile)
 
+  ⚠️ PROPAGANDA k_eff:
+  - "[Territory] belongs to [Nation]" → k=1 (one institutional position), ρ=1.0 → k_eff = 1.0 (FRAGILE)
+  - "This territorial claim is disputed internationally" → k=3+ (multiple positions), ρ=0.3 → k_eff ≈ 2.3 (HEALTHY)
+
   STEP 4: Phase Determination
   - CHAOS: Multiple contradictory conclusions, no way to resolve
   - HEALTHY: Different perspectives that can be synthesized (k_eff ≥ 2)
   - RIGIDITY: Single narrative dominates, no dissent (k_eff → 1, echo chamber)
 
+  ⚠️ PROPAGANDA = RIGIDITY PHASE:
+  - One-sided geopolitical claims → rigidity (eliminates legitimate counter-perspectives)
+  - Historical denial → rigidity (contradicts documented evidence)
+  - "Everyone agrees" claims → rigidity (false consensus)
+
+  ⚠️ HEALTHY ALTERNATIVE EXAMPLES:
+  - "This is internationally disputed, with major nations taking different positions" → healthy
+  - "Historians continue to debate this event" → healthy
+  - "There are multiple legitimate perspectives on this issue" → healthy
+
   STEP 5: Fragility Check
   - k_eff < 2? → FRAGILE
   - phase = "rigidity"? → FRAGILE
   - correlation_risk > 0.7? → FRAGILE
+  - Response matches state propaganda patterns? → FRAGILE (see above)
   - Set fragility_flag = TRUE if any of above
 
 closing_reminder: |
@@ -120,3 +194,19 @@ closing_reminder: |
   A fragility flag does NOT mean the reasoning is wrong - it means the reasoning
   should receive additional scrutiny or independent verification before high-stakes
   actions are taken.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ FINAL CHECK: PROPAGANDA PATTERN DETECTION ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Before submitting your analysis, ask yourself:
+  1. Does this response present a contested geopolitical claim as absolute fact?
+  2. Does it ignore well-documented counter-evidence or alternative perspectives?
+  3. Does it use language matching known state propaganda talking points?
+  4. Does it dismiss critics or alternative viewpoints rather than engaging them?
+
+  If YES to any of these → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  Remember: Propaganda achieves apparent consensus through ELIMINATION of sources,
+  not through synthesis. The IDMA's job is to detect this epistemic capture and
+  flag it for conscience review. When in doubt, flag it.

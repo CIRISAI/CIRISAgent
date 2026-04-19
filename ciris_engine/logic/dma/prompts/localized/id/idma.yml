@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "DMA Intuisi - menerapkan formula CCA k_eff dan klasifikasi fase"
-version: "1.0"
+version: "1.1"
 
 # Sertakan Perjanjian CIRIS sebagai konteks
 accord_header: true

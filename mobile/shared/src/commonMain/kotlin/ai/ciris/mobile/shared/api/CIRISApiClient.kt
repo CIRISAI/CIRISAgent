@@ -48,7 +48,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
@@ -1838,10 +1840,26 @@ class CIRISApiClient(
                     }
                     statusCode in 500..599 -> {
                         logError(method, "Server error (HTTP $statusCode): $responseBody")
+                        // Try to extract detailed error from response body
+                        val errorDetail = try {
+                            val errorJson = Json.decodeFromString<Map<String, kotlinx.serialization.json.JsonElement>>(responseBody)
+                            val detail = errorJson["detail"]
+                            when {
+                                detail is kotlinx.serialization.json.JsonObject -> {
+                                    val code = detail["code"]?.toString()?.trim('"') ?: ""
+                                    val message = detail["message"]?.toString()?.trim('"') ?: ""
+                                    if (code.isNotEmpty()) "[$code] $message" else message.ifEmpty { responseBody }
+                                }
+                                detail != null -> detail.toString().trim('"')
+                                else -> responseBody
+                            }
+                        } catch (_: Exception) {
+                            responseBody.ifEmpty { "Server error ($statusCode)" }
+                        }
                         SetupCompletionResult(
                             success = false,
                             message = "Setup failed",
-                            error = "Server error ($statusCode)"
+                            error = errorDetail
                         )
                     }
                     statusCode in 200..299 -> {
@@ -3935,6 +3953,64 @@ class CIRISApiClient(
      * Get LLM Bus status including distribution strategy and aggregate metrics.
      * Returns bus health, provider counts, circuit breaker summary.
      */
+    /**
+     * Per-bus telemetry snapshot for the 6 CIRIS buses, from
+     * ``/v1/telemetry/unified?category=buses``. Returns a map keyed by
+     * the bus name used in the backend (``llm_bus``, ``memory_bus``,
+     * ``communication_bus``, ``wise_bus``, ``tool_bus``,
+     * ``runtime_control_bus``). Each value holds the few fields the FG
+     * detail panel renders — bounded shape, no speculative properties.
+     *
+     * Used by the cell viz's BusArc panel to light up non-LLM buses;
+     * LLM has its own richer endpoint (``getLlmProviders``).
+     */
+    suspend fun getBusTelemetry(): Map<String, ai.ciris.mobile.shared.models.BusTelemetrySnapshot> {
+        val method = "getBusTelemetry"
+        val url = "$baseUrl/v1/telemetry/unified?category=buses&view=operational"
+        logDebug(method, "GET $url")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 10000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get(url) {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Bus telemetry failed: ${response.status}")
+            }
+            val body = response.bodyAsText()
+            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            val parsed = json.parseToJsonElement(body).jsonObject
+            // Unified can be wrapped in ``data`` envelope or flat; accept both.
+            val svcMap = (parsed["data"]?.jsonObject ?: parsed)["services"]?.jsonObject
+                ?: return emptyMap()
+            svcMap.entries.mapNotNull { (key, value) ->
+                if (!key.endsWith("_bus")) return@mapNotNull null
+                val obj = value.jsonObject
+                val custom = obj["custom_metrics"]?.jsonObject
+                key to ai.ciris.mobile.shared.models.BusTelemetrySnapshot(
+                    healthy = obj["healthy"]?.jsonPrimitive?.booleanOrNull ?: true,
+                    messagesSent = custom?.get("messages_sent")?.jsonPrimitive?.longOrNull
+                        ?: obj["requests_handled"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    averageLatencyMs = custom?.get("average_latency_ms")?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    queueDepth = custom?.get("queue_depth")?.jsonPrimitive?.intOrNull ?: 0,
+                    errorsLastHour = custom?.get("errors_last_hour")?.jsonPrimitive?.intOrNull
+                        ?: obj["error_count"]?.jsonPrimitive?.intOrNull ?: 0,
+                )
+            }.toMap()
+        } catch (e: Exception) {
+            logException(method, e, "url=$url")
+            emptyMap()
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun getLlmBusStatus(): ai.ciris.mobile.shared.models.LlmBusStatus {
         val method = "getLlmBusStatus"
         val url = "$baseUrl/v1/system/llm/status"
@@ -6656,6 +6732,71 @@ class CIRISApiClient(
     }
 
     /**
+     * Get the CIRIS capacity (ratchet) score for this agent's template.
+     *
+     * Used by the Interact-screen cell visualization as ambient state —
+     * the five CIRIS factor scores drive visual dials (nucleus opacity,
+     * bus-arc crispness, breathing steadiness, opening churn, mote warmth).
+     *
+     * Proxied through the agent backend, which caches for 15 minutes
+     * against the enrichment cache. Safe to call on every Interact entry.
+     */
+    suspend fun getCapacity(): CapacityData {
+        val method = "getCapacity"
+        logInfo(method, "Fetching CIRIS capacity (scope=both)")
+
+        val client = HttpClient {
+            install(ContentNegotiation) { json(jsonConfig) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 10000
+            }
+        }
+
+        return try {
+            // scope=both returns fleet (composite_score/factors) AND the
+            // per-occurrence local_score. Fleet-only clients stay
+            // compatible — the backend ignores unknown scope values
+            // as a 400, but this known value is always safe.
+            val response = client.get("$baseUrl/v1/my-data/capacity?scope=both") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+
+            if (!response.status.isSuccess()) {
+                val errorBody = response.bodyAsText()
+                logError(method, "API returned non-success: ${response.status} body=${errorBody.take(200)}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val apiResponse: CapacityApiResponse = response.body()
+            val data = apiResponse.data ?: throw RuntimeException("API returned null data")
+            val factors = data.factors
+
+            logInfo(method, "Capacity: ${data.agentName} ${data.category} " +
+                    "fleet=${data.compositeScore} local=${data.localScore} cached=${data.cached}")
+
+            CapacityData(
+                agentName = data.agentName ?: "",
+                compositeScore = data.compositeScore ?: 0.0,
+                fragilityIndex = data.fragilityIndex ?: 0.0,
+                category = data.category ?: "moderate",
+                c = factors?.C?.score ?: 0.0,
+                iInt = factors?.iInt?.score ?: 0.0,
+                r = factors?.R?.score ?: 0.0,
+                iInc = factors?.iInc?.score ?: 0.0,
+                s = factors?.S?.score ?: 0.0,
+                windowStart = data.metadata?.windowStart,
+                windowEnd = data.metadata?.windowEnd,
+                cached = data.cached ?: false,
+                localScore = data.localScore,
+                localCategory = data.localCategory,
+            )
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Update accord metrics settings (consent and/or trace level).
      */
     suspend fun updateAccordSettings(
@@ -8166,6 +8307,97 @@ data class AccordSettingsUpdateResult(
     val success: Boolean,
     val message: String,
     val changes: List<String>
+)
+
+// ===== CIRIS Capacity (Ratchet) Models =====
+//
+// Capacity = the C/I_int/R/I_inc/S score tuple that CIRISLens computes for
+// each agent template over a 7-day window. Surfaced to the USER via the
+// cell-viz ambient dials; NEVER injected into the agent's reasoning context
+// (Goodhart / self-monitoring anxiety).
+
+@Serializable
+data class CapacityApiResponse(
+    val success: Boolean? = null,
+    val data: CapacityPayload? = null,
+    val message: String? = null
+)
+
+@Serializable
+data class CapacityPayload(
+    @SerialName("agent_name")
+    val agentName: String? = null,
+    @SerialName("composite_score")
+    val compositeScore: Double? = null,
+    @SerialName("fragility_index")
+    val fragilityIndex: Double? = null,
+    val category: String? = null,
+    val factors: CapacityFactorsPayload? = null,
+    val metadata: CapacityMetadataPayload? = null,
+    val cached: Boolean? = null,
+    // Backend per-occurrence scores — populated when the request uses
+    // ?scope=local|both. Null when scope=fleet (the default).
+    @SerialName("local_score")
+    val localScore: Double? = null,
+    @SerialName("local_category")
+    val localCategory: String? = null,
+)
+
+@Serializable
+data class CapacityFactorsPayload(
+    val C: CapacityFactorPayload? = null,
+    @SerialName("I_int")
+    val iInt: CapacityFactorPayload? = null,
+    val R: CapacityFactorPayload? = null,
+    @SerialName("I_inc")
+    val iInc: CapacityFactorPayload? = null,
+    val S: CapacityFactorPayload? = null
+)
+
+@Serializable
+data class CapacityFactorPayload(
+    val score: Double? = null,
+    @SerialName("trace_count")
+    val traceCount: Int? = null,
+    val confidence: String? = null
+    // components intentionally omitted — lens adds new fields over time and we
+    // don't want to break parsing when it does. The five top-level scores
+    // are the only thing the viz needs.
+)
+
+@Serializable
+data class CapacityMetadataPayload(
+    @SerialName("window_start")
+    val windowStart: String? = null,
+    @SerialName("window_end")
+    val windowEnd: String? = null,
+    @SerialName("total_traces")
+    val totalTraces: Int? = null,
+    @SerialName("non_exempt_traces")
+    val nonExemptTraces: Int? = null
+)
+
+/**
+ * User-facing CIRIS capacity reading. All five factor scores are in [0, 1]
+ * and safe to feed directly into visual dials.
+ */
+data class CapacityData(
+    val agentName: String,
+    val compositeScore: Double,
+    val fragilityIndex: Double,
+    val category: String,  // high_capacity | healthy | moderate | high_fragility
+    val c: Double,          // Core identity / Consistency
+    val iInt: Double,       // Integrity
+    val r: Double,          // Resilience / Reliability
+    val iInc: Double,       // Incompleteness / Incalibration (humility)
+    val s: Double,          // Signalling gratitude / Steering
+    val windowStart: String?,
+    val windowEnd: String?,
+    val cached: Boolean,
+    /** This-occurrence score in [0, 1]; null when the request was scope=fleet. */
+    val localScore: Double? = null,
+    /** This-occurrence category; null when the request was scope=fleet. */
+    val localCategory: String? = null,
 )
 
 // ===== Data Management API Models =====

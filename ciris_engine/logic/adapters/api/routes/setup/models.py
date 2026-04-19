@@ -87,6 +87,14 @@ class SetupStatusResponse(BaseModel):
     config_exists: bool = Field(..., description="Whether config file exists")
     config_path: Optional[str] = Field(None, description="Path to config file if exists")
     setup_required: bool = Field(..., description="Whether setup is required")
+    skip_user_step: bool = Field(
+        default=False,
+        description="Whether to skip user creation step (e.g., HA ingress auth provides auth)",
+    )
+    auth_provider: Optional[str] = Field(
+        default=None,
+        description="Name of ingress auth provider handling authentication (e.g., 'home_assistant')",
+    )
 
 
 class VerifyStatusResponse(BaseModel):
@@ -375,6 +383,14 @@ class SetupCompleteRequest(BaseModel):
         None, description="OAuth external ID (e.g., Google user ID). Required if oauth_provider is set."
     )
     oauth_email: Optional[str] = Field(None, description="OAuth email address from the provider.")
+
+    # External auth - skip user creation entirely when auth is handled externally
+    # (e.g., Home Assistant ingress auth, CIRISMedical enterprise auth)
+    skip_user_creation: bool = Field(
+        default=False,
+        description="Skip user creation when authentication is handled by external system "
+        "(e.g., Home Assistant ingress, enterprise SSO). Users are created on-demand when they first authenticate.",
+    )
 
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")

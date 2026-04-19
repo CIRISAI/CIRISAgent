@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Query, Request
-
 from pydantic import BaseModel, Field
 
 from ciris_engine.logic.utils.path_resolution import get_env_file_path
@@ -338,25 +337,40 @@ def _apply_env_updates(updates: dict[str, str]) -> None:
             del os.environ[key]
 
 
-def _try_refresh_adapter_location(adapter_manager: Any, adapter_name: str, service_attr: str) -> None:
-    """Try to refresh location for a single adapter if it supports refresh_location."""
-    if adapter_name not in adapter_manager.loaded_adapters:
-        return
+def _try_refresh_adapter_location(adapter_manager: Any, adapter_type: str, service_attr: str) -> None:
+    """Try to refresh location for every loaded adapter of the given type.
 
-    instance = adapter_manager.loaded_adapters[adapter_name]
-    service = getattr(instance.adapter, service_attr, None)
-    if service is None:
-        return
+    Previously keyed `loaded_adapters` by the type name ("weather"), which never
+    matched — adapter_ids are `{type}_{hash}` (e.g. `weather_a8a272d8`). Now we
+    scan all loaded instances and match by `adapter_type` so location refresh
+    actually reaches the running adapter.
+    """
+    matched = False
+    for adapter_id, instance in adapter_manager.loaded_adapters.items():
+        if getattr(instance, "adapter_type", None) != adapter_type:
+            continue
+        matched = True
 
-    refresh_fn = getattr(service, "refresh_location", None)
-    if refresh_fn is None:
-        return
+        service = getattr(instance.adapter, service_attr, None)
+        if service is None:
+            logger.debug(f"[LOCATION] {adapter_type.title()} adapter {adapter_id} has no '{service_attr}' attr")
+            continue
 
-    result = refresh_fn()
-    if result:
-        logger.info(f"[LOCATION] {adapter_name.title()} adapter location refreshed")
-    else:
-        logger.debug(f"[LOCATION] {adapter_name.title()} adapter location unchanged")
+        refresh_fn = getattr(service, "refresh_location", None)
+        if refresh_fn is None:
+            continue
+
+        try:
+            result = refresh_fn()
+            if result:
+                logger.info(f"[LOCATION] {adapter_type.title()} adapter {adapter_id} location refreshed")
+            else:
+                logger.debug(f"[LOCATION] {adapter_type.title()} adapter {adapter_id} location unchanged")
+        except Exception as e:
+            logger.warning(f"[LOCATION] refresh_location() failed on {adapter_id}: {type(e).__name__}: {e}")
+
+    if not matched:
+        logger.debug(f"[LOCATION] No loaded adapters of type '{adapter_type}' to refresh")
 
 
 def _refresh_location_aware_adapters(request: Request) -> None:
@@ -385,9 +399,7 @@ def _refresh_location_aware_adapters(request: Request) -> None:
 
 
 @router.post("/location")
-async def update_user_location(
-    update_request: UpdateLocationRequest, request: Request
-) -> UpdateLocationResponse:
+async def update_user_location(update_request: UpdateLocationRequest, request: Request) -> UpdateLocationResponse:
     """Update user's location in the .env file.
 
     This persists the location so weather and other location-aware
@@ -414,7 +426,9 @@ async def update_user_location(
         _refresh_location_aware_adapters(request)
 
         logger.info("[LOCATION] User location updated successfully")
-        return UpdateLocationResponse(success=True, message="Location updated successfully", location_display=location_display)
+        return UpdateLocationResponse(
+            success=True, message="Location updated successfully", location_display=location_display
+        )
 
     except Exception as e:
         logger.error("[LOCATION] Failed to update location: %s", type(e).__name__)

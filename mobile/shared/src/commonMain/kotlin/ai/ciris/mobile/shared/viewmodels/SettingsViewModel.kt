@@ -9,6 +9,8 @@ import ai.ciris.mobile.shared.api.LlmConfigData
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.EnvFileUpdater
 import ai.ciris.mobile.shared.platform.SecureStorage
+import ai.ciris.mobile.shared.ui.screens.graph.CellVizConfig
+import ai.ciris.mobile.shared.ui.screens.graph.CellVizConfigStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -105,6 +107,23 @@ class SettingsViewModel(
     // Live background setting (persisted)
     private val _liveBackgroundEnabled = MutableStateFlow(true)  // Default enabled
     val liveBackgroundEnabled: StateFlow<Boolean> = _liveBackgroundEnabled.asStateFlow()
+
+    // User override for the cell-viz capability gate. When true, render the
+    // legacy cylinder visualization even if the device is capable of the
+    // newer cell viz. Default false — let the capability probe decide.
+    // Useful for users who prefer the classic look, have motion sensitivity,
+    // or want to isolate a visual regression.
+    private val _forceClassicViz = MutableStateFlow(false)
+    val forceClassicViz: StateFlow<Boolean> = _forceClassicViz.asStateFlow()
+
+    // Cell-visualization tuning config — every field on [CellVizConfig] is
+    // user-tunable via the Visualization Settings screen (FSD §5 step 11).
+    // Starts from DEFAULT at init; hydrated asynchronously from secure
+    // storage in [loadDisplaySettings]. InteractScreen reads this as the
+    // single source of truth for the cell viz's runtime bounds — so slider
+    // ranges and renderer ranges cannot disagree.
+    private val _cellVizConfig = MutableStateFlow(CellVizConfig.DEFAULT)
+    val cellVizConfig: StateFlow<CellVizConfig> = _cellVizConfig.asStateFlow()
 
     // Color theme setting (persisted) - Vapor (pink/cyan/plum) is default
     private val _colorTheme = MutableStateFlow(ColorTheme.DEFAULT)
@@ -222,6 +241,27 @@ class SettingsViewModel(
                     logInfo("loadDisplaySettings", ">>> Brightness preference loaded: ${_brightnessPreference.value}")
                 }.onFailure {
                     _brightnessPreference.value = BrightnessPreference.SYSTEM
+                }
+
+                // Load force-classic-viz override. Missing key → default false
+                // (let the capability probe decide).
+                secureStorage.get("force_classic_viz").onSuccess { value ->
+                    _forceClassicViz.value = value?.toBooleanStrictOrNull() == true
+                    logInfo("loadDisplaySettings", ">>> Force classic viz: ${_forceClassicViz.value}")
+                }.onFailure {
+                    _forceClassicViz.value = false
+                }
+
+                // Load cell-viz config. Missing / malformed keys fall back
+                // to [CellVizConfig] defaults; the returned value is always
+                // sanitized, so the renderer can trust every field.
+                try {
+                    val loaded = CellVizConfigStore.load(secureStorage)
+                    _cellVizConfig.value = loaded
+                    logInfo("loadDisplaySettings", ">>> Cell viz config loaded (rotationDegPerSec=${loaded.rotationDegPerSec}, maxMemoryMotes=${loaded.maxMemoryMotes})")
+                } catch (e: Exception) {
+                    logWarn("loadDisplaySettings", ">>> Cell viz config load failed: ${e.message}, using DEFAULT")
+                    _cellVizConfig.value = CellVizConfig.DEFAULT
                 }
             } catch (e: Exception) {
                 logWarn("loadDisplaySettings", ">>> Exception loading display settings: ${e.message}, defaulting to true")
@@ -872,6 +912,72 @@ class SettingsViewModel(
                 logDebug(method, "Live background setting persisted")
             } catch (e: Exception) {
                 logWarn(method, "Failed to persist live background setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * User override for the cell-viz capability gate.
+     *
+     * When enabled, the Interact screen renders the legacy cylinder
+     * visualization regardless of what [probeCellVizCapability] reports.
+     * Useful for users who prefer the classic look or have motion sensitivity.
+     * Persists to secure storage immediately.
+     */
+    fun toggleForceClassicViz(enabled: Boolean) {
+        val method = "toggleForceClassicViz"
+        logInfo(method, "Setting force-classic-viz to: $enabled")
+
+        _forceClassicViz.value = enabled
+
+        viewModelScope.launch {
+            try {
+                secureStorage.save("force_classic_viz", enabled.toString()).getOrThrow()
+                logDebug(method, "Force-classic-viz setting persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist force-classic-viz setting: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Update the cell-viz tuning config. The caller passes a partially
+     * edited [CellVizConfig]; [CellVizConfig.sanitized] forces every
+     * numeric field back into bounds before both the StateFlow and the
+     * secure-storage layer see it — so the renderer and the persisted
+     * surface always agree on what's safe.
+     */
+    fun updateCellVizConfig(config: CellVizConfig) {
+        val method = "updateCellVizConfig"
+        val sanitized = config.sanitized()
+        _cellVizConfig.value = sanitized
+
+        viewModelScope.launch {
+            try {
+                CellVizConfigStore.save(secureStorage, sanitized)
+                logDebug(method, "Cell viz config persisted")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to persist cell viz config: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Reset every cell-viz tunable to its [CellVizConfig] default and
+     * wipe the persisted `viz_config_*` keys from secure storage. Used
+     * by the Visualization Settings screen's Reset-to-defaults button.
+     */
+    fun resetCellVizConfig() {
+        val method = "resetCellVizConfig"
+        logInfo(method, "Resetting cell viz config to DEFAULT")
+        _cellVizConfig.value = CellVizConfig.DEFAULT
+
+        viewModelScope.launch {
+            try {
+                CellVizConfigStore.clear(secureStorage)
+                logDebug(method, "Cell viz config keys cleared from secure storage")
+            } catch (e: Exception) {
+                logWarn(method, "Failed to clear cell viz config: ${e.message}")
             }
         }
     }

@@ -19,10 +19,30 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .communication_service import HACommunicationService
+from .ingress_auth import get_ha_ingress_auth_provider
 from .service import HAIntegrationService
 from .tool_service import HAToolService
 
 logger = logging.getLogger(__name__)
+
+
+def _register_ingress_auth_if_supervisor_mode() -> None:
+    """Register HA ingress auth provider if running in HA Supervisor mode.
+
+    This allows users authenticated via HA's web UI to automatically
+    authenticate with CIRIS without separate login.
+    """
+    provider = get_ha_ingress_auth_provider()
+    if provider:
+        try:
+            from ciris_engine.logic.adapters.api.dependencies.auth import (
+                register_ingress_auth_provider,
+            )
+
+            register_ingress_auth_provider(provider, priority=100)
+            logger.info("[HA_ADAPTER] Registered HA ingress auth provider (Supervisor mode)")
+        except ImportError:
+            logger.debug("[HA_ADAPTER] API dependencies not available, skipping ingress auth registration")
 
 
 class HomeAssistantAdapter(Service):
@@ -110,6 +130,10 @@ class HomeAssistantAdapter(Service):
         """
         logger.info("Starting Home Assistant adapter")
 
+        # Register ingress auth provider if in HA Supervisor mode
+        # This allows HA-authenticated users to access CIRIS without separate login
+        _register_ingress_auth_if_supervisor_mode()
+
         # Start tool service (will lazy-init HA connection on first use)
         await self.tool_service.start()
         logger.info("HAToolService started")
@@ -155,6 +179,19 @@ class HomeAssistantAdapter(Service):
         """Stop the Home Assistant adapter."""
         logger.info("Stopping Home Assistant adapter")
         self._running = False
+
+        # Unregister ingress auth provider
+        provider = get_ha_ingress_auth_provider()
+        if provider:
+            try:
+                from ciris_engine.logic.adapters.api.dependencies.auth import (
+                    unregister_ingress_auth_provider,
+                )
+
+                unregister_ingress_auth_provider(provider)
+                logger.info("[HA_ADAPTER] Unregistered HA ingress auth provider")
+            except ImportError:
+                pass
 
         if self._lifecycle_task and not self._lifecycle_task.done():
             self._lifecycle_task.cancel()

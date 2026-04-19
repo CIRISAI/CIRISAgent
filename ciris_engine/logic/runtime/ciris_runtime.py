@@ -74,6 +74,7 @@ from .config_migration import (
 from .identity_manager import IdentityManager
 from .resume_helpers import (
     auto_enable_android_adapters_for_resume,
+    auto_enable_environment_adapters_for_resume,
     initialize_core_services_for_resume,
     initialize_identity_for_resume,
     initialize_llm_for_resume,
@@ -1245,6 +1246,18 @@ class CIRISRuntime(ServicePropertyMixin):
 
         await load_post_setup_adapters_for_resume(self, log_step, total_steps)
 
+    async def _resume_auto_enable_environment_adapters(self) -> None:
+        """Auto-enable adapters based on detected runtime environment.
+
+        This enables adapters that can be automatically configured based on
+        the environment, such as:
+        - home_assistant: When SUPERVISOR_TOKEN present (HA addon mode)
+        - ciris_hosted_tools: When on Android with Google auth
+
+        Called after post-setup adapters are loaded.
+        """
+        await auto_enable_environment_adapters_for_resume(self)
+
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes."""
         self._resume_in_progress = True
@@ -1303,10 +1316,13 @@ class CIRISRuntime(ServicePropertyMixin):
         # Step 11: Re-inject services into adapters
         self._resume_reinject_adapters(log_step, total_steps)
 
-        # Step 12: Load post-setup adapters (explicit loading only - no auto-enable)
+        # Step 12: Load post-setup adapters and auto-enable environment adapters
         # This loads adapters configured during setup (e.g., cirisnode after Portal registration)
+        # Then auto-enables environment-specific adapters (e.g., home_assistant when running as HA addon)
         log_step(12, total_steps, "Loading post-setup adapters...")
         await self._resume_load_post_setup_adapters(log_step, total_steps)
+        log_step(12, total_steps, "Auto-enabling environment adapters...")
+        await self._resume_auto_enable_environment_adapters()
         log_step(12, total_steps, "Post-setup adapters loaded")
 
         # Step 13: Build cognitive components

@@ -713,6 +713,35 @@ class StreamingVerificationModule:
                                         if event["is_recursive"]:
                                             recursive_conscience_count += 1
 
+                                    # Print conscience prompts if present (for localization debugging)
+                                    conscience_prompt_fields = [
+                                        "entropy_prompt",
+                                        "coherence_prompt",
+                                        "optimization_veto_prompt",
+                                        "epistemic_humility_prompt",
+                                    ]
+                                    has_prompts = any(event.get(f) for f in conscience_prompt_fields)
+                                    if has_prompts:
+                                        print("\n" + "=" * 80)
+                                        print("📝 CONSCIENCE PROMPTS (from conscience_result event)")
+                                        print("=" * 80)
+                                        for prompt_key in conscience_prompt_fields:
+                                            prompt_value = event.get(prompt_key)
+                                            if prompt_value:
+                                                print(f"\n🔹 {prompt_key.upper()}:")
+                                                print("-" * 40)
+                                                # Truncate very long prompts for readability
+                                                if len(prompt_value) > 3000:
+                                                    print(
+                                                        prompt_value[:3000]
+                                                        + f"\n... [truncated, {len(prompt_value)} chars total]"
+                                                    )
+                                                else:
+                                                    print(prompt_value)
+                                            else:
+                                                print(f"\n🔹 {prompt_key.upper()}: (not present)")
+                                        print("=" * 80 + "\n")
+
                                 elif event_type == "action_result":
                                     # Required fields per schema
                                     required_fields = {
@@ -867,7 +896,12 @@ class StreamingVerificationModule:
                                         "is_recursive",
                                         "conscience_override_reason",
                                         "action_was_overridden",
-                                        "conscience_prompt",
+                                        "conscience_prompt",  # Legacy single field (deprecated)
+                                        # === CONSCIENCE PROMPTS (for localization validation) ===
+                                        "entropy_prompt",
+                                        "coherence_prompt",
+                                        "optimization_veto_prompt",
+                                        "epistemic_humility_prompt",
                                         # Exempt actions flag
                                         "ethical_faculties_skipped",
                                         # === BYPASS GUARDRAIL 1: Updated Status ===
@@ -1197,6 +1231,54 @@ class StreamingVerificationModule:
         "zh": ["上下文摘要:", "主要思想:", "待评估思想:"],  # Chinese
     }
 
+    # Language-specific markers to detect proper localization in CONSCIENCE prompts
+    # These phrases appear in entropy/coherence/optimization_veto/epistemic_humility prompts
+    # The conscience prompts are now streamed as separate fields in conscience_result events
+    CONSCIENCE_LANGUAGE_MARKERS = {
+        "en": [
+            "Entropy Check:",  # Entropy prompt marker
+            "Coherence Check:",  # Coherence prompt marker
+            "Optimization Veto:",  # OptimizationVeto prompt marker
+            "Epistemic Humility:",  # EpistemicHumility prompt marker
+        ],
+        "am": [
+            "የኢንትሮፒ ምርመራ:",  # Amharic entropy
+            "የማቻቻል ምርመራ:",  # Amharic coherence
+            "የኦፕቲማይዜሽን ቬቶ:",  # Amharic optimization veto
+            "ኤፒስተሚክ ትሕትና:",  # Amharic epistemic humility
+        ],
+        "es": [
+            "Verificación de Entropía:",
+            "Verificación de Coherencia:",
+            "Veto de Optimización:",
+            "Humildad Epistémica:",
+        ],
+        "fr": [
+            "Vérification d'Entropie:",
+            "Vérification de Cohérence:",
+            "Veto d'Optimisation:",
+            "Humilité Épistémique:",
+        ],
+        "de": [
+            "Entropie-Prüfung:",
+            "Kohärenz-Prüfung:",
+            "Optimierungs-Veto:",
+            "Epistemische Demut:",
+        ],
+        "zh": [
+            "熵检查:",
+            "一致性检查:",
+            "优化否决:",
+            "认识谦逊:",
+        ],
+        "ja": [
+            "エントロピーチェック:",
+            "整合性チェック:",
+            "最適化拒否:",
+            "認識的謙虚さ:",
+        ],
+    }
+
     @staticmethod
     def verify_localization_change(base_url: str, token: str, target_language: str = "am") -> Dict[str, Any]:
         """
@@ -1278,7 +1360,7 @@ class StreamingVerificationModule:
             "total_events": streaming_events_result.get("total_events", 0),
         }
 
-        # Step 4: Analyze DMA prompts for localization (DMA prompts ARE streamed unlike conscience prompts)
+        # Step 4: Analyze DMA prompts for localization
         print(f"\n{'='*80}")
         print(f"📝 DMA PROMPT LOCALIZATION ANALYSIS")
         print(f"{'='*80}")
@@ -1342,6 +1424,71 @@ class StreamingVerificationModule:
                     snippet = prompt_text[:200] + "..." if len(prompt_text) > 200 else prompt_text
                     print(f"     Snippet: {snippet}")
 
+        # Step 4b: Analyze CONSCIENCE prompts for localization (v2.5+ streaming)
+        print(f"\n{'='*80}")
+        print(f"📝 CONSCIENCE PROMPT LOCALIZATION ANALYSIS (v2.5+)")
+        print(f"{'='*80}")
+
+        conscience_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("conscience_prompts", [])
+        english_conscience_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get("en", [])
+        target_conscience_markers = StreamingVerificationModule.CONSCIENCE_LANGUAGE_MARKERS.get(target_language, [])
+
+        conscience_localized = False
+        english_conscience_detected = False
+        conscience_prompt_analysis: List[Dict[str, Any]] = []
+
+        if not conscience_prompts_list:
+            print(f"  ⚠️  No conscience prompts captured (may be using legacy single field)")
+        else:
+            for prompt_data in conscience_prompts_list:
+                prompt_text = prompt_data.get("prompt", "")
+                conscience_type = prompt_data.get("type", "unknown")
+                field_name = prompt_data.get("field", "unknown")
+
+                analysis = {
+                    "conscience_type": conscience_type,
+                    "field": field_name,
+                    "prompt_length": len(prompt_text),
+                    "english_markers_found": [],
+                    "target_markers_found": [],
+                    "is_localized": False,
+                }
+
+                # Check for English markers
+                for marker in english_conscience_markers:
+                    if marker.lower() in prompt_text.lower():
+                        analysis["english_markers_found"].append(marker)
+                        english_conscience_detected = True
+
+                # Check for target language markers
+                for marker in target_conscience_markers:
+                    if marker in prompt_text:
+                        analysis["target_markers_found"].append(marker)
+                        conscience_localized = True
+
+                # Determine if properly localized
+                if target_language != "en":
+                    analysis["is_localized"] = (
+                        len(analysis["target_markers_found"]) > 0 and len(analysis["english_markers_found"]) == 0
+                    )
+                else:
+                    analysis["is_localized"] = len(analysis["english_markers_found"]) > 0
+
+                conscience_prompt_analysis.append(analysis)
+
+                # Print analysis
+                status = "✅" if analysis["is_localized"] else "❌"
+                print(f"\n  {status} CONSCIENCE: {conscience_type} ({field_name})")
+                print(f"     Prompt length: {analysis['prompt_length']} chars")
+                if analysis["english_markers_found"]:
+                    print(f"     ⚠️  English markers found: {analysis['english_markers_found']}")
+                if analysis["target_markers_found"]:
+                    print(f"     ✅ {target_language.upper()} markers found: {analysis['target_markers_found']}")
+                if not analysis["is_localized"] and target_language != "en":
+                    print(f"     ❌ Prompt is NOT localized to {target_language}!")
+                    snippet = prompt_text[:200] + "..." if len(prompt_text) > 200 else prompt_text
+                    print(f"     Snippet: {snippet}")
+
         # Step 5: Check the received events include all expected types
         received_events_list: List[Any] = streaming_result.get("received_events", []) if streaming_result else []
         received = set(received_events_list)
@@ -1370,15 +1517,15 @@ class StreamingVerificationModule:
 
         # Step 6: Determine overall localization success
         if target_language != "en":
-            # For non-English: success if at least one DMA prompt is localized
+            # For non-English: success if DMA prompts are localized
             # and NO English markers were found
-            localization_passed = dma_localized and not english_detected
-            if localization_passed:
+            dma_localization_passed = dma_localized and not english_detected
+            if dma_localization_passed:
                 localization_evidence.append(
                     {
                         "source": "dma_prompts",
                         "field": "localization",
-                        "value": f"Prompts localized to {target_language}",
+                        "value": f"DMA prompts localized to {target_language}",
                     }
                 )
             else:
@@ -1390,9 +1537,34 @@ class StreamingVerificationModule:
                     errors.append(
                         f"No {target_language} markers found in DMA prompts - localization may have failed"
                     )
+
+            # Also check conscience prompts if available
+            conscience_localization_passed = True  # Default to pass if no prompts captured
+            if conscience_prompts_list:
+                conscience_localization_passed = conscience_localized and not english_conscience_detected
+                if conscience_localization_passed:
+                    localization_evidence.append(
+                        {
+                            "source": "conscience_prompts",
+                            "field": "localization",
+                            "value": f"Conscience prompts localized to {target_language}",
+                        }
+                    )
+                else:
+                    if english_conscience_detected:
+                        errors.append(
+                            f"English markers found in conscience prompts when language should be {target_language}"
+                        )
+                    if not conscience_localized:
+                        errors.append(
+                            f"No {target_language} markers found in conscience prompts - localization may have failed"
+                        )
+
+            # Overall pass requires both DMA and conscience (if available) to be localized
+            localization_passed = dma_localization_passed and conscience_localization_passed
         else:
             # For English: success if English markers are found
-            localization_passed = english_detected
+            localization_passed = english_detected or (conscience_prompts_list and english_conscience_detected)
 
         # Step 7: Summary
         print(f"\n{'='*80}")
@@ -1405,7 +1577,8 @@ class StreamingVerificationModule:
         print(f"  Streaming test passed: {'✅' if streaming_success else '❌'}")
         print(f"  Events received: {streaming_total}")
         print(f"  DMA prompts captured: {len(dma_prompts_list)}")
-        print(f"  DMA localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
+        print(f"  Conscience prompts captured: {len(conscience_prompts_list)}")
+        print(f"  Overall localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
         print(f"  Localization evidence: {len(localization_evidence)} items")
 
         for evidence in localization_evidence:
@@ -1416,17 +1589,19 @@ class StreamingVerificationModule:
             for error in errors:
                 print(f"   - {error}")
 
-        # Success requires: language stored, streaming passed, AND DMA prompts localized
+        # Success requires: language stored, streaming passed, AND prompts localized
         success = len(localization_evidence) > 0 and streaming_success and localization_passed and len(errors) == 0
 
         if success:
             print(f"\n✅ LOCALIZATION TEST PASSED")
             print(f"   Language preference '{target_language}' is stored and propagated through reasoning pipeline")
             print(f"   DMA prompts are properly localized to {target_language}")
+            if conscience_prompts_list:
+                print(f"   Conscience prompts are properly localized to {target_language}")
         else:
             print(f"\n❌ LOCALIZATION TEST FAILED")
             if not localization_passed:
-                print(f"   DMA prompts are NOT properly localized to {target_language}")
+                print(f"   Prompts are NOT properly localized to {target_language}")
 
         print(f"{'='*80}\n")
 
@@ -1436,6 +1611,7 @@ class StreamingVerificationModule:
             "streaming_result": streaming_result,
             "localization_evidence": localization_evidence,
             "dma_prompt_analysis": dma_prompt_analysis,
+            "conscience_prompt_analysis": conscience_prompt_analysis,
             "errors": errors,
         }
 
@@ -1521,30 +1697,36 @@ class StreamingVerificationModule:
                                                 }
                                             )
 
-                                # Also capture conscience prompts if present
+                                # Capture all 4 individual conscience prompts (v2.5+ streaming)
                                 if event_type == "conscience_result":
-                                    conscience_prompt = event.get("conscience_prompt", "")
-                                    if conscience_prompt:
-                                        # Try to identify the conscience type from the prompt content
-                                        conscience_type = "unknown"
-                                        if "IRIS-E" in conscience_prompt or "entropy" in conscience_prompt.lower():
-                                            conscience_type = "entropy"
-                                        elif "IRIS-C" in conscience_prompt or "coherence" in conscience_prompt.lower():
-                                            conscience_type = "coherence"
-                                        elif (
-                                            "CIRIS-EOV" in conscience_prompt
-                                            or "optimization" in conscience_prompt.lower()
-                                        ):
-                                            conscience_type = "optimization_veto"
-                                        elif (
-                                            "CIRIS-EH" in conscience_prompt or "epistemic" in conscience_prompt.lower()
-                                        ):
-                                            conscience_type = "epistemic_humility"
+                                    # v2.5+: 4 separate prompt fields for each conscience check
+                                    prompt_fields = [
+                                        ("entropy_prompt", "entropy"),
+                                        ("coherence_prompt", "coherence"),
+                                        ("optimization_veto_prompt", "optimization_veto"),
+                                        ("epistemic_humility_prompt", "epistemic_humility"),
+                                    ]
+                                    for field_name, conscience_type in prompt_fields:
+                                        prompt_value = event.get(field_name, "")
+                                        if prompt_value:
+                                            conscience_prompts.append(
+                                                {
+                                                    "type": conscience_type,
+                                                    "field": field_name,
+                                                    "prompt": prompt_value,
+                                                    "thought_id": event.get("thought_id"),
+                                                }
+                                            )
 
+                                    # Legacy: also check single conscience_prompt field (deprecated)
+                                    legacy_prompt = event.get("conscience_prompt", "")
+                                    if legacy_prompt and not any(event.get(f[0]) for f in prompt_fields):
+                                        # Only add legacy if no individual prompts found
                                         conscience_prompts.append(
                                             {
-                                                "type": conscience_type,
-                                                "prompt": conscience_prompt,
+                                                "type": "legacy",
+                                                "field": "conscience_prompt",
+                                                "prompt": legacy_prompt,
                                                 "thought_id": event.get("thought_id"),
                                             }
                                         )

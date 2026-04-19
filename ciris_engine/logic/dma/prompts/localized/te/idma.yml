@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "అంతర్ దృష్టి DMA - CCA k_eff ఫార్ములా మరియు దశ వర్గీకరణను వర్తిస్తుంది"
-version: "1.0"
+version: "1.1"
 
 # CIRIS ఒప్పందాన్ని సందర్భంగా చేర్చండి
 accord_header: true

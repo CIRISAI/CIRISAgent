@@ -3471,12 +3471,13 @@ private fun DetailRow(
             text = label,
             fontSize = 11.sp,
             color = theme.textMuted,
-            modifier = Modifier.width(100.dp),
+            modifier = Modifier.weight(0.45f),  // Flexible width instead of fixed 100.dp
         )
         Text(
             text = value,
             fontSize = 11.sp,
             color = valueColor ?: theme.textPrimary,
+            modifier = Modifier.weight(0.55f),  // Takes remaining space
         )
     }
 }

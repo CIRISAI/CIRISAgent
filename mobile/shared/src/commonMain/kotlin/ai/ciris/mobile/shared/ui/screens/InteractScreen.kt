@@ -1135,9 +1135,9 @@ private fun TrustShield(
  *   - high_fragility  → red    (low-L-equivalent)
  *   - pre-fetch       → gray   (no data yet — same treatment as trust)
  *
- * Non-clickable by design in this pass: the viz itself is the interactive
- * readout. A details sheet (per-factor breakdown) can land later behind
- * a testableClickable tag if users want to drill in.
+ * The per-factor detail lives in the cell viz itself (ambient dials +
+ * multi-coloured nucleus shells). The badge is intentionally a single
+ * status LED so the chrome row stays scannable.
  */
 @Composable
 private fun CapacityBadge(

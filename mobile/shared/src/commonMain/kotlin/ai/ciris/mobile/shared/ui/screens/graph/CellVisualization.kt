@@ -84,7 +84,7 @@ internal val BUS_SEGMENTS: List<BusSegment> = listOf(
 // Nucleus styling
 // -----------------------------------------------------------------------------
 
-/** Warm amber the nucleus emits — fixed, not theme-derived. */
+/** Warm amber the nucleus core emits — fixed, not theme-derived. */
 private val NUCLEUS_AMBER = Color(0xFFE3A64B)
 
 /**
@@ -99,6 +99,28 @@ private val NUCLEUS_SHELL_FRACTIONS = floatArrayOf(
 /** Shell opacities, matched index-by-index to [NUCLEUS_SHELL_FRACTIONS]. */
 private val NUCLEUS_SHELL_OPACITIES = floatArrayOf(
     0.40f, 0.42f, 0.42f, 0.38f, 0.32f, 0.24f, 0.16f,
+)
+
+/**
+ * One colour per shell, mapped to the H3ERE pipeline stage that lights
+ * that shell on its SSE event. Using the bus palette makes the
+ * nucleus read as "the ring compressed into concentric bands" —
+ * reinforces the idea that each pipeline stage is *really* work
+ * happening on a specific bus.
+ *
+ * Innermost stays warm amber (the core identity tone — thought_start
+ * radiates *from* identity), then the palette walks the reasoning
+ * rhythm outward: memory pulls context, LLM reasons, wise consults
+ * intuition, tool selects action, runtime gates ethics, comm emits.
+ */
+private val NUCLEUS_SHELL_COLORS: List<Color> = listOf(
+    NUCLEUS_AMBER,                 // shell 0  thought_start         (core)
+    CIRISColors.BusMemory,         // shell 1  snapshot_and_context  (MEMORY)
+    CIRISColors.BusLLM,            // shell 2  dma_results           (LLM)
+    CIRISColors.BusWise,           // shell 3  idma_result           (WISE / intuition)
+    CIRISColors.BusTool,           // shell 4  aspdma_result         (TOOL)
+    CIRISColors.BusRuntime,        // shell 5  conscience_result     (RUNTIME veto gate)
+    CIRISColors.BusComm,           // shell 6  action_result         (COMM emits)
 )
 
 // =============================================================================
@@ -685,8 +707,11 @@ private fun DrawScope.drawNucleus(
         // the pulse is legible even on small-screen rendering.
         val alpha = (baseAlpha + glow * 0.70f).coerceAtMost(1f)
         val width = 0.9f + glow * 1.3f
+        // Each shell wears the colour of the pipeline stage / bus it
+        // represents — so the nucleus reads as the ring's layered echo.
+        val shellColor = NUCLEUS_SHELL_COLORS.getOrNull(i) ?: NUCLEUS_AMBER
         drawCircle(
-            color = NUCLEUS_AMBER.copy(alpha = alpha),
+            color = shellColor.copy(alpha = alpha),
             radius = outerRadius * frac,
             center = center,
             style = Stroke(width = width),

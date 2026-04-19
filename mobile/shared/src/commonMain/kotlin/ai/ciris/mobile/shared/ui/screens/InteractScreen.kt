@@ -46,6 +46,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -485,6 +486,10 @@ fun InteractScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                // clipToBounds so the cell viz's graphicsLayer pan/zoom
+                // can't paint outside this Box — otherwise a FG drag
+                // translates the Canvas up into the status bar area.
+                .clipToBounds()
                 .then(swipeSpinModifier)
         ) {
             // Cell viz / legacy cylinder renders as the BACKGROUND of the

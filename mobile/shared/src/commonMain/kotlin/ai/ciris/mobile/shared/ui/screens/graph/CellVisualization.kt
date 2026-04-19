@@ -539,38 +539,13 @@ fun CellVisualization(
                     onSelectionSnap.value(hit)
                 }
             }
-            .graphicsLayer(
-                scaleX = scale,
-                scaleY = scale,
-                translationX = panX,
-                translationY = panY,
-            )
-            .pointerInput(Unit) {
-                // Touch: pinch + drag.
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
-                    panX += pan.x
-                    panY += pan.y
-                }
-            }
-            .pointerInput(Unit) {
-                // Desktop: mouse wheel → zoom. Scroll.y is positive when
-                // the wheel rolls toward the user (zoom out) on most
-                // platforms; flip the sign so "scroll up" zooms in.
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Scroll) {
-                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                            if (delta != 0f) {
-                                scale = (scale * (1f - delta * 0.08f))
-                                    .coerceIn(0.8f, 3.0f)
-                                event.changes.forEach { it.consume() }
-                            }
-                        }
-                    }
-                }
-            }
+            // graphicsLayer + pan/zoom handlers REMOVED. The compositing
+            // layer was causing the Column's status bar + detail panel
+            // to visually disappear in FG even though zIndex should have
+            // kept them on top. Selection (tap) is the primary FG
+            // interaction — pan/zoom can return later via a different
+            // mechanism (e.g. draw-time scaling) that doesn't force a
+            // render layer.
     } else {
         modifier
     }

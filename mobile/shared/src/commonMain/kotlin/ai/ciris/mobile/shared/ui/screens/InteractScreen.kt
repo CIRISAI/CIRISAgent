@@ -404,8 +404,12 @@ fun InteractScreen(
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
-        // AI Warning banner (from fragment_interact.xml:65-76)
-        AIWarningBanner(theme = theme)
+        // AI Warning banner — hidden in FG so the cell viz gets a clean
+        // inspect area. The warning is a BG-only ambient reminder; in FG
+        // the user is actively reasoning-about-agent-state, not chatting.
+        if (visualizationMode != VisualizationMode.FOREGROUND) {
+            AIWarningBanner(theme = theme)
+        }
 
         // Pending deferrals banner - shows when there are human review requests waiting
         if (pendingDeferrals > 0) {

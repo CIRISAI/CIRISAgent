@@ -10,6 +10,17 @@ plugins {
 }
 
 kotlin {
+    // Suppress expect/actual beta warnings - feature is stable enough for production use
+    targets.all {
+        compilations.all {
+            compileTaskProvider.configure {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
+            }
+        }
+    }
+
     // Android
     androidTarget {
         compilerOptions {

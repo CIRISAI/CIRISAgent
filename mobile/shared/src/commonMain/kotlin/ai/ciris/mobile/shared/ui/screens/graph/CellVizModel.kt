@@ -259,6 +259,28 @@ fun channelPacketAt(startMs: Long, nowMs: Long): ChannelPacket? {
     return ChannelPacket(t = t, alpha = alpha)
 }
 
+/** Duration of the channel-open animation when an adapter comes online, in ms. */
+const val CHANNEL_OPEN_DURATION_MS: Long = 650L
+
+/**
+ * 0..1 progress of a channel's open animation, where 0 = just activated
+ * and 1 = fully open (line reaches the label anchor). Returns 1 for any
+ * channel that activated more than [CHANNEL_OPEN_DURATION_MS] ago, so
+ * stable channels render at full length with no extra work.
+ *
+ * Input is `activatedAtMs` — the wall-clock time the adapter first
+ * appeared as active. Callers pass 0 / -1 for "never activated" /
+ * "always-on from initial snapshot", in which case the animation is
+ * skipped entirely (full-length line).
+ */
+fun channelOpenProgress(activatedAtMs: Long, nowMs: Long): Float {
+    if (activatedAtMs <= 0L) return 1f  // stable / pre-existing — no animation
+    val elapsed = (nowMs - activatedAtMs).toFloat()
+    if (elapsed <= 0f) return 0f
+    if (elapsed >= CHANNEL_OPEN_DURATION_MS) return 1f
+    return smoothstep(elapsed / CHANNEL_OPEN_DURATION_MS.toFloat())
+}
+
 // =============================================================================
 // Membrane openings — dynamic apertures
 // =============================================================================

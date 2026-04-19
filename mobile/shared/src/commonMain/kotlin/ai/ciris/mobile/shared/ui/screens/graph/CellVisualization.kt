@@ -4,6 +4,7 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.ui.theme.getScopeColor
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +21,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
 import kotlin.math.cos
@@ -199,6 +202,11 @@ fun CellVisualization(
      * each adapter port outward past the membrane. Non-biological:
      * these are wiring diagrams, not reaching tendrils. Only enabled
      * in Foreground viz mode — BG/OFF keep the glanceable read.
+     *
+     * Also flips the viz into *interactive / frozen* mode: rotation,
+     * openings-drift, breathing, and mote-drift all pause so the user
+     * can actually click / zoom / drag the diagram without chasing
+     * moving targets. FG is "pause and explore", BG is "let it run".
      */
     showSignalChannels: Boolean = false,
 ) {
@@ -208,15 +216,37 @@ fun CellVisualization(
     // factors change (i.e. once per 15-min capacity refresh).
     val dials = remember(state) { derivedDials(state) }
 
+    // FG mode is a "pause and interact" mode — animation drivers check
+    // this flag each frame and skip state advancement when true. We
+    // still run the frame loop (cheaper than disposing / reattaching
+    // LaunchedEffects on every mode change) but every driver no-ops.
+    val isFrozen = showSignalChannels
+
+    // FG pan + zoom. Values apply via graphicsLayer on the Canvas so
+    // all inner drawing (ring, ports, motes, nucleus, channels) moves
+    // coherently. Pinch to zoom in [0.8, 3.0], drag to pan. Reset to
+    // 1/0/0 whenever the user leaves FG mode so returning to BG feels
+    // like a fresh glance rather than "where did I park it last time."
+    var scale by remember { mutableStateOf(1f) }
+    var panX by remember { mutableStateOf(0f) }
+    var panY by remember { mutableStateOf(0f) }
+    LaunchedEffect(showSignalChannels) {
+        if (!showSignalChannels) {
+            scale = 1f; panX = 0f; panY = 0f
+        }
+    }
+
     // Rotation driver: withFrameNanos accumulates delta-time. Single
     // source of truth for current angle; the membrane, ports, and any
-    // future rotating element all derive from it.
+    // future rotating element all derive from it. Frozen in FG so the
+    // user's pointer target (a port, a label) doesn't move out from
+    // under their finger mid-tap.
     var autoRotationDeg by remember { mutableStateOf(0f) }
     LaunchedEffect(cfg.rotationDegPerSec) {
         var lastFrameNs = 0L
         while (isActive) {
             withFrameNanos { frameTimeNs ->
-                if (lastFrameNs != 0L) {
+                if (lastFrameNs != 0L && !isFrozen) {
                     val dSec = (frameTimeNs - lastFrameNs) / 1_000_000_000f
                     autoRotationDeg =
                         (autoRotationDeg + cfg.rotationDegPerSec * dSec) % 360f
@@ -252,7 +282,7 @@ fun CellVisualization(
             .coerceIn(cfg.minOpenings, cfg.maxOpenings)
         while (isActive) {
             withFrameNanos { frameTimeNs ->
-                if (lastFrameNs != 0L) {
+                if (lastFrameNs != 0L && !isFrozen) {
                     val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                     nowMs.value = now
                     val alive = openings.value.filterNot { it.isDead(now) }
@@ -320,7 +350,29 @@ fun CellVisualization(
         }
     }
 
-    Canvas(modifier = modifier) {
+    // Apply pan + zoom via graphicsLayer when in FG so the entire diagram
+    // (frozen) can be explored. Gestures are only wired in FG so BG stays
+    // a passive glance surface — no accidental zooms while scrolling chat.
+    val canvasModifier = if (showSignalChannels) {
+        modifier
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = panX,
+                translationY = panY,
+            )
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(0.8f, 3.0f)
+                    panX += pan.x
+                    panY += pan.y
+                }
+            }
+    } else {
+        modifier
+    }
+
+    Canvas(modifier = canvasModifier) {
         val centerX = size.width / 2f
         val centerY = size.height / 2f
         val membraneRadius = minOf(size.width, size.height) * cfg.membraneRadiusFraction
@@ -803,12 +855,34 @@ private fun DrawScope.drawSignalChannels(
 
             val baseAlpha = if (adapter.isActive) 1f else cfg.portInactiveAlpha
 
-            // 1. Main leader line: port → label
+            // Channel-open progress (§8). Inactive adapters start short,
+            // activate-on-online will animate outward. For now — without
+            // a per-adapter activatedAtMs source — we bind progress to
+            // isActive (1 when active, 0.40 when inactive) so the
+            // primitive is ready to drive from future ViewModel wiring.
+            val openProgress = if (adapter.isActive) 1f else 0.40f
+            val liveLabelPos = Offset(
+                x = portPos.x + (labelPos.x - portPos.x) * openProgress,
+                y = portPos.y + (labelPos.y - portPos.y) * openProgress,
+            )
+
+            // 1. Main leader line: port → label. Two-stroke stack (halo +
+            //    bright core) so the line reads against the dark medium
+            //    at a distance — earlier single-stroke draft looked like
+            //    a tiny hair trailing off the port.
+            if (isDarkMode) {
+                drawLine(
+                    color = seg.color.copy(alpha = 0.25f * baseAlpha),
+                    start = portPos,
+                    end = liveLabelPos,
+                    strokeWidth = 5.0f,
+                )
+            }
             drawLine(
-                color = seg.color.copy(alpha = 0.60f * baseAlpha),
+                color = seg.color.copy(alpha = 0.85f * baseAlpha),
                 start = portPos,
-                end = labelPos,
-                strokeWidth = 1.4f,
+                end = liveLabelPos,
+                strokeWidth = 2.4f,
             )
 
             // 2. Fade tail: label → past the edge, exponentially fading.
@@ -816,7 +890,7 @@ private fun DrawScope.drawSignalChannels(
             //    the "dissolves into medium" curve reads without needing
             //    a gradient brush (cheap on 32-bit ARM).
             val tailSegments = 6
-            val tailStartAlpha = 0.35f * baseAlpha
+            val tailStartAlpha = 0.55f * baseAlpha
             for (i in 0 until tailSegments) {
                 val t0 = i.toFloat() / tailSegments
                 val t1 = (i + 1).toFloat() / tailSegments
@@ -830,17 +904,17 @@ private fun DrawScope.drawSignalChannels(
                 )
                 // Exponential fade: alpha at segment midpoint.
                 val tMid = (t0 + t1) * 0.5f
-                val fadeMul = kotlin.math.exp(-2.5f * tMid)
+                val fadeMul = kotlin.math.exp(-2.2f * tMid)
                 drawLine(
                     color = seg.color.copy(alpha = tailStartAlpha * fadeMul),
                     start = segStart,
                     end = segEnd,
-                    strokeWidth = 1.2f,
+                    strokeWidth = 2.0f,
                 )
             }
 
-            // 3. Travelling signal packet — dot sliding from port to
-            //    label over the active phase of the cycle. Uses the
+            // 3. Travelling signal packet — bright dot sliding from port
+            //    to label over the active phase of the cycle. Uses the
             //    adapter id's hash as a phase offset so packets on
             //    different channels don't lockstep.
             val phaseOffset = (adapter.id.hashCode().toLong() and 0xFFFFL)
@@ -854,14 +928,19 @@ private fun DrawScope.drawSignalChannels(
                 val packetCenter = Offset(px, py)
                 if (isDarkMode) {
                     drawCircle(
-                        color = seg.color.copy(alpha = 0.30f * packet.alpha),
+                        color = seg.color.copy(alpha = 0.35f * packet.alpha),
+                        radius = 7.5f,
+                        center = packetCenter,
+                    )
+                    drawCircle(
+                        color = seg.color.copy(alpha = 0.55f * packet.alpha),
                         radius = 4.5f,
                         center = packetCenter,
                     )
                 }
                 drawCircle(
-                    color = seg.color.copy(alpha = 0.95f * packet.alpha),
-                    radius = 2.2f,
+                    color = seg.color.copy(alpha = 0.98f * packet.alpha),
+                    radius = 3.2f,
                     center = packetCenter,
                 )
             }

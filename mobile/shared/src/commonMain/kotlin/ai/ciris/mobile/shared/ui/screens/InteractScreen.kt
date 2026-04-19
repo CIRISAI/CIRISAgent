@@ -791,7 +791,10 @@ private fun EnhancedStatusBar(
                         VisualizationMode.FOREGROUND -> theme.statusConnected.copy(alpha = 0.2f)
                         VisualizationMode.BACKGROUND -> theme.textAccent.copy(alpha = 0.15f)
                         VisualizationMode.OFF -> Color.Transparent
-                    }
+                    },
+                    modifier = Modifier.testableClickable("btn_viz_mode_toggle") {
+                        onVisualizationToggle()
+                    },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),

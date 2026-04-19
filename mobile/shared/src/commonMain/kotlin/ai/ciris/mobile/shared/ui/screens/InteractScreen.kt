@@ -241,10 +241,26 @@ fun InteractScreen(
     val energyDecayRate = 0.92f  // Energy decays faster when not spinning fast
     val energyGainMultiplier = 0.15f  // How much velocity contributes to energy (reduced for more flicks needed)
 
-    // Momentum animation loop for cylinder spin and tilt
+    // Momentum animation loop for cylinder spin and tilt. In FG mode
+    // the whole loop short-circuits and velocity is zeroed — FG is
+    // "pause and explore", so any residual spin from BG must stop
+    // the moment the user flips modes. `rememberUpdatedState` keeps
+    // the loop reading the CURRENT visualization mode rather than the
+    // launch-time capture.
+    val vizModeState = rememberUpdatedState(visualizationMode)
     LaunchedEffect(Unit) {
         while (isActive) {
             kotlinx.coroutines.delay(16)  // ~60 FPS
+
+            if (vizModeState.value == VisualizationMode.FOREGROUND) {
+                // Kill momentum instantly so re-entering BG later doesn't
+                // resume with stale velocity. Don't advance rotation; a
+                // dedicated FG rotate gesture (TODO: 2-finger rotate) is
+                // the only way to spin the cell in this mode.
+                rotationVelocity = 0f
+                spinEnergy = 0f
+                continue
+            }
 
             // Horizontal spin momentum
             if (abs(rotationVelocity) > 0.1f) {

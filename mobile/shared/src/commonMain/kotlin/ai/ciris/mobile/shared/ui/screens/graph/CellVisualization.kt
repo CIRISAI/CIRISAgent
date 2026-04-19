@@ -320,7 +320,29 @@ fun CellVisualization(
                         val nowWallMs = kotlinx.datetime.Clock.System
                             .now().toEpochMilliseconds()
                         val elapsedMs = nowWallMs - rippleStart
-                        if (elapsedMs in 0L..RIPPLE_PAUSE_MS) 0.2f else 1.0f
+                        // Ease-in-out across the 800ms pause: ramp into
+                        // 0.2× over the first 20% of the window, hold,
+                        // then ramp back to 1.0× over the last 20%. A
+                        // hard step-down read as a render glitch; the
+                        // eased version reads as "the cell briefly
+                        // goes still to consult" which is the §2.5.3
+                        // intent. Cosine ease for a gentle curve.
+                        val t = elapsedMs.toFloat() / RIPPLE_PAUSE_MS.toFloat()
+                        when {
+                            t < 0f -> 1.0f
+                            t > 1f -> 1.0f
+                            t < 0.2f -> {
+                                val u = t / 0.2f  // 0..1
+                                val eased = 0.5f * (1f - cos(u * PI.toFloat()))  // cosine ease-in
+                                1.0f - eased * (1.0f - 0.2f)
+                            }
+                            t > 0.8f -> {
+                                val u = (t - 0.8f) / 0.2f  // 0..1
+                                val eased = 0.5f * (1f - cos(u * PI.toFloat()))
+                                0.2f + eased * (1.0f - 0.2f)
+                            }
+                            else -> 0.2f
+                        }
                     } else 1.0f
                     autoRotationDeg = (
                         autoRotationDeg + cfg.rotationDegPerSec * dSec * rotationScale

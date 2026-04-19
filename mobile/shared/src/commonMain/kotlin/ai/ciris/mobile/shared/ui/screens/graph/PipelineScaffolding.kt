@@ -18,9 +18,13 @@ enum class VisualizationMode {
     FOREGROUND;
 
     fun next(): VisualizationMode = when (this) {
+        // Toggle is a 2-state BG <-> FG cycle in practice. Previously
+        // FG -> OFF, which users experienced as "the viz closed" on
+        // what they thought was a back-to-BG tap. OFF is still reachable
+        // via settings; it just isn't part of the casual toggle loop.
         OFF -> BACKGROUND
         BACKGROUND -> FOREGROUND
-        FOREGROUND -> OFF
+        FOREGROUND -> BACKGROUND
     }
 
     val label: String get() = when (this) {

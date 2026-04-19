@@ -797,7 +797,8 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
     try:
         svc_registry = getattr(request.app.state, "service_registry", None)
         if svc_registry is None:
-            return 1.0, "healthy"
+            # No registry = degraded state, not healthy
+            return 0.30, "high_fragility"
 
         # --- k_eff + λ probes (service registry walk) ----------------------
         services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
@@ -861,8 +862,9 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
         )
         return j, category
     except Exception as e:
-        logger.debug(f"[capacity] local compute failed, returning neutral: {type(e).__name__}: {e}")
-        return 1.0, "healthy"
+        logger.debug(f"[capacity] local compute failed, returning degraded: {type(e).__name__}: {e}")
+        # Errors = degraded state, not healthy
+        return 0.30, "high_fragility"
 
 
 def _count_recent_task_completes_sqlite(hours: int = 1) -> int:

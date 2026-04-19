@@ -1495,7 +1495,16 @@ class SetupViewModel : ViewModel() {
 
             // For BYOK mode, we still need OAuth fields if user authenticated via OAuth
             // This allows OAuth users to use their own API keys while still using OAuth for login
+            // HA addon mode is treated as external auth (SUPERVISOR_TOKEN) - no password needed
             val isOAuthUser = currentState.isGoogleAuth && currentState.googleUserId != null
+            val isExternalAuthUser = isOAuthUser || currentState.isHAAddonMode
+
+            // Determine the effective OAuth provider
+            val effectiveOAuthProvider = when {
+                currentState.isHAAddonMode -> "home_assistant"
+                isOAuthUser -> currentState.oauthProvider
+                else -> null
+            }
 
             CompleteSetupRequest(
                 llm_provider = providerId,
@@ -1512,16 +1521,16 @@ class SetupViewModel : ViewModel() {
                 // Admin account (auto-generated)
                 system_admin_password = adminPassword,
 
-                // User account - OAuth users get auto-generated username, local users provide their own
-                admin_username = if (isOAuthUser) {
-                    "oauth_${currentState.oauthProvider}_user"
-                } else {
-                    currentState.username.ifEmpty { "admin" }
+                // User account - external auth users get auto-generated username, local users provide their own
+                admin_username = when {
+                    currentState.isHAAddonMode -> "ha_admin"
+                    isOAuthUser -> "oauth_${currentState.oauthProvider}_user"
+                    else -> currentState.username.ifEmpty { "admin" }
                 },
-                admin_password = if (isOAuthUser) null else currentState.userPassword,
+                admin_password = if (isExternalAuthUser) null else currentState.userPassword,
 
-                // OAuth fields - include if user authenticated via OAuth (even in BYOK mode)
-                oauth_provider = if (isOAuthUser) currentState.oauthProvider else null,
+                // OAuth fields - include for any external auth (OAuth or HA addon)
+                oauth_provider = effectiveOAuthProvider,
                 oauth_external_id = if (isOAuthUser) currentState.googleUserId else null,
                 oauth_email = if (isOAuthUser) currentState.googleEmail else null,
 

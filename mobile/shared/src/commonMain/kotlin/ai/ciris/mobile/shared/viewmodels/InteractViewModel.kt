@@ -2173,9 +2173,19 @@ class InteractViewModel(
                 } catch (e: Exception) {
                     logDebug("fetchSelectionDetail", "poll error: ${e.message}")
                     if (!isActive) break
-                    _selectionDetail.value = SelectionDetail.Error(
-                        summaryLine = "Couldn't fetch detail: ${e.message ?: e::class.simpleName}",
-                    )
+                    // Friendlier message for the common case — a node
+                    // that was in the timeline at viz load but has
+                    // since rotated out of the window returns 404 when
+                    // the user taps. Don't scare the user with the
+                    // raw HTTP code.
+                    val msg = e.message ?: e::class.simpleName ?: "unknown error"
+                    val friendly = when {
+                        msg.contains("404") -> "This node is no longer available"
+                        msg.contains("401") || msg.contains("403") ->
+                            "Sign-in required to view this detail"
+                        else -> "Couldn't fetch detail: $msg"
+                    }
+                    _selectionDetail.value = SelectionDetail.Error(summaryLine = friendly)
                 }
                 // Nucleus shells read the SSE ring buffer on every tick
                 // too so newly-arrived events show up without a manual

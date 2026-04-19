@@ -18,6 +18,7 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.probeCellVizCapability
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -3052,23 +3053,27 @@ private fun VisualizationLegendButton(
             }
         }
 
-        // Question mark button - larger and more visible
+        // Subtle help pill — was previously a 56dp bubble with a chunky
+        // ExtraBold "?" that read as a generic Material FAB. Smaller
+        // (40dp), thin accent border instead of heavy shadow, SemiBold
+        // instead of ExtraBold so it sits as a secondary control rather
+        // than competing with the cell viz for attention.
         Surface(
             onClick = onToggle,
             shape = CircleShape,
-            color = theme.surface.copy(alpha = 0.95f),
-            shadowElevation = 4.dp,
-            modifier = Modifier.size(56.dp)
+            color = theme.surface.copy(alpha = 0.70f),
+            border = BorderStroke(1.dp, theme.textAccent.copy(alpha = 0.45f)),
+            modifier = Modifier.size(40.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
                 Text(
                     text = "?",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = theme.textAccent
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = theme.textAccent,
                 )
             }
         }

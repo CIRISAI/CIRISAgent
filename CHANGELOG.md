@@ -5,6 +5,31 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-04-19
+
+### Added
+
+- **Cell Visualization Enhancements** - Grounded ρ (service-failure clustering), σ from signed audit SQLite, non-LLM BusArc panels wired to telemetry
+- **Desktop Viz QA Module** - Programmatic smoke test for cell visualization (`tools/qa_runner/modules/desktop_viz.py`)
+- **KMP 2.x Migration Scripts** - Validation and migration scripts for Kotlin 2.0.21 upgrade (`mobile/scripts/`)
+
+### Changed
+
+- **Directory Restructure** - Removed legacy `android/` and `ios/` directories; wheels relocated to `mobile/androidApp/wheels/`
+- **Deferral Ripple Animation** - Eased rotation pause timing for smoother UX
+
+### Fixed
+
+- **HA Ingress Identity Persistence** - Ingress users now stored under `provider:external_id` key with OAuth identity linked to WA for cross-restart persistence
+- **Setup Ingress IP Validation** - Added trusted IP check (172.30.32.2) to setup ingress fallback, rejecting spoofed headers
+- **HA Network Trust Scope** - Restricted trust to supervisor IP only (removed overly-permissive /23 range)
+- **First-User Admin Flag** - Removed in-memory flag that could reset on restart; now uses authoritative DB check
+- **Setup Identity Fragmentation** - Setup now uses ingress user's actual identity instead of creating separate `ha_admin` user
+
+### Security
+
+- **Ingress Auth Hardening** - Five P1 security fixes addressing privilege escalation, identity binding, and IP validation vulnerabilities
+
 ## [2.5.0] - 2026-04-15
 
 ### Added

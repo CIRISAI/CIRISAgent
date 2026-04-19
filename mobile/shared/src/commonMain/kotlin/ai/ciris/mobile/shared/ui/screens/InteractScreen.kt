@@ -375,6 +375,7 @@ fun InteractScreen(
                 creditStatus = creditStatus,
                 trustStatus = trustStatus,
                 walletStatus = walletStatus,
+                cellVizState = cellVizState,
                 visualizationMode = visualizationMode,
                 onVisualizationToggle = { visualizationMode = visualizationMode.next() },
                 onShutdown = { viewModel.shutdown(emergency = false) },
@@ -655,6 +656,7 @@ private fun EnhancedStatusBar(
     creditStatus: CreditStatus,
     trustStatus: TrustStatus,
     walletStatus: WalletStatus,
+    cellVizState: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
     visualizationMode: VisualizationMode,
     onVisualizationToggle: () -> Unit,
     onShutdown: () -> Unit,
@@ -724,6 +726,15 @@ private fun EnhancedStatusBar(
                 WalletBadge(
                     walletStatus = walletStatus,
                     onClick = onWalletClick,
+                    theme = theme
+                )
+
+                // CIRIS capacity (ratchet) badge — composite C/I_int/R/I_inc/S
+                // score for this agent's template. Sits next to trust so the
+                // two "at a glance" health signals (attestation + behavior)
+                // live together.
+                CapacityBadge(
+                    state = cellVizState,
                     theme = theme
                 )
 
@@ -1094,6 +1105,90 @@ private fun TrustShield(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = shieldColor
+            )
+        }
+    }
+}
+
+/**
+ * CIRIS capacity (ratchet) badge — the clear, at-a-glance companion to
+ * the ambient cell-viz dials. Sits immediately beside the Trust shield
+ * so the two system-health signals (attestation + behaviour) are read
+ * together.
+ *
+ * Colour scheme mirrors the Trust shield so "green / amber / red" means
+ * the same thing in both:
+ *   - high_capacity   → green  (L5-equivalent)
+ *   - healthy         → green  (strong but with room)
+ *   - moderate        → amber  (L4-equivalent)
+ *   - high_fragility  → red    (low-L-equivalent)
+ *   - pre-fetch       → gray   (no data yet — same treatment as trust)
+ *
+ * Non-clickable by design in this pass: the viz itself is the interactive
+ * readout. A details sheet (per-factor breakdown) can land later behind
+ * a testableClickable tag if users want to drill in.
+ */
+@Composable
+private fun CapacityBadge(
+    state: ai.ciris.mobile.shared.ui.screens.graph.CellVizState,
+    theme: InteractTheme,
+    modifier: Modifier = Modifier,
+) {
+    val isLoaded = !state.isPreFetch
+    val badgeColor = when {
+        !isLoaded -> theme.trustDefault
+        state.category == "high_capacity" -> theme.trustLevel5
+        state.category == "healthy" -> theme.trustLevel5
+        state.category == "moderate" -> theme.trustLevel4
+        state.category == "high_fragility" -> theme.trustLevelLow
+        else -> theme.trustDefault
+    }
+
+    // Two-decimal fixed-width score. Avoid String.format (JVM-only in
+    // commonMain); use integer math to produce "0.90", "1.00", "0.38".
+    val scoreText = if (!isLoaded) {
+        "…"
+    } else {
+        val hundredths = (state.compositeScore.coerceIn(0f, 1f) * 100f + 0.5f).toInt()
+        val whole = hundredths / 100
+        val frac = hundredths % 100
+        val fracStr = if (frac < 10) "0$frac" else "$frac"
+        "$whole.$fracStr"
+    }
+
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = badgeColor.copy(alpha = 0.15f),
+        modifier = modifier.testable("capacity_badge"),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            if (!isLoaded) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = badgeColor,
+                )
+            } else {
+                // Filled status dot — reads as a signal LED, not a heartbeat
+                // or other anthropomorphic metaphor. Same shape as the
+                // Connection-status dot earlier in the bar so the visual
+                // language is consistent.
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(color = badgeColor, shape = CircleShape),
+                )
+            }
+
+            Text(
+                text = scoreText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = badgeColor,
             )
         }
     }

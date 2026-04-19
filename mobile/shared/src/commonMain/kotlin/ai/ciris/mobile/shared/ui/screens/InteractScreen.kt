@@ -476,7 +476,10 @@ fun InteractScreen(
                 }
         ) {
             if (messages.isEmpty() && !isLoading) {
-                EmptyStateView(transparentBackground = liveBackgroundEnabled)
+                EmptyStateView(
+                    transparentBackground = liveBackgroundEnabled,
+                    isDarkMode = isDarkMode,
+                )
             } else {
                 ChatMessageList(messages = messages, transparentBackground = liveBackgroundEnabled)
             }
@@ -1440,8 +1443,27 @@ private fun SystemWarningBanner(
 @Composable
 private fun EmptyStateView(
     modifier: Modifier = Modifier,
-    transparentBackground: Boolean = false
+    transparentBackground: Boolean = false,
+    isDarkMode: Boolean = false,
 ) {
+    // When the background is transparent, text sits directly on top of the
+    // cell viz. In dark mode that means dark-on-dark — so we flip the
+    // title/subtitle to high-contrast light colours. The earlier hard-coded
+    // gray values were chosen for light mode and became unreadable once
+    // dark mode became the hero view (see FSD §2.6).
+    val onTransparentDark = transparentBackground && isDarkMode
+    val titleColor = if (onTransparentDark) Color(0xFFF5F5F7) else Color(0xFF1F2937)
+    val subtitleColor = when {
+        onTransparentDark -> Color(0xFFD1D5DB)              // light slate
+        transparentBackground -> Color(0xFF4B5563)          // light mode on viz
+        else -> Color(0xFF6B7280)                           // opaque card
+    }
+    val hintColor = when {
+        onTransparentDark -> Color(0xFF5DD3D8)              // NavSignetLight — readable on dark
+        transparentBackground -> Color(0xFF0E7490)          // darker cyan on light viz
+        else -> Color(0xFF419CA0)                           // brand teal on opaque card
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1462,7 +1484,7 @@ private fun EmptyStateView(
             text = localizedString("mobile.interact_welcome_title"),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (transparentBackground) Color(0xFF1F2937) else Color(0xFF1F2937),  // Dark text for readability
+            color = titleColor,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -1470,7 +1492,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_subtitle"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color(0xFF4B5563) else Color(0xFF6B7280),  // Darker gray for readability
+            color = subtitleColor,
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -1478,7 +1500,7 @@ private fun EmptyStateView(
         Text(
             text = localizedString("mobile.interact_welcome_hint"),
             fontSize = 14.sp,
-            color = if (transparentBackground) Color(0xFF0E7490) else Color(0xFF419CA0),  // Darker cyan for readability
+            color = hintColor,
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 16.dp)

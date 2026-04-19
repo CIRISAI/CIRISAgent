@@ -310,8 +310,14 @@ fun CellVisualization(
                 radius = membraneRadius * 1.05f,
                 opacityMultiplier = breatheAuraAlpha,
             )
-            val openingAngleRanges = openings.value
-                .flatMap { openingRanges(it, nowMs.value) }
+            // Openings are stored in world coordinates (their drift is its own
+            // rotation). To make them rotate *with* the bus ring rather than
+            // staying fixed while the ring turns through them, shift each
+            // range by the current ring rotation before subtraction.
+            val openingAngleRanges = rotateRanges(
+                openings.value.flatMap { openingRanges(it, nowMs.value) },
+                rotationDeg,
+            )
             // Aggregate per-bus shimmer intensity so drawMembrane adds a
             // simple brightness boost. O(buses × pulses) but both are tiny.
             val nowMsLocal = nowMs.value

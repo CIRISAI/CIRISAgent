@@ -246,6 +246,30 @@ internal fun openingRanges(
 }
 
 /**
+ * Rotate each non-wrapping range by `rotationDeg` around the 0/360
+ * circle, splitting into two pieces if the shift causes it to straddle
+ * the boundary. Used so membrane openings rotate *with* the bus ring
+ * instead of staying fixed in screen space (which reads as the ring
+ * passing through stationary holes rather than as holes in the ring).
+ *
+ * Inputs are expected to be non-wrapping (start <= endInclusive);
+ * `openingRanges` already guarantees this.
+ */
+internal fun rotateRanges(
+    ranges: List<ClosedFloatingPointRange<Float>>,
+    rotationDeg: Float,
+): List<ClosedFloatingPointRange<Float>> {
+    val rot = ((rotationDeg % 360f) + 360f) % 360f
+    if (rot == 0f || ranges.isEmpty()) return ranges
+    return ranges.flatMap { r ->
+        val s = (r.start + rot) % 360f
+        val e = (r.endInclusive + rot) % 360f
+        if (e >= s) listOf(s..e)
+        else listOf(s..360f, 0f..e)  // shift caused a 0/360 straddle
+    }
+}
+
+/**
  * Subtract a list of opening ranges (absolute degrees, possibly
  * wrapping past 0/360) from a single bus-arc range.
  *

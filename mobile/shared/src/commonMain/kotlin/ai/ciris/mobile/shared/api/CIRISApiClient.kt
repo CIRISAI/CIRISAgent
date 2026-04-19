@@ -6748,8 +6748,12 @@ class CIRISApiClient(
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
             install(HttpTimeout) {
-                requestTimeoutMillis = 15000
+                // Generous timeouts: backend lens call can take 8s, plus
+                // Chaquopy async overhead on Android. Socket timeout must
+                // match request timeout or Ktor defaults to 10s.
+                requestTimeoutMillis = 20000
                 connectTimeoutMillis = 10000
+                socketTimeoutMillis = 20000
             }
         }
 

@@ -204,6 +204,35 @@ fun LoginScreen(
                     )
                 } else {
                     // Mobile mode - show OAuth buttons
+
+                    // Error message for OAuth failures (Google/Apple sign-in errors)
+                    if (errorMessage != null) {
+                        val displayError = when {
+                            errorMessage.contains("12500", ignoreCase = true) ->
+                                localizedString("mobile.login_error_google_config")
+                            errorMessage.contains("10:", ignoreCase = true) ->
+                                localizedString("mobile.login_error_google_config")
+                            errorMessage.contains("7:", ignoreCase = true) ->
+                                localizedString("mobile.login_error_connection")
+                            errorMessage.contains("timeout", ignoreCase = true) ||
+                            errorMessage.contains("connect", ignoreCase = true) ->
+                                localizedString("mobile.login_error_connection")
+                            errorMessage.contains("cancel", ignoreCase = true) ->
+                                localizedString("mobile.login_error_cancelled")
+                            else -> errorMessage.take(100)
+                        }
+                        Text(
+                            text = displayError,
+                            color = LoginColors.Error,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .width(280.dp)
+                                .padding(bottom = 16.dp)
+                                .testable("txt_oauth_error")
+                        )
+                    }
+
                     Button(
                         onClick = onGoogleSignIn,
                         colors = ButtonDefaults.buttonColors(

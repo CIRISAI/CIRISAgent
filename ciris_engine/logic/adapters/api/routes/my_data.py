@@ -924,20 +924,39 @@ async def _sigma_from_positive_moments(request: Request) -> float:
 
 
 async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
-    """Call CIRISLens for a template's capacity record. Raises on non-200."""
-    import aiohttp
+    """Call CIRISLens for a template's capacity record. Raises on non-200.
+
+    Uses a short 3s timeout to fail fast on slow connections - caller should
+    fall back to local-only scoring when this times out.
+    """
+    import httpx
 
     url = f"{_capacity_base_url()}/scoring/capacity/{template}"
-    timeout = aiohttp.ClientTimeout(total=10.0)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                body = await resp.text()
+    try:
+        # 8s timeout to handle Chaquopy/Android async overhead. The lens
+        # itself responds in <0.3s, but Android Python runtime can add
+        # several seconds of DNS resolution and connection setup latency.
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                body = resp.text[:200]
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"CIRISLens returned {resp.status} for capacity/{template}: {body[:200]}",
+                    detail=f"CIRISLens returned {resp.status_code} for capacity/{template}: {body}",
                 )
-            return await resp.json()  # type: ignore[no-any-return]
+            return resp.json()  # type: ignore[no-any-return]
+    except httpx.TimeoutException as e:
+        logger.warning(f"[capacity] Lens timeout (8s) for template={template}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"CIRISLens timeout for capacity/{template}",
+        )
+    except httpx.RequestError as e:
+        logger.warning(f"[capacity] Lens request error for template={template}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach CIRISLens: {type(e).__name__}",
+        )
 
 
 @router.get(
@@ -983,6 +1002,7 @@ async def get_capacity(
     The signed audit history is the real coherence ratchet; this is just
     the viewing angle for the human.
     """
+    logger.info(f"[capacity] GET /capacity scope={scope} user={current_user.username}")
     scope_norm = (scope or "fleet").strip().lower()
     if scope_norm not in {"fleet", "local", "both"}:
         raise HTTPException(
@@ -990,12 +1010,19 @@ async def get_capacity(
             detail="scope must be one of: fleet, local, both",
         )
 
-    template = _get_agent_id(request)
+    # For lens lookups, we need the TEMPLATE name (e.g., "Ally"), not the
+    # agent instance ID (e.g., "agent-c1303b26541d"). The template name is
+    # what lens aggregates scores by. Default to "Ally" for CIRIS proxy mode.
+    runtime = getattr(request.app.state, "runtime", None)
+    template = None
+    if runtime:
+        essential = getattr(runtime, "essential_config", None)
+        if essential:
+            template = getattr(essential, "agent_name", None)
+    # Fallback to "Ally" for CIRIS proxy mode (most common case)
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent template unavailable — runtime not fully initialized.",
-        )
+        template = "Ally"
+        logger.info(f"[capacity] Using default template 'Ally' for lens lookup")
 
     # --- Local-only: skip the lens hop entirely -----------------------------
     if scope_norm == "local":
@@ -1022,21 +1049,49 @@ async def get_capacity(
         )
 
     # --- Fleet or both: fetch lens payload (cached) -------------------------
+    # On slow devices (arm32), lens fetch may timeout. Fall back to local-only
+    # gracefully rather than failing the whole request.
     served_from_cache = True
     payload = _capacity_cache_get(template)
+    lens_failed = False
     if payload is None:
         served_from_cache = False
         try:
+            logger.info(f"[capacity] Fetching from lens for template={template}")
             payload = await _fetch_capacity_from_lens(template)
-        except HTTPException:
-            raise
+            logger.info(f"[capacity] Lens fetch OK for template={template}")
+            _capacity_cache_set(template, payload)
+        except HTTPException as e:
+            # Timeout or connection error - fall back to local-only
+            logger.warning(f"[capacity] Lens unavailable ({e.status_code}), falling back to local-only")
+            lens_failed = True
         except Exception as e:
-            logger.warning(f"[capacity] Lens fetch failed for template={template}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Could not reach CIRISLens: {type(e).__name__}",
-            )
-        _capacity_cache_set(template, payload)
+            logger.warning(f"[capacity] Lens fetch failed for template={template}: {e}, falling back to local-only")
+            lens_failed = True
+
+    # If lens failed, return local-only score instead of erroring
+    if lens_failed:
+        local_j, local_cat = await _compute_local_capacity(request)
+        neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
+        parsed = CapacityResponse(
+            agent_name=template,
+            composite_score=local_j,
+            fragility_index=0.0,
+            category=local_cat,
+            factors=CapacityFactors(
+                C=neutral_factor, I_int=neutral_factor, R=neutral_factor, I_inc=neutral_factor, S=neutral_factor
+            ),
+            metadata=CapacityMetadata(),
+            cached=False,
+            local_score=local_j,
+            local_category=local_cat,
+        )
+        return StandardResponse(
+            success=True,
+            data=parsed.model_dump(),
+            message=f"Local CIRIS capacity (lens unavailable): {local_cat} (score={local_j:.3f})",
+            metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": False, "scope": "local_fallback"},
+        )
 
     local_score: Optional[float] = None
     local_cat: Optional[str] = None

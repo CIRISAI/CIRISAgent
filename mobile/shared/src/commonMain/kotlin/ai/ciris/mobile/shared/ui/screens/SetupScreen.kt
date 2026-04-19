@@ -75,6 +75,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.ciris.mobile.shared.ui.theme.ColorTheme
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
+import ai.ciris.mobile.shared.ui.components.setup.SetupCollapsibleSection
+import ai.ciris.mobile.shared.ui.components.LanguageSelector
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Extension
 
 private const val TAG = "SetupScreen"
 
@@ -335,6 +342,11 @@ fun SetupScreen(
                         apiClient = apiClient
                     )
                     SetupStep.NODE_AUTH -> NodeAuthStep(viewModel, state, apiClient)
+                    SetupStep.QUICK_SETUP -> QuickSetupStep(
+                        viewModel = viewModel,
+                        state = state,
+                        apiClient = apiClient
+                    )
                     SetupStep.PREFERENCES -> PreferencesStep(viewModel, state)
                     SetupStep.LLM_CONFIGURATION -> LlmConfigurationStep(viewModel, state, apiClient)
                     SetupStep.OPTIONAL_FEATURES -> OptionalFeaturesStep(viewModel, state)
@@ -425,8 +437,10 @@ fun SetupScreen(
                     // Determine if this is the final step before COMPLETE
                     // - Normal flow: ACCOUNT_AND_CONFIRMATION is the final step
                     // - Node flow: OPTIONAL_FEATURES is the final step (skips ACCOUNT_AND_CONFIRMATION)
+                    // - Unified quick setup: QUICK_SETUP is the final step
                     val isFinalStep = state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
-                        (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES)
+                        (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES) ||
+                        state.currentStep == SetupStep.QUICK_SETUP
 
                     if (isFinalStep) {
                         // On final step, submit setup to API then advance
@@ -492,6 +506,7 @@ private fun StepIndicators(
     isNodeFlow: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // Node flow has 4 steps, unified quick setup flow has 2 steps
     val steps = if (isNodeFlow) {
         listOf(
             SetupStep.WELCOME to "1",
@@ -500,11 +515,10 @@ private fun StepIndicators(
             SetupStep.OPTIONAL_FEATURES to "4"
         )
     } else {
+        // Unified flow: WELCOME → QUICK_SETUP
         listOf(
             SetupStep.WELCOME to "1",
-            SetupStep.LLM_CONFIGURATION to "2",
-            SetupStep.OPTIONAL_FEATURES to "3",
-            SetupStep.ACCOUNT_AND_CONFIRMATION to "4"
+            SetupStep.QUICK_SETUP to "2"
         )
     }
 
@@ -561,29 +575,30 @@ private fun WelcomeStep(
     modifier: Modifier = Modifier
 ) {
     val isGoogleAuth = state.isGoogleAuth
-    var detailsExpanded by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
-    // Track if there's more content below
-    val showScrollIndicator by remember {
-        derivedStateOf {
-            scrollState.value < scrollState.maxValue - 50
-        }
-    }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(scrollState),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Welcome Title
+        Text(
+            text = localizedString("setup.welcome_title"),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = SetupColors.TextPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp)
-                .verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
         // Badge: "✓ 100% Free & Open Source"
         Surface(
             shape = RoundedCornerShape(8.dp),
             color = SetupColors.SuccessLight,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 24.dp)
         ) {
             Text(
                 text = "✓ ${localizedString("mobile.setup_free_badge")}",
@@ -594,150 +609,19 @@ private fun WelcomeStep(
             )
         }
 
-        // Register Your Agent card — always visible, above the fold
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.SuccessLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-                .border(1.dp, SetupColors.SuccessBorder, RoundedCornerShape(12.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = localizedString("mobile.setup_register_title"),
-                        color = SetupColors.SuccessDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = SetupColors.SuccessLight
-                    ) {
-                        Text(
-                            text = localizedString("mobile.setup_register_optional"),
-                            color = SetupColors.SuccessDark,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Text(
-                    text = localizedString("mobile.setup_register_desc"),
-                    color = SetupColors.SuccessText,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                )
-
-                // Benefits list
-                Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                    BenefitRow(localizedString("mobile.setup_register_audit"))
-                    BenefitRow(localizedString("mobile.setup_register_ratchet"))
-                    BenefitRow(localizedString("mobile.setup_register_scoring"))
-                    BenefitRow(localizedString("mobile.setup_register_template"))
-                }
-
-                Text(
-                    text = localizedString("mobile.setup_register_bond"),
-                    color = SetupColors.SuccessDark,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                Button(
-                    onClick = {
-                        // Set default portal URL and enter node flow
-                        viewModel.updateNodeUrl("https://portal.ciris.ai")
-                        viewModel.enterNodeFlow()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SetupColors.SuccessDark
-                    ),
-                    modifier = Modifier.fillMaxWidth().testableClickable("btn_connect_portal") {
-                        viewModel.updateNodeUrl("https://portal.ciris.ai")
-                        viewModel.enterNodeFlow()
-                    }
-                ) {
-                    Text(localizedString("mobile.setup_register_connect"), fontWeight = FontWeight.Bold)
-                }
-
-                Text(
-                    text = localizedString("mobile.setup_register_key_note"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                )
-
-                Text(
-                    text = localizedString("mobile.setup_register_sales"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                )
-
-                // Skip option
-                Text(
-                    text = localizedString("mobile.setup_register_skip"),
-                    color = SetupColors.TextSecondary,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                )
-            }
-        }
-
         // Main description
         Text(
             text = localizedString("setup.welcome_desc"),
-            color = SetupColors.TextPrimary,
+            color = SetupColors.TextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
             lineHeight = 24.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // AI Nature Disclaimer - first-run awareness
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = SetupColors.InfoLight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "ℹ️ ${localizedString("mobile.setup_what_ciris")}",
-                    color = SetupColors.InfoDark,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Text(
-                    text = localizedString("mobile.setup_what_ciris_desc"),
-                    color = SetupColors.InfoText,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-
-        // Card: Google user - "You're ready to go!"
+        // Status card based on auth type
         if (isGoogleAuth) {
+            // CIRIS Mode - Google/Apple signed in
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = SetupColors.SuccessLight,
@@ -745,54 +629,34 @@ private fun WelcomeStep(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        Text(
-                            text = "✓",
-                            color = SetupColors.SuccessDark,
-                            fontSize = 24.sp,
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = SetupColors.SuccessDark,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
                         Text(
                             text = localizedString("mobile.setup_google_ready"),
                             color = SetupColors.SuccessDark,
-                            fontSize = 18.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
-                    }
-                    Text(
-                        text = localizedString("mobile.setup_google_desc", mapOf("provider" to getOAuthProviderName())),
-                        color = SetupColors.SuccessText,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-
-                    // Expandable details
-                    Text(
-                        text = if (detailsExpanded) "▼ ${localizedString("mobile.setup_details_expand")}" else "▶ ${localizedString("mobile.setup_details_expand")}",
-                        color = SetupColors.SuccessDark,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .testableClickable("btn_toggle_details") { detailsExpanded = !detailsExpanded }
-                    )
-
-                    AnimatedVisibility(visible = detailsExpanded) {
                         Text(
-                            text = localizedString("mobile.setup_details_content"),
+                            text = localizedString("setup.ciris_mode_desc"),
                             color = SetupColors.SuccessText,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(top = 8.dp)
+                            fontSize = 13.sp
                         )
                     }
                 }
             }
         } else {
-            // Card: Non-Google user - "Quick Setup Required"
+            // BYOK Mode - need to configure LLM
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = SetupColors.InfoLight,
@@ -800,25 +664,35 @@ private fun WelcomeStep(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = localizedString("mobile.setup_required_title"),
-                        color = SetupColors.InfoDark,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = SetupColors.InfoDark,
+                        modifier = Modifier.size(28.dp)
                     )
-                    Text(
-                        text = localizedString("mobile.setup_required_desc"),
-                        color = SetupColors.InfoText,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = localizedString("setup.byok_mode_title"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = localizedString("setup.byok_mode_desc"),
+                            color = SetupColors.InfoText,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
         }
 
-        // How it works section
+        // What is CIRIS?
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = SetupColors.GrayLight,
@@ -826,50 +700,23 @@ private fun WelcomeStep(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = localizedString("mobile.setup_how_title"),
+                    text = "ℹ️ ${localizedString("mobile.setup_what_ciris")}",
                     color = SetupColors.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    text = localizedString("mobile.setup_how_desc"),
+                    text = localizedString("mobile.setup_what_ciris_desc"),
                     color = SetupColors.TextSecondary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
                 )
             }
         }
 
-            // Bottom padding for scroll indicator
-            Spacer(modifier = Modifier.height(32.dp))
-        }
-
-        // Scroll indicator arrow - shows when there's more content below
-        AnimatedVisibility(
-            visible = showScrollIndicator,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp)
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = SetupColors.Primary.copy(alpha = 0.9f),
-                modifier = Modifier.size(36.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Text(
-                        text = "↓",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
+        // Bottom padding
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
@@ -2690,6 +2537,350 @@ private fun SummaryRow(label: String, value: String) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+// ========== Quick Setup Step ==========
+/**
+ * Single-screen setup for Google/Apple Sign-in users.
+ *
+ * These users get CIRIS LLM services via their OAuth token automatically,
+ * so they don't need to configure an LLM provider.
+ *
+ * This step provides:
+ * - Language selection (expanded by default)
+ * - Location settings (optional, collapsed)
+ * - Local LLM discovery (optional, collapsed - if user wants to add local server)
+ * - Services toggle (navigation, weather - collapsed)
+ * - Adapters note (collapsed)
+ */
+@Composable
+private fun QuickSetupStep(
+    viewModel: SetupViewModel,
+    state: SetupFormState,
+    apiClient: CIRISApiClient,
+    modifier: Modifier = Modifier
+) {
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Section expansion state - location and services expanded by default (important for UX)
+    var languageExpanded by remember { mutableStateOf(true) }
+    var locationExpanded by remember { mutableStateOf(true) }
+    var servicesExpanded by remember { mutableStateOf(true) }
+    var localLlmExpanded by remember { mutableStateOf(false) }
+    var adaptersExpanded by remember { mutableStateOf(false) }
+
+    // Local LLM discovery
+    val discoveryState = rememberLocalLlmDiscoveryState()
+    val localInferenceCapability = remember { probeLocalInferenceCapability() }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Header - "100% Free & Open Source" badge
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = SetupColors.SuccessLight,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Text(
+                text = "✓ " + localizedString("mobile.setup_free_badge"),
+                color = SetupColors.SuccessDark,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        // Provider-specific description
+        val providerName = when {
+            state.isGoogleAuth && state.oauthProvider == "apple" -> "Apple"
+            state.isGoogleAuth -> "Google"
+            else -> "OAuth"
+        }
+        Text(
+            text = localizedString("setup.quick_desc").replace("{provider}", providerName),
+            fontSize = 14.sp,
+            color = SetupColors.TextSecondary
+        )
+
+        // CIRIS Proxy info card
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.SuccessLight,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = SetupColors.SuccessDark,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = localizedString("setup.quick_ciris_active"),
+                        fontWeight = FontWeight.SemiBold,
+                        color = SetupColors.SuccessDark
+                    )
+                    Text(
+                        text = localizedString("setup.quick_ciris_desc"),
+                        fontSize = 12.sp,
+                        color = SetupColors.SuccessDark.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Language Section
+        SetupCollapsibleSection(
+            title = localizedString("setup.prefs_language_label"),
+            subtitle = SUPPORTED_LANGUAGES.find { it.code == state.preferredLanguage }?.nativeName ?: "English",
+            icon = Icons.Filled.Language,
+            expanded = languageExpanded,
+            onToggle = { languageExpanded = !languageExpanded }
+        ) {
+            LanguageSelector(
+                compact = false,
+                onLanguageChanged = { code ->
+                    viewModel.setPreferredLanguage(code)
+                }
+            )
+        }
+
+        // Location Section (optional)
+        SetupCollapsibleSection(
+            title = localizedString("mobile.settings_location"),
+            subtitle = when (state.locationGranularity) {
+                LocationGranularity.NONE -> localizedString("setup.optional")
+                LocationGranularity.COUNTRY -> state.country.ifEmpty { localizedString("setup.location_enabled") }
+                LocationGranularity.REGION -> "${state.region}, ${state.country}".ifEmpty { localizedString("setup.location_enabled") }
+                LocationGranularity.CITY -> state.city.ifEmpty { localizedString("setup.location_enabled") }
+            },
+            icon = Icons.Filled.LocationOn,
+            expanded = locationExpanded,
+            onToggle = { locationExpanded = !locationExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = localizedString("setup.location_desc"),
+                    fontSize = 13.sp,
+                    color = SetupColors.TextSecondary
+                )
+
+                // Location search (uses ViewModel's search functionality)
+                OutlinedTextField(
+                    value = state.locationSearchQuery,
+                    onValueChange = { query ->
+                        viewModel.searchLocations(query)
+                    },
+                    label = { Text(localizedString("mobile.settings_search_city")) },
+                    placeholder = { Text(localizedString("mobile.settings_search_city_hint")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (state.locationSearchLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else if (state.locationSearchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearLocationSearch() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = "Clear"
+                                )
+                            }
+                        }
+                    }
+                )
+
+                // Show search results
+                state.locationSearchResults.take(5).forEach { result ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SetupColors.GrayLight,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.selectLocation(result)
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = result.displayName,
+                                color = SetupColors.TextPrimary
+                            )
+                            if (result.population > 0) {
+                                Text(
+                                    text = "Pop. ${formatNumber(result.population)}",
+                                    fontSize = 12.sp,
+                                    color = SetupColors.TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Show selected location
+                if (state.city.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SetupColors.SuccessLight,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = SetupColors.SuccessDark,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${state.city}, ${state.country}",
+                                color = SetupColors.SuccessDark
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Services Section (nav/weather) - combined toggle - IMPORTANT: shown expanded by default
+        SetupCollapsibleSection(
+            title = localizedString("setup.services_title"),
+            subtitle = if (state.publicApiServicesEnabled)
+                localizedString("setup.location_enabled")
+            else
+                localizedString("setup.location_disabled"),
+            icon = Icons.Filled.Info,
+            expanded = servicesExpanded,
+            onToggle = { servicesExpanded = !servicesExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = localizedString("setup.services_info"),
+                    fontSize = 13.sp,
+                    color = SetupColors.TextSecondary
+                )
+
+                // Combined services toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = localizedString("setup.navigation_weather"),
+                            color = SetupColors.TextPrimary
+                        )
+                        Text(
+                            text = localizedString("setup.services_desc"),
+                            fontSize = 12.sp,
+                            color = SetupColors.TextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = state.publicApiServicesEnabled,
+                        onCheckedChange = { enabled ->
+                            viewModel.setPublicApiServicesEnabled(enabled)
+                        },
+                        modifier = Modifier.testable("switch_services_enabled")
+                    )
+                }
+            }
+        }
+
+        // Local LLM Section (optional - for advanced users who want local inference)
+        SetupCollapsibleSection(
+            title = localizedString("setup.local_llm_title"),
+            subtitle = if (discoveryState.discoveredServers.isNotEmpty())
+                "${discoveryState.discoveredServers.size} ${localizedString("setup.servers_found")}"
+            else
+                localizedString("setup.optional"),
+            icon = Icons.Filled.Settings,
+            expanded = localLlmExpanded,
+            onToggle = { localLlmExpanded = !localLlmExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = localizedString("setup.local_llm_desc"),
+                    fontSize = 13.sp,
+                    color = SetupColors.TextSecondary
+                )
+
+                LocalLlmServerDiscovery(
+                    state = discoveryState,
+                    apiClient = apiClient,
+                    onServerSelected = { server ->
+                        discoveryState.selectedServer = server
+                    },
+                    onAddAsProvider = { server, model ->
+                        // Add local server as additional provider
+                        coroutineScope.launch {
+                            try {
+                                apiClient.addLlmProvider(
+                                    providerId = "local-${server.id.take(20).replace(":", "-").lowercase()}",
+                                    providerBaseUrl = server.url,
+                                    name = server.label,
+                                    model = model ?: server.models.firstOrNull(),
+                                    apiKey = null
+                                )
+                            } catch (e: Exception) {
+                                PlatformLogger.e(TAG, "Failed to add local LLM provider: ${e.message}")
+                            }
+                        }
+                    },
+                    localInferenceCapability = localInferenceCapability,
+                    primaryColor = SetupColors.Primary,
+                    surfaceColor = SetupColors.GrayLight,
+                    textColor = SetupColors.TextPrimary,
+                    secondaryTextColor = SetupColors.TextSecondary
+                )
+            }
+        }
+
+        // Adapters Section (informational)
+        SetupCollapsibleSection(
+            title = localizedString("setup.adapters_title"),
+            subtitle = localizedString("setup.adapters_later"),
+            icon = Icons.Filled.Extension,
+            expanded = adaptersExpanded,
+            onToggle = { adaptersExpanded = !adaptersExpanded }
+        ) {
+            Text(
+                text = localizedString("setup.adapters_info"),
+                fontSize = 13.sp,
+                color = SetupColors.TextSecondary
+            )
+        }
+
+        // Bottom spacer for navigation buttons
+        Spacer(modifier = Modifier.height(80.dp))
+    }
+}
+
+// Helper function to format large numbers
+private fun formatNumber(num: Int): String {
+    return when {
+        num >= 1_000_000 -> "${num / 1_000_000}M"
+        num >= 1_000 -> "${num / 1_000}K"
+        else -> num.toString()
     }
 }
 

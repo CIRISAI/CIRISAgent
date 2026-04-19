@@ -7,6 +7,10 @@
   "setup": {
     "welcome_title": "CIRIS కి స్వాగతం",
     "welcome_desc": "CIRIS మీ పరికరంలో రన్ అవ్వే నైతిక AI సహాయకుడు. మీ సంభాషణలు మరియు డేటా ప్రైవేట్‌గా ఉంటాయి.",
+    "quick_title": "త్వరిత సెటప్",
+    "quick_desc": "మీరు {provider} తో సైన్ ఇన్ చేసారు. CIRIS AI సేవలు యాక్టివ్‌గా ఉన్నాయి. క్రింద ఐచ్ఛిక సెట్టింగ్‌లను కాన్ఫిగర్ చేయండి.",
+    "quick_ciris_active": "CIRIS AI సేవలు యాక్టివ్",
+    "quick_ciris_desc": "మీ ఖాతాలో CIRIS AI యాక్సెస్ ఉంది. అదనపు సెటప్ అవసరం లేదు.",
     "prefs_title": "మీ ప్రాధాన్యతలు",
     "prefs_desc": "మీ ఇష్టపడే భాషలో మీతో కమ్యూనికేట్ చేయడానికి CIRIS కి సహాయం చేయండి. స్థానం ఐచ్ఛికం మరియు సంబంధిత సందర్భం అందించడంలో సహాయపడుతుంది.",
     "prefs_language_label": "ఇష్టపడే భాష",
@@ -34,7 +38,11 @@
     "next": "తదుపరి",
     "finish": "సెటప్ పూర్తి చేయి",
     "complete_message": "సెటప్ విజయవంతంగా పూర్తయింది. ఏజెంట్ ప్రాసెసర్‌ను ప్రారంభిస్తోంది...",
-    "error_runtime": "రన్‌టైమ్ అందుబాటులో లేదు - సెటప్ పూర్తి చేయలేరు"
+    "error_runtime": "రన్‌టైమ్ అందుబాటులో లేదు - సెటప్ పూర్తి చేయలేరు",
+    "byok_mode_title": "మీ కీని తీసుకుండి",
+    "byok_mode_desc": "మీ LLM ప్రదాతను కాన్ఫిగర్ చేయండి",
+    "ciris_mode_title": "CIRIS మోడ్ సక్రియ",
+    "ciris_mode_desc": "CIRIS AI సేవలు మీ ఖాతాలో చేర్చబడ్డాయి"
   },
   "agent": {
     "greeting": "నమస్కారం! ఈ రోజు నేను మీకు ఎలా సహాయం చేయగలను?",
@@ -1520,6 +1528,8 @@
     "tickets_status_progress": "In Progress",
     "login_error_invalid_credentials": "చెల్లని username or password. దయచేసి try again.",
     "login_error_connection": "Cannot connect to server. దయచేసి check your connection.",
+    "login_error_google_config": "Sign-in విఫలమైంది. దయచేసి Google Play Services ఆపడేట్ చేసి మరియు మళ్లీ ప్రయత్నించండి.",
+    "login_error_cancelled": "Sign-in రద్దు చేయబడింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
     "skill_workshop": "Skill Workshop",
     "skill_workshop_desc": "సృష్టించు, import, and manage skills for your agent.",
     "skill_studio": "Skill Studio",

@@ -41,6 +41,13 @@ enum class SetupStep {
     NODE_AUTH,
 
     /**
+     * Quick Setup: Single-screen setup for OAuth users.
+     * Combines language, LLM, location, services, and adapters.
+     * Shows collapsible cards with "Start Now" button at bottom.
+     */
+    QUICK_SETUP,
+
+    /**
      * Step 2: Language and location preferences.
      * Helps CIRIS communicate in the user's preferred language.
      * Location is optional and provides contextual awareness.
@@ -317,7 +324,8 @@ data class SetupFormState(
     // Public API Services (Navigation & Weather)
     // Email included in User-Agent header for Nominatim (OSM) and weather.gov (NOAA)
     // Required by their usage policies for contact if issues arise
-    val publicApiEmail: String = "",
+    // Default to support@ciris.ai so users don't need to enter email
+    val publicApiEmail: String = "support@ciris.ai",
     val publicApiServicesEnabled: Boolean = false,
 
     // V1.9.7: Template selection (Advanced Settings)
@@ -442,8 +450,22 @@ data class SetupFormState(
                 true
             }
 
+            SetupStep.QUICK_SETUP -> {
+                // Quick setup requires Google/Apple auth for CIRIS proxy
+                isGoogleAuth && googleIdToken != null
+            }
+
             SetupStep.COMPLETE -> true
         }
+    }
+
+    /**
+     * Check if user is eligible for quick setup flow.
+     * Only Google/Apple sign-in users on mobile get access to CIRIS LLM services
+     * and can skip manual LLM configuration.
+     */
+    fun isQuickSetupEligible(): Boolean {
+        return isGoogleAuth && googleIdToken != null
     }
 
     /**
@@ -501,6 +523,15 @@ data class SetupFormState(
                         userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
                         else -> null
                     }
+                } else {
+                    null
+                }
+            }
+
+            SetupStep.QUICK_SETUP -> {
+                // Quick setup is only valid for Google/Apple sign-in users
+                if (!isGoogleAuth || googleIdToken == null) {
+                    LocalizationHelper.getString("setup_validation_google_required")
                 } else {
                     null
                 }

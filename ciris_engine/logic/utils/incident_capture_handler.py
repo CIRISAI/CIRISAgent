@@ -54,7 +54,7 @@ class IncidentCaptureHandler(logging.Handler):
         self._graph_audit_service = graph_audit_service
 
         # Clean up old incident logs on startup (keep last 3 sessions)
-        _cleanup_old_incident_logs(self.log_dir, prefix=filename_prefix, keep_count=3)
+        _cleanup_old_incident_logs(self.log_dir, prefix=filename_prefix, keep_count=2)
 
         # Create incident log file with timestamp
         timestamp = self._time_service.now().strftime("%Y%m%d_%H%M%S")

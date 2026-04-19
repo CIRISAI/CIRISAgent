@@ -99,6 +99,12 @@ class SetupViewModel : ViewModel() {
                 _state.value.setupMode != null -> _state.value.setupMode
                 isAuth -> SetupMode.CIRIS_PROXY
                 else -> SetupMode.BYOK
+            },
+            // Skip Welcome step for authenticated users - go directly to Quick Setup
+            currentStep = if (isAuth && _state.value.currentStep == SetupStep.WELCOME) {
+                SetupStep.QUICK_SETUP
+            } else {
+                _state.value.currentStep
             }
         )
     }
@@ -439,13 +445,11 @@ class SetupViewModel : ViewModel() {
                 else -> SetupStep.COMPLETE
             }
         } else {
-            // Normal flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → ACCOUNT → COMPLETE
+            // Unified flow for ALL users: WELCOME → QUICK_SETUP → COMPLETE
+            // Quick Setup handles both CIRIS mode (LLM optional) and BYOK mode (LLM required)
             when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.PREFERENCES
-                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
-                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
-                SetupStep.OPTIONAL_FEATURES -> SetupStep.ACCOUNT_AND_CONFIRMATION
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
+                SetupStep.WELCOME -> SetupStep.QUICK_SETUP
+                SetupStep.QUICK_SETUP -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
         }
@@ -486,14 +490,11 @@ class SetupViewModel : ViewModel() {
                 else -> SetupStep.WELCOME
             }
         } else {
-            // Normal flow: COMPLETE → ACCOUNT → OPTIONAL_FEATURES → LLM → PREFERENCES → WELCOME
+            // Unified flow for ALL users: COMPLETE → QUICK_SETUP → WELCOME
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
-                SetupStep.PREFERENCES -> SetupStep.WELCOME
-                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
-                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
-                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.OPTIONAL_FEATURES
-                SetupStep.COMPLETE -> SetupStep.ACCOUNT_AND_CONFIRMATION
+                SetupStep.QUICK_SETUP -> SetupStep.WELCOME
+                SetupStep.COMPLETE -> SetupStep.QUICK_SETUP
                 else -> SetupStep.WELCOME
             }
         }

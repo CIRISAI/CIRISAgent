@@ -115,7 +115,7 @@ def setup_basic_logging(
             raise RuntimeError("CRITICAL: TimeService is required for logging setup")
 
         # Clean up old log files on startup (keep last 5 sessions)
-        _cleanup_old_logs(log_path, prefix="ciris_agent_", keep_count=5)
+        _cleanup_old_logs(log_path, prefix="ciris_agent_", keep_count=2)
 
         timestamp = time_service.now().strftime("%Y%m%d_%H%M%S")
         log_filename = log_path / f"ciris_agent_{timestamp}.log"

@@ -712,73 +712,72 @@ private fun EnhancedStatusBar(
         modifier = modifier.fillMaxWidth()
     ) {
         Column {
-            // Main status row
+            // Main status row - compact, modern layout without dot separators
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Connection status - tappable to Server Connection screen
+                // Connection status - minimal tap target
                 Row(
                     modifier = Modifier
                         .testableClickable("btn_connection_status") { onLocalClick() }
-                        .padding(4.dp),
+                        .padding(2.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(6.dp)
                             .background(
                                 color = if (isConnected) theme.statusConnected else theme.statusDisconnected,
                                 shape = CircleShape
                             )
                     )
                     Text(
-                        text = if (isConnected) localizedString("mobile.interact_local") else localizedString("mobile.interact_offline"),
-                        fontSize = 11.sp,
+                        text = if (isConnected) "Local" else "Off",
+                        fontSize = 10.sp,
                         color = if (isConnected) theme.statusConnected else theme.statusDisconnected
                     )
                 }
 
-                // Divider
-                Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
-
-                // LLM health indicator - tappable to LLM Settings
+                // LLM health indicator - compact, 6-char max
                 LlmHealthIndicator(health = llmHealth, onClick = onLLMSettingsClick, theme = theme)
 
-                // Credits indicator (only if CIRIS proxy) - clickable to billing
+                // Credits indicator (only if CIRIS proxy)
                 if (llmHealth.isCirisProxy && creditStatus.isLoaded) {
-                    Text(text = "•", fontSize = 10.sp, color = theme.textMuted)
                     CreditsIndicator(credits = creditStatus, onClick = onCreditsClick, theme = theme)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Wallet badge (to the left of trust shield)
-                WalletBadge(
-                    walletStatus = walletStatus,
-                    onClick = onWalletClick,
-                    theme = theme
-                )
+                // Right-aligned badges in a tight row
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    // Wallet badge
+                    WalletBadge(
+                        walletStatus = walletStatus,
+                        onClick = onWalletClick,
+                        theme = theme
+                    )
 
-                // CIRIS capacity (ratchet) badge — composite C/I_int/R/I_inc/S
-                // score for this agent's template. Sits next to trust so the
-                // two "at a glance" health signals (attestation + behavior)
-                // live together.
-                CapacityBadge(
-                    state = cellVizState,
-                    theme = theme
-                )
+                    // CIRIS capacity badge
+                    CapacityBadge(
+                        state = cellVizState,
+                        theme = theme
+                    )
 
-                // Trust shield
-                TrustShield(
-                    trustStatus = trustStatus,
-                    onClick = onTrustShieldClick,
-                    theme = theme
-                )
+                    // Trust shield - forced horizontal
+                    TrustShield(
+                        trustStatus = trustStatus,
+                        onClick = onTrustShieldClick,
+                        theme = theme
+                    )
+                }
             }
 
             // Shutdown controls row (collapsed by default, could be expandable)
@@ -895,16 +894,17 @@ private fun LlmHealthIndicator(
     theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
+    // Compact LLM indicator - 6 char max provider names for tight layouts
     Row(
         modifier = modifier
             .clickable(onClick = onClick)
-            .padding(4.dp),
+            .padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         val isMockLlm = health.provider == "mockllm" || health.provider == "mock"
 
-        // Health dot - bright red for mock LLM
+        // Health dot
         Box(
             modifier = Modifier
                 .size(6.dp)
@@ -918,30 +918,29 @@ private fun LlmHealthIndicator(
                 )
         )
 
-        // Provider name - comprehensive provider display
-        // Show "..." while loading (provider defaults to "unknown")
+        // Provider name - 6 char max for compact layout
         val displayName = when {
-            health.provider == "unknown" -> "..."  // Still loading
-            isMockLlm -> "\u26A0\uFE0F MOCKLLM \u26A0\uFE0F"
+            health.provider == "unknown" -> "..."
+            isMockLlm -> "⚠MOCK"
             health.isCirisProxy -> "CIRIS"
             health.provider == "openai" -> "OpenAI"
-            health.provider == "anthropic" -> "Anthropic"
-            health.provider == "google" || health.provider == "google_ai" -> "Google AI"
-            health.provider == "openrouter" -> "OpenRouter"
+            health.provider == "anthropic" -> "Anthr"
+            health.provider == "google" || health.provider == "google_ai" -> "Google"
+            health.provider == "openrouter" -> "ORouter"
             health.provider == "groq" -> "Groq"
-            health.provider == "together" || health.provider == "together_ai" -> "Together"
+            health.provider == "together" || health.provider == "together_ai" -> "Togeth"
             health.provider == "local" || health.provider == "ollama" -> "Local"
             health.provider == "azure" || health.provider == "azure_openai" -> "Azure"
-            health.provider == "mistral" -> "Mistral"
+            health.provider == "mistral" -> "Mistrl"
             health.provider == "cohere" -> "Cohere"
-            health.provider == "deepseek" -> "DeepSeek"
+            health.provider == "deepseek" -> "DSeek"
             health.provider == "xai" || health.provider == "x_ai" -> "xAI"
             health.provider == "other" -> "Custom"
-            else -> health.provider.replaceFirstChar { it.uppercase() }.take(10)
+            else -> health.provider.take(6).replaceFirstChar { it.uppercase() }
         }
         Text(
             text = displayName,
-            fontSize = if (isMockLlm) 11.sp else 10.sp,
+            fontSize = 10.sp,
             fontWeight = if (isMockLlm) FontWeight.Bold else FontWeight.Normal,
             color = when {
                 isMockLlm -> theme.statusDisconnected
@@ -1110,6 +1109,7 @@ private fun TrustShield(
         else -> theme.trustDefault             // Not started - gray
     }
 
+    // Compact trust badge - fixed width to prevent wrapping
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
@@ -1117,32 +1117,31 @@ private fun TrustShield(
         modifier = modifier.testableClickable("btn_trust_shield") { onClick() }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (isLoading) {
-                // Show spinner when loading or attestation is pending
                 CircularProgressIndicator(
-                    modifier = Modifier.size(12.dp),
-                    strokeWidth = 1.5.dp,
+                    modifier = Modifier.size(10.dp),
+                    strokeWidth = 1.dp,
                     color = shieldColor
                 )
             } else {
-                // Shield emoji when stable
-                Text(text = "🛡", fontSize = 12.sp)
+                Text(text = "🛡", fontSize = 10.sp)
             }
 
-            // Level text - show loading indicator when not loaded, provisional when pending
+            // Compact level text - no wrapping
             Text(
                 text = when {
-                    !isLoaded -> "…"           // Loading
-                    isPending -> "$level/5..."  // Attestation pending
-                    else -> "$level/5"          // Stable
+                    !isLoaded -> "…"
+                    isPending -> "$level…"
+                    else -> "$level/5"
                 },
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
-                color = shieldColor
+                color = shieldColor,
+                maxLines = 1
             )
         }
     }
@@ -1209,39 +1208,38 @@ private fun CapacityBadge(
         else -> fmt(state.compositeScore)
     }
 
+    // Compact capacity badge - matches trust badge style
     Surface(
         shape = RoundedCornerShape(4.dp),
         color = badgeColor.copy(alpha = 0.15f),
         modifier = modifier.testable("capacity_badge"),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (!isLoaded) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(12.dp),
-                    strokeWidth = 1.5.dp,
+                    modifier = Modifier.size(10.dp),
+                    strokeWidth = 1.dp,
                     color = badgeColor,
                 )
             } else {
-                // Filled status dot — reads as a signal LED, not a heartbeat
-                // or other anthropomorphic metaphor. Same shape as the
-                // Connection-status dot earlier in the bar so the visual
-                // language is consistent.
+                // Status dot
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(6.dp)
                         .background(color = badgeColor, shape = CircleShape),
                 )
             }
 
             Text(
                 text = scoreText,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = badgeColor,
+                maxLines = 1,
             )
         }
     }

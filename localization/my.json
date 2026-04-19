@@ -7,6 +7,10 @@
   "setup": {
     "welcome_title": "Welcome to CIRIS",
     "welcome_desc": "CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.",
+    "quick_title": "အမြန်သတ်မှတ်ခြင်း",
+    "quick_desc": "သင်သည် {provider} ဖြင့် လော့ဂ်အင်ဝင်ထားပါသည်။ CIRIS AI ဝန်ဆောင်မှုများ အသက်ဝင်နေပါသည်။ အောက်တွင် ရွေးချယ်စရာ သတ်မှတ်ချက်များကို စီစဉ်ပါ။",
+    "quick_ciris_active": "CIRIS AI ဝန်ဆောင်မှုများ အသက်ဝင်နေသည်",
+    "quick_ciris_desc": "သင့်အကောင့်တွင် CIRIS AI အသုံးပြုခွင့် ပါဝင်ပါသည်။ အပိုသတ်မှတ်မှု မလိုအပ်ပါ။",
     "prefs_title": "Your Preferences",
     "prefs_desc": "Help CIRIS communicate with you in your preferred language. Location is optional and helps provide relevant အကြောင်းအရာ.",
     "prefs_language_label": "Preferred Language",
@@ -31,10 +35,14 @@
     "confirm_desc": "Review your configuration and complete setup.",
     "continue": "Continue",
     "back": "Back",
-    "next": "Next",
-    "finish": "Finish Setup",
+    "byok_mode_desc": "သင်၏ LLM ပေးဆောင်သူကို စီစဉ်ရန်ပြီး ဆက်လက်လုပ်ဆောင်ပါ",
+    "byok_mode_title": "သင့်ကိုယ်ပိုင်သော့ယူဆောင်လာပါ",
+    "ciris_mode_desc": "CIRIS AI ဝန်ဆောင်မှုများ သင့်အကောင့်တွင်ပါဝင်ပါသည်",
+    "ciris_mode_title": "CIRIS မုဒ်သည် ကျင့်ဆောင်နေသည်",
     "complete_message": "Setup completed အောင်မြင်fully. Starting အေးဂျင့် processor...",
-    "error_runtime": "Runtime not available - cannot complete setup"
+    "error_runtime": "Runtime not available - cannot complete setup",
+    "finish": "Finish Setup",
+    "next": "Next"
   },
   "agent": {
     "greeting": "Hello! How can I help you today?",
@@ -1520,6 +1528,8 @@
     "tickets_status_progress": "In Progress",
     "login_error_invalid_credentials": "Invalid username or password. Please try again.",
     "login_error_connection": "Cannot connect to server. Please check your connection.",
+    "login_error_google_config": "စတင်ခွင့်ပြုခြင်းမအောင်မြင်ပါ။ Google Play Services အဆင့်မြှင့်တင်ပြီးနောက် ထပ်မံကြိုးစားပါ။",
+    "login_error_cancelled": "စတင်ခွင့်ပြုခြင်းကို ပယ်ဖျက်လိုက်ပါသည်။ ထပ်မံကြိုးစားပါ။",
     "skill_workshop": "Skill အလုပ်shop",
     "skill_workshop_desc": "Create, import, and manage skills for your အေးဂျင့်.",
     "skill_studio": "Skill Studio",

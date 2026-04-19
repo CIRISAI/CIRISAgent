@@ -496,7 +496,11 @@ class InteractViewModel(
      * back to [CellVizState.DEFAULT] (neutral), never crashes.
      */
     private fun startCapacityRefresh() {
-        if (capacityRefreshJob?.isActive == true) return
+        if (capacityRefreshJob?.isActive == true) {
+            logInfo("startCapacityRefresh", "Job already active, skipping")
+            return
+        }
+        logInfo("startCapacityRefresh", "Starting capacity refresh loop")
         capacityRefreshJob = viewModelScope.launch {
             while (isActive) {
                 refreshCapacity()
@@ -547,6 +551,7 @@ class InteractViewModel(
 
     private suspend fun refreshCapacity() {
         val method = "refreshCapacity"
+        logInfo(method, "Starting capacity fetch...")
         try {
             val data = apiClient.getCapacity()
             // Prefer backend-authoritative local score when present (the
@@ -568,11 +573,31 @@ class InteractViewModel(
                 isPreFetch = false,
                 localScore = local,
             ).sanitized()
-            logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
-                    "composite=${data.compositeScore} cached=${data.cached}")
+            logInfo(method, "Capacity OK: ${data.agentName} ${data.category} " +
+                    "composite=${data.compositeScore} local=${data.localScore} cached=${data.cached}")
         } catch (e: Exception) {
-            // Expected in offline / dev / pre-auth states — don't spam WARN.
-            logDebug(method, "Capacity fetch skipped: ${e.message}")
+            // Log at INFO so we can see failures in logcat
+            logInfo(method, "Capacity fetch failed: ${e::class.simpleName}: ${e.message}")
+            // Lens failed - compute local score from runtime signals (services + LLM health).
+            // Wait briefly for status poll if it hasn't completed yet.
+            if (_lastSystemStatus == null) {
+                logInfo(method, "Waiting for status poll to compute local score...")
+                kotlinx.coroutines.delay(500)
+            }
+            recomputeLocalScore()
+            val localScore = _cellVizState.value.localScore ?: 0f
+            val localCat = when {
+                localScore >= 0.85f -> "healthy"
+                localScore >= 0.6f -> "moderate"
+                else -> "high_fragility"
+            }
+            _cellVizState.value = _cellVizState.value.copy(
+                isPreFetch = false,  // Stop the spinner
+                category = localCat,
+                compositeScore = localScore,  // Use local as composite when lens unavailable
+                localScore = localScore,
+            )
+            logInfo(method, "Fell back to local: score=$localScore category=$localCat")
         }
     }
 

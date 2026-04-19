@@ -7,6 +7,10 @@
   "setup": {
     "welcome_title": "Welcome to CIRIS",
     "welcome_desc": "CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.",
+    "quick_title": "द्रुत सेटअप",
+    "quick_desc": "तुम्ही {provider} सह साइन इन केले आहे. CIRIS AI सेवा सक्रिय आहेत. खाली पर्यायी सेटिंग्ज कॉन्फिगर करा.",
+    "quick_ciris_active": "CIRIS AI सेवा सक्रिय",
+    "quick_ciris_desc": "तुमच्या खात्यात CIRIS AI प्रवेश समाविष्ट आहे. अतिरिक्त सेटअप आवश्यक नाही.",
     "prefs_title": "Your Preferences",
     "prefs_desc": "Help CIRIS communicate with you in your preferred language. Location is optional and helps provide relevant संदर्भ.",
     "prefs_language_label": "Preferred Language",
@@ -34,7 +38,11 @@
     "next": "Next",
     "finish": "Finish Setup",
     "complete_message": "Setup completed यशfully. Starting एजंट processor...",
-    "error_runtime": "Runtime not available - cannot complete setup"
+    "error_runtime": "Runtime not available - cannot complete setup",
+    "byok_mode_title": "आपनी कुंजी आणा",
+    "byok_mode_desc": "आपला LLM प्रदाता कॉन्फिगर करा",
+    "ciris_mode_title": "CIRIS मोड सक्रिय",
+    "ciris_mode_desc": "CIRIS AI सेवा आपल्या खात्यात समाविष्ट आहे"
   },
   "agent": {
     "greeting": "Hello! How can I help you today?",
@@ -1520,6 +1528,8 @@
     "tickets_status_progress": "In Progress",
     "login_error_invalid_credentials": "Invalid username or password. Please try again.",
     "login_error_connection": "Cannot connect to server. Please check your connection.",
+    "login_error_google_config": "साइन-इन अयशस्वी झाले. कृपया Google Play Services अपडेट करा आणि पुन्हा प्रयत्न करा.",
+    "login_error_cancelled": "साइन-इन रद्द केले गेले. कृपया पुन्हा प्रयत्न करा.",
     "skill_workshop": "Skill कार्यshop",
     "skill_workshop_desc": "Create, import, and manage skills for your एजंट.",
     "skill_studio": "Skill Studio",

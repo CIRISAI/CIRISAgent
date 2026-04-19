@@ -140,7 +140,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
         raise DatabaseAccessError(error_msg)
 
 
-def check_disk_space(path: Path, required_mb: int = 100) -> Tuple[bool, float]:
+def check_disk_space(path: Path, required_mb: int = 50) -> Tuple[bool, float]:
     """
     Check if sufficient disk space is available.
 
@@ -165,7 +165,7 @@ def _check_disk_space_or_fail(base_dir: Path, fail_fast: bool) -> None:
     """Check disk space and fail if insufficient."""
     has_space, available_mb = check_disk_space(base_dir)
     if not has_space:
-        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 100MB REQUIRED - EXITING"
+        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 50MB REQUIRED - EXITING"
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
         if fail_fast:
             sys.exit(1)

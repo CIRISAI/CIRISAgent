@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -581,7 +580,7 @@ private fun TrustSecurityCard(
             logMessages = logMessages + "[verify] Querying registry.ciris.ai..."
 
             // Start the actual API call (uses cached attestation from auth service)
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.Default) {
                 apiClient.getVerifyStatus()
             }
             verifyStatus = result
@@ -679,7 +678,7 @@ private fun TrustSecurityCard(
                                             logMessages = logMessages + "[verify] Loading CIRISVerify binary..."
                                             kotlinx.coroutines.delay(300)
                                             logMessages = logMessages + "[verify] Querying registry..."
-                                            val result = withContext(Dispatchers.IO) {
+                                            val result = withContext(Dispatchers.Default) {
                                                 apiClient.getVerifyStatus()
                                             }
                                             verifyStatus = result
@@ -937,7 +936,7 @@ private fun TrustSecurityCard(
                                         logMessages = logMessages + "[verify] Loading CIRISVerify binary..."
                                         kotlinx.coroutines.delay(300)
                                         logMessages = logMessages + "[verify] Querying registry..."
-                                        val result = withContext(Dispatchers.IO) {
+                                        val result = withContext(Dispatchers.Default) {
                                             apiClient.getVerifyStatus()
                                         }
                                         verifyStatus = result

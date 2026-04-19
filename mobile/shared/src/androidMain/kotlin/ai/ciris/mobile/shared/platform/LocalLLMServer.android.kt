@@ -62,7 +62,7 @@ class AndroidLocalLLMServer : LocalLLMServer {
     )
     override val state: StateFlow<LocalLLMServerState> = _state.asStateFlow()
 
-    private var httpServer: ApplicationEngine? = null
+    private var httpServer: io.ktor.server.engine.EmbeddedServer<*, *>? = null
     private var ortSession: OrtSession? = null
     private var ortEnv: OrtEnvironment? = null
     private var currentModelPath: String? = null

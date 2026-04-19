@@ -75,7 +75,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -922,7 +921,7 @@ fun CIRISApp(
                                 interactViewModel.startPolling() // Start polling now that token is set
 
                                 // Run CIRISVerify attestation at boot (not first run)
-                                launch(kotlinx.coroutines.Dispatchers.IO) {
+                                launch(kotlinx.coroutines.Dispatchers.Default) {
                                     try {
                                         PlatformLogger.i(TAG, " Running boot-time attestation check...")
                                         val verifyResult = apiClient.getVerifyStatus()
@@ -1189,7 +1188,7 @@ fun CIRISApp(
 
                         coroutineScope.launch {
                             try {
-                                val cirisToken = withContext(Dispatchers.IO) {
+                                val cirisToken = withContext(Dispatchers.Default) {
                                     val authResponse = apiClient.login(username, password)
                                     authResponse.access_token
                                 }
@@ -1290,7 +1289,7 @@ fun CIRISApp(
 
                                 if (idToken != null) {
                                     // Network and file operations on IO dispatcher
-                                    val cirisToken = withContext(Dispatchers.IO) {
+                                    val cirisToken = withContext(Dispatchers.Default) {
                                         PlatformLogger.i(TAG, " Exchanging OAuth ID token for CIRIS access token (provider=$provider)")
                                         val authResponse = apiClient.nativeAuth(idToken, userId, provider)
                                         val token = authResponse.access_token
@@ -1343,7 +1342,7 @@ fun CIRISApp(
 
                                     if (password.isNotEmpty()) {
                                         PlatformLogger.i(TAG, " Logging in with local credentials: $username")
-                                        val cirisToken = withContext(Dispatchers.IO) {
+                                        val cirisToken = withContext(Dispatchers.Default) {
                                             val authResponse = apiClient.login(username, password)
                                             val token = authResponse.access_token
                                             PlatformLogger.i(TAG, " Got CIRIS access token: ${token.take(8)}...${token.takeLast(4)}")

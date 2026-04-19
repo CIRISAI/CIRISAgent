@@ -32,7 +32,6 @@ import ai.ciris.mobile.shared.viewmodels.SUPPORTED_LANGUAGES
 import ai.ciris.mobile.shared.viewmodels.LocationGranularity
 import androidx.compose.animation.AnimatedVisibility
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -450,7 +449,7 @@ fun SetupScreen(
                             try {
                                 // Run API call on IO dispatcher to avoid blocking main thread
                                 // Setup can take 20+ seconds as Python initializes services
-                                val result = withContext(Dispatchers.IO) {
+                                val result = withContext(Dispatchers.Default) {
                                     viewModel.completeSetup { request ->
                                         // Make API call to /v1/setup/complete
                                         PlatformLogger.i(TAG, " Calling apiClient.completeSetup with provider=${request.llm_provider}")
@@ -479,7 +478,7 @@ fun SetupScreen(
                     // If backing out of NODE_AUTH, also reset server-side device auth state
                     if (state.isNodeFlow && state.currentStep == SetupStep.NODE_AUTH) {
                         PlatformLogger.i(TAG, "Backing out of NODE_AUTH - resetting server device auth state")
-                        coroutineScope.launch(Dispatchers.IO) {
+                        coroutineScope.launch(Dispatchers.Default) {
                             try {
                                 apiClient.resetDeviceAuthOnServer()
                             } catch (e: Exception) {
@@ -1666,7 +1665,7 @@ private fun LlmConfigurationStep(
                     if (!isTesting) {
                         isTesting = true
                         testResult = null
-                        coroutineScope.launch(Dispatchers.IO) {
+                        coroutineScope.launch(Dispatchers.Default) {
                             try {
                                 // Provider is now stored as key directly (e.g., "openai", "local")
                                 val providerId = state.llmProvider

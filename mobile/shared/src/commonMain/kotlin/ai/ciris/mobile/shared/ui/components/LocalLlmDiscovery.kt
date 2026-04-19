@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,7 +105,7 @@ fun LocalLlmServerDiscovery(
         state.errorMessage = null
         state.discoveredServers = emptyList()
 
-        coroutineScope.launch(Dispatchers.IO) {
+        coroutineScope.launch(Dispatchers.Default) {
             try {
                 PlatformLogger.i(TAG, "Starting local LLM server discovery...")
                 val servers = apiClient.discoverLocalLlmServers(
@@ -143,7 +142,7 @@ fun LocalLlmServerDiscovery(
         state.serverStartProgress = if (confirmDownload) "Downloading model..." else "Starting local inference server..."
         state.errorMessage = null
 
-        coroutineScope.launch(Dispatchers.IO) {
+        coroutineScope.launch(Dispatchers.Default) {
             try {
                 PlatformLogger.i(TAG, "Starting local LLM server (confirmDownload=$confirmDownload)...")
 
@@ -172,7 +171,7 @@ fun LocalLlmServerDiscovery(
                         PlatformLogger.i(TAG, "Server started successfully, waiting for readiness...")
 
                         // Wait for the server to be ready, then re-discover
-                        coroutineScope.launch(Dispatchers.IO) {
+                        coroutineScope.launch(Dispatchers.Default) {
                             // Wait for estimated ready time (in chunks so we can update UI)
                             val waitSeconds = result.estimatedReadySeconds.coerceIn(10, 120)
                             repeat(waitSeconds / 5) {

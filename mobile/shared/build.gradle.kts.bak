@@ -1,23 +1,27 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     kotlin("multiplatform")
-    kotlin("plugin.serialization")
+    kotlin("plugin.serialization") version "1.9.22"
     id("com.android.library")
     id("org.jetbrains.compose")
-    kotlin("plugin.compose")
 }
 
 kotlin {
-    // Android
     androidTarget {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
         }
     }
 
-    // iOS
+    jvm("desktop") {
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -25,27 +29,13 @@ kotlin {
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "shared"
-            isStatic = true
-        }
-    }
+            isStatic = false  // Dynamic framework required for App Store
 
-    // Desktop (JVM)
-    jvm("desktop") {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
+            // Export Compose runtime for iOS
+            export(compose.runtime)
+            export(compose.foundation)
+            export(compose.material3)
         }
-    }
-
-    // Web (WASM) - NEW TARGET
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        moduleName = "ciris-shared"
-        browser {
-            commonWebpackConfig {
-                outputFileName = "ciris-shared.js"
-            }
-        }
-        binaries.executable()
     }
 
     sourceSets {
@@ -61,45 +51,48 @@ kotlin {
                 implementation(compose.components.uiToolingPreview)
 
                 // Coroutines
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
 
                 // Serialization
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
                 // Date/Time
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
 
-                // Ktor client
-                implementation("io.ktor:ktor-client-core:3.0.3")
-                implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
-                implementation("io.ktor:ktor-client-logging:3.0.3")
-                implementation("io.ktor:ktor-client-auth:3.0.3")
+                // Ktor client (replaces OkHttp)
+                implementation("io.ktor:ktor-client-core:2.3.7")
+                implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+                implementation("io.ktor:ktor-client-logging:2.3.7")
+                implementation("io.ktor:ktor-client-auth:2.3.7")
 
-                // Multiplatform ViewModel
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
+                // Multiplatform ViewModel (KMP-compatible)
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
 
                 // Navigation
-                implementation("org.jetbrains.androidx.navigation:navigation-compose:2.8.0-alpha10")
+                implementation("org.jetbrains.androidx.navigation:navigation-compose:2.7.0-alpha03")
 
                 // Generated API client
                 implementation(project(":generated-api"))
+
+                // On-device LLM: Android uses llmedge (androidMain), iOS coming soon.
+                // Desktop connects to external servers (Ollama, llama.cpp, etc.)
             }
         }
 
         val androidMain by getting {
             dependencies {
                 // Ktor Android engine
-                implementation("io.ktor:ktor-client-okhttp:3.0.3")
+                implementation("io.ktor:ktor-client-okhttp:2.3.7")
 
                 // Ktor server for local LLM HTTP API and test automation
-                implementation("io.ktor:ktor-server-core:3.0.3")
-                implementation("io.ktor:ktor-server-cio:3.0.3")
-                implementation("io.ktor:ktor-server-content-negotiation:3.0.3")
-                implementation("io.ktor:ktor-server-status-pages:3.0.3")
+                implementation("io.ktor:ktor-server-core:2.3.7")
+                implementation("io.ktor:ktor-server-cio:2.3.7")
+                implementation("io.ktor:ktor-server-content-negotiation:2.3.7")
+                implementation("io.ktor:ktor-server-status-pages:2.3.7")
 
-                // On-device LLM inference via ONNX Runtime
+                // On-device LLM inference via ONNX Runtime (works with Kotlin 1.9.x)
                 // 64-bit devices (arm64-v8a, x86_64): Full on-device inference
                 // 32-bit devices (armeabi-v7a): Falls back to "Local Inference Server" provider
                 implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
@@ -107,7 +100,6 @@ kotlin {
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")
                 implementation("androidx.security:security-crypto:1.1.0-alpha06")
-                implementation("androidx.activity:activity-compose:1.9.3")
 
                 // Google Play Services
                 implementation("com.google.android.gms:play-services-auth:20.7.0")
@@ -128,33 +120,39 @@ kotlin {
         val iosMain by creating {
             dependsOn(commonMain)
             dependencies {
-                implementation("io.ktor:ktor-client-darwin:3.0.3")
+                // Compose dependencies as API for framework export
+                api(compose.runtime)
+                api(compose.foundation)
+                api(compose.material3)
+
+                // Ktor iOS engine
+                implementation("io.ktor:ktor-client-darwin:2.3.7")
             }
         }
-
-        val iosX64Main by getting { dependsOn(iosMain) }
-        val iosArm64Main by getting { dependsOn(iosMain) }
-        val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
 
         val desktopMain by getting {
             dependencies {
+                // Compose Desktop
                 implementation(compose.desktop.currentOs)
-                implementation("io.ktor:ktor-client-cio:3.0.3")
-            }
-        }
 
-        val wasmJsMain by getting {
-            dependencies {
-                implementation("io.ktor:ktor-client-js:3.0.3")
+                // Ktor JVM engine (CIO for desktop)
+                implementation("io.ktor:ktor-client-cio:2.3.7")
+
+                // Coroutines Swing for desktop dispatchers
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")
             }
         }
 
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
             }
         }
+
+        val iosX64Main by getting { dependsOn(iosMain) }
+        val iosArm64Main by getting { dependsOn(iosMain) }
+        val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
     }
 }
 

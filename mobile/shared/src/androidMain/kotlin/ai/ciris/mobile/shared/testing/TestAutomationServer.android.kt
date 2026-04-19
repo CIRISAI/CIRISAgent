@@ -24,7 +24,7 @@ private const val TAG = "TestAutomation.android"
  */
 class AndroidTestAutomationServer(private val port: Int = 9091) {
 
-    private var server: ApplicationEngine? = null
+    private var server: EmbeddedServer<*, *>? = null
 
     private val json = Json {
         prettyPrint = true

@@ -1,21 +1,24 @@
 plugins {
-    // Kotlin Multiplatform - staying on 1.9.22 for AGP 8.1.0/Chaquopy compatibility
-    // Kotlin 2.x requires AGP 8.5+ which needs more testing with Chaquopy
-    kotlin("multiplatform").version("1.9.22").apply(false)
-    kotlin("android").version("1.9.22").apply(false)
+    // Kotlin 2.x with new Compose compiler architecture
+    kotlin("multiplatform").version("2.0.21").apply(false)
+    kotlin("android").version("2.0.21").apply(false)
+    kotlin("plugin.serialization").version("2.0.21").apply(false)
+    kotlin("plugin.compose").version("2.0.21").apply(false)
 
-    // Android - using 8.1.0 to match android/ (8.2.2 causes ctypes crash on x86_64 emulators)
-    id("com.android.application").version("8.1.0").apply(false)
-    id("com.android.library").version("8.1.0").apply(false)
+    // Android Gradle Plugin 8.5+ (required for Kotlin 2.x)
+    id("com.android.application").version("8.5.2").apply(false)
+    id("com.android.library").version("8.5.2").apply(false)
 
-    // Compose Multiplatform
-    id("org.jetbrains.compose").version("1.6.0").apply(false)
+    // Compose Multiplatform 1.7+
+    id("org.jetbrains.compose").version("1.7.1").apply(false)
 
-    // Python runtime - using 17.0.0
-    // Known issue: x86_64 emulator crashes during ctypes initialization (works on ARM devices)
+    // Python runtime - Chaquopy 17.0.0 (compatible with AGP 8.5+, Kotlin 2.x)
     id("com.chaquo.python").version("17.0.0").apply(false)
 }
 
-tasks.register("clean", Delete::class) {
-    delete(rootProject.buildDir)
+// Clean task - extend base plugin's clean
+tasks.matching { it.name == "clean" }.configureEach {
+    doLast {
+        delete(rootProject.layout.buildDirectory)
+    }
 }

@@ -1,6 +1,7 @@
 plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
+    id "org.jetbrains.kotlin.plugin.compose"
     id "com.chaquo.python"
     id "org.jetbrains.compose"
 }
@@ -122,8 +123,9 @@ android {
         coreLibraryDesugaringEnabled true
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    // Kotlin 2.x: Use kotlin {} block instead of kotlinOptions {}
+    kotlin {
+        jvmToolchain(17)
     }
 
     buildFeatures {
@@ -134,9 +136,7 @@ android {
     // Note: APK splits conflict with Chaquopy's ndk.abiFilters requirement
     // Use App Bundle (AAB) for Google Play's automatic ABI splitting instead
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
+    // composeOptions removed - Kotlin 2.x uses kotlin("plugin.compose") instead
 
     packaging {
         jniLibs {

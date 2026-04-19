@@ -59,9 +59,9 @@ done
 log_header() { echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════════════════════════════${NC}"; echo -e "${BOLD}$1${NC}"; echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"; }
 log_check() { echo -e "${BLUE}[CHECK]${NC} $1"; }
 log_ok() { echo -e "${GREEN}[OK]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; ((WARNINGS++)); }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; ((ERRORS++)); }
-log_fix() { echo -e "${GREEN}[FIXED]${NC} $1"; ((FIXED++)); }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; WARNINGS=$((WARNINGS + 1)); }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; ERRORS=$((ERRORS + 1)); }
+log_fix() { echo -e "${GREEN}[FIXED]${NC} $1"; FIXED=$((FIXED + 1)); }
 log_verbose() { $VERBOSE && echo -e "       $1" || true; }
 
 echo ""
@@ -132,7 +132,7 @@ if [ -n "$ACTUAL_CLASSES" ]; then
                 rel_path="${file#$SHARED_DIR/}"
                 log_warn "Possible missing 'override' in: $rel_path"
                 log_verbose "  Pattern: 'actual fun' without 'actual override fun'"
-                ((MISSING_OVERRIDE++))
+                MISSING_OVERRIDE=$((MISSING_OVERRIDE + 1))
             fi
         fi
     done <<< "$ACTUAL_CLASSES"
@@ -166,7 +166,7 @@ if [ -n "$WHEN_PLATFORM" ]; then
             if ! grep -q "Platform\.WEB" "$file" 2>/dev/null; then
                 rel_path="${file#$SHARED_DIR/}"
                 log_warn "Missing Platform.WEB branch: $rel_path"
-                ((MISSING_WEB++))
+                MISSING_WEB=$((MISSING_WEB + 1))
             fi
         fi
     done < <(grep -rl "when.*[Pp]latform\|Platform\.[A-Z]* ->" "$SHARED_DIR/commonMain" --include="*.kt" 2>/dev/null || true)

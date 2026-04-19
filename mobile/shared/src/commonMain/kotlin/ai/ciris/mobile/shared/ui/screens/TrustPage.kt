@@ -39,7 +39,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -220,11 +219,11 @@ private suspend fun fetchVerifyStatus(
     try {
         if (refresh) {
             // Trigger a fresh attestation run, then poll for the result
-            withContext(Dispatchers.IO) { apiClient.getVerifyStatus(refresh = true) }
+            withContext(Dispatchers.Default) { apiClient.getVerifyStatus(refresh = true) }
             // Wait for attestation to complete (typically 2-5s)
             kotlinx.coroutines.delay(3000)
         }
-        val result = withContext(Dispatchers.IO) {
+        val result = withContext(Dispatchers.Default) {
             apiClient.getVerifyStatus()
         }
         onSuccess(result)

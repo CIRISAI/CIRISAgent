@@ -579,7 +579,18 @@ fun CellVisualization(
                             "cx=${cx.toInt()} cy=${cy.toInt()} mr=${mr.toInt()} nr=${nr.toInt()} " +
                             "ports=${ports.size} motes=${selMotes.size}",
                     )
-                    val xFrac = if (size.width > 0) tap.x / size.width else 0.5f
+                    // tap.x here is in POST-inverse-transform (canvas-local)
+                    // coordinates — correct for hit-testing against draw
+                    // coords above, but wrong for the panel anchor hint,
+                    // which needs to reflect where the user *visually*
+                    // tapped on screen so the panel can open on the
+                    // opposite side. Forward-transform back to screen
+                    // coords using the current scale + pan.
+                    val cxL = size.width / 2f
+                    val screenX = (tap.x - cxL) * scale + cxL + panX
+                    val xFrac = if (size.width > 0)
+                        (screenX / size.width).coerceIn(0f, 1f)
+                    else 0.5f
                     onSelectionSnap.value(hit, xFrac)
                 }
             }

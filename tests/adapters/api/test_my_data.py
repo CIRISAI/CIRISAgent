@@ -9,6 +9,7 @@ Covers:
 """
 
 import hashlib
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -1040,13 +1041,16 @@ _FAKE_LENS_PAYLOAD = {
 
 @pytest.fixture
 def clear_capacity_cache():
-    """Reset the enrichment cache so each test starts from a clean miss."""
-    from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+    """Reset the route-local capacity cache so each test starts from a clean miss.
 
-    cache = get_enrichment_cache()
-    cache.clear()
-    yield cache
-    cache.clear()
+    Capacity uses its own module-level TTL dict (NOT ContextEnrichmentCache)
+    so the agent can never see its own score via /v1/system/environment.
+    """
+    from ciris_engine.logic.adapters.api.routes.my_data import _capacity_cache_clear
+
+    _capacity_cache_clear()
+    yield
+    _capacity_cache_clear()
 
 
 class TestCapacityEndpoint:
@@ -1160,6 +1164,72 @@ class TestCapacityEndpoint:
             "Capacity must not be registered as a context enrichment tool — "
             "it is user-facing only (see CellVizState docstring)."
         )
+
+    def test_capacity_does_not_use_context_enrichment_cache(self):
+        """Capacity must use its own isolated cache, not the shared enrichment cache.
+
+        The ContextEnrichmentCache is exposed via /v1/system/environment
+        (the UI's "Context Enrichment" screen) and its entries are also
+        read by the agent's context pipeline. Putting capacity there
+        would leak the self-grade into the agent's environment view —
+        exactly the Goodhart-adjacent outcome we're engineering against.
+
+        Checks *code references*, not mentions — explanatory comments
+        citing the cache to explain why we DON'T use it are fine.
+        """
+        import importlib
+        import re
+
+        my_data = importlib.import_module("ciris_engine.logic.adapters.api.routes.my_data")
+        module_src = (
+            "".join(open(my_data.__file__).readlines()) if hasattr(my_data, "__file__") and my_data.__file__ else ""
+        )
+
+        # Strip python comments so we only scan executable lines. Keeps
+        # docstrings out too (they never contain bare import statements).
+        code_only = "\n".join(line.split("#", 1)[0] for line in module_src.splitlines())
+
+        # An import of the shared cache would look like:
+        #   from ciris_engine.logic.context.system_snapshot_helpers import ...
+        #   import ciris_engine.logic.context.system_snapshot_helpers
+        assert not re.search(
+            r"^\s*(from\s+[\w.]*context\.system_snapshot_helpers|"
+            r"import\s+[\w.]*context\.system_snapshot_helpers)",
+            code_only,
+            re.MULTILINE,
+        ), "my_data.py must not import from context.system_snapshot_helpers"
+
+        # A call to the shared cache helper would look like `get_enrichment_cache(`.
+        assert "get_enrichment_cache(" not in code_only, (
+            "my_data.py must not call get_enrichment_cache() — capacity "
+            "uses its own module-local TTL dict to stay out of the shared "
+            "enrichment surface."
+        )
+
+    def test_capacity_cache_expires_after_ttl(self, client, clear_capacity_cache):
+        """Cache entry must be evicted after its 15-min TTL elapses."""
+        from ciris_engine.logic.adapters.api.routes import my_data as my_data_mod
+
+        fetch_mock = AsyncMock(return_value=_FAKE_LENS_PAYLOAD)
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.my_data._fetch_capacity_from_lens",
+            new=fetch_mock,
+        ):
+            first = client.get("/v1/my-data/capacity")
+            # Force expiry by rewriting the cache entry's expiry timestamp
+            # to the past. No time machine needed.
+            with my_data_mod._CAPACITY_CACHE_LOCK:
+                template, (payload, _) = next(iter(my_data_mod._CAPACITY_CACHE.items()))
+                past = datetime.now(timezone.utc) - timedelta(seconds=1)
+                my_data_mod._CAPACITY_CACHE[template] = (payload, past)
+            second = client.get("/v1/my-data/capacity")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        # First call misses (fresh), second call misses too because TTL expired.
+        assert first.json()["data"]["cached"] is False
+        assert second.json()["data"]["cached"] is False
+        assert fetch_mock.await_count == 2
 
     def test_capacity_base_url_respects_env_var(self, monkeypatch):
         """`_capacity_base_url` honours the same env var as the accord adapter."""

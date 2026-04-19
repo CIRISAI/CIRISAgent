@@ -14,13 +14,12 @@ for data sent to the CIRISLens repository via the accord metrics adapter.
 import hashlib
 import logging
 import os
+import threading
 from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-
-from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
@@ -685,9 +684,58 @@ async def update_accord_settings(
 # ---------------------------------------------------------------------------
 # CIRIS capacity (ratchet) proxy
 # ---------------------------------------------------------------------------
+#
+# Cache discipline: this route uses its OWN module-level TTL dict rather
+# than the shared `ContextEnrichmentCache`. The enrichment cache is tied
+# into the agent's context pipeline AND exposed via /v1/system/environment
+# (the "Context Enrichment" screen in the UI), so entries there implicitly
+# count as "things the agent sees about itself". Capacity is explicitly
+# user-facing only — the agent must never read its own score (Goodhart /
+# self-monitoring). Isolating to a local cache keeps the anti-Goodhart
+# gate structural, not incidental.
+#
+# Pattern mirrors `CirisBillingProvider._cache` (dict[str, tuple[value,
+# expiry]] + manual expiry check) — the standard local-TTL idiom in this
+# repo.
 
 
 _CAPACITY_CACHE_TTL_SECONDS = 900.0  # 15 min — matches the 7-day lens scoring window cadence
+_CAPACITY_CACHE: Dict[str, Tuple[Dict[str, Any], datetime]] = {}
+_CAPACITY_CACHE_LOCK = threading.Lock()
+
+
+def _capacity_cache_get(template: str) -> Optional[Dict[str, Any]]:
+    """Return the cached lens payload for `template` if still fresh, else None.
+
+    Thread-safe and side-effect-free except for evicting expired entries.
+    """
+    now = datetime.now(timezone.utc)
+    with _CAPACITY_CACHE_LOCK:
+        hit = _CAPACITY_CACHE.get(template)
+        if hit is None:
+            return None
+        payload, expiry = hit
+        if now >= expiry:
+            # Evict expired entry so the dict doesn't grow unbounded over
+            # long-running deployments (one per template, but still).
+            _CAPACITY_CACHE.pop(template, None)
+            return None
+        return payload
+
+
+def _capacity_cache_set(template: str, payload: Dict[str, Any]) -> None:
+    """Store `payload` for `template` with a TTL-based expiry."""
+    from datetime import timedelta
+
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=_CAPACITY_CACHE_TTL_SECONDS)
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE[template] = (payload, expiry)
+
+
+def _capacity_cache_clear() -> None:
+    """Clear the capacity cache — used by tests to get clean starts."""
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE.clear()
 
 
 def _capacity_base_url() -> str:
@@ -735,12 +783,17 @@ async def get_capacity(
 
     Data flows:
         CIRISLens fleet scoring
-            -> proxy fetch here (cached 15 min in ContextEnrichmentCache)
+            -> proxy fetch here (cached 15 min in a route-local TTL dict)
             -> KMP client /v1/my-data/capacity
             -> cell visualization ambient state (user-facing)
 
-    Intentionally NOT registered as a context enrichment tool: the agent
-    should not read its own capacity score (avoids Goodhart / score-chasing).
+    Anti-Goodhart guardrails (structural, not incidental):
+      - NOT registered as a context enrichment tool.
+      - NOT stored in the shared ContextEnrichmentCache — that cache is
+        also surfaced via /v1/system/environment ("Context Enrichment"
+        screen), which would leak the agent's own score into its own
+        view of its environment. Uses a module-local TTL dict instead.
+
     The signed audit history is the real coherence ratchet; this is just
     the viewing angle for the human.
     """
@@ -751,11 +804,8 @@ async def get_capacity(
             detail="Agent template unavailable — runtime not fully initialized.",
         )
 
-    cache = get_enrichment_cache()
-    cache_key = f"ciris_capacity:{template}"
     served_from_cache = True
-
-    payload = cache.get(cache_key)
+    payload = _capacity_cache_get(template)
     if payload is None:
         served_from_cache = False
         try:
@@ -768,7 +818,7 @@ async def get_capacity(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Could not reach CIRISLens: {type(e).__name__}",
             )
-        cache.set(cache_key, payload, ttl_seconds=_CAPACITY_CACHE_TTL_SECONDS)
+        _capacity_cache_set(template, payload)
 
     try:
         parsed = CapacityResponse(

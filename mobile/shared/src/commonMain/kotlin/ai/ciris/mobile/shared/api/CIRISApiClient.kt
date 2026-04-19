@@ -6683,7 +6683,7 @@ class CIRISApiClient(
      */
     suspend fun getCapacity(): CapacityData {
         val method = "getCapacity"
-        logInfo(method, "Fetching CIRIS capacity")
+        logInfo(method, "Fetching CIRIS capacity (scope=both)")
 
         val client = HttpClient {
             install(ContentNegotiation) { json(jsonConfig) }
@@ -6694,7 +6694,11 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/my-data/capacity") {
+            // scope=both returns fleet (composite_score/factors) AND the
+            // per-occurrence local_score. Fleet-only clients stay
+            // compatible — the backend ignores unknown scope values
+            // as a 400, but this known value is always safe.
+            val response = client.get("$baseUrl/v1/my-data/capacity?scope=both") {
                 authHeader()?.let { header("Authorization", it) }
             }
 
@@ -6709,7 +6713,7 @@ class CIRISApiClient(
             val factors = data.factors
 
             logInfo(method, "Capacity: ${data.agentName} ${data.category} " +
-                    "composite=${data.compositeScore} cached=${data.cached}")
+                    "fleet=${data.compositeScore} local=${data.localScore} cached=${data.cached}")
 
             CapacityData(
                 agentName = data.agentName ?: "",
@@ -6723,7 +6727,9 @@ class CIRISApiClient(
                 s = factors?.S?.score ?: 0.0,
                 windowStart = data.metadata?.windowStart,
                 windowEnd = data.metadata?.windowEnd,
-                cached = data.cached ?: false
+                cached = data.cached ?: false,
+                localScore = data.localScore,
+                localCategory = data.localCategory,
             )
         } finally {
             client.close()
@@ -8268,7 +8274,13 @@ data class CapacityPayload(
     val category: String? = null,
     val factors: CapacityFactorsPayload? = null,
     val metadata: CapacityMetadataPayload? = null,
-    val cached: Boolean? = null
+    val cached: Boolean? = null,
+    // Backend per-occurrence scores — populated when the request uses
+    // ?scope=local|both. Null when scope=fleet (the default).
+    @SerialName("local_score")
+    val localScore: Double? = null,
+    @SerialName("local_category")
+    val localCategory: String? = null,
 )
 
 @Serializable
@@ -8321,7 +8333,11 @@ data class CapacityData(
     val s: Double,          // Signalling gratitude / Steering
     val windowStart: String?,
     val windowEnd: String?,
-    val cached: Boolean
+    val cached: Boolean,
+    /** This-occurrence score in [0, 1]; null when the request was scope=fleet. */
+    val localScore: Double? = null,
+    /** This-occurrence category; null when the request was scope=fleet. */
+    val localCategory: String? = null,
 )
 
 // ===== Data Management API Models =====

@@ -549,7 +549,13 @@ class InteractViewModel(
         val method = "refreshCapacity"
         try {
             val data = apiClient.getCapacity()
+            // Prefer backend-authoritative local score when present (the
+            // CCA proxy over runtime signals lives in my_data.py
+            // _compute_local_capacity). Fall back to the client-side
+            // computation (recomputeLocalScore) for backward compat
+            // with older backends or pre-fetch state.
             val prevLocal = _cellVizState.value.localScore
+            val local = data.localScore?.toFloat() ?: prevLocal
             _cellVizState.value = ai.ciris.mobile.shared.ui.screens.graph.CellVizState(
                 c = data.c.toFloat(),
                 iInt = data.iInt.toFloat(),
@@ -560,10 +566,7 @@ class InteractViewModel(
                 fragilityIndex = data.fragilityIndex.toFloat(),
                 category = data.category,
                 isPreFetch = false,
-                // Preserve the already-computed local score across fleet
-                // refreshes. recomputeLocalScore() will overwrite it on
-                // the next status / LLM poll anyway.
-                localScore = prevLocal,
+                localScore = local,
             ).sanitized()
             logDebug(method, "Capacity: ${data.agentName} ${data.category} " +
                     "composite=${data.compositeScore} cached=${data.cached}")

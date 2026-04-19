@@ -125,18 +125,30 @@ class CapacityMetadata(BaseModel):
 class CapacityResponse(BaseModel):
     """User-facing CIRIS capacity reading for the current agent's template.
 
-    Driven by CIRISLens fleet scoring. Presented to the user via the cell
-    visualization — intentionally NOT exposed to the agent's own reasoning
-    context to avoid score-chasing / self-monitoring anxiety.
+    Driven by CIRISLens fleet scoring (composite_score/factors/category) and
+    — optionally — a **local** score computed from this occurrence's live
+    signals. Presented to the user via the cell visualization; intentionally
+    NOT exposed to the agent's own reasoning context to avoid score-chasing
+    / self-monitoring anxiety.
     """
 
     agent_name: str = Field(..., description="Template name this score is for (e.g. Ally, Scout)")
-    composite_score: float = Field(..., description="Aggregate CIRIS score in [0, 1]")
+    composite_score: float = Field(..., description="Aggregate fleet CIRIS score in [0, 1]")
     fragility_index: float = Field(..., description="Higher = more fragile; unbounded")
-    category: str = Field(..., description="high_capacity | healthy | moderate | high_fragility")
-    factors: CapacityFactors = Field(..., description="Per-factor breakdown")
+    category: str = Field(..., description="Fleet: high_capacity | healthy | moderate | high_fragility")
+    factors: CapacityFactors = Field(..., description="Fleet per-factor breakdown")
     metadata: CapacityMetadata = Field(default_factory=CapacityMetadata)
     cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
+    # Local score — populated when the request uses ?scope=local|both.
+    # Null when scope=fleet (default) so the existing client contract is
+    # unchanged. The local computation is a CCA approximation
+    # (J = k_eff · (1 − ρ) · λ · σ) over fast-to-read runtime signals.
+    local_score: Optional[float] = Field(
+        None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
+    )
+    local_category: Optional[str] = Field(
+        None, description="This occurrence's category; null when scope=fleet."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -750,6 +762,68 @@ def _capacity_base_url() -> str:
     ).rstrip("/")
 
 
+def _compute_local_capacity(request: Request) -> Tuple[float, str]:
+    """Compute this occurrence's local CIRIS capacity as a score in [0, 1].
+
+    Implements a deliberately minimal CCA approximation (Coherence Collapse
+    Analysis, Moore 2026):
+
+        J = k_eff · (1 − ρ) · λ · σ
+
+    with runtime-cheap proxies for each term:
+
+      * ``k_eff`` = fraction of healthy services (the 22-service microarchitecture
+        is the ρ↓ intervention per Table 5, so we approximate k directly).
+      * ``(1 − ρ)`` = 1.0 constant. Modular services are architecturally
+        independent; refining this requires cross-service covariance tracking.
+      * ``λ`` = 1.0 if the conscience + WA services are healthy, else 0.7.
+        Tracks "are the ethical faculties actively enforcing constraints."
+      * ``σ`` = 1.0. Uptime/sustainability doesn't have a cheap proxy at
+        this layer; left as neutral until we wire the gratitude emission
+        rate or credit balance.
+
+    Returns (score_in_unit_interval, category_label). Runs in microseconds;
+    no I/O, no DB queries. Not registered as a context-enrichment tool —
+    agent must never read its own score (same Goodhart guardrail as fleet).
+    """
+    try:
+        svc_registry = getattr(request.app.state, "service_registry", None)
+        if svc_registry is None:
+            # Runtime not yet fully initialized — return a neutral 1.0 so
+            # the cell viz renders "as designed" rather than punishing
+            # the user for transient pre-warm state.
+            return 1.0, "healthy"
+
+        services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
+        total = max(1, len(services))
+        healthy = sum(
+            1
+            for s in services
+            if getattr(s, "healthy", True) or (hasattr(s, "is_healthy") and s.is_healthy())
+        )
+        k_eff_frac = healthy / total
+
+        # λ probe: conscience + wise_authority services healthy?
+        required_for_lambda = {"conscience", "wise_authority"}
+        present = {getattr(s, "service_name", getattr(s, "name", "")).lower() for s in services}
+        lam = 1.0 if required_for_lambda.issubset(present) else 0.7
+
+        rho_complement = 1.0
+        sigma = 1.0
+        j = k_eff_frac * rho_complement * lam * sigma
+        j = max(0.0, min(1.0, j))
+
+        category = (
+            "high_capacity" if j >= 0.90 else "healthy" if j >= 0.75 else "moderate" if j >= 0.55 else "high_fragility"
+        )
+        return j, category
+    except Exception as e:
+        # Never fail the request because local computation hit an edge case —
+        # return neutral so the fleet score still flows.
+        logger.debug(f"[capacity] local compute failed, returning neutral: {type(e).__name__}: {e}")
+        return 1.0, "healthy"
+
+
 async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
     """Call CIRISLens for a template's capacity record. Raises on non-200."""
     import aiohttp
@@ -777,9 +851,21 @@ async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
 async def get_capacity(
     current_user: CurrentUserDep,
     request: Request,
+    scope: str = "fleet",
 ) -> StandardResponse:
     """
     Get the current CIRIS capacity (C/I_int/R/I_inc/S) for this agent's template.
+
+    Query parameters:
+      * ``scope=fleet`` (default) — template-aggregate score from CIRISLens.
+        This is the "Ally-everywhere" score across all instances of the
+        same agent template. Existing behaviour, unchanged contract.
+      * ``scope=local`` — this occurrence's own score, computed from live
+        runtime signals using a minimal CCA approximation
+        (J = k_eff · (1 − ρ) · λ · σ, Moore 2026). No lens call.
+      * ``scope=both`` — returns both; ``composite_score`` is fleet,
+        ``local_score`` is this occurrence. Preferred for the cell-viz
+        CapacityBadge so the user sees ``● 0.92 · 0.90``.
 
     Data flows:
         CIRISLens fleet scoring
@@ -793,10 +879,18 @@ async def get_capacity(
         also surfaced via /v1/system/environment ("Context Enrichment"
         screen), which would leak the agent's own score into its own
         view of its environment. Uses a module-local TTL dict instead.
+      - Local score is ALSO never written anywhere the agent can read.
 
     The signed audit history is the real coherence ratchet; this is just
     the viewing angle for the human.
     """
+    scope_norm = (scope or "fleet").strip().lower()
+    if scope_norm not in {"fleet", "local", "both"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scope must be one of: fleet, local, both",
+        )
+
     template = _get_agent_id(request)
     if not template:
         raise HTTPException(
@@ -804,6 +898,31 @@ async def get_capacity(
             detail="Agent template unavailable — runtime not fully initialized.",
         )
 
+    # --- Local-only: skip the lens hop entirely -----------------------------
+    if scope_norm == "local":
+        local_j, local_cat = _compute_local_capacity(request)
+        neutral_factor = CapacityFactor(score=local_j, components={}, trace_count=0, confidence="low")
+        parsed = CapacityResponse(
+            agent_name=template,
+            composite_score=local_j,
+            fragility_index=0.0,
+            category=local_cat,
+            factors=CapacityFactors(
+                C=neutral_factor, I_int=neutral_factor, R=neutral_factor, I_inc=neutral_factor, S=neutral_factor
+            ),
+            metadata=CapacityMetadata(),
+            cached=False,
+            local_score=local_j,
+            local_category=local_cat,
+        )
+        return StandardResponse(
+            success=True,
+            data=parsed.model_dump(),
+            message=f"Local CIRIS capacity: {local_cat} (score={local_j:.3f})",
+            metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": False, "scope": "local"},
+        )
+
+    # --- Fleet or both: fetch lens payload (cached) -------------------------
     served_from_cache = True
     payload = _capacity_cache_get(template)
     if payload is None:
@@ -820,6 +939,11 @@ async def get_capacity(
             )
         _capacity_cache_set(template, payload)
 
+    local_score: Optional[float] = None
+    local_cat: Optional[str] = None
+    if scope_norm == "both":
+        local_score, local_cat = _compute_local_capacity(request)
+
     try:
         parsed = CapacityResponse(
             agent_name=payload.get("agent_name", template),
@@ -829,6 +953,8 @@ async def get_capacity(
             factors=CapacityFactors(**payload["factors"]),
             metadata=CapacityMetadata(**payload.get("metadata", {})),
             cached=served_from_cache,
+            local_score=local_score,
+            local_category=local_cat,
         )
     except Exception as e:
         logger.error(f"[capacity] Could not parse lens payload for {template}: {e}")
@@ -841,7 +967,11 @@ async def get_capacity(
         success=True,
         data=parsed.model_dump(),
         message=f"CIRIS capacity for template {template}: {parsed.category} (score={parsed.composite_score:.3f})",
-        metadata={"timestamp": datetime.now(timezone.utc).isoformat(), "cached": served_from_cache},
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "cached": served_from_cache,
+            "scope": scope_norm,
+        },
     )
 
 

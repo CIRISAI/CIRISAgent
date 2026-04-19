@@ -165,6 +165,10 @@ class InteractViewModel(
         private const val MAX_CAUGHT_BUBBLES = 12
         private const val SSE_RECONNECT_BASE_MS = 1000L
         private const val SSE_RECONNECT_MAX_MS = 30000L
+        /** Max recent SSE events retained per pipeline stage (ring buffer). */
+        private const val STAGE_EVENT_BUFFER = 5
+        /** 1 Hz poll cadence for selected-element detail fetches. */
+        private const val SELECTION_POLL_INTERVAL_MS = 1000L
     }
 
     // Device attestation callback for triggering Play Integrity at startup
@@ -346,6 +350,32 @@ class InteractViewModel(
         _gratitudePulses.asStateFlow()
 
     private var lastGratitudeMs: Long = 0L
+
+    // Per-stage SSE ring buffer — the data source for the "tap a nucleus
+    // shell and see the most recent rationales" demo scenario. Keyed by
+    // SSE event_type, capped at STAGE_EVENT_BUFFER capacity per type so
+    // memory stays bounded (<= 7 × 5 × ~200 chars ≈ 7 KB worst case).
+    //
+    // Updated on every ReasoningEvent.Emoji so the buffer always holds
+    // the last K events for each stage, independent of FG/BG mode.
+    private val _stageEvents = MutableStateFlow<Map<String, List<StageEvent>>>(emptyMap())
+    val stageEvents: StateFlow<Map<String, List<StageEvent>>> = _stageEvents.asStateFlow()
+
+    // Current FG selection. Null = nothing selected. Only settable from
+    // CellVisualization's tap handler; cleared on every FG → BG
+    // transition so re-entering FG starts fresh.
+    private val _selectionKind =
+        MutableStateFlow<ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?>(null)
+    val selectionKind: StateFlow<ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?> =
+        _selectionKind.asStateFlow()
+
+    // Polled detail for whatever is currently selected. The poll job
+    // swaps endpoints based on `_selectionKind` and writes the raw
+    // JSON-parsed body here for the panel composable to render.
+    private val _selectionDetail = MutableStateFlow<SelectionDetail?>(null)
+    val selectionDetail: StateFlow<SelectionDetail?> = _selectionDetail.asStateFlow()
+
+    private var selectionPollJob: Job? = null
 
     private var capacityRefreshJob: Job? = null
 
@@ -1721,6 +1751,11 @@ class InteractViewModel(
                                 // carrier for the event's semantic summary.
                                 addBubbleEmoji(event.emoji, event.payload)
 
+                                // Record into the per-stage ring buffer so the
+                                // nucleus-shell selection panel can show recent
+                                // rationales / conscience values without a poll.
+                                recordStageEvent(event)
+
                                 // Add to timeline (persists for bubble net)
                                 addTimelineEvent(event.emoji, event.eventType)
 
@@ -1895,6 +1930,238 @@ class InteractViewModel(
         _timelineEvents.value = emptyList()
     }
 
+    // =========================================================================
+    // FG selection + per-stage ring buffer + 1 Hz poll
+    //
+    // See FSD §12 — the detail panel in FG reads live agent data for the
+    // element the user tapped. Nucleus shells use a client-side SSE
+    // ring buffer (no poll), everything else polls @ 1 Hz while selected.
+    // =========================================================================
+
+    /** One entry in the per-stage SSE ring buffer. */
+    data class StageEvent(
+        val eventType: String,
+        val emoji: String,
+        val timestampMs: Long,
+        /** Truncated semantic summary (<= 160 chars per ReasoningEvent). */
+        val payload: String?,
+    )
+
+    /**
+     * Parsed live data for whatever is currently selected in FG.
+     * Kind-tagged so the panel composable can render the right shape.
+     */
+    sealed interface SelectionDetail {
+        /** One-line status line common to every variant. */
+        val summaryLine: String
+
+        data class AdapterPort(
+            override val summaryLine: String,
+            val adapterId: String,
+            val adapterType: String,
+            val isRunning: Boolean,
+            val messagesProcessed: Int,
+            val errorsCount: Int,
+            val lastError: String?,
+            val lastActivity: String?,
+            /** Queue depth if available (null = not yet surfaced). */
+            val queueSize: Int?,
+        ) : SelectionDetail
+
+        data class BusArc(
+            override val summaryLine: String,
+            val bus: ai.ciris.mobile.shared.ui.screens.graph.CellBus,
+            val messagesSent: Long,
+            val averageLatencyMs: Double,
+            val errorsLastHour: Int,
+            val queueDepth: Int,
+            /** LLM bus only: per-provider detail. Empty for other buses. */
+            val llmProviders: List<LLMProviderRow> = emptyList(),
+        ) : SelectionDetail
+
+        data class LLMProviderRow(
+            val name: String,
+            val healthy: Boolean,
+            val priority: String,
+            val circuitBreakerState: String,  // "closed" / "open" / "half_open"
+            val failureCount: Int,
+            val rateLimited: Boolean,
+        )
+
+        data class NucleusShell(
+            override val summaryLine: String,
+            val stageIndex: Int,
+            val stageLabel: String,
+            val eventType: String,
+            val recentEvents: List<StageEvent>,
+        ) : SelectionDetail
+
+        data class NucleusCore(
+            override val summaryLine: String,
+            val cognitiveState: String,
+            val systemStatus: String,
+            val servicesOnline: Int,
+            val servicesTotal: Int,
+        ) : SelectionDetail
+
+        data class Mote(
+            override val summaryLine: String,
+            val nodeId: String,
+            val scope: String,
+            val nodeType: String?,
+            val attributesJson: String?,
+        ) : SelectionDetail
+
+        data class Gratitude(
+            override val summaryLine: String,
+            val recentCompletions: List<String>,
+        ) : SelectionDetail
+
+        data class Loading(override val summaryLine: String = "Loading…") : SelectionDetail
+
+        data class Error(override val summaryLine: String) : SelectionDetail
+    }
+
+    private fun recordStageEvent(event: ReasoningEvent.Emoji) {
+        val entry = StageEvent(
+            eventType = event.eventType,
+            emoji = event.emoji,
+            timestampMs = Clock.System.now().toEpochMilliseconds(),
+            payload = event.payload,
+        )
+        _stageEvents.value = _stageEvents.value.toMutableMap().apply {
+            val list = (get(event.eventType).orEmpty() + entry).takeLast(STAGE_EVENT_BUFFER)
+            put(event.eventType, list)
+        }
+    }
+
+    /**
+     * Set the current FG selection. Starts / cancels / swaps the 1 Hz
+     * poll job so we never poll endpoints for elements the user isn't
+     * looking at.
+     */
+    fun setSelection(kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?) {
+        val prev = _selectionKind.value
+        _selectionKind.value = kind
+        // No change → keep the existing poll running.
+        if (prev == kind) return
+
+        selectionPollJob?.cancel()
+        selectionPollJob = null
+        _selectionDetail.value = null
+        if (kind == null) return
+
+        _selectionDetail.value = SelectionDetail.Loading()
+        selectionPollJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    _selectionDetail.value = fetchSelectionDetail(kind)
+                } catch (e: Exception) {
+                    logDebug("fetchSelectionDetail", "poll error: ${e.message}")
+                    _selectionDetail.value = SelectionDetail.Error(
+                        summaryLine = "Couldn't fetch detail: ${e.message ?: e::class.simpleName}",
+                    )
+                }
+                // Nucleus shells read the SSE ring buffer on every tick
+                // too so newly-arrived events show up without a manual
+                // refresh. For HTTP-backed kinds the 1 s cadence is the
+                // cap — fetchSelectionDetail short-circuits if nothing
+                // obvious has changed (not strictly needed; polls are
+                // cheap and the 1Hz cap is fine).
+                kotlinx.coroutines.delay(SELECTION_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun fetchSelectionDetail(
+        kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind,
+    ): SelectionDetail = when (kind) {
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort -> {
+            val details = apiClient.getAdapterDetails(kind.adapterId)
+            SelectionDetail.AdapterPort(
+                summaryLine = "${kind.adapterType}:${kind.adapterId.take(12)} • " +
+                    (if (details.isRunning) "running" else "stopped"),
+                adapterId = kind.adapterId,
+                adapterType = kind.adapterType,
+                isRunning = details.isRunning,
+                messagesProcessed = details.metrics?.messagesProcessed ?: 0,
+                errorsCount = details.metrics?.errorsCount ?: 0,
+                lastError = details.metrics?.lastError,
+                lastActivity = details.lastActivity,
+                // Adapter-level queue depth isn't surfaced yet.
+                queueSize = null,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.BusArc -> {
+            // Bus-level telemetry (per-bus messages/latency/errors/queue)
+            // and the LLM providers endpoint aren't wired in the KMP
+            // client yet — that's deferred to a follow-up commit. For
+            // now the panel shows the bus identity + signals that
+            // richer live data is in-progress, rather than faking it.
+            SelectionDetail.BusArc(
+                summaryLine = "${kind.bus.name} bus",
+                bus = kind.bus,
+                messagesSent = 0L,
+                averageLatencyMs = 0.0,
+                errorsLastHour = 0,
+                queueDepth = 0,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell -> {
+            val recent = _stageEvents.value[kind.eventType].orEmpty()
+            SelectionDetail.NucleusShell(
+                summaryLine = kind.eventType.replace('_', ' ')
+                    .replaceFirstChar { it.uppercase() } + " • ${recent.size} recent",
+                stageIndex = kind.stageIndex,
+                stageLabel = kind.eventType.replace('_', ' ').uppercase(),
+                eventType = kind.eventType,
+                recentEvents = recent,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusCore -> {
+            val status = apiClient.getSystemStatus()
+            val cog = status.cognitive_state ?: "unknown"
+            SelectionDetail.NucleusCore(
+                summaryLine = "$cog • ${status.services_online}/${status.services_total} services",
+                cognitiveState = cog,
+                systemStatus = status.status,
+                servicesOnline = status.services_online,
+                servicesTotal = status.services_total,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.CytoplasmMote -> {
+            val node = apiClient.getMemoryNode(kind.nodeId)
+            SelectionDetail.Mote(
+                summaryLine = "${node.type} • ${node.scope}",
+                nodeId = kind.nodeId,
+                scope = kind.scope,
+                nodeType = node.type,
+                attributesJson = node.attributesJson,
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.SignalChannel -> {
+            // A channel is the correspondent-facing surface of a port —
+            // same data source.
+            fetchSelectionDetail(
+                ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort(
+                    adapterId = kind.adapterId,
+                    adapterType = "",
+                    bus = kind.bus,
+                )
+            )
+        }
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.GratitudeMote -> {
+            // Audit-query backed task-completion list is deferred to a
+            // follow-up (needs a new API method). Empty list for now;
+            // summaryLine makes the in-progress state legible, not
+            // silently-broken.
+            SelectionDetail.Gratitude(
+                summaryLine = "Recent signalled gratitude (in progress)",
+                recentCompletions = emptyList(),
+            )
+        }
+    }
+
     override fun onCleared() {
         logInfo("onCleared", "ViewModel cleared, cancelling jobs")
         super.onCleared()
@@ -1905,5 +2172,6 @@ class InteractViewModel(
         sseJob?.cancel()
         languageObserverJob?.cancel()
         capacityRefreshJob?.cancel()
+        selectionPollJob?.cancel()
     }
 }

@@ -144,6 +144,8 @@ fun InteractScreen(
     val cellVizState by viewModel.cellVizState.collectAsState()
     val busPulses by viewModel.busPulses.collectAsState()
     val gratitudePulses by viewModel.gratitudePulses.collectAsState()
+    val selectionKind by viewModel.selectionKind.collectAsState()
+    val selectionDetail by viewModel.selectionDetail.collectAsState()
 
     // When auth error occurs, navigate to login silently
     LaunchedEffect(authError) {
@@ -209,6 +211,13 @@ fun InteractScreen(
         } else {
             // When disabled, force OFF
             VisualizationMode.OFF
+        }
+    }
+
+    // Leaving FG clears any live selection so re-entering is fresh.
+    LaunchedEffect(visualizationMode) {
+        if (visualizationMode != VisualizationMode.FOREGROUND) {
+            viewModel.setSelection(null)
         }
     }
 
@@ -380,6 +389,9 @@ fun InteractScreen(
                     // Signal channels (adapter wiring leader lines) only
                     // surface in Foreground mode — BG stays glanceable.
                     showSignalChannels = visualizationMode == VisualizationMode.FOREGROUND,
+                    // FG selection: tap → ViewModel → live detail panel.
+                    onSelection = { kind -> viewModel.setSelection(kind) },
+                    selection = selectionKind,
                 )
             } else {
                 // Low-end / 32-bit device — frozen legacy path. No orbits,
@@ -451,6 +463,22 @@ fun InteractScreen(
                 onSessionsClick = onOpenSessions,
                 theme = theme
             )
+
+            // FG selection detail panel. Renders immediately below the
+            // status bar when the user taps a selectable element on the
+            // cell (only in FG — selection is cleared on BG entry).
+            val sel = selectionKind
+            if (visualizationMode == VisualizationMode.FOREGROUND && sel != null) {
+                FgDetailPanel(
+                    selection = sel,
+                    detail = selectionDetail,
+                    theme = theme,
+                    onDismiss = { viewModel.setSelection(null) },
+                    onOpenLLMSettings = onOpenLLMSettings,
+                    onOpenWiseAuthority = onOpenWiseAuthority,
+                    onOpenSystem = onOpenSystem,
+                )
+            }
 
         // Auth error is now handled by LaunchedEffect above - navigates to login silently
 
@@ -3134,6 +3162,368 @@ private fun VisualizationLegendItem(
             text = description,
             fontSize = 9.sp,
             color = theme.textMuted
+        )
+    }
+}
+
+/**
+ * FG detail panel — the transparency surface that opens when the user
+ * taps a selectable element on the frozen cell diagram in Foreground
+ * mode (FSD §12). Renders a compact summary of *this* element's live
+ * state alongside a deeplink to the existing full-detail screen (e.g.
+ * Adapters, Memory, System, LLM Settings) for drill-in.
+ *
+ * Framing discipline (per CIRIS accord):
+ *   - Transparency by default — the element's live fields are visible,
+ *     not hidden behind expert toggles.
+ *   - Incompleteness is first-class — a NucleusShell with no recent
+ *     events reads as "no recent activity" not as an error.
+ *   - No anthropomorphizing. Panels narrate *what the system did by
+ *     design*, never what the agent "feels" or "wants".
+ *   - No surveillance framing — never "monitoring" / "tracking" /
+ *     "profile" language for adapter channels.
+ *
+ * Hosts the kind-tagged content below the chat-bar area so it shares
+ * vertical rhythm with the existing Interact chrome. A close button
+ * dismisses back to the plain cell view.
+ */
+@Composable
+private fun FgDetailPanel(
+    selection: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind,
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail?,
+    theme: InteractTheme,
+    onDismiss: () -> Unit,
+    onOpenLLMSettings: () -> Unit,
+    onOpenWiseAuthority: () -> Unit,
+    onOpenSystem: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = theme.surface.copy(alpha = 0.96f),
+        shadowElevation = if (theme.isDark) 0.dp else 4.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Header row: kind label + dismiss button.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = kindLabel(selection),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = theme.textPrimary,
+                )
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Transparent,
+                    modifier = Modifier.testableClickable("btn_fg_detail_close") { onDismiss() },
+                ) {
+                    Text(
+                        text = "✕",
+                        fontSize = 14.sp,
+                        color = theme.textMuted,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            // Body — kind-specific rendering against the live detail.
+            when (val d = detail) {
+                null, is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Loading -> {
+                    Text(
+                        text = d?.summaryLine ?: "Loading…",
+                        fontSize = 12.sp,
+                        color = theme.textSecondary,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Error -> {
+                    Text(
+                        text = d.summaryLine,
+                        fontSize = 12.sp,
+                        color = theme.statusDisconnected,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.AdapterPort -> {
+                    AdapterPortBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.BusArc -> {
+                    BusArcBody(
+                        detail = d,
+                        theme = theme,
+                        onOpenLLMSettings = onOpenLLMSettings,
+                        onOpenWiseAuthority = onOpenWiseAuthority,
+                    )
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusShell -> {
+                    NucleusShellBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusCore -> {
+                    NucleusCoreBody(detail = d, theme = theme, onOpenSystem = onOpenSystem)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Mote -> {
+                    MoteBody(detail = d, theme = theme)
+                }
+                is ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Gratitude -> {
+                    Text(
+                        text = d.summaryLine,
+                        fontSize = 12.sp,
+                        color = theme.textSecondary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun kindLabel(kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind): String = when (kind) {
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort ->
+        "Adapter · ${kind.adapterType}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.BusArc ->
+        "${kind.bus.name} bus"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell ->
+        "Pipeline stage · ${kind.eventType.replace('_', ' ')}"
+    ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusCore ->
+        "Agent core"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.CytoplasmMote ->
+        "Memory node · ${kind.scope}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.SignalChannel ->
+        "Signal channel · ${kind.bus.name}"
+    is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.GratitudeMote ->
+        "Signalled gratitude"
+}
+
+@Composable
+private fun AdapterPortBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.AdapterPort,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "id", value = detail.adapterId, theme = theme)
+        DetailRow(
+            label = "status",
+            value = if (detail.isRunning) "running" else "stopped",
+            theme = theme,
+        )
+        DetailRow(label = "messages", value = "${detail.messagesProcessed}", theme = theme)
+        if (detail.errorsCount > 0) {
+            DetailRow(
+                label = "errors",
+                value = "${detail.errorsCount}",
+                theme = theme,
+                valueColor = theme.statusDisconnected,
+            )
+        }
+        detail.lastError?.let {
+            DetailRow(label = "last error", value = it.take(80), theme = theme,
+                valueColor = theme.statusDisconnected)
+        }
+        detail.lastActivity?.let {
+            DetailRow(label = "last activity", value = it, theme = theme)
+        }
+    }
+}
+
+@Composable
+private fun BusArcBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.BusArc,
+    theme: InteractTheme,
+    onOpenLLMSettings: () -> Unit,
+    onOpenWiseAuthority: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (detail.llmProviders.isNotEmpty()) {
+            Text(
+                text = "${detail.llmProviders.size} provider(s)",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.textPrimary,
+            )
+            detail.llmProviders.forEach { p ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (p.healthy) theme.statusConnected
+                                    else theme.statusDisconnected,
+                                shape = CircleShape,
+                            ),
+                    )
+                    Text(text = p.name, fontSize = 11.sp, color = theme.textPrimary)
+                    Text(
+                        text = "· cb=${p.circuitBreakerState}",
+                        fontSize = 10.sp,
+                        color = theme.textMuted,
+                    )
+                    if (p.rateLimited) {
+                        Text(
+                            text = "· rate-limited",
+                            fontSize = 10.sp,
+                            color = theme.trustLevel4,
+                        )
+                    }
+                }
+            }
+        } else {
+            DetailRow(label = "messages sent", value = "${detail.messagesSent}", theme = theme)
+            DetailRow(
+                label = "avg latency",
+                value = "${detail.averageLatencyMs.toInt()} ms",
+                theme = theme,
+            )
+            DetailRow(label = "queue", value = "${detail.queueDepth}", theme = theme)
+            if (detail.errorsLastHour > 0) {
+                DetailRow(
+                    label = "errors/h",
+                    value = "${detail.errorsLastHour}",
+                    theme = theme,
+                    valueColor = theme.statusDisconnected,
+                )
+            }
+        }
+
+        // Deeplink to the matching full screen.
+        val (label, action) = when (detail.bus) {
+            ai.ciris.mobile.shared.ui.screens.graph.CellBus.LLM ->
+                "Open LLM settings" to onOpenLLMSettings
+            ai.ciris.mobile.shared.ui.screens.graph.CellBus.WISE ->
+                "Open Wise Authority" to onOpenWiseAuthority
+            else -> null to null
+        }
+        if (label != null && action != null) {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = theme.textAccent.copy(alpha = 0.15f),
+                modifier = Modifier.testableClickable("btn_fg_detail_open") { action() },
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = theme.textAccent,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NucleusShellBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusShell,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (detail.recentEvents.isEmpty()) {
+            Text(
+                text = "No recent activity on this stage.",
+                fontSize = 12.sp,
+                color = theme.textMuted,
+            )
+        } else {
+            detail.recentEvents.asReversed().forEach { ev ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(text = ev.emoji, fontSize = 14.sp)
+                    Text(
+                        text = ev.payload ?: "(no payload)",
+                        fontSize = 11.sp,
+                        color = theme.textPrimary,
+                        lineHeight = 14.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NucleusCoreBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.NucleusCore,
+    theme: InteractTheme,
+    onOpenSystem: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "cognitive state", value = detail.cognitiveState, theme = theme)
+        DetailRow(label = "system", value = detail.systemStatus, theme = theme)
+        DetailRow(
+            label = "services",
+            value = "${detail.servicesOnline}/${detail.servicesTotal}",
+            theme = theme,
+        )
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = theme.textAccent.copy(alpha = 0.15f),
+            modifier = Modifier.testableClickable("btn_fg_detail_open_system") { onOpenSystem() },
+        ) {
+            Text(
+                text = "Open system",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = theme.textAccent,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoteBody(
+    detail: ai.ciris.mobile.shared.viewmodels.InteractViewModel.SelectionDetail.Mote,
+    theme: InteractTheme,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DetailRow(label = "id", value = detail.nodeId.take(24), theme = theme)
+        DetailRow(label = "type", value = detail.nodeType ?: "—", theme = theme)
+        DetailRow(label = "scope", value = detail.scope, theme = theme)
+        detail.attributesJson?.let {
+            Text(
+                text = it.take(300),
+                fontSize = 10.sp,
+                color = theme.textMuted,
+                lineHeight = 13.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    theme: InteractTheme,
+    valueColor: Color? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = theme.textMuted,
+            modifier = Modifier.width(100.dp),
+        )
+        Text(
+            text = value,
+            fontSize = 11.sp,
+            color = valueColor ?: theme.textPrimary,
         )
     }
 }

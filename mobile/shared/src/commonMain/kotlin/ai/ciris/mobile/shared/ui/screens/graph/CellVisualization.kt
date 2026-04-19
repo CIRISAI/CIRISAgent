@@ -4,7 +4,11 @@ import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.ui.theme.getScopeColor
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -211,6 +215,19 @@ fun CellVisualization(
      * moving targets. FG is "pause and explore", BG is "let it run".
      */
     showSignalChannels: Boolean = false,
+    /**
+     * Invoked in FG mode when the user taps a selectable element.
+     * The `SelectionKind?` is null when the tap lands in dead space,
+     * which the caller should treat as a deselect. BG never calls this.
+     */
+    onSelection: (SelectionKind?) -> Unit = {},
+    /**
+     * Current selection — drives any "selected" visual affordance
+     * (outline, fade of non-selected, etc.). Not used yet for visual
+     * indication; passed in so the Canvas has what it needs when we
+     * add the selected-element highlight.
+     */
+    selection: SelectionKind? = null,
 ) {
     // Sanitize once per composition so draw code reads in-range values.
     val cfg = remember(config) { config.sanitized() }
@@ -375,8 +392,113 @@ fun CellVisualization(
     // mouse-wheel scroll. Desktop users zoom by wheel, so we handle
     // PointerEventType.Scroll directly; pinch + single-pointer drag
     // stay on detectTransformGestures for touch parity.
+    // Canvas size — needed by the tap hit tester. Updated from the
+    // Canvas' Modifier.onSizeChanged.
+    val canvasSize = remember { mutableStateOf(IntSize.Zero) }
+
     val canvasModifier = if (showSignalChannels) {
         modifier
+            // Tap → hit-test → onSelection. Runs BEFORE graphicsLayer so
+            // tap coordinates match the Canvas' own draw coordinates.
+            .pointerInput(rotationDeg, adaptersByBus, cfg) {
+                detectTapGestures { tap ->
+                    val size = canvasSize.value
+                    if (size.width == 0 || size.height == 0) return@detectTapGestures
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val mr = minOf(size.width, size.height).toFloat() *
+                        cfg.membraneRadiusFraction
+                    val nr = mr * cfg.nucleusRadiusFraction
+
+                    // Re-derive port positions using the same formulas as
+                    // drawAdapterPorts so hit coordinates align exactly.
+                    val ports = buildList<SelectionPort> {
+                        BUS_SEGMENTS.forEach { seg ->
+                            val adapters = adaptersByBus[seg.bus] ?: return@forEach
+                            adapters.forEachIndexed { idx, adapter ->
+                                val angleDeg = spreadAngle(
+                                    segmentStartDeg = seg.startDeg,
+                                    segmentEndDeg = seg.endDeg,
+                                    index = idx,
+                                    total = adapters.size,
+                                    marginDeg = cfg.portSegmentMarginDeg,
+                                )
+                                val effective = (angleDeg + rotationDeg) % 360f
+                                val pos = polar(cx, cy, mr, effective)
+                                add(
+                                    SelectionPort(
+                                        adapterId = adapter.id,
+                                        adapterType = adapter.type,
+                                        bus = seg.bus,
+                                        x = pos.x,
+                                        y = pos.y,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+
+                    // Re-derive mote positions — same golden-angle +
+                    // per-index drift formula as drawCytoplasmMotes.
+                    val liveMotes = motes.value
+                    val total = liveMotes.size.coerceAtLeast(1)
+                    val innerRadial = nr * 1.10f
+                    val outerRadial = mr * 0.92f
+                    val nowSec = nowMs.value / 1000f
+                    val driftOmega = if (cfg.moteDriftPeriodSec > 0f)
+                        (2f * PI.toFloat()) / cfg.moteDriftPeriodSec else 0f
+                    val selMotes = if (outerRadial <= innerRadial) emptyList()
+                    else liveMotes.map { m ->
+                        val idx = m.stableIndex
+                        val angleDeg = ((idx.toFloat() * GOLDEN_ANGLE_DEG) % 360f + 360f) % 360f
+                        val radialFrac = kotlin.math.sqrt(
+                            (idx + 0.5f) / total.toFloat()
+                        ).coerceIn(0f, 1f)
+                        val r = innerRadial + (outerRadial - innerRadial) * radialFrac
+                        val rad = angleDeg.toDouble() * PI / 180.0
+                        val bx = cx + r * cos(rad).toFloat()
+                        val by = cy + r * sin(rad).toFloat()
+                        val pX = (idx * 0.7531f) % (2f * PI.toFloat())
+                        val pY = (idx * 1.2847f) % (2f * PI.toFloat())
+                        val wX = driftOmega * (0.85f + 0.30f * ((idx * 31) % 17) / 17f)
+                        val wY = driftOmega * (0.80f + 0.40f * ((idx * 53) % 19) / 19f)
+                        val dx = sin(nowSec * wX + pX) * cfg.moteDriftAmpPx
+                        val dy = cos(nowSec * wY + pY) * cfg.moteDriftAmpPx
+                        SelectionMote(
+                            nodeId = m.id,
+                            scope = m.scope.toString(),
+                            x = bx + dx,
+                            y = by + dy,
+                        )
+                    }
+
+                    // SSE event types in shell order (must stay in sync
+                    // with NUCLEUS_SHELL_COLORS and PipelineStage.STAGE_DEFINITIONS).
+                    val shellEventTypes = listOf(
+                        "thought_start",
+                        "snapshot_and_context",
+                        "dma_results",
+                        "idma_result",
+                        "aspdma_result",
+                        "conscience_result",
+                        "action_result",
+                    )
+
+                    val hit = hitTestSelection(
+                        tapX = tap.x,
+                        tapY = tap.y,
+                        layout = SelectionLayout(
+                            centerX = cx, centerY = cy,
+                            membraneRadius = mr, nucleusRadius = nr,
+                            rotationDeg = rotationDeg,
+                        ),
+                        ports = ports,
+                        motes = selMotes,
+                        shellEventTypes = shellEventTypes,
+                    )
+                    onSelection(hit)
+                }
+            }
             .graphicsLayer(
                 scaleX = scale,
                 scaleY = scale,
@@ -413,7 +535,9 @@ fun CellVisualization(
         modifier
     }
 
-    Canvas(modifier = canvasModifier) {
+    Canvas(
+        modifier = canvasModifier.onSizeChanged { canvasSize.value = it },
+    ) {
         val centerX = size.width / 2f
         val centerY = size.height / 2f
         val membraneRadius = minOf(size.width, size.height) * cfg.membraneRadiusFraction

@@ -226,6 +226,12 @@ class TestThoughtProcessor:
         mock_conscience_check_result.thought_depth_current = None
         mock_conscience_check_result.thought_depth_max = None
         mock_conscience_check_result.CIRIS_OBSERVATION_UPDATED_STATUS = None  # Used by conscience_execution.py
+        # Conscience prompt fields - must be None or strings, not Mock objects
+        mock_conscience_check_result.entropy_prompt = None
+        mock_conscience_check_result.coherence_prompt = None
+        mock_conscience_check_result.optimization_veto_prompt = None
+        mock_conscience_check_result.epistemic_humility_prompt = None
+        mock_conscience_check_result.replacement_action = None  # Prevents mock from being truthy
         mock_conscience.check = AsyncMock(return_value=mock_conscience_check_result)
 
         # Mock conscience registry entry

@@ -451,11 +451,13 @@ async def _create_setup_users(
 
     try:
         # Check if OAuth user already exists and update to ROOT if found
-        wa_cert, _ = await _check_existing_oauth_wa(auth_service, setup)
+        existing_wa, _ = await _check_existing_oauth_wa(auth_service, setup)
 
         # Create new WA if we didn't find an existing OAuth user
-        if wa_cert is None:
+        if existing_wa is None:
             wa_cert = await _create_new_wa(auth_service, setup)
+        else:
+            wa_cert = existing_wa
 
         # Set password for non-OAuth users
         await _set_password_for_wa(auth_service, setup, wa_cert)
@@ -831,8 +833,11 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
     Returns:
         Tuple of (user_id, display_name, email) or (None, None, None) if no ingress auth
     """
+    import os
+
     from ...dependencies.auth import _ingress_auth_providers
 
+    # First check registered providers
     for registered in _ingress_auth_providers:
         provider = registered.provider
         try:
@@ -847,6 +852,16 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
         except Exception as e:
             logger.debug(f"[SETUP] Ingress provider {provider.provider_name} check failed: {e}")
             continue
+
+    # FALLBACK: Check for HA ingress headers directly if in supervisor mode
+    # This handles first-run setup where HA adapter isn't loaded yet
+    if os.getenv("SUPERVISOR_TOKEN"):
+        ha_user_id = request.headers.get("X-Remote-User-Id")
+        if ha_user_id:
+            display_name = request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name")
+            # HA doesn't provide email in ingress headers
+            logger.info(f"[SETUP] Detected HA ingress user (direct): home_assistant:{ha_user_id} ({display_name})")
+            return f"home_assistant:{ha_user_id}", display_name, None
 
     return None, None, None
 

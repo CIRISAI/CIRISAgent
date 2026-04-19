@@ -404,7 +404,7 @@ class TestEntropyConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_entropy_messages("Hello world")
+        messages, user_prompt = conscience._create_entropy_messages("Hello world")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -413,6 +413,7 @@ class TestEntropyConscience:
         assert "IRIS-E" in messages[1].content
         assert messages[2].role == "user"
         assert "Hello world" in messages[2].content
+        assert "Hello world" in user_prompt
 
 
 # ============================================================================
@@ -544,7 +545,7 @@ class TestCoherenceConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_coherence_messages("Hello world")
+        messages, user_prompt = conscience._create_coherence_messages("Hello world")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -553,6 +554,7 @@ class TestCoherenceConscience:
         assert "IRIS-C" in messages[1].content
         assert messages[2].role == "user"
         assert "Hello world" in messages[2].content
+        assert "Hello world" in user_prompt
 
 
 # ============================================================================
@@ -703,7 +705,7 @@ class TestOptimizationVetoConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_optimization_veto_messages("test action")
+        messages, user_prompt = conscience._create_optimization_veto_messages("test action")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -711,6 +713,7 @@ class TestOptimizationVetoConscience:
         assert messages[1].role == "system"
         assert "CIRIS-EOV" in messages[1].content
         assert messages[2].role == "user"
+        assert "test action" in user_prompt
 
 
 # ============================================================================
@@ -862,7 +865,7 @@ class TestEpistemicHumilityConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_epistemic_humility_messages("test action")
+        messages, user_prompt = conscience._create_epistemic_humility_messages("test action")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -870,3 +873,4 @@ class TestEpistemicHumilityConscience:
         assert messages[1].role == "system"
         assert "CIRIS-EH" in messages[1].content
         assert messages[2].role == "user"
+        assert "test action" in user_prompt

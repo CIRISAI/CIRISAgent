@@ -297,14 +297,34 @@ fun CellVisualization(
     // user's pointer target (a port, a label) doesn't move out from
     // under their finger mid-tap.
     var autoRotationDeg by remember { mutableStateOf(0f) }
+    // Read the ripple timestamp every frame so the 800ms rotation-slowdown
+    // that precedes the ripple (§2.5.3) tracks state without restarting
+    // the frame loop. Value updates are cheap; the loop itself stays
+    // keyed on rotationDegPerSec only.
+    val rippleStartSnap = rememberUpdatedState(deferralRippleStartMs)
     LaunchedEffect(cfg.rotationDegPerSec) {
         var lastFrameNs = 0L
         while (isActive) {
             withFrameNanos { frameTimeNs ->
                 if (lastFrameNs != 0L && !frozenState.value) {
                     val dSec = (frameTimeNs - lastFrameNs) / 1_000_000_000f
-                    autoRotationDeg =
-                        (autoRotationDeg + cfg.rotationDegPerSec * dSec) % 360f
+                    // §2.5.3 Pause: baseline rotation slows to ~20% for
+                    // the first 800 ms of a deferral ripple — reads as
+                    // "pipeline work suspended pending authority routing"
+                    // distinct from routine bus traffic.
+                    val rippleStart = rippleStartSnap.value
+                    val rotationScale = if (rippleStart != null) {
+                        // Wall-clock on both sides — rippleStart comes
+                        // from Clock.System.now() in the ViewModel; can't
+                        // compare against frameTimeNs (monotonic).
+                        val nowWallMs = kotlinx.datetime.Clock.System
+                            .now().toEpochMilliseconds()
+                        val elapsedMs = nowWallMs - rippleStart
+                        if (elapsedMs in 0L..RIPPLE_PAUSE_MS) 0.2f else 1.0f
+                    } else 1.0f
+                    autoRotationDeg = (
+                        autoRotationDeg + cfg.rotationDegPerSec * dSec * rotationScale
+                    ) % 360f
                 }
                 lastFrameNs = frameTimeNs
             }

@@ -121,20 +121,25 @@ targets:
             exit 1
           fi
 
-          # Copy framework to build directory for embedding
-          DEST_PATH="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
-          rm -rf "$DEST_PATH"
-          cp -R "$FRAMEWORK_PATH" "$DEST_PATH"
-
-          # Fix shared.framework Info.plist for App Store compliance
-          PLIST="${DEST_PATH}/Info.plist"
-          if [ -f "$PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$PLIST" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ai.ciris.mobile.shared" "$PLIST" 2>/dev/null || true
-            echo "Fixed shared.framework Info.plist"
+          # Check if static (.a) or dynamic (.dylib) framework
+          if file "${FRAMEWORK_PATH}/shared" | grep -q "ar archive"; then
+            # Static: link via search path, do NOT embed in Frameworks/
+            DEST_PATH="${BUILT_PRODUCTS_DIR}/shared.framework"
+            rm -rf "$DEST_PATH"
+            cp -R "$FRAMEWORK_PATH" "$DEST_PATH"
+            echo "Linked STATIC shared.framework (not embedded in Frameworks/)"
+          else
+            # Dynamic: embed in Frameworks/ for runtime loading
+            DEST_PATH="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
+            rm -rf "$DEST_PATH"
+            cp -R "$FRAMEWORK_PATH" "$DEST_PATH"
+            PLIST="${DEST_PATH}/Info.plist"
+            if [ -f "$PLIST" ]; then
+              /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ai.ciris.mobile.shared" "$PLIST" 2>/dev/null || true
+            fi
+            echo "Embedded DYNAMIC shared.framework in Frameworks/"
           fi
-
-          echo "Embedded shared.framework from: $FRAMEWORK_PATH"
         basedOnDependencyAnalysis: false
     postCompileScripts:
       - name: Embed Python Native Modules

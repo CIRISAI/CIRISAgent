@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -229,7 +230,7 @@ private fun EditingScreen(
                         onClick = onShowPreview,
                         modifier = Modifier.testableClickable("btn_skill_preview") { onShowPreview() }
                     ) {
-                        Icon(Icons.Filled.Visibility, contentDescription = "Preview")
+                        Icon(CIRISMaterialIcons.Filled.Visibility, contentDescription = "Preview")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -356,7 +357,7 @@ private fun PreviewScreen(
                         onClick = { /* Copy to clipboard */ },
                         modifier = Modifier.testableClickable("btn_copy_md") { }
                     ) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy")
+                        Icon(CIRISMaterialIcons.Filled.ContentCopy, contentDescription = "Copy")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -381,7 +382,7 @@ private fun PreviewScreen(
                         onClick = onImport,
                         modifier = Modifier.testable("btn_import_now")
                     ) {
-                        Icon(Icons.Filled.Download, contentDescription = null)
+                        Icon(CIRISMaterialIcons.Filled.Download, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Import as Adapter")
                     }
@@ -528,7 +529,7 @@ private fun ErrorScreen(
             modifier = Modifier.padding(32.dp)
         ) {
             Icon(
-                Icons.Filled.Error,
+                CIRISMaterialIcons.Filled.Error,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(64.dp)
@@ -724,7 +725,7 @@ private fun SeverityCount(label: String, count: Int, color: androidx.compose.ui.
 @Composable
 private fun SecurityFindingCard(finding: SecurityFinding) {
     val (icon, color) = when (finding.severity.lowercase()) {
-        "critical" -> Icons.Filled.Error to MaterialTheme.colorScheme.error
+        "critical" -> CIRISMaterialIcons.Filled.Error to MaterialTheme.colorScheme.error
         "high" -> Icons.Filled.Warning to SemanticColors.Default.warning
         "medium" -> Icons.Filled.Info to SemanticColors.Default.info
         else -> Icons.Filled.Info to MaterialTheme.colorScheme.outline

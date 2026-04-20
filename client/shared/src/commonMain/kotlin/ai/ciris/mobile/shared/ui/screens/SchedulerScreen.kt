@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import ai.ciris.mobile.shared.ui.theme.SemanticColors

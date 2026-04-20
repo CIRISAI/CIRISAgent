@@ -72,7 +72,10 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
-                implementation(compose.materialIconsExtended)
+                // implementation(compose.materialIconsExtended) // 113MB — replaced by ui/icons/CIRISMaterialIcons.kt
+                // Extended icons defined inline in ui/icons/CIRISMaterialIcons.kt (~93KB)
+                // To add a new icon: copy SVG path from fonts.google.com/icons into CIRISMaterialIcons.kt
+                //   then add an extension property in MaterialIconCompat.kt
                 implementation(compose.components.resources)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.components.uiToolingPreview)

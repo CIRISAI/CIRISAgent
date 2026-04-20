@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -489,7 +490,7 @@ fun BinariesCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Terminal, contentDescription = null) },
+                icon = { Icon(CIRISMaterialIcons.Filled.Terminal, contentDescription = null) },
                 title = "Required Binaries",
                 count = binaries.size,
                 isExpanded = isExpanded,
@@ -585,7 +586,7 @@ fun InstructionsCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Description, contentDescription = null) },
+                icon = { Icon(CIRISMaterialIcons.Filled.Description, contentDescription = null) },
                 title = "Instructions",
                 isExpanded = isExpanded,
                 onToggle = onToggle

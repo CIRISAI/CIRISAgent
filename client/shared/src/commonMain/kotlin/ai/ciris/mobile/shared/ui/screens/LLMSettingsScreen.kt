@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -270,7 +271,7 @@ fun LLMSettingsScreen(
                 CollapsibleSection(
                     title = "Adapters",
                     subtitle = "${llmAdapters.size} loaded",
-                    icon = Icons.Filled.Extension,
+                    icon = CIRISMaterialIcons.Filled.Extension,
                     expanded = adaptersExpanded,
                     onToggle = { llmViewModel.toggleAdaptersExpanded() }
                 ) {
@@ -330,7 +331,7 @@ fun LLMSettingsScreen(
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_advanced"),
                     subtitle = llmBusStatus?.distributionStrategyLabel ?: localizedString("mobile.llm_distribution_latency"),
-                    icon = Icons.Filled.Tune,
+                    icon = CIRISMaterialIcons.Filled.Tune,
                     expanded = advancedExpanded,
                     onToggle = { llmViewModel.toggleAdvancedExpanded() }
                 ) {
@@ -389,7 +390,7 @@ private fun StatusOverviewCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Analytics,
+                    imageVector = CIRISMaterialIcons.Filled.Analytics,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -581,7 +582,7 @@ private fun AdaptersContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = if (adapter.isRunning) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                                    imageVector = if (adapter.isRunning) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Error,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = if (adapter.isRunning) semantic.success else semantic.error
@@ -855,7 +856,7 @@ private fun RegisteredProvidersContent(
                         ) {
                             // Health indicator
                             Icon(
-                                imageVector = if (provider.healthy) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                                imageVector = if (provider.healthy) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Error,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = if (provider.healthy) semantic.success else semantic.error
@@ -970,7 +971,7 @@ private fun CirisServicesCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = if (enabled) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                    imageVector = if (enabled) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Cancel,
                     contentDescription = null,
                     tint = if (enabled) semantic.success else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
@@ -1006,7 +1007,7 @@ private fun CirisServicesCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PowerOff,
+                        imageVector = CIRISMaterialIcons.Filled.PowerOff,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1099,7 +1100,7 @@ private fun AddProviderCard(
                     )
                 }
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    imageVector = if (isExpanded) CIRISMaterialIcons.Filled.ExpandLess else CIRISMaterialIcons.Filled.ExpandMore,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1160,7 +1161,7 @@ private fun AddProviderCard(
                     trailingIcon = {
                         IconButton(onClick = { showApiKey = !showApiKey }) {
                             Icon(
-                                imageVector = if (showApiKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                imageVector = if (showApiKey) CIRISMaterialIcons.Filled.VisibilityOff else CIRISMaterialIcons.Filled.Visibility,
                                 contentDescription = if (showApiKey) "Hide" else "Show"
                             )
                         }
@@ -1673,7 +1674,7 @@ private fun ProviderCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isActive) Icons.Filled.Circle else Icons.Filled.RadioButtonUnchecked,
+                    imageVector = if (isActive) CIRISMaterialIcons.Filled.Circle else CIRISMaterialIcons.Filled.RadioButtonUnchecked,
                     contentDescription = null,
                     modifier = Modifier.size(12.dp),
                     tint = if (isActive)
@@ -1716,7 +1717,7 @@ private fun ProviderCard(
             }
             if (isActive) {
                 Icon(
-                    imageVector = Icons.Filled.Speed,
+                    imageVector = CIRISMaterialIcons.Filled.Speed,
                     contentDescription = "Active",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
@@ -1808,7 +1809,7 @@ private fun AddProviderCardLocal(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PhoneAndroid,
+                    imageVector = CIRISMaterialIcons.Filled.PhoneAndroid,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
@@ -1870,7 +1871,7 @@ private fun AddProviderCardLocal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Schedule,
+                            imageVector = CIRISMaterialIcons.Filled.Schedule,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.size(16.dp)
@@ -1949,7 +1950,7 @@ private fun AddProviderCardServer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Wifi,
+                    imageVector = CIRISMaterialIcons.Filled.Wifi,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
@@ -2065,7 +2066,7 @@ private fun LocalServersContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Schedule,
+                        imageVector = CIRISMaterialIcons.Filled.Schedule,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(20.dp)
@@ -2350,8 +2351,8 @@ private fun ProviderCircuitBreakerRow(
                 Icon(
                     imageVector = when (cb.state) {
                         ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> Icons.Filled.CheckCircle
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> Icons.Filled.Error
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> Icons.Filled.Schedule
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> CIRISMaterialIcons.Filled.Error
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> CIRISMaterialIcons.Filled.Schedule
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),

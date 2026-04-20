@@ -49,6 +49,75 @@ command -v xcodegen >/dev/null 2>&1 || fail "xcodegen not found. Install: brew i
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild not found. Install Xcode."
 [ -d "$RESOURCES_DIR" ] || fail "Resources directory not found at $RESOURCES_DIR"
 
+# Preflight: Resources sanity checks
+step "Preflight: Resources validation..."
+
+# Check for desktop_app JAR (98MB+ of dead weight on iOS)
+if [ -d "$RESOURCES_DIR/app/ciris_engine/desktop_app" ]; then
+    JAR_SIZE=$(du -sm "$RESOURCES_DIR/app/ciris_engine/desktop_app" 2>/dev/null | cut -f1)
+    warn "desktop_app/ found in Resources (${JAR_SIZE}MB) — removing (not needed on iOS)"
+    rm -rf "$RESOURCES_DIR/app/ciris_engine/desktop_app"
+    ok "Removed desktop_app/"
+fi
+
+# Check for gui_static (Next.js web GUI — not needed on iOS)
+if [ -d "$RESOURCES_DIR/app/ciris_engine/gui_static" ]; then
+    warn "gui_static/ found in Resources — removing (not needed on iOS)"
+    rm -rf "$RESOURCES_DIR/app/ciris_engine/gui_static"
+    ok "Removed gui_static/"
+fi
+
+# Clean __pycache__
+find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+ok "Cleaned __pycache__"
+
+# Verify kmp_main.py exists (required for Python runtime to start)
+if [ ! -f "$RESOURCES_DIR/app/ciris_ios/kmp_main.py" ]; then
+    fail "kmp_main.py missing from Resources/app/ciris_ios/ — Python runtime will not start"
+fi
+ok "kmp_main.py present"
+
+# Verify Resources total size is reasonable (<150MB uncompressed)
+RESOURCES_SIZE_MB=$(du -sm "$RESOURCES_DIR" 2>/dev/null | cut -f1)
+if [ "$RESOURCES_SIZE_MB" -gt 150 ]; then
+    warn "Resources is ${RESOURCES_SIZE_MB}MB (expected <150MB) — check for bundled artifacts"
+    du -sh "$RESOURCES_DIR"/app/*/ 2>/dev/null | sort -rh | head -5
+fi
+ok "Resources: ${RESOURCES_SIZE_MB}MB"
+
+# Preflight: Framework validation
+step "Preflight: Framework validation..."
+
+# Check shared.framework exists and is the correct type
+SHARED_FW_DIR="$CIRIS_ROOT/client/shared/build/bin"
+if $IS_DEVICE; then
+    FW_CHECK="$SHARED_FW_DIR/iosArm64/debugFramework/shared.framework/shared"
+else
+    FW_CHECK="$SHARED_FW_DIR/iosSimulatorArm64/debugFramework/shared.framework/shared"
+fi
+
+if [ -f "$FW_CHECK" ]; then
+    FW_TYPE=$(file "$FW_CHECK")
+    if echo "$FW_TYPE" | grep -q "ar archive"; then
+        ok "shared.framework: STATIC archive (correct for isStatic=true)"
+        # Verify project.yml handles static correctly
+        if grep -q "FRAMEWORKS_FOLDER_PATH.*shared" "$IOS_APP_DIR/project.yml" && ! grep -q "ar archive" "$IOS_APP_DIR/project.yml"; then
+            warn "project.yml may embed static archive in Frameworks/ — verify Link KMP script handles static detection"
+        fi
+    elif echo "$FW_TYPE" | grep -q "dynamically linked"; then
+        ok "shared.framework: DYNAMIC library"
+    else
+        warn "shared.framework: unknown type — $FW_TYPE"
+    fi
+    FW_SIZE_MB=$(du -sm "$FW_CHECK" 2>/dev/null | cut -f1)
+    if [ "$FW_SIZE_MB" -gt 350 ]; then
+        warn "shared.framework is ${FW_SIZE_MB}MB — check if materialIconsExtended is included (should be removed, saves ~113MB)"
+    fi
+    ok "shared.framework: ${FW_SIZE_MB}MB"
+else
+    warn "shared.framework not built yet — will be built during KMP step"
+fi
+
 # Check simulator is booted
 BOOTED_DEVICE=$(xcrun simctl list devices | grep "(Booted)" | head -1)
 if [ -z "$BOOTED_DEVICE" ]; then

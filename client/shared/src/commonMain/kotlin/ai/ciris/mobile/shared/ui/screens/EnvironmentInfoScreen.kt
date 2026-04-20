@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -593,7 +594,7 @@ private fun SmartEnrichmentCard(key: String, value: String) {
                     )
                 }
                 Icon(
-                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    if (expanded) CIRISMaterialIcons.Filled.ExpandLess else CIRISMaterialIcons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand"
                 )
             }
@@ -809,11 +810,11 @@ private fun extractJsonNumber(json: String, key: String): Double? {
 @Composable
 private fun getEnrichmentIcon(key: String) = when {
     key.contains("entities") || key.contains("ha_") -> Icons.Filled.Home
-    key.contains("players") || key.contains("ma_") -> Icons.Filled.Speaker
-    key.contains("weather") -> Icons.Filled.WbSunny
-    key.contains("wallet") || key.contains("balance") -> Icons.Filled.AccountBalance
+    key.contains("players") || key.contains("ma_") -> CIRISMaterialIcons.Filled.Speaker
+    key.contains("weather") -> CIRISMaterialIcons.Filled.WbSunny
+    key.contains("wallet") || key.contains("balance") -> CIRISMaterialIcons.Filled.AccountBalance
     key.contains("location") || key.contains("navigation") -> Icons.Filled.LocationOn
-    else -> Icons.Filled.DataObject
+    else -> CIRISMaterialIcons.Filled.DataObject
 }
 
 private fun getEnrichmentTitle(key: String): String {
@@ -865,7 +866,7 @@ private fun ItemGroupSection(group: String, items: List<EnrichmentItem>) {
                     )
                 }
                 Icon(
-                    if (expanded) Icons.Filled.Remove else Icons.Filled.Add,
+                    if (expanded) CIRISMaterialIcons.Filled.Remove else Icons.Filled.Add,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -902,7 +903,7 @@ private fun SmartItemRow(item: EnrichmentItem) {
                 item.state?.let { state ->
                     val stateColor = getStateColor(state)
                     Icon(
-                        Icons.Filled.Circle,
+                        CIRISMaterialIcons.Filled.Circle,
                         contentDescription = state,
                         modifier = Modifier.size(8.dp),
                         tint = stateColor
@@ -1238,19 +1239,19 @@ private fun parseEntities(json: String): Map<String, List<EntityInfo>> {
  */
 @Composable
 private fun getDomainIcon(domain: String) = when (domain) {
-    "light" -> Icons.Filled.Lightbulb
-    "switch" -> Icons.Filled.ToggleOn
-    "media_player" -> Icons.Filled.Speaker
-    "climate" -> Icons.Filled.Thermostat
-    "sensor" -> Icons.Filled.Sensors
-    "binary_sensor" -> Icons.Filled.RadioButtonChecked
-    "cover" -> Icons.Filled.Blinds
-    "fan" -> Icons.Filled.Air
+    "light" -> CIRISMaterialIcons.Filled.Lightbulb
+    "switch" -> CIRISMaterialIcons.Filled.ToggleOn
+    "media_player" -> CIRISMaterialIcons.Filled.Speaker
+    "climate" -> CIRISMaterialIcons.Filled.Thermostat
+    "sensor" -> CIRISMaterialIcons.Filled.Sensors
+    "binary_sensor" -> CIRISMaterialIcons.Filled.RadioButtonChecked
+    "cover" -> CIRISMaterialIcons.Filled.Blinds
+    "fan" -> CIRISMaterialIcons.Filled.Air
     "lock" -> Icons.Filled.Lock
-    "camera" -> Icons.Filled.CameraAlt
-    "automation" -> Icons.Filled.AutoMode
+    "camera" -> CIRISMaterialIcons.Filled.CameraAlt
+    "automation" -> CIRISMaterialIcons.Filled.AutoMode
     "person" -> Icons.Filled.Person
-    else -> Icons.Filled.Devices
+    else -> CIRISMaterialIcons.Filled.Devices
 }
 
 /**
@@ -1296,7 +1297,7 @@ private fun EntityEnrichmentCard(key: String, value: String) {
                     )
                 }
                 Icon(
-                    if (cardExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    if (cardExpanded) CIRISMaterialIcons.Filled.ExpandLess else CIRISMaterialIcons.Filled.ExpandMore,
                     contentDescription = if (cardExpanded) "Collapse" else "Expand"
                 )
             }
@@ -1352,7 +1353,7 @@ private fun DomainSection(domain: String, entities: List<EntityInfo>) {
                     )
                 }
                 Icon(
-                    if (expanded) Icons.Filled.Remove else Icons.Filled.Add,
+                    if (expanded) CIRISMaterialIcons.Filled.Remove else Icons.Filled.Add,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -1394,7 +1395,7 @@ private fun EntityRow(entity: EntityInfo) {
                     else -> MaterialTheme.colorScheme.tertiary
                 }
                 Icon(
-                    Icons.Filled.Circle,
+                    CIRISMaterialIcons.Filled.Circle,
                     contentDescription = entity.state,
                     modifier = Modifier.size(8.dp),
                     tint = stateColor

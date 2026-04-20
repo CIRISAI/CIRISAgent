@@ -80,9 +80,8 @@ import ai.ciris.mobile.shared.ui.components.setup.SetupCollapsibleSection
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Extension
+import ai.ciris.mobile.shared.ui.icons.*
 
 private const val TAG = "SetupScreen"
 
@@ -2698,7 +2697,7 @@ private fun QuickSetupStep(
         SetupCollapsibleSection(
             title = localizedString("setup.prefs_language_label"),
             subtitle = SUPPORTED_LANGUAGES.find { it.code == state.preferredLanguage }?.nativeName ?: "English",
-            icon = Icons.Filled.Language,
+            icon = CIRISMaterialIcons.Filled.Language,
             expanded = languageExpanded,
             onToggle = { languageExpanded = !languageExpanded }
         ) {
@@ -3267,7 +3266,7 @@ private fun QuickSetupStep(
         SetupCollapsibleSection(
             title = localizedString("setup.adapters_title"),
             subtitle = localizedString("setup.adapters_later"),
-            icon = Icons.Filled.Extension,
+            icon = CIRISMaterialIcons.Filled.Extension,
             expanded = adaptersExpanded,
             onToggle = { adaptersExpanded = !adaptersExpanded }
         ) {

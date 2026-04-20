@@ -434,8 +434,9 @@ private fun AdapterCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 72.dp)  // Minimum touch target height
                     .clickable { onToggleExpand() }
-                    .padding(16.dp),
+                    .padding(20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {

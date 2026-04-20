@@ -12,6 +12,7 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -256,16 +257,15 @@ private fun AdapterTypeCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .wrapContentHeight()
+            .heightIn(min = 80.dp)  // Minimum touch target height
             .testableClickable("item_adapter_type_${adapter.adapterType}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(20.dp),  // Larger padding for easier touch
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -688,14 +688,15 @@ private fun DiscoveredItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 72.dp)  // Minimum touch target height
             .testableClickable("item_discovered_${item.id}") { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(20.dp),  // Larger padding for easier touch
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
                 text = item.label,
@@ -1012,8 +1013,9 @@ private fun SelectStepContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 56.dp)  // Minimum touch target height
                             .clickable { fieldValues[option.id] = (!checked).toString() }
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

@@ -230,7 +230,7 @@ private fun CylinderCanvasContent(
                 detectTapGestures { offset ->
                     lastInteractionTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
 
-                    // Find node at tap position
+                    // Find node at tap position (larger touch radius for mobile)
                     val hitNode = findNodeAtPosition3D(
                         nodes = state.nodes,
                         cylinderLayout = cylinderLayout,
@@ -238,7 +238,7 @@ private fun CylinderCanvasContent(
                         centerY = canvasHeight / 2f,
                         tapX = offset.x,
                         tapY = offset.y,
-                        touchRadius = 40f
+                        touchRadius = 60f
                     )
 
                     onNodeSelected(hitNode?.id)

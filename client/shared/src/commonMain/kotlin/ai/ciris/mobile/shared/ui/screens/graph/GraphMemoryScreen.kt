@@ -462,8 +462,8 @@ private fun NodeDetailsPanel(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = modifier.padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Header
         Row(

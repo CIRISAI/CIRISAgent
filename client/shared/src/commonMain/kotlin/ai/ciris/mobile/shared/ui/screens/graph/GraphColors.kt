@@ -85,18 +85,19 @@ object GraphColors {
     val LabelColorMuted = Color(0xFF94A3B8)   // Muted gray
 
     // Node sizes by type (important nodes are larger)
+    // Sizes increased for better touch targets on mobile
     private val nodeSizes = mapOf(
-        NodeType.AGENT to 28f,
-        NodeType.USER to 24f,
-        NodeType.CHANNEL to 24f,
-        NodeType.IDENTITY to 26f,
-        NodeType.CONCEPT to 20f,
-        NodeType.OBSERVATION to 18f,
-        NodeType.CONFIG to 16f,
-        NodeType.AUDIT_ENTRY to 14f
+        NodeType.AGENT to 42f,
+        NodeType.USER to 36f,
+        NodeType.CHANNEL to 36f,
+        NodeType.IDENTITY to 40f,
+        NodeType.CONCEPT to 32f,
+        NodeType.OBSERVATION to 28f,
+        NodeType.CONFIG to 26f,
+        NodeType.AUDIT_ENTRY to 24f
     )
 
-    val DefaultNodeRadius = 18f
+    val DefaultNodeRadius = 28f
 
     /**
      * Get color for a node type.

@@ -101,8 +101,8 @@ class SecretsEncryption:
             True if hardware backend is available and initialized
         """
         try:
-            # Import is untyped - ciris_adapters doesn't have py.typed marker
-            from ciris_adapters.ciris_verify.verifier_singleton import has_verifier, get_verifier  # type: ignore[import-untyped]
+            # Import may not exist in CI or may be untyped - ignore all import errors
+            from ciris_adapters.ciris_verify.verifier_singleton import has_verifier, get_verifier  # type: ignore
 
             if not has_verifier():
                 return False

@@ -72,7 +72,7 @@ ACCORD_EXPECTED_HASHES: Dict[str, str] = {
     "accord_1.2b_it.txt": "72d5e38af0050a4ae24ff0d1a75fc77a094bc25a990d908dd312251e98a6d181",
     "accord_1.2b_ja.txt": "9a2563b75db2e78fb0a11149b03932486eec9fe2808c181f0c6f326dbb7d80db",
     "accord_1.2b_ko.txt": "9cf4f7e7213e870b927f43bef2551549a5c1a85f7c3f5b451d42e45682c6923e",
-    "accord_1.2b_mr.txt": "3be9b51e537ce18834743c501d8cc10c8cc10c8ea61019a1bf039435495e464fb2c43c",
+    "accord_1.2b_mr.txt": "3be9b51e537ce18834743c501d8cc10c8ea61019a1bf039435495e464fb2c43c",
     "accord_1.2b_my.txt": "2057a367b88364347b9741a5722ae7bd75940a085e5f6ba4e41878e24cf6d722",
     "accord_1.2b_pa.txt": "5a0a738e0bec257077a0d5c3c73bdfff2ded0b85dca3a2dffc80bd194aaf0934",
     "accord_1.2b_pt.txt": "6431b4fabbc558e097cb2ec6e0bd9f9309c31344428b4c91cf4551a7f0bceb4a",

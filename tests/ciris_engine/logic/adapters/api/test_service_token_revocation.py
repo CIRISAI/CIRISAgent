@@ -10,9 +10,14 @@ from ciris_engine.schemas.runtime.api import APIRole
 
 
 @pytest.fixture
-def auth_service():
-    """Create an auth service instance for testing."""
-    return APIAuthService(auth_service=None)
+def auth_service(tmp_path):
+    """Create an auth service instance for testing with isolated database."""
+    service = APIAuthService(auth_service=None)
+    # Use a temporary database to avoid conflicts with existing data
+    service._revocations_db_path = str(tmp_path / "test_revocations.db")
+    # Mark as loaded to use in-memory set (initially empty)
+    service._revoked_tokens_loaded = True
+    return service
 
 
 @pytest.fixture

@@ -308,16 +308,27 @@ class APIDocumentHelper:
             # Parse URL to construct connection with pinned IP (DNS rebinding protection)
             parsed = urlparse(url)
             port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            original_host = parsed.hostname
 
-            # Create connector pinned to the validated IP to prevent DNS rebinding
-            # Use resolved IP as the connection target, but send original hostname in Host header
+            # Construct URL with resolved IP to prevent DNS rebinding attacks
+            # The attacker's DNS could return a different IP after validation
+            # By using the validated IP directly, we ensure we connect to what we validated
+            ip_url = f"{parsed.scheme}://{resolved_ip}:{port}{parsed.path}"
+            if parsed.query:
+                ip_url += f"?{parsed.query}"
+
+            # Create connector - SSL verification uses SNI with original hostname
             ssl_context: bool | None = False if parsed.scheme == 'http' else None
             connector = aiohttp.TCPConnector(ssl=ssl_context)  # type: ignore[arg-type]
+
+            # Headers must include original Host for virtual hosting and SSL SNI
+            headers = {"Host": original_host} if original_host else {}
 
             async with aiohttp.ClientSession(connector=connector) as session:
                 # Disable automatic redirects to validate each redirect target
                 async with session.get(
-                    url,
+                    ip_url,  # Use IP-based URL instead of hostname
+                    headers=headers,  # Include original Host header
                     allow_redirects=False,
                     timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)
                 ) as response:

@@ -135,6 +135,7 @@ class APIAuthService:
         # Revoked service tokens (in-memory set of token hashes)
         # Persisted to database for multi-occurrence deployment support
         self._revoked_service_tokens: set[str] = set()
+        self._revoked_tokens_loaded: bool = False  # Track if async load completed
 
         # Database path for revocation persistence
         self._revocations_db_path = os.path.join(
@@ -177,11 +178,13 @@ class APIAuthService:
                 async with db.execute("SELECT token_hash FROM revoked_service_tokens") as cursor:
                     rows = await cursor.fetchall()
                     self._revoked_service_tokens = {row[0] for row in rows}
+                    self._revoked_tokens_loaded = True
                     logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from database")
         except Exception as e:
             logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
             # Initialize empty set on error to avoid blocking startup
             self._revoked_service_tokens = set()
+            self._revoked_tokens_loaded = True  # Mark as loaded even on error to avoid repeated attempts
 
     # ==========================================================================
     # Attestation Methods (delegate to infrastructure AuthenticationService)
@@ -1148,7 +1151,28 @@ class APIAuthService:
             True if token is revoked, False otherwise
         """
         token_hash = self._hash_service_token(token)
-        return token_hash in self._revoked_service_tokens
+
+        # If async load has completed, use the in-memory cache
+        if self._revoked_tokens_loaded:
+            return token_hash in self._revoked_service_tokens
+
+        # Fallback: synchronous DB check if async load hasn't completed yet
+        # This prevents revoked tokens from being accepted after restart
+        # before the async load has run
+        import sqlite3
+        try:
+            if not os.path.exists(self._revocations_db_path):
+                return False  # No revocations DB yet
+            with sqlite3.connect(self._revocations_db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT 1 FROM revoked_service_tokens WHERE token_hash = ?",
+                    (token_hash,)
+                )
+                return cursor.fetchone() is not None
+        except Exception as e:
+            logger.warning(f"[AUTH] Failed to check revocation synchronously: {e}")
+            # On error, also check in-memory set (may have partial data)
+            return token_hash in self._revoked_service_tokens
 
     async def revoke_service_token(self, token: str, reason: str, revoked_by: str) -> bool:
         """Revoke a service token.

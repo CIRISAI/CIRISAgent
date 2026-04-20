@@ -65,7 +65,8 @@ class SecretsStore:
             logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
             key_storage_mode = "auto"
 
-        self.encryption = SecretsEncryption(master_key, key_storage_mode=cast(KeyStorageMode, key_storage_mode))
+        # key_storage_mode is guaranteed valid after line 66 check, but mypy needs hint
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=key_storage_mode)  # type: ignore[arg-type]
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}
@@ -746,11 +747,12 @@ class SecretsStore:
         Returns:
             True if hardware key can successfully round-trip a canary value
         """
-        canary = b"CIRIS_HARDWARE_KEY_CANARY_" + secrets.token_bytes(16)
+        # Use token_hex instead of token_bytes to ensure valid UTF-8 string
+        canary = "CIRIS_HARDWARE_KEY_CANARY_" + secrets.token_hex(16)
         try:
-            encrypted_value, salt, nonce = self.encryption.encrypt_secret(canary.decode("utf-8"))
+            encrypted_value, salt, nonce = self.encryption.encrypt_secret(canary)
             decrypted = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
-            success = decrypted == canary.decode("utf-8")
+            success = decrypted == canary
             if success:
                 logger.info("Hardware key canary verification PASSED")
             else:

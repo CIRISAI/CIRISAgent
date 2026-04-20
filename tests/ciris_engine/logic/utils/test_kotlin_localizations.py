@@ -127,22 +127,22 @@ class TestKotlinLocalizations:
 
         Source of truth: localization/*.json
         Copies that must stay in sync:
-        1. mobile/iosApp/iosApp/localization/     (iOS app bundle)
-        2. mobile/iosApp/Resources/app/localization/ (iOS Python Resources)
-        3. mobile/androidApp/src/main/assets/localization/ (Android assets)
-        4. mobile/desktopApp/src/main/resources/localization/ (Desktop resources)
-        5. mobile/shared/src/desktopMain/resources/localization/ (Desktop KMP)
+        1. client/iosApp/iosApp/localization/     (iOS app bundle)
+        2. client/iosApp/Resources/app/localization/ (iOS Python Resources)
+        3. client/androidApp/src/main/assets/localization/ (Android assets)
+        4. client/desktopApp/src/main/resources/localization/ (Desktop resources)
+        5. client/shared/src/desktopMain/resources/localization/ (Desktop KMP)
         """
         source_dir = project_root / "localization"
         if not source_dir.exists():
             pytest.skip("localization/ directory not found")
 
         copy_dirs = [
-            project_root / "mobile" / "iosApp" / "iosApp" / "localization",
-            project_root / "mobile" / "iosApp" / "Resources" / "app" / "localization",
-            project_root / "mobile" / "androidApp" / "src" / "main" / "assets" / "localization",
-            project_root / "mobile" / "desktopApp" / "src" / "main" / "resources" / "localization",
-            project_root / "mobile" / "shared" / "src" / "desktopMain" / "resources" / "localization",
+            project_root / "client" / "iosApp" / "iosApp" / "localization",
+            project_root / "client" / "iosApp" / "Resources" / "app" / "localization",
+            project_root / "client" / "androidApp" / "src" / "main" / "assets" / "localization",
+            project_root / "client" / "desktopApp" / "src" / "main" / "resources" / "localization",
+            project_root / "client" / "shared" / "src" / "desktopMain" / "resources" / "localization",
         ]
 
         source_files = {f.name for f in source_dir.glob("*.json") if f.name != "manifest.json"}
@@ -171,11 +171,11 @@ class TestKotlinLocalizations:
 
         if errors:
             fix_cmd = (
-                "cp localization/*.json mobile/iosApp/iosApp/localization/ && "
-                "cp localization/*.json mobile/iosApp/Resources/app/localization/ && "
-                "cp localization/*.json mobile/androidApp/src/main/assets/localization/ && "
-                "cp localization/*.json mobile/desktopApp/src/main/resources/localization/ && "
-                "cp localization/*.json mobile/shared/src/desktopMain/resources/localization/"
+                "cp localization/*.json client/iosApp/iosApp/localization/ && "
+                "cp localization/*.json client/iosApp/Resources/app/localization/ && "
+                "cp localization/*.json client/androidApp/src/main/assets/localization/ && "
+                "cp localization/*.json client/desktopApp/src/main/resources/localization/ && "
+                "cp localization/*.json client/shared/src/desktopMain/resources/localization/"
             )
             pytest.fail(
                 f"\n{len(errors)} localization sync issues:\n"

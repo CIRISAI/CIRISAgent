@@ -1,0 +1,496 @@
+--------- beginning of main
+03-27 14:27:35.163 I/python.stdout(18246): ============================================================
+03-27 14:27:35.163 I/python.stdout(18246): PYDANTIC_CORE NATIVE LIBRARY SETUP
+03-27 14:27:35.163 I/python.stdout(18246): ============================================================
+03-27 14:27:35.164 I/python.stdout(18246): [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-27 14:27:35.164 I/python.stdout(18246): [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:27:35.167 I/python.stdout(18246): [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-27 14:27:35.167 I/python.stdout(18246): [4/6] No cached modules to clear
+03-27 14:27:35.167 I/python.stdout(18246): [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:27:35.167 I/python.stdout(18246): [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-27 14:27:35.167 I/python.stdout(18246): [6/6] Testing native library load...
+03-27 14:27:35.175 I/python.stdout(18246): [6/6] ctypes.CDLL: SUCCESS
+03-27 14:27:35.175 W/python.stderr(18246): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-27 14:27:35.176 W/python.stderr(18246): <frozen importlib._bootstrap>:671: ImportWarning: PydanticCoreFinder.exec_module() not found; falling back to load_module()
+03-27 14:27:35.222 I/python.stdout(18246): [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-27 14:27:35.222 I/python.stdout(18246): [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-27 14:27:35.222 I/python.stdout(18246): ============================================================
+03-27 14:27:35.222 I/python.stdout(18246): PYDANTIC_CORE READY
+03-27 14:27:35.222 I/python.stdout(18246): ============================================================
+03-27 14:27:35.223 I/python.stdout(18246): INFO: mobile_main: CIRIS Mobile - Full On-Device Runtime (LLM Remote)
+03-27 14:27:37.080 W/python.stderr(18246): stdlib/enum.py:289: DeprecationWarning: FUNCTIONS is deprecated and will be removed in future versions
+03-27 14:27:37.308 I/python.stdout(18246): INFO: ciris_engine.logic.utils.path_resolution: [path_resolution] CIRIS_HOME configured: /data/data/ai.ciris.mobile.debug/files/ciris (platform: Android, os: linux)
+03-27 14:27:37.310 I/python.stdout(18246): INFO: mobile_main: Android paths: CIRIS_HOME=/data/data/ai.ciris.mobile.debug/files/ciris, data=/data/data/ai.ciris.mobile.debug/files/ciris/data, logs=/data/data/ai.ciris.mobile.debug/files/ciris/logs
+03-27 14:27:37.310 I/python.stdout(18246): INFO: mobile_main: Loading configuration from /data/data/ai.ciris.mobile.debug/files/ciris/.env
+03-27 14:27:37.314 I/python.stdout(18246): INFO: mobile_main: Loaded .env - OPENAI_API_KEY set: True
+03-27 14:27:37.314 I/python.stdout(18246): INFO: mobile_main: Loaded .env - OPENAI_API_BASE: https://llm01.ciris-services-1.ai/v1
+03-27 14:27:37.314 I/python.stdout(18246): INFO: mobile_main: Verifying code integrity (parallel with imports)...
+03-27 14:27:37.318 I/python.stdout(18246): [7/8] Hashing ciris_engine...
+03-27 14:27:37.477 I/python.stdout(18246): [7/8] ciris_engine: 687 files hashed
+03-27 14:27:37.477 I/python.stdout(18246): [8/8] Hashing ciris_adapters...
+03-27 14:27:37.650 I/python.stdout(18246): [8/8] ciris_adapters: 250 files hashed
+03-27 14:27:37.650 I/python.stdout(18246): INFO: mobile_main: Code integrity check: 937/937 files hashed, total_hash=ca7b8a2748a756b9...
+03-27 14:27:37.658 I/python.stdout(18246): INFO: mobile_main: Saved 937 module hashes to /data/data/ai.ciris.mobile.debug/files/ciris/startup_python_hashes.json
+03-27 14:27:39.114 W/python.stderr(18246): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_fields.py:132: UserWarning: Field "model_used" in ResourceCost has conflict with protected namespace "model_".
+03-27 14:27:39.114 W/python.stderr(18246): 
+03-27 14:27:39.114 W/python.stderr(18246): You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+03-27 14:27:40.067 I/python.stdout(18246): INFO: mobile_main: Code integrity verified: 937 modules, hash=ca7b8a2748a756b9...
+03-27 14:27:40.068 I/python.stdout(18246): INFO: mobile_main: Starting CIRIS on-device runtime...
+03-27 14:27:40.068 I/python.stdout(18246): INFO: mobile_main: API endpoint: http://0.0.0.0:8080 (binding all interfaces)
+03-27 14:27:40.068 I/python.stdout(18246): INFO: mobile_main: LLM endpoint: https://llm01.ciris-services-1.ai/v1
+03-27 14:27:40.083 I/python.stdout(18246): INFO: mobile_main: Using Android config - CIRIS_HOME: /data/data/ai.ciris.mobile.debug/files/ciris, data_dir: /data/data/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:27:40.085 I/python.stdout(18246): INFO: mobile_main: Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume
+03-27 14:27:40.087 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.bootstrap_helpers: [BOOTSTRAP] identity_update=False, template_name=None
+03-27 14:27:40.148 I/python.stdout(18246): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'ciris_verify' from modular adapters
+03-27 14:27:40.152 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.base: Initializing service: CIRISVerifyAdapter
+03-27 14:27:40.152 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: ciris_verify
+03-27 14:27:40.352 I/python.stdout(18246): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'wallet' from modular adapters
+03-27 14:27:40.352 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.base: Initializing service: WalletAdapter
+03-27 14:27:40.352 I/python.stdout(18246): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR=/data/user/0/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:27:40.355 I/python.stdout(18246): INFO: ciris_adapters.ciris_verify.ffi_bindings.client: [CIRISVerify] Android nativeLibraryDir: /data/app/~~WD9FIfu_kAUPLEGxTa9PIA==/ai.ciris.mobile.debug-SNOZCgr4no64Y3fK1mu1hg==/lib/arm64
+03-27 14:27:40.394 I/python.stdout(18246): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Created global CIRISVerify instance
+03-27 14:27:40.395 I/python.stdout(18246): INFO: ciris_verify: [ciris_verify_ffi] Log callback registered
+03-27 14:27:40.396 I/python.stdout(18246): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Rust logging callback registered (TRACE level)
+03-27 14:27:40.396 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:27:40.396 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:27:40.397 I/python.stdout(18246): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:27:40.397 I/python.stdout(18246): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:27:40.397 I/python.stdout(18246): INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-27 14:27:40.397 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_verify_ffi] has_key check: true
+03-27 14:27:40.397 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:27:40.397 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:27:40.398 I/python.stdout(18246): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:27:40.398 I/python.stdout(18246): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:27:40.398 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_keyring::software] get_public_key from hardware wrapper, pubkey_len=32, hardware_backed=true
+03-27 14:27:40.398 I/python.stdout(18246): DEBUG: ciris_verify: [ciris_verify_ffi] Ed25519 public key returned (32 bytes)
+03-27 14:27:40.398 I/python.stdout(18246): INFO: ciris_adapters.wallet.adapter: Got Ed25519 public key from CIRISVerify (32 bytes)
+03-27 14:27:40.398 I/python.stdout(18246): INFO: ciris_adapters.wallet.adapter: x402 provider configured with CIRISVerify key
+03-27 14:27:40.401 I/python.stdout(18246): INFO: ciris_adapters.wallet.providers.registry: Loaded provider: x402
+03-27 14:27:40.401 I/python.stdout(18246): INFO: ciris_adapters.wallet.providers.chain_client: ChainClient initialized for base-mainnet (chain_id=8453)
+03-27 14:27:40.401 I/python.stdout(18246): INFO: ciris_adapters.wallet.providers.x402_provider: X402Provider created for network: base-mainnet
+03-27 14:27:40.401 I/python.stdout(18246): INFO: ciris_adapters.wallet.providers.x402_provider: Derived wallet address from public key: 0x87779885D3422fa11f402C3b5c3030A5bCD15670
+03-27 14:27:40.401 I/python.stdout(18246): INFO: ciris_adapters.wallet.adapter: Loaded provider: x402
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_adapters.wallet.tool_service: WalletToolService initialized with providers: ['x402']
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_adapters.wallet.adapter: Wallet adapter initialized with providers: ['x402']
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: wallet
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'api' from core adapters
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.base: Initializing service: ApiPlatform
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] kwargs keys: ['adapter_config']
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config in kwargs: True
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config value: {'host': '0.0.0.0', 'port': 8080, 'cors_enabled': True, 'cors_origins': ['*'], 'cors_allow_credentials': False, 'max_request_size': 1048576, 'request_timeout': 30.0, 'enable_swagger': True, 'enable_redoc': True, 'rate_limit_enabled': True, 'rate_limit_per_minute': 60, 'auth_enabled': True, 'interaction_timeout': 55.0, 'proxy_path': '', 'agent_id': ''}, type: <class 'dict'>
+03-27 14:27:40.402 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] Created APIAdapterConfig from dict, port=8080
+03-27 14:27:40.403 I/python.stdout(18246): Rate limiting enabled: 60 requests per minute
+03-27 14:27:41.209 I/python.stdout(18246): ℹ️  API-only mode - use CIRIS Desktop app to connect
+03-27 14:27:41.210 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.base: Initializing service: APIRuntimeControlService
+03-27 14:27:41.210 I/python.stdout(18246): INFO: ciris_engine.logic.adapters.api.adapter: API adapter initialized - host: 0.0.0.0, port: 8080
+03-27 14:27:41.210 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: api
+03-27 14:27:41.210 I/python.stdout(18246): INFO: mobile_main: Initializing CIRIS services...
+03-27 14:27:41.210 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: Initializing CIRIS Runtime...
+03-27 14:27:41.211 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: Development environment - setting up directories...
+03-27 14:27:41.222 I/python.stdout(18246): ✓ Database exclusive access confirmed: /data/data/ai.ciris.mobile.debug/files/ciris/data/ciris_engine.db
+03-27 14:27:41.224 I/python.stdout(18246): ✓ All directories and critical files successfully configured
+03-27 14:27:41.224 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Initializing infrastructure services...
+03-27 14:27:41.224 I/python.stdout(18246): INFO: ciris_engine.logic.setup.first_run: Checking first-run status...
+03-27 14:27:41.224 I/python.stdout(18246): INFO: ciris_engine.logic.setup.first_run: Running in INSTALLED mode (git repo: False)
+03-27 14:27:41.224 I/python.stdout(18246): INFO: ciris_engine.logic.setup.first_run: CIRIS_FORCE_FIRST_RUN env var: None
+03-27 14:27:41.225 I/python.stdout(18246): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED env var: true
+03-27 14:27:41.225 I/python.stdout(18246): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED is set - not first run
+03-27 14:27:41.225 I/python.stdout(18246): WARNING: ciris_engine.logic.runtime.service_initializer: [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:27:41.225 I/python.stdout(18246): [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:27:41.225 I/python.stdout(18246): INFO: ciris_engine.services.TimeService: TimeService started successfully
+03-27 14:27:41.225 I/python.stdout(18246): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:27:41.225 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:27:41.225 I/python.stdout(18246): INFO: ciris_engine.services.ShutdownService: ShutdownService started successfully
+03-27 14:27:41.225 I/python.stdout(18246): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:27:41.225 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:27:41.225 I/python.stdout(18246): INFO: ciris_engine.services.InitializationService: InitializationService started successfully
+03-27 14:27:41.225 I/python.stdout(18246): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:27:41.225 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:27:41.232 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.service_initializer: Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider: [BILLING_PROVIDER] Started:
+03-27 14:27:41.273 I/python.stdout(18246):   base_url: https://billing1.ciris-services-1.ai
+03-27 14:27:41.273 I/python.stdout(18246):   auth_mode: JWT (Google ID token)
+03-27 14:27:41.273 I/python.stdout(18246):   token_length: 1100 chars
+03-27 14:27:41.273 I/python.stdout(18246):   has_refresh_callback: False
+03-27 14:27:41.273 I/python.stdout(18246):   cache_ttl: 15s
+03-27 14:27:41.273 I/python.stdout(18246):   fail_open: False
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService: Started scheduled task with interval 1.0s
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService started successfully
+03-27 14:27:41.273 I/python.stdout(18246): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:27:41.273 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Infrastructure services initialized
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Got initialization service: <ciris_engine.logic.services.lifecycle.initialization.service.InitializationService object at 0x777ec17ca0>
+03-27 14:27:41.273 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Registering initialization steps...
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Steps registered
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Running initialization sequence...
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: CIRIS Agent Initialization Sequence Starting
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Registered 13 steps across 8 phases
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Executing phase infrastructure with 1 steps
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: Phase: INFRASTRUCTURE
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:27:41.274 I/python.stdout(18246): INFO: ciris_engine.logic.services.lifecycle.initialization.service: → Initialize Infrastructure Services...
+03-27 14:27:41.289 I/python.stdout(18246): 
+03-27 14:27:41.289 I/python.stdout(18246): ================================================================================
+03-27 14:27:41.289 I/python.stdout(18246): 🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: /data/data/ai.ciris.mobile.debug/files/ciris/logs/ciris_agent_20260327_192741.log
+03-27 14:27:41.289 I/python.stdout(18246): 🔗 Symlinked to: /data/data/ai.ciris.mobile.debug/files/ciris/logs/latest.log
+03-27 14:27:41.289 I/python.stdout(18246): ⚠️  Incident capture: /data/data/ai.ciris.mobile.debug/files/ciris/logs/incidents_latest.log (WARNING/ERROR messages captured as incidents)
+03-27 14:27:41.289 I/python.stdout(18246): ================================================================================
+03-27 14:27:41.289 I/python.stdout(18246): 
+03-27 14:27:41.307 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 5/22] SecretsService STARTED
+03-27 14:27:41.309 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 22/22] SecretsToolService STARTED
+03-27 14:27:41.314 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 6/22] MemoryService STARTED
+03-27 14:27:41.314 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 7/22] ConfigService STARTED
+03-27 14:27:42.031 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 15/22] AuthenticationService STARTED
+03-27 14:27:42.043 I/python.stdout(18246): [FULL-STARTUP] [SERVICE 13/22] WiseAuthority STARTED
+03-27 14:27:42.052 I/python.stdout(18246): [SERVICES] === RESUME (12 remaining services) PHASE ===
+03-27 14:27:42.057 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 9/22] TelemetryService STARTED
+03-27 14:27:42.097 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 14/22] LLMService STARTED
+03-27 14:27:43.693 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 8/22] AuditService STARTED
+03-27 14:27:43.714 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 10/22] IncidentManagement STARTED
+03-27 14:27:43.727 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 19/22] AdaptiveFilter STARTED
+03-27 14:27:43.733 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 18/22] TaskScheduler STARTED
+03-27 14:27:43.848 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 11/22] TSDBConsolidation STARTED
+03-27 14:27:43.849 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 16/22] DatabaseMaintenance STARTED
+03-27 14:27:43.850 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 21/22] SelfObservation STARTED
+03-27 14:27:43.852 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 20/22] VisibilityService STARTED
+03-27 14:27:43.852 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 12/22] ConsentService STARTED
+03-27 14:27:43.860 I/python.stdout(18246): [RESUME (12 remaining services)] [SERVICE 17/22] RuntimeControl STARTED
+03-27 14:27:44.060 W/python.stderr(18246): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+03-27 14:27:44.731 I/python.stdout(18246): Starting CIRIS API...
+03-27 14:27:46.471 I/python.stdout(18246): [14:27:46.471] [STATE] Transition: shutdown -> work
+03-27 14:29:54.832 I/python.stdout(19190): ============================================================
+03-27 14:29:54.832 I/python.stdout(19190): PYDANTIC_CORE NATIVE LIBRARY SETUP
+03-27 14:29:54.832 I/python.stdout(19190): ============================================================
+03-27 14:29:54.832 I/python.stdout(19190): [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-27 14:29:54.832 I/python.stdout(19190): [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:29:54.833 I/python.stdout(19190): [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-27 14:29:54.833 I/python.stdout(19190): [4/6] No cached modules to clear
+03-27 14:29:54.834 I/python.stdout(19190): [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:29:54.834 I/python.stdout(19190): [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-27 14:29:54.834 I/python.stdout(19190): [6/6] Testing native library load...
+03-27 14:29:54.837 I/python.stdout(19190): [6/6] ctypes.CDLL: SUCCESS
+03-27 14:29:54.837 W/python.stderr(19190): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-27 14:29:54.837 W/python.stderr(19190): <frozen importlib._bootstrap>:671: ImportWarning: PydanticCoreFinder.exec_module() not found; falling back to load_module()
+03-27 14:29:54.867 I/python.stdout(19190): [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-27 14:29:54.867 I/python.stdout(19190): [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-27 14:29:54.867 I/python.stdout(19190): ============================================================
+03-27 14:29:54.867 I/python.stdout(19190): PYDANTIC_CORE READY
+03-27 14:29:54.867 I/python.stdout(19190): ============================================================
+03-27 14:29:54.868 I/python.stdout(19190): INFO: mobile_main: CIRIS Mobile - Full On-Device Runtime (LLM Remote)
+03-27 14:29:56.461 W/python.stderr(19190): stdlib/enum.py:289: DeprecationWarning: FUNCTIONS is deprecated and will be removed in future versions
+03-27 14:29:56.692 I/python.stdout(19190): INFO: ciris_engine.logic.utils.path_resolution: [path_resolution] CIRIS_HOME configured: /data/data/ai.ciris.mobile.debug/files/ciris (platform: Android, os: linux)
+03-27 14:29:56.692 I/python.stdout(19190): INFO: mobile_main: Android paths: CIRIS_HOME=/data/data/ai.ciris.mobile.debug/files/ciris, data=/data/data/ai.ciris.mobile.debug/files/ciris/data, logs=/data/data/ai.ciris.mobile.debug/files/ciris/logs
+03-27 14:29:56.692 I/python.stdout(19190): INFO: mobile_main: Loading configuration from /data/data/ai.ciris.mobile.debug/files/ciris/.env
+03-27 14:29:56.695 I/python.stdout(19190): INFO: mobile_main: Loaded .env - OPENAI_API_KEY set: True
+03-27 14:29:56.696 I/python.stdout(19190): INFO: mobile_main: Loaded .env - OPENAI_API_BASE: https://llm01.ciris-services-1.ai/v1
+03-27 14:29:56.696 I/python.stdout(19190): INFO: mobile_main: Verifying code integrity (parallel with imports)...
+03-27 14:29:56.699 I/python.stdout(19190): [7/8] Hashing ciris_engine...
+03-27 14:29:58.017 W/python.stderr(19190): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_fields.py:132: UserWarning: Field "model_used" in ResourceCost has conflict with protected namespace "model_".
+03-27 14:29:58.017 W/python.stderr(19190): 
+03-27 14:29:58.017 W/python.stderr(19190): You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+03-27 14:29:59.021 I/python.stdout(19190): [7/8] ciris_engine: 687 files hashed
+03-27 14:29:59.021 I/python.stdout(19190): [8/8] Hashing ciris_adapters...
+03-27 14:29:59.056 I/python.stdout(19190): [8/8] ciris_adapters: 250 files hashed
+03-27 14:29:59.057 I/python.stdout(19190): INFO: mobile_main: Code integrity check: 937/937 files hashed, total_hash=ca7b8a2748a756b9...
+03-27 14:29:59.060 I/python.stdout(19190): INFO: mobile_main: Saved 937 module hashes to /data/data/ai.ciris.mobile.debug/files/ciris/startup_python_hashes.json
+03-27 14:29:59.061 I/python.stdout(19190): INFO: mobile_main: Code integrity verified: 937 modules, hash=ca7b8a2748a756b9...
+03-27 14:29:59.061 I/python.stdout(19190): INFO: mobile_main: Starting CIRIS on-device runtime...
+03-27 14:29:59.061 I/python.stdout(19190): INFO: mobile_main: API endpoint: http://0.0.0.0:8080 (binding all interfaces)
+03-27 14:29:59.061 I/python.stdout(19190): INFO: mobile_main: LLM endpoint: https://llm01.ciris-services-1.ai/v1
+03-27 14:29:59.075 I/python.stdout(19190): INFO: mobile_main: Using Android config - CIRIS_HOME: /data/data/ai.ciris.mobile.debug/files/ciris, data_dir: /data/data/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:29:59.077 I/python.stdout(19190): INFO: mobile_main: Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume
+03-27 14:29:59.079 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.bootstrap_helpers: [BOOTSTRAP] identity_update=False, template_name=None
+03-27 14:29:59.144 I/python.stdout(19190): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'ciris_verify' from modular adapters
+03-27 14:29:59.148 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.base: Initializing service: CIRISVerifyAdapter
+03-27 14:29:59.149 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: ciris_verify
+03-27 14:29:59.345 I/python.stdout(19190): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'wallet' from modular adapters
+03-27 14:29:59.345 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.base: Initializing service: WalletAdapter
+03-27 14:29:59.345 I/python.stdout(19190): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR=/data/user/0/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:29:59.347 I/python.stdout(19190): INFO: ciris_adapters.ciris_verify.ffi_bindings.client: [CIRISVerify] Android nativeLibraryDir: /data/app/~~fYvDdOS-CFGKdsnB1oMKpw==/ai.ciris.mobile.debug-UlhPSnXaNQUNz00UnNZO-Q==/lib/arm64
+03-27 14:29:59.374 I/python.stdout(19190): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Created global CIRISVerify instance
+03-27 14:29:59.375 I/python.stdout(19190): INFO: ciris_verify: [ciris_verify_ffi] Log callback registered
+03-27 14:29:59.376 I/python.stdout(19190): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Rust logging callback registered (TRACE level)
+03-27 14:29:59.376 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:29:59.376 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:29:59.377 I/python.stdout(19190): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:29:59.377 I/python.stdout(19190): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:29:59.377 I/python.stdout(19190): INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-27 14:29:59.377 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_verify_ffi] has_key check: true
+03-27 14:29:59.378 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:29:59.378 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:29:59.378 I/python.stdout(19190): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:29:59.379 I/python.stdout(19190): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:29:59.379 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_keyring::software] get_public_key from hardware wrapper, pubkey_len=32, hardware_backed=true
+03-27 14:29:59.379 I/python.stdout(19190): DEBUG: ciris_verify: [ciris_verify_ffi] Ed25519 public key returned (32 bytes)
+03-27 14:29:59.379 I/python.stdout(19190): INFO: ciris_adapters.wallet.adapter: Got Ed25519 public key from CIRISVerify (32 bytes)
+03-27 14:29:59.379 I/python.stdout(19190): INFO: ciris_adapters.wallet.adapter: x402 provider configured with CIRISVerify key
+03-27 14:29:59.381 I/python.stdout(19190): INFO: ciris_adapters.wallet.providers.registry: Loaded provider: x402
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.providers.chain_client: ChainClient initialized for base-mainnet (chain_id=8453)
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.providers.x402_provider: X402Provider created for network: base-mainnet
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.providers.x402_provider: Derived wallet address from public key: 0x87779885D3422fa11f402C3b5c3030A5bCD15670
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.adapter: Loaded provider: x402
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.tool_service: WalletToolService initialized with providers: ['x402']
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_adapters.wallet.adapter: Wallet adapter initialized with providers: ['x402']
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: wallet
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'api' from core adapters
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.base: Initializing service: ApiPlatform
+03-27 14:29:59.382 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] kwargs keys: ['adapter_config']
+03-27 14:29:59.383 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config in kwargs: True
+03-27 14:29:59.383 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config value: {'host': '0.0.0.0', 'port': 8080, 'cors_enabled': True, 'cors_origins': ['*'], 'cors_allow_credentials': False, 'max_request_size': 1048576, 'request_timeout': 30.0, 'enable_swagger': True, 'enable_redoc': True, 'rate_limit_enabled': True, 'rate_limit_per_minute': 60, 'auth_enabled': True, 'interaction_timeout': 55.0, 'proxy_path': '', 'agent_id': ''}, type: <class 'dict'>
+03-27 14:29:59.383 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] Created APIAdapterConfig from dict, port=8080
+03-27 14:29:59.383 I/python.stdout(19190): Rate limiting enabled: 60 requests per minute
+03-27 14:30:00.185 I/python.stdout(19190): ℹ️  API-only mode - use CIRIS Desktop app to connect
+03-27 14:30:00.185 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.base: Initializing service: APIRuntimeControlService
+03-27 14:30:00.185 I/python.stdout(19190): INFO: ciris_engine.logic.adapters.api.adapter: API adapter initialized - host: 0.0.0.0, port: 8080
+03-27 14:30:00.185 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: api
+03-27 14:30:00.185 I/python.stdout(19190): INFO: mobile_main: Initializing CIRIS services...
+03-27 14:30:00.185 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: Initializing CIRIS Runtime...
+03-27 14:30:00.186 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: Development environment - setting up directories...
+03-27 14:30:00.201 I/python.stdout(19190): ✓ Database exclusive access confirmed: /data/data/ai.ciris.mobile.debug/files/ciris/data/ciris_engine.db
+03-27 14:30:00.202 I/python.stdout(19190): ✓ All directories and critical files successfully configured
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Initializing infrastructure services...
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.setup.first_run: Checking first-run status...
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.setup.first_run: Running in INSTALLED mode (git repo: False)
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.setup.first_run: CIRIS_FORCE_FIRST_RUN env var: None
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED env var: true
+03-27 14:30:00.202 I/python.stdout(19190): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED is set - not first run
+03-27 14:30:00.202 I/python.stdout(19190): WARNING: ciris_engine.logic.runtime.service_initializer: [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:30:00.202 I/python.stdout(19190): [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:30:00.203 I/python.stdout(19190): INFO: ciris_engine.services.TimeService: TimeService started successfully
+03-27 14:30:00.203 I/python.stdout(19190): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:30:00.203 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:30:00.203 I/python.stdout(19190): INFO: ciris_engine.services.ShutdownService: ShutdownService started successfully
+03-27 14:30:00.203 I/python.stdout(19190): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:30:00.203 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:30:00.203 I/python.stdout(19190): INFO: ciris_engine.services.InitializationService: InitializationService started successfully
+03-27 14:30:00.203 I/python.stdout(19190): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:30:00.203 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:30:00.210 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.service_initializer: Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)
+03-27 14:30:00.245 I/python.stdout(19190): INFO: ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider: [BILLING_PROVIDER] Started:
+03-27 14:30:00.245 I/python.stdout(19190):   base_url: https://billing1.ciris-services-1.ai
+03-27 14:30:00.245 I/python.stdout(19190):   auth_mode: JWT (Google ID token)
+03-27 14:30:00.245 I/python.stdout(19190):   token_length: 1100 chars
+03-27 14:30:00.245 I/python.stdout(19190):   has_refresh_callback: False
+03-27 14:30:00.245 I/python.stdout(19190):   cache_ttl: 15s
+03-27 14:30:00.245 I/python.stdout(19190):   fail_open: False
+03-27 14:30:00.245 I/python.stdout(19190): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService: Started scheduled task with interval 1.0s
+03-27 14:30:00.245 I/python.stdout(19190): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService started successfully
+03-27 14:30:00.246 I/python.stdout(19190): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:30:00.246 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Infrastructure services initialized
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Got initialization service: <ciris_engine.logic.services.lifecycle.initialization.service.InitializationService object at 0x776b00f370>
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Registering initialization steps...
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Steps registered
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Running initialization sequence...
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: CIRIS Agent Initialization Sequence Starting
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Registered 13 steps across 8 phases
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Executing phase infrastructure with 1 steps
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: Phase: INFRASTRUCTURE
+03-27 14:30:00.246 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:30:00.247 I/python.stdout(19190): INFO: ciris_engine.logic.services.lifecycle.initialization.service: → Initialize Infrastructure Services...
+03-27 14:30:00.260 I/python.stdout(19190): 
+03-27 14:30:00.260 I/python.stdout(19190): ================================================================================
+03-27 14:30:00.260 I/python.stdout(19190): 🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: /data/data/ai.ciris.mobile.debug/files/ciris/logs/ciris_agent_20260327_193000.log
+03-27 14:30:00.260 I/python.stdout(19190): 🔗 Symlinked to: /data/data/ai.ciris.mobile.debug/files/ciris/logs/latest.log
+03-27 14:30:00.260 I/python.stdout(19190): ⚠️  Incident capture: /data/data/ai.ciris.mobile.debug/files/ciris/logs/incidents_latest.log (WARNING/ERROR messages captured as incidents)
+03-27 14:30:00.260 I/python.stdout(19190): ================================================================================
+03-27 14:30:00.260 I/python.stdout(19190): 
+03-27 14:30:00.275 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 5/22] SecretsService STARTED
+03-27 14:30:00.277 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 22/22] SecretsToolService STARTED
+03-27 14:30:00.282 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 6/22] MemoryService STARTED
+03-27 14:30:00.282 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 7/22] ConfigService STARTED
+03-27 14:30:00.978 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 15/22] AuthenticationService STARTED
+03-27 14:30:00.989 I/python.stdout(19190): [FULL-STARTUP] [SERVICE 13/22] WiseAuthority STARTED
+03-27 14:30:00.998 I/python.stdout(19190): [SERVICES] === RESUME (12 remaining services) PHASE ===
+03-27 14:30:01.003 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 9/22] TelemetryService STARTED
+03-27 14:30:01.042 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 14/22] LLMService STARTED
+03-27 14:30:01.607 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 8/22] AuditService STARTED
+03-27 14:30:01.616 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 10/22] IncidentManagement STARTED
+03-27 14:30:01.628 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 19/22] AdaptiveFilter STARTED
+03-27 14:30:01.634 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 18/22] TaskScheduler STARTED
+03-27 14:30:01.746 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 11/22] TSDBConsolidation STARTED
+03-27 14:30:01.747 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 16/22] DatabaseMaintenance STARTED
+03-27 14:30:01.748 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 21/22] SelfObservation STARTED
+03-27 14:30:01.749 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 20/22] VisibilityService STARTED
+03-27 14:30:01.750 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 12/22] ConsentService STARTED
+03-27 14:30:01.757 I/python.stdout(19190): [RESUME (12 remaining services)] [SERVICE 17/22] RuntimeControl STARTED
+03-27 14:30:01.947 W/python.stderr(19190): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+03-27 14:30:02.380 I/python.stdout(19190): Starting CIRIS API...
+03-27 14:30:04.442 I/python.stdout(19190): [14:30:04.442] [STATE] Transition: shutdown -> work
+03-27 14:32:22.487 W/python.stderr(19190): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-27 14:32:31.507 I/python.stdout(19190): [14:32:31.507] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_seed_2fe49aaf_070c695f-ca3 - created follow-up thought th_followup_th_seed__2df1443f-878
+03-27 14:32:54.426 I/python.stdout(19190): [14:32:54.426] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_seed__2df1443f-878 - created follow-up thought th_followup_th_follo_b6c6d270-9f8
+03-27 14:33:09.812 I/python.stdout(19190): [14:33:09.812] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_b6c6d270-9f8 - created follow-up thought th_followup_th_follo_bd5c6eb7-27e
+03-27 14:33:29.026 I/python.stdout(19190): [14:33:29.026] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_bd5c6eb7-27e - created follow-up thought th_followup_th_follo_ab5ecd0c-3b8
+03-27 14:33:50.907 I/python.stdout(19190): [14:33:50.907] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_ab5ecd0c-3b8 - created follow-up thought th_followup_th_follo_89c4b9f2-8e6
+03-27 14:34:16.664 I/python.stdout(19190): [14:34:16.664] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_89c4b9f2-8e6 - created follow-up thought th_followup_th_follo_795ac33f-be4
+03-27 14:34:39.893 I/python.stdout(19190): [14:34:39.892] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_795ac33f-be4 - created follow-up thought th_followup_th_follo_2fd67450-88d
+03-27 14:35:10.171 I/python.stdout(19190): [14:35:10.171] [DISPATCHER] Handler TaskCompleteHandler completed for action task_complete on thought th_followup_th_follo_2fd67450-88d
+03-27 14:41:54.658 I/python.stdout(28031): ============================================================
+03-27 14:41:54.658 I/python.stdout(28031): PYDANTIC_CORE NATIVE LIBRARY SETUP
+03-27 14:41:54.658 I/python.stdout(28031): ============================================================
+03-27 14:41:54.658 I/python.stdout(28031): [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-27 14:41:54.658 I/python.stdout(28031): [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:41:54.660 I/python.stdout(28031): [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-27 14:41:54.660 I/python.stdout(28031): [4/6] No cached modules to clear
+03-27 14:41:54.660 I/python.stdout(28031): [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-27 14:41:54.660 I/python.stdout(28031): [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-27 14:41:54.660 I/python.stdout(28031): [6/6] Testing native library load...
+03-27 14:41:54.666 I/python.stdout(28031): [6/6] ctypes.CDLL: SUCCESS
+03-27 14:41:54.666 W/python.stderr(28031): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-27 14:41:54.667 W/python.stderr(28031): <frozen importlib._bootstrap>:671: ImportWarning: PydanticCoreFinder.exec_module() not found; falling back to load_module()
+03-27 14:41:54.700 I/python.stdout(28031): [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-27 14:41:54.700 I/python.stdout(28031): [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-27 14:41:54.700 I/python.stdout(28031): ============================================================
+03-27 14:41:54.700 I/python.stdout(28031): PYDANTIC_CORE READY
+03-27 14:41:54.700 I/python.stdout(28031): ============================================================
+03-27 14:41:54.701 I/python.stdout(28031): INFO: mobile_main: CIRIS Mobile - Full On-Device Runtime (LLM Remote)
+03-27 14:41:56.664 W/python.stderr(28031): stdlib/enum.py:289: DeprecationWarning: FUNCTIONS is deprecated and will be removed in future versions
+03-27 14:41:56.894 I/python.stdout(28031): INFO: ciris_engine.logic.utils.path_resolution: [path_resolution] CIRIS_HOME configured: /data/data/ai.ciris.mobile.debug/files/ciris (platform: Android, os: linux)
+03-27 14:41:56.895 I/python.stdout(28031): INFO: mobile_main: Android paths: CIRIS_HOME=/data/data/ai.ciris.mobile.debug/files/ciris, data=/data/data/ai.ciris.mobile.debug/files/ciris/data, logs=/data/data/ai.ciris.mobile.debug/files/ciris/logs
+03-27 14:41:56.895 I/python.stdout(28031): INFO: mobile_main: Loading configuration from /data/data/ai.ciris.mobile.debug/files/ciris/.env
+03-27 14:41:56.899 I/python.stdout(28031): INFO: mobile_main: Loaded .env - OPENAI_API_KEY set: True
+03-27 14:41:56.899 I/python.stdout(28031): INFO: mobile_main: Loaded .env - OPENAI_API_BASE: https://llm01.ciris-services-1.ai/v1
+03-27 14:41:56.899 I/python.stdout(28031): INFO: mobile_main: Verifying code integrity (parallel with imports)...
+03-27 14:41:56.903 I/python.stdout(28031): [7/8] Hashing ciris_engine...
+03-27 14:41:57.408 I/python.stdout(28031): [7/8] ciris_engine: 687 files hashed
+03-27 14:41:57.413 I/python.stdout(28031): [8/8] Hashing ciris_adapters...
+03-27 14:41:58.620 W/python.stderr(28031): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_fields.py:132: UserWarning: Field "model_used" in ResourceCost has conflict with protected namespace "model_".
+03-27 14:41:58.620 W/python.stderr(28031): 
+03-27 14:41:58.620 W/python.stderr(28031): You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+03-27 14:41:59.690 I/python.stdout(28031): [8/8] ciris_adapters: 250 files hashed
+03-27 14:41:59.692 I/python.stdout(28031): INFO: mobile_main: Code integrity check: 937/937 files hashed, total_hash=ca7b8a2748a756b9...
+03-27 14:41:59.696 I/python.stdout(28031): INFO: mobile_main: Saved 937 module hashes to /data/data/ai.ciris.mobile.debug/files/ciris/startup_python_hashes.json
+03-27 14:41:59.697 I/python.stdout(28031): INFO: mobile_main: Code integrity verified: 937 modules, hash=ca7b8a2748a756b9...
+03-27 14:41:59.697 I/python.stdout(28031): INFO: mobile_main: Starting CIRIS on-device runtime...
+03-27 14:41:59.697 I/python.stdout(28031): INFO: mobile_main: API endpoint: http://0.0.0.0:8080 (binding all interfaces)
+03-27 14:41:59.697 I/python.stdout(28031): INFO: mobile_main: LLM endpoint: https://llm01.ciris-services-1.ai/v1
+03-27 14:41:59.713 I/python.stdout(28031): INFO: mobile_main: Using Android config - CIRIS_HOME: /data/data/ai.ciris.mobile.debug/files/ciris, data_dir: /data/data/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:41:59.715 I/python.stdout(28031): INFO: mobile_main: Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume
+03-27 14:41:59.717 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.bootstrap_helpers: [BOOTSTRAP] identity_update=False, template_name=None
+03-27 14:41:59.782 I/python.stdout(28031): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'ciris_verify' from modular adapters
+03-27 14:41:59.787 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.base: Initializing service: CIRISVerifyAdapter
+03-27 14:41:59.787 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: ciris_verify
+03-27 14:41:59.994 I/python.stdout(28031): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'wallet' from modular adapters
+03-27 14:41:59.995 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.base: Initializing service: WalletAdapter
+03-27 14:41:59.995 I/python.stdout(28031): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR=/data/user/0/ai.ciris.mobile.debug/files/ciris/data
+03-27 14:41:59.997 I/python.stdout(28031): INFO: ciris_adapters.ciris_verify.ffi_bindings.client: [CIRISVerify] Android nativeLibraryDir: /data/app/~~v0nh3OdoMxHCJY_6XUFxyQ==/ai.ciris.mobile.debug-m45BCuGGoNATElseNQV4Wg==/lib/arm64
+03-27 14:42:00.050 I/python.stdout(28031): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Created global CIRISVerify instance
+03-27 14:42:00.052 I/python.stdout(28031): INFO: ciris_verify: [ciris_verify_ffi] Log callback registered
+03-27 14:42:00.052 I/python.stdout(28031): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Rust logging callback registered (TRACE level)
+03-27 14:42:00.052 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:42:00.053 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:42:00.054 I/python.stdout(28031): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:42:00.054 I/python.stdout(28031): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:42:00.054 I/python.stdout(28031): INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-27 14:42:00.054 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_verify_ffi] has_key check: true
+03-27 14:42:00.054 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-27 14:42:00.054 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-27 14:42:00.055 I/python.stdout(28031): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-27 14:42:00.055 I/python.stdout(28031): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-27 14:42:00.055 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_keyring::software] get_public_key from hardware wrapper, pubkey_len=32, hardware_backed=true
+03-27 14:42:00.056 I/python.stdout(28031): DEBUG: ciris_verify: [ciris_verify_ffi] Ed25519 public key returned (32 bytes)
+03-27 14:42:00.056 I/python.stdout(28031): INFO: ciris_adapters.wallet.adapter: Got Ed25519 public key from CIRISVerify (32 bytes)
+03-27 14:42:00.056 I/python.stdout(28031): INFO: ciris_adapters.wallet.adapter: x402 provider configured with CIRISVerify key
+03-27 14:42:00.061 I/python.stdout(28031): INFO: ciris_adapters.wallet.providers.registry: Loaded provider: x402
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.providers.chain_client: ChainClient initialized for base-mainnet (chain_id=8453)
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.providers.x402_provider: X402Provider created for network: base-mainnet
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.providers.x402_provider: Derived wallet address from public key: 0x87779885D3422fa11f402C3b5c3030A5bCD15670
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.adapter: Loaded provider: x402
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.tool_service: WalletToolService initialized with providers: ['x402']
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_adapters.wallet.adapter: Wallet adapter initialized with providers: ['x402']
+03-27 14:42:00.062 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: wallet
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'api' from core adapters
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.base: Initializing service: ApiPlatform
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] kwargs keys: ['adapter_config']
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config in kwargs: True
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config value: {'host': '0.0.0.0', 'port': 8080, 'cors_enabled': True, 'cors_origins': ['*'], 'cors_allow_credentials': False, 'max_request_size': 1048576, 'request_timeout': 30.0, 'enable_swagger': True, 'enable_redoc': True, 'rate_limit_enabled': True, 'rate_limit_per_minute': 60, 'auth_enabled': True, 'interaction_timeout': 55.0, 'proxy_path': '', 'agent_id': ''}, type: <class 'dict'>
+03-27 14:42:00.063 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] Created APIAdapterConfig from dict, port=8080
+03-27 14:42:00.064 I/python.stdout(28031): Rate limiting enabled: 60 requests per minute
+03-27 14:42:00.871 I/python.stdout(28031): ℹ️  API-only mode - use CIRIS Desktop app to connect
+03-27 14:42:00.872 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.base: Initializing service: APIRuntimeControlService
+03-27 14:42:00.872 I/python.stdout(28031): INFO: ciris_engine.logic.adapters.api.adapter: API adapter initialized - host: 0.0.0.0, port: 8080
+03-27 14:42:00.872 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: api
+03-27 14:42:00.872 I/python.stdout(28031): INFO: mobile_main: Initializing CIRIS services...
+03-27 14:42:00.872 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: Initializing CIRIS Runtime...
+03-27 14:42:00.875 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: Development environment - setting up directories...
+03-27 14:42:00.888 I/python.stdout(28031): ✓ Database exclusive access confirmed: /data/data/ai.ciris.mobile.debug/files/ciris/data/ciris_engine.db
+03-27 14:42:00.890 I/python.stdout(28031): ✓ All directories and critical files successfully configured
+03-27 14:42:00.890 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Initializing infrastructure services...
+03-27 14:42:00.890 I/python.stdout(28031): INFO: ciris_engine.logic.setup.first_run: Checking first-run status...
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.logic.setup.first_run: Running in INSTALLED mode (git repo: False)
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.logic.setup.first_run: CIRIS_FORCE_FIRST_RUN env var: None
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED env var: true
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED is set - not first run
+03-27 14:42:00.891 I/python.stdout(28031): WARNING: ciris_engine.logic.runtime.service_initializer: [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:42:00.891 I/python.stdout(28031): [SERVICES] === FULL-STARTUP PHASE ===
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.services.TimeService: TimeService started successfully
+03-27 14:42:00.891 I/python.stdout(28031): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:42:00.891 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.services.ShutdownService: ShutdownService started successfully
+03-27 14:42:00.891 I/python.stdout(28031): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:42:00.891 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-27 14:42:00.891 I/python.stdout(28031): INFO: ciris_engine.services.InitializationService: InitializationService started successfully
+03-27 14:42:00.891 I/python.stdout(28031): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:42:00.891 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-27 14:42:00.901 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.service_initializer: Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider: [BILLING_PROVIDER] Started:
+03-27 14:42:00.944 I/python.stdout(28031):   base_url: https://billing1.ciris-services-1.ai
+03-27 14:42:00.944 I/python.stdout(28031):   auth_mode: JWT (Google ID token)
+03-27 14:42:00.944 I/python.stdout(28031):   token_length: 1100 chars
+03-27 14:42:00.944 I/python.stdout(28031):   has_refresh_callback: False
+03-27 14:42:00.944 I/python.stdout(28031):   cache_ttl: 15s
+03-27 14:42:00.944 I/python.stdout(28031):   fail_open: False
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService: Started scheduled task with interval 1.0s
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService started successfully
+03-27 14:42:00.944 I/python.stdout(28031): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:42:00.944 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Infrastructure services initialized
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Got initialization service: <ciris_engine.logic.services.lifecycle.initialization.service.InitializationService object at 0x77745fb400>
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Registering initialization steps...
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Steps registered
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Running initialization sequence...
+03-27 14:42:00.944 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: CIRIS Agent Initialization Sequence Starting
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Registered 13 steps across 8 phases
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Executing phase infrastructure with 1 steps
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: Phase: INFRASTRUCTURE
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-27 14:42:00.945 I/python.stdout(28031): INFO: ciris_engine.logic.services.lifecycle.initialization.service: → Initialize Infrastructure Services...
+03-27 14:42:00.960 I/python.stdout(28031): 
+03-27 14:42:00.960 I/python.stdout(28031): ================================================================================
+03-27 14:42:00.960 I/python.stdout(28031): 🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: /data/data/ai.ciris.mobile.debug/files/ciris/logs/ciris_agent_20260327_194200.log
+03-27 14:42:00.960 I/python.stdout(28031): 🔗 Symlinked to: /data/data/ai.ciris.mobile.debug/files/ciris/logs/latest.log
+03-27 14:42:00.960 I/python.stdout(28031): ⚠️  Incident capture: /data/data/ai.ciris.mobile.debug/files/ciris/logs/incidents_latest.log (WARNING/ERROR messages captured as incidents)
+03-27 14:42:00.960 I/python.stdout(28031): ================================================================================
+03-27 14:42:00.960 I/python.stdout(28031): 
+03-27 14:42:00.978 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 5/22] SecretsService STARTED
+03-27 14:42:00.980 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 22/22] SecretsToolService STARTED
+03-27 14:42:00.985 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 6/22] MemoryService STARTED
+03-27 14:42:00.986 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 7/22] ConfigService STARTED
+03-27 14:42:01.709 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 15/22] AuthenticationService STARTED
+03-27 14:42:01.721 I/python.stdout(28031): [FULL-STARTUP] [SERVICE 13/22] WiseAuthority STARTED
+03-27 14:42:01.734 I/python.stdout(28031): [SERVICES] === RESUME (12 remaining services) PHASE ===
+03-27 14:42:01.744 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 9/22] TelemetryService STARTED
+03-27 14:42:01.790 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 14/22] LLMService STARTED
+03-27 14:42:03.372 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 8/22] AuditService STARTED
+03-27 14:42:03.391 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 10/22] IncidentManagement STARTED
+03-27 14:42:03.403 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 19/22] AdaptiveFilter STARTED
+03-27 14:42:03.411 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 18/22] TaskScheduler STARTED
+03-27 14:42:03.545 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 11/22] TSDBConsolidation STARTED
+03-27 14:42:03.546 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 16/22] DatabaseMaintenance STARTED
+03-27 14:42:03.547 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 21/22] SelfObservation STARTED
+03-27 14:42:03.550 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 20/22] VisibilityService STARTED
+03-27 14:42:03.551 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 12/22] ConsentService STARTED
+03-27 14:42:03.560 I/python.stdout(28031): [RESUME (12 remaining services)] [SERVICE 17/22] RuntimeControl STARTED
+03-27 14:42:03.768 W/python.stderr(28031): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+03-27 14:42:04.236 I/python.stdout(28031): Starting CIRIS API...
+03-27 14:42:06.113 I/python.stdout(28031): [14:42:06.113] [STATE] Transition: shutdown -> work

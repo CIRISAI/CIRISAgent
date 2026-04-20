@@ -1432,7 +1432,7 @@ Examples:
     test_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     test_parser.add_argument(
         "--apk",
-        default="mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
+        default="client/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
         help="Path to APK file",
     )
     test_parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")

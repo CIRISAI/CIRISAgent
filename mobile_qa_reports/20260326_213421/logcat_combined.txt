@@ -1,0 +1,605 @@
+--------- beginning of main
+03-26 21:11:52.025 I/WebViewFactory(18523): Loading com.google.android.webview version 145.0.7632.159 (code 763215903)
+03-26 21:32:23.713 I/MainActivity(24219): Initializing Python runtime...
+03-26 21:32:24.030 I/MainActivity(24219): Python runtime started
+03-26 21:32:24.030 I/MainActivity(24219): Localization resource loader initialized
+03-26 21:32:24.037 I/MainActivity(24219): Google Sign-In initialized with client ID: 265882853697-l421ndo...
+03-26 21:32:24.037 I/MainActivity(24219): Initializing Google Play Billing...
+03-26 21:32:24.097 I/CIRISApiClient(24219): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 21:32:24.116 I/MainActivity(24219): Google Play Billing initialized
+03-26 21:32:24.119 I/MainActivity(24219): Google Play Integrity initialized (via Python API)
+03-26 21:32:24.277 I/MainActivity(24219): Running CIRIS network diagnostics...
+03-26 21:32:24.279 I/MainActivity(24219): Showing CIRISApp immediately for startup animation
+03-26 21:32:24.279 I/MainActivity(24219): Starting PythonRuntimeService...
+03-26 21:32:24.287 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:24.295 I/CIRISApiClient(24219): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 21:32:24.300 I/TokenManager(24219): [setShared] Shared TokenManager instance set
+03-26 21:32:24.308 I/InteractViewModel(24219): [init] InteractViewModel initialized (polling deferred until token available)
+03-26 21:32:24.308 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:24.310 I/SettingsViewModel(24219): [loadDisplaySettings] >>> Loading live_background_enabled from secure storage...
+03-26 21:32:24.312 I/BillingViewModel(24219): [init] BillingViewModel initialized
+03-26 21:32:24.437 I/CIRISApp(24219): Initializing localization...
+03-26 21:32:24.439 I/MainActivity(24219): Setting purchase result callback
+03-26 21:32:24.485 I/CIRISApp(24219): Initializing currency...
+03-26 21:32:24.503 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:24.504 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:24.588 I/SettingsViewModel(24219): [loadDisplaySettings] >>> Raw value='true', parsed=true
+03-26 21:32:24.589 I/SettingsViewModel(24219): [loadDisplaySettings] >>> Live background state set to: true
+03-26 21:32:24.616 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:24.617 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:24.631 I/python.stdout(24219): ============================================================
+03-26 21:32:24.631 I/python.stdout(24219): PYDANTIC_CORE NATIVE LIBRARY SETUP
+03-26 21:32:24.631 I/python.stdout(24219): ============================================================
+03-26 21:32:24.631 I/python.stdout(24219): [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-26 21:32:24.631 I/python.stdout(24219): [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 21:32:24.634 I/python.stdout(24219): [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-26 21:32:24.634 I/python.stdout(24219): [4/6] No cached modules to clear
+03-26 21:32:24.634 I/python.stdout(24219): [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 21:32:24.634 I/python.stdout(24219): [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-26 21:32:24.634 I/python.stdout(24219): [6/6] Testing native library load...
+03-26 21:32:24.635 D/MainActivity(24219): Prep step 1/6: [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-26 21:32:24.635 D/MainActivity(24219): Prep step 2/6: [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 21:32:24.635 D/MainActivity(24219): Prep step 3/6: [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-26 21:32:24.636 D/MainActivity(24219): Prep step 4/6: [4/6] No cached modules to clear
+03-26 21:32:24.636 D/MainActivity(24219): Prep step 5/6: [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 21:32:24.636 D/MainActivity(24219): Prep step 5/6: [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-26 21:32:24.636 D/MainActivity(24219): Prep step 6/6: [6/6] Testing native library load...
+03-26 21:32:24.641 I/python.stdout(24219): [6/6] ctypes.CDLL: SUCCESS
+03-26 21:32:24.641 W/python.stderr(24219): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-26 21:32:24.642 W/python.stderr(24219): <frozen importlib._bootstrap>:671: ImportWarning: PydanticCoreFinder.exec_module() not found; falling back to load_module()
+03-26 21:32:24.642 D/MainActivity(24219): Prep step 6/6: [6/6] ctypes.CDLL: SUCCESS
+03-26 21:32:24.655 I/SettingsViewModel(24219): [loadDisplaySettings] >>> Color theme loaded: LAPIS
+03-26 21:32:24.688 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:24.689 I/python.stdout(24219): [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-26 21:32:24.689 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:24.689 I/python.stdout(24219): [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-26 21:32:24.689 I/python.stdout(24219): ============================================================
+03-26 21:32:24.690 I/python.stdout(24219): PYDANTIC_CORE READY
+03-26 21:32:24.690 I/python.stdout(24219): ============================================================
+03-26 21:32:24.690 D/MainActivity(24219): Prep step 6/6: [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-26 21:32:24.690 D/MainActivity(24219): Prep step 6/6: [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-26 21:32:24.690 I/python.stdout(24219): INFO: mobile_main: CIRIS Mobile - Full On-Device Runtime (LLM Remote)
+03-26 21:32:24.721 I/SettingsViewModel(24219): [loadDisplaySettings] >>> Brightness preference loaded: DARK
+03-26 21:32:24.745 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:24.746 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:24.937 I/MainActivity(24219): Network diagnostics completed
+03-26 21:32:26.572 W/python.stderr(24219): stdlib/enum.py:289: DeprecationWarning: FUNCTIONS is deprecated and will be removed in future versions
+03-26 21:32:26.801 I/python.stdout(24219): INFO: ciris_engine.logic.utils.path_resolution: [path_resolution] CIRIS_HOME configured: /data/data/ai.ciris.mobile.debug/files/ciris (platform: Android, os: linux)
+03-26 21:32:26.803 I/python.stdout(24219): INFO: mobile_main: Android paths: CIRIS_HOME=/data/data/ai.ciris.mobile.debug/files/ciris, data=/data/data/ai.ciris.mobile.debug/files/ciris/data, logs=/data/data/ai.ciris.mobile.debug/files/ciris/logs
+03-26 21:32:26.803 I/python.stdout(24219): INFO: mobile_main: Loading configuration from /data/data/ai.ciris.mobile.debug/files/ciris/.env
+03-26 21:32:26.807 I/python.stdout(24219): INFO: mobile_main: Loaded .env - OPENAI_API_KEY set: True
+03-26 21:32:26.807 I/python.stdout(24219): INFO: mobile_main: Loaded .env - OPENAI_API_BASE: https://llm01.ciris-services-1.ai/v1
+03-26 21:32:26.807 I/python.stdout(24219): INFO: mobile_main: Verifying code integrity (parallel with imports)...
+03-26 21:32:26.811 I/python.stdout(24219): [7/8] Hashing ciris_engine...
+03-26 21:32:26.812 D/MainActivity(24219): Prep step 7/8: [7/8] Hashing ciris_engine...
+03-26 21:32:26.974 I/python.stdout(24219): [7/8] ciris_engine: 687 files hashed
+03-26 21:32:26.974 I/python.stdout(24219): [8/8] Hashing ciris_adapters...
+03-26 21:32:26.975 D/MainActivity(24219): Prep step 7/8: [7/8] ciris_engine: 687 files hashed
+03-26 21:32:26.975 D/MainActivity(24219): Prep step 8/8: [8/8] Hashing ciris_adapters...
+03-26 21:32:27.223 I/python.stdout(24219): [8/8] ciris_adapters: 250 files hashed
+03-26 21:32:27.224 D/MainActivity(24219): Prep step 8/8: [8/8] ciris_adapters: 250 files hashed
+03-26 21:32:27.225 I/python.stdout(24219): INFO: mobile_main: Code integrity check: 937/937 files hashed, total_hash=157aa0cea21b98b2...
+03-26 21:32:27.228 I/python.stdout(24219): INFO: mobile_main: Saved 937 module hashes to /data/data/ai.ciris.mobile.debug/files/ciris/startup_python_hashes.json
+03-26 21:32:28.747 W/python.stderr(24219): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_fields.py:132: UserWarning: Field "model_used" in ResourceCost has conflict with protected namespace "model_".
+03-26 21:32:28.747 W/python.stderr(24219): 
+03-26 21:32:28.747 W/python.stderr(24219): You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+03-26 21:32:29.701 I/python.stdout(24219): INFO: mobile_main: Code integrity verified: 937 modules, hash=157aa0cea21b98b2...
+03-26 21:32:29.702 I/python.stdout(24219): INFO: mobile_main: Starting CIRIS on-device runtime...
+03-26 21:32:29.702 I/python.stdout(24219): INFO: mobile_main: API endpoint: http://0.0.0.0:8080 (binding all interfaces)
+03-26 21:32:29.702 I/python.stdout(24219): INFO: mobile_main: LLM endpoint: https://llm01.ciris-services-1.ai/v1
+03-26 21:32:29.733 I/python.stdout(24219): INFO: mobile_main: Using Android config - CIRIS_HOME: /data/data/ai.ciris.mobile.debug/files/ciris, data_dir: /data/data/ai.ciris.mobile.debug/files/ciris/data
+03-26 21:32:29.736 I/python.stdout(24219): INFO: mobile_main: Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume
+03-26 21:32:29.738 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.bootstrap_helpers: [BOOTSTRAP] identity_update=False, template_name=None
+03-26 21:32:29.799 I/python.stdout(24219): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'ciris_verify' from modular adapters
+03-26 21:32:29.803 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.base: Initializing service: CIRISVerifyAdapter
+03-26 21:32:29.803 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: ciris_verify
+03-26 21:32:30.006 I/python.stdout(24219): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'wallet' from modular adapters
+03-26 21:32:30.007 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.base: Initializing service: WalletAdapter
+03-26 21:32:30.007 I/python.stdout(24219): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Initializing CIRISVerify with CIRIS_DATA_DIR=/data/user/0/ai.ciris.mobile.debug/files/ciris/data
+03-26 21:32:30.010 I/python.stdout(24219): INFO: ciris_adapters.ciris_verify.ffi_bindings.client: [CIRISVerify] Android nativeLibraryDir: /data/app/~~7veQXlBpOr1_5T08rf683Q==/ai.ciris.mobile.debug-22aqYyt8ZFW9pTZNiEoY7A==/lib/arm64
+03-26 21:32:30.050 I/python.stdout(24219): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Created global CIRISVerify instance
+03-26 21:32:30.051 I/python.stdout(24219): INFO: ciris_verify: [ciris_verify_ffi] Log callback registered
+03-26 21:32:30.052 I/python.stdout(24219): INFO: ciris_engine.logic.services.infrastructure.authentication.verifier_singleton: [verifier_singleton] Rust logging callback registered (TRACE level)
+03-26 21:32:30.052 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-26 21:32:30.053 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-26 21:32:30.053 I/python.stdout(24219): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 21:32:30.054 I/python.stdout(24219): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 21:32:30.054 I/python.stdout(24219): INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-26 21:32:30.054 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_verify_ffi] has_key check: true
+03-26 21:32:30.054 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: loading AndroidKeyStore
+03-26 21:32:30.054 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_keyring::platform::android] get_keystore: AndroidKeyStore loaded successfully
+03-26 21:32:30.054 D/MainActivity(24219): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 21:32:30.055 D/MainActivity(24219): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 21:32:30.055 I/python.stdout(24219): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 21:32:30.055 I/python.stdout(24219): INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 21:32:30.055 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_keyring::software] get_public_key from hardware wrapper, pubkey_len=32, hardware_backed=true
+03-26 21:32:30.056 I/python.stdout(24219): DEBUG: ciris_verify: [ciris_verify_ffi] Ed25519 public key returned (32 bytes)
+03-26 21:32:30.056 D/MainActivity(24219): Verify: INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-26 21:32:30.056 I/python.stdout(24219): INFO: ciris_adapters.wallet.adapter: Got Ed25519 public key from CIRISVerify (32 bytes)
+03-26 21:32:30.056 I/python.stdout(24219): INFO: ciris_adapters.wallet.adapter: x402 provider configured with CIRISVerify key
+03-26 21:32:30.057 D/MainActivity(24219): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 21:32:30.057 D/MainActivity(24219): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 21:32:30.059 I/python.stdout(24219): INFO: ciris_adapters.wallet.providers.registry: Loaded provider: x402
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.providers.chain_client: ChainClient initialized for base-mainnet (chain_id=8453)
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.providers.x402_provider: X402Provider created for network: base-mainnet
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.providers.x402_provider: Derived wallet address from public key: 0x87779885D3422fa11f402C3b5c3030A5bCD15670
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.adapter: Loaded provider: x402
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.tool_service: WalletToolService initialized with providers: ['x402']
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_adapters.wallet.adapter: Wallet adapter initialized with providers: ['x402']
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: wallet
+03-26 21:32:30.060 I/python.stdout(24219): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'api' from core adapters
+03-26 21:32:30.061 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.base: Initializing service: ApiPlatform
+03-26 21:32:30.061 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] kwargs keys: ['adapter_config']
+03-26 21:32:30.061 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config in kwargs: True
+03-26 21:32:30.061 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config value: {'host': '0.0.0.0', 'port': 8080, 'cors_enabled': True, 'cors_origins': ['*'], 'cors_allow_credentials': False, 'max_request_size': 1048576, 'request_timeout': 30.0, 'enable_swagger': True, 'enable_redoc': True, 'rate_limit_enabled': True, 'rate_limit_per_minute': 60, 'auth_enabled': True, 'interaction_timeout': 55.0, 'proxy_path': '', 'agent_id': ''}, type: <class 'dict'>
+03-26 21:32:30.061 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] Created APIAdapterConfig from dict, port=8080
+03-26 21:32:30.062 I/python.stdout(24219): Rate limiting enabled: 60 requests per minute
+03-26 21:32:30.857 I/python.stdout(24219): ℹ️  API-only mode - use CIRIS Desktop app to connect
+03-26 21:32:30.857 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.base: Initializing service: APIRuntimeControlService
+03-26 21:32:30.857 I/python.stdout(24219): INFO: ciris_engine.logic.adapters.api.adapter: API adapter initialized - host: 0.0.0.0, port: 8080
+03-26 21:32:30.857 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: api
+03-26 21:32:30.857 I/python.stdout(24219): INFO: mobile_main: Initializing CIRIS services...
+03-26 21:32:30.857 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: Initializing CIRIS Runtime...
+03-26 21:32:30.858 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: Development environment - setting up directories...
+03-26 21:32:30.895 I/python.stdout(24219): ✓ Database exclusive access confirmed: /data/data/ai.ciris.mobile.debug/files/ciris/data/ciris_engine.db
+03-26 21:32:30.898 I/python.stdout(24219): ✓ All directories and critical files successfully configured
+03-26 21:32:30.898 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Initializing infrastructure services...
+03-26 21:32:30.898 I/python.stdout(24219): INFO: ciris_engine.logic.setup.first_run: Checking first-run status...
+03-26 21:32:30.898 I/python.stdout(24219): INFO: ciris_engine.logic.setup.first_run: Running in INSTALLED mode (git repo: False)
+03-26 21:32:30.898 I/python.stdout(24219): INFO: ciris_engine.logic.setup.first_run: CIRIS_FORCE_FIRST_RUN env var: None
+03-26 21:32:30.898 I/python.stdout(24219): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED env var: true
+03-26 21:32:30.899 I/python.stdout(24219): INFO: ciris_engine.logic.setup.first_run: CIRIS_CONFIGURED is set - not first run
+03-26 21:32:30.899 I/python.stdout(24219): WARNING: ciris_engine.logic.runtime.service_initializer: [SERVICES] === FULL-STARTUP PHASE ===
+03-26 21:32:30.899 I/python.stdout(24219): [SERVICES] === FULL-STARTUP PHASE ===
+03-26 21:32:30.899 I/python.stdout(24219): INFO: ciris_engine.services.TimeService: TimeService started successfully
+03-26 21:32:30.899 I/python.stdout(24219): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-26 21:32:30.899 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+03-26 21:32:30.899 I/python.stdout(24219): INFO: ciris_engine.services.ShutdownService: ShutdownService started successfully
+03-26 21:32:30.899 I/python.stdout(24219): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-26 21:32:30.899 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+03-26 21:32:30.900 D/MainActivity(24219): Service 1 started (1/22)
+03-26 21:32:30.900 I/python.stdout(24219): INFO: ciris_engine.services.InitializationService: InitializationService started successfully
+03-26 21:32:30.900 I/python.stdout(24219): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-26 21:32:30.900 D/MainActivity(24219): Service 1 started (1/22)
+03-26 21:32:30.900 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+03-26 21:32:30.900 D/MainActivity(24219): Service 2 started (2/22)
+03-26 21:32:30.900 D/MainActivity(24219): Service 2 started (2/22)
+03-26 21:32:30.901 D/MainActivity(24219): Service 3 started (3/22)
+03-26 21:32:30.901 D/MainActivity(24219): Service 3 started (3/22)
+03-26 21:32:30.909 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.service_initializer: Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)
+03-26 21:32:30.953 I/python.stdout(24219): INFO: ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider: [BILLING_PROVIDER] Started:
+03-26 21:32:30.953 I/python.stdout(24219):   base_url: https://billing1.ciris-services-1.ai
+03-26 21:32:30.953 I/python.stdout(24219):   auth_mode: JWT (Google ID token)
+03-26 21:32:30.953 I/python.stdout(24219):   token_length: 1100 chars
+03-26 21:32:30.953 I/python.stdout(24219):   has_refresh_callback: False
+03-26 21:32:30.953 I/python.stdout(24219):   cache_ttl: 15s
+03-26 21:32:30.953 I/python.stdout(24219):   fail_open: False
+03-26 21:32:30.953 I/python.stdout(24219): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService: Started scheduled task with interval 1.0s
+03-26 21:32:30.953 I/python.stdout(24219): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService started successfully
+03-26 21:32:30.953 I/python.stdout(24219): WARNING: ciris_engine.logic.runtime.service_initializer: [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-26 21:32:30.953 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+03-26 21:32:30.953 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Infrastructure services initialized
+03-26 21:32:30.953 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Got initialization service: <ciris_engine.logic.services.lifecycle.initialization.service.InitializationService object at 0x777a52fbb0>
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Registering initialization steps...
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Steps registered
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Running initialization sequence...
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: CIRIS Agent Initialization Sequence Starting
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Registered 13 steps across 8 phases
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Executing phase infrastructure with 1 steps
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: Phase: INFRASTRUCTURE
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+03-26 21:32:30.954 I/python.stdout(24219): INFO: ciris_engine.logic.services.lifecycle.initialization.service: → Initialize Infrastructure Services...
+03-26 21:32:30.954 D/MainActivity(24219): Service 4 started (4/22)
+03-26 21:32:30.955 D/MainActivity(24219): Service 4 started (4/22)
+03-26 21:32:30.969 I/python.stdout(24219): 
+03-26 21:32:30.969 I/python.stdout(24219): ================================================================================
+03-26 21:32:30.969 I/python.stdout(24219): 🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: /data/data/ai.ciris.mobile.debug/files/ciris/logs/ciris_agent_20260327_023230.log
+03-26 21:32:30.969 I/python.stdout(24219): 🔗 Symlinked to: /data/data/ai.ciris.mobile.debug/files/ciris/logs/latest.log
+03-26 21:32:30.969 I/python.stdout(24219): ⚠️  Incident capture: /data/data/ai.ciris.mobile.debug/files/ciris/logs/incidents_latest.log (WARNING/ERROR messages captured as incidents)
+03-26 21:32:30.969 I/python.stdout(24219): ================================================================================
+03-26 21:32:30.969 I/python.stdout(24219): 
+03-26 21:32:30.988 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 5/22] SecretsService STARTED
+03-26 21:32:30.988 D/MainActivity(24219): Service 5 started (5/22)
+03-26 21:32:30.989 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 22/22] SecretsToolService STARTED
+03-26 21:32:30.990 D/MainActivity(24219): Service 22 started (6/22)
+03-26 21:32:30.994 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 6/22] MemoryService STARTED
+03-26 21:32:30.995 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 7/22] ConfigService STARTED
+03-26 21:32:30.995 D/MainActivity(24219): Service 6 started (7/22)
+03-26 21:32:30.995 D/MainActivity(24219): Service 7 started (8/22)
+03-26 21:32:31.676 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 15/22] AuthenticationService STARTED
+03-26 21:32:31.677 D/MainActivity(24219): Service 15 started (9/22)
+03-26 21:32:31.687 I/python.stdout(24219): [FULL-STARTUP] [SERVICE 13/22] WiseAuthority STARTED
+03-26 21:32:31.688 D/MainActivity(24219): Service 13 started (10/22)
+03-26 21:32:31.696 I/python.stdout(24219): [SERVICES] === RESUME (12 remaining services) PHASE ===
+03-26 21:32:31.701 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 9/22] TelemetryService STARTED
+03-26 21:32:31.701 D/MainActivity(24219): Service 9 started (11/22)
+03-26 21:32:31.740 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 14/22] LLMService STARTED
+03-26 21:32:31.741 D/MainActivity(24219): Service 14 started (12/22)
+03-26 21:32:33.335 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 8/22] AuditService STARTED
+03-26 21:32:33.337 D/MainActivity(24219): Service 8 started (13/22)
+03-26 21:32:33.362 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 10/22] IncidentManagement STARTED
+03-26 21:32:33.365 D/MainActivity(24219): Service 10 started (14/22)
+03-26 21:32:33.380 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 19/22] AdaptiveFilter STARTED
+03-26 21:32:33.381 D/MainActivity(24219): Service 19 started (15/22)
+03-26 21:32:33.387 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 18/22] TaskScheduler STARTED
+03-26 21:32:33.391 D/MainActivity(24219): Service 18 started (16/22)
+03-26 21:32:33.503 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 11/22] TSDBConsolidation STARTED
+03-26 21:32:33.504 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 16/22] DatabaseMaintenance STARTED
+03-26 21:32:33.506 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 21/22] SelfObservation STARTED
+03-26 21:32:33.506 D/MainActivity(24219): Service 11 started (17/22)
+03-26 21:32:33.506 D/MainActivity(24219): Service 16 started (18/22)
+03-26 21:32:33.507 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 20/22] VisibilityService STARTED
+03-26 21:32:33.508 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 12/22] ConsentService STARTED
+03-26 21:32:33.508 D/MainActivity(24219): Service 21 started (19/22)
+03-26 21:32:33.509 D/MainActivity(24219): Service 20 started (20/22)
+03-26 21:32:33.510 D/MainActivity(24219): Service 12 started (21/22)
+03-26 21:32:33.515 I/python.stdout(24219): [RESUME (12 remaining services)] [SERVICE 17/22] RuntimeControl STARTED
+03-26 21:32:33.516 D/MainActivity(24219): Service 17 started (22/22)
+03-26 21:32:33.690 W/python.stderr(24219): /data/data/ai.ciris.mobile.debug/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+03-26 21:32:34.337 I/python.stdout(24219): Starting CIRIS API...
+03-26 21:32:34.439 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:32:34.728 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:34.731 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:34.784 D/CIRISApp(24219): [INFO] Startup READY, checking first-run status...
+03-26 21:32:34.797 I/CIRISApiClient(24219): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 21:32:34.874 I/CIRISApiClient(24219): [getSetupStatus] Setup status: required=false, firstRun=false, configExists=true
+03-26 21:32:34.876 D/CIRISApp(24219): [INFO] First run check result: false
+03-26 21:32:34.876 D/CIRISApp(24219): [INFO] Not first run, attempting to load and validate stored token
+03-26 21:32:34.937 D/CIRISApp(24219): [INFO] Loaded stored token: ciris_ad...BJI0
+03-26 21:32:34.940 W/TokenManager(24219): [getTokenExpiry] Invalid JWT format: expected 3 parts, got 1
+03-26 21:32:34.941 I/TokenManager(24219): [checkAndRefreshToken] Token check: expiry=null, remaining=nulls, minValid=300s
+03-26 21:32:34.942 W/TokenManager(24219): [checkAndRefreshToken] Could not parse token expiry - treating as expired
+03-26 21:32:34.943 I/TokenManager(24219): [attemptSilentRefresh] Attempting silent sign-in...
+03-26 21:32:34.945 I/MainActivity(24219): Silent Sign-In requested from CIRISApp
+03-26 21:32:34.955 I/MainActivity(24219): Found cached account: mooreericnyc@gmail.com
+03-26 21:32:35.573 I/MainActivity(24219): Silent Sign-In successful: mooreericnyc@gmail.com
+03-26 21:32:35.574 I/TokenManager(24219): [attemptSilentRefresh] Silent sign-in successful! provider=google
+03-26 21:32:35.576 I/TokenManager(24219): [handleNewToken] Processing new token (length: 1100, provider: google)
+03-26 21:32:35.579 I/TokenManager(24219): [handleNewToken] New token expiry: 1774582355 (3600s remaining)
+03-26 21:32:35.580 I/CIRISApp(24219):  OAuth ID token refreshed by TokenManager (provider=google), exchanging for CIRIS token
+03-26 21:32:35.583 I/CIRISApp(24219):  Token was refreshed, waiting for CIRIS token exchange...
+03-26 21:32:35.586 I/CIRISApiClient(24219): [nativeAuth] Attempting native auth: provider=google, userId=null
+03-26 21:32:35.587 I/CIRISApiClient(24219): [googleAuth] Attempting Google auth: userId=null, idToken=eyJhbGci...IUBQ
+03-26 21:32:35.604 I/TokenManager(24219): [startPeriodicRefresh] Starting periodic refresh (interval: 45 minutes)
+03-26 21:32:36.533 I/python.stdout(24219): [21:32:36.533] [STATE] Transition: shutdown -> work
+03-26 21:32:37.071 I/CIRISApiClient(24219): [googleAuth] Google auth successful: userId=google:115300315355793131383, role=SYSTEM_ADMIN
+03-26 21:32:37.073 I/CIRISApp(24219):  Got CIRIS access token: ciris_ad...ngKc
+03-26 21:32:37.073 I/CIRISApiClient(24219): [setAccessToken] Setting access token: ciris_ad...ngKc, length=55
+03-26 21:32:37.074 I/CIRISApiClient(24219): [setAccessToken] Bearer token set on all API instances (13 APIs)
+03-26 21:32:37.074 I/MainActivity(24219): Token updated, setting on billing apiClient
+03-26 21:32:37.074 I/CIRISApiClient(24219): [setAccessToken] Setting access token: ciris_ad...ngKc, length=55
+03-26 21:32:37.074 I/CIRISApiClient(24219): [setAccessToken] Bearer token set on all API instances (13 APIs)
+03-26 21:32:37.075 I/CIRISApiClient(24219): [logTokenState] === TOKEN STATE DEBUG ===
+03-26 21:32:37.075 I/CIRISApiClient(24219): [logTokenState] accessToken present: true
+03-26 21:32:37.076 I/CIRISApiClient(24219): [logTokenState] accessToken preview: ciris_ad...ngKc
+03-26 21:32:37.076 I/CIRISApiClient(24219): [logTokenState] accessToken length: 55
+03-26 21:32:37.076 I/CIRISApiClient(24219): [logTokenState] authHeader() returns: Bearer <token>
+03-26 21:32:37.077 I/CIRISApiClient(24219): [logTokenState] =========================
+03-26 21:32:37.079 I/CIRISApp(24219):  Refreshed CIRIS token saved to secure storage
+03-26 21:32:37.080 I/CIRISApp(24219):  Writing OAuth ID token to .env for Python billing...
+03-26 21:32:37.081 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:32:37.081 I/EnvFileUpdater(24219): Read .env file (7416 bytes)
+03-26 21:32:37.083 I/EnvFileUpdater(24219): CIRIS proxy mode detected - updating OPENAI_API_KEY
+03-26 21:32:37.084 I/EnvFileUpdater(24219): Updated OPENAI_API_KEY
+03-26 21:32:37.084 I/EnvFileUpdater(24219): Updated CIRIS_BILLING_GOOGLE_ID_TOKEN
+03-26 21:32:37.085 I/EnvFileUpdater(24219): .env file updated (proxy mode: true)
+03-26 21:32:37.085 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:32:37.085 I/EnvFileUpdater(24219): Config reload signal written to /data/user/0/ai.ciris.mobile.debug/files/ciris/.config_reload
+03-26 21:32:37.085 I/CIRISApp(24219):  .env updated, .config_reload signal written
+03-26 21:32:37.086 I/CIRISApp(24219):  Waiting 1.5s for Python to reload billing token...
+03-26 21:32:38.588 I/CIRISApp(24219):  Python reload wait complete
+03-26 21:32:38.683 I/CIRISApp(24219):  Token exchange completed
+03-26 21:32:38.771 I/CIRISApp(24219):  Agent state: WORK
+03-26 21:32:38.773 I/CIRISApp(24219):  Agent reached WORK state!
+03-26 21:32:39.278 I/CIRISApp(24219):  Triggering data load for ViewModels after token set
+03-26 21:32:39.279 I/BillingViewModel(24219): [loadBalance] Loading credit balance...
+03-26 21:32:39.290 I/CIRISApiClient(24219): [listAdapters] Listing adapters
+03-26 21:32:39.300 I/InteractViewModel(24219): [startPolling] Starting polling and SSE streams
+03-26 21:32:39.304 I/InteractViewModel(24219): [startStatusPolling] Starting status polling (fast until agent ready)
+03-26 21:32:39.309 I/InteractViewModel(24219): [startMessagePolling] Starting message polling (interval=3000ms)
+03-26 21:32:39.315 I/InteractViewModel(24219): [startHealthPolling] Starting health polling (fast until LLM ready)
+03-26 21:32:39.320 I/InteractViewModel(24219): [startTrustPendingPolling] Starting trust pending polling (interval=5000ms)
+03-26 21:32:39.321 I/InteractViewModel(24219): [startSseStream] Starting SSE reasoning stream
+03-26 21:32:39.326 I/InteractViewModel(24219): [fetchWalletStatus] Fetching adapters list to check wallet status
+03-26 21:32:39.326 I/CIRISApiClient(24219): [listAdapters] Listing adapters
+03-26 21:32:39.330 I/CIRISApp(24219):  Running boot-time attestation check...
+03-26 21:32:39.331 D/CIRISApp(24219): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (241859476)
+03-26 21:32:39.332 I/InteractViewModel(24219): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 21:32:39.338 D/CIRISApp(24219): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+03-26 21:32:39.684 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:32:39.684 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:32:41.517 I/CIRISApp(24219):  Boot attestation: loaded=true, maxLevel=1, dns_us=true, dns_eu=true, https=true
+03-26 21:32:41.560 I/InteractViewModel(24219): [startStatusPolling] Agent ready with state: WORK
+03-26 21:32:41.561 I/InteractViewModel(24219): [startStatusPolling] Connection state changed: false -> true
+03-26 21:32:41.905 I/InteractViewModel(24219): [startSseStream] SSE connected
+03-26 21:32:41.918 I/InteractViewModel(24219): [fetchHistory] Added 7 new messages to chat
+03-26 21:32:41.928 I/InteractViewModel(24219): [fetchTrustStatus] Trust level changed: 0 -> 1
+03-26 21:32:41.929 I/InteractViewModel(24219): [fetchTrustStatus] Level pending changed: false -> true
+03-26 21:32:41.929 I/InteractViewModel(24219): [startTrustPendingPolling] Level pending=true, triggering device attestation automatically...
+03-26 21:32:41.929 I/MainActivity(24219): Device attestation requested
+03-26 21:32:41.930 I/CIRISApiClient(24219): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+03-26 21:32:42.048 I/CIRISApiClient(24219): [listAdapters] API response: total=5, running=5, adapters.size=5
+03-26 21:32:42.049 I/CIRISApiClient(24219): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+03-26 21:32:42.049 I/CIRISApiClient(24219): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+03-26 21:32:42.050 I/CIRISApiClient(24219): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+03-26 21:32:42.050 I/CIRISApiClient(24219): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+03-26 21:32:42.050 I/CIRISApiClient(24219): [listAdapters]   API adapter[4]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+03-26 21:32:42.051 I/InteractViewModel(24219): [fetchWalletStatus] Wallet adapter found: isRunning=true
+03-26 21:32:42.110 I/CIRISApiClient(24219): [listAdapters] API response: total=5, running=5, adapters.size=5
+03-26 21:32:42.110 I/CIRISApiClient(24219): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+03-26 21:32:42.111 I/CIRISApiClient(24219): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+03-26 21:32:42.111 I/CIRISApiClient(24219): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+03-26 21:32:42.111 I/CIRISApiClient(24219): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+03-26 21:32:42.112 I/CIRISApiClient(24219): [listAdapters]   API adapter[4]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+03-26 21:32:42.374 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 2690ms (single API call)
+03-26 21:32:42.375 I/CIRISApiClient(24219): [getGraphData]     Nodes: 105 ({local=86, identity=19})
+03-26 21:32:42.375 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:32:42.376 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:32:42.593 I/CIRISApiClient(24219): [getPlayIntegrityNonce] Got nonce: 7ap4KcRTTq0aqwaE3lg4...
+03-26 21:32:42.623 I/BillingViewModel(24219): [loadBalance] Credit status loaded: hasCredit=true, creditsRemaining=425, freeUsesRemaining=0, dailyFreeUsesRemaining=2, planName=CIRIS Mobile
+03-26 21:32:42.624 I/BillingViewModel(24219): [loadBalance] Total credits calculated: 427
+03-26 21:32:42.721 I/InteractViewModel(24219): [fetchAuditActions] Adding 6 action entries to timeline
+03-26 21:32:42.722 I/InteractViewModel(24219): [startMessagePolling] First load complete
+03-26 21:32:42.950 I/InteractViewModel(24219): [startHealthPolling] LLM health ready: provider=other
+03-26 21:32:43.601 I/MainActivity(24219): Device attestation result: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+03-26 21:32:43.601 I/MainActivity(24219): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+03-26 21:32:43.601 I/MainActivity(24219):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+03-26 21:32:43.601 I/InteractViewModel(24219): [startTrustPendingPolling] Device attestation completed: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+03-26 21:32:43.601 I/InteractViewModel(24219): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+03-26 21:32:43.601 I/InteractViewModel(24219):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+03-26 21:32:44.449 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:32:45.643 I/InteractViewModel(24219): [startTrustPendingPolling] Trust status refreshed after device attestation
+03-26 21:32:54.461 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:04.463 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:05.118 I/InteractViewModel(24219): [sendMessage] Sending message: 'please answer in Amharic, what is the meaning of l...' with 0 attachments
+03-26 21:33:05.120 I/CIRISApiClient(24219): [sendMessage] Sending message: 'please answer in Amharic, what is the meaning of l...' to channel=mobile_app, images=0, docs=0
+03-26 21:33:07.344 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:07.345 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:07.797 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 453ms (single API call)
+03-26 21:33:07.798 I/CIRISApiClient(24219): [getGraphData]     Nodes: 105 ({local=86, identity=19})
+03-26 21:33:07.798 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:07.798 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:11.906 W/python.stderr(24219): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+03-26 21:33:14.464 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:15.458 I/python.stdout(24219): [21:33:15.457] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_seed_8c2fe129_fbbd0acb-47a - created follow-up thought th_followup_th_seed__12481555-c83
+03-26 21:33:16.374 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:33:17.042 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:17.043 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:17.858 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 816ms (single API call)
+03-26 21:33:17.859 I/CIRISApiClient(24219): [getGraphData]     Nodes: 106 ({local=87, identity=19})
+03-26 21:33:17.859 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:17.860 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:23.806 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:23.807 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:23.897 E/CIRISApiClient(24219): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-26 21:33:23.897 E/CIRISApiClient(24219): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.os.Looper.loop(Looper.java:342)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at java.lang.reflect.Method.invoke(Native Method)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-26 21:33:23.897 E/CIRISApiClient(24219): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-26 21:33:24.472 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:24.787 I/python.stdout(24219): [21:33:24.787] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_seed__12481555-c83 - created follow-up thought th_followup_th_follo_dde485ad-e9b
+03-26 21:33:26.054 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:33:30.301 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:30.302 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:30.756 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 455ms (single API call)
+03-26 21:33:30.757 I/CIRISApiClient(24219): [getGraphData]     Nodes: 107 ({local=88, identity=19})
+03-26 21:33:30.757 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:30.758 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:34.138 I/python.stdout(24219): [21:33:34.138] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_dde485ad-e9b - created follow-up thought th_followup_th_follo_7cf03a07-943
+03-26 21:33:34.473 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:35.045 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:33:35.132 E/CIRISApiClient(24219): [sendMessage] Exception: HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/agent/interact, request_timeout=30000 ms] | Context: message='please answer in Amharic, what...', channelId=mobile_app, hasToken=true
+03-26 21:33:35.132 E/CIRISApiClient(24219): io.ktor.client.plugins.HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/agent/interact, request_timeout=30000 ms]
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at io.ktor.client.plugins.HttpTimeout$Plugin$install$1$1$killer$1.invokeSuspend(HttpTimeout.kt:165)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:111)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:99)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:585)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:802)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:706)
+03-26 21:33:35.132 E/CIRISApiClient(24219): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:693)
+03-26 21:33:35.133 E/InteractViewModel(24219): [sendMessage] Failed to send message: HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/agent/interact, request_timeout=30000 ms]
+03-26 21:33:35.133 E/InteractViewModel(24219): [sendMessage] Stack trace: io.ktor.client.plugins.HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/agent/interact, request_timeout=30000 ms]
+03-26 21:33:35.133 E/InteractViewModel(24219): 	at io.ktor.client.plugins.HttpTimeout$Plugin$install$1$1$killer$1.invokeSuspend(HttpTimeout.kt:165)
+03-26 21:33:35.133 E/InteractViewModel(24219): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+03-26 21:33:35.133 E/InteractViewModel(24219): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+03-26 21:33:35.133 E/InteractViewModel(24219): 	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:111)
+03-26 21:33:35.133 E/InteractViewModel(24219): 	at 
+03-26 21:33:35.134 I/InteractViewModel(24219): [sendMessage] Timeout during send - response will arrive via SSE
+03-26 21:33:36.800 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:36.801 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:37.647 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 847ms (single API call)
+03-26 21:33:37.648 I/CIRISApiClient(24219): [getGraphData]     Nodes: 108 ({local=89, identity=19})
+03-26 21:33:37.648 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:37.649 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:44.478 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:45.559 I/python.stdout(24219): [21:33:45.559] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_7cf03a07-943 - created follow-up thought th_followup_th_follo_48761779-d25
+03-26 21:33:45.958 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:33:47.127 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:47.129 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:47.593 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 466ms (single API call)
+03-26 21:33:47.594 I/CIRISApiClient(24219): [getGraphData]     Nodes: 109 ({local=90, identity=19})
+03-26 21:33:47.594 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:47.595 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:53.623 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:33:53.624 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:33:54.104 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 481ms (single API call)
+03-26 21:33:54.105 I/CIRISApiClient(24219): [getGraphData]     Nodes: 109 ({local=90, identity=19})
+03-26 21:33:54.105 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:33:54.105 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:33:54.490 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:33:56.465 I/python.stdout(24219): [21:33:56.465] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_48761779-d25 - created follow-up thought th_followup_th_follo_11e1fad2-494
+03-26 21:33:57.432 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:34:01.171 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:01.172 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:02.014 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 843ms (single API call)
+03-26 21:34:02.015 I/CIRISApiClient(24219): [getGraphData]     Nodes: 110 ({local=91, identity=19})
+03-26 21:34:02.016 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:02.016 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:04.491 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:06.231 I/python.stdout(24219): [21:34:06.231] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_11e1fad2-494 - created follow-up thought th_followup_th_follo_f06a6e5a-4ef
+03-26 21:34:07.180 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:34:07.817 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:07.818 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:08.270 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 453ms (single API call)
+03-26 21:34:08.271 I/CIRISApiClient(24219): [getGraphData]     Nodes: 111 ({local=92, identity=19})
+03-26 21:34:08.271 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:08.272 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:14.497 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:15.950 I/python.stdout(24219): [21:34:15.950] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_f06a6e5a-4ef - created follow-up thought th_followup_th_follo_228514ad-54f
+03-26 21:34:17.473 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:34:17.530 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:17.531 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:18.207 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 677ms (single API call)
+03-26 21:34:18.208 I/CIRISApiClient(24219): [getGraphData]     Nodes: 112 ({local=93, identity=19})
+03-26 21:34:18.209 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:18.209 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:24.040 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:24.041 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:24.507 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:24.548 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 508ms (single API call)
+03-26 21:34:24.549 I/CIRISApiClient(24219): [getGraphData]     Nodes: 112 ({local=93, identity=19})
+03-26 21:34:24.549 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:24.550 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:31.390 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:31.391 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:31.827 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 437ms (single API call)
+03-26 21:34:31.828 I/CIRISApiClient(24219): [getGraphData]     Nodes: 112 ({local=93, identity=19})
+03-26 21:34:31.828 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:31.828 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:32.547 I/python.stdout(24219): [21:34:32.547] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_228514ad-54f - created follow-up thought th_followup_th_follo_da06d2ef-52c
+03-26 21:34:33.669 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:34:34.508 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:37.888 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:37.889 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:38.336 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 448ms (single API call)
+03-26 21:34:38.337 I/CIRISApiClient(24219): [getGraphData]     Nodes: 113 ({local=94, identity=19})
+03-26 21:34:38.337 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:38.338 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:44.509 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:46.569 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:46.569 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:46.860 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:46.861 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:46.866 E/CIRISApiClient(24219): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-26 21:34:46.866 E/CIRISApiClient(24219): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.os.Looper.loop(Looper.java:342)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at java.lang.reflect.Method.invoke(Native Method)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-26 21:34:46.866 E/CIRISApiClient(24219): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-26 21:34:47.144 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:47.145 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:47.149 E/CIRISApiClient(24219): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-26 21:34:47.149 E/CIRISApiClient(24219): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.os.Looper.loop(Looper.java:342)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at java.lang.reflect.Method.invoke(Native Method)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-26 21:34:47.149 E/CIRISApiClient(24219): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-26 21:34:47.923 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 779ms (single API call)
+03-26 21:34:47.924 I/CIRISApiClient(24219): [getGraphData]     Nodes: 113 ({local=94, identity=19})
+03-26 21:34:47.924 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:47.924 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:48.179 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:48.180 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:49.944 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 1765ms (single API call)
+03-26 21:34:49.945 I/CIRISApiClient(24219): [getGraphData]     Nodes: 113 ({local=94, identity=19})
+03-26 21:34:49.945 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:49.946 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}
+03-26 21:34:50.588 I/python.stdout(24219): [21:34:50.587] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_da06d2ef-52c - created follow-up thought th_followup_th_follo_6bd9d783-4aa
+03-26 21:34:51.493 I/InteractViewModel(24219): [fetchAuditActions] Adding 1 action entries to timeline
+03-26 21:34:54.515 D/EnvFileUpdater(24219): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 21:34:56.199 I/CIRISApiClient(24219): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 21:34:56.200 I/CIRISApiClient(24219): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 21:34:56.635 I/CIRISApiClient(24219): [getGraphData] <<< DONE in 436ms (single API call)
+03-26 21:34:56.636 I/CIRISApiClient(24219): [getGraphData]     Nodes: 114 ({local=95, identity=19})
+03-26 21:34:56.636 I/CIRISApiClient(24219): [getGraphData]     Edges: 49 total, 49 visible
+03-26 21:34:56.637 I/CIRISApiClient(24219): [getGraphData]     Edge types: {FIRST_AUDIT_EVENT=1, LAST_AUDIT_EVENT=1, INVOLVED_USER=1, OCCURRED_IN_CHANNEL=1, DISCUSSED_CONCEPT=15, DRIVES_PROCESSING=1, TEMPORAL_CORRELATION=7, LONG_RUNNING_TASK=1, HIGH_LATENCY_TASK=1, CREATES_TRAIL=1, SUMMARIZES=18, IMPACTS_QUALITY=1}

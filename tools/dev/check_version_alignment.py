@@ -32,7 +32,7 @@ def check_all() -> list[str]:
     display_version, major, minor, patch = get_engine_version()
 
     # iOS Info.plist CFBundleShortVersionString
-    plist = ROOT / "mobile" / "iosApp" / "iosApp" / "Info.plist"
+    plist = ROOT / "client" / "iosApp" / "iosApp" / "Info.plist"
     if plist.exists():
         content = plist.read_text()
         m = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>", content)
@@ -40,16 +40,16 @@ def check_all() -> list[str]:
             errors.append(f"iOS CFBundleShortVersionString: {m.group(1)} != {display_version}")
 
     # Android build.gradle versionName
-    gradle = ROOT / "mobile" / "androidApp" / "build.gradle"
+    gradle = ROOT / "client" / "androidApp" / "build.gradle"
     if gradle.exists():
         content = gradle.read_text()
         m = re.search(r'versionName "([^"]+)"', content)
         if m and m.group(1) != display_version:
             errors.append(f"Android versionName: {m.group(1)} != {display_version}")
 
-    # Mobile Python version files
+    # Client Python version files
     version_files = [
-        ("mobile/androidApp/src/main/python/version.py", f"android-{display_version}"),
+        ("client/androidApp/src/main/python/version.py", f"android-{display_version}"),
         ("android/app/src/main/python/version.py", f"android-{display_version}"),
         ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
     ]

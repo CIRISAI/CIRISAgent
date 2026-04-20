@@ -1,0 +1,9 @@
+--------- beginning of main
+03-28 13:01:54.478 I/python.stdout(26882): [13:01:54.478] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_seed_0500e565_8f1e13a8-364 - created follow-up thought th_followup_th_seed__7107cfbf-fa7
+03-28 13:02:11.215 I/python.stdout(26882): [13:02:11.215] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_seed__7107cfbf-fa7 - created follow-up thought th_followup_th_follo_c474743a-723
+03-28 13:02:36.460 I/python.stdout(26882): [13:02:36.460] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_c474743a-723 - created follow-up thought th_followup_th_follo_fd60ad6f-163
+03-28 13:02:55.591 I/python.stdout(26882): [13:02:55.591] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_fd60ad6f-163 - created follow-up thought th_followup_th_follo_6f9d8bfe-f76
+03-28 13:03:17.995 I/python.stdout(26882): [13:03:17.995] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_6f9d8bfe-f76 - created follow-up thought th_followup_th_follo_e2520ce6-218
+03-28 13:03:42.607 I/python.stdout(26882): [13:03:42.607] [DISPATCHER] Handler SpeakHandler completed for action speak on thought th_followup_th_follo_e2520ce6-218 - created follow-up thought th_followup_th_follo_e3f2c0ae-457
+03-28 13:03:57.214 I/python.stdout(26882): [13:03:57.214] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_e3f2c0ae-457 - created follow-up thought th_followup_th_follo_c4ad075e-c47
+03-28 13:04:06.363 I/python.stdout(26882): [13:04:06.363] [DISPATCHER] Handler TaskCompleteHandler completed for action task_complete on thought th_followup_th_follo_c4ad075e-c47

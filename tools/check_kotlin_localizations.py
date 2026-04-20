@@ -30,15 +30,15 @@ PATTERNS = [
 ]
 
 KOTLIN_DIRS = [
-    "mobile/shared/src/commonMain/kotlin",
-    "mobile/shared/src/androidMain/kotlin",
-    "mobile/shared/src/desktopMain/kotlin",
+    "client/shared/src/commonMain/kotlin",
+    "client/shared/src/androidMain/kotlin",
+    "client/shared/src/desktopMain/kotlin",
 ]
 
 LOCALIZATION_FILES = [
     "localization/en.json",
-    "mobile/androidApp/src/main/assets/localization/en.json",
-    "mobile/shared/src/desktopMain/resources/localization/en.json",
+    "client/androidApp/src/main/assets/localization/en.json",
+    "client/shared/src/desktopMain/resources/localization/en.json",
 ]
 
 

@@ -10,8 +10,8 @@ Usage:
 
 This tool updates version in:
     - ciris_engine/constants.py (main version source)
-    - mobile/iosApp/iosApp/Info.plist (iOS CFBundleVersion)
-    - mobile/androidApp/build.gradle (Android versionCode + versionName)
+    - client/iosApp/iosApp/Info.plist (iOS CFBundleVersion)
+    - client/androidApp/build.gradle (Android versionCode + versionName)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
     - README.md (automatically switches between STABLE/BETA RELEASE based on version stage)
@@ -202,14 +202,14 @@ def bump_version(bump_type: str):
         with open(android_gradle_file, "w") as f:
             f.write(gradle_content)
 
-    # Update mobile Python version files (android + iOS)
+    # Update client Python version files (android + iOS)
     display_version = f"{major}.{minor}.{patch}"
-    mobile_version_files = [
-        ("mobile/androidApp/src/main/python/version.py", f"android-{display_version}"),
+    client_version_files = [
+        ("client/androidApp/src/main/python/version.py", f"android-{display_version}"),
         ("android/app/src/main/python/version.py", f"android-{display_version}"),
         ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
     ]
-    for rel_path, platform_version in mobile_version_files:
+    for rel_path, platform_version in client_version_files:
         version_file = Path(__file__).parent.parent.parent / rel_path
         if version_file.exists():
             with open(version_file, "r") as f:

@@ -384,7 +384,9 @@ async def _create_setup_users(
     logger.info("=" * 70)
     logger.info(f"CIRIS_USER_CREATE: auth_db_path = {auth_db_path}")
     logger.info(f"CIRIS_USER_CREATE: skip_user_creation = {setup.skip_user_creation}")
-    logger.info(f"CIRIS_USER_CREATE: ingress_user_id = {ingress_user_id}")
+    # SECURITY: Log provider only, not full external_id (could be PII)
+    ingress_provider = ingress_user_id.split(":")[0] if ingress_user_id and ":" in ingress_user_id else None
+    logger.info(f"CIRIS_USER_CREATE: ingress_provider = {ingress_provider}, has_user_id = {bool(ingress_user_id)}")
     logger.info(f"CIRIS_USER_CREATE: ingress_user_name = {ingress_user_name}")
 
     # IMPORTANT: If we have an ingress user completing setup, they ARE the admin
@@ -397,7 +399,7 @@ async def _create_setup_users(
     # 2. We have an ingress user completing setup (use their identity)
     # In both cases, AUTO-MINT a WA for the ingress user with ROOT authority
     if setup.skip_user_creation or use_ingress_user:
-        reason = "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected: {ingress_user_id}"
+        reason = "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected ({ingress_provider})"
         logger.info(f"CIRIS_USER_CREATE: Skipping regular user creation ({reason}) - auto-minting WA for ingress user")
         # Still need to ensure system WA exists for agent operations
         time_service = TimeService()
@@ -412,7 +414,8 @@ async def _create_setup_users(
 
             # AUTO-MINT: Create WA with ROOT role for ingress user who completed setup
             if ingress_user_id:
-                logger.info(f"CIRIS_USER_CREATE: Auto-minting ROOT WA for ingress user: {ingress_user_id}")
+                # SECURITY: Log provider only, not full external_id
+                logger.info(f"CIRIS_USER_CREATE: Auto-minting ROOT WA for ingress provider: {ingress_provider}")
 
                 # Use provided name/email or derive from ingress_user_id
                 wa_name = ingress_user_name or ingress_user_id.split(":")[-1]  # e.g., "home_assistant:admin" -> "admin"
@@ -440,15 +443,15 @@ async def _create_setup_users(
                             metadata={"ingress_setup": "true"},
                             primary=True,
                         )
-                        logger.info(f"CIRIS_USER_CREATE: ✅ Linked ingress identity {ingress_user_id} to WA {wa_cert.wa_id}")
+                        logger.info(f"CIRIS_USER_CREATE: ✅ Linked ingress identity ({ingress_provider}) to WA {wa_cert.wa_id}")
                     except Exception as link_err:
                         # Non-fatal - log but continue (founding partnership is more important)
                         logger.warning(f"CIRIS_USER_CREATE: ⚠️ Failed to link ingress identity: {link_err}")
 
                 # Create founding partnership for the ingress user
-                logger.info(f"CIRIS_USER_CREATE: Creating founding partnership for: {ingress_user_id}")
+                logger.info(f"CIRIS_USER_CREATE: Creating founding partnership for ingress provider: {ingress_provider}")
                 _create_founding_partnership(wa_cert.wa_id, ingress_user_id)
-                logger.info(f"CIRIS_USER_CREATE: ✅ Founding partnership created for ingress user: {ingress_user_id}")
+                logger.info(f"CIRIS_USER_CREATE: ✅ Founding partnership created for ingress provider: {ingress_provider}")
 
                 # Store preferences if provided
                 _store_user_preferences(wa_cert.wa_id, setup)
@@ -888,10 +891,8 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
             trusted_ips = {"172.30.32.2", "127.0.0.1", "::1"}  # Supervisor + localhost for dev
 
             if client_ip not in trusted_ips:
-                logger.warning(
-                    f"[SETUP] Rejecting HA ingress headers from untrusted IP: {client_ip} "
-                    f"(trusted: {trusted_ips})"
-                )
+                # SECURITY: Don't reveal trusted IP list in logs
+                logger.warning(f"[SETUP] Rejecting HA ingress headers from untrusted source")
                 return None, None, None
 
             display_name = request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name")
@@ -919,7 +920,9 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     # Try to detect ingress user completing setup (for auto-mint)
     ingress_user_id, ingress_user_name, ingress_user_email = await _try_get_ingress_user(request)
     if ingress_user_id:
-        logger.info(f"[SETUP] Ingress user detected: {ingress_user_id} - will auto-mint WA")
+        # SECURITY: Log provider only, not full external_id
+        _ingress_provider = ingress_user_id.split(":")[0] if ":" in ingress_user_id else "unknown"
+        logger.info(f"[SETUP] Ingress user detected ({_ingress_provider}) - will auto-mint WA")
 
     # Determine if this is an OAuth user (password is optional for OAuth users)
     is_oauth_user = bool(setup.oauth_provider)
@@ -1026,8 +1029,8 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
         # Create users immediately (don't wait for restart)
         # For ingress auth, pass the detected user info for auto-mint
-        print(f"[SETUP_COMPLETE] Calling _create_setup_users(username={setup.admin_username}, db={auth_db_path})")
-        print(f"[SETUP_COMPLETE] Ingress user: {ingress_user_id} ({ingress_user_name})")
+        print(f"[SETUP_COMPLETE] Calling _create_setup_users(username={setup.admin_username})")
+        print(f"[SETUP_COMPLETE] Ingress provider: {_ingress_provider if ingress_user_id else 'none'}")
         try:
             await _create_setup_users(
                 setup,

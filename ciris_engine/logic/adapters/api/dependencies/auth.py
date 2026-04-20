@@ -295,7 +295,8 @@ async def _handle_ingress_auth(
         # User exists - use their existing role
         role = existing_user.api_role
         user_role = UserRole[role.value] if hasattr(role, "value") else UserRole.OBSERVER
-        logger.debug(f"[INGRESS_AUTH] Found existing user: {user_id}, role: {user_role}")
+        # SECURITY: Log provider only, not full external_id
+        logger.debug(f"[INGRESS_AUTH] Found existing user ({ingress_user.provider}), role: {user_role}")
     else:
         # New user - create them
         # Check if this is the FIRST user in the system - they should be SYSTEM_ADMIN
@@ -307,7 +308,8 @@ async def _handle_ingress_auth(
         if is_first_user:
             # First user in the system gets SYSTEM_ADMIN
             user_role = UserRole.SYSTEM_ADMIN
-            logger.info(f"[INGRESS_AUTH] First user in system - granting SYSTEM_ADMIN to {user_id}")
+            # SECURITY: Log provider only
+            logger.info(f"[INGRESS_AUTH] First user in system - granting SYSTEM_ADMIN ({ingress_user.provider})")
         elif ingress_user.suggested_role:
             user_role = ingress_user.suggested_role
         else:
@@ -323,7 +325,8 @@ async def _handle_ingress_auth(
 
         # Create the user
         username = ingress_user.display_name or ingress_user.username or ingress_user.external_id
-        logger.info(f"[INGRESS_AUTH] Creating new user from ingress: {username} ({user_id}), role: {user_role}")
+        # SECURITY: Log provider only, not full external_id
+        logger.info(f"[INGRESS_AUTH] Creating new user from ingress: {username} ({ingress_user.provider}), role: {user_role}")
 
         # Use a placeholder password - ingress users don't use passwords
         import secrets
@@ -341,7 +344,8 @@ async def _handle_ingress_auth(
             # CRITICAL: Also store user under provider:external_id key for future lookups
             # The user was stored under wa_id by create_user, but ingress lookups use provider:external_id
             auth_service._users[user_id] = new_user
-            logger.info(f"[INGRESS_AUTH] Stored user under ingress key: {user_id}")
+            # SECURITY: Don't log full user_id which contains external_id
+            logger.info(f"[INGRESS_AUTH] Stored user under ingress key ({ingress_user.provider})")
 
             # Link OAuth identity to WA certificate so it persists across restarts
             try:

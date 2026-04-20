@@ -340,9 +340,8 @@ class WeatherToolService:
             self._default_lon = user_location.longitude
             self._default_location_string = user_location.location_string
             self._location_source = "user_setup"
-            logger.info(
-                f"Location refreshed: {user_location.location_string} " f"({self._default_lat}, {self._default_lon})"
-            )
+            # SECURITY: Don't log precise coordinates - location_string is user-controlled granularity
+            logger.info(f"Location refreshed: {user_location.location_string} (coordinates set)")
         else:
             # No coordinates available
             self._default_lat = None

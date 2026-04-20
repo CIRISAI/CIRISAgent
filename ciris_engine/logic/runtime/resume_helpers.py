@@ -278,23 +278,30 @@ async def _persist_adapter_to_env(adapter_type: str) -> None:
         if env_path and env_path.exists():
             content = env_path.read_text()
             lines = content.split("\n")
-            updated = False
+            found_line = False
+            modified = False
 
             for i, line in enumerate(lines):
                 if line.startswith("CIRIS_ADAPTER="):
+                    found_line = True
                     existing = line.split("=", 1)[1].strip().strip('"')
                     if adapter_type not in existing:
                         new_value = f"{existing},{adapter_type}" if existing else adapter_type
                         lines[i] = f'CIRIS_ADAPTER="{new_value}"'
-                        updated = True
+                        modified = True
+                    # else: adapter already present, nothing to do
                     break
 
-            if not updated:
-                # Add new CIRIS_ADAPTER line
+            if not found_line:
+                # Add new CIRIS_ADAPTER line only if no existing line was found
                 lines.append(f'CIRIS_ADAPTER="{adapter_type}"')
+                modified = True
 
-            env_path.write_text("\n".join(lines))
-            logger.info(f"[AUTO_ENABLE] Persisted {adapter_type} to .env file")
+            if modified:
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[AUTO_ENABLE] Persisted {adapter_type} to .env file")
+            else:
+                logger.debug(f"[AUTO_ENABLE] {adapter_type} already in CIRIS_ADAPTER, no change needed")
     except Exception as e:
         logger.debug(f"[AUTO_ENABLE] Could not persist {adapter_type} to .env: {e}")
 

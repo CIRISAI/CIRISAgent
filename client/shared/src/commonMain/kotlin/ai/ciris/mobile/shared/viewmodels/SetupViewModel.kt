@@ -125,8 +125,9 @@ class SetupViewModel : ViewModel() {
      * Enable Home Assistant addon mode.
      * In this mode:
      * - Login is skipped (HA handles auth via SUPERVISOR_TOKEN)
-     * - User creation is skipped (ACCOUNT_AND_CONFIRMATION step)
-     * - Flow: WELCOME → PREFERENCES → LLM_CONFIGURATION → OPTIONAL_FEATURES → COMPLETE
+     * - User creation is optional (handled in QuickSetup)
+     * - Uses unified flow: WELCOME → QUICK_SETUP → COMPLETE
+     * - QuickSetup provides BYOK configuration without requiring user account setup
      */
     fun setHAAddonMode(enabled: Boolean) {
         _state.value = _state.value.copy(isHAAddonMode = enabled)
@@ -434,19 +435,10 @@ class SetupViewModel : ViewModel() {
                 SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
-        } else if (currentState.isHAAddonMode) {
-            // HA Addon flow: WELCOME → PREFERENCES → LLM → OPTIONAL_FEATURES → COMPLETE
-            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth via SUPERVISOR_TOKEN)
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.PREFERENCES
-                SetupStep.PREFERENCES -> SetupStep.LLM_CONFIGURATION
-                SetupStep.LLM_CONFIGURATION -> SetupStep.OPTIONAL_FEATURES
-                SetupStep.OPTIONAL_FEATURES -> SetupStep.COMPLETE
-                else -> SetupStep.COMPLETE
-            }
         } else {
-            // Unified flow for ALL users: WELCOME → QUICK_SETUP → COMPLETE
-            // Quick Setup handles both CIRIS mode (LLM optional) and BYOK mode (LLM required)
+            // Unified flow for ALL users (including HA addon): WELCOME → QUICK_SETUP → COMPLETE
+            // Quick Setup handles CIRIS mode (LLM optional), BYOK mode (LLM required), and
+            // HA addon mode (external auth via SUPERVISOR_TOKEN, user setup optional)
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.QUICK_SETUP
                 SetupStep.QUICK_SETUP -> SetupStep.COMPLETE
@@ -478,19 +470,8 @@ class SetupViewModel : ViewModel() {
                 SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
                 else -> SetupStep.WELCOME
             }
-        } else if (currentState.isHAAddonMode) {
-            // HA Addon flow: COMPLETE → OPTIONAL_FEATURES → LLM → PREFERENCES → WELCOME
-            // (Skip ACCOUNT_AND_CONFIRMATION - HA handles auth)
-            when (currentState.currentStep) {
-                SetupStep.WELCOME -> SetupStep.WELCOME
-                SetupStep.PREFERENCES -> SetupStep.WELCOME
-                SetupStep.LLM_CONFIGURATION -> SetupStep.PREFERENCES
-                SetupStep.OPTIONAL_FEATURES -> SetupStep.LLM_CONFIGURATION
-                SetupStep.COMPLETE -> SetupStep.OPTIONAL_FEATURES
-                else -> SetupStep.WELCOME
-            }
         } else {
-            // Unified flow for ALL users: COMPLETE → QUICK_SETUP → WELCOME
+            // Unified flow for ALL users (including HA addon): COMPLETE → QUICK_SETUP → WELCOME
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.QUICK_SETUP -> SetupStep.WELCOME

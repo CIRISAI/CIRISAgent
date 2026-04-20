@@ -312,11 +312,10 @@ LEGAL_CAPABILITIES = {
     "arbitration",
     "mediation",
 
-    # Compliance
+    # Compliance (specific legal terms only - "compliance" alone is too broad)
     "compliance_determination",
-    "compliance",
     "regulatory_compliance",
-    "comply",
+    "legal_compliance",
 
     # Rights and assessments
     "rights_assessment",

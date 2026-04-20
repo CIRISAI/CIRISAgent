@@ -739,8 +739,15 @@ fun CIRISApp(
                     platformLog(TAG, "[INFO] First run detected, navigating to Login")
                     currentScreen = Screen.Login
                 }
+            } else if (isHAAddonMode) {
+                // Not first run + HA addon mode - ingress handles auth via HTTP headers
+                // No client-side token needed - backend extracts user from Ingress-Token header
+                platformLog(TAG, "[INFO] Not first run in HA Addon mode - using ingress auth directly")
+                startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_ready"))
+                interactViewModel.startPolling()
+                currentScreen = Screen.Interact
             } else {
-                // Not first run - try to load stored token and check if valid/refresh if needed
+                // Not first run, normal mode - try to load stored token and check if valid/refresh if needed
                 platformLog(TAG, "[INFO] Not first run, attempting to load and validate stored token")
                 // NOTE: Don't change phase here - it would restart the LaunchedEffect and cancel this coroutine!
                 // Just update the status message which is shown on the startup screen

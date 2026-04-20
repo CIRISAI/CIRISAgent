@@ -1,11 +1,11 @@
 package ai.ciris.mobile.shared.platform
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Modifier
 
 /**
- * iOS implementation - no-op.
- * iOS native keyboard avoidance handles input field visibility automatically
- * via the hosting UIViewController. Using imePadding() causes a permanent
- * white gap because WindowInsets.ime doesn't reset to 0 after keyboard dismiss.
+ * iOS implementation - applies imePadding().
+ * Compose Multiplatform in ComposeHostingViewController does NOT get native
+ * iOS keyboard avoidance. The keyboard covers input fields without this.
  */
-actual fun Modifier.platformImePadding(): Modifier = this
+actual fun Modifier.platformImePadding(): Modifier = this.imePadding()

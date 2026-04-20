@@ -18,8 +18,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")
 
-    // Test automation server (Ktor embedded)
-    val ktorVersion = "2.3.12"
+    // Test automation server (Ktor embedded) - must match shared module version
+    val ktorVersion = "3.0.3"
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-cio:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
@@ -34,7 +34,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "CIRIS"
-            packageVersion = "2.0.0"
+            packageVersion = "2.6.0"
             description = "CIRIS Agent Desktop Application"
             vendor = "CIRIS L3C"
 

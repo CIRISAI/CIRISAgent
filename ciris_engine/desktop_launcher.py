@@ -99,7 +99,7 @@ def find_desktop_jar() -> Optional[Path]:
             return jars[0]
 
     # Fallback: check for development build
-    dev_jar = package_dir.parent / "mobile" / "desktopApp" / "build" / "compose" / "jars"
+    dev_jar = package_dir.parent / "client" / "desktopApp" / "build" / "compose" / "jars"
     if dev_jar.exists():
         jars = list(dev_jar.glob("CIRIS-*.jar"))
         if jars:

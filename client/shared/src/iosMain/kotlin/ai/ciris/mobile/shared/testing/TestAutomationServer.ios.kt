@@ -76,12 +76,12 @@ class IOSTestAutomationServer(private val port: Int = 9091) {
             setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, optval.ptr, sizeOf<IntVar>().toUInt())
         }
 
-        // Bind
+        // Bind to localhost only - never expose to LAN (security)
         memScoped {
             val addr = alloc<sockaddr_in>()
             addr.sin_family = AF_INET.toUByte()
             addr.sin_port = htons(port.toUShort())
-            addr.sin_addr.s_addr = htonl(INADDR_ANY.toUInt())
+            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK.toUInt())
 
             if (bind(serverSocket, addr.ptr.reinterpret(), sizeOf<sockaddr_in>().toUInt()) < 0) {
                 NSLog("[TestAutomation.ios] Failed to bind to port $port")

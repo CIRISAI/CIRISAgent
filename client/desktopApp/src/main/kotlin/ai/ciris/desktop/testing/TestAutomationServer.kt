@@ -124,7 +124,8 @@ class TestAutomationServer(
      * Start the automation server
      */
     fun start() {
-        server = embeddedServer(CIO, port = port) {
+        // Bind to localhost only - never expose to LAN (security)
+        server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true

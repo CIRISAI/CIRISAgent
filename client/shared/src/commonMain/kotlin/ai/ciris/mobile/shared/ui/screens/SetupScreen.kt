@@ -575,7 +575,8 @@ private fun WelcomeStep(
     apiClient: CIRISApiClient,
     modifier: Modifier = Modifier
 ) {
-    val isGoogleAuth = state.isGoogleAuth
+    // Use setupMode as single source of truth for CIRIS vs BYOK display
+    val isCirisMode = state.setupMode == SetupMode.CIRIS_PROXY
     val scrollState = rememberScrollState()
 
     Column(
@@ -620,9 +621,9 @@ private fun WelcomeStep(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Status card based on auth type
-        if (isGoogleAuth) {
-            // CIRIS Mode - Google/Apple signed in
+        // Status card based on setup mode (CIRIS_PROXY vs BYOK)
+        if (isCirisMode) {
+            // CIRIS Mode - Google/Apple OAuth signed in
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = SetupColors.SuccessLight,
@@ -2581,7 +2582,8 @@ private fun QuickSetupStep(
     var languageExpanded by remember { mutableStateOf(true) }
     var locationExpanded by remember { mutableStateOf(true) }
     var servicesExpanded by remember { mutableStateOf(true) }
-    var llmConfigExpanded by remember { mutableStateOf(state.setupMode == SetupMode.BYOK || state.isHAAddonMode) }
+    // LLM config always expanded - show all options in both CIRIS and BYOK modes
+    var llmConfigExpanded by remember { mutableStateOf(true) }
     var adaptersExpanded by remember { mutableStateOf(false) }
 
     // Local LLM discovery
@@ -2959,34 +2961,32 @@ private fun QuickSetupStep(
                     }
                 }
 
-                // Local LLM Server Discovery (shown when local_inference provider selected)
-                if (state.llmProvider == "local_inference") {
-                    LocalLlmServerDiscovery(
-                        state = discoveryState,
-                        apiClient = apiClient,
-                        onServerSelected = { server ->
-                            val baseUrl = "${server.url}/v1"
-                            viewModel.setLlmBaseUrl(baseUrl)
-                            if (server.models.isNotEmpty()) {
-                                availableModels = server.models.map { modelId ->
-                                    ModelInfo(
-                                        id = modelId,
-                                        displayName = modelId,
-                                        contextWindow = null,
-                                        cirisCompatible = true,
-                                        cirisRecommended = false
-                                    )
-                                }
-                                viewModel.setLlmModel(server.models.first())
+                // Local LLM Server Discovery (always shown - users can discover local servers in any mode)
+                LocalLlmServerDiscovery(
+                    state = discoveryState,
+                    apiClient = apiClient,
+                    onServerSelected = { server ->
+                        val baseUrl = "${server.url}/v1"
+                        viewModel.setLlmBaseUrl(baseUrl)
+                        if (server.models.isNotEmpty()) {
+                            availableModels = server.models.map { modelId ->
+                                ModelInfo(
+                                    id = modelId,
+                                    displayName = modelId,
+                                    contextWindow = null,
+                                    cirisCompatible = true,
+                                    cirisRecommended = false
+                                )
                             }
-                        },
-                        localInferenceCapability = localInferenceCapability,
-                        primaryColor = SetupColors.Primary,
-                        surfaceColor = SetupColors.GrayLight,
-                        textColor = SetupColors.TextPrimary,
-                        secondaryTextColor = SetupColors.TextSecondary
-                    )
-                }
+                            viewModel.setLlmModel(server.models.first())
+                        }
+                    },
+                    localInferenceCapability = localInferenceCapability,
+                    primaryColor = SetupColors.Primary,
+                    surfaceColor = SetupColors.GrayLight,
+                    textColor = SetupColors.TextPrimary,
+                    secondaryTextColor = SetupColors.TextSecondary
+                )
 
                 // API Key input (skip for keyless providers)
                 val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")

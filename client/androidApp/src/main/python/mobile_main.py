@@ -424,10 +424,16 @@ def _extract_from_imy(arch: str, data_dir: Path, extract_dir: Path) -> str:
         return ""
 
 
-# Run setup before any pydantic imports
+# Run setup before any pydantic imports (only on Android where 'java' module exists)
 _pydantic_ready = False
 try:
-    _pydantic_ready = setup_pydantic_core()
+    # Check if we're running on Android (java module available via Chaquopy)
+    import importlib.util
+    if importlib.util.find_spec("java") is not None:
+        _pydantic_ready = setup_pydantic_core()
+    else:
+        # Not on Android (e.g., running tests on desktop) - skip native setup
+        _pydantic_ready = True  # Assume pydantic_core is available via pip on desktop
 except Exception as e:
     print(f"PYDANTIC_CORE SETUP ERROR: {e}")
     import traceback

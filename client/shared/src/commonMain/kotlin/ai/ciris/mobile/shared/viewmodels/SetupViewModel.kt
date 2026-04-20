@@ -75,9 +75,11 @@ class SetupViewModel : ViewModel() {
     // Source: SetupViewModel.kt:68-80, SetupWizardActivity.kt:110-174
 
     /**
-     * Set Google OAuth state from successful sign-in.
+     * Set Google/Apple OAuth state from successful sign-in.
      *
-     * If Google auth is available, defaults to CIRIS_PROXY mode.
+     * Setup mode is determined by OAuth provider:
+     * - Google or Apple OAuth → CIRIS_PROXY (free AI via CIRIS proxy)
+     * - Any other provider → BYOK (bring your own key)
      *
      * Source: SetupViewModel.kt:68-80
      */
@@ -88,16 +90,19 @@ class SetupViewModel : ViewModel() {
         userId: String?,
         provider: String = "google"
     ) {
+        // CIRIS_PROXY only for Google or Apple OAuth, otherwise BYOK
+        val isCirisEligible = isAuth && (provider == "google" || provider == "apple")
+
         _state.value = _state.value.copy(
             isGoogleAuth = isAuth,
             googleIdToken = idToken,
             googleEmail = email,
             googleUserId = userId,
             oauthProvider = provider,
-            // Default mode: CIRIS_PROXY for Google auth, BYOK for local credentials
+            // Setup mode: CIRIS_PROXY for Google/Apple OAuth, BYOK otherwise
             setupMode = when {
                 _state.value.setupMode != null -> _state.value.setupMode
-                isAuth -> SetupMode.CIRIS_PROXY
+                isCirisEligible -> SetupMode.CIRIS_PROXY
                 else -> SetupMode.BYOK
             },
             // Skip Welcome step for authenticated users - go directly to Quick Setup

@@ -663,7 +663,7 @@ def action_selection(
                     reason = action_params
 
                     # Format: $defer +30s <reason> (seconds from now)
-                    import re
+                    # re is imported at module level (line 2)
                     from datetime import datetime, timedelta, timezone
 
                     time_match = re.match(r"^\+(\d+)s\s+(.+)$", action_params)
@@ -933,7 +933,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
             # Check for timed defer format
             if command_args_from_context:
-                import re
+                # re is imported at module level (line 2)
                 from datetime import datetime, timedelta, timezone
 
                 time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args_from_context)
@@ -1343,7 +1343,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                             defer_until = None
 
                             if command_args:
-                                import re
+                                # re is imported at module level (line 2)
                                 from datetime import datetime, timedelta, timezone
 
                                 time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args)

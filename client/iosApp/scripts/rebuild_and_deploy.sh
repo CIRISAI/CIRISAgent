@@ -23,6 +23,12 @@ RESOURCES_DIR="$IOS_APP_DIR/Resources"
 
 MODE="${1:-full}"
 SIMULATOR_NAME="iPhone 17 Pro"
+DEVICE_UUID="A53DA92F-972A-5A28-86E3-E6E86E02EE79"
+IS_DEVICE=false
+if [ "$MODE" = "--device" ]; then
+    IS_DEVICE=true
+    MODE="--quick"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -118,15 +124,19 @@ else
     warn "shared.framework not built yet — will be built during KMP step"
 fi
 
-# Check simulator is booted
-BOOTED_DEVICE=$(xcrun simctl list devices | grep "(Booted)" | head -1)
-if [ -z "$BOOTED_DEVICE" ]; then
-    warn "No simulator booted. Booting $SIMULATOR_NAME..."
-    xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || true
-    sleep 3
+if $IS_DEVICE; then
+    ok "Target: Physical device ($DEVICE_UUID)"
+else
+    # Check simulator is booted
+    BOOTED_DEVICE=$(xcrun simctl list devices | grep "(Booted)" | head -1)
+    if [ -z "$BOOTED_DEVICE" ]; then
+        warn "No simulator booted. Booting $SIMULATOR_NAME..."
+        xcrun simctl boot "$SIMULATOR_NAME" 2>/dev/null || true
+        sleep 3
+    fi
+    DEVICE_ID=$(xcrun simctl list devices | grep "(Booted)" | grep -oE '[A-F0-9-]{36}' | head -1)
+    ok "Simulator: $DEVICE_ID"
 fi
-DEVICE_ID=$(xcrun simctl list devices | grep "(Booted)" | grep -oE '[A-F0-9-]{36}' | head -1)
-ok "Simulator: $DEVICE_ID"
 
 # Step 1: Full prepare or quick overlay
 if [ "$MODE" = "full" ] || [ "$MODE" = "--full" ]; then
@@ -209,63 +219,101 @@ if [ "$MODE" = "--source-only" ]; then
     fi
 fi
 
+# Step 3.5: Build KMP shared framework
+step "Building KMP shared framework..."
+cd "$CIRIS_ROOT/client"
+if $IS_DEVICE; then
+    ./gradlew :shared:linkDebugFrameworkIosArm64 2>&1 | tail -3
+else
+    ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 2>&1 | tail -3
+fi
+ok "KMP framework built"
+cd "$IOS_APP_DIR"
+
 # Step 4: Regenerate Xcode project
 step "Regenerating Xcode project (xcodegen)..."
-cd "$IOS_APP_DIR"
 xcodegen generate 2>&1 | tail -3
 ok "Xcode project generated"
 
+# Step 4.5: Bump build number
+step "Bumping CFBundleVersion..."
+CURRENT_BUILD=$(grep -A1 CFBundleVersion iosApp/Info.plist | tail -1 | sed 's/.*<string>\(.*\)<\/string>/\1/')
+NEXT_BUILD=$((CURRENT_BUILD + 1))
+plutil -replace CFBundleVersion -string "$NEXT_BUILD" iosApp/Info.plist
+ok "Build $CURRENT_BUILD → $NEXT_BUILD"
+
 # Step 5: Build
-step "Building for simulator (this may take a minute)..."
-xcodebuild -project iosApp.xcodeproj -scheme iosApp \
-    -sdk iphonesimulator \
-    -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
-    -configuration Debug \
-    -quiet build 2>&1 | tail -5
+if $IS_DEVICE; then
+    step "Building for device (this may take a minute)..."
+    xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+        -sdk iphoneos -configuration Debug \
+        -destination 'generic/platform=iOS' \
+        -allowProvisioningUpdates \
+        -quiet build 2>&1 | tail -5
+else
+    step "Building for simulator (this may take a minute)..."
+    xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+        -sdk iphonesimulator \
+        -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
+        -configuration Debug \
+        -quiet build 2>&1 | tail -5
+fi
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
     fail "Build failed! Run without -quiet for details."
 fi
 ok "Build succeeded"
 
-# Step 6: Find the built app (exclude Index.noindex which has incomplete bundles)
-APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
-    -name "iosApp.app" -path "*Debug-iphonesimulator*" -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
+# Step 6: Find the built app
+if $IS_DEVICE; then
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+        -name "iosApp.app" -path "*Debug-iphoneos*" -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
+else
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+        -name "iosApp.app" -path "*Debug-iphonesimulator*" -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
+fi
 
 if [ -z "$APP_PATH" ]; then
     fail "Could not find built iosApp.app in DerivedData"
 fi
 ok "Built app: $APP_PATH"
 
-# Step 7: Terminate old app and clear cached Python resources
-step "Terminating old app and clearing cached Python..."
-xcrun simctl terminate booted ai.ciris.mobile 2>/dev/null || true
-sleep 1
-
-# Clear cached PythonResources so the app re-extracts from the new Resources.zip
-APP_DATA_DIR=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
-if [ -n "$APP_DATA_DIR" ] && [ -d "$APP_DATA_DIR/Documents/PythonResources" ]; then
-    rm -rf "$APP_DATA_DIR/Documents/PythonResources"
-    ok "Cleared cached PythonResources (will re-extract on launch)"
+# Step 7: Terminate old app
+step "Terminating old app..."
+if $IS_DEVICE; then
+    xcrun devicectl device process terminate -d "$DEVICE_UUID" ai.ciris.mobile 2>/dev/null || true
 else
-    ok "No cached PythonResources to clear"
+    xcrun simctl terminate booted ai.ciris.mobile 2>/dev/null || true
+    sleep 1
+    APP_DATA_DIR=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+    if [ -n "$APP_DATA_DIR" ] && [ -d "$APP_DATA_DIR/Documents/PythonResources" ]; then
+        rm -rf "$APP_DATA_DIR/Documents/PythonResources"
+        ok "Cleared cached PythonResources"
+    fi
 fi
 ok "Old app terminated"
 
 # Step 8: Install and launch
 step "Installing and launching..."
-xcrun simctl install booted "$APP_PATH"
-ok "App installed"
-
-# Clear cached resources again after install (new data container may be assigned)
-APP_DATA_DIR=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
-if [ -n "$APP_DATA_DIR" ] && [ -d "$APP_DATA_DIR/Documents/PythonResources" ]; then
-    rm -rf "$APP_DATA_DIR/Documents/PythonResources"
-    ok "Cleared cached PythonResources post-install"
+if $IS_DEVICE; then
+    xcrun devicectl device uninstall app -d "$DEVICE_UUID" ai.ciris.mobile 2>/dev/null || true
+    sleep 1
+    xcrun devicectl device install app -d "$DEVICE_UUID" "$APP_PATH" 2>&1 | tail -3
+    ok "App installed"
+    sleep 1
+    xcrun devicectl device process launch -d "$DEVICE_UUID" ai.ciris.mobile 2>&1 | tail -2
+    ok "App launched"
+else
+    xcrun simctl install booted "$APP_PATH"
+    ok "App installed"
+    APP_DATA_DIR=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+    if [ -n "$APP_DATA_DIR" ] && [ -d "$APP_DATA_DIR/Documents/PythonResources" ]; then
+        rm -rf "$APP_DATA_DIR/Documents/PythonResources"
+        ok "Cleared cached PythonResources post-install"
+    fi
+    xcrun simctl launch booted ai.ciris.mobile
+    ok "App launched"
 fi
-
-xcrun simctl launch booted ai.ciris.mobile
-ok "App launched"
 
 echo ""
 echo -e "${GREEN}================================================${NC}"

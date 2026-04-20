@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -326,8 +327,8 @@ private fun TrustSummaryCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Shield with level
-            Text(text = "\u25C6", fontSize = 48.sp)  // ◆ trust diamond
+            // Shield with level - trust diamond icon
+            Icon(CIRISIcons.diamond, contentDescription = null, modifier = Modifier.size(48.dp), tint = textColor)
 
             Text(
                 text = localizedString("mobile.trust_level").replace("{level}", level.toString()),

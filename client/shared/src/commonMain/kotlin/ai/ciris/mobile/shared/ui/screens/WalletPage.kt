@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -484,8 +485,8 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Wallet emoji
-                Text(text = "💰", fontSize = 48.sp)
+                // Wallet icon
+                Icon(CIRISIcons.wallet, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.White)
 
                 // Converted Balance (primary, if different currency selected)
                 if (showConversion && convertedBalance != null) {

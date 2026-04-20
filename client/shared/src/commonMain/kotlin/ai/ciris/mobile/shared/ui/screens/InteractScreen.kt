@@ -1059,7 +1059,7 @@ private fun WalletBadge(
                     color = badgeColor
                 )
             } else {
-                Text(text = "💰", fontSize = 12.sp)
+                Icon(CIRISIcons.wallet, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
             }
 
             // Balance or status text - convert to selected currency
@@ -1649,7 +1649,7 @@ private fun UserChatBubble(
             modifier = Modifier
                 .widthIn(max = bubbleMaxWidth)
                 .background(
-                    color = Color(0xFF2563EB), // Blue from chat_bubble_user.xml
+                    color = Color(0xFF2563EB).copy(alpha = 0.90f), // Semi-transparent for visualization (90% per WCAG)
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,
@@ -1719,21 +1719,11 @@ private fun AgentChatBubble(
             modifier = Modifier
                 .widthIn(max = bubbleMaxWidth)
                 .background(
-                    color = Color.White,
+                    color = Color.White.copy(alpha = 0.90f), // Semi-transparent for visualization
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,
                         bottomStart = 4.dp, // Different corner radius
-                        bottomEnd = 16.dp
-                    )
-                )
-                .padding(1.dp) // Border effect
-                .background(
-                    color = Color.White,
-                    shape = RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = 4.dp,
                         bottomEnd = 16.dp
                     )
                 )
@@ -1787,7 +1777,7 @@ private fun SystemMessage(
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = Color(0xFFE0F2FE), // Light blue info background
+            color = Color(0xFFE0F2FE).copy(alpha = 0.90f), // Semi-transparent for visualization
             modifier = Modifier.widthIn(max = bubbleMaxWidth)
         ) {
             Row(
@@ -1831,7 +1821,7 @@ private fun ErrorMessage(
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = Color(0xFFFEE2E2), // Light red error background
+            color = Color(0xFFFEE2E2).copy(alpha = 0.90f), // Semi-transparent for visualization
             modifier = Modifier.widthIn(max = bubbleMaxWidth)
         ) {
             Row(
@@ -1898,7 +1888,7 @@ private fun ActionBubble(
         Surface(
             onClick = { isExpanded = !isExpanded },
             shape = RoundedCornerShape(8.dp),
-            color = bgColor,
+            color = bgColor.copy(alpha = 0.90f), // Semi-transparent for visualization
             modifier = Modifier.widthIn(max = actionBubbleWidth)
         ) {
             Column(
@@ -2527,16 +2517,18 @@ private fun AgentStateIcon(
             modifier = Modifier.fillMaxSize()
         ) {
             if (state == AgentProcessingState.PROCESSING && sseConnected) {
-                Text(
-                    text = "\u21BB", // ↻ clockwise circular arrow
-                    fontSize = 22.sp,
-                    color = Color(0xFF2563EB),
-                    modifier = Modifier.graphicsLayer { rotationZ = rotation }
+                Icon(
+                    CIRISIcons.processing,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = rotation },
+                    tint = Color(0xFF2563EB)
                 )
             } else {
-                Text(
-                    text = if (!sseConnected) "\u26AA" else "\uD83D\uDCAD",
-                    fontSize = 20.sp
+                Icon(
+                    if (!sseConnected) CIRISIcons.disconnected else CIRISIcons.thought,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = Color.Unspecified
                 )
             }
         }

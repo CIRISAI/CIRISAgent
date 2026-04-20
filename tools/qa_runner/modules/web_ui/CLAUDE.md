@@ -14,22 +14,22 @@ The desktop app can be built/run in several ways:
 
 ```bash
 # Quick run (development) - JIT compilation, fastest iteration
-cd mobile && CIRIS_TEST_MODE=true ./gradlew :desktopApp:run
+cd client && CIRIS_TEST_MODE=true ./gradlew :desktopApp:run
 
 # Build runnable JAR (production-like)
-cd mobile && ./gradlew :desktopApp:createDistributable
-# Output: mobile/desktopApp/build/compose/binaries/main/app/
+cd client && ./gradlew :desktopApp:createDistributable
+# Output: client/desktopApp/build/compose/binaries/main/app/
 
 # Build native installer package (DMG/MSI/DEB)
-cd mobile && ./gradlew :desktopApp:packageDistributionForCurrentOS
-# Output: mobile/desktopApp/build/compose/binaries/main/
+cd client && ./gradlew :desktopApp:packageDistributionForCurrentOS
+# Output: client/desktopApp/build/compose/binaries/main/
 ```
 
 **Prerequisite**: Desktop app running with `CIRIS_TEST_MODE=true`
 
 ```bash
 # Start desktop app with test mode
-cd mobile && CIRIS_TEST_MODE=true ./gradlew :desktopApp:run
+cd client && CIRIS_TEST_MODE=true ./gradlew :desktopApp:run
 
 # Quick CLI
 python3 -m tools.qa_runner.modules.web_ui.desktop_test status

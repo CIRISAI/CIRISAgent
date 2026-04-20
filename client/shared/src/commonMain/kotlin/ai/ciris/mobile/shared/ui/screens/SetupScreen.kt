@@ -83,6 +83,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.filled.Settings
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 
 private const val TAG = "SetupScreen"
 

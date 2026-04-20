@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh as RefreshIcon
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,7 +93,7 @@ fun AdaptersScreen(
                         modifier = Modifier.testableClickable("btn_adapters_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = CIRISIcons.refreshIcon,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -729,7 +730,7 @@ private fun AdapterCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = CIRISIcons.refreshIcon,
+                        imageVector = CIRISIcons.refresh,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
@@ -744,7 +745,7 @@ private fun AdapterCard(
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
-                            imageVector = CIRISIcons.refreshIcon,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )

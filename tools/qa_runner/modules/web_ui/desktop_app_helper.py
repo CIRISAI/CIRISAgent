@@ -652,11 +652,11 @@ def ensure_desktop_app_running(server_url: str = "http://localhost:8091") -> Non
                 "To run tests, start the desktop app with test mode:\n"
                 "\n"
                 "  export CIRIS_TEST_MODE=true\n"
-                "  cd mobile && ./gradlew :desktopApp:run\n"
+                "  cd client && ./gradlew :desktopApp:run\n"
                 "\n"
                 "Or in a single command:\n"
                 "\n"
-                "  CIRIS_TEST_MODE=true ./gradlew :desktopApp:run\n"
+                "  CIRIS_TEST_MODE=true cd client && ./gradlew :desktopApp:run\n"
             )
 
     asyncio.get_event_loop().run_until_complete(_check())

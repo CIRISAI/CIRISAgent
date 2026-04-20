@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -794,7 +795,7 @@ private fun TrustSecurityCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("\u25C6", fontSize = 20.sp)  // ◆ trust
+                    Icon(CIRISIcons.diamond, contentDescription = null, modifier = Modifier.size(20.dp), tint = TrustColors.EmeraldDark)  // trust diamond
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = localizedString("mobile.settings_verify_active"),

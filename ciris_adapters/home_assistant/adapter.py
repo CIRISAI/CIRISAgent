@@ -73,6 +73,7 @@ class HomeAssistantAdapter(Service):
         # Track adapter state
         self._running = False
         self._lifecycle_task: Optional[asyncio.Task[None]] = None
+        self._init_task: Optional[asyncio.Task[None]] = None
 
         logger.info(f"Home Assistant adapter initialized for {self.ha_service.ha_url}")
 
@@ -146,7 +147,8 @@ class HomeAssistantAdapter(Service):
         logger.info("Home Assistant adapter started")
 
         # Initialize HA connection in background - don't block startup
-        asyncio.create_task(self._background_initialize())
+        # Store reference to prevent garbage collection
+        self._init_task = asyncio.create_task(self._background_initialize())
 
     async def _background_initialize(self) -> None:
         """Initialize HA connection in background without blocking startup."""
@@ -198,7 +200,7 @@ class HomeAssistantAdapter(Service):
             try:
                 await self._lifecycle_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected - we initiated the cancellation
 
         # Stop communication service
         await self.communication_service.stop()
@@ -223,6 +225,7 @@ class HomeAssistantAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Home Assistant adapter lifecycle cancelled")
+            raise  # Re-raise to propagate cancellation
         finally:
             await self.stop()
 

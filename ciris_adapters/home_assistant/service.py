@@ -1550,55 +1550,58 @@ class HAIntegrationService:
         last_event_time: Dict[str, datetime] = {}
         cooldown_seconds = 10
 
-        while True:
-            try:
-                cap = cv2.VideoCapture(url)
-                if not cap.isOpened():
+        try:
+            while True:
+                try:
+                    cap = cv2.VideoCapture(url)
+                    if not cap.isOpened():
+                        await asyncio.sleep(5)
+                        continue
+
+                    ret, frame = cap.read()
+                    cap.release()
+
+                    if not ret:
+                        await asyncio.sleep(5)
+                        continue
+
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                    # Motion detection
+                    if previous_frame is not None:
+                        diff = cv2.absdiff(previous_frame, gray)
+                        _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+                        changed_pixels = int(np.count_nonzero(thresh))
+                        total_pixels = int(thresh.shape[0] * thresh.shape[1])
+                        change_pct = float(changed_pixels) / float(total_pixels)
+
+                        if change_pct > 0.02:  # 2% threshold
+                            now = datetime.now(timezone.utc)
+                            last_motion = last_event_time.get("motion", datetime.min.replace(tzinfo=timezone.utc))
+                            if (now - last_motion).total_seconds() > cooldown_seconds:
+                                event = DetectionEvent(
+                                    event_type=EventType.MOTION,
+                                    camera_name=camera_name,
+                                    confidence=min(change_pct * 10, 1.0),
+                                    timestamp=now,
+                                    zones=[],
+                                    description=f"Motion detected ({change_pct:.1%} change)",
+                                    ha_event_type=HAEventType.CAMERA_MOTION,
+                                )
+                                self._event_history.append(event)
+                                await self._send_ha_event(event)
+                                last_event_time["motion"] = now
+
+                    previous_frame = gray.copy()
+                    await asyncio.sleep(3)
+
+                except asyncio.CancelledError:
+                    raise  # Re-raise to exit loop cleanly
+                except Exception as e:
+                    logger.error(f"Detection loop error for {camera_name}: {e}")
                     await asyncio.sleep(5)
-                    continue
-
-                ret, frame = cap.read()
-                cap.release()
-
-                if not ret:
-                    await asyncio.sleep(5)
-                    continue
-
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                # Motion detection
-                if previous_frame is not None:
-                    diff = cv2.absdiff(previous_frame, gray)
-                    _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-                    changed_pixels = int(np.count_nonzero(thresh))
-                    total_pixels = int(thresh.shape[0] * thresh.shape[1])
-                    change_pct = float(changed_pixels) / float(total_pixels)
-
-                    if change_pct > 0.02:  # 2% threshold
-                        now = datetime.now(timezone.utc)
-                        last_motion = last_event_time.get("motion", datetime.min.replace(tzinfo=timezone.utc))
-                        if (now - last_motion).total_seconds() > cooldown_seconds:
-                            event = DetectionEvent(
-                                event_type=EventType.MOTION,
-                                camera_name=camera_name,
-                                confidence=min(change_pct * 10, 1.0),
-                                timestamp=now,
-                                zones=[],
-                                description=f"Motion detected ({change_pct:.1%} change)",
-                                ha_event_type=HAEventType.CAMERA_MOTION,
-                            )
-                            self._event_history.append(event)
-                            await self._send_ha_event(event)
-                            last_event_time["motion"] = now
-
-                previous_frame = gray.copy()
-                await asyncio.sleep(3)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Detection loop error for {camera_name}: {e}")
-                await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            logger.debug(f"Detection loop cancelled for {camera_name}")
 
     async def _send_ha_event(self, event: DetectionEvent, _retry: bool = True) -> bool:
         """Send detection event to Home Assistant."""

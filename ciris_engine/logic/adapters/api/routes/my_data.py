@@ -1004,13 +1004,15 @@ async def get_capacity(
     The signed audit history is the real coherence ratchet; this is just
     the viewing angle for the human.
     """
-    logger.info(f"[capacity] GET /capacity scope={scope} user={current_user.username}")
+    # Validate scope first before logging to prevent log injection
     scope_norm = (scope or "fleet").strip().lower()
     if scope_norm not in {"fleet", "local", "both"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="scope must be one of: fleet, local, both",
         )
+    # Log after validation with sanitized value (prevents log injection)
+    logger.info(f"[capacity] GET /capacity scope={scope_norm}")
 
     # For lens lookups, we need the TEMPLATE name (e.g., "Ally"), not the
     # agent instance ID (e.g., "agent-c1303b26541d"). The template name is

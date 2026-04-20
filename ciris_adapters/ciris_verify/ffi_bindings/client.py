@@ -3625,8 +3625,8 @@ class MockCIRISVerify(CIRISVerify):
             "python_integrity": (
                 {
                     "valid": True,
-                    "modules_checked": python_hashes.module_count if python_hashes else 0,
-                    "modules_passed": python_hashes.module_count if python_hashes else 0,
+                    "modules_checked": python_hashes.module_count,
+                    "modules_passed": python_hashes.module_count,
                     "modules_failed": 0,
                     "total_hash_valid": True,
                 }
@@ -3678,8 +3678,8 @@ class MockCIRISVerify(CIRISVerify):
             "python_integrity": (
                 {
                     "valid": True,
-                    "modules_checked": python_hashes.module_count if python_hashes else 0,
-                    "modules_passed": python_hashes.module_count if python_hashes else 0,
+                    "modules_checked": python_hashes.module_count,
+                    "modules_passed": python_hashes.module_count,
                     "modules_failed": 0,
                     "total_hash_valid": True,
                 }

@@ -2582,6 +2582,7 @@ private fun QuickSetupStep(
     var languageExpanded by remember { mutableStateOf(true) }
     var locationExpanded by remember { mutableStateOf(true) }
     var servicesExpanded by remember { mutableStateOf(true) }
+    var tracesExpanded by remember { mutableStateOf(true) }
     // LLM config always expanded - show all options in both CIRIS and BYOK modes
     var llmConfigExpanded by remember { mutableStateOf(true) }
     var adaptersExpanded by remember { mutableStateOf(false) }
@@ -2854,6 +2855,92 @@ private fun QuickSetupStep(
                         },
                         modifier = Modifier.testable("switch_services_enabled")
                     )
+                }
+            }
+        }
+
+        // Traces / Telemetry Section - ACCORD alignment data sharing
+        SetupCollapsibleSection(
+            title = localizedString("mobile.setup_alignment_title"),
+            subtitle = if (state.accordMetricsConsent)
+                localizedString("setup.location_enabled")
+            else
+                localizedString("setup.location_disabled"),
+            icon = CIRISMaterialIcons.Filled.Analytics,
+            expanded = tracesExpanded,
+            onToggle = { tracesExpanded = !tracesExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = localizedString("mobile.setup_alignment_desc"),
+                    fontSize = 13.sp,
+                    color = SetupColors.TextSecondary
+                )
+
+                // Data shared explanation
+                Text(
+                    text = localizedString("mobile.setup_data_shared"),
+                    color = SetupColors.InfoDark,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                Column(modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)) {
+                    DataPointRow("Reasoning quality scores", SetupColors.InfoText)
+                    DataPointRow("Decision patterns (no message content)", SetupColors.InfoText)
+                    DataPointRow("LLM provider and API base URL", SetupColors.InfoText)
+                    DataPointRow("Performance metrics", SetupColors.InfoText)
+                }
+
+                // Accord metrics consent checkbox
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.testableClickable("item_accord_metrics_consent_quick") {
+                        viewModel.setAccordMetricsConsent(!state.accordMetricsConsent)
+                    }
+                ) {
+                    Checkbox(
+                        checked = state.accordMetricsConsent,
+                        onCheckedChange = { viewModel.setAccordMetricsConsent(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SetupColors.Primary,
+                            uncheckedColor = SetupColors.TextSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = localizedString("mobile.setup_alignment_agree"),
+                        color = SetupColors.InfoDark,
+                        fontSize = 14.sp
+                    )
+                }
+
+                // Optional: Include location in traces (only show if city selected and metrics consent given)
+                AnimatedVisibility(visible = state.accordMetricsConsent && state.city.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .testableClickable("item_share_location_traces_quick") {
+                                viewModel.setShareLocationInTraces(!state.shareLocationInTraces)
+                            }
+                    ) {
+                        Checkbox(
+                            checked = state.shareLocationInTraces,
+                            onCheckedChange = { viewModel.setShareLocationInTraces(it) },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = SetupColors.Primary,
+                                uncheckedColor = SetupColors.TextSecondary
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = localizedString("mobile.setup_include_location"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }

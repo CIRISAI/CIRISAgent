@@ -1,7 +1,7 @@
 {
   "agent_version": "2.6.0-stable",
-  "computed_at": 1776644619,
-  "generated_at": "2026-04-20T00:23:39.431012+00:00",
+  "computed_at": 1776649124,
+  "generated_at": "2026-04-20T01:38:44.309213+00:00",
   "module_hashes": {
     "ciris_adapters/__init__.py": "98f0ed46cb1ff3e31b77fb396a1aaf85c506eba9ccf4ae8226982fb321f0093d",
     "ciris_adapters/a2a/__init__.py": "7fdd638aa72239d567bad90213216a3eb7115d3802067d39c00d7f82de3e65eb",
@@ -306,7 +306,7 @@
     "ciris_engine/logic/adapters/api/routes/_adapter_discovery.py": "9ab396814bc960302ab5be8497cdad72b37e5d9441fabd155d42d10fd7deb9a5",
     "ciris_engine/logic/adapters/api/routes/_common.py": "645d7ff4c0d6f1975d00ba391c7ea326faaec3a075836344a9703769ae2e0abb",
     "ciris_engine/logic/adapters/api/routes/agent.py": "7fb3e294156d946bd80394284260d5bcce744bc3a8ef417b05c667cc553a060c",
-    "ciris_engine/logic/adapters/api/routes/audit.py": "aeeb8b0086ab1c74c4280015ce879ef3f60a26baa46f784c028c7b8ad89695d8",
+    "ciris_engine/logic/adapters/api/routes/audit.py": "f8a8ab025287debf8a01176422be51f73b5194a390668bd90916e259623ffea4",
     "ciris_engine/logic/adapters/api/routes/auth.py": "c48d21cb05fcf9449587d278a39b7e7fed931f330e54a261403bf52329d64176",
     "ciris_engine/logic/adapters/api/routes/billing.py": "884f474d58e289609e8b5b9a849333bcd356e91772c7b16aac7d92e40aaf3920",
     "ciris_engine/logic/adapters/api/routes/config.py": "e071eda61186a82ced2fb3a656fb97b5e60673754983d00505c64df687272767",
@@ -1004,7 +1004,7 @@
     "ciris_engine",
     "ciris_adapters"
   ],
-  "total_hash": "7d81b510ac734097ffbae7bc9ef11d7dc1f694c2ef2ff1a360e597ac04ada238",
+  "total_hash": "248a5f557b07e315dd55fcf9ec6d72c999eb72a69714d62c8608a5232756f14d",
   "unavailable_count": 0,
   "unavailable_modules": [],
   "version": "1.2"

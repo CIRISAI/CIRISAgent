@@ -4,7 +4,7 @@
 
 # Testing Framework
 pytest>=9.0.3,<10.0.0  # 9.0.3 fixes tmpdir vulnerability (CVE-2026-XXXX)
-pytest-asyncio>=0.21.0,<1.0.0
+pytest-asyncio>=0.24.0,<1.0.0  # 0.24+ required for pytest 9.x compatibility
 pytest-cov>=4.1.0,<5.0.0
 pytest-timeout>=2.2.0,<3.0.0
 pytest-xdist>=3.3.0,<4.0.0  # For parallel test execution

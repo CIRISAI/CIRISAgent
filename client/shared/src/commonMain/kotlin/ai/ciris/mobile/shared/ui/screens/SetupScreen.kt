@@ -317,10 +317,10 @@ fun SetupScreen(
     }
 
     Surface(
-        modifier = modifier.fillMaxSize().imePadding(),
+        modifier = modifier.fillMaxSize(),
         color = SetupColors.Background
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().imePadding()) {
             // Step indicators at top
             StepIndicators(
                 currentStep = state.currentStep,
@@ -330,7 +330,7 @@ fun SetupScreen(
                     .padding(vertical = 16.dp, horizontal = 24.dp)
             )
 
-            // Step content
+            // Step content — shrinks when keyboard appears, buttons stay visible
             Box(
                 modifier = Modifier
                     .weight(1f)

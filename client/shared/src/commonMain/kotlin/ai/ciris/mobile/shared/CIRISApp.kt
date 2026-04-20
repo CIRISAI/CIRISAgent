@@ -524,7 +524,8 @@ fun CIRISApp(
         StartupViewModel(pythonRuntimeProtocol, apiClient)
     }
     // SetupViewModel needs to survive configuration changes and app backgrounding
-    val setupViewModel: SetupViewModel = viewModel { SetupViewModel() }
+    // Pass apiClient to ensure proper base URL (especially in HA addon mode)
+    val setupViewModel: SetupViewModel = viewModel { SetupViewModel(apiClient) }
     // Set HA addon mode if running in Home Assistant addon context
     if (isHAAddonMode) {
         setupViewModel.setHAAddonMode(true)

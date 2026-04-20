@@ -36,7 +36,9 @@ private const val TAG = "SetupViewModel"
  * - Google OAuth support for CIRIS proxy mode
  * - Survives configuration changes and app backgrounding (extends ViewModel)
  */
-class SetupViewModel : ViewModel() {
+class SetupViewModel(
+    private val apiClient: CIRISApiClientProtocol
+) : ViewModel() {
 
     private val _state = MutableStateFlow(SetupFormState())
     val state: StateFlow<SetupFormState> = _state.asStateFlow()
@@ -46,11 +48,6 @@ class SetupViewModel : ViewModel() {
 
     // Location search debounce job
     private var locationSearchJob: Job? = null
-
-    // API client for location search (lazy - only needed during setup)
-    private val apiClient: CIRISApiClientProtocol by lazy {
-        CIRISApiClient()
-    }
 
     // Available LLM providers for BYOK mode
     val availableProviders = listOf(

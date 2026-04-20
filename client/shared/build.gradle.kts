@@ -48,6 +48,12 @@ kotlin {
     }
 
     // Web (WASM) - NEW TARGET
+    // WARNING: Production builds (productionExecutable) fail at runtime due to KT-69154
+    // https://youtrack.jetbrains.com/issue/KT-69154
+    // Error: WebAssembly.instantiate(): Import #1 "js_code" "kotlin.wasm.internal.throwJsError":
+    //        function import requires a callable
+    // Workaround: Use developmentExecutable builds only (~11MB vs ~3MB, but functional)
+    // Track issue and do NOT ship production WASM builds until Kotlin team fixes this.
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         moduleName = "ciris-shared"

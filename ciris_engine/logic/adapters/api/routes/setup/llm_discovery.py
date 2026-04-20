@@ -173,7 +173,7 @@ async def discover_local_llm_servers(
 
     # Generate all probe targets
     targets = _generate_probe_targets(include_localhost)
-    unique_hostnames = list(set(h for h, _ in targets if h != "localhost"))
+    unique_hostnames = list({h for h, _ in targets if h != "localhost"})
 
     logger.info(f"[LLM_DISCOVERY] Starting parallel discovery: {len(unique_hostnames)} hostnames, {len(targets)} endpoints")
 
@@ -188,7 +188,7 @@ async def discover_local_llm_servers(
     # Cancel pending tasks
     for task in pending:
         task.cancel()
-        logger.debug(f"[LLM_DISCOVERY] Cancelled pending Phase 1 task")
+        logger.debug("[LLM_DISCOVERY] Cancelled pending Phase 1 task")
 
     # Extract results from completed tasks
     mdns_results: List[Dict[str, Any]] = []

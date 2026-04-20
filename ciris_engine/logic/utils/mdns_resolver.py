@@ -154,7 +154,7 @@ async def resolve_local_hostname(
     azc = await _get_async_zeroconf()
     if azc is not None:
         try:
-            resolved_ip = await _resolve_via_zeroconf(azc, hostname, timeout)
+            resolved_ip = await _resolve_via_zeroconf(hostname, timeout)
             if resolved_ip:
                 logger.info(f"[mDNS] Resolved {hostname} -> {resolved_ip} via zeroconf")
                 return resolved_ip
@@ -177,7 +177,6 @@ async def resolve_local_hostname(
 
 
 async def _resolve_via_zeroconf(
-    azc: Any,
     hostname: str,
     timeout: float,
 ) -> Optional[str]:
@@ -224,7 +223,7 @@ def _sync_resolve_via_serviceinfo(
         # Create a ServiceInfo for a dummy service on this host
         # This lets us use ServiceInfo.request() to resolve the hostname
         # The service type doesn't matter - we just want the address
-        service_name = f"_ciris-probe._tcp.local."
+        service_name = "_ciris-probe._tcp.local."
         full_name = f"probe.{service_name}"
 
         # Try using ServiceInfo to resolve the server hostname

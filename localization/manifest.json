@@ -5,7 +5,7 @@
   "generated_by": "claude-opus-4-6",
   "generation_note": "Auto-generated translations. Native speaker review recommended before production use. v2.0 expanded en.json to cover all LLM-facing text including DMA prompts, system formatters, handler messages, escalation guidance, crisis resources, error messages, and Discord field labels. Non-English files cover setup/agent/status sections; prompts/handlers/errors/discord sections pending translation.",
   "created_at": "2026-03-25T00:00:00Z",
-  "updated_at": "2026-03-25T21:00:00Z",
+  "updated_at": "2026-04-20T05:00:00Z",
   "string_categories": {
     "setup": "Setup wizard UI strings",
     "agent": "User-facing agent response messages",
@@ -204,7 +204,8 @@
       "added": "2026-04-07",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD re-translated 2026-04-20 (prior version mis-shipped with Arabic content); first half has known glossary drift pending reconciliation"
     },
     "ha": {
       "name": "Hausa",
@@ -237,7 +238,8 @@
       "added": "2026-04-07",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD re-translated 2026-04-20 (prior version mis-shipped with mixed Bengali/Gurmukhi content); first half has known glossary drift pending reconciliation"
     },
     "ta": {
       "name": "Tamil",
@@ -280,7 +282,8 @@
       "added": "2026-04-08",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD created 2026-04-20 (previously missing); first half has known glossary drift pending reconciliation"
     },
     "my": {
       "name": "Burmese",
@@ -291,7 +294,8 @@
       "added": "2026-04-08",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD created 2026-04-20 (previously missing); first half has known glossary drift pending reconciliation"
     },
     "th": {
       "name": "Thai",
@@ -302,7 +306,8 @@
       "added": "2026-04-08",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD created 2026-04-20 (previously missing); first half has known glossary drift pending reconciliation"
     },
     "uk": {
       "name": "Ukrainian",
@@ -324,7 +329,8 @@
       "added": "2026-04-08",
       "status": "draft",
       "review_status": "needs_native_review",
-      "coverage": "complete"
+      "coverage": "complete",
+      "accord_notes": "ACCORD created 2026-04-20 (previously missing); first half has known glossary drift pending reconciliation"
     }
   },
   "coverage_analysis": {

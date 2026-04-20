@@ -119,6 +119,14 @@ class ConscienceCheckResult(BaseModel):
     entropy_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall entropy score")
     coherence_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall coherence score")
 
+    # Prompts used (for streaming/debugging when include_prompts flag is set)
+    entropy_prompt: Optional[str] = Field(default=None, description="User prompt used for entropy evaluation")
+    coherence_prompt: Optional[str] = Field(default=None, description="User prompt used for coherence evaluation")
+    optimization_veto_prompt: Optional[str] = Field(default=None, description="User prompt used for optimization veto")
+    epistemic_humility_prompt: Optional[str] = Field(
+        default=None, description="User prompt used for epistemic humility evaluation"
+    )
+
     # Processing metadata
     check_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When check was performed"

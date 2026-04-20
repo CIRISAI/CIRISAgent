@@ -1,0 +1,11 @@
+=== Device Info ===
+Model: SM-J700T
+Android: 7.1.1
+
+=== Package Info ===
+versionCode=94 minSdk=24 targetSdk=35
+versionName=2.6.0
+firstInstallTime=2026-04-19 12:36:15
+lastUpdateTime=2026-04-19 12:36:15
+
+=== Process Info ===

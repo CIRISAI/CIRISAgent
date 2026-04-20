@@ -765,7 +765,7 @@ class AccordMetricsService:
             try:
                 await self._reasoning_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected - we initiated the cancellation
 
         # Cancel flush task
         if self._flush_task and not self._flush_task.done():
@@ -773,7 +773,7 @@ class AccordMetricsService:
             try:
                 await self._flush_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected - we initiated the cancellation
 
         # Flush remaining events
         logger.info("   Performing final flush...")
@@ -798,14 +798,17 @@ class AccordMetricsService:
 
     async def _periodic_flush(self) -> None:
         """Periodically flush events even if batch is not full."""
-        while True:
-            try:
-                await asyncio.sleep(self._flush_interval)
-                await self._flush_events()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in periodic flush: {e}")
+        try:
+            while True:
+                try:
+                    await asyncio.sleep(self._flush_interval)
+                    await self._flush_events()
+                except Exception as e:
+                    if isinstance(e, asyncio.CancelledError):
+                        raise  # Re-raise to exit cleanly
+                    logger.error(f"Error in periodic flush: {e}")
+        except asyncio.CancelledError:
+            pass  # Clean exit on cancellation
 
     async def _flush_events(self) -> None:
         """Send all queued events to CIRISLens."""
@@ -854,6 +857,13 @@ class AccordMetricsService:
         """
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
+
+        # CRITICAL: Require explicit consent_timestamp - server returns 422 without it
+        if not self._consent_timestamp:
+            raise RuntimeError(
+                "Cannot send events: consent_timestamp is not set. "
+                "Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var or provide consent_timestamp in config."
+            )
 
         # Build early warning correlation metadata (only include non-empty values)
         correlation_metadata: Dict[str, str] = {}
@@ -1040,6 +1050,12 @@ class AccordMetricsService:
             logger.info(f"   Event type: {event_type}")
             logger.info(f"   Agent hash: {self._agent_id_hash}")
 
+            # CRITICAL: Require explicit consent_timestamp
+            if not self._consent_timestamp:
+                logger.error("❌ Cannot send connected event: consent_timestamp is not set")
+                logger.error("   Set CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP env var")
+                return
+
             # Wrap as a standard event batch
             batch_payload: Dict[str, Any] = {
                 "events": [payload],
@@ -1116,10 +1132,10 @@ class AccordMetricsService:
             logger.error("Reasoning queue not initialized")
             return
 
-        while True:
-            try:
-                # Wait for next event with timeout to check for cancellation
+        try:
+            while True:
                 try:
+                    # Wait for next event with timeout to check for cancellation
                     event_data = await asyncio.wait_for(self._reasoning_queue.get(), timeout=1.0)
                     events_processed += 1
                     logger.info(f"📥 RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
@@ -1127,16 +1143,17 @@ class AccordMetricsService:
                 except asyncio.TimeoutError:
                     # No event, just continue waiting
                     continue
-            except asyncio.CancelledError:
-                logger.info(f"Reasoning event processor cancelled (processed {events_processed} events)")
-                break
-            except Exception as e:
-                # Check if event loop is gone (e.g., during shutdown/test teardown)
-                err_str = str(e).lower()
-                if "no running event loop" in err_str or "event loop is closed" in err_str:
-                    logger.debug("Event loop closed, stopping reasoning event processor")
-                    break
-                logger.error(f"Error processing reasoning event: {e}")
+                except asyncio.CancelledError:
+                    raise  # Re-raise to exit cleanly
+                except Exception as e:
+                    # Check if event loop is gone (e.g., during shutdown/test teardown)
+                    err_str = str(e).lower()
+                    if "no running event loop" in err_str or "event loop is closed" in err_str:
+                        logger.debug("Event loop closed, stopping reasoning event processor")
+                        break
+                    logger.error(f"Error processing reasoning event: {e}")
+        except asyncio.CancelledError:
+            logger.info(f"Reasoning event processor cancelled (processed {events_processed} events)")
 
     async def _handle_reasoning_event(self, event_data: Dict[str, Any]) -> None:
         """Handle a single reasoning event and add to appropriate trace.
@@ -1703,10 +1720,37 @@ class AccordMetricsService:
         """
         logger.debug(f"Received WBD event for thought {request.thought_id}")
 
-        # Build anonymized event
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+
+        # Build minimal trace for WBD event (CIRISLens requires trace field)
+        wbd_trace: Dict[str, Any] = {
+            "trace_id": f"wbd_{request.thought_id}_{now.strftime('%Y%m%d%H%M%S')}",
+            "thought_id": request.thought_id,
+            "task_id": request.task_id,
+            "agent_id_hash": self._agent_id_hash or "unknown",
+            "started_at": now_iso,
+            "completed_at": now_iso,
+            "trace_level": TraceDetailLevel.GENERIC.value,
+            "components": [
+                {
+                    "component_type": "action",
+                    "event_type": "WISDOM_BASED_DEFERRAL",
+                    "timestamp": now_iso,
+                    "data": {
+                        "action": "defer",
+                        "reason_truncated": request.reason[:200] if request.reason else None,
+                        "defer_until": request.defer_until.isoformat() if request.defer_until else None,
+                    },
+                }
+            ],
+        }
+
+        # Build anonymized event with required trace field
         wbd_event: Dict[str, Any] = {
             "event_type": "wbd_deferral",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "trace": wbd_trace,
+            "timestamp": now_iso,
             "agent_id": self._agent_id_hash or "unknown",
             "thought_id": request.thought_id,
             "task_id": request.task_id,

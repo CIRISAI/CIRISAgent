@@ -233,7 +233,7 @@ def mock_runtime_with_adapters(mock_runtime, mock_adapters, mock_bus_manager):
 
 
 @pytest.fixture
-def service_with_real_task(event_loop):
+async def service_with_real_task():
     """Service with a real asyncio task."""
     service = Mock()
     service.__class__.__name__ = "RealTaskService"
@@ -241,8 +241,8 @@ def service_with_real_task(event_loop):
     async def service_work():
         await asyncio.sleep(0.1)  # Shorter sleep
 
-    # Use event_loop fixture to ensure event loop is running
-    task = event_loop.create_task(service_work())
+    # Create task in current event loop (pytest-asyncio handles this)
+    task = asyncio.create_task(service_work())
     service._task = task
     return service
 

@@ -1,0 +1,28 @@
+--------- beginning of system
+--------- beginning of main
+--------- beginning of crash
+04-04 12:46:46.848 E/AndroidRuntime(11972): FATAL EXCEPTION: main
+04-04 12:46:46.848 E/AndroidRuntime(11972): Process: ai.ciris.mobile.debug, PID: 11972
+04-04 12:46:46.848 E/AndroidRuntime(11972): java.lang.NoClassDefFoundError: Failed resolution of: Ljava/time/Instant;
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at kotlinx.datetime.Instant.<clinit>(Instant.kt:96)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at kotlinx.datetime.Clock$System.now(Clock.kt:25)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at ai.ciris.mobile.shared.viewmodels.StartupViewModel.startCIRIS(StartupViewModel.kt:92)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at ai.ciris.mobile.shared.ui.screens.StartupScreenKt$StartupScreen$4.invokeSuspend(StartupScreen.kt:117)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performTrampolineDispatch(AndroidUiDispatcher.android.kt:81)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performTrampolineDispatch(AndroidUiDispatcher.android.kt:41)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.run(AndroidUiDispatcher.android.kt:57)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at android.os.Handler.handleCallback(Handler.java:751)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at android.os.Handler.dispatchMessage(Handler.java:95)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at android.os.Looper.loop(Looper.java:154)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at android.app.ActivityThread.main(ActivityThread.java:6816)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at java.lang.reflect.Method.invoke(Native Method)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at com.android.internal.os.ZygoteInit$MethodAndArgsCaller.run(ZygoteInit.java:1563)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1451)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [androidx.compose.ui.platform.MotionDurationScaleImpl@bfb51eb, androidx.compose.runtime.BroadcastFrameClock@3b9ab48, StandaloneCoroutine{Cancelling}@9ee0de1, AndroidUiDispatcher@f9ca706]
+04-04 12:46:46.848 E/AndroidRuntime(11972): Caused by: java.lang.ClassNotFoundException: Didn't find class "java.time.Instant" on path: DexPathList[[zip file "/data/app/ai.ciris.mobile.debug-1/base.apk"],nativeLibraryDirectories=[/data/app/ai.ciris.mobile.debug-1/lib/arm, /data/app/ai.ciris.mobile.debug-1/base.apk!/lib/armeabi-v7a, /system/lib, /vendor/lib]]
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at dalvik.system.BaseDexClassLoader.findClass(BaseDexClassLoader.java:56)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at java.lang.ClassLoader.loadClass(ClassLoader.java:380)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	at java.lang.ClassLoader.loadClass(ClassLoader.java:312)
+04-04 12:46:46.848 E/AndroidRuntime(11972): 	... 16 more

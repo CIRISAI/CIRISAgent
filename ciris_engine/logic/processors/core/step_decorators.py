@@ -891,6 +891,11 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
         epistemic_humility_uncertainties=epi_humility["uncertainties"],
         epistemic_humility_justification=epi_humility["justification"],
         epistemic_humility_recommendation=epi_humility["recommendation"],
+        # Conscience prompts for localization validation
+        entropy_prompt=getattr(result, "entropy_prompt", None),
+        coherence_prompt=getattr(result, "coherence_prompt", None),
+        optimization_veto_prompt=getattr(result, "optimization_veto_prompt", None),
+        epistemic_humility_prompt=getattr(result, "epistemic_humility_prompt", None),
     )
 
 
@@ -1608,6 +1613,11 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
         epistemic_humility_uncertainties=getattr(step_data, "epistemic_humility_uncertainties", None),
         epistemic_humility_justification=getattr(step_data, "epistemic_humility_justification", None),
         epistemic_humility_recommendation=getattr(step_data, "epistemic_humility_recommendation", None),
+        # === CONSCIENCE PROMPTS (for localization validation) ===
+        entropy_prompt=getattr(step_data, "entropy_prompt", None),
+        coherence_prompt=getattr(step_data, "coherence_prompt", None),
+        optimization_veto_prompt=getattr(step_data, "optimization_veto_prompt", None),
+        epistemic_humility_prompt=getattr(step_data, "epistemic_humility_prompt", None),
     )
 
 

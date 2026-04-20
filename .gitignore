@@ -1,5 +1,7 @@
 .DS_Store
 env*.sh
+# Security tokens - NEVER commit
+.token
 .venv/
 venv/
 *.pyc
@@ -125,12 +127,12 @@ ios/pyo3-ios-config.txt
 
 # Main engine GUI static assets (regenerated from CIRISGUI)
 ciris_engine/gui_static/
-mobile_qa_reports/
+client_qa_reports/
 web_ui_qa_reports/
 benchmark_results/
 
 # iOS Resources.zip (rebuilt locally, too large for git)
-mobile/iosApp/Resources.zip
+client/iosApp/Resources.zip
 
 # Gradle cache directories (build config files like build.gradle are OK)
 .gradle/
@@ -163,8 +165,8 @@ ios/ios_gui_static/
 # iOS crash logs
 *.ips
 
-# Mobile temp files
-mobile/iosApp/zi*
+# Client temp files
+client/iosApp/zi*
 
 # Platform-specific FFI binaries (installed via pip, not tracked in repo)
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
@@ -173,4 +175,15 @@ ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll
 
 # Build-time generated secrets (API keys obfuscated at build, NOT committed)
 ciris_adapters/wallet/providers/_build_secrets.py
-mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
+client/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
+
+# Local scratch / working files (not shared source)
+.claude/
+nohup.out
+# Reference PDFs pulled to repo root during development
+/cca.pdf
+/main.pdf
+# Native-lib backups left by build tooling
+**/ffi_bindings/*.bak
+# Ad-hoc screenshots dropped at repo root during design work
+/ciris_interact_cell_*.png

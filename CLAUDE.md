@@ -432,9 +432,9 @@ dma_guidance=ToolDMAGuidance(
 - `ciris_adapters/home_assistant/` - Context enrichment example
 - `ciris_adapters/wallet/` - Financial tools example
 
-## Unified Agent UX (`mobile/`)
+## Unified Agent UX (`client/`)
 
-**NOTE: "mobile" is a misnomer.** The `mobile/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
+The `client/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
 
 ### Unified Entry Point (`ciris-agent`)
 
@@ -462,7 +462,7 @@ ciris-desktop                     # Desktop app only (connects to running server
 
 **Desktop JAR location:**
 - Production: `ciris_engine/desktop_app/CIRIS-*.jar` (bundled in pip package)
-- Development: `mobile/desktopApp/build/compose/jars/CIRIS-*.jar`
+- Development: `client/desktopApp/build/compose/jars/CIRIS-*.jar`
 
 ### Mobile QA Runner (ALWAYS USE THIS)
 
@@ -479,7 +479,7 @@ python3 -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
 python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
 ```
 
-**Files collected (saved to `mobile_qa_reports/<timestamp>/`):**
+**Files collected (saved to `client_qa_reports/<timestamp>/`):**
 - `logs/latest.log` - Python runtime logs (CIRIS engine)
 - `logs/incidents_latest.log` - Incident/error logs (CHECK THIS FIRST!)
 - `logcat_python.txt` - Python stdout/stderr
@@ -494,18 +494,18 @@ python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
 **Quick analysis:**
 ```bash
 # Check for errors (ALWAYS DO THIS FIRST!)
-grep -i error mobile_qa_reports/*/logs/incidents_latest.log
+grep -i error client_qa_reports/*/logs/incidents_latest.log
 
 # Recent Python logs
-tail -100 mobile_qa_reports/*/logs/latest.log
+tail -100 client_qa_reports/*/logs/latest.log
 
 # Kotlin/KMP logs (CIRISApp, ViewModels)
-grep -i "CIRISApp\|ViewModel\|error" mobile_qa_reports/*/logcat_app.txt
+grep -i "CIRISApp\|ViewModel\|error" client_qa_reports/*/logcat_app.txt
 ```
 
 ### UI Automation Tests
 
-Automated UI testing for the CIRIS mobile app:
+Automated UI testing for the CIRIS client app:
 
 ```bash
 # Full flow test with test account
@@ -527,13 +527,13 @@ python3 -m tools.qa_runner.modules.mobile --build full_flow
 
 ```bash
 # Build debug APK
-cd mobile && ./gradlew :androidApp:assembleDebug
+cd client && ./gradlew :androidApp:assembleDebug
 
 # IMPORTANT: Kill the app before reinstalling (required for Python runtime to reload)
 ~/Android/Sdk/platform-tools/adb shell am force-stop ai.ciris.mobile.debug
 
 # Install to device
-~/Android/Sdk/platform-tools/adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+~/Android/Sdk/platform-tools/adb install -r client/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 
 # Launch the app
 ~/Android/Sdk/platform-tools/adb shell am start -n ai.ciris.mobile.debug/ai.ciris.mobile.MainActivity
@@ -550,10 +550,10 @@ ciris-agent
 
 # Via Gradle (development - desktop only, connects to existing server)
 export CIRIS_TEST_MODE=true
-cd mobile && ./gradlew :desktopApp:run
+cd client && ./gradlew :desktopApp:run
 
 # Build development JAR first (if needed)
-cd mobile && ./gradlew :desktopApp:packageUberJarForCurrentOS
+cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS
 
 # Custom test server port
 export CIRIS_TEST_PORT=9000
@@ -567,7 +567,7 @@ export CIRIS_TEST_PORT=9000
 - `POST /input` - Input text: `{"testTag": "input_user", "text": "admin"}`
 - `POST /wait` - Wait for element: `{"testTag": "btn_send", "timeoutMs": 5000}`
 
-**Full documentation:** `mobile/desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
+**Full documentation:** `client/desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
 ## Development Workflow
 

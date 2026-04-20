@@ -6,7 +6,7 @@ Reads from ~/.<key_name> files and generates the secrets Python module.
 
 Usage:
     python3 tools/generate_ios_secrets.py
-    # Output: mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
+    # Output: client/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
 """
 
 import os
@@ -70,7 +70,7 @@ _XK = [0x5A, 0x3C, 0x7E, 0x1F, 0x9B, 0x4D, 0x2E, 0x6A]
 
     # Write to iOS Resources AND local ciris_adapters
     outputs = [
-        Path("mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py"),
+        Path("client/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py"),
         Path("ciris_adapters/wallet/providers/_build_secrets.py"),
     ]
 

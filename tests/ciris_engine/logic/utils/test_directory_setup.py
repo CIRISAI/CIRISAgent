@@ -123,7 +123,7 @@ class TestSetupApplicationDirectories:
                 # Test with fail_fast=False (should raise)
                 with pytest.raises(DiskSpaceError) as exc_info:
                     setup_application_directories(base_dir=base_dir, fail_fast=False)
-                assert "MINIMUM 100MB REQUIRED" in str(exc_info.value)
+                assert "MINIMUM 50MB REQUIRED" in str(exc_info.value)
 
     def test_cannot_create_directory_fails_fast(self, mock_db_path):
         """Test that directory creation failure causes immediate failure."""
@@ -278,7 +278,7 @@ class TestErrorMessages:
                 error_msg = str(exc_info.value)
                 assert "INSUFFICIENT DISK SPACE" in error_msg
                 assert "42.5MB available" in error_msg
-                assert "MINIMUM 100MB REQUIRED" in error_msg
+                assert "MINIMUM 50MB REQUIRED" in error_msg
                 assert "EXITING" in error_msg
 
     def test_permission_error_message(self, mock_db_path):

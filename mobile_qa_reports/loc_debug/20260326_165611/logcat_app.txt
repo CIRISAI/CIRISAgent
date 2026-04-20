@@ -1,0 +1,295 @@
+--------- beginning of main
+03-26 16:55:21.280 I/MainActivity(31677): Initializing Python runtime...
+03-26 16:55:21.471 I/MainActivity(31677): Python runtime started
+03-26 16:55:21.471 I/MainActivity(31677): Localization resource loader initialized
+03-26 16:55:21.479 I/MainActivity(31677): Google Sign-In initialized with client ID: 265882853697-l421ndo...
+03-26 16:55:21.479 I/MainActivity(31677): Initializing Google Play Billing...
+03-26 16:55:21.537 I/CIRISApiClient(31677): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 16:55:21.552 I/MainActivity(31677): Google Play Billing initialized
+03-26 16:55:21.554 I/MainActivity(31677): Google Play Integrity initialized (via Python API)
+03-26 16:55:21.695 I/MainActivity(31677): Running CIRIS network diagnostics...
+03-26 16:55:21.696 I/MainActivity(31677): Showing CIRISApp immediately for startup animation
+03-26 16:55:21.697 I/MainActivity(31677): Starting PythonRuntimeService...
+03-26 16:55:21.704 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:21.713 I/CIRISApiClient(31677): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 16:55:21.717 I/TokenManager(31677): [setShared] Shared TokenManager instance set
+03-26 16:55:21.724 I/InteractViewModel(31677): [init] InteractViewModel initialized (polling deferred until token available)
+03-26 16:55:21.725 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:21.726 I/SettingsViewModel(31677): [loadDisplaySettings] >>> Loading live_background_enabled from secure storage...
+03-26 16:55:21.729 I/BillingViewModel(31677): [init] BillingViewModel initialized
+03-26 16:55:21.730 I/SessionsViewModel(31677): [init] SessionsViewModel initialized (polling deferred until startPolling() called)
+03-26 16:55:21.731 I/AdaptersViewModel(31677): [init] AdaptersViewModel initialized
+03-26 16:55:21.733 I/ServicesViewModel(31677): [init] ServicesViewModel initialized (polling deferred until startPolling() called)
+03-26 16:55:21.734 I/AuditViewModel(31677): [init] AuditViewModel initialized (data load deferred until startPolling() called)
+03-26 16:55:21.735 I/LogsViewModel(31677): [init] LogsViewModel initialized (polling deferred until startPolling() called)
+03-26 16:55:21.735 I/MemoryViewModel(31677): [init] MemoryViewModel initialized (data load deferred until startPolling() called)
+03-26 16:55:21.736 I/ConfigViewModel(31677): [init] ConfigViewModel initialized (data load deferred until startPolling() called)
+03-26 16:55:21.737 I/ConsentViewModel(31677): [init] ConsentViewModel initialized (data load deferred until startPolling() called)
+03-26 16:55:21.738 I/RuntimeViewModel(31677): [init] RuntimeViewModel initialized (polling deferred until startPolling() called)
+03-26 16:55:21.741 I/TicketsViewModel(31677): [init] TicketsViewModel initialized (data load deferred)
+03-26 16:55:21.742 I/SchedulerViewModel(31677): [init] SchedulerViewModel initialized
+03-26 16:55:21.846 I/CIRISApp(31677): Initializing localization...
+03-26 16:55:21.848 I/MainActivity(31677): Setting purchase result callback
+03-26 16:55:21.849 I/StartupViewModel(31677): [STARTUP] startCIRIS() called - beginning startup sequence
+03-26 16:55:21.850 I/StartupViewModel(31677): [STARTUP] TOTAL_PREP_STEPS=8, TOTAL_VERIFY_STEPS=11
+03-26 16:55:21.851 I/StartupViewModel(31677): [STARTUP] === Beginning 3-step startup sequence ===
+03-26 16:55:21.851 I/StartupViewModel(31677): [STARTUP] Step 1: initializePython()
+03-26 16:55:21.892 I/CIRISApp(31677): Initializing currency...
+03-26 16:55:21.894 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:21.896 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:21.998 I/StartupViewModel(31677): [STARTUP] Step 1 complete: Python initialized
+03-26 16:55:21.999 I/StartupViewModel(31677): [STARTUP] Step 2: calling pythonRuntime.startServer()...
+03-26 16:55:22.000 I/SettingsViewModel(31677): [loadDisplaySettings] >>> Raw value='true', parsed=true
+03-26 16:55:22.000 I/SettingsViewModel(31677): [loadDisplaySettings] >>> Live background state set to: true
+03-26 16:55:22.017 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:22.018 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:22.026 D/PythonRuntime(31677): Prep step 1/6 completed
+03-26 16:55:22.026 D/MainActivity(31677): Prep step 1/6: [1/6] Architecture: arm64-v8a (machine=aarch64)
+03-26 16:55:22.026 D/PythonRuntime(31677): Prep step 2/6 completed
+03-26 16:55:22.026 D/MainActivity(31677): Prep step 2/6: [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 16:55:22.026 D/PythonRuntime(31677): Prep step 3/6 completed
+03-26 16:55:22.026 D/MainActivity(31677): Prep step 3/6: [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+03-26 16:55:22.026 D/PythonRuntime(31677): Prep step 4/6 completed
+03-26 16:55:22.026 D/MainActivity(31677): Prep step 4/6: [4/6] No cached modules to clear
+03-26 16:55:22.026 D/PythonRuntime(31677): Prep step 5/6 completed
+03-26 16:55:22.026 D/MainActivity(31677): Prep step 5/6: [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+03-26 16:55:22.027 D/PythonRuntime(31677): Prep step 5/6 completed
+03-26 16:55:22.027 D/MainActivity(31677): Prep step 5/6: [5/6] Installed PydanticCoreFinder at meta_path[0]
+03-26 16:55:22.027 D/PythonRuntime(31677): Prep step 6/6 completed
+03-26 16:55:22.027 D/MainActivity(31677): Prep step 6/6: [6/6] Testing native library load...
+03-26 16:55:22.029 D/PythonRuntime(31677): Prep step 6/6 completed
+03-26 16:55:22.029 D/MainActivity(31677): Prep step 6/6: [6/6] ctypes.CDLL: SUCCESS
+03-26 16:55:22.052 I/SettingsViewModel(31677): [loadDisplaySettings] >>> Color theme loaded: LAPIS
+03-26 16:55:22.064 D/PythonRuntime(31677): Prep step 6/6 completed
+03-26 16:55:22.064 D/MainActivity(31677): Prep step 6/6: [6/6] import pydantic_core: SUCCESS (v2.23.4)
+03-26 16:55:22.064 D/PythonRuntime(31677): Prep step 6/6 completed
+03-26 16:55:22.064 D/MainActivity(31677): Prep step 6/6: [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+03-26 16:55:22.084 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:22.085 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:22.109 I/StartupViewModel(31677): [STARTUP] Step 2 complete: server healthy at http://localhost:8080
+03-26 16:55:22.109 I/StartupViewModel(31677): [STARTUP] Server healthy - verify=11, prep=8, services=0
+03-26 16:55:22.111 I/SettingsViewModel(31677): [loadDisplaySettings] >>> Brightness preference loaded: DARK
+03-26 16:55:22.141 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:22.143 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:22.329 D/PythonRuntime(31677): [checkHealth] Exception: Failed to connect to localhost/127.0.0.1:8080
+03-26 16:55:22.337 I/MainActivity(31677): Network diagnostics completed
+03-26 16:55:23.743 D/PythonRuntime(31677): Prep step 7/8 completed
+03-26 16:55:23.743 D/MainActivity(31677): Prep step 7/8: [7/8] Hashing ciris_engine...
+03-26 16:55:24.365 D/PythonRuntime(31677): [checkHealth] Exception: Failed to connect to localhost/127.0.0.1:8080
+03-26 16:55:25.280 D/PythonRuntime(31677): Prep step 7/8 completed
+03-26 16:55:25.280 D/MainActivity(31677): Prep step 7/8: [7/8] ciris_engine: 686 files hashed
+03-26 16:55:25.286 D/PythonRuntime(31677): Prep step 8/8 completed
+03-26 16:55:25.286 D/MainActivity(31677): Prep step 8/8: [8/8] Hashing ciris_adapters...
+03-26 16:55:26.174 D/PythonRuntime(31677): Prep step 8/8 completed
+03-26 16:55:26.174 D/MainActivity(31677): Prep step 8/8: [8/8] ciris_adapters: 250 files hashed
+03-26 16:55:26.397 D/PythonRuntime(31677): [checkHealth] Exception: Failed to connect to localhost/127.0.0.1:8080
+03-26 16:55:26.501 D/MainActivity(31677): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 16:55:26.501 D/MainActivity(31677): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 16:55:26.502 D/MainActivity(31677): Verify: INFO: ciris_verify: [ciris_keyring::software] VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/user/0/ai.ciris.mobile.debug/files/ciris/data")
+03-26 16:55:26.503 D/MainActivity(31677): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/user/0/ai.ciris.mobile.debug/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+03-26 16:55:26.503 D/MainActivity(31677): Verify: INFO: ciris_verify: [ciris_keyring::platform::android] VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+03-26 16:55:27.329 D/PythonRuntime(31677): Service 1 started, total: 1/22
+03-26 16:55:27.329 D/MainActivity(31677): Service 1 started (1/22)
+03-26 16:55:27.329 D/PythonRuntime(31677): Service 1 started, total: 1/22
+03-26 16:55:27.329 D/MainActivity(31677): Service 1 started (1/22)
+03-26 16:55:27.330 D/PythonRuntime(31677): Service 2 started, total: 2/22
+03-26 16:55:27.330 D/MainActivity(31677): Service 2 started (2/22)
+03-26 16:55:27.330 D/PythonRuntime(31677): Service 2 started, total: 2/22
+03-26 16:55:27.330 D/MainActivity(31677): Service 2 started (2/22)
+03-26 16:55:27.330 D/PythonRuntime(31677): Service 3 started, total: 3/22
+03-26 16:55:27.330 D/MainActivity(31677): Service 3 started (3/22)
+03-26 16:55:27.330 D/PythonRuntime(31677): Service 3 started, total: 3/22
+03-26 16:55:27.330 D/MainActivity(31677): Service 3 started (3/22)
+03-26 16:55:27.378 D/PythonRuntime(31677): Service 4 started, total: 4/22
+03-26 16:55:27.378 D/MainActivity(31677): Service 4 started (4/22)
+03-26 16:55:27.378 D/PythonRuntime(31677): Service 4 started, total: 4/22
+03-26 16:55:27.378 D/MainActivity(31677): Service 4 started (4/22)
+03-26 16:55:27.407 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 4/22 started
+03-26 16:55:27.409 D/PythonRuntime(31677): Service 5 started, total: 5/22
+03-26 16:55:27.409 D/MainActivity(31677): Service 5 started (5/22)
+03-26 16:55:27.411 D/PythonRuntime(31677): Service 22 started, total: 6/22
+03-26 16:55:27.411 D/MainActivity(31677): Service 22 started (6/22)
+03-26 16:55:27.415 D/PythonRuntime(31677): Service 6 started, total: 7/22
+03-26 16:55:27.415 D/MainActivity(31677): Service 6 started (7/22)
+03-26 16:55:27.416 D/PythonRuntime(31677): Service 7 started, total: 8/22
+03-26 16:55:27.416 D/MainActivity(31677): Service 7 started (8/22)
+03-26 16:55:27.609 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 8/22 started
+03-26 16:55:28.116 D/PythonRuntime(31677): Service 15 started, total: 9/22
+03-26 16:55:28.116 D/MainActivity(31677): Service 15 started (9/22)
+03-26 16:55:28.126 D/PythonRuntime(31677): Service 13 started, total: 10/22
+03-26 16:55:28.126 D/MainActivity(31677): Service 13 started (10/22)
+03-26 16:55:28.140 D/PythonRuntime(31677): Service 9 started, total: 11/22
+03-26 16:55:28.140 D/MainActivity(31677): Service 9 started (11/22)
+03-26 16:55:28.181 D/PythonRuntime(31677): Service 14 started, total: 12/22
+03-26 16:55:28.181 D/MainActivity(31677): Service 14 started (12/22)
+03-26 16:55:28.215 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 12/22 started
+03-26 16:55:28.440 D/PythonRuntime(31677): [checkHealth] Exception: Failed to connect to localhost/127.0.0.1:8080
+03-26 16:55:29.781 D/PythonRuntime(31677): Service 8 started, total: 13/22
+03-26 16:55:29.781 D/MainActivity(31677): Service 8 started (13/22)
+03-26 16:55:29.877 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 13/22 started
+03-26 16:55:29.975 D/PythonRuntime(31677): Service 10 started, total: 14/22
+03-26 16:55:29.975 D/MainActivity(31677): Service 10 started (14/22)
+03-26 16:55:29.975 D/PythonRuntime(31677): Service 19 started, total: 15/22
+03-26 16:55:29.975 D/MainActivity(31677): Service 19 started (15/22)
+03-26 16:55:29.975 D/PythonRuntime(31677): Service 18 started, total: 16/22
+03-26 16:55:29.975 D/MainActivity(31677): Service 18 started (16/22)
+03-26 16:55:30.086 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 16/22 started
+03-26 16:55:30.109 D/PythonRuntime(31677): Service 11 started, total: 17/22
+03-26 16:55:30.109 D/MainActivity(31677): Service 11 started (17/22)
+03-26 16:55:30.110 D/PythonRuntime(31677): Service 16 started, total: 18/22
+03-26 16:55:30.110 D/MainActivity(31677): Service 16 started (18/22)
+03-26 16:55:30.110 D/PythonRuntime(31677): Service 21 started, total: 19/22
+03-26 16:55:30.110 D/MainActivity(31677): Service 21 started (19/22)
+03-26 16:55:30.110 D/PythonRuntime(31677): Service 20 started, total: 20/22
+03-26 16:55:30.110 D/MainActivity(31677): Service 20 started (20/22)
+03-26 16:55:30.110 D/PythonRuntime(31677): Service 12 started, total: 21/22
+03-26 16:55:30.110 D/MainActivity(31677): Service 12 started (21/22)
+03-26 16:55:30.110 D/PythonRuntime(31677): Service 17 started, total: 22/22
+03-26 16:55:30.110 D/MainActivity(31677): Service 17 started (22/22)
+03-26 16:55:30.290 I/StartupViewModel(31677): [STARTUP][SERVICE] Service 22/22 started
+03-26 16:55:30.291 I/StartupViewModel(31677): [STARTUP][SERVICE] All 22 services started
+03-26 16:55:30.291 I/StartupViewModel(31677): [STARTUP] Agent Runtime Ready! - displaying for 1.2s
+03-26 16:55:31.495 I/StartupViewModel(31677): [STARTUP] === Startup sequence complete ===
+03-26 16:55:31.514 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:31.517 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:31.566 D/CIRISApp(31677): [INFO] Startup READY, checking first-run status...
+03-26 16:55:31.566 I/StartupViewModel(31677): [TIMER] setKeepTimerAlive(true)
+03-26 16:55:31.567 I/StartupViewModel(31677): [STARTUP][STATUS] Checking setup status...
+03-26 16:55:31.580 I/CIRISApiClient(31677): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+03-26 16:55:31.850 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:55:32.028 I/CIRISApiClient(31677): [getSetupStatus] Setup status: required=false, firstRun=false, configExists=true
+03-26 16:55:32.029 I/StartupViewModel(31677): [TIMER] setKeepTimerAlive(false)
+03-26 16:55:32.030 D/CIRISApp(31677): [INFO] First run check result: false
+03-26 16:55:32.030 D/CIRISApp(31677): [INFO] Not first run, attempting to load and validate stored token
+03-26 16:55:32.030 I/StartupViewModel(31677): [STARTUP][STATUS] Authenticating...
+03-26 16:55:32.081 D/CIRISApp(31677): [INFO] Loaded stored token: ciris_ad...pzy8
+03-26 16:55:32.081 I/StartupViewModel(31677): [STARTUP][STATUS] Token loaded, checking validity...
+03-26 16:55:32.083 I/StartupViewModel(31677): [STARTUP][STATUS] Checking token expiry...
+03-26 16:55:32.084 W/TokenManager(31677): [getTokenExpiry] Invalid JWT format: expected 3 parts, got 1
+03-26 16:55:32.084 I/TokenManager(31677): [checkAndRefreshToken] Token check: expiry=null, remaining=nulls, minValid=300s
+03-26 16:55:32.085 W/TokenManager(31677): [checkAndRefreshToken] Could not parse token expiry - treating as expired
+03-26 16:55:32.086 I/TokenManager(31677): [attemptSilentRefresh] Attempting silent sign-in...
+03-26 16:55:32.086 I/MainActivity(31677): Silent Sign-In requested from CIRISApp
+03-26 16:55:32.090 I/MainActivity(31677): Found cached account: mooreericnyc@gmail.com
+03-26 16:55:32.108 I/MainActivity(31677): Silent Sign-In successful: mooreericnyc@gmail.com
+03-26 16:55:32.108 I/TokenManager(31677): [attemptSilentRefresh] Silent sign-in successful! provider=google
+03-26 16:55:32.109 I/TokenManager(31677): [handleNewToken] Processing new token (length: 1100, provider: google)
+03-26 16:55:32.110 I/TokenManager(31677): [handleNewToken] New token expiry: 1774563505 (1373s remaining)
+03-26 16:55:32.111 I/CIRISApp(31677):  OAuth ID token refreshed by TokenManager (provider=google), exchanging for CIRIS token
+03-26 16:55:32.111 I/CIRISApp(31677):  Token was refreshed, waiting for CIRIS token exchange...
+03-26 16:55:32.112 I/StartupViewModel(31677): [STARTUP][STATUS] Refreshing token...
+03-26 16:55:32.113 I/CIRISApiClient(31677): [nativeAuth] Attempting native auth: provider=google, userId=null
+03-26 16:55:32.113 I/CIRISApiClient(31677): [googleAuth] Attempting Google auth: userId=null, idToken=eyJhbGci...vqNg
+03-26 16:55:32.125 I/TokenManager(31677): [startPeriodicRefresh] Starting periodic refresh (interval: 45 minutes)
+03-26 16:55:33.131 I/StartupViewModel(31677): [STARTUP][STATUS] Token exchange... 1s
+03-26 16:55:33.301 I/CIRISApiClient(31677): [googleAuth] Google auth successful: userId=google:115300315355793131383, role=SYSTEM_ADMIN
+03-26 16:55:33.302 I/CIRISApp(31677):  Got CIRIS access token: ciris_ad...d6rE
+03-26 16:55:33.302 I/CIRISApiClient(31677): [setAccessToken] Setting access token: ciris_ad...d6rE, length=55
+03-26 16:55:33.303 I/CIRISApiClient(31677): [setAccessToken] Bearer token set on all API instances (13 APIs)
+03-26 16:55:33.303 I/MainActivity(31677): Token updated, setting on billing apiClient
+03-26 16:55:33.303 I/CIRISApiClient(31677): [setAccessToken] Setting access token: ciris_ad...d6rE, length=55
+03-26 16:55:33.304 I/CIRISApiClient(31677): [setAccessToken] Bearer token set on all API instances (13 APIs)
+03-26 16:55:33.304 I/CIRISApiClient(31677): [logTokenState] === TOKEN STATE DEBUG ===
+03-26 16:55:33.305 I/CIRISApiClient(31677): [logTokenState] accessToken present: true
+03-26 16:55:33.305 I/CIRISApiClient(31677): [logTokenState] accessToken preview: ciris_ad...d6rE
+03-26 16:55:33.305 I/CIRISApiClient(31677): [logTokenState] accessToken length: 55
+03-26 16:55:33.306 I/CIRISApiClient(31677): [logTokenState] authHeader() returns: Bearer <token>
+03-26 16:55:33.306 I/CIRISApiClient(31677): [logTokenState] =========================
+03-26 16:55:33.308 I/CIRISApp(31677):  Refreshed CIRIS token saved to secure storage
+03-26 16:55:33.308 I/CIRISApp(31677):  Writing OAuth ID token to .env for Python billing...
+03-26 16:55:33.310 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:55:33.310 I/EnvFileUpdater(31677): Read .env file (7416 bytes)
+03-26 16:55:33.312 I/EnvFileUpdater(31677): CIRIS proxy mode detected - updating OPENAI_API_KEY
+03-26 16:55:33.313 I/EnvFileUpdater(31677): Updated OPENAI_API_KEY
+03-26 16:55:33.313 I/EnvFileUpdater(31677): Updated CIRIS_BILLING_GOOGLE_ID_TOKEN
+03-26 16:55:33.314 I/EnvFileUpdater(31677): .env file updated (proxy mode: true)
+03-26 16:55:33.314 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:55:33.314 I/EnvFileUpdater(31677): Config reload signal written to /data/user/0/ai.ciris.mobile.debug/files/ciris/.config_reload
+03-26 16:55:33.314 I/CIRISApp(31677):  .env updated, .config_reload signal written
+03-26 16:55:33.315 I/CIRISApp(31677):  Waiting 1.5s for Python to reload billing token...
+03-26 16:55:34.166 I/StartupViewModel(31677): [STARTUP][STATUS] Token exchange... 2s
+03-26 16:55:34.816 I/CIRISApp(31677):  Python reload wait complete
+03-26 16:55:34.893 I/CIRISApp(31677):  Token exchange completed
+03-26 16:55:34.898 I/StartupViewModel(31677): [STARTUP][STATUS] Token exchange complete
+03-26 16:55:34.901 I/StartupViewModel(31677): [TIMER] setKeepTimerAlive(true)
+03-26 16:55:34.903 I/StartupViewModel(31677): [STARTUP][STATUS] Waiting for agent...
+03-26 16:55:34.988 I/CIRISApp(31677):  Agent state: WORK
+03-26 16:55:34.989 I/StartupViewModel(31677): [STARTUP][STATUS] Agent state: WORK
+03-26 16:55:34.989 I/CIRISApp(31677):  Agent reached WORK state!
+03-26 16:55:34.990 I/StartupViewModel(31677): [STARTUP][STATUS] Agent ready!
+03-26 16:55:35.492 I/StartupViewModel(31677): [TIMER] setKeepTimerAlive(false)
+03-26 16:55:35.494 I/CIRISApp(31677):  Triggering data load for ViewModels after token set
+03-26 16:55:35.495 I/BillingViewModel(31677): [loadBalance] Loading credit balance...
+03-26 16:55:35.506 I/CIRISApiClient(31677): [listAdapters] Listing adapters
+03-26 16:55:35.515 I/InteractViewModel(31677): [startPolling] Starting polling and SSE streams
+03-26 16:55:35.516 I/InteractViewModel(31677): [startStatusPolling] Starting status polling (fast until agent ready)
+03-26 16:55:35.524 I/InteractViewModel(31677): [startMessagePolling] Starting message polling (interval=3000ms)
+03-26 16:55:35.529 I/InteractViewModel(31677): [startHealthPolling] Starting health polling (fast until LLM ready)
+03-26 16:55:35.533 I/InteractViewModel(31677): [startTrustPendingPolling] Starting trust pending polling (interval=5000ms)
+03-26 16:55:35.534 I/InteractViewModel(31677): [startSseStream] Starting SSE reasoning stream
+03-26 16:55:35.538 I/InteractViewModel(31677): [fetchWalletStatus] Fetching adapters list to check wallet status
+03-26 16:55:35.539 I/CIRISApiClient(31677): [listAdapters] Listing adapters
+03-26 16:55:35.542 I/CIRISApp(31677):  Running boot-time attestation check...
+03-26 16:55:35.544 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:35.545 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:35.551 D/CIRISApp(31677): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+03-26 16:55:35.945 I/CIRISApiClient(31677): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-26 16:55:35.945 I/CIRISApiClient(31677): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-26 16:55:37.607 I/CIRISApp(31677):  Boot attestation: loaded=true, maxLevel=1, dns_us=true, dns_eu=true, https=true
+03-26 16:55:37.649 I/InteractViewModel(31677): [startStatusPolling] Agent ready with state: WORK
+03-26 16:55:37.649 I/InteractViewModel(31677): [startStatusPolling] Connection state changed: false -> true
+03-26 16:55:37.969 I/InteractViewModel(31677): [startSseStream] SSE connected
+03-26 16:55:37.975 I/InteractViewModel(31677): [fetchTrustStatus] Trust level changed: 0 -> 1
+03-26 16:55:37.976 I/InteractViewModel(31677): [fetchTrustStatus] Level pending changed: false -> true
+03-26 16:55:37.976 I/InteractViewModel(31677): [startTrustPendingPolling] Level pending=true, triggering device attestation automatically...
+03-26 16:55:37.977 I/MainActivity(31677): Device attestation requested
+03-26 16:55:37.977 I/CIRISApiClient(31677): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+03-26 16:55:38.037 I/CIRISApiClient(31677): [listAdapters] API response: total=5, running=5, adapters.size=5
+03-26 16:55:38.038 I/CIRISApiClient(31677): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+03-26 16:55:38.038 I/CIRISApiClient(31677): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+03-26 16:55:38.038 I/CIRISApiClient(31677): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+03-26 16:55:38.039 I/CIRISApiClient(31677): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+03-26 16:55:38.039 I/CIRISApiClient(31677): [listAdapters]   API adapter[4]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+03-26 16:55:38.040 I/AdaptersViewModel(31677): [fetchAdaptersInternal] Fetched 5 adapters (5 running), raw list size=5
+03-26 16:55:38.040 I/AdaptersViewModel(31677): [fetchAdaptersInternal]   [0] id=cirisverify_bootstrap, type=cirisverify, running=true
+03-26 16:55:38.040 I/AdaptersViewModel(31677): [fetchAdaptersInternal]   [1] id=wallet_bootstrap, type=wallet, running=true
+03-26 16:55:38.041 I/AdaptersViewModel(31677): [fetchAdaptersInternal]   [2] id=api_bootstrap, type=api, running=true
+03-26 16:55:38.041 I/AdaptersViewModel(31677): [fetchAdaptersInternal]   [3] id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+03-26 16:55:38.041 I/AdaptersViewModel(31677): [fetchAdaptersInternal]   [4] id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+03-26 16:55:38.042 I/AdaptersViewModel(31677): [fetchAdapters] First load complete
+03-26 16:55:38.058 I/CIRISApiClient(31677): [listAdapters] API response: total=5, running=5, adapters.size=5
+03-26 16:55:38.058 I/CIRISApiClient(31677): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+03-26 16:55:38.058 I/CIRISApiClient(31677): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+03-26 16:55:38.059 I/CIRISApiClient(31677): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+03-26 16:55:38.059 I/CIRISApiClient(31677): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+03-26 16:55:38.059 I/CIRISApiClient(31677): [listAdapters]   API adapter[4]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+03-26 16:55:38.060 I/InteractViewModel(31677): [fetchWalletStatus] Wallet adapter found: isRunning=true
+03-26 16:55:38.418 I/CIRISApiClient(31677): [getGraphData] <<< DONE in 2473ms (single API call)
+03-26 16:55:38.419 I/CIRISApiClient(31677): [getGraphData]     Nodes: 85 ({local=71, identity=14})
+03-26 16:55:38.420 I/CIRISApiClient(31677): [getGraphData]     Edges: 0 total, 0 visible
+03-26 16:55:38.420 I/CIRISApiClient(31677): [getGraphData]     Edge types: {}
+03-26 16:55:38.420 I/CIRISApiClient(31677): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-26 16:55:38.664 I/CIRISApiClient(31677): [getPlayIntegrityNonce] Got nonce: MqA65NWSAfg5oABRO2kw...
+03-26 16:55:38.671 I/BillingViewModel(31677): [loadBalance] Credit status loaded: hasCredit=true, creditsRemaining=428, freeUsesRemaining=0, dailyFreeUsesRemaining=1, planName=CIRIS Mobile
+03-26 16:55:38.672 I/BillingViewModel(31677): [loadBalance] Total credits calculated: 429
+03-26 16:55:38.730 I/InteractViewModel(31677): [startMessagePolling] First load complete
+03-26 16:55:38.880 I/InteractViewModel(31677): [startHealthPolling] LLM health ready: provider=other
+03-26 16:55:39.569 I/MainActivity(31677): Device attestation result: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+03-26 16:55:39.569 I/MainActivity(31677): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+03-26 16:55:39.569 I/MainActivity(31677):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+03-26 16:55:39.570 I/InteractViewModel(31677): [startTrustPendingPolling] Device attestation completed: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+03-26 16:55:39.570 I/InteractViewModel(31677): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+03-26 16:55:39.570 I/InteractViewModel(31677):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+03-26 16:55:41.610 I/InteractViewModel(31677): [startTrustPendingPolling] Trust status refreshed after device attestation
+03-26 16:55:41.851 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:55:45.173 D/CIRISApp(31677): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (83586075)
+03-26 16:55:45.174 I/InteractViewModel(31677): [setDeviceAttestationCallback] Device attestation callback SET
+03-26 16:55:45.269 I/SettingsViewModel(31677): [loadLlmConfig] Loading LLM configuration
+03-26 16:55:45.639 I/SettingsViewModel(31677): [loadLlmConfig] LLM config loaded from API: provider=other, isCirisProxy=true, model=default
+03-26 16:55:45.640 I/SettingsViewModel(31677): [loadLlmConfig] Configuration loaded successfully from API
+03-26 16:55:51.853 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:56:01.856 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:56:11.859 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:56:21.863 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:56:31.866 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-26 16:56:41.870 D/EnvFileUpdater(31677): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris

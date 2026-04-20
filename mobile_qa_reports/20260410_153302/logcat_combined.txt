@@ -1,0 +1,1158 @@
+--------- beginning of main
+04-10 15:19:44.877 I/CIRISApiClient(26001): [getWAStatus] Fetching WA status
+04-10 15:19:45.301 I/CIRISApiClient(26001): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:19:45.341 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:19:45.342 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:19:46.556 I/python.stdout(26001): [15:19:46.556] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_f0c9a5d0-a8b - created follow-up thought th_followup_th_follo_7216b600-d30
+04-10 15:19:46.568 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:19:46.568 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:19:47.502 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:19:47.829 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:20:27.308 W/chromium(26441): [WARNING:components/sync/engine/syncer_proto_util.cc:430] Error posting from syncer: Response Code (bogus on error): -1 Content-Length (bogus on error): -1 Server Status: CONNECTION_UNAVAILABLE
+04-10 15:20:27.309 W/chromium(26441): [WARNING:components/sync/engine/commit.cc:181] Post commit failed
+04-10 15:20:29.077 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:29.077 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:29.080 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:20:29.088 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:29.089 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:29.090 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:29.090 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:32.325 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:20:44.715 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:20:45.276 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:45.276 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:47.557 I/python.stdout(26001): [15:20:47.557] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_7216b600-d30 - created follow-up thought th_followup_th_follo_54ac5ae4-d63
+04-10 15:20:47.565 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:47.566 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:48.868 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:20:51.477 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:51.486 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:51.486 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:20:51.486 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:51.487 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:51.487 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:20:51.487 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:20:55.234 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.236 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.242 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.249 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.250 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.250 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.251 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.251 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.267 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.274 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:55.482 I/CIRISApiClient(26001): [getWAStatus] Fetching WA status
+04-10 15:20:55.848 I/CIRISApiClient(26001): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:20:55.999 W/chromium(30137): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:20:56.532 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:20:58.159 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.159 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.159 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.161 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.194 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.194 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.195 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.195 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.215 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.215 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.215 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.216 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.240 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.240 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.241 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:20:58.241 E/chromium(23367): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:21:00.313 E/chromium(26441): [ERROR:net/socket/ssl_client_socket_impl.cc:924] handshake failed; returned -1, SSL error code 1, net_error -103
+04-10 15:21:01.454 I/WebViewFactory(27889): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:21:02.446 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:02.447 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:02.873 I/python.stdout(26001): [15:21:02.873] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_54ac5ae4-d63 - created follow-up thought th_followup_th_follo_324f9516-1f2
+04-10 15:21:02.879 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:02.880 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:03.767 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:21:06.534 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:07.239 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:07.240 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:07.240 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:21:07.241 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:07.242 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:07.243 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:07.244 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:10.801 W/chromium(26441): [WARNING:components/sync/engine/syncer_proto_util.cc:430] Error posting from syncer: Response Code (bogus on error): -1 Content-Length (bogus on error): -1 Server Status: CONNECTION_UNAVAILABLE
+04-10 15:21:10.801 W/chromium(26441): [WARNING:components/sync/engine/commit.cc:181] Post commit failed
+04-10 15:21:16.535 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:18.033 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:18.034 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:18.556 I/python.stdout(26001): [15:21:18.556] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_324f9516-1f2 - created follow-up thought th_followup_th_follo_f1b814c7-430
+04-10 15:21:18.567 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:18.567 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:19.479 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:21:21.748 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:21.749 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:21.749 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:21:21.752 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:21.752 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:21.755 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:21.755 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:26.537 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:26.890 I/CIRISApiClient(26001): [getWAStatus] Fetching WA status
+04-10 15:21:27.333 I/CIRISApiClient(26001): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:21:33.356 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:33.356 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:34.044 I/python.stdout(26001): [15:21:34.044] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_f1b814c7-430 - created follow-up thought th_followup_th_follo_57874d32-aa3
+04-10 15:21:34.052 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:34.052 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:35.033 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:21:36.539 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:37.236 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:37.237 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:37.237 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:21:37.242 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:37.243 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:37.249 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:37.249 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:46.202 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:46.202 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:46.541 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:46.689 I/python.stdout(26001): [15:21:46.689] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_57874d32-aa3 - created follow-up thought th_followup_th_follo_494a1a2f-f03
+04-10 15:21:46.697 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:46.698 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:47.620 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:21:49.868 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:49.869 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:49.869 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:21:49.872 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:49.872 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:49.874 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:21:49.874 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:21:55.260 E/CIRISApiClient(26001): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...2uIc
+04-10 15:21:55.262 W/InteractViewModel(26001): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:55.269 E/CIRISApiClient(26001): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:55.947 E/CIRISApiClient(26001): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: url=http://localhost:8080
+04-10 15:21:56.544 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:21:57.344 E/CIRISApiClient(26001): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:57.346 W/InteractViewModel(26001): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:57.351 E/CIRISApiClient(26001): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:57.354 I/CIRISApiClient(26001): [getWAStatus] Fetching WA status
+04-10 15:21:57.358 E/CIRISApiClient(26001): [getWAStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:58.274 E/CIRISApiClient(26001): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...2uIc
+04-10 15:21:58.276 W/InteractViewModel(26001): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:21:58.282 E/CIRISApiClient(26001): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:22:00.961 E/CIRISApiClient(26001): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: url=http://localhost:8080
+04-10 15:22:01.294 E/CIRISApiClient(26001): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...2uIc
+04-10 15:22:01.296 W/InteractViewModel(26001): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:22:01.299 E/CIRISApiClient(26001): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+04-10 15:22:06.545 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:22:16.499 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:16.499 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:16.545 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:22:16.803 I/python.stdout(26001): [15:22:16.803] [DISPATCHER] Handler PonderHandler completed for action ponder on thought th_followup_th_follo_494a1a2f-f03 - created follow-up thought th_followup_th_follo_60b1282e-dff
+04-10 15:22:16.810 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:16.810 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:17.717 I/InteractViewModel(26001): [fetchAuditActions] Adding 1 action entries to timeline
+04-10 15:22:20.895 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:20.895 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:20.895 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:22:20.897 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:20.897 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:20.899 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:20.899 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:24.377 I/InteractViewModel(26001): [shutdown] Initiating shutdown: emergency=true
+04-10 15:22:24.378 W/InteractViewModel(26001): [shutdown] Emergency shutdown triggered
+04-10 15:22:24.378 W/CIRISApiClient(26001): [emergencyShutdown] Initiating EMERGENCY shutdown
+04-10 15:22:24.742 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:24.750 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:24.798 W/python.stderr(26001): ERROR:    Traceback (most recent call last):
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/runners.py", line 44, in run
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/base_events.py", line 636, in run_until_complete
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/base_events.py", line 603, in run_forever
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/base_events.py", line 1909, in _run_once
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/events.py", line 80, in _run
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/middleware/base.py", line 149, in coro
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/middleware/exceptions.py", line 62, in __call__
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/_exception_handler.py", line 51, in wrapped_app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 715, in __call__
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 735, in app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 288, in handle
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 76, in app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/_exception_handler.py", line 51, in wrapped_app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 73, in app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/fastapi/routing.py", line 301, in app
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/fastapi/routing.py", line 212, in run_endpoint_function
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/app/ciris_engine/logic/adapters/api/routes/system/shutdown.py", line 74, in shutdown_system
+04-10 15:22:24.798 W/python.stderr(26001):     await execute_shutdown(shutdown_service, runtime, body.force, safe_reason)
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/app/ciris_engine/logic/adapters/api/routes/system/helpers.py", line 677, in execute_shutdown
+04-10 15:22:24.798 W/python.stderr(26001):     await shutdown_service.emergency_shutdown(reason, timeout_seconds=5)
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/app/ciris_engine/logic/services/lifecycle/shutdown/service.py", line 295, in emergency_shutdown
+04-10 15:22:24.798 W/python.stderr(26001):     sys.exit(1)
+04-10 15:22:24.798 W/python.stderr(26001): SystemExit: 1
+04-10 15:22:24.798 W/python.stderr(26001): 
+04-10 15:22:24.798 W/python.stderr(26001): During handling of the above exception, another exception occurred:
+04-10 15:22:24.798 W/python.stderr(26001): 
+04-10 15:22:24.798 W/python.stderr(26001): Traceback (most recent call last):
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/starlette/routing.py", line 700, in lifespan
+04-10 15:22:24.798 W/python.stderr(26001):   File "/data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/uvicorn/lifespan/on.py", line 137, in receive
+04-10 15:22:24.798 W/python.stderr(26001):   File "stdlib/asyncio/queues.py", line 159, in get
+04-10 15:22:24.798 W/python.stderr(26001): asyncio.exceptions.CancelledError
+04-10 15:22:24.798 W/python.stderr(26001): 
+04-10 15:22:25.102 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:22:25.102 D/MainActivity(26001): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:22:26.550 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:22:32.597 D/CIRISApp(26001): [INFO] Opening Server Connection page from Local status badge
+04-10 15:22:32.610 D/CIRISApp(26001): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (105617214)
+04-10 15:22:32.610 I/InteractViewModel(26001): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:22:36.363 E/CIRISApiClient(26001): [getSystemStatus] Exception: HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/system/health, request_timeout=10000 ms] | Context: url=http://localhost:8080
+04-10 15:22:36.363 E/CIRISApiClient(26001): io.ktor.client.plugins.HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/system/health, request_timeout=10000 ms]
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at io.ktor.client.plugins.HttpTimeout$Plugin$install$1$1$killer$1.invokeSuspend(HttpTimeout.kt:165)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:111)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:99)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:585)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:802)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:706)
+04-10 15:22:36.363 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:693)
+04-10 15:22:36.553 D/EnvFileUpdater(26001): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:22:37.297 D/CIRISApp(26001): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (105617214)
+04-10 15:22:37.297 I/InteractViewModel(26001): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:22:37.300 D/CIRISApp(26001): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-10 15:22:37.342 I/CIRISApiClient(26001): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-10 15:22:37.342 I/CIRISApiClient(26001): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-10 15:22:37.368 E/CIRISApiClient(26001): [getLlmConfig] Exception: SocketTimeoutException: Socket timeout has expired [url=http://localhost:8080/v1/setup/config, socket_timeout=unknown] ms
+04-10 15:22:37.368 E/CIRISApiClient(26001): io.ktor.client.network.sockets.SocketTimeoutException: Socket timeout has expired [url=http://localhost:8080/v1/setup/config, socket_timeout=unknown] ms
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at io.ktor.client.plugins.HttpTimeoutKt.SocketTimeoutException(HttpTimeout.kt:239)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at io.ktor.client.engine.okhttp.OkUtilsKt.mapOkHttpException(OkUtils.kt:80)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at io.ktor.client.engine.okhttp.OkUtilsKt.access$mapOkHttpException(OkUtils.kt:1)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at io.ktor.client.engine.okhttp.OkHttpCallback.onFailure(OkUtils.kt:39)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:525)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1154)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:652)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at java.lang.Thread.run(Thread.java:1564)
+04-10 15:22:37.368 E/CIRISApiClient(26001): Caused by: java.net.SocketTimeoutException: timeout
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.SocketAsyncTimeout.newTimeoutException(JvmOkio.kt:146)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.AsyncTimeout.access$newTimeoutException(AsyncTimeout.kt:161)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.AsyncTimeout$source$1.read(AsyncTimeout.kt:339)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.RealBufferedSource.indexOf(RealBufferedSource.kt:430)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:323)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	... 3 more
+04-10 15:22:37.368 E/CIRISApiClient(26001): Caused by: java.net.SocketException: Socket closed
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at java.net.SocketInputStream.read(SocketInputStream.java:188)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at java.net.SocketInputStream.read(SocketInputStream.java:143)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.InputStreamSource.read(JvmOkio.kt:93)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	at okio.AsyncTimeout$source$1.read(AsyncTimeout.kt:128)
+04-10 15:22:37.368 E/CIRISApiClient(26001): 	... 20 more
+04-10 15:22:37.369 W/InteractViewModel(26001): [fetchHealthData] Failed to fetch LLM config from API: Socket timeout has expired [url=http://localhost:8080/v1/setup/config, socket_timeout=unknown] ms
+04-10 15:22:38.982 E/CIRISApiClient(26001): [getSystemStatus] Exception: HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/system/health, request_timeout=10000 ms] | Context: url=http://localhost:8080
+04-10 15:22:38.982 E/CIRISApiClient(26001): io.ktor.client.plugins.HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/system/health, request_timeout=10000 ms]
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at io.ktor.client.plugins.HttpTimeout$Plugin$install$1$1$killer$1.invokeSuspend(HttpTimeout.kt:165)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:104)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:111)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:99)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:585)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:802)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:706)
+04-10 15:22:38.982 E/CIRISApiClient(26001): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:693)
+04-10 15:22:38.983 E/InteractViewModel(26001): [startStatusPolling] Status poll failed: HttpRequestTimeoutException: Request timeout has expired [url=http://localhost:8080/v1/system/health, request_timeout=10000 ms]
+04-10 15:22:47.593 I/chromium(31411): [INFO:components/enterprise/browser/controller/chrome_browser_cloud_management_controller.cc:302] Deferring CBCM Controller Initialization until it is unblocked.
+04-10 15:22:47.671 W/chromium(31411): [WARNING:components/gcm_driver/instance_id/instance_id_android.cc:101] Non-zero TTL requested for InstanceID token, while TTLs are not supported by Android Firebase IID API.
+04-10 15:22:47.671 W/chromium(31411): [WARNING:components/gcm_driver/instance_id/instance_id_android.cc:101] Non-zero TTL requested for InstanceID token, while TTLs are not supported by Android Firebase IID API.
+04-10 15:22:47.673 W/chromium(31482): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:47.759 I/chromium(31482): [INFO:third_party/skia/src/gpu/vk/VulkanPreferredFeatures.cpp:435] WARNING: VulkanPreferredFeatures::addFeaturesToQuery() was not called
+04-10 15:22:47.759 I/chromium(31482): 
+04-10 15:22:47.759 I/chromium(31482): [INFO:third_party/skia/src/gpu/vk/VulkanPreferredFeatures.cpp:438] WARNING: VulkanPreferredFeatures::addFeaturesToEnable() was not called
+04-10 15:22:47.759 I/chromium(31482): 
+04-10 15:22:47.839 W/chromium(31450): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:47.909 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:47.911 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:47.979 W/chromium(31519): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:47.983 I/chromium(31411): [INFO:brave/components/brave_ads/core/internal/creatives/new_tab_page_ads/creative_new_tab_page_ads_util.cc:157] Successfully saved creative new tab page ads
+04-10 15:22:47.984 I/chromium(31411): [INFO:brave/components/brave_ads/core/internal/creatives/new_tab_page_ads/creative_new_tab_page_ads_util.cc:142] Successfully saved creative set conversions
+04-10 15:22:47.986 W/chromium(31518): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.034 W/chromium(31543): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.082 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:48.123 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:48.179 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:48.272 W/chromium(31604): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.284 W/chromium(31603): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.395 W/chromium(31411): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=31603)
+04-10 15:22:48.460 W/chromium(31645): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.477 W/chromium(31411): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=31604)
+04-10 15:22:48.531 W/chromium(31662): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:48.543 W/chromium(31411): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=31645)
+04-10 15:22:48.615 W/chromium(31411): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=31662)
+04-10 15:22:48.629 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:48.691 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:48.836 W/chromium(31680): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:22:49.344 W/chromium(31482): [WARNING:components/viz/service/frame_sinks/compositor_frame_sink_support.cc:1763] Surface SurfaceId(FrameSinkId(3, 3), LocalSurfaceId(9, 1, 0551...)) is destroyed while there is an outstanding CopyOutputRequest specificc for it.
+04-10 15:22:49.655 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:49.659 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:49.689 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:49.718 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:50.444 W/chromium(31411): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=31518)
+04-10 15:22:50.597 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:51.083 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:57.991 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:22:58.056 W/chromium(31411): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:23:47.662 I/WebViewFactory(31977): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:24:06.734 I/chromium(32283): [INFO:components/enterprise/browser/controller/chrome_browser_cloud_management_controller.cc:302] Deferring CBCM Controller Initialization until it is unblocked.
+04-10 15:24:06.769 W/chromium(32283): [WARNING:components/gcm_driver/instance_id/instance_id_android.cc:101] Non-zero TTL requested for InstanceID token, while TTLs are not supported by Android Firebase IID API.
+04-10 15:24:06.771 W/chromium(32283): [WARNING:components/gcm_driver/instance_id/instance_id_android.cc:101] Non-zero TTL requested for InstanceID token, while TTLs are not supported by Android Firebase IID API.
+04-10 15:24:06.771 W/chromium(32283): [WARNING:components/gcm_driver/instance_id/instance_id_android.cc:101] Non-zero TTL requested for InstanceID token, while TTLs are not supported by Android Firebase IID API.
+04-10 15:24:06.968 W/chromium(32374): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:06.980 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.061 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.063 W/chromium(32386): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:07.142 W/chromium(32411): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:07.178 I/chromium(32386): [INFO:third_party/skia/src/gpu/vk/VulkanPreferredFeatures.cpp:435] WARNING: VulkanPreferredFeatures::addFeaturesToQuery() was not called
+04-10 15:24:07.178 I/chromium(32386): 
+04-10 15:24:07.178 I/chromium(32386): [INFO:third_party/skia/src/gpu/vk/VulkanPreferredFeatures.cpp:438] WARNING: VulkanPreferredFeatures::addFeaturesToEnable() was not called
+04-10 15:24:07.178 I/chromium(32386): 
+04-10 15:24:07.240 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.336 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.444 E/chromium(32283): [ERROR:net/socket/socket_posix.cc:153] bind() failed: Address already in use (98)
+04-10 15:24:07.444 E/chromium(32283): [ERROR:net/socket/unix_domain_server_socket_posix.cc:88] Could not bind unix domain socket to chrome_devtools_remote (with abstract namespace): Address already in use (98)
+04-10 15:24:07.446 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.501 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:07.994 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:08.112 W/chromium(32283): [WARNING:chrome/browser/android/compositor/compositor_view.cc:385] Child process died (type=6) pid=32411)
+04-10 15:24:09.173 W/chromium(32514): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:09.186 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:09.503 W/chromium(32546): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:10.109 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:10.114 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:10.138 W/chromium(32569): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:10.282 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:12.238 W/chromium(32612): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:16.830 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:21.884 W/chromium(32283): [WARNING:net/cert/ev_root_ca_metadata.cc:118] Not implemented
+04-10 15:24:38.745 W/chromium(26356): [WARNING:android_webview/browser/network_service/net_helpers.cc:137] HTTP Cache size is: 20971520
+04-10 15:24:38.747 W/chromium(26356): [WARNING:android_webview/browser/cookie_manager.cc:401] Transferring cookies from provisional CookieManager to network service. For issues with the provisional CookieManager, see crbug.com/478873476.
+04-10 15:24:38.867 W/chromium(  647): [WARNING:content/app/android/content_main_android.cc:82] android_setCpu already initialized
+04-10 15:24:38.890 W/chromium(  647): [WARNING:content/child/runtime_features.cc:563] Fenced frames cannot be enabled in this configuration. Use --enable-features=FencedFrames instead.
+04-10 15:24:38.890 W/chromium(  647): [WARNING:content/child/runtime_features.cc:588] Topics cannot be enabled in this configuration. Use --enable-features=BrowsingTopics in addition.
+04-10 15:24:38.890 W/chromium(  647): [WARNING:content/child/runtime_features.cc:609] SharedStorage cannot be enabled in this configuration. Use --enable-features=SharedStorageAPI in addition.
+04-10 15:24:39.208 E/chromium(  647): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:24:39.208 E/chromium(  647): [ERROR:cc/tiles/tile_manager.cc:997] WARNING: tile memory limits exceeded, some content may not draw
+04-10 15:27:49.784 I/WebViewFactory( 2855): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:28:14.533 I/MainActivity( 3759): Initializing Python runtime...
+04-10 15:28:14.693 I/MainActivity( 3759): Python runtime started
+04-10 15:28:14.693 I/MainActivity( 3759): Localization resource loader initialized
+04-10 15:28:14.701 I/MainActivity( 3759): Google Sign-In initialized with client ID: 265882853697-l421ndo...
+04-10 15:28:14.701 I/MainActivity( 3759): Initializing Google Play Billing...
+04-10 15:28:14.702 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:28:14.705 I/MainActivity( 3759): Google Play Billing initialized
+04-10 15:28:14.706 I/MainActivity( 3759): Google Play Integrity initialized (via Python API)
+04-10 15:28:14.755 I/MainActivity( 3759): Showing CIRISApp immediately for startup animation
+04-10 15:28:14.755 I/MainActivity( 3759): Starting PythonRuntimeService...
+04-10 15:28:14.755 I/MainActivity( 3759): Running CIRIS network diagnostics...
+04-10 15:28:14.755 I/MainActivity( 3759): Starting logcat reader (generation 1)
+04-10 15:28:14.756 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:14.757 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:28:14.758 I/TokenManager( 3759): [setShared] Shared TokenManager instance set
+04-10 15:28:14.759 I/InteractViewModel( 3759): [init] InteractViewModel initialized (polling deferred until token available)
+04-10 15:28:14.759 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:14.760 I/InteractViewModel( 3759): [observeLanguageChanges] Starting language observation for pipeline localization
+04-10 15:28:14.760 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Loading live_background_enabled from secure storage...
+04-10 15:28:14.761 I/BillingViewModel( 3759): [init] BillingViewModel initialized
+04-10 15:28:14.781 I/CIRISApp( 3759): Test mode enabled on mobile — starting test automation server
+04-10 15:28:14.782 I/CIRISApp( 3759): Initializing localization...
+04-10 15:28:14.782 I/MainActivity( 3759): Setting purchase result callback
+04-10 15:28:14.790 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:14.791 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:14.799 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:14.799 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:14.814 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Raw value='null', parsed=true
+04-10 15:28:14.814 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Live background state set to: true
+04-10 15:28:14.820 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Color theme loaded: VAPOR
+04-10 15:28:14.822 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=true)
+04-10 15:28:14.822 I/CIRISApp( 3759): Initializing currency...
+04-10 15:28:14.822 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Brightness preference loaded: SYSTEM
+04-10 15:28:14.844 E/CIRISApiClient( 3759): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-10 15:28:14.844 E/CIRISApiClient( 3759): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1154)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:652)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.lang.Thread.run(Thread.java:1564)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): Caused by: java.net.ConnectException: failed to connect to localhost/127.0.0.1 (port 8080) from /127.0.0.1 (port 34650) after 5000ms: isConnected failed: ECONNREFUSED (Connection refused)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.isConnected(IoBridge.java:347)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.connectErrno(IoBridge.java:237)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.connect(IoBridge.java:179)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.PlainSocketImpl.socketConnect(PlainSocketImpl.java:142)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:390)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:230)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:212)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:436)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at java.net.Socket.connect(Socket.java:646)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	... 18 more
+04-10 15:28:14.844 E/CIRISApiClient( 3759): Caused by: android.system.ErrnoException: isConnected failed: ECONNREFUSED (Connection refused)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.isConnected(IoBridge.java:334)
+04-10 15:28:14.844 E/CIRISApiClient( 3759): 	... 28 more
+04-10 15:28:14.886 I/python.stdout( 3759): ============================================================
+04-10 15:28:14.886 I/python.stdout( 3759): PYDANTIC_CORE NATIVE LIBRARY SETUP
+04-10 15:28:14.886 I/python.stdout( 3759): ============================================================
+04-10 15:28:14.886 I/python.stdout( 3759): [1/6] Architecture: arm64-v8a (machine=aarch64)
+04-10 15:28:14.886 I/python.stdout( 3759): [2/6] Extract target: /data/data/ai.ciris.mobile/files/chaquopy/extract-packages
+04-10 15:28:14.888 I/python.stdout( 3759): [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+04-10 15:28:14.888 I/python.stdout( 3759): [4/6] No cached modules to clear
+04-10 15:28:14.888 I/python.stdout( 3759): [5/6] sys.path[0] = /data/data/ai.ciris.mobile/files/chaquopy/extract-packages
+04-10 15:28:14.888 I/python.stdout( 3759): [5/6] Installed PydanticCoreFinder at meta_path[0]
+04-10 15:28:14.888 I/python.stdout( 3759): [6/6] Testing native library load...
+04-10 15:28:14.891 I/python.stdout( 3759): [6/6] ctypes.CDLL: SUCCESS
+04-10 15:28:14.891 W/python.stderr( 3759): <frozen importlib._bootstrap>:914: ImportWarning: PydanticCoreFinder.find_spec() not found; falling back to find_module()
+04-10 15:28:14.891 W/python.stderr( 3759): <frozen importlib._bootstrap>:671: ImportWarning: PydanticCoreFinder.exec_module() not found; falling back to load_module()
+04-10 15:28:14.915 I/python.stdout( 3759): [6/6] import pydantic_core: SUCCESS (v2.23.4)
+04-10 15:28:14.915 I/python.stdout( 3759): [6/6] Location: /data/data/ai.ciris.mobile/files/chaquopy/extract-packages/pydantic_core/__init__.py
+04-10 15:28:14.915 I/python.stdout( 3759): ============================================================
+04-10 15:28:14.915 I/python.stdout( 3759): PYDANTIC_CORE READY
+04-10 15:28:14.915 I/python.stdout( 3759): ============================================================
+04-10 15:28:14.916 I/python.stdout( 3759): INFO: mobile_main: CIRIS Mobile - Full On-Device Runtime (LLM Remote)
+04-10 15:28:15.111 D/MainActivity( 3759): Prep step 1/6: [1/6] Architecture: arm64-v8a (machine=aarch64)
+04-10 15:28:15.111 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:15.111 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:15.111 D/MainActivity( 3759): Prep step 2/6: [2/6] Extract target: /data/data/ai.ciris.mobile/files/chaquopy/extract-packages
+04-10 15:28:15.111 D/MainActivity( 3759): Prep step 3/6: [3/6] Found existing .so: _pydantic_core.cpython-310-aarch64-linux-android.so
+04-10 15:28:15.111 D/MainActivity( 3759): Prep step 4/6: [4/6] No cached modules to clear
+04-10 15:28:15.112 D/MainActivity( 3759): Prep step 5/6: [5/6] sys.path[0] = /data/data/ai.ciris.mobile/files/chaquopy/extract-packages
+04-10 15:28:15.112 D/MainActivity( 3759): Prep step 5/6: [5/6] Installed PydanticCoreFinder at meta_path[0]
+04-10 15:28:15.112 D/MainActivity( 3759): Prep step 6/6: [6/6] Testing native library load...
+04-10 15:28:15.112 D/MainActivity( 3759): Prep step 6/6: [6/6] ctypes.CDLL: SUCCESS
+04-10 15:28:15.113 D/MainActivity( 3759): Prep step 6/6: [6/6] import pydantic_core: SUCCESS (v2.23.4)
+04-10 15:28:15.113 D/MainActivity( 3759): Prep step 6/6: [6/6] Location: /data/data/ai.ciris.mobile/files/chaquopy/extract-packages/pydantic_core/__init__.py
+04-10 15:28:15.538 I/MainActivity( 3759): Network diagnostics completed
+04-10 15:28:15.806 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.constants: [ACCORD] Loaded accord_1.2b_POLYGLOT.txt: 63819 chars
+04-10 15:28:15.807 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.constants: [ACCORD] ACCORD_TEXT ready: 63819 chars total
+04-10 15:28:15.807 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.constants: [ACCORD] Loaded accord_1.2b_POLYGLOT_compressed.txt: 7338 chars
+04-10 15:28:15.807 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.constants: [ACCORD] Active mode: compressed (set via CIRIS_ACCORD_MODE env var)
+04-10 15:28:15.807 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.constants: [ACCORD] Using compressed polyglot (~7338 chars) for system prompts
+04-10 15:28:16.239 W/python.stderr( 3759): stdlib/enum.py:289: DeprecationWarning: FUNCTIONS is deprecated and will be removed in future versions
+04-10 15:28:16.468 I/python.stdout( 3759): INFO: ciris_engine.logic.utils.path_resolution: [path_resolution] CIRIS_HOME configured: /data/data/ai.ciris.mobile/files/ciris (platform: Android, os: linux)
+04-10 15:28:16.468 I/python.stdout( 3759): INFO: mobile_main: Android paths: CIRIS_HOME=/data/data/ai.ciris.mobile/files/ciris, data=/data/data/ai.ciris.mobile/files/ciris/data, logs=/data/data/ai.ciris.mobile/files/ciris/logs
+04-10 15:28:16.468 I/python.stdout( 3759): INFO: mobile_main: Loading configuration from /data/data/ai.ciris.mobile/files/ciris/.env
+04-10 15:28:16.472 I/python.stdout( 3759): INFO: mobile_main: Loaded .env - OPENAI_API_KEY set: True
+04-10 15:28:16.472 I/python.stdout( 3759): INFO: mobile_main: Loaded .env - OPENAI_API_BASE: https://llm01.ciris-services-1.ai/v1
+04-10 15:28:16.472 I/python.stdout( 3759): INFO: mobile_main: Verifying code integrity (parallel with imports)...
+04-10 15:28:16.475 I/python.stdout( 3759): [7/8] Hashing ciris_engine...
+04-10 15:28:16.476 D/MainActivity( 3759): Prep step 7/8: [7/8] Hashing ciris_engine...
+04-10 15:28:17.614 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: ar (explicit=true)
+04-10 15:28:17.627 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:17.628 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:17.755 W/python.stderr( 3759): /data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_fields.py:132: UserWarning: Field "model_used" in ResourceCost has conflict with protected namespace "model_".
+04-10 15:28:17.755 W/python.stderr( 3759): 
+04-10 15:28:17.755 W/python.stderr( 3759): You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+04-10 15:28:18.721 I/python.stdout( 3759): [7/8] ciris_engine: 702 files hashed
+04-10 15:28:18.722 I/python.stdout( 3759): [8/8] Hashing ciris_adapters...
+04-10 15:28:18.723 D/MainActivity( 3759): Prep step 7/8: [7/8] ciris_engine: 702 files hashed
+04-10 15:28:18.724 D/MainActivity( 3759): Prep step 8/8: [8/8] Hashing ciris_adapters...
+04-10 15:28:18.727 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:18.728 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:18.771 I/python.stdout( 3759): [8/8] ciris_adapters: 256 files hashed
+04-10 15:28:18.772 I/python.stdout( 3759): INFO: mobile_main: Code integrity check: 958/958 files hashed, total_hash=5b10bb9f9d153791...
+04-10 15:28:18.773 D/MainActivity( 3759): Prep step 8/8: [8/8] ciris_adapters: 256 files hashed
+04-10 15:28:18.776 I/python.stdout( 3759): INFO: mobile_main: Saved 958 module hashes to /data/data/ai.ciris.mobile/files/ciris/startup_python_hashes.json
+04-10 15:28:18.777 I/python.stdout( 3759): INFO: mobile_main: Code integrity verified: 958 modules, hash=5b10bb9f9d153791...
+04-10 15:28:18.777 I/python.stdout( 3759): INFO: mobile_main: Starting CIRIS on-device runtime...
+04-10 15:28:18.777 I/python.stdout( 3759): INFO: mobile_main: API endpoint: http://0.0.0.0:8080 (binding all interfaces)
+04-10 15:28:18.777 I/python.stdout( 3759): INFO: mobile_main: LLM endpoint: https://llm01.ciris-services-1.ai/v1
+04-10 15:28:18.798 I/python.stdout( 3759): INFO: mobile_main: Using Android config - CIRIS_HOME: /data/data/ai.ciris.mobile/files/ciris, data_dir: /data/data/ai.ciris.mobile/files/ciris/data
+04-10 15:28:18.800 I/python.stdout( 3759): INFO: mobile_main: Bootstrap adapters: ['api'] - additional adapters loaded from graph/resume
+04-10 15:28:18.801 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.bootstrap_helpers: [BOOTSTRAP] identity_update=False, template_name=None
+04-10 15:28:18.869 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'ciris_verify' from modular adapters
+04-10 15:28:18.873 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.base: Initializing service: CIRISVerifyAdapter
+04-10 15:28:18.873 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: ciris_verify
+04-10 15:28:19.097 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'wallet' from modular adapters
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.base: Initializing service: WalletAdapter
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_adapters.wallet.tool_service: WalletToolService initialized with providers: []
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: wallet
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters: Successfully loaded adapter for mode 'api' from core adapters
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.base: Initializing service: ApiPlatform
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] kwargs keys: ['adapter_config']
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config in kwargs: True
+04-10 15:28:19.098 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] adapter_config value: {'host': '0.0.0.0', 'port': 8080, 'cors_enabled': True, 'cors_origins': ['*'], 'cors_allow_credentials': False, 'max_request_size': 1048576, 'request_timeout': 30.0, 'enable_swagger': True, 'enable_redoc': True, 'rate_limit_enabled': True, 'rate_limit_per_minute': 60, 'auth_enabled': True, 'interaction_timeout': 55.0, 'proxy_path': '', 'agent_id': ''}, type: <class 'dict'>
+04-10 15:28:19.099 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.api.adapter: [API_ADAPTER_INIT] Created APIAdapterConfig from dict, port=8080
+04-10 15:28:19.099 I/python.stdout( 3759): [STARTUP] Creating API application...
+04-10 15:28:19.099 I/python.stdout( 3759): [STARTUP] Configuring middleware...
+04-10 15:28:19.099 I/python.stdout( 3759): Rate limiting enabled: 60 requests per minute
+04-10 15:28:19.099 I/python.stdout( 3759): [STARTUP] Initializing runtime state...
+04-10 15:28:19.205 I/python.stdout( 3759): [STARTUP] Registering API routes...
+04-10 15:28:19.850 E/CIRISApiClient( 3759): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-10 15:28:19.850 E/CIRISApiClient( 3759): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1154)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:652)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.lang.Thread.run(Thread.java:1564)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): Caused by: java.net.ConnectException: failed to connect to localhost/127.0.0.1 (port 8080) from /127.0.0.1 (port 33502) after 5000ms: isConnected failed: ECONNREFUSED (Connection refused)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.isConnected(IoBridge.java:347)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.connectErrno(IoBridge.java:237)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.connect(IoBridge.java:179)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.PlainSocketImpl.socketConnect(PlainSocketImpl.java:142)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:390)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:230)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:212)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:436)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at java.net.Socket.connect(Socket.java:646)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	... 18 more
+04-10 15:28:19.850 E/CIRISApiClient( 3759): Caused by: android.system.ErrnoException: isConnected failed: ECONNREFUSED (Connection refused)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	at libcore.io.IoBridge.isConnected(IoBridge.java:334)
+04-10 15:28:19.850 E/CIRISApiClient( 3759): 	... 28 more
+04-10 15:28:19.974 I/python.stdout( 3759): [STARTUP] Routes registered successfully
+04-10 15:28:19.976 I/python.stdout( 3759): ℹ️  API-only mode - use CIRIS Desktop app to connect
+04-10 15:28:19.976 I/python.stdout( 3759): [STARTUP] API application ready
+04-10 15:28:19.976 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.base: Initializing service: APIRuntimeControlService
+04-10 15:28:19.976 I/python.stdout( 3759): INFO: ciris_engine.logic.adapters.api.adapter: API adapter initialized - host: 0.0.0.0, port: 8080
+04-10 15:28:19.977 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.bootstrap_helpers: Successfully loaded adapter: api
+04-10 15:28:19.977 I/python.stdout( 3759): INFO: mobile_main: Initializing CIRIS services...
+04-10 15:28:19.977 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: Initializing CIRIS Runtime...
+04-10 15:28:19.978 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: Development environment - setting up directories...
+04-10 15:28:19.995 I/python.stdout( 3759): ✓ Database exclusive access confirmed: /data/data/ai.ciris.mobile/files/ciris/data/ciris_engine.db
+04-10 15:28:19.996 I/python.stdout( 3759): ✓ All directories and critical files successfully configured
+04-10 15:28:19.996 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Initializing infrastructure services...
+04-10 15:28:19.996 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: Checking first-run status...
+04-10 15:28:19.997 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: Running in INSTALLED mode (git repo: False)
+04-10 15:28:19.997 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: CIRIS_FORCE_FIRST_RUN env var: None
+04-10 15:28:19.997 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: Android mode: checking /data/data/ai.ciris.mobile/files/ciris/.env
+04-10 15:28:19.997 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: Checking config paths: ['/data/data/ai.ciris.mobile/files/ciris/.env']
+04-10 15:28:19.997 I/python.stdout( 3759): INFO: ciris_engine.logic.setup.first_run: Found configured .env at /data/data/ai.ciris.mobile/files/ciris/.env - NOT first run
+04-10 15:28:19.997 I/python.stdout( 3759): WARNING: ciris_engine.logic.runtime.startup_logging: [SERVICES] === FULL-STARTUP PHASE ===
+04-10 15:28:19.997 I/python.stdout( 3759): [SERVICES] === FULL-STARTUP PHASE ===
+04-10 15:28:19.998 I/python.stdout( 3759): INFO: ciris_engine.services.TimeService: TimeService started successfully
+04-10 15:28:19.998 I/python.stdout( 3759): WARNING: ciris_engine.logic.runtime.startup_logging: [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+04-10 15:28:19.998 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 1/22] TimeService STARTED
+04-10 15:28:19.998 I/python.stdout( 3759): INFO: ciris_engine.services.ShutdownService: ShutdownService started successfully
+04-10 15:28:19.998 I/python.stdout( 3759): WARNING: ciris_engine.logic.runtime.startup_logging: [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+04-10 15:28:19.998 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 2/22] ShutdownService STARTED
+04-10 15:28:19.998 I/python.stdout( 3759): INFO: ciris_engine.services.InitializationService: InitializationService started successfully
+04-10 15:28:19.998 I/python.stdout( 3759): WARNING: ciris_engine.logic.runtime.startup_logging: [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+04-10 15:28:19.998 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 3/22] InitializationService STARTED
+04-10 15:28:20.004 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.service_initializer: Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)
+04-10 15:28:20.004 D/MainActivity( 3759): Service 1 started (1/22)
+04-10 15:28:20.005 D/MainActivity( 3759): Service 1 started (1/22)
+04-10 15:28:20.006 D/MainActivity( 3759): Service 2 started (2/22)
+04-10 15:28:20.007 D/MainActivity( 3759): Service 2 started (2/22)
+04-10 15:28:20.008 D/MainActivity( 3759): Service 3 started (3/22)
+04-10 15:28:20.008 D/MainActivity( 3759): Service 3 started (3/22)
+04-10 15:28:20.011 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:20.012 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:20.037 I/python.stdout( 3759): INFO: ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider: [BILLING_PROVIDER] Started:
+04-10 15:28:20.037 I/python.stdout( 3759):   base_url: https://billing1.ciris-services-1.ai
+04-10 15:28:20.037 I/python.stdout( 3759):   auth_mode: JWT (Google ID token)
+04-10 15:28:20.037 I/python.stdout( 3759):   token_length: 1100 chars
+04-10 15:28:20.037 I/python.stdout( 3759):   has_refresh_callback: False
+04-10 15:28:20.037 I/python.stdout( 3759):   cache_ttl: 15s
+04-10 15:28:20.037 I/python.stdout( 3759):   fail_open: False
+04-10 15:28:20.037 I/python.stdout( 3759): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService: Started scheduled task with interval 1.0s
+04-10 15:28:20.037 I/python.stdout( 3759): INFO: ciris_engine.services.ResourceMonitorService: ResourceMonitorService started successfully
+04-10 15:28:20.037 I/python.stdout( 3759): WARNING: ciris_engine.logic.runtime.startup_logging: [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+04-10 15:28:20.037 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 4/22] ResourceMonitor STARTED
+04-10 15:28:20.037 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Infrastructure services initialized
+04-10 15:28:20.037 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Got initialization service: <ciris_engine.logic.services.lifecycle.initialization.service.InitializationService object at 0x6be72c6e00>
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Registering initialization steps...
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Steps registered
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.runtime.ciris_runtime: [initialize] Running initialization sequence...
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: CIRIS Agent Initialization Sequence Starting
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ============================================================
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Registered 13 steps across 8 phases
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: [InitializationService] Executing phase infrastructure with 1 steps
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: Phase: INFRASTRUCTURE
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: ------------------------------------------------------------
+04-10 15:28:20.038 I/python.stdout( 3759): INFO: ciris_engine.logic.services.lifecycle.initialization.service: → Initialize Infrastructure Services...
+04-10 15:28:20.040 D/MainActivity( 3759): Service 4 started (4/22)
+04-10 15:28:20.040 D/MainActivity( 3759): Service 4 started (4/22)
+04-10 15:28:20.052 I/python.stdout( 3759): 
+04-10 15:28:20.052 I/python.stdout( 3759): ================================================================================
+04-10 15:28:20.052 I/python.stdout( 3759): 🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: /data/data/ai.ciris.mobile/files/ciris/logs/ciris_agent_20260410_202820.log
+04-10 15:28:20.052 I/python.stdout( 3759): 🔗 Symlinked to: /data/data/ai.ciris.mobile/files/ciris/logs/latest.log
+04-10 15:28:20.052 I/python.stdout( 3759): ⚠️  Incident capture: /data/data/ai.ciris.mobile/files/ciris/logs/incidents_latest.log (WARNING/ERROR messages captured as incidents)
+04-10 15:28:20.052 I/python.stdout( 3759): ================================================================================
+04-10 15:28:20.052 I/python.stdout( 3759): 
+04-10 15:28:20.067 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 5/22] SecretsService STARTED
+04-10 15:28:20.069 D/MainActivity( 3759): Service 5 started (5/22)
+04-10 15:28:20.069 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 22/22] SecretsToolService STARTED
+04-10 15:28:20.071 D/MainActivity( 3759): Service 22 started (6/22)
+04-10 15:28:20.075 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 6/22] MemoryService STARTED
+04-10 15:28:20.075 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 7/22] ConfigService STARTED
+04-10 15:28:20.076 D/MainActivity( 3759): Service 6 started (7/22)
+04-10 15:28:20.077 D/MainActivity( 3759): Service 7 started (8/22)
+04-10 15:28:20.752 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 15/22] AuthenticationService STARTED
+04-10 15:28:20.754 D/MainActivity( 3759): Service 15 started (9/22)
+04-10 15:28:20.764 I/python.stdout( 3759): [FULL-STARTUP] [SERVICE 13/22] WiseAuthority STARTED
+04-10 15:28:20.765 D/MainActivity( 3759): Service 13 started (10/22)
+04-10 15:28:20.775 I/python.stdout( 3759): [SERVICES] === RESUME (12 remaining services) PHASE ===
+04-10 15:28:20.785 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 9/22] TelemetryService STARTED
+04-10 15:28:20.786 D/MainActivity( 3759): Service 9 started (11/22)
+04-10 15:28:20.800 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_ffi: VERIFY Creating Ed25519 signer - environment snapshot, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data"), ciris_key_path=None, current_dir=Some("/")
+04-10 15:28:20.800 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::new - initializing, alias=agent_signing, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data"), ciris_key_path=None
+04-10 15:28:20.800 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY HardwareWrappedEd25519Signer::new - initializing hardware wrapper, alias=agent_signing, wrapper_alias=agent_signing_aes_wrapper, key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", key_dir="/data/data/ai.ciris.mobile/files/ciris/data", prefer_strongbox=false, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:20.800 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY Attempting to load hardware-backed Ed25519 key..., ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:20.800 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:20.807 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:20.807 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_ffi: VERIFY Ed25519 signer initialized
+04-10 15:28:20.808 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:20.808 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:20.808 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:20.814 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:20.814 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:20.814 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:20.816 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:20.816 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:20.823 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY ATTESTATION STARTING: Full attestation with network+integrity checks
+04-10 15:28:20.824 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 14/22] LLMService STARTED
+04-10 15:28:20.824 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 1/2 STARTING: Parallel manifest fetch + validation (5 network calls)
+04-10 15:28:20.825 D/MainActivity( 3759): Service 14 started (12/22)
+04-10 15:28:20.825 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/5 STARTING: Binary manifest fetch
+04-10 15:28:20.829 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:20.829 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:20.924 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/5 COMPLETE: OK (10 targets)
+04-10 15:28:20.924 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/5 STARTING: Function manifest fetch
+04-10 15:28:20.950 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/5 COMPLETE: OK (48 functions)
+04-10 15:28:20.951 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/5 STARTING: Agent build record fetch
+04-10 15:28:21.028 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/5 COMPLETE: OK (1547 files)
+04-10 15:28:21.029 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/5 STARTING: Source validation (DNS US + EU + HTTPS)
+04-10 15:28:21.280 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/5 COMPLETE: 3/3 sources reachable
+04-10 15:28:21.281 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/5 STARTING: Registry key verification
+04-10 15:28:21.305 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/5 COMPLETE: active
+04-10 15:28:21.306 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 1/2 COMPLETE: All network fetches done
+04-10 15:28:21.306 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 2/2 STARTING: Local verification (6 checks)
+04-10 15:28:21.306 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/6 STARTING: Self-verification (binary + functions)
+04-10 15:28:21.357 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/6 COMPLETE: OK (binary=✓, functions=48/48)
+04-10 15:28:21.357 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/6 STARTING: File integrity check
+04-10 15:28:21.525 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/6 COMPLETE: FAILED (full=1488/1547)
+04-10 15:28:21.525 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/6 STARTING: Module integrity check
+04-10 15:28:21.727 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/6 COMPLETE: OK (1488/1547 verified)
+04-10 15:28:21.727 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/6 STARTING: Source validation analysis
+04-10 15:28:21.728 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/6 COMPLETE: 3/3 sources valid (status=AllSourcesAgree)
+04-10 15:28:21.728 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/6 STARTING: Python module integrity
+04-10 15:28:21.729 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/6 COMPLETE: OK (958/958 modules passed)
+04-10 15:28:21.729 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 6/6 STARTING: Audit trail verification
+04-10 15:28:21.729 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 6/6 COMPLETE: SKIP (no entries provided)
+04-10 15:28:21.730 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 2/2 COMPLETE: All local checks done
+04-10 15:28:21.730 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY BASELINE SET: binary=true, functions=true, file_integrity=true, python=true
+04-10 15:28:21.731 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY ATTESTATION COMPLETE: level=1, valid=true, checks=7/7, time=905ms
+04-10 15:28:21.734 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:21.734 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:21.734 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:21.736 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:21.736 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:21.794 I/python.stdout( 3759): VERIFY Unified attestation complete, valid=true, level=1, level_pending=true, checks_passed=5, checks_total=5
+04-10 15:28:21.796 D/MainActivity( 3759): Verify: VERIFY Unified attestation complete, valid=true, level=1, level_pending=true, checks_passed=5, checks_total=5
+04-10 15:28:22.396 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:22.397 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:22.398 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:22.406 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:22.406 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:22.422 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:22.422 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:22.425 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 8/22] AuditService STARTED
+04-10 15:28:22.428 D/MainActivity( 3759): Service 8 started (13/22)
+04-10 15:28:22.447 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 10/22] IncidentManagement STARTED
+04-10 15:28:22.449 D/MainActivity( 3759): Service 10 started (14/22)
+04-10 15:28:22.462 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 19/22] AdaptiveFilter STARTED
+04-10 15:28:22.468 D/MainActivity( 3759): Service 19 started (15/22)
+04-10 15:28:22.468 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 18/22] TaskScheduler STARTED
+04-10 15:28:22.470 D/MainActivity( 3759): Service 18 started (16/22)
+04-10 15:28:22.588 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 11/22] TSDBConsolidation STARTED
+04-10 15:28:22.589 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 16/22] DatabaseMaintenance STARTED
+04-10 15:28:22.590 D/MainActivity( 3759): Service 11 started (17/22)
+04-10 15:28:22.591 D/MainActivity( 3759): Service 16 started (18/22)
+04-10 15:28:22.639 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 21/22] SelfObservation STARTED
+04-10 15:28:22.641 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 20/22] VisibilityService STARTED
+04-10 15:28:22.641 D/MainActivity( 3759): Service 21 started (19/22)
+04-10 15:28:22.641 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 12/22] ConsentService STARTED
+04-10 15:28:22.642 D/MainActivity( 3759): Service 20 started (20/22)
+04-10 15:28:22.642 D/MainActivity( 3759): Service 12 started (21/22)
+04-10 15:28:22.649 I/python.stdout( 3759): [RESUME (12 remaining services)] [SERVICE 17/22] RuntimeControl STARTED
+04-10 15:28:22.651 D/MainActivity( 3759): Service 17 started (22/22)
+04-10 15:28:22.676 I/python.stdout( 3759): [CONSOLIDATOR] Checking for missed windows...
+04-10 15:28:23.177 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:23.177 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:23.177 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:23.179 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:23.179 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:23.179 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris/data")
+04-10 15:28:23.287 W/python.stderr( 3759): /data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
+04-10 15:28:23.336 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: bn (explicit=true)
+04-10 15:28:23.346 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:23.346 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:23.904 I/python.stdout( 3759): [STARTUP] Checking port 8080 availability...
+04-10 15:28:23.905 I/python.stdout( 3759): [STARTUP] Binding to port 8080...
+04-10 15:28:23.909 I/python.stdout( 3759): [STARTUP] Starting server...
+04-10 15:28:23.933 I/python.stdout( 3759): [CONSOLIDATOR] Complete - no missed periods
+04-10 15:28:23.934 I/python.stdout( 3759): Starting CIRIS API...
+04-10 15:28:24.783 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:24.910 I/python.stdout( 3759): [STARTUP] API server listening on port 8080
+04-10 15:28:24.910 I/python.stdout( 3759): [STARTUP] Server ready for connections
+04-10 15:28:25.025 I/python.stdout( 3759): [SETUP_COMPLETE] ✅ Founding partnership created: consent/wa-2026-04-10-17C5B6 (PARTNERED)
+04-10 15:28:25.110 W/python.stderr( 3759): /data/data/ai.ciris.mobile/files/chaquopy/AssetFinder/requirements/pydantic/main.py:390: UserWarning: Pydantic serializer warnings:
+04-10 15:28:25.110 W/python.stderr( 3759):   Expected `dict[str, nullable]` but got `AdapterConfig` with value `AdapterConfig(adapter_typ...{}, adapter_config=None)` - serialized value may not be as expected
+04-10 15:28:25.839 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: my (explicit=true)
+04-10 15:28:25.849 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:25.850 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:28.343 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: zh (explicit=true)
+04-10 15:28:28.352 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:28.354 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:29.619 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:29.619 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:30.425 I/python.stdout( 3759): [15:28:30.425] [STATE] Transition: shutdown -> work
+04-10 15:28:30.847 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=true)
+04-10 15:28:30.852 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:30.853 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:32.770 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:32.771 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:32.791 D/CIRISApp( 3759): [INFO] Startup READY, checking first-run status...
+04-10 15:28:32.797 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:28:32.840 I/CIRISApiClient( 3759): [getSetupStatus] Setup status: required=false, firstRun=false, configExists=true
+04-10 15:28:32.842 D/CIRISApp( 3759): [INFO] First run check result: false
+04-10 15:28:32.842 D/CIRISApp( 3759): [INFO] Not first run, attempting to load and validate stored token
+04-10 15:28:32.894 D/CIRISApp( 3759): [INFO] Loaded stored token: ciris_ad...2uIc
+04-10 15:28:32.895 W/TokenManager( 3759): [getTokenExpiry] Invalid JWT format: expected 3 parts, got 1
+04-10 15:28:32.896 I/TokenManager( 3759): [checkAndRefreshToken] Token check: expiry=null, remaining=nulls, minValid=300s
+04-10 15:28:32.896 W/TokenManager( 3759): [checkAndRefreshToken] Could not parse token expiry - treating as expired
+04-10 15:28:32.896 I/TokenManager( 3759): [attemptSilentRefresh] Attempting silent sign-in...
+04-10 15:28:32.897 I/MainActivity( 3759): Silent Sign-In requested from CIRISApp
+04-10 15:28:32.899 I/MainActivity( 3759): Found cached account: mooreericnyc@gmail.com
+04-10 15:28:32.900 I/MainActivity( 3759): Silent Sign-In successful: mooreericnyc@gmail.com
+04-10 15:28:32.900 I/TokenManager( 3759): [attemptSilentRefresh] Silent sign-in successful! provider=google
+04-10 15:28:32.900 I/TokenManager( 3759): [handleNewToken] Processing new token (length: 1100, provider: google)
+04-10 15:28:32.901 I/TokenManager( 3759): [handleNewToken] New token expiry: 1775854928 (2016s remaining)
+04-10 15:28:32.901 I/CIRISApp( 3759):  OAuth ID token refreshed by TokenManager (provider=google), exchanging for CIRIS token
+04-10 15:28:32.901 I/CIRISApp( 3759):  Token was refreshed, waiting for CIRIS token exchange...
+04-10 15:28:32.902 I/CIRISApiClient( 3759): [nativeAuth] Attempting native auth: provider=google, userId=null
+04-10 15:28:32.902 I/CIRISApiClient( 3759): [googleAuth] Attempting Google auth: userId=null, idToken=eyJhbGci...vAfg
+04-10 15:28:32.909 I/TokenManager( 3759): [startPeriodicRefresh] Starting periodic refresh (interval: 45 minutes)
+04-10 15:28:33.785 I/CIRISApiClient( 3759): [googleAuth] Google auth successful: userId=google:115300315355793131383, role=SYSTEM_ADMIN
+04-10 15:28:33.787 I/CIRISApp( 3759):  Got CIRIS access token: ciris_ad...ewf4
+04-10 15:28:33.788 I/CIRISApiClient( 3759): [setAccessToken] Setting access token: ciris_ad...ewf4, length=55
+04-10 15:28:33.789 I/CIRISApiClient( 3759): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-10 15:28:33.790 I/MainActivity( 3759): Token updated, setting on billing apiClient
+04-10 15:28:33.790 I/CIRISApiClient( 3759): [setAccessToken] Setting access token: ciris_ad...ewf4, length=55
+04-10 15:28:33.791 I/CIRISApiClient( 3759): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-10 15:28:33.792 I/CIRISApiClient( 3759): [logTokenState] === TOKEN STATE DEBUG ===
+04-10 15:28:33.792 I/CIRISApiClient( 3759): [logTokenState] accessToken present: true
+04-10 15:28:33.793 I/CIRISApiClient( 3759): [logTokenState] accessToken preview: ciris_ad...ewf4
+04-10 15:28:33.794 I/CIRISApiClient( 3759): [logTokenState] accessToken length: 55
+04-10 15:28:33.795 I/CIRISApiClient( 3759): [logTokenState] authHeader() returns: Bearer <token>
+04-10 15:28:33.795 I/CIRISApiClient( 3759): [logTokenState] =========================
+04-10 15:28:33.797 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:33.798 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:33.808 I/CIRISApp( 3759):  Refreshed CIRIS token saved to secure storage
+04-10 15:28:33.809 I/CIRISApp( 3759):  Writing OAuth ID token to .env for Python billing...
+04-10 15:28:33.810 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:33.811 I/EnvFileUpdater( 3759): Read .env file (7504 bytes)
+04-10 15:28:33.813 I/EnvFileUpdater( 3759): CIRIS proxy mode detected - updating OPENAI_API_KEY
+04-10 15:28:33.815 I/EnvFileUpdater( 3759): Updated OPENAI_API_KEY
+04-10 15:28:33.816 I/EnvFileUpdater( 3759): Updated CIRIS_BILLING_GOOGLE_ID_TOKEN
+04-10 15:28:33.817 I/EnvFileUpdater( 3759): .env file updated (proxy mode: true)
+04-10 15:28:33.817 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:33.818 I/EnvFileUpdater( 3759): Config reload signal written to /data/user/0/ai.ciris.mobile/files/ciris/.config_reload
+04-10 15:28:33.818 I/CIRISApp( 3759):  .env updated, .config_reload signal written
+04-10 15:28:33.819 I/CIRISApp( 3759):  Waiting 1.5s for Python to reload billing token...
+04-10 15:28:34.785 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:35.320 I/CIRISApp( 3759):  Python reload wait complete
+04-10 15:28:35.344 I/CIRISApp( 3759):  Token exchange completed
+04-10 15:28:35.414 I/CIRISApp( 3759):  Agent state: WORK
+04-10 15:28:35.414 I/CIRISApp( 3759):  Agent reached WORK state!
+04-10 15:28:35.918 I/CIRISApp( 3759):  Triggering data load for ViewModels after token set
+04-10 15:28:35.919 I/BillingViewModel( 3759): [loadBalance] Loading credit balance...
+04-10 15:28:35.922 I/CIRISApiClient( 3759): [listAdapters] Listing adapters
+04-10 15:28:35.924 I/InteractViewModel( 3759): [startPolling] Starting polling and SSE streams
+04-10 15:28:35.924 I/InteractViewModel( 3759): [startStatusPolling] Starting status polling (fast until agent ready)
+04-10 15:28:35.926 I/InteractViewModel( 3759): [startMessagePolling] Starting message polling (interval=3000ms)
+04-10 15:28:35.928 I/InteractViewModel( 3759): [startHealthPolling] Starting health polling (fast until LLM ready)
+04-10 15:28:35.930 I/InteractViewModel( 3759): [startTrustPendingPolling] Starting trust pending polling (interval=5000ms)
+04-10 15:28:35.931 I/InteractViewModel( 3759): [startSseStream] Starting SSE reasoning stream
+04-10 15:28:35.932 I/InteractViewModel( 3759): [startFileInjectionObserver] Starting file injection observer for test automation
+04-10 15:28:35.933 I/InteractViewModel( 3759): [fetchWalletStatus] Fetching wallet status from API
+04-10 15:28:35.934 I/CIRISApiClient( 3759): [getWalletStatus] Fetching wallet status
+04-10 15:28:35.935 I/CIRISApp( 3759):  Running boot-time attestation check...
+04-10 15:28:35.935 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:35.936 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:35.937 D/CIRISApp( 3759): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-10 15:28:35.989 I/CIRISApiClient( 3759): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-10 15:28:35.989 I/CIRISApiClient( 3759): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-10 15:28:37.443 I/InteractViewModel( 3759): [startStatusPolling] Agent ready with state: WORK
+04-10 15:28:37.444 I/InteractViewModel( 3759): [startStatusPolling] Connection state changed: false -> true
+04-10 15:28:38.239 I/InteractViewModel( 3759): [fetchHistory] Added 5 new messages to chat
+04-10 15:28:38.242 I/CIRISApp( 3759):  Boot attestation: loaded=true, maxLevel=1, dns_us=true, dns_eu=true, https=true
+04-10 15:28:38.264 I/CIRISApiClient( 3759): [listAdapters] API response: total=8, running=8, adapters.size=8
+04-10 15:28:38.265 I/CIRISApiClient( 3759): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+04-10 15:28:38.265 I/CIRISApiClient( 3759): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+04-10 15:28:38.265 I/CIRISApiClient( 3759): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+04-10 15:28:38.265 I/CIRISApiClient( 3759): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+04-10 15:28:38.265 I/CIRISApiClient( 3759): [listAdapters]   API adapter[4]: id=home_assistant, type=home_assistant, running=true
+04-10 15:28:38.266 I/CIRISApiClient( 3759): [listAdapters]   API adapter[5]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+04-10 15:28:38.266 I/CIRISApiClient( 3759): [listAdapters]   API adapter[6]: id=navigation, type=navigation, running=true
+04-10 15:28:38.266 I/CIRISApiClient( 3759): [listAdapters]   API adapter[7]: id=weather, type=weather, running=true
+04-10 15:28:38.570 I/InteractViewModel( 3759): [startSseStream] SSE connected
+04-10 15:28:38.957 I/InteractViewModel( 3759): [fetchTrustStatus] Trust level changed: 0 -> 1
+04-10 15:28:38.958 I/InteractViewModel( 3759): [fetchTrustStatus] Level pending changed: false -> true
+04-10 15:28:38.958 I/InteractViewModel( 3759): [startTrustPendingPolling] Level pending=true, triggering device attestation automatically...
+04-10 15:28:38.958 I/MainActivity( 3759): Device attestation requested
+04-10 15:28:38.959 I/CIRISApiClient( 3759): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+04-10 15:28:39.370 I/CIRISApiClient( 3759): [getGraphData] <<< DONE in 3381ms (single API call)
+04-10 15:28:39.370 I/CIRISApiClient( 3759): [getGraphData]     Nodes: 99 ({local=96, identity=3})
+04-10 15:28:39.371 I/CIRISApiClient( 3759): [getGraphData]     Edges: 0 total, 0 visible
+04-10 15:28:39.371 I/CIRISApiClient( 3759): [getGraphData]     Edge types: {}
+04-10 15:28:39.371 I/CIRISApiClient( 3759): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+04-10 15:28:39.419 I/InteractViewModel( 3759): [fetchAuditActions] Adding 17 action entries to timeline
+04-10 15:28:39.420 I/InteractViewModel( 3759): [startMessagePolling] First load complete
+04-10 15:28:39.559 I/BillingViewModel( 3759): [loadBalance] Credit status loaded: hasCredit=true, creditsRemaining=417, freeUsesRemaining=0, dailyFreeUsesRemaining=0, planName=CIRIS Mobile
+04-10 15:28:39.560 I/BillingViewModel( 3759): [loadBalance] Total credits calculated: 417
+04-10 15:28:39.578 I/CIRISApiClient( 3759): [getPlayIntegrityNonce] Got nonce: Cf8iEepMM3oWLYTANGCT...
+04-10 15:28:39.740 I/CIRISApiClient( 3759): [getWalletStatus] Wallet status: address=0xbc17364BC59a0ed185A21f5933C7944F3ff159Ef, balance=0, level=1
+04-10 15:28:39.740 I/InteractViewModel( 3759): [fetchWalletStatus] Wallet response: hasWallet=true, isInitializing=false, provider=x402
+04-10 15:28:39.780 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:28:40.109 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:28:40.109 I/InteractViewModel( 3759): [startHealthPolling] LLM health ready: provider=other
+04-10 15:28:40.595 I/CIRISApiClient( 3759): [verifyPlayIntegrity] Verifying Play Integrity token via Python API
+04-10 15:28:40.951 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:40.951 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:40.959 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY ATTESTATION STARTING: Full attestation with network+integrity checks
+04-10 15:28:40.959 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 1/2 STARTING: Parallel manifest fetch + validation (5 network calls)
+04-10 15:28:40.959 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/5 STARTING: Binary manifest fetch
+04-10 15:28:41.127 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/5 COMPLETE: OK (10 targets)
+04-10 15:28:41.127 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/5 STARTING: Function manifest fetch
+04-10 15:28:41.267 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/5 COMPLETE: OK (48 functions)
+04-10 15:28:41.267 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/5 STARTING: Agent build record fetch
+04-10 15:28:41.486 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/5 COMPLETE: OK (1547 files)
+04-10 15:28:41.487 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/5 STARTING: Source validation (DNS US + EU + HTTPS)
+04-10 15:28:42.310 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/5 COMPLETE: 3/3 sources reachable
+04-10 15:28:42.311 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/5 STARTING: Registry key verification
+04-10 15:28:42.328 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/5 COMPLETE: active
+04-10 15:28:42.328 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 1/2 COMPLETE: All network fetches done
+04-10 15:28:42.330 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 2/2 STARTING: Local verification (6 checks)
+04-10 15:28:42.330 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/6 STARTING: Self-verification (binary + functions)
+04-10 15:28:42.366 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 1/6 COMPLETE: OK (binary=✓, functions=48/48)
+04-10 15:28:42.367 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/6 STARTING: File integrity check
+04-10 15:28:42.515 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 2/6 COMPLETE: FAILED (full=1488/1547)
+04-10 15:28:42.515 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/6 STARTING: Module integrity check
+04-10 15:28:42.683 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 3/6 COMPLETE: OK (1488/1547 verified)
+04-10 15:28:42.683 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/6 STARTING: Source validation analysis
+04-10 15:28:42.684 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 4/6 COMPLETE: 3/3 sources valid (status=AllSourcesAgree)
+04-10 15:28:42.684 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/6 STARTING: Python module integrity
+04-10 15:28:42.685 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 5/6 COMPLETE: OK (958/958 modules passed)
+04-10 15:28:42.685 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 6/6 STARTING: Audit trail verification
+04-10 15:28:42.685 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY STEP 6/6 COMPLETE: SKIP (no entries provided)
+04-10 15:28:42.686 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY PHASE 2/2 COMPLETE: All local checks done
+04-10 15:28:42.686 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_verify_core::unified: VERIFY ATTESTATION COMPLETE: level=1, valid=true, checks=7/7, time=1729ms
+04-10 15:28:42.688 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:42.689 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:42.689 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::software: VERIFY MutableEd25519Signer::has_key - hardware wrapper check, has_key=true, hardware_backed=true, ciris_data_dir=Some("/data/data/ai.ciris.mobile/files/ciris")
+04-10 15:28:42.691 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 1 (file/wrapper check), wrapper_alias=agent_signing_aes_wrapper, encrypted_key_path="/data/data/ai.ciris.mobile/files/ciris/data/agent_signing.ed25519.enc", wrapper_exists=true, file_exists=true
+04-10 15:28:42.692 D/MainActivity( 3759): Verify: ciris_verify_ffi: [INFO] ciris_keyring::platform::android: VERIFY key_exists check - phase 2 PASSED (key can be decrypted), wrapper_alias=agent_signing_aes_wrapper
+04-10 15:28:42.808 I/CIRISApiClient( 3759): [verifyPlayIntegrity] Verification result: verified=true, verdict=UNKNOWN
+04-10 15:28:42.810 I/MainActivity( 3759): Device attestation result: Success(verified=true, verdict=UNKNOWN, meetsStrongIntegrity=false, meetsDeviceIntegrity=false, meetsBasicIntegrity=false)
+04-10 15:28:42.810 I/InteractViewModel( 3759): [startTrustPendingPolling] Device attestation completed: Success(verified=true, verdict=UNKNOWN, meetsStrongIntegrity=false, meetsDeviceIntegrity=false, meetsBasicIntegrity=false)
+04-10 15:28:44.009 I/InteractViewModel( 3759): [fetchTrustStatus] Trust level changed: 1 -> 5
+04-10 15:28:44.009 I/InteractViewModel( 3759): [fetchTrustStatus] Level pending changed: true -> false
+04-10 15:28:44.010 I/InteractViewModel( 3759): [startTrustPendingPolling] Level pending=false (level=5/5), stopping fast poll
+04-10 15:28:44.788 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:44.836 I/InteractViewModel( 3759): [startTrustPendingPolling] Trust status refreshed after device attestation
+04-10 15:28:45.548 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (157715954)
+04-10 15:28:45.549 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:28:45.593 I/CIRISApp( 3759): [Screen.Tools] Loading tools on screen entry
+04-10 15:28:45.594 I/CIRISApiClient( 3759): [getTools] Fetching available tools
+04-10 15:28:45.967 I/CIRISApiClient( 3759): [getTools] Loaded 27 tools from 9 providers
+04-10 15:28:54.790 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:28:56.173 I/WebViewFactory( 4298): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:28:56.231 E/chromium( 4298): [0410/152856.230995:ERROR:android_webview/browser/variations/variations_seed_loader.cc:39] Seed missing signature.
+04-10 15:28:56.372 W/chromium( 4298): [WARNING:android_webview/browser/network_service/net_helpers.cc:137] HTTP Cache size is: 51721473
+04-10 15:29:04.791 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:29:10.982 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:29:11.347 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:29:14.792 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:29:24.795 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:29:34.797 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:29:42.373 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:29:42.756 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:29:44.799 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:29:54.801 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:04.803 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:14.319 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:30:14.700 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:30:14.805 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:24.807 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:34.810 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:39.712 I/WebViewFactory( 5388): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:30:39.737 E/chromium( 5388): [0410/153039.737112:ERROR:android_webview/browser/variations/variations_seed_loader.cc:39] Seed missing signature.
+04-10 15:30:44.811 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:30:45.872 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:30:46.223 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:30:54.813 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:31:04.814 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:31:14.823 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:31:17.290 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:31:17.689 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:31:33.282 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:31:40.039 E/CIRISApiClient( 3759): [getAuditEntries] Exception: CancellationException: Job was cancelled
+04-10 15:31:40.039 E/CIRISApiClient( 3759): java.util.concurrent.CancellationException: Job was cancelled
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.parentCancelled(JobSupport.kt:638)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.ChildHandleNode.invoke(JobSupport.kt:1436)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.tryMakeCompletingSlowPath(JobSupport.kt:901)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.tryMakeCompleting(JobSupport.kt:864)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.cancelMakeCompleting(JobSupport.kt:697)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:668)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobKt__JobKt.cancel(Job.kt:560)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobKt.cancel(Unknown Source:1)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobKt__JobKt.cancel$default(Job.kt:559)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at kotlinx.coroutines.JobKt.cancel$default(Unknown Source:1)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.viewmodel.internal.CloseableCoroutineScope.close(CloseableCoroutineScope.kt:81)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.viewmodel.internal.ViewModelImpl.closeWithRuntimeException(ViewModelImpl.kt:130)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.viewmodel.internal.ViewModelImpl.access$closeWithRuntimeException(ViewModelImpl.kt:34)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.viewmodel.internal.ViewModelImpl.clear(ViewModelImpl.kt:85)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.ViewModel.clear$lifecycle_viewmodel_release(ViewModel.jvm.kt:68)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.ViewModelStore.clear(ViewModelStore.kt:69)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.activity.ComponentActivity$3.onStateChanged(ComponentActivity.java:296)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:320)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.LifecycleRegistry.backwardPass(LifecycleRegistry.jvm.kt:272)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.LifecycleRegistry.sync(LifecycleRegistry.jvm.kt:289)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.LifecycleRegistry.moveToState(LifecycleRegistry.jvm.kt:142)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.LifecycleRegistry.handleLifecycleEvent(LifecycleRegistry.jvm.kt:124)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.ReportFragment$Companion.dispatch$lifecycle_runtime_release(ReportFragment.android.kt:190)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at androidx.lifecycle.ReportFragment$LifecycleCallbacks.onActivityPreDestroyed(ReportFragment.android.kt:146)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.Activity.dispatchActivityPreDestroyed(Activity.java:1761)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.Activity.performDestroy(Activity.java:9668)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.Instrumentation.callActivityOnDestroy(Instrumentation.java:1561)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.ActivityThread.performDestroyActivity(ActivityThread.java:6650)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.ActivityThread.handleDestroyActivity(ActivityThread.java:6695)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.servertransaction.DestroyActivityItem.execute(DestroyActivityItem.java:46)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.servertransaction.ActivityTransactionItem.execute(ActivityTransactionItem.java:60)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.servertransaction.TransactionExecutor.executeLifecycleItem(TransactionExecutor.java:225)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.servertransaction.TransactionExecutor.executeTransactionItems(TransactionExecutor.java:107)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:81)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2895)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.os.Handler.dispatchMessage(Handler.java:107)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.os.Looper.loopOnce(Looper.java:257)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.os.Looper.loop(Looper.java:342)
+04-10 15:31:40.039 E/CIRISApiClient( 3759): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+04-10 15:31:40.040 E/CIRISApiClient( 3759): 	at java.lang.reflect.Method.invoke(Native Method)
+04-10 15:31:40.040 E/CIRISApiClient( 3759): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+04-10 15:31:40.040 E/CIRISApiClient( 3759): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+04-10 15:31:40.044 E/InteractViewModel( 3759): [startSseStream] SSE error: Job was cancelled
+04-10 15:31:40.044 I/InteractViewModel( 3759): [startSseStream] Reconnecting in 1000ms...
+04-10 15:31:40.045 I/InteractViewModel( 3759): [onCleared] ViewModel cleared, cancelling jobs
+04-10 15:31:40.045 I/BillingViewModel( 3759): [onCleared] ViewModel cleared, stopping polling
+04-10 15:31:40.046 I/BillingViewModel( 3759): [stopBalancePolling] Stopping balance polling
+04-10 15:31:48.527 I/WebViewFactory( 6455): Loading com.google.android.webview version 146.0.7680.177 (code 768017703)
+04-10 15:32:03.129 I/MainActivity( 3759): Localization resource loader initialized
+04-10 15:32:03.136 I/MainActivity( 3759): Google Sign-In initialized with client ID: 265882853697-l421ndo...
+04-10 15:32:03.136 I/MainActivity( 3759): Initializing Google Play Billing...
+04-10 15:32:03.137 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:32:03.140 I/MainActivity( 3759): Google Play Billing initialized
+04-10 15:32:03.140 I/MainActivity( 3759): Google Play Integrity initialized (via Python API)
+04-10 15:32:03.174 I/MainActivity( 3759): Running CIRIS network diagnostics...
+04-10 15:32:03.174 I/MainActivity( 3759): Showing CIRISApp immediately for startup animation
+04-10 15:32:03.174 I/MainActivity( 3759): PythonRuntimeService already running
+04-10 15:32:03.174 I/MainActivity( 3759): Starting logcat reader (generation 2)
+04-10 15:32:03.174 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:03.175 E/MainActivity( 3759): Logcat reader error: read interrupted by close() on another thread
+04-10 15:32:03.175 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:32:03.175 I/TokenManager( 3759): [setShared] Shared TokenManager instance set
+04-10 15:32:03.175 I/InteractViewModel( 3759): [init] InteractViewModel initialized (polling deferred until token available)
+04-10 15:32:03.176 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:03.176 I/InteractViewModel( 3759): [observeLanguageChanges] Starting language observation for pipeline localization
+04-10 15:32:03.176 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Loading live_background_enabled from secure storage...
+04-10 15:32:03.176 I/BillingViewModel( 3759): [init] BillingViewModel initialized
+04-10 15:32:03.182 I/CIRISApp( 3759): Test mode enabled on mobile — starting test automation server
+04-10 15:32:03.183 I/CIRISApp( 3759): Initializing localization...
+04-10 15:32:03.183 I/MainActivity( 3759): Setting purchase result callback
+04-10 15:32:03.187 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:03.187 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:03.198 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:03.198 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:03.226 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=true)
+04-10 15:32:03.226 I/CIRISApp( 3759): Initializing currency...
+04-10 15:32:03.227 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Raw value='null', parsed=true
+04-10 15:32:03.227 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Live background state set to: true
+04-10 15:32:03.228 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Color theme loaded: VAPOR
+04-10 15:32:03.229 I/SettingsViewModel( 3759): [loadDisplaySettings] >>> Brightness preference loaded: SYSTEM
+04-10 15:32:03.266 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:03.266 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:04.882 I/MainActivity( 3759): Network diagnostics completed
+04-10 15:32:05.790 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: ar (explicit=true)
+04-10 15:32:05.799 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:05.799 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:08.293 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: bn (explicit=true)
+04-10 15:32:08.299 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:08.300 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:10.800 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: my (explicit=true)
+04-10 15:32:10.818 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:10.820 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:13.184 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:13.202 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:13.202 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:13.208 D/CIRISApp( 3759): [INFO] Startup READY, checking first-run status...
+04-10 15:32:13.212 I/CIRISApiClient( 3759): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-10 15:32:13.214 I/InteractViewModel( 3759): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=true)
+04-10 15:32:13.218 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:13.218 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:13.234 I/CIRISApiClient( 3759): [getSetupStatus] Setup status: required=false, firstRun=false, configExists=true
+04-10 15:32:13.234 D/CIRISApp( 3759): [INFO] First run check result: false
+04-10 15:32:13.234 D/CIRISApp( 3759): [INFO] Not first run, attempting to load and validate stored token
+04-10 15:32:13.275 D/CIRISApp( 3759): [INFO] Loaded stored token: ciris_ad...ewf4
+04-10 15:32:13.275 W/TokenManager( 3759): [getTokenExpiry] Invalid JWT format: expected 3 parts, got 1
+04-10 15:32:13.276 I/TokenManager( 3759): [checkAndRefreshToken] Token check: expiry=null, remaining=nulls, minValid=300s
+04-10 15:32:13.276 W/TokenManager( 3759): [checkAndRefreshToken] Could not parse token expiry - treating as expired
+04-10 15:32:13.276 I/TokenManager( 3759): [attemptSilentRefresh] Attempting silent sign-in...
+04-10 15:32:13.276 I/MainActivity( 3759): Silent Sign-In requested from CIRISApp
+04-10 15:32:13.276 I/MainActivity( 3759): Found cached account: mooreericnyc@gmail.com
+04-10 15:32:13.276 I/MainActivity( 3759): Silent Sign-In successful: mooreericnyc@gmail.com
+04-10 15:32:13.276 I/TokenManager( 3759): [attemptSilentRefresh] Silent sign-in successful! provider=google
+04-10 15:32:13.277 I/TokenManager( 3759): [handleNewToken] Processing new token (length: 1100, provider: google)
+04-10 15:32:13.277 I/TokenManager( 3759): [handleNewToken] New token expiry: 1775854928 (1795s remaining)
+04-10 15:32:13.277 I/CIRISApp( 3759):  OAuth ID token refreshed by TokenManager (provider=google), exchanging for CIRIS token
+04-10 15:32:13.277 I/CIRISApp( 3759):  Token was refreshed, waiting for CIRIS token exchange...
+04-10 15:32:13.278 I/CIRISApiClient( 3759): [nativeAuth] Attempting native auth: provider=google, userId=null
+04-10 15:32:13.278 I/CIRISApiClient( 3759): [googleAuth] Attempting Google auth: userId=null, idToken=eyJhbGci...vAfg
+04-10 15:32:13.279 I/TokenManager( 3759): [startPeriodicRefresh] Starting periodic refresh (interval: 45 minutes)
+04-10 15:32:14.079 I/CIRISApiClient( 3759): [googleAuth] Google auth successful: userId=google:115300315355793131383, role=SYSTEM_ADMIN
+04-10 15:32:14.081 I/CIRISApp( 3759):  Got CIRIS access token: ciris_ad...Uuh0
+04-10 15:32:14.082 I/CIRISApiClient( 3759): [setAccessToken] Setting access token: ciris_ad...Uuh0, length=55
+04-10 15:32:14.083 I/CIRISApiClient( 3759): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-10 15:32:14.085 I/MainActivity( 3759): Token updated, setting on billing apiClient
+04-10 15:32:14.085 I/CIRISApiClient( 3759): [setAccessToken] Setting access token: ciris_ad...Uuh0, length=55
+04-10 15:32:14.086 I/CIRISApiClient( 3759): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-10 15:32:14.087 I/CIRISApiClient( 3759): [logTokenState] === TOKEN STATE DEBUG ===
+04-10 15:32:14.089 I/CIRISApiClient( 3759): [logTokenState] accessToken present: true
+04-10 15:32:14.089 I/CIRISApiClient( 3759): [logTokenState] accessToken preview: ciris_ad...Uuh0
+04-10 15:32:14.090 I/CIRISApiClient( 3759): [logTokenState] accessToken length: 55
+04-10 15:32:14.091 I/CIRISApiClient( 3759): [logTokenState] authHeader() returns: Bearer <token>
+04-10 15:32:14.091 I/CIRISApiClient( 3759): [logTokenState] =========================
+04-10 15:32:14.093 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:14.093 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:14.102 I/CIRISApp( 3759):  Refreshed CIRIS token saved to secure storage
+04-10 15:32:14.102 I/CIRISApp( 3759):  Writing OAuth ID token to .env for Python billing...
+04-10 15:32:14.103 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:14.104 I/EnvFileUpdater( 3759): Read .env file (7504 bytes)
+04-10 15:32:14.104 I/EnvFileUpdater( 3759): CIRIS proxy mode detected - updating OPENAI_API_KEY
+04-10 15:32:14.105 I/EnvFileUpdater( 3759): Updated OPENAI_API_KEY
+04-10 15:32:14.105 I/EnvFileUpdater( 3759): Updated CIRIS_BILLING_GOOGLE_ID_TOKEN
+04-10 15:32:14.105 I/EnvFileUpdater( 3759): .env file updated (proxy mode: true)
+04-10 15:32:14.105 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:14.106 I/EnvFileUpdater( 3759): Config reload signal written to /data/user/0/ai.ciris.mobile/files/ciris/.config_reload
+04-10 15:32:14.106 I/CIRISApp( 3759):  .env updated, .config_reload signal written
+04-10 15:32:14.106 I/CIRISApp( 3759):  Waiting 1.5s for Python to reload billing token...
+04-10 15:32:15.608 I/CIRISApp( 3759):  Python reload wait complete
+04-10 15:32:15.614 I/CIRISApp( 3759):  Token exchange completed
+04-10 15:32:15.675 I/CIRISApp( 3759):  Agent state: WORK
+04-10 15:32:15.675 I/CIRISApp( 3759):  Agent reached WORK state!
+04-10 15:32:16.177 I/CIRISApp( 3759):  Triggering data load for ViewModels after token set
+04-10 15:32:16.178 I/BillingViewModel( 3759): [loadBalance] Loading credit balance...
+04-10 15:32:16.179 I/CIRISApiClient( 3759): [listAdapters] Listing adapters
+04-10 15:32:16.179 I/InteractViewModel( 3759): [startPolling] Starting polling and SSE streams
+04-10 15:32:16.180 I/InteractViewModel( 3759): [startStatusPolling] Starting status polling (fast until agent ready)
+04-10 15:32:16.181 I/InteractViewModel( 3759): [startMessagePolling] Starting message polling (interval=3000ms)
+04-10 15:32:16.182 I/InteractViewModel( 3759): [startHealthPolling] Starting health polling (fast until LLM ready)
+04-10 15:32:16.183 I/InteractViewModel( 3759): [startTrustPendingPolling] Starting trust pending polling (interval=5000ms)
+04-10 15:32:16.183 I/InteractViewModel( 3759): [startSseStream] Starting SSE reasoning stream
+04-10 15:32:16.185 I/InteractViewModel( 3759): [startFileInjectionObserver] Starting file injection observer for test automation
+04-10 15:32:16.185 I/InteractViewModel( 3759): [fetchWalletStatus] Fetching wallet status from API
+04-10 15:32:16.186 I/CIRISApiClient( 3759): [getWalletStatus] Fetching wallet status
+04-10 15:32:16.187 I/CIRISApp( 3759):  Running boot-time attestation check...
+04-10 15:32:16.198 D/CIRISApp( 3759): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (78855718)
+04-10 15:32:16.198 I/InteractViewModel( 3759): [setDeviceAttestationCallback] Device attestation callback SET
+04-10 15:32:16.199 D/CIRISApp( 3759): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-10 15:32:16.223 I/CIRISApiClient( 3759): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-10 15:32:16.223 I/CIRISApiClient( 3759): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-10 15:32:18.354 I/CIRISApp( 3759):  Boot attestation: loaded=true, maxLevel=5, dns_us=true, dns_eu=true, https=true
+04-10 15:32:18.418 I/InteractViewModel( 3759): [startStatusPolling] Agent ready with state: WORK
+04-10 15:32:18.418 I/InteractViewModel( 3759): [startStatusPolling] Connection state changed: false -> true
+04-10 15:32:18.748 I/InteractViewModel( 3759): [startSseStream] SSE connected
+04-10 15:32:18.751 I/CIRISApiClient( 3759): [listAdapters] API response: total=8, running=8, adapters.size=8
+04-10 15:32:18.751 I/CIRISApiClient( 3759): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+04-10 15:32:18.751 I/CIRISApiClient( 3759): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+04-10 15:32:18.751 I/CIRISApiClient( 3759): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+04-10 15:32:18.752 I/CIRISApiClient( 3759): [listAdapters]   API adapter[3]: id=ciris_hosted_tools, type=ciris_hosted_tools, running=true
+04-10 15:32:18.752 I/CIRISApiClient( 3759): [listAdapters]   API adapter[4]: id=home_assistant, type=home_assistant, running=true
+04-10 15:32:18.752 I/CIRISApiClient( 3759): [listAdapters]   API adapter[5]: id=ciris_accord_metrics, type=ciris_accord_metrics, running=true
+04-10 15:32:18.752 I/CIRISApiClient( 3759): [listAdapters]   API adapter[6]: id=navigation, type=navigation, running=true
+04-10 15:32:18.752 I/CIRISApiClient( 3759): [listAdapters]   API adapter[7]: id=weather, type=weather, running=true
+04-10 15:32:18.756 I/InteractViewModel( 3759): [fetchHistory] Added 5 new messages to chat
+04-10 15:32:18.770 I/InteractViewModel( 3759): [fetchTrustStatus] Trust level changed: 0 -> 5
+04-10 15:32:18.771 I/InteractViewModel( 3759): [startTrustPendingPolling] Level pending=false (level=5/5), stopping fast poll
+04-10 15:32:19.528 I/CIRISApiClient( 3759): [getGraphData] <<< DONE in 3305ms (single API call)
+04-10 15:32:19.529 I/CIRISApiClient( 3759): [getGraphData]     Nodes: 99 ({local=96, identity=3})
+04-10 15:32:19.529 I/CIRISApiClient( 3759): [getGraphData]     Edges: 0 total, 0 visible
+04-10 15:32:19.530 I/CIRISApiClient( 3759): [getGraphData]     Edge types: {}
+04-10 15:32:19.530 I/CIRISApiClient( 3759): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+04-10 15:32:19.548 I/InteractViewModel( 3759): [fetchAuditActions] Adding 17 action entries to timeline
+04-10 15:32:19.549 I/InteractViewModel( 3759): [startMessagePolling] First load complete
+04-10 15:32:19.559 I/BillingViewModel( 3759): [loadBalance] Credit status loaded: hasCredit=true, creditsRemaining=417, freeUsesRemaining=0, dailyFreeUsesRemaining=0, planName=CIRIS Mobile
+04-10 15:32:19.559 I/BillingViewModel( 3759): [loadBalance] Total credits calculated: 417
+04-10 15:32:19.580 I/CIRISApiClient( 3759): [getWalletStatus] Wallet status: address=0xbc17364BC59a0ed185A21f5933C7944F3ff159Ef, balance=0, level=5
+04-10 15:32:19.581 I/InteractViewModel( 3759): [fetchWalletStatus] Wallet response: hasWallet=true, isInitializing=false, provider=x402
+04-10 15:32:19.663 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:32:19.997 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:32:19.998 I/InteractViewModel( 3759): [startHealthPolling] LLM health ready: provider=other
+04-10 15:32:23.187 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:33.188 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:43.192 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:32:51.011 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:32:51.414 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:32:53.194 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:33:03.195 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:33:13.196 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:33:22.438 I/CIRISApiClient( 3759): [getWAStatus] Fetching WA status
+04-10 15:33:22.836 I/CIRISApiClient( 3759): [getWAStatus] WA Status: healthy=true, activeWAs=1, pendingDeferrals=0, deferrals24h=0, subscribers=2
+04-10 15:33:23.198 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris
+04-10 15:33:33.199 D/EnvFileUpdater( 3759): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile/files/ciris

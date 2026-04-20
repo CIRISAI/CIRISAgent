@@ -127,6 +127,12 @@ class ConscienceApplicationResult(BaseModel):
         None, description="Epistemic humility conscience check result"
     )
 
+    # === CONSCIENCE PROMPTS (for localization validation/streaming) ===
+    entropy_prompt: Optional[str] = Field(None, description="User prompt used for entropy evaluation")
+    coherence_prompt: Optional[str] = Field(None, description="User prompt used for coherence evaluation")
+    optimization_veto_prompt: Optional[str] = Field(None, description="User prompt used for optimization veto")
+    epistemic_humility_prompt: Optional[str] = Field(None, description="User prompt used for epistemic humility")
+
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 

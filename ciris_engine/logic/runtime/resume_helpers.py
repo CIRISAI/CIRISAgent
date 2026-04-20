@@ -181,6 +181,131 @@ async def auto_enable_android_adapters_for_resume(runtime: Any) -> None:
                 logger.warning(f"[RESUME] Failed to auto-enable Android adapters on {adapter.__class__.__name__}: {e}")
 
 
+async def auto_enable_environment_adapters_for_resume(runtime: Any) -> None:
+    """Auto-enable adapters based on detected runtime environment.
+
+    This is the centralized entry point for environment-based adapter enabling.
+    Currently supports:
+
+    1. Home Assistant Addon Mode (SUPERVISOR_TOKEN present):
+       - Auto-enables home_assistant adapter with supervisor authentication
+       - No OAuth required, uses HA's automatic token injection
+
+    2. Android Platform (CIRIS_ANDROID + Google Auth):
+       - Delegated to auto_enable_android_adapters_for_resume()
+
+    Called during runtime resume after core services are initialized.
+    """
+    import os
+
+    # Check for HA addon mode (SUPERVISOR_TOKEN present)
+    if os.getenv("SUPERVISOR_TOKEN"):
+        await _auto_enable_ha_addon_adapter(runtime)
+
+    # Android-specific adapters (delegated to existing logic)
+    await auto_enable_android_adapters_for_resume(runtime)
+
+
+async def _auto_enable_ha_addon_adapter(runtime: Any) -> None:
+    """Auto-enable Home Assistant adapter when running as HA addon.
+
+    When SUPERVISOR_TOKEN is present (injected by HA Supervisor),
+    the home_assistant adapter can be auto-enabled with automatic
+    authentication - no OAuth flow required.
+    """
+    import os
+
+    supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+    if not supervisor_token:
+        return
+
+    # Check if home_assistant adapter is already loaded
+    loaded_adapter_types = set()
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", None)
+        if adapter_type:
+            loaded_adapter_types.add(str(adapter_type).lower())
+        class_name = adapter.__class__.__name__.lower()
+        if "homeassistant" in class_name or "home_assistant" in class_name:
+            loaded_adapter_types.add("home_assistant")
+
+    if "home_assistant" in loaded_adapter_types:
+        logger.debug("[AUTO_ENABLE] home_assistant adapter already loaded, skipping")
+        return
+
+    logger.info("[AUTO_ENABLE] HA addon mode detected (SUPERVISOR_TOKEN present) - enabling home_assistant adapter")
+
+    try:
+        # Use runtime_control_service to load the adapter properly
+        runtime_control = getattr(runtime, "runtime_control_service", None)
+        if not runtime_control:
+            logger.warning("[AUTO_ENABLE] No runtime_control_service available for adapter loading")
+            return
+
+        result = await runtime_control.load_adapter(
+            adapter_type="home_assistant",
+            adapter_id="home_assistant_auto",
+            config={
+                "supervisor_mode": True,
+                "auto_enabled": True,
+            },
+        )
+
+        if result.success:
+            logger.info(f"[AUTO_ENABLE] Successfully auto-enabled home_assistant adapter (id: {result.adapter_id})")
+
+            # Persist to CIRIS_ADAPTER env for next restart
+            existing = os.environ.get("CIRIS_ADAPTER", "")
+            if "home_assistant" not in existing:
+                new_adapters = f"{existing},home_assistant" if existing else "home_assistant"
+                os.environ["CIRIS_ADAPTER"] = new_adapters
+                logger.info(f"[AUTO_ENABLE] Updated CIRIS_ADAPTER: {new_adapters}")
+
+                # Try to persist to .env file
+                await _persist_adapter_to_env("home_assistant")
+        else:
+            logger.warning(f"[AUTO_ENABLE] Failed to enable home_assistant adapter: {result.error}")
+    except Exception as e:
+        logger.warning(f"[AUTO_ENABLE] Error enabling home_assistant adapter: {e}")
+
+
+async def _persist_adapter_to_env(adapter_type: str) -> None:
+    """Persist adapter to .env file for next restart."""
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+        env_path = get_env_file_path()
+        if env_path and env_path.exists():
+            content = env_path.read_text()
+            lines = content.split("\n")
+            found_line = False
+            modified = False
+
+            for i, line in enumerate(lines):
+                if line.startswith("CIRIS_ADAPTER="):
+                    found_line = True
+                    existing = line.split("=", 1)[1].strip().strip('"')
+                    if adapter_type not in existing:
+                        new_value = f"{existing},{adapter_type}" if existing else adapter_type
+                        lines[i] = f'CIRIS_ADAPTER="{new_value}"'
+                        modified = True
+                    # else: adapter already present, nothing to do
+                    break
+
+            if not found_line:
+                # Add new CIRIS_ADAPTER line only if no existing line was found
+                lines.append(f'CIRIS_ADAPTER="{adapter_type}"')
+                modified = True
+
+            if modified:
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[AUTO_ENABLE] Persisted {adapter_type} to .env file")
+            else:
+                logger.debug(f"[AUTO_ENABLE] {adapter_type} already in CIRIS_ADAPTER, no change needed")
+    except Exception as e:
+        logger.debug(f"[AUTO_ENABLE] Could not persist {adapter_type} to .env: {e}")
+
+
 # Bootstrap adapters that are always loaded at startup (before setup wizard)
 BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify"}
 

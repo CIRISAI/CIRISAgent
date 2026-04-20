@@ -1,0 +1,1173 @@
+--------- beginning of main
+03-28 13:00:47.653 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:00:57.656 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:07.657 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:15.753 D/CIRISApp(26882): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (99530984)
+03-28 13:01:15.754 I/InteractViewModel(26882): [setDeviceAttestationCallback] Device attestation callback SET
+03-28 13:01:15.837 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette (lang=en, stringsKeys=11)
+03-28 13:01:15.838 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette_desc (lang=en, stringsKeys=11)
+03-28 13:01:15.849 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_auth (lang=en, stringsKeys=11)
+03-28 13:01:15.850 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_access_token (lang=en, stringsKeys=11)
+03-28 13:01:15.850 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_info_desc (lang=en, stringsKeys=11)
+03-28 13:01:15.851 W/LocalizationManager(26882): Missing localization key: mobile.settings_loading_token (lang=en, stringsKeys=11)
+03-28 13:01:15.953 I/SettingsViewModel(26882): [loadLlmConfig] Loading LLM configuration
+03-28 13:01:16.323 I/SettingsViewModel(26882): [loadLlmConfig] LLM config loaded from API: provider=other, isCirisProxy=true, model=default
+03-28 13:01:16.325 I/SettingsViewModel(26882): [loadLlmConfig] Configuration loaded successfully from API
+03-28 13:01:16.352 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette (lang=en, stringsKeys=11)
+03-28 13:01:16.353 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette_desc (lang=en, stringsKeys=11)
+03-28 13:01:16.363 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_auth (lang=en, stringsKeys=11)
+03-28 13:01:16.364 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_access_token (lang=en, stringsKeys=11)
+03-28 13:01:16.365 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_info_desc (lang=en, stringsKeys=11)
+03-28 13:01:16.366 W/LocalizationManager(26882): Missing localization key: mobile.settings_loading_token (lang=en, stringsKeys=11)
+03-28 13:01:16.475 W/LocalizationManager(26882): Missing localization key: mobile.settings_opaque_token (lang=en, stringsKeys=11)
+03-28 13:01:16.476 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_type (lang=en, stringsKeys=11)
+03-28 13:01:16.476 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_id (lang=en, stringsKeys=11)
+03-28 13:01:16.477 W/LocalizationManager(26882): Missing localization key: mobile.settings_issuer (lang=en, stringsKeys=11)
+03-28 13:01:17.660 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:21.853 I/LocalizationManager(26882): Setting language to: Amharic (am)
+03-28 13:01:21.856 I/LocalizationManager(26882): Loaded 11 top-level keys for am
+03-28 13:01:21.886 I/InteractViewModel(26882): [observeLanguageChanges] Updating pipeline labels for language: am
+03-28 13:01:21.889 D/CIRISApp(26882): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (99530984)
+03-28 13:01:21.890 I/InteractViewModel(26882): [setDeviceAttestationCallback] Device attestation callback SET
+03-28 13:01:21.906 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette (lang=am, stringsKeys=11)
+03-28 13:01:21.907 W/LocalizationManager(26882): Missing localization key: mobile.settings_color_palette_desc (lang=am, stringsKeys=11)
+03-28 13:01:21.919 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_auth (lang=am, stringsKeys=11)
+03-28 13:01:21.921 W/LocalizationManager(26882): Missing localization key: mobile.settings_ciris_access_token (lang=am, stringsKeys=11)
+03-28 13:01:21.921 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_info_desc (lang=am, stringsKeys=11)
+03-28 13:01:21.922 W/LocalizationManager(26882): Missing localization key: mobile.settings_opaque_token (lang=am, stringsKeys=11)
+03-28 13:01:21.923 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_type (lang=am, stringsKeys=11)
+03-28 13:01:21.923 W/LocalizationManager(26882): Missing localization key: mobile.settings_token_id (lang=am, stringsKeys=11)
+03-28 13:01:21.924 W/LocalizationManager(26882): Missing localization key: mobile.settings_issuer (lang=am, stringsKeys=11)
+03-28 13:01:22.030 I/CIRISApp(26882): Language changed from en to am, syncing to backend...
+03-28 13:01:22.031 I/CIRISApiClient(26882): [updateUserLanguage] Updating user language to: am
+03-28 13:01:22.407 I/CIRISApiClient(26882): [updateUserLanguage] User language updated successfully to: am
+03-28 13:01:22.408 I/CIRISApp(26882): Language synced to backend successfully: am
+03-28 13:01:22.807 D/CIRISApp(26882): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (99530984)
+03-28 13:01:22.808 I/InteractViewModel(26882): [setDeviceAttestationCallback] Device attestation callback SET
+03-28 13:01:22.814 D/CIRISApp(26882): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+03-28 13:01:22.957 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:01:22.957 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:01:23.368 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 412ms (single API call)
+03-28 13:01:23.369 I/CIRISApiClient(26882): [getGraphData]     Nodes: 97 ({local=86, identity=11})
+03-28 13:01:23.370 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:01:23.370 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:01:23.370 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:01:27.664 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:37.665 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:40.622 I/InteractViewModel(26882): [sendMessage] Sending message: 'yay! you understood me friend, what is the meaning...' with 0 attachments
+03-28 13:01:40.623 I/CIRISApiClient(26882): [sendMessage] Sending message: 'yay! you understood me friend, what is the meaning...' to channel=mobile_app, images=0, docs=0
+03-28 13:01:42.409 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:01:42.410 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:01:42.828 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 419ms (single API call)
+03-28 13:01:42.829 I/CIRISApiClient(26882): [getGraphData]     Nodes: 97 ({local=86, identity=11})
+03-28 13:01:42.829 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:01:42.829 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:01:42.830 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:01:47.666 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:01:50.430 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:01:50.432 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:01:50.907 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 477ms (single API call)
+03-28 13:01:50.908 I/CIRISApiClient(26882): [getGraphData]     Nodes: 97 ({local=86, identity=11})
+03-28 13:01:50.908 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:01:50.909 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:01:50.909 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:01:54.254 I/CIRISApiClient(26882): [sendMessage] Message sent successfully: messageId=8de2eee3-8931-4e49-9871-4b633c3a43ea
+03-28 13:01:54.255 I/InteractViewModel(26882): [sendMessage] Message sent successfully: messageId=8de2eee3-8931-4e49-9871-4b633c3a43ea
+03-28 13:01:54.255 I/InteractViewModel(26882): [sendMessage] Agent response: 'ሰላም! የሕይወት ትርጉም በአማርኛ 'የህይወት አላማ' ወይም 'መኖር' ማለት ሊሆን ይችላል። በ CIRIS ስርዓት መሰረት፣ የህይወት ትርጉም እንደ ግለሰባዊ እሴ...'
+03-28 13:01:56.926 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:01:56.927 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:01:57.375 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 448ms (single API call)
+03-28 13:01:57.375 I/CIRISApiClient(26882): [getGraphData]     Nodes: 98 ({local=87, identity=11})
+03-28 13:01:57.376 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:01:57.376 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:01:57.376 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:01:57.666 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:03.425 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:03.426 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:04.258 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 834ms (single API call)
+03-28 13:02:04.259 I/CIRISApiClient(26882): [getGraphData]     Nodes: 98 ({local=87, identity=11})
+03-28 13:02:04.259 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:04.259 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:04.260 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:07.667 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:09.927 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:09.928 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:10.374 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 448ms (single API call)
+03-28 13:02:10.375 I/CIRISApiClient(26882): [getGraphData]     Nodes: 98 ({local=87, identity=11})
+03-28 13:02:10.375 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:10.376 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:10.376 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:12.133 I/InteractViewModel(26882): [fetchAuditActions] Adding 1 action entries to timeline
+03-28 13:02:16.434 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:16.435 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:17.303 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 869ms (single API call)
+03-28 13:02:17.303 I/CIRISApiClient(26882): [getGraphData]     Nodes: 99 ({local=88, identity=11})
+03-28 13:02:17.304 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:17.304 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:17.305 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:17.681 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:22.939 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:22.940 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:23.383 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 444ms (single API call)
+03-28 13:02:23.383 I/CIRISApiClient(26882): [getGraphData]     Nodes: 99 ({local=88, identity=11})
+03-28 13:02:23.384 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:23.384 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:23.385 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:27.683 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:35.099 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:35.099 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:35.909 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 810ms (single API call)
+03-28 13:02:35.910 I/CIRISApiClient(26882): [getGraphData]     Nodes: 99 ({local=88, identity=11})
+03-28 13:02:35.911 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:35.911 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:35.911 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:35.917 I/InteractViewModel(26882): [fetchHistory] Added 1 new messages to chat
+03-28 13:02:36.511 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:36.511 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:36.911 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 400ms (single API call)
+03-28 13:02:36.912 I/CIRISApiClient(26882): [getGraphData]     Nodes: 100 ({local=89, identity=11})
+03-28 13:02:36.912 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:36.913 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:36.913 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:37.684 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:45.456 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:45.457 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:45.512 E/CIRISApiClient(26882): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-28 13:02:45.512 E/CIRISApiClient(26882): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.os.Looper.loop(Looper.java:342)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at java.lang.reflect.Method.invoke(Native Method)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-28 13:02:45.512 E/CIRISApiClient(26882): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-28 13:02:47.690 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:51.953 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:51.954 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:52.483 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 530ms (single API call)
+03-28 13:02:52.484 I/CIRISApiClient(26882): [getGraphData]     Nodes: 100 ({local=89, identity=11})
+03-28 13:02:52.484 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:52.485 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:52.485 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:02:56.573 I/InteractViewModel(26882): [fetchHistory] Added 1 new messages to chat
+03-28 13:02:57.700 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:02:58.452 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:02:58.454 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:02:58.921 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 469ms (single API call)
+03-28 13:02:58.922 I/CIRISApiClient(26882): [getGraphData]     Nodes: 101 ({local=90, identity=11})
+03-28 13:02:58.922 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:02:58.923 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:02:58.923 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:05.004 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:05.005 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:05.185 E/CIRISApiClient(26882): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-28 13:03:05.185 E/CIRISApiClient(26882): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.os.Looper.loop(Looper.java:342)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at java.lang.reflect.Method.invoke(Native Method)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-28 13:03:05.185 E/CIRISApiClient(26882): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-28 13:03:07.701 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:11.498 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:11.499 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:13.079 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 1581ms (single API call)
+03-28 13:03:13.080 I/CIRISApiClient(26882): [getGraphData]     Nodes: 101 ({local=90, identity=11})
+03-28 13:03:13.080 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:13.081 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:13.081 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:17.034 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:17.034 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:17.489 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 455ms (single API call)
+03-28 13:03:17.490 I/CIRISApiClient(26882): [getGraphData]     Nodes: 101 ({local=90, identity=11})
+03-28 13:03:17.490 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:17.491 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:17.491 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:17.702 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:18.038 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:18.039 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:18.496 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 458ms (single API call)
+03-28 13:03:18.497 I/CIRISApiClient(26882): [getGraphData]     Nodes: 102 ({local=91, identity=11})
+03-28 13:03:18.497 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:18.498 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:18.498 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:20.331 I/InteractViewModel(26882): [fetchHistory] Added 1 new messages to chat
+03-28 13:03:26.608 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:26.609 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:26.819 E/CIRISApiClient(26882): [getGraphData] Exception: CancellationException: The coroutine scope left the composition
+03-28 13:03:26.819 E/CIRISApiClient(26882): java.util.concurrent.CancellationException: The coroutine scope left the composition
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:98)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at io.ktor.client.engine.UtilsKt$attachToUserJob$cleanupHandler$1.invoke(Utils.kt:96)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.InvokeOnCancelling.invoke(JobSupport.kt:1428)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.notifyCancelling(JobSupport.kt:1473)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.tryMakeCancelling(JobSupport.kt:796)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.makeCancelling(JobSupport.kt:756)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelImpl$kotlinx_coroutines_core(JobSupport.kt:672)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancelInternal(JobSupport.kt:633)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at kotlinx.coroutines.JobSupport.cancel(JobSupport.kt:618)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.LaunchedEffectImpl.onForgotten(Effects.kt:295)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl$RememberEventDispatcher.dispatchRememberObservers(Composition.kt:1276)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChangesInLocked(Composition.kt:984)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.CompositionImpl.applyChanges(Composition.kt:1005)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:639)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.runtime.Recomposer$runRecomposeAndApplyChanges$2$1.invoke(Recomposer.kt:551)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiFrameClock$withFrameNanos$2$callback$1.doFrame(AndroidUiFrameClock.android.kt:41)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.performFrameDispatch(AndroidUiDispatcher.android.kt:109)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher.access$performFrameDispatch(AndroidUiDispatcher.android.kt:41)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at androidx.compose.ui.platform.AndroidUiDispatcher$dispatchCallback$1.doFrame(AndroidUiDispatcher.android.kt:69)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1749)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1760)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.view.Choreographer.doCallbacks(Choreographer.java:1216)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.view.Choreographer.doFrame(Choreographer.java:1132)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1707)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.os.Handler.handleCallback(Handler.java:959)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.os.Handler.dispatchMessage(Handler.java:100)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.os.Looper.loopOnce(Looper.java:257)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.os.Looper.loop(Looper.java:342)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at android.app.ActivityThread.main(ActivityThread.java:9634)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at java.lang.reflect.Method.invoke(Native Method)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:619)
+03-28 13:03:26.819 E/CIRISApiClient(26882): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:929)
+03-28 13:03:27.710 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:33.111 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:33.112 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:33.552 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 441ms (single API call)
+03-28 13:03:33.553 I/CIRISApiClient(26882): [getGraphData]     Nodes: 102 ({local=91, identity=11})
+03-28 13:03:33.553 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:33.554 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:33.554 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:37.711 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:41.909 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:41.909 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:42.386 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 477ms (single API call)
+03-28 13:03:42.387 I/CIRISApiClient(26882): [getGraphData]     Nodes: 102 ({local=91, identity=11})
+03-28 13:03:42.387 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:42.387 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:42.387 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:42.668 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:42.669 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:43.470 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 802ms (single API call)
+03-28 13:03:43.471 I/CIRISApiClient(26882): [getGraphData]     Nodes: 103 ({local=92, identity=11})
+03-28 13:03:43.471 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:43.472 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:43.472 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:43.792 I/InteractViewModel(26882): [fetchHistory] Added 1 new messages to chat
+03-28 13:03:47.715 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:52.085 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:52.086 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:52.948 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 863ms (single API call)
+03-28 13:03:52.949 I/CIRISApiClient(26882): [getGraphData]     Nodes: 103 ({local=92, identity=11})
+03-28 13:03:52.949 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:52.949 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:52.950 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:03:57.718 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:03:58.130 I/InteractViewModel(26882): [fetchAuditActions] Adding 1 action entries to timeline
+03-28 13:03:58.600 I/CIRISApiClient(26882): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+03-28 13:03:58.601 I/CIRISApiClient(26882): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+03-28 13:03:59.039 I/CIRISApiClient(26882): [getGraphData] <<< DONE in 439ms (single API call)
+03-28 13:03:59.040 I/CIRISApiClient(26882): [getGraphData]     Nodes: 104 ({local=93, identity=11})
+03-28 13:03:59.040 I/CIRISApiClient(26882): [getGraphData]     Edges: 0 total, 0 visible
+03-28 13:03:59.041 I/CIRISApiClient(26882): [getGraphData]     Edge types: {}
+03-28 13:03:59.041 I/CIRISApiClient(26882): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+03-28 13:04:07.718 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:04:17.725 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:04:27.726 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:04:37.728 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:04:47.730 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:04:57.734 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:07.738 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:17.739 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:27.740 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:37.742 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:47.745 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:05:57.748 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:07.750 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:17.752 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:27.755 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:37.758 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:47.761 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:06:57.764 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:07.766 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:17.769 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:27.772 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:35.345 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:36.773 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:36.776 E/InteractViewModel(26882): [startStatusPolling] Status poll failed: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:37.775 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:38.383 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:38.448 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:38.516 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:40.335 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:40.339 I/InteractViewModel(26882): [fetchTrustStatus] Trust level changed: 1 -> 0
+03-28 13:07:40.341 I/InteractViewModel(26882): [fetchTrustStatus] Level pending changed: true -> false
+03-28 13:07:40.342 I/InteractViewModel(26882): [startTrustPendingPolling] Level pending=false (level=0/5), stopping fast poll
+03-28 13:07:41.564 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:41.571 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:41.587 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:41.793 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:44.612 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:44.618 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:44.631 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:46.811 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:47.652 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:47.656 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:47.670 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:47.777 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:50.719 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:50.723 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:50.739 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:51.834 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:53.764 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:53.769 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:53.785 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:54.821 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:54.824 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:54.846 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:56.804 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:56.809 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:56.824 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:56.850 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:57.780 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:07:59.851 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:07:59.856 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:07:59.869 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:01.874 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:02.889 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:02.893 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:02.908 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:05.942 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:05.947 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:05.961 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:06.892 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:07.783 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:08:08.993 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:08.999 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:09.015 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:11.923 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:12.043 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:12.051 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:12.070 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:15.091 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:15.095 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:15.108 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:16.955 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:17.786 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:08:18.129 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:18.133 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:18.146 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:21.176 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:21.181 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:21.196 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:21.977 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:24.212 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:24.220 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:24.234 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:24.870 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:24.875 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:24.893 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:26.999 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:27.254 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:27.258 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:27.273 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:27.788 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:08:30.298 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:30.303 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:30.317 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:32.019 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:33.342 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:33.346 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:33.360 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:36.383 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:36.389 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:36.404 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:37.039 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:37.790 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:08:39.427 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:39.431 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:39.442 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:42.071 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:42.462 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:42.467 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:42.481 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:45.519 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:45.529 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:45.547 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:47.098 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:47.799 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:08:48.572 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:48.576 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:48.592 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:51.617 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:51.622 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:51.636 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:52.117 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:54.659 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:54.664 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:54.680 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:54.910 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:54.913 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:54.926 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:57.142 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:57.710 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:08:57.714 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:57.735 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:08:57.802 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:00.754 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:00.761 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:00.775 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:02.168 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:03.803 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:03.808 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:03.824 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:06.851 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:06.857 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:06.876 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:07.188 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:07.804 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:09.911 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:09.918 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:09.935 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:12.222 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:12.966 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:12.974 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:12.994 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:16.021 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:16.026 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:16.040 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:17.241 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:17.806 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:19.068 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:19.074 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:19.087 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:22.109 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:22.113 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:22.126 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:22.259 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:24.962 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:24.969 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:24.989 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:25.147 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:25.152 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:25.168 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:27.294 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:27.808 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:28.201 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:28.209 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:28.228 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:31.264 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:31.272 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:31.288 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:32.327 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:34.311 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:34.315 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:34.332 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:37.361 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:37.367 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:37.369 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:37.380 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:37.819 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:40.404 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:40.410 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:40.428 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:42.376 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:43.450 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:43.457 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:43.473 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:46.497 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:46.502 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:46.518 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:47.397 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:47.821 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:49.541 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:49.547 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:49.563 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:52.418 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:52.578 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:52.581 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:52.596 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:55.018 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:55.022 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:55.040 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:55.621 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:55.626 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:55.642 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:57.443 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:57.824 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:09:58.661 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:09:58.665 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:09:58.679 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:01.705 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:01.709 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:01.725 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:02.468 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:04.753 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:04.758 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:04.771 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:07.487 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:07.787 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:07.791 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:07.806 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:07.826 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:10.830 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:10.834 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:10.846 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:12.520 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:13.868 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:13.873 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:13.887 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:16.905 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:16.910 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:16.925 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:17.544 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:17.827 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:19.946 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:19.951 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:19.963 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:22.568 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:22.984 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:22.989 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:23.001 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:25.064 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:25.068 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:25.082 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:26.031 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:26.039 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:26.056 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:27.590 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:27.829 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:29.078 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:29.086 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:29.103 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:32.125 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:32.130 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:32.143 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:32.605 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:35.180 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:35.184 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:35.197 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:37.630 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:37.831 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:38.220 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:38.226 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:38.242 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:41.267 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:41.272 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:41.284 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:42.655 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:44.318 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:44.327 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:44.344 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:47.381 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:47.389 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:47.408 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:47.686 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:47.833 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:50.435 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:50.439 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:50.452 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:52.714 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:53.478 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:53.482 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:53.497 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:55.114 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:55.120 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:55.145 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:56.520 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:56.525 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:56.545 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:57.750 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:57.836 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:10:59.565 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:10:59.569 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:10:59.582 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:02.604 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:02.609 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:02.623 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:02.769 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:05.645 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:05.649 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:05.661 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:07.788 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:07.838 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:08.691 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:08.698 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:08.716 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:11.753 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:11.758 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:11.771 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:12.815 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:14.805 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:14.811 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:14.826 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:17.854 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:17.859 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:17.867 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:17.870 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:17.885 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:20.920 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:20.926 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:20.942 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:22.891 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:23.972 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:23.978 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:23.998 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:25.179 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:25.186 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:25.204 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:27.029 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:27.034 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:27.049 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:27.856 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:27.924 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:30.082 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:30.090 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:30.111 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:32.958 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:33.140 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:33.146 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:33.164 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:36.193 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:36.198 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:36.213 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:37.861 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:37.990 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:39.250 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:39.257 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:39.272 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:42.314 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:42.319 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:42.335 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:43.024 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:45.369 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:45.376 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:45.393 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:47.865 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:48.060 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:48.425 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:48.431 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:48.449 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:51.482 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:51.490 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:51.508 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:53.093 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:54.543 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:54.551 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:54.567 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:55.235 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:55.240 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:55.262 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:57.601 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:11:57.608 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:57.623 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:11:57.867 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:11:58.125 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:00.659 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:00.666 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:00.687 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:03.153 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:03.713 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:03.718 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:03.738 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:06.762 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:06.767 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:06.779 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:07.871 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:08.198 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:09.797 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:09.800 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:09.812 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:12.837 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:12.840 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:12.858 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:13.211 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:15.880 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:15.883 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:15.896 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:17.873 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:18.233 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:18.913 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:18.920 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:18.940 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:21.960 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:21.964 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:21.977 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:23.251 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:25.000 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:25.005 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:25.019 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:25.287 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:25.291 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:25.308 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:27.876 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:28.048 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:28.051 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:28.063 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:28.268 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:31.087 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:31.091 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:31.110 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:33.294 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:34.137 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:34.142 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:34.160 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:37.190 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:37.195 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:37.213 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:37.881 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:38.321 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:40.247 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:40.253 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:40.271 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:43.298 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:43.303 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:43.318 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:43.337 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:46.336 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:46.339 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:46.352 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:47.884 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:48.359 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:49.371 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:49.376 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:49.391 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:52.410 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:52.414 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:52.425 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:53.378 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:55.333 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:55.337 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:55.355 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:55.445 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:55.448 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:55.462 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:57.886 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:12:58.400 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:58.478 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:12:58.482 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:12:58.492 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:01.538 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:01.542 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:01.558 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:03.425 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:04.584 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:04.588 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:04.601 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:07.631 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:07.635 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:07.649 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:07.890 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:08.441 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:10.677 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:10.684 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:10.702 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:13.469 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:13.722 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:13.726 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:13.740 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:16.766 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:16.771 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:16.784 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:17.892 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:18.492 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:19.810 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:19.814 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:19.832 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:22.861 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:22.866 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:22.880 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:23.514 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:25.387 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:25.392 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:25.412 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:25.911 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:25.915 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:25.930 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:27.895 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:28.545 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:28.947 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:28.953 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:28.964 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:31.998 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:32.004 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:32.026 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:33.571 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:35.056 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:35.062 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:35.077 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:37.898 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:38.106 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:38.110 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:38.132 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:38.593 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:41.158 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:41.165 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:41.185 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:43.615 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:44.202 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:44.206 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:44.222 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:47.249 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:47.254 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:47.270 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:47.900 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:48.642 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:50.294 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:50.299 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:50.317 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:53.341 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:53.346 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:53.360 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:53.665 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:55.440 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:55.445 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:55.461 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:56.384 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:56.389 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:56.410 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:57.903 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:13:58.692 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:59.430 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:13:59.433 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:13:59.444 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:02.469 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:02.475 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:02.494 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:03.710 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:05.523 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:05.527 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:05.540 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:07.906 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:08.565 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:08.570 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:08.586 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:08.732 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:11.611 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:11.617 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:11.635 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:13.755 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:14.654 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:14.659 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:14.675 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:17.703 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:17.708 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:17.728 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:17.909 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:18.778 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:20.759 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:20.765 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:20.780 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:23.812 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:23.818 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:23.820 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:23.833 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:25.492 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:25.498 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:25.525 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:26.858 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:26.864 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:26.880 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:27.910 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:28.834 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:29.903 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:29.908 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:29.925 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:32.947 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:32.952 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:32.971 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:33.855 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:36.004 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:36.008 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:36.022 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:37.912 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:38.883 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:39.045 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:39.050 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:39.067 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:42.093 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:42.098 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:42.113 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:43.905 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:45.137 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:45.142 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:45.160 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:47.914 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:48.190 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:48.196 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:48.212 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:48.926 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:51.240 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:51.246 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:51.262 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:53.950 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:54.286 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:54.292 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:54.309 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:55.546 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:55.549 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:55.564 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:57.337 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:14:57.343 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:57.357 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:14:57.917 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:14:58.973 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:00.383 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:00.390 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:00.407 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:03.434 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:03.439 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:03.455 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:03.994 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:06.486 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:06.492 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:06.513 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:07.919 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:09.016 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:09.530 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:09.534 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:09.549 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:12.576 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:12.581 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:12.599 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:14.037 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:15.626 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:15.631 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:15.648 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:17.923 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:18.673 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:18.677 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:18.689 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:19.067 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:21.714 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:21.719 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:21.734 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:24.098 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:24.763 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:24.769 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:24.783 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:25.590 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:25.594 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:25.611 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:27.807 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:27.810 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:27.825 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:27.925 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:29.123 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:30.849 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:30.854 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:30.872 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:33.902 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:33.907 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:33.925 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:34.143 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:36.953 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:36.958 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:36.973 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:37.928 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:39.164 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:39.994 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:39.999 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:40.014 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:43.047 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:43.051 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:43.070 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:44.191 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:46.101 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:46.106 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:46.119 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:47.933 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:49.146 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:49.152 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:49.169 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:49.212 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:52.199 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:52.204 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:52.215 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:54.236 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:55.244 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:55.248 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:55.259 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:55.636 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:55.641 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:55.665 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:57.936 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:15:58.289 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:15:58.293 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:58.306 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:15:59.267 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:01.333 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:01.339 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:01.355 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:04.292 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:04.378 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:04.382 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:04.398 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:07.416 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:07.420 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:07.435 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:07.938 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:09.308 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:10.456 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:10.460 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:10.473 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:13.494 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:13.499 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:13.517 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:14.338 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:16.545 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:16.550 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:16.564 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:17.940 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:19.379 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:19.585 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:19.589 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:19.603 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:22.631 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:22.636 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:22.649 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:24.413 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:25.679 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:25.685 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:25.693 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:25.695 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:25.702 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:25.708 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:27.943 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:28.729 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:28.735 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:28.749 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:29.441 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:31.773 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:31.778 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:31.792 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:34.469 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:34.816 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:34.820 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:34.835 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:37.871 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:37.879 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:37.896 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:37.945 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:39.498 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:40.929 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:40.936 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:40.957 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:43.990 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:43.996 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:44.015 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:44.528 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:47.046 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:47.052 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:47.067 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:47.948 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:49.563 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:50.095 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:50.101 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:50.117 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:53.149 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:53.154 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:53.165 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:54.596 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:55.745 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:55.752 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:55.769 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:56.195 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:56.201 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:56.219 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:57.952 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:16:59.255 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:16:59.263 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:59.282 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:16:59.625 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:02.299 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:02.303 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:02.315 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:04.646 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:05.330 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:05.333 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:05.341 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:07.954 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:17:08.362 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:08.366 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:08.376 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:09.662 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:11.392 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:11.395 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:11.405 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:14.425 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:14.428 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:14.439 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:14.678 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:17.460 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:17.463 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:17.473 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:17.956 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:17:19.697 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:20.489 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:20.493 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:20.503 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:23.519 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:23.522 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:23.532 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:24.712 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:25.791 E/CIRISApiClient(26882): [getLlmConfig] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:25.794 W/InteractViewModel(26882): [fetchHealthData] Failed to fetch LLM config from API: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:25.805 E/CIRISApiClient(26882): [getVerifyStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:26.546 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:26.549 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:26.559 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:27.958 D/EnvFileUpdater(26882): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+03-28 13:17:29.579 E/CIRISApiClient(26882): [getMessages] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname | Context: limit=50, is401=false, tokenPresent=true, tokenPreview=ciris_ad...zK88
+03-28 13:17:29.583 W/InteractViewModel(26882): [fetchHistory] Non-auth error: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:29.594 E/CIRISApiClient(26882): [getAuditEntries] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname
+03-28 13:17:29.726 E/CIRISApiClient(26882): [getSystemStatus] Exception: UnknownHostException: Unable to resolve host "localhost": No address associated with hostname

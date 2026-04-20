@@ -253,6 +253,27 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
             )
         return response
 
+    # Add cache-control headers for static files to prevent stale WASM cache
+    # This fixes the "hard reload required" issue in Home Assistant ingress
+    @app.middleware("http")
+    async def _add_cache_control(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        response = await call_next(request)
+        path = request.url.path
+
+        # For index.html and root path, always revalidate (no caching)
+        if path == "/" or path.endswith("/index.html") or path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        # For JS and WASM files, use short cache with revalidation
+        elif path.endswith(".js") or path.endswith(".wasm"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        # For other static assets (CSS, images), allow short caching
+        elif any(path.endswith(ext) for ext in [".css", ".png", ".jpg", ".svg", ".ico", ".woff", ".woff2"]):
+            response.headers["Cache-Control"] = "public, max-age=3600, must-revalidate"
+
+        return response
+
     # Configure middleware
     print("[STARTUP] Configuring middleware...")
     set_api_status("configuring_middleware")

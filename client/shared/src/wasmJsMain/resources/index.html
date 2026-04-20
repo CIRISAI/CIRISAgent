@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>CIRIS Agent</title>
+
+    <style>
+        /* Self-hosted Material Icons - works offline, no CDN dependency */
+        @font-face {
+            font-family: 'Material Icons';
+            font-style: normal;
+            font-weight: 400;
+            font-display: block;
+            src: url(fonts/material-icons.woff2) format('woff2');
+        }
+
+        /* Material Icons helper class */
+        .material-icons {
+            font-family: 'Material Icons';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Reset and base styles */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Compose WASM canvas container */
+        #ComposeTarget {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Loading state */
+        .loading-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            z-index: 9999;
+            transition: opacity 0.3s ease-out;
+        }
+
+        .loading-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-logo {
+            font-size: 48px;
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 24px;
+            letter-spacing: 4px;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 212, 255, 0.2);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error state */
+        .error-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a2e;
+            color: #ff6b6b;
+            z-index: 10000;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .error-container.visible {
+            display: flex;
+        }
+
+        .error-title {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .error-message {
+            color: rgba(255, 255, 255, 0.7);
+            max-width: 400px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="loading" class="loading-container">
+        <div class="loading-logo">CIRIS</div>
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <!-- Error overlay -->
+    <div id="error" class="error-container">
+        <div class="error-title">Failed to Load</div>
+        <div class="error-message" id="error-message">
+            WebAssembly is not supported in this browser.
+            Please use a modern browser like Chrome, Firefox, Safari, or Edge.
+        </div>
+    </div>
+
+    <!-- Compose WASM canvas target -->
+    <canvas id="ComposeTarget"></canvas>
+
+    <script>
+        // Check WebAssembly support
+        if (typeof WebAssembly === 'undefined') {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.add('visible');
+        }
+
+        // Hide loading when canvas gets first paint
+        var checkInterval = setInterval(function() {
+            var canvas = document.getElementById('ComposeTarget');
+            if (canvas && canvas.width > 0 && canvas.height > 0) {
+                // Small delay to ensure first frame is painted
+                setTimeout(function() {
+                    document.getElementById('loading').classList.add('hidden');
+                }, 100);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+
+        // Timeout fallback
+        setTimeout(function() {
+            document.getElementById('loading').classList.add('hidden');
+            clearInterval(checkInterval);
+        }, 30000);
+    </script>
+
+    <!-- Compose WASM entry point -->
+    <script src="ciris-shared.js"></script>
+</body>
+</html>

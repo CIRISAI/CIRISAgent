@@ -87,6 +87,32 @@ The runner automatically configures adapters based on which modules are selected
 - `reddit` module → adapter set to `api,reddit`
 - `sql_external_data` / `dsar_multi_source` → adapter set to `api,external_data_sql`
 
+### Adding New Modules
+
+When creating a new test module, you must update **THREE places** in `runner.py`:
+
+1. **Import the module** (~line 893):
+   ```python
+   from .modules.my_new_tests import MyNewTests
+   ```
+
+2. **Add to `module_map`** (~line 954):
+   ```python
+   QAModule.MY_NEW: MyNewTests,
+   ```
+
+3. **Add to `sdk_modules` list** (~line 233):
+   ```python
+   QAModule.MY_NEW,
+   ```
+
+**CRITICAL**: If you forget step 3, your module will be silently skipped! The `sdk_modules` list determines which modules are routed to `_run_sdk_modules()`. Modules not in this list are treated as HTTP test modules and may not run.
+
+Also add the enum to `config.py`:
+```python
+MY_NEW = "my_new"  # Description of what it tests
+```
+
 ## SSE-Based Task Completion Monitoring
 
 **Critical**: Tests must wait for `TASK_COMPLETE` action via SSE before proceeding to the next test.

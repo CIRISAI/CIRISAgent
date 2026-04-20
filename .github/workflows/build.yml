@@ -312,7 +312,7 @@ jobs:
 
       - name: Build CIRIS Desktop UberJar
         run: |
-          cd mobile
+          cd client
           ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
           mkdir -p ../ciris_engine/desktop_app
           cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
@@ -594,15 +594,15 @@ jobs:
 
       - name: Extract mobile Resources.zip
         run: |
-          mkdir -p mobile/iosApp/Resources/app
-          cd mobile/iosApp/Resources && unzip -qo ../Resources.zip
+          mkdir -p client/iosApp/Resources/app
+          cd client/iosApp/Resources && unzip -qo ../Resources.zip
 
       - name: Register mobile build manifest with Registry
         env:
           REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
           REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
         run: |
-          python tools/ops/register_agent_build.py --build mobile/iosApp/Resources/app \
+          python tools/ops/register_agent_build.py --build client/iosApp/Resources/app \
             --modules core --include-dirs ciris_engine ciris_adapters ciris_ios ciris_sdk
 
   deploy:
@@ -744,7 +744,7 @@ jobs:
 
       - name: Build debug APK
         run: |
-          cd mobile
+          cd client
           ./gradlew :androidApp:syncPythonSources
           ./gradlew :androidApp:assembleDebug
 
@@ -764,6 +764,6 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            mobile/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
+            client/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

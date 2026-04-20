@@ -30,6 +30,7 @@ from .config_migration import (
 )
 from .resume_helpers import (
     auto_enable_android_adapters_for_resume,
+    auto_enable_environment_adapters_for_resume,
     initialize_core_services_for_resume,
     initialize_identity_for_resume,
     initialize_llm_for_resume,
@@ -79,6 +80,7 @@ __all__ = [
     "should_skip_cognitive_migration",
     # Resume helpers
     "auto_enable_android_adapters_for_resume",
+    "auto_enable_environment_adapters_for_resume",
     "initialize_core_services_for_resume",
     "initialize_identity_for_resume",
     "initialize_llm_for_resume",

@@ -47,7 +47,7 @@ class iOSBuildConfig:
     def __post_init__(self):
         if self.ciris_root is None:
             # Derive CIRIS root from project path
-            # project_path = .../mobile/iosApp
+            # project_path = .../client/iosApp
             self.ciris_root = self.project_path.parent.parent
 
         if self.derived_data_path is None:

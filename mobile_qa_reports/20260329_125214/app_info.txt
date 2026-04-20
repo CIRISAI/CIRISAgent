@@ -1,0 +1,12 @@
+=== Device Info ===
+Model: SM-S737TL
+Android: 8.1.0
+
+=== Package Info ===
+versionCode=76 minSdk=24 targetSdk=35
+versionName=2.3.0
+firstInstallTime=2026-03-01 02:27:12
+lastUpdateTime=2026-03-29 12:46:08
+
+=== Process Info ===
+u0_a172       3022  2874 2060952  91516 SyS_epoll_wait      0 S ai.ciris.mobile

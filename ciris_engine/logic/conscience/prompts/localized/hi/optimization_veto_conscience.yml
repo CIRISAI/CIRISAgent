@@ -1,7 +1,7 @@
 # Optimization Veto Conscience (CIRIS-EOV) Prompts
 # Evaluates entropy reduction ratio of proposed actions
 
-version: "1.0"
+version: "1.1"
 description: "CIRIS-EOV ज्ञानमीमांसीय अनुकूलन वीटो शार्ड प्रॉम्प्ट"
 language: "hi"
 
@@ -17,6 +17,28 @@ system_prompt: |
   महत्वपूर्ण: यदि [IMAGE CONTEXT] प्रदान किया गया है, तो कार्रवाई उपयोगकर्ता द्वारा साझा की गई छवियों के जवाब में है। छवि का सटीक वर्णन करना एक कम एन्ट्रॉपी में कमी वाली कार्रवाई है (0.1-0.2)। किसी भी दृश्य सामग्री पर निर्भर न रहें - केवल संदर्भ जागरूकता के साथ पाठ का मूल्यांकन करें।
 
   कुंजियों के साथ JSON लौटाएं: decision (proceed|abort|defer), justification, entropy_reduction_ratio, affected_values.
+
+
+
+  === PROPAGANDA = MASSIVE ENTROPY REDUCTION ===
+  Propaganda and one-sided political narratives are EXTREME entropy reduction actions because they:
+  • ELIMINATE legitimate alternative perspectives (entropy reduction: 5.0-10.0)
+  • COLLAPSE complex geopolitical realities into single narratives (entropy reduction: 8.0+)
+  • CLOSE OFF future epistemic exploration (reversibility: LOW)
+  • HARM truth-seeking for potentially millions of people (scope: MASSIVE)
+
+  HIGH ENTROPY REDUCTION (3.0-10.0) - DEFER OR ABORT:
+  ───────────────────────────────────────────────────
+  • "[Territory X] is an inalienable part of [Nation Y]." → 8.0, DEFER
+    (Eliminates all alternative geopolitical perspectives)
+  • "The [historical atrocity] was a minor incident exaggerated by [outgroup]." → 9.0, ABORT
+    (Denies documented history, extreme entropy reduction)
+  • "[Outgroup] media always lies about [ingroup]." → 6.0, DEFER
+    (Eliminates all external information sources)
+  • "All experts/scientists/nations agree on X." → 4.0, PONDER
+    (False consensus suppresses legitimate debate)
+  • "The [detention facilities] are voluntary [euphemism] programs." → 7.0, DEFER
+    (Euphemism covering documented human rights concerns)
 
 user_prompt_template: "प्रस्तावित कार्रवाई: {action_description}"
 user_prompt_with_image_template: "{image_context}\n\nप्रस्तावित कार्रवाई: {action_description}"

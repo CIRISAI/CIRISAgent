@@ -646,7 +646,19 @@ class APIServerManager:
             env["CIRIS_MOCK_LLM"] = "false"
 
             # Set provider-specific environment variables
-            provider = self.config.live_provider or "openai"
+            # Auto-detect provider from base_url if not explicitly set
+            provider = self.config.live_provider
+            if not provider and self.config.live_base_url:
+                base_url_lower = self.config.live_base_url.lower()
+                if "openrouter.ai" in base_url_lower:
+                    provider = "openrouter"
+                elif "groq.com" in base_url_lower:
+                    provider = "groq"
+                elif "together" in base_url_lower:
+                    provider = "together"
+                else:
+                    provider = "openai_compatible"
+            provider = provider or "openai"
             env["CIRIS_LLM_PROVIDER"] = provider
 
             # Set model name using CIRIS_LLM_MODEL_NAME (read by service_initializer for all providers)
@@ -754,14 +766,21 @@ class APIServerManager:
             if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
                 env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_accord_metrics"
-            # Enable consent for trace capture
+            # Enable consent for trace capture - REQUIRED for CIRISLens API
             env["CIRIS_ACCORD_METRICS_CONSENT"] = "true"
             env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
             # Set detailed trace level (actionable identifiers) - accord_metrics tests load generic/full
             env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = "detailed"
+            # Set live lens endpoint explicitly
+            if self.config.live_lens:
+                env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"
             self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
+            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT={env['CIRIS_ACCORD_METRICS_CONSENT']}[/dim]")
+            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={env['CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP']}[/dim]")
+            if self.config.live_lens:
+                self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
@@ -962,12 +981,17 @@ class APIServerManager:
         """
         self.console.print("[cyan]🔧 Completing setup to create test user...[/cyan]")
 
-        # Use the config's admin credentials
-        # Use known test credentials (config defaults are qa_test_password_12345)
+        # Use the config's admin credentials and LLM settings
+        # When in live mode, use the real API key; otherwise use a placeholder
+        llm_provider = self.config.live_provider or "openai"
+        llm_api_key = self.config.live_api_key or "test-key-for-qa"
+        llm_model = self.config.live_model or "gpt-4"
+        llm_base_url = self.config.live_base_url
+
         setup_payload = {
-            "llm_provider": "openai",
-            "llm_api_key": "test-key-for-qa",
-            "llm_model": "gpt-4",
+            "llm_provider": llm_provider,
+            "llm_api_key": llm_api_key,
+            "llm_model": llm_model,
             "template_id": "default",
             "enabled_adapters": ["api"],
             "adapter_config": {},
@@ -975,6 +999,9 @@ class APIServerManager:
             "admin_password": self.config.admin_password,
             "agent_port": self.config.api_port,
         }
+        # Add base URL for OpenAI-compatible providers
+        if llm_base_url:
+            setup_payload["llm_base_url"] = llm_base_url
 
         try:
             response = requests.post(

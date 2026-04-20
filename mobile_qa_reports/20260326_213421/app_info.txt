@@ -1,0 +1,12 @@
+=== Device Info ===
+Model: SM-G998U
+Android: 15
+
+=== Package Info ===
+versionCode=75 minSdk=24 targetSdk=35
+versionName=2.3.0
+lastUpdateTime=2026-03-26 21:31:33
+firstInstallTime=2026-03-14 20:16:12
+
+=== Process Info ===
+u0_a413      24219  1400   18209496 611604 0                   0 R ai.ciris.mobile.debug

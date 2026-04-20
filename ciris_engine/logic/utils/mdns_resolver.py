@@ -8,6 +8,13 @@ Provides:
 Uses zeroconf library for reliable mDNS across all platforms (including Android
 where socket.gethostbyname() doesn't support .local domains).
 
+Security Note (REVIEWED 2026-04-19):
+    HTTP is used for local service discovery because:
+    1. mDNS discovers LAN services that typically don't have TLS certificates
+    2. Home Assistant, local LLMs, etc. commonly run without TLS on local networks
+    3. Connections are LAN-only, not over the internet
+    This is a deliberate design decision for local service discovery.
+
 Usage:
     from ciris_engine.logic.utils.mdns_resolver import (
         resolve_local_hostname,
@@ -147,7 +154,7 @@ async def resolve_local_hostname(
     azc = await _get_async_zeroconf()
     if azc is not None:
         try:
-            resolved_ip = await _resolve_via_zeroconf(azc, hostname, timeout)
+            resolved_ip = await _resolve_via_zeroconf(hostname, timeout)
             if resolved_ip:
                 logger.info(f"[mDNS] Resolved {hostname} -> {resolved_ip} via zeroconf")
                 return resolved_ip
@@ -170,7 +177,6 @@ async def resolve_local_hostname(
 
 
 async def _resolve_via_zeroconf(
-    azc: Any,
     hostname: str,
     timeout: float,
 ) -> Optional[str]:
@@ -217,7 +223,7 @@ def _sync_resolve_via_serviceinfo(
         # Create a ServiceInfo for a dummy service on this host
         # This lets us use ServiceInfo.request() to resolve the hostname
         # The service type doesn't matter - we just want the address
-        service_name = f"_ciris-probe._tcp.local."
+        service_name = "_ciris-probe._tcp.local."
         full_name = f"probe.{service_name}"
 
         # Try using ServiceInfo to resolve the server hostname
@@ -336,7 +342,7 @@ class DiscoveredService:
     @property
     def url(self) -> str:
         """HTTP URL for this service (using IP for reliability)."""
-        return f"http://{self.ip_address}:{self.port}"
+        return f"http://{self.ip_address}:{self.port}"  # NOSONAR - local services use HTTP
 
 
 class _ServiceDiscoveryListener:
@@ -457,7 +463,7 @@ async def discover_and_probe_hostnames(
     async def probe_host(hostname: str, port: int) -> Optional[Dict[str, Any]]:
         # First resolve hostname to IP via mDNS
         ip = await resolve_local_hostname(hostname, timeout=2.0)
-        url = f"http://{ip}:{port}{probe_endpoint}"
+        url = f"http://{ip}:{port}{probe_endpoint}"  # NOSONAR - local service probe
 
         try:
             client_timeout = aiohttp.ClientTimeout(total=2.0)
@@ -468,7 +474,7 @@ async def discover_and_probe_hostnames(
                             "hostname": hostname,
                             "ip": ip,
                             "port": port,
-                            "url": f"http://{ip}:{port}",
+                            "url": f"http://{ip}:{port}",  # NOSONAR - local services use HTTP
                             "status": response.status,
                         }
         except Exception:

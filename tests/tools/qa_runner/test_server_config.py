@@ -185,7 +185,8 @@ class TestLiveLLMConfig:
 
             # Live LLM should override mock settings
             assert env.get("CIRIS_MOCK_LLM") == "false"
-            assert env.get("CIRIS_LLM_PROVIDER") == "openai"
+            # When base_url is provided, provider becomes openai_compatible
+            assert env.get("CIRIS_LLM_PROVIDER") == "openai_compatible"
             assert env.get("OPENAI_API_KEY") == "sk-test-key"
             # Model name is set via CIRIS_LLM_MODEL_NAME (used by service_initializer for all providers)
             assert env.get("CIRIS_LLM_MODEL_NAME") == "gpt-4o-mini"

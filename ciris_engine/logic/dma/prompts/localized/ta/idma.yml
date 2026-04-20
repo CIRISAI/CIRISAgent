@@ -3,7 +3,7 @@
 
 component_name: idma
 description: "உள்ளுணர்வு DMA - CCA k_eff சூத்திரம் மற்றும் நிலை வகைப்பாட்டைப் பயன்படுத்துகிறது"
-version: "1.0"
+version: "1.1"
 
 # CIRIS உடன்படிக்கையை சூழலாக சேர்க்கவும்
 accord_header: true

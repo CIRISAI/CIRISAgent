@@ -58,6 +58,11 @@ class FilterTestHelper:
         if self.stream_thread:
             self.stream_thread.join(timeout=2)
 
+    def clear_task_ids(self) -> None:
+        """Clear completed task IDs to prepare for next test."""
+        self.completed_tasks.clear()
+        self.task_complete_seen = False
+
     def wait_for_task_complete(self, task_id: Optional[str] = None, timeout: float = 30.0) -> bool:
         """
         Wait for a specific task to complete, or any task if task_id is None.

@@ -37,14 +37,14 @@ MODE="${1:-all}"  # all, debug, release, ios-deploy
 step "Pre-flight checks"
 
 [[ -f "ciris_engine/constants.py" ]] || fail "Not in CIRISAgent project root"
-[[ -d "mobile/shared" ]] || fail "mobile/shared not found"
+[[ -d "client/shared" ]] || fail "client/shared not found"
 
 # Version info
 VERSION=$(grep 'CIRIS_VERSION = ' ciris_engine/constants.py | head -1 | sed 's/.*"\(.*\)".*/\1/')
 ok "Project version: $VERSION"
 
 # Check gradle
-[[ -f "mobile/gradlew" ]] || fail "mobile/gradlew not found"
+[[ -f "client/gradlew" ]] || fail "client/gradlew not found"
 
 # ============================================================================
 # 2. Generate build secrets
@@ -69,15 +69,15 @@ fi
 step "Syncing Python code to iOS Resources"
 
 rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' \
-    ciris_engine/ mobile/iosApp/Resources/app/ciris_engine/
+    ciris_engine/ client/iosApp/Resources/app/ciris_engine/
 ok "ciris_engine synced"
 
 rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' \
-    ciris_adapters/ mobile/iosApp/Resources/app/ciris_adapters/
+    ciris_adapters/ client/iosApp/Resources/app/ciris_adapters/
 ok "ciris_adapters synced"
 
 # Ensure build secrets landed in Resources (rsync from source which has it)
-if [[ ! -f "mobile/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py" ]]; then
+if [[ ! -f "client/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py" ]]; then
     fail "_build_secrets.py missing from iOS Resources after sync"
 fi
 ok "Build secrets in iOS Resources"
@@ -90,11 +90,11 @@ step "Syncing localization files"
 LANG_COUNT=$(ls localization/*.json 2>/dev/null | wc -l | tr -d ' ')
 [[ "$LANG_COUNT" -gt 0 ]] || fail "No localization JSON files found in localization/"
 
-cp localization/*.json mobile/iosApp/iosApp/localization/
-cp localization/*.json mobile/iosApp/Resources/app/localization/
-cp localization/*.json mobile/desktopApp/src/main/resources/localization/
-cp localization/*.json mobile/shared/src/desktopMain/resources/localization/
-cp localization/*.json mobile/androidApp/src/main/assets/localization/
+cp localization/*.json client/iosApp/iosApp/localization/
+cp localization/*.json client/iosApp/Resources/app/localization/
+cp localization/*.json client/desktopApp/src/main/resources/localization/
+cp localization/*.json client/shared/src/desktopMain/resources/localization/
+cp localization/*.json client/androidApp/src/main/assets/localization/
 
 ok "$LANG_COUNT language files synced to 5 targets"
 
@@ -103,7 +103,7 @@ ok "$LANG_COUNT language files synced to 5 targets"
 # ============================================================================
 step "Pruning iOS Resources (removing desktop/test/Linux artifacts)"
 
-cd mobile/iosApp/Resources
+cd client/iosApp/Resources
 
 # Desktop JAR — macOS only, not for iOS (~98MB)
 rm -rf app/ciris_engine/desktop_app/
@@ -169,7 +169,7 @@ cd "$PROJECT_ROOT"
 # ============================================================================
 if [[ "$MODE" == "ios-deploy" ]]; then
     step "Building iOS app (xcodebuild)"
-    cd mobile/iosApp
+    cd client/iosApp
     xcodebuild -project iosApp.xcodeproj -scheme iosApp \
         -sdk iphoneos -configuration Debug \
         -destination 'generic/platform=iOS' \

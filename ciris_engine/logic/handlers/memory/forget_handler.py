@@ -54,22 +54,9 @@ class ForgetHandler(BaseActionHandler):
             # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
             return follow_up_id
         # Memory operations will use the memory bus
+        # Note: WA authorization for IDENTITY/ENVIRONMENT scopes is already checked by _can_forget()
 
         node = params.node
-        scope = node.scope
-        if scope in (GraphScope.IDENTITY, GraphScope.ENVIRONMENT) and not getattr(
-            dispatch_context, "wa_authorized", False
-        ):
-            follow_up_content = "FORGET action denied: WA authorization required"
-
-            # Use the proper method to complete thought and create follow-up
-            follow_up_id = self.complete_thought_and_create_followup(
-                thought=thought, follow_up_content=follow_up_content, action_result=result, status=ThoughtStatus.FAILED
-            )
-
-            # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
-            return follow_up_id
-
         forget_result = await self.bus_manager.memory.forget(node=node, handler_name=self.__class__.__name__)
         await self._audit_forget_operation(params, dispatch_context, forget_result)
         success = forget_result.status == MemoryOpStatus.OK

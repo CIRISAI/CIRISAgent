@@ -1,0 +1,1173 @@
+--------- beginning of main
+--------- beginning of system
+04-06 22:35:55.468 I/MainActivity(  987): Initializing Python runtime...
+04-06 22:35:57.626 I/MainActivity(  987): Python runtime started
+04-06 22:35:57.626 I/LocalizationResourceLoader(  987): Initialized with context
+04-06 22:35:57.628 I/MainActivity(  987): Localization resource loader initialized
+04-06 22:35:57.937 I/MainActivity(  987): Google Sign-In initialized with client ID: 265882853697-l421ndo...
+04-06 22:35:57.937 I/MainActivity(  987): Initializing Google Play Billing...
+04-06 22:35:58.032 I/CIRISApiClient(  987): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-06 22:35:58.065 I/MainActivity(  987): Google Play Billing initialized
+04-06 22:35:58.071 I/MainActivity(  987): Google Play Integrity initialized (via Python API)
+04-06 22:35:58.770 I/MainActivity(  987): Running CIRIS network diagnostics...
+04-06 22:35:58.791 D/PythonRuntime(  987): New logcat generation: 1
+04-06 22:35:58.791 I/MainActivity(  987): Starting logcat reader (generation 1)
+04-06 22:35:58.792 I/MainActivity(  987): Showing CIRISApp immediately for startup animation
+04-06 22:35:58.800 I/MainActivity(  987): Starting PythonRuntimeService...
+04-06 22:35:58.818 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:35:58.883 I/CIRISApiClient(  987): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-06 22:35:58.910 I/TokenManager(  987): [setShared] Shared TokenManager instance set
+04-06 22:35:58.941 I/InteractViewModel(  987): [init] InteractViewModel initialized (polling deferred until token available)
+04-06 22:35:58.943 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:35:58.944 I/InteractViewModel(  987): [observeLanguageChanges] Starting language observation for pipeline localization
+04-06 22:35:58.966 I/SettingsViewModel(  987): [loadDisplaySettings] >>> Loading live_background_enabled from secure storage...
+04-06 22:35:58.980 I/BillingViewModel(  987): [init] BillingViewModel initialized
+04-06 22:35:58.986 I/SessionsViewModel(  987): [init] SessionsViewModel initialized (polling deferred until startPolling() called)
+04-06 22:35:58.995 I/AdaptersViewModel(  987): [init] AdaptersViewModel initialized
+04-06 22:35:59.004 I/ServicesViewModel(  987): [init] ServicesViewModel initialized (polling deferred until startPolling() called)
+04-06 22:35:59.021 I/AuditViewModel(  987): [init] AuditViewModel initialized (data load deferred until startPolling() called)
+04-06 22:35:59.026 I/LogsViewModel(  987): [init] LogsViewModel initialized (polling deferred until startPolling() called)
+04-06 22:35:59.031 I/MemoryViewModel(  987): [init] MemoryViewModel initialized (data load deferred until startPolling() called)
+04-06 22:35:59.036 I/ConfigViewModel(  987): [init] ConfigViewModel initialized (data load deferred until startPolling() called)
+04-06 22:35:59.041 I/ConsentViewModel(  987): [init] ConsentViewModel initialized (data load deferred until startPolling() called)
+04-06 22:35:59.050 I/RuntimeViewModel(  987): [init] RuntimeViewModel initialized (polling deferred until startPolling() called)
+04-06 22:35:59.067 I/TicketsViewModel(  987): [init] TicketsViewModel initialized (data load deferred)
+04-06 22:35:59.071 I/SchedulerViewModel(  987): [init] SchedulerViewModel initialized
+04-06 22:35:59.841 I/CIRISApp(  987): Test mode enabled on mobile — starting test automation server
+04-06 22:35:59.843 I/CIRISApp(  987): Initializing localization...
+04-06 22:35:59.844 I/LocalizationManager(  987): Initializing localization manager...
+04-06 22:35:59.852 I/MainActivity(  987): Setting purchase result callback
+04-06 22:35:59.876 W/StartupViewModel(  987): [STARTUP][0ms] === startCIRIS() CALLED ===
+04-06 22:35:59.878 W/StartupViewModel(  987): [STARTUP][0ms] TOTAL_PREP_STEPS=8, TOTAL_VERIFY_STEPS=11, TOTAL_SERVICES=22
+04-06 22:35:59.881 W/StartupViewModel(  987): [STARTUP][0ms] Initial state: prep=0, verify=0, services=0, slots=[]
+04-06 22:35:59.885 I/StartupViewModel(  987): [STARTUP] === Beginning 3-step startup sequence ===
+04-06 22:35:59.887 W/StartupViewModel(  987): [STARTUP][PYTHON][3ms] === Step 1: initializePython() ===
+04-06 22:35:59.891 W/LocalizationManager(  987): Missing localization key: mobile.status_starting_python (lang=en, stringsKeys=0)
+04-06 22:35:59.981 I/LocalizationManager(  987): Loaded English fallback: 207 top-level keys
+04-06 22:36:00.026 I/LocalizationManager(  987): Loaded 207 top-level keys for en
+04-06 22:36:00.027 I/LocalizationManager(  987): Localization initialized with language: en, explicit: false
+04-06 22:36:00.029 I/CIRISApp(  987): Initializing currency...
+04-06 22:36:00.051 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:00.061 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:00.318 I/MainActivity(  987): Network diagnostics completed
+04-06 22:36:00.359 I/InteractViewModel(  987): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=false)
+04-06 22:36:00.366 I/SettingsViewModel(  987): [loadDisplaySettings] >>> Raw value='null', parsed=true
+04-06 22:36:00.368 I/SettingsViewModel(  987): [loadDisplaySettings] >>> Live background state set to: true
+04-06 22:36:00.375 I/SettingsViewModel(  987): [loadDisplaySettings] >>> Color theme loaded: VAPOR
+04-06 22:36:00.425 D/PythonRuntime(  987): Prep step 1/6 completed
+04-06 22:36:00.425 D/MainActivity(  987): Prep step 1/6: [1/6] Architecture: armeabi-v7a (machine=armv8l)
+04-06 22:36:00.426 D/PythonRuntime(  987): Prep step 2/6 completed
+04-06 22:36:00.426 D/MainActivity(  987): Prep step 2/6: [2/6] Extract target: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+04-06 22:36:00.431 D/PythonRuntime(  987): Prep step 3/6 completed
+04-06 22:36:00.431 D/MainActivity(  987): Prep step 3/6: [3/6] Found existing .so: _pydantic_core.cpython-310-arm-linux-androideabi.so
+04-06 22:36:00.431 D/PythonRuntime(  987): Prep step 4/6 completed
+04-06 22:36:00.432 D/MainActivity(  987): Prep step 4/6: [4/6] No cached modules to clear
+04-06 22:36:00.432 D/PythonRuntime(  987): Prep step 5/6 completed
+04-06 22:36:00.432 D/MainActivity(  987): Prep step 5/6: [5/6] sys.path[0] = /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages
+04-06 22:36:00.433 D/PythonRuntime(  987): Prep step 5/6 completed
+04-06 22:36:00.433 D/MainActivity(  987): Prep step 5/6: [5/6] Installed PydanticCoreFinder at meta_path[0]
+04-06 22:36:00.434 D/PythonRuntime(  987): Prep step 6/6 completed
+04-06 22:36:00.434 D/MainActivity(  987): Prep step 6/6: [6/6] Testing native library load...
+04-06 22:36:00.454 W/StartupViewModel(  987): [STARTUP][PYTHON][569ms] Step 1 complete: Python initialized (took 566ms)
+04-06 22:36:00.457 W/StartupViewModel(  987): [STARTUP][SERVER][573ms] === Step 2: startFastAPIServer() ===
+04-06 22:36:00.461 W/StartupViewModel(  987): [STARTUP][CALLBACK][573ms] === WIRING OUTPUT CALLBACK ===
+04-06 22:36:00.462 D/PythonRuntime(  987): Prep step 6/6 completed
+04-06 22:36:00.462 D/MainActivity(  987): Prep step 6/6: [6/6] ctypes.CDLL: SUCCESS
+04-06 22:36:00.465 I/StartupViewModel(  987): [STARTUP] Step 2: calling pythonRuntime.startServer()...
+04-06 22:36:00.473 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:00.473 D/PythonRuntime(  987): [startServer] Health check attempt 0: false
+04-06 22:36:00.545 I/SettingsViewModel(  987): [loadDisplaySettings] >>> Brightness preference loaded: SYSTEM
+04-06 22:36:00.551 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:00.558 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:00.753 I/StartupViewModel(  987): [STARTUP][PHASE] STARTING_SERVER -> PREPARING (PREPARING ENVIRONMENT)
+04-06 22:36:00.756 I/StartupViewModel(  987): [STARTUP][PREP] Step 6/8 complete
+04-06 22:36:00.761 D/PythonRuntime(  987): Prep step 6/6 completed
+04-06 22:36:00.762 D/MainActivity(  987): Prep step 6/6: [6/6] import pydantic_core: SUCCESS (v2.23.4)
+04-06 22:36:00.764 I/StartupViewModel(  987): [STARTUP][PREP] Step 6/8 complete
+04-06 22:36:00.765 D/PythonRuntime(  987): Prep step 6/6 completed
+04-06 22:36:00.766 D/MainActivity(  987): Prep step 6/6: [6/6] Location: /data/data/ai.ciris.mobile.debug/files/chaquopy/extract-packages/pydantic_core/__init__.py
+04-06 22:36:00.778 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:00.778 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:00.778 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:00.778 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:00.868 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:00.872 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:01.479 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:01.480 D/PythonRuntime(  987): [startServer] Health check attempt 1: false
+04-06 22:36:02.495 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:02.495 D/PythonRuntime(  987): [startServer] Health check attempt 2: false
+04-06 22:36:03.501 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:03.501 D/PythonRuntime(  987): [startServer] Health check attempt 3: false
+04-06 22:36:04.095 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:04.099 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:04.522 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:04.523 D/PythonRuntime(  987): [startServer] Health check attempt 4: false
+04-06 22:36:05.529 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:05.529 D/PythonRuntime(  987): [startServer] Health check attempt 5: false
+04-06 22:36:05.820 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:05.820 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:05.820 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:05.820 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:06.538 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:06.538 D/PythonRuntime(  987): [startServer] Health check attempt 6: false
+04-06 22:36:06.615 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:06.618 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:07.545 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:07.545 D/PythonRuntime(  987): [startServer] Health check attempt 7: false
+04-06 22:36:08.559 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:08.559 D/PythonRuntime(  987): [startServer] Health check attempt 8: false
+04-06 22:36:09.095 I/InteractViewModel(  987): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=false)
+04-06 22:36:09.103 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:09.105 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:09.566 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:09.567 D/PythonRuntime(  987): [startServer] Health check attempt 9: false
+04-06 22:36:09.852 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:10.574 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:10.574 D/PythonRuntime(  987): [startServer] Health check attempt 10: false
+04-06 22:36:10.864 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:10.864 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:10.864 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:10.864 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:11.580 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:11.580 D/PythonRuntime(  987): [startServer] Health check attempt 11: false
+04-06 22:36:11.605 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:11.606 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:12.587 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:12.587 D/PythonRuntime(  987): [startServer] Health check attempt 12: false
+04-06 22:36:13.592 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:13.593 D/PythonRuntime(  987): [startServer] Health check attempt 13: false
+04-06 22:36:14.108 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:14.110 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:14.599 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:14.599 D/PythonRuntime(  987): [startServer] Health check attempt 14: false
+04-06 22:36:15.606 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:15.606 D/PythonRuntime(  987): [startServer] Health check attempt 15: false
+04-06 22:36:15.919 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:15.919 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:15.919 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:15.919 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:16.614 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:16.616 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:16.616 D/PythonRuntime(  987): [startServer] Health check attempt 16: false
+04-06 22:36:16.617 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:17.628 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:17.629 D/PythonRuntime(  987): [startServer] Health check attempt 17: false
+04-06 22:36:18.642 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:18.643 D/PythonRuntime(  987): [startServer] Health check attempt 18: false
+04-06 22:36:19.118 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:19.121 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:19.655 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:19.655 D/PythonRuntime(  987): [startServer] Health check attempt 19: false
+04-06 22:36:19.855 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:20.669 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:20.669 D/PythonRuntime(  987): [startServer] Health check attempt 20: false
+04-06 22:36:20.970 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:20.970 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:20.970 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:20.970 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:21.622 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:21.625 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:21.676 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:21.676 D/PythonRuntime(  987): [startServer] Health check attempt 21: false
+04-06 22:36:21.791 I/StartupViewModel(  987): [STARTUP][PREP] Step 7/8 complete
+04-06 22:36:21.793 D/PythonRuntime(  987): Prep step 7/8 completed
+04-06 22:36:21.793 D/MainActivity(  987): Prep step 7/8: [7/8] Hashing ciris_engine...
+04-06 22:36:22.683 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:22.683 D/PythonRuntime(  987): [startServer] Health check attempt 22: false
+04-06 22:36:23.377 I/StartupViewModel(  987): [STARTUP][PREP] Step 7/8 complete
+04-06 22:36:23.379 D/PythonRuntime(  987): Prep step 7/8 completed
+04-06 22:36:23.379 D/MainActivity(  987): Prep step 7/8: [7/8] ciris_engine: 701 files hashed
+04-06 22:36:23.381 I/StartupViewModel(  987): [STARTUP][PREP] Step 8/8 complete
+04-06 22:36:23.382 I/StartupViewModel(  987): [STARTUP][PREP] All prep steps complete, transitioning to STARTING_SERVER
+04-06 22:36:23.384 I/StartupViewModel(  987): [STARTUP][PHASE] PREPARING -> STARTING_SERVER (STARTING BACKEND)
+04-06 22:36:23.386 D/PythonRuntime(  987): Prep step 8/8 completed
+04-06 22:36:23.386 D/MainActivity(  987): Prep step 8/8: [8/8] Hashing ciris_adapters...
+04-06 22:36:23.388 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:23.389 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:23.689 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:23.689 D/PythonRuntime(  987): [startServer] Health check attempt 23: false
+04-06 22:36:24.399 I/StartupViewModel(  987): [STARTUP][PREP] Step 8/8 complete
+04-06 22:36:24.400 I/StartupViewModel(  987): [STARTUP][PREP] All prep steps complete, transitioning to STARTING_SERVER
+04-06 22:36:24.402 I/StartupViewModel(  987): [STARTUP][PHASE] STARTING_SERVER -> STARTING_SERVER (STARTING BACKEND)
+04-06 22:36:24.404 D/PythonRuntime(  987): Prep step 8/8 completed
+04-06 22:36:24.404 D/MainActivity(  987): Prep step 8/8: [8/8] ciris_adapters: 256 files hashed
+04-06 22:36:24.695 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:24.696 D/PythonRuntime(  987): [startServer] Health check attempt 24: false
+04-06 22:36:25.701 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:25.701 D/PythonRuntime(  987): [startServer] Health check attempt 25: false
+04-06 22:36:26.002 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:26.002 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:26.002 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:26.002 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:26.040 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:26.042 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:26.708 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:26.708 D/PythonRuntime(  987): [startServer] Health check attempt 26: false
+04-06 22:36:27.713 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:27.713 D/PythonRuntime(  987): [startServer] Health check attempt 27: false
+04-06 22:36:28.544 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:28.545 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:28.720 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:28.720 D/PythonRuntime(  987): [startServer] Health check attempt 28: false
+04-06 22:36:29.725 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:29.725 D/PythonRuntime(  987): [startServer] Health check attempt 29: false
+04-06 22:36:29.856 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:30.732 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:30.732 D/PythonRuntime(  987): [startServer] Health check attempt 30: false
+04-06 22:36:31.034 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:31.034 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:31.034 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:31.034 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:31.047 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:31.048 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:31.738 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:31.738 D/PythonRuntime(  987): [startServer] Health check attempt 31: false
+04-06 22:36:32.744 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:32.744 D/PythonRuntime(  987): [startServer] Health check attempt 32: false
+04-06 22:36:33.550 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:33.552 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:33.750 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:33.750 D/PythonRuntime(  987): [startServer] Health check attempt 33: false
+04-06 22:36:34.756 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:34.757 D/PythonRuntime(  987): [startServer] Health check attempt 34: false
+04-06 22:36:35.762 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:35.762 D/PythonRuntime(  987): [startServer] Health check attempt 35: false
+04-06 22:36:36.070 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:36.070 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:36.070 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:36.070 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:36.076 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:36.077 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:36.769 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:36.769 D/PythonRuntime(  987): [startServer] Health check attempt 36: false
+04-06 22:36:37.774 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:37.774 D/PythonRuntime(  987): [startServer] Health check attempt 37: false
+04-06 22:36:38.574 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:38.575 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:38.781 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:38.781 D/PythonRuntime(  987): [startServer] Health check attempt 38: false
+04-06 22:36:39.786 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:39.786 D/PythonRuntime(  987): [startServer] Health check attempt 39: false
+04-06 22:36:39.858 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:40.792 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:40.793 D/PythonRuntime(  987): [startServer] Health check attempt 40: false
+04-06 22:36:41.087 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:41.088 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:41.131 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:41.131 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:41.131 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:41.131 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:41.798 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:41.798 D/PythonRuntime(  987): [startServer] Health check attempt 41: false
+04-06 22:36:42.808 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:42.809 D/PythonRuntime(  987): [startServer] Health check attempt 42: false
+04-06 22:36:43.580 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:43.581 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:43.814 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:43.814 D/PythonRuntime(  987): [startServer] Health check attempt 43: false
+04-06 22:36:44.185 I/StartupViewModel(  987): [STARTUP][SERVER] Creating API application...
+04-06 22:36:44.188 I/StartupViewModel(  987): [STARTUP][SERVER] Configuring middleware...
+04-06 22:36:44.191 I/StartupViewModel(  987): [STARTUP][SERVER] Initializing runtime state...
+04-06 22:36:44.746 I/StartupViewModel(  987): [STARTUP][SERVER] Registering API routes...
+04-06 22:36:44.820 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:44.820 D/PythonRuntime(  987): [startServer] Health check attempt 44: false
+04-06 22:36:45.826 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:45.826 D/PythonRuntime(  987): [startServer] Health check attempt 45: false
+04-06 22:36:46.066 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:46.068 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:46.162 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:46.162 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:46.162 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:46.162 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:46.832 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:46.832 D/PythonRuntime(  987): [startServer] Health check attempt 46: false
+04-06 22:36:47.838 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:47.838 D/PythonRuntime(  987): [startServer] Health check attempt 47: false
+04-06 22:36:48.570 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:48.571 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:48.845 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:48.845 D/PythonRuntime(  987): [startServer] Health check attempt 48: false
+04-06 22:36:49.850 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:49.851 D/PythonRuntime(  987): [startServer] Health check attempt 49: false
+04-06 22:36:49.859 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:50.190 I/StartupViewModel(  987): [STARTUP][SERVER] Routes registered successfully
+04-06 22:36:50.203 I/StartupViewModel(  987): [STARTUP][SERVER] API application ready
+04-06 22:36:50.259 I/StartupViewModel(  987): [STARTUP][CALLBACK][50372ms] !!! SERVICE MATCH: slot=1/22 name=TimeService !!!
+04-06 22:36:50.261 I/StartupViewModel(  987): [STARTUP][SERVICE][50377ms] === FIRST SERVICE - Starting services phase ===
+04-06 22:36:50.263 I/StartupViewModel(  987): [STARTUP][PHASE] STARTING_SERVER -> LOADING_SERVICES (LOADING SERVICES)
+04-06 22:36:50.265 I/StartupViewModel(  987): [STARTUP][SERVICE][50377ms] Slot 1 started, total=1/22, slots=[1]
+04-06 22:36:50.268 D/PythonRuntime(  987): Service 1 started, total: 1/22
+04-06 22:36:50.268 D/MainActivity(  987): Service 1 started (1/22)
+04-06 22:36:50.269 I/StartupViewModel(  987): [STARTUP][CALLBACK][50384ms] !!! SERVICE MATCH: slot=1/22 name=TimeService !!!
+04-06 22:36:50.271 I/StartupViewModel(  987): [STARTUP][SERVICE][50386ms] Slot 1 started, total=1/22, slots=[1]
+04-06 22:36:50.272 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:50.273 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:50.273 D/PythonRuntime(  987): Service 1 started, total: 1/22
+04-06 22:36:50.273 D/MainActivity(  987): Service 1 started (1/22)
+04-06 22:36:50.274 I/StartupViewModel(  987): [STARTUP][CALLBACK][50390ms] !!! SERVICE MATCH: slot=2/22 name=ShutdownService !!!
+04-06 22:36:50.276 I/StartupViewModel(  987): [STARTUP][SERVICE][50392ms] Slot 2 started, total=2/22, slots=[1, 2]
+04-06 22:36:50.278 D/PythonRuntime(  987): Service 2 started, total: 2/22
+04-06 22:36:50.278 D/MainActivity(  987): Service 2 started (2/22)
+04-06 22:36:50.279 I/StartupViewModel(  987): [STARTUP][CALLBACK][50394ms] !!! SERVICE MATCH: slot=2/22 name=ShutdownService !!!
+04-06 22:36:50.281 I/StartupViewModel(  987): [STARTUP][SERVICE][50397ms] Slot 2 started, total=2/22, slots=[1, 2]
+04-06 22:36:50.283 D/PythonRuntime(  987): Service 2 started, total: 2/22
+04-06 22:36:50.283 D/MainActivity(  987): Service 2 started (2/22)
+04-06 22:36:50.284 I/StartupViewModel(  987): [STARTUP][CALLBACK][50400ms] !!! SERVICE MATCH: slot=3/22 name=InitializationService !!!
+04-06 22:36:50.286 I/StartupViewModel(  987): [STARTUP][SERVICE][50402ms] Slot 3 started, total=3/22, slots=[1, 2, 3]
+04-06 22:36:50.288 D/PythonRuntime(  987): Service 3 started, total: 3/22
+04-06 22:36:50.288 D/MainActivity(  987): Service 3 started (3/22)
+04-06 22:36:50.289 I/StartupViewModel(  987): [STARTUP][CALLBACK][50404ms] !!! SERVICE MATCH: slot=3/22 name=InitializationService !!!
+04-06 22:36:50.291 I/StartupViewModel(  987): [STARTUP][SERVICE][50406ms] Slot 3 started, total=3/22, slots=[1, 2, 3]
+04-06 22:36:50.292 D/PythonRuntime(  987): Service 3 started, total: 3/22
+04-06 22:36:50.293 D/MainActivity(  987): Service 3 started (3/22)
+04-06 22:36:50.537 I/StartupViewModel(  987): [STARTUP][CALLBACK][50653ms] !!! SERVICE MATCH: slot=4/22 name=ResourceMonitor !!!
+04-06 22:36:50.540 I/StartupViewModel(  987): [STARTUP][SERVICE][50656ms] Slot 4 started, total=4/22, slots=[1, 2, 3, 4]
+04-06 22:36:50.542 D/PythonRuntime(  987): Service 4 started, total: 4/22
+04-06 22:36:50.542 D/MainActivity(  987): Service 4 started (4/22)
+04-06 22:36:50.543 I/StartupViewModel(  987): [STARTUP][CALLBACK][50659ms] !!! SERVICE MATCH: slot=4/22 name=ResourceMonitor !!!
+04-06 22:36:50.545 I/StartupViewModel(  987): [STARTUP][SERVICE][50660ms] Slot 4 started, total=4/22, slots=[1, 2, 3, 4]
+04-06 22:36:50.546 D/PythonRuntime(  987): Service 4 started, total: 4/22
+04-06 22:36:50.547 D/MainActivity(  987): Service 4 started (4/22)
+04-06 22:36:50.735 I/StartupViewModel(  987): [STARTUP][CALLBACK][50851ms] !!! SERVICE MATCH: slot=5/22 name=SecretsService !!!
+04-06 22:36:50.737 I/StartupViewModel(  987): [STARTUP][SERVICE][50853ms] Slot 5 started, total=5/22, slots=[1, 2, 3, 4, 5]
+04-06 22:36:50.739 D/PythonRuntime(  987): Service 5 started, total: 5/22
+04-06 22:36:50.740 D/MainActivity(  987): Service 5 started (5/22)
+04-06 22:36:50.748 I/StartupViewModel(  987): [STARTUP][CALLBACK][50863ms] !!! SERVICE MATCH: slot=22/22 name=SecretsToolService !!!
+04-06 22:36:50.749 I/StartupViewModel(  987): [STARTUP][SERVICE][50865ms] Slot 22 started, total=6/22, slots=[1, 2, 3, 4, 5, 22]
+04-06 22:36:50.751 D/PythonRuntime(  987): Service 22 started, total: 6/22
+04-06 22:36:50.751 D/MainActivity(  987): Service 22 started (6/22)
+04-06 22:36:50.778 I/StartupViewModel(  987): [STARTUP][CALLBACK][50894ms] !!! SERVICE MATCH: slot=6/22 name=MemoryService !!!
+04-06 22:36:50.780 I/StartupViewModel(  987): [STARTUP][SERVICE][50895ms] Slot 6 started, total=7/22, slots=[1, 2, 3, 4, 5, 22, 6]
+04-06 22:36:50.782 D/PythonRuntime(  987): Service 6 started, total: 7/22
+04-06 22:36:50.782 D/MainActivity(  987): Service 6 started (7/22)
+04-06 22:36:50.791 I/StartupViewModel(  987): [STARTUP][CALLBACK][50906ms] !!! SERVICE MATCH: slot=7/22 name=ConfigService !!!
+04-06 22:36:50.793 I/StartupViewModel(  987): [STARTUP][SERVICE][50908ms] Slot 7 started, total=8/22, slots=[1, 2, 3, 4, 5, 22, 6, 7]
+04-06 22:36:50.795 D/PythonRuntime(  987): Service 7 started, total: 8/22
+04-06 22:36:50.795 D/MainActivity(  987): Service 7 started (8/22)
+04-06 22:36:50.857 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:50.857 D/PythonRuntime(  987): [startServer] Health check attempt 50: false
+04-06 22:36:51.194 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:51.194 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:51.194 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:51.194 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:51.863 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:51.863 D/PythonRuntime(  987): [startServer] Health check attempt 51: false
+04-06 22:36:52.833 I/InteractViewModel(  987): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=false)
+04-06 22:36:52.838 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:52.839 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:52.869 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:52.869 D/PythonRuntime(  987): [startServer] Health check attempt 52: false
+04-06 22:36:53.875 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:53.875 D/PythonRuntime(  987): [startServer] Health check attempt 53: false
+04-06 22:36:54.881 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:54.881 D/PythonRuntime(  987): [startServer] Health check attempt 54: false
+04-06 22:36:55.093 I/StartupViewModel(  987): [STARTUP][CALLBACK][55208ms] !!! SERVICE MATCH: slot=15/22 name=AuthenticationService !!!
+04-06 22:36:55.096 I/StartupViewModel(  987): [STARTUP][SERVICE][55211ms] Slot 15 started, total=9/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15]
+04-06 22:36:55.099 D/PythonRuntime(  987): Service 15 started, total: 9/22
+04-06 22:36:55.099 D/MainActivity(  987): Service 15 started (9/22)
+04-06 22:36:55.193 I/StartupViewModel(  987): [STARTUP][CALLBACK][55308ms] !!! SERVICE MATCH: slot=13/22 name=WiseAuthority !!!
+04-06 22:36:55.195 I/StartupViewModel(  987): [STARTUP][SERVICE][55310ms] Slot 13 started, total=10/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13]
+04-06 22:36:55.197 D/PythonRuntime(  987): Service 13 started, total: 10/22
+04-06 22:36:55.198 D/MainActivity(  987): Service 13 started (10/22)
+04-06 22:36:55.332 I/StartupViewModel(  987): [STARTUP][CALLBACK][55447ms] !!! SERVICE MATCH: slot=9/22 name=TelemetryService !!!
+04-06 22:36:55.334 I/StartupViewModel(  987): [STARTUP][SERVICE][55450ms] Slot 9 started, total=11/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9]
+04-06 22:36:55.336 D/PythonRuntime(  987): Service 9 started, total: 11/22
+04-06 22:36:55.336 D/MainActivity(  987): Service 9 started (11/22)
+04-06 22:36:55.346 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:55.347 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:55.569 I/StartupViewModel(  987): [STARTUP][CALLBACK][55685ms] !!! SERVICE MATCH: slot=14/22 name=LLMService !!!
+04-06 22:36:55.571 I/StartupViewModel(  987): [STARTUP][SERVICE][55687ms] Slot 14 started, total=12/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14]
+04-06 22:36:55.573 D/PythonRuntime(  987): Service 14 started, total: 12/22
+04-06 22:36:55.573 D/MainActivity(  987): Service 14 started (12/22)
+04-06 22:36:55.887 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:55.887 D/PythonRuntime(  987): [startServer] Health check attempt 55: false
+04-06 22:36:56.233 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:36:56.233 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:36:56.233 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:36:56.233 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:36:56.896 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:56.897 D/PythonRuntime(  987): [startServer] Health check attempt 56: false
+04-06 22:36:57.848 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:36:57.849 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:36:57.902 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:57.903 D/PythonRuntime(  987): [startServer] Health check attempt 57: false
+04-06 22:36:58.912 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:58.912 D/PythonRuntime(  987): [startServer] Health check attempt 58: false
+04-06 22:36:59.371 I/StartupViewModel(  987): [STARTUP][CALLBACK][59487ms] !!! SERVICE MATCH: slot=8/22 name=AuditService !!!
+04-06 22:36:59.374 I/StartupViewModel(  987): [STARTUP][SERVICE][59489ms] Slot 8 started, total=13/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8]
+04-06 22:36:59.376 D/PythonRuntime(  987): Service 8 started, total: 13/22
+04-06 22:36:59.376 D/MainActivity(  987): Service 8 started (13/22)
+04-06 22:36:59.426 I/StartupViewModel(  987): [STARTUP][CALLBACK][59542ms] !!! SERVICE MATCH: slot=10/22 name=IncidentManagement !!!
+04-06 22:36:59.428 I/StartupViewModel(  987): [STARTUP][SERVICE][59544ms] Slot 10 started, total=14/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10]
+04-06 22:36:59.431 D/PythonRuntime(  987): Service 10 started, total: 14/22
+04-06 22:36:59.431 D/MainActivity(  987): Service 10 started (14/22)
+04-06 22:36:59.504 I/StartupViewModel(  987): [STARTUP][CALLBACK][59619ms] !!! SERVICE MATCH: slot=19/22 name=AdaptiveFilter !!!
+04-06 22:36:59.506 I/StartupViewModel(  987): [STARTUP][SERVICE][59621ms] Slot 19 started, total=15/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19]
+04-06 22:36:59.507 D/PythonRuntime(  987): Service 19 started, total: 15/22
+04-06 22:36:59.508 D/MainActivity(  987): Service 19 started (15/22)
+04-06 22:36:59.528 I/StartupViewModel(  987): [STARTUP][CALLBACK][59643ms] !!! SERVICE MATCH: slot=18/22 name=TaskScheduler !!!
+04-06 22:36:59.529 I/StartupViewModel(  987): [STARTUP][SERVICE][59645ms] Slot 18 started, total=16/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18]
+04-06 22:36:59.531 D/PythonRuntime(  987): Service 18 started, total: 16/22
+04-06 22:36:59.531 D/MainActivity(  987): Service 18 started (16/22)
+04-06 22:36:59.861 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:36:59.917 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:36:59.917 D/PythonRuntime(  987): [startServer] Health check attempt 59: false
+04-06 22:37:00.351 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:00.352 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:00.380 I/StartupViewModel(  987): [STARTUP][CALLBACK][60496ms] !!! SERVICE MATCH: slot=11/22 name=TSDBConsolidation !!!
+04-06 22:37:00.382 I/StartupViewModel(  987): [STARTUP][SERVICE][60498ms] Slot 11 started, total=17/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11]
+04-06 22:37:00.384 D/PythonRuntime(  987): Service 11 started, total: 17/22
+04-06 22:37:00.384 D/MainActivity(  987): Service 11 started (17/22)
+04-06 22:37:00.388 I/StartupViewModel(  987): [STARTUP][CALLBACK][60503ms] !!! SERVICE MATCH: slot=16/22 name=DatabaseMaintenance !!!
+04-06 22:37:00.389 I/StartupViewModel(  987): [STARTUP][SERVICE][60505ms] Slot 16 started, total=18/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16]
+04-06 22:37:00.391 D/PythonRuntime(  987): Service 16 started, total: 18/22
+04-06 22:37:00.391 D/MainActivity(  987): Service 16 started (18/22)
+04-06 22:37:00.788 I/StartupViewModel(  987): [STARTUP][CALLBACK][60903ms] !!! SERVICE MATCH: slot=21/22 name=SelfObservation !!!
+04-06 22:37:00.790 I/StartupViewModel(  987): [STARTUP][SERVICE][60905ms] Slot 21 started, total=19/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21]
+04-06 22:37:00.792 D/PythonRuntime(  987): Service 21 started, total: 19/22
+04-06 22:37:00.792 D/MainActivity(  987): Service 21 started (19/22)
+04-06 22:37:00.800 I/StartupViewModel(  987): [STARTUP][CALLBACK][60916ms] !!! SERVICE MATCH: slot=20/22 name=VisibilityService !!!
+04-06 22:37:00.802 I/StartupViewModel(  987): [STARTUP][SERVICE][60918ms] Slot 20 started, total=20/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21, 20]
+04-06 22:37:00.804 D/PythonRuntime(  987): Service 20 started, total: 20/22
+04-06 22:37:00.804 D/MainActivity(  987): Service 20 started (20/22)
+04-06 22:37:00.805 I/StartupViewModel(  987): [STARTUP][CALLBACK][60921ms] !!! SERVICE MATCH: slot=12/22 name=ConsentService !!!
+04-06 22:37:00.807 I/StartupViewModel(  987): [STARTUP][SERVICE][60922ms] Slot 12 started, total=21/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21, 20, 12]
+04-06 22:37:00.809 D/PythonRuntime(  987): Service 12 started, total: 21/22
+04-06 22:37:00.809 D/MainActivity(  987): Service 12 started (21/22)
+04-06 22:37:00.846 I/StartupViewModel(  987): [STARTUP][CALLBACK][60961ms] !!! SERVICE MATCH: slot=17/22 name=RuntimeControl !!!
+04-06 22:37:00.848 I/StartupViewModel(  987): [STARTUP][SERVICE][60963ms] Slot 17 started, total=22/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21, 20, 12, 17]
+04-06 22:37:00.849 I/StartupViewModel(  987): [STARTUP][SERVICE][60963ms] === ALL 22 SERVICES STARTED ===
+04-06 22:37:00.851 D/PythonRuntime(  987): Service 17 started, total: 22/22
+04-06 22:37:00.852 D/MainActivity(  987): Service 17 started (22/22)
+04-06 22:37:00.925 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:37:00.925 D/PythonRuntime(  987): [startServer] Health check attempt 60: false
+04-06 22:37:01.030 I/StartupViewModel(  987): [STARTUP][CONSOLIDATOR] Checking for missed windows...
+04-06 22:37:01.093 I/StartupViewModel(  987): [STARTUP][CONSOLIDATOR] Complete - no missed periods
+04-06 22:37:01.265 E/CIRISApiClient(  987): [getSystemStatus] Exception: ConnectException: Failed to connect to localhost/127.0.0.1:8080 | Context: url=http://localhost:8080
+04-06 22:37:01.265 E/CIRISApiClient(  987): java.net.ConnectException: Failed to connect to localhost/127.0.0.1:8080
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:297)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:207)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:517)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.lang.Thread.run(Thread.java:762)
+04-06 22:37:01.265 E/CIRISApiClient(  987): Caused by: java.net.ConnectException: Connection refused
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.PlainSocketImpl.socketConnect(Native Method)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.doConnect(AbstractPlainSocketImpl.java:334)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connectToAddress(AbstractPlainSocketImpl.java:196)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.AbstractPlainSocketImpl.connect(AbstractPlainSocketImpl.java:178)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.SocksSocketImpl.connect(SocksSocketImpl.java:356)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at java.net.Socket.connect(Socket.java:605)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.platform.AndroidPlatform.connectSocket(AndroidPlatform.kt:63)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:295)
+04-06 22:37:01.265 E/CIRISApiClient(  987): 	... 18 more
+04-06 22:37:01.930 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:37:01.930 D/PythonRuntime(  987): [startServer] Health check attempt 61: false
+04-06 22:37:02.855 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:02.856 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:02.936 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:37:02.936 D/PythonRuntime(  987): [startServer] Health check attempt 62: false
+04-06 22:37:03.942 D/PythonRuntime(  987): [checkHealth] Exception: Connection refused
+04-06 22:37:03.942 D/PythonRuntime(  987): [startServer] Health check attempt 63: false
+04-06 22:37:04.538 I/StartupViewModel(  987): [STARTUP][SERVER] Checking port 8080 availability...
+04-06 22:37:04.541 I/StartupViewModel(  987): [STARTUP][SERVER] Binding to port 8080...
+04-06 22:37:04.557 I/StartupViewModel(  987): [STARTUP][SERVER] Starting server...
+04-06 22:37:05.173 D/PythonRuntime(  987): [checkHealth] Not ready yet - cognitive_state: null
+04-06 22:37:05.173 D/PythonRuntime(  987): [startServer] Health check attempt 64: false
+04-06 22:37:05.359 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:05.361 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:05.559 I/StartupViewModel(  987): [STARTUP][SERVER] API server listening on port 8080
+04-06 22:37:05.566 I/StartupViewModel(  987): [STARTUP][SERVER] Server ready for connections
+04-06 22:37:07.854 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:07.856 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:08.348 D/PythonRuntime(  987): [checkHealth] Not ready yet - cognitive_state: null
+04-06 22:37:08.349 D/PythonRuntime(  987): [startServer] Health check attempt 65: false
+04-06 22:37:09.621 D/PythonRuntime(  987): [startServer] Health check attempt 66: true
+04-06 22:37:09.621 I/PythonRuntime(  987): [startServer] Server is healthy after 66 attempts
+04-06 22:37:09.622 I/StartupViewModel(  987): [STARTUP] Step 2 complete: server healthy at http://localhost:8080
+04-06 22:37:09.626 W/StartupViewModel(  987): [STARTUP][SERVER][69742ms] Server healthy, checking fallback states...
+04-06 22:37:09.629 W/StartupViewModel(  987): [STARTUP][SERVER][69742ms] verify=0, prep=8, services=22, slots=22
+04-06 22:37:09.632 W/StartupViewModel(  987): [STARTUP][SERVER][69742ms] !!! FALLBACK: verify was 0, setting to 11 !!!
+04-06 22:37:09.636 I/StartupViewModel(  987): [STARTUP][SERVER][69742ms] Final state - verify=11, prep=8, services=22
+04-06 22:37:09.640 W/StartupViewModel(  987): [STARTUP][WAIT][69756ms] === waitForServices() CALLED ===
+04-06 22:37:09.643 W/StartupViewModel(  987): [STARTUP][WAIT][69756ms] Current state: services=22/22, slots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21, 20, 12, 17]
+04-06 22:37:09.647 I/StartupViewModel(  987): [STARTUP][WAIT][69756ms] All 22 services already loaded, skipping wait
+04-06 22:37:09.650 W/StartupViewModel(  987): [STARTUP][READY][69766ms] === showReadyAndComplete() CALLED ===
+04-06 22:37:09.653 W/StartupViewModel(  987): [STARTUP][READY][69766ms] BEFORE: prep=8/8, verify=11/11, services=22/22
+04-06 22:37:09.654 W/StartupViewModel(  987): [STARTUP][READY][69766ms] BEFORE: startedSlots=[1, 2, 3, 4, 5, 22, 6, 7, 15, 13, 9, 14, 8, 10, 19, 18, 11, 16, 21, 20, 12, 17]
+04-06 22:37:09.656 W/StartupViewModel(  987): [STARTUP][READY][69766ms] AFTER: services=22, slots=22
+04-06 22:37:09.658 I/StartupViewModel(  987): [STARTUP][READY][69766ms] Displaying 'Agent Runtime Ready!' for 1.2s
+04-06 22:37:09.862 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:10.365 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:10.368 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:10.860 I/StartupViewModel(  987): [STARTUP][READY][69766ms + 1200] Phase set to READY
+04-06 22:37:10.864 I/StartupViewModel(  987): [STARTUP] === Startup sequence complete ===
+04-06 22:37:10.870 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:10.872 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:10.900 D/CIRISApp(  987): [INFO] Startup READY, checking first-run status...
+04-06 22:37:10.900 I/StartupViewModel(  987): [TIMER] setKeepTimerAlive(true)
+04-06 22:37:10.902 I/StartupViewModel(  987): [STARTUP][STATUS] Verificando status da configuração...
+04-06 22:37:10.958 I/CIRISApiClient(  987): [init] CIRISApiClient initialized with baseUrl=http://localhost:8080
+04-06 22:37:10.985 I/LocalizationManager(  987): Resetting from temporary language pt to en
+04-06 22:37:10.987 I/LocalizationManager(  987): Setting language to: English (en)
+04-06 22:37:10.989 I/LocalizationManager(  987): Loaded 207 top-level keys for en
+04-06 22:37:10.991 I/InteractViewModel(  987): [observeLanguageChanges] Updating pipeline labels for language: en (explicit=false)
+04-06 22:37:10.999 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:11.000 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:11.076 I/CIRISApiClient(  987): [getSetupStatus] Setup status: required=false, firstRun=false, configExists=true
+04-06 22:37:11.079 I/StartupViewModel(  987): [TIMER] setKeepTimerAlive(false)
+04-06 22:37:11.080 D/CIRISApp(  987): [INFO] First run check result: false
+04-06 22:37:11.080 D/CIRISApp(  987): [INFO] Not first run, attempting to load and validate stored token
+04-06 22:37:11.080 I/StartupViewModel(  987): [STARTUP][STATUS] Authenticating...
+04-06 22:37:11.200 D/CIRISApp(  987): [INFO] Loaded stored token: ciris_ad...iabU
+04-06 22:37:11.200 I/StartupViewModel(  987): [STARTUP][STATUS] Token loaded, checking validity...
+04-06 22:37:11.202 I/StartupViewModel(  987): [STARTUP][STATUS] Checking token expiry...
+04-06 22:37:11.206 W/TokenManager(  987): [getTokenExpiry] Invalid JWT format: expected 3 parts, got 1
+04-06 22:37:11.208 I/TokenManager(  987): [checkAndRefreshToken] Token check: expiry=null, remaining=nulls, minValid=300s
+04-06 22:37:11.210 W/TokenManager(  987): [checkAndRefreshToken] Could not parse token expiry - treating as expired
+04-06 22:37:11.212 I/TokenManager(  987): [attemptSilentRefresh] Attempting silent sign-in...
+04-06 22:37:11.216 I/MainActivity(  987): Silent Sign-In requested from CIRISApp
+04-06 22:37:11.227 I/MainActivity(  987): Found cached account: ciristest1@gmail.com
+04-06 22:37:12.873 I/MainActivity(  987): Silent Sign-In successful: ciristest1@gmail.com
+04-06 22:37:12.877 I/TokenManager(  987): [attemptSilentRefresh] Silent sign-in successful! provider=google
+04-06 22:37:12.881 I/TokenManager(  987): [handleNewToken] Processing new token (length: 1096, provider: google)
+04-06 22:37:12.890 I/TokenManager(  987): [handleNewToken] New token expiry: 1775536634 (3602s remaining)
+04-06 22:37:12.894 I/CIRISApp(  987):  OAuth ID token refreshed by TokenManager (provider=google), exchanging for CIRIS token
+04-06 22:37:12.898 I/CIRISApp(  987):  Token was refreshed, waiting for CIRIS token exchange...
+04-06 22:37:12.902 I/StartupViewModel(  987): [STARTUP][STATUS] Refreshing token...
+04-06 22:37:12.906 I/CIRISApiClient(  987): [nativeAuth] Attempting native auth: provider=google, userId=null
+04-06 22:37:12.910 I/CIRISApiClient(  987): [googleAuth] Attempting Google auth: userId=null, idToken=eyJhbGci...m7Tw
+04-06 22:37:13.051 I/TokenManager(  987): [startPeriodicRefresh] Starting periodic refresh (interval: 45 minutes)
+04-06 22:37:13.962 I/StartupViewModel(  987): [STARTUP][STATUS] Token exchange... 1s
+04-06 22:37:14.973 I/StartupViewModel(  987): [STARTUP][STATUS] Token exchange... 2s
+04-06 22:37:15.624 I/CIRISApiClient(  987): [googleAuth] Google auth successful: userId=google:102773749033681671083, role=SYSTEM_ADMIN
+04-06 22:37:15.626 I/CIRISApp(  987):  Got CIRIS access token: ciris_ad...Th4I
+04-06 22:37:15.627 I/CIRISApiClient(  987): [setAccessToken] Setting access token: ciris_ad...Th4I, length=55
+04-06 22:37:15.632 I/CIRISApiClient(  987): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-06 22:37:15.634 I/MainActivity(  987): Token updated, setting on billing apiClient
+04-06 22:37:15.634 I/CIRISApiClient(  987): [setAccessToken] Setting access token: ciris_ad...Th4I, length=55
+04-06 22:37:15.636 I/CIRISApiClient(  987): [setAccessToken] Bearer token set on all API instances (13 APIs)
+04-06 22:37:15.637 I/CIRISApiClient(  987): [logTokenState] === TOKEN STATE DEBUG ===
+04-06 22:37:15.639 I/CIRISApiClient(  987): [logTokenState] accessToken present: true
+04-06 22:37:15.641 I/CIRISApiClient(  987): [logTokenState] accessToken preview: ciris_ad...Th4I
+04-06 22:37:15.642 I/CIRISApiClient(  987): [logTokenState] accessToken length: 55
+04-06 22:37:15.643 I/CIRISApiClient(  987): [logTokenState] authHeader() returns: Bearer <token>
+04-06 22:37:15.645 I/CIRISApiClient(  987): [logTokenState] =========================
+04-06 22:37:15.648 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:15.649 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:15.662 I/CIRISApp(  987):  Refreshed CIRIS token saved to secure storage
+04-06 22:37:15.664 I/CIRISApp(  987):  Writing OAuth ID token to .env for Python billing...
+04-06 22:37:15.666 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:15.668 I/EnvFileUpdater(  987): Read .env file (7129 bytes)
+04-06 22:37:15.670 I/EnvFileUpdater(  987): CIRIS proxy mode detected - updating OPENAI_API_KEY
+04-06 22:37:15.672 I/EnvFileUpdater(  987): Updated OPENAI_API_KEY
+04-06 22:37:15.678 I/EnvFileUpdater(  987): Updated CIRIS_BILLING_GOOGLE_ID_TOKEN
+04-06 22:37:15.679 I/EnvFileUpdater(  987): .env file updated (proxy mode: true)
+04-06 22:37:15.679 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:15.680 I/EnvFileUpdater(  987): Config reload signal written to /data/user/0/ai.ciris.mobile.debug/files/ciris/.config_reload
+04-06 22:37:15.680 I/CIRISApp(  987):  .env updated, .config_reload signal written
+04-06 22:37:15.682 I/CIRISApp(  987):  Waiting 1.5s for Python to reload billing token...
+04-06 22:37:15.986 I/StartupViewModel(  987): [STARTUP][STATUS] Token exchange... 3s
+04-06 22:37:16.998 I/StartupViewModel(  987): [STARTUP][STATUS] Token exchange... 4s
+04-06 22:37:17.184 I/CIRISApp(  987):  Python reload wait complete
+04-06 22:37:17.201 I/CIRISApp(  987):  Token exchange completed
+04-06 22:37:17.202 I/StartupViewModel(  987): [STARTUP][STATUS] Token exchange complete
+04-06 22:37:17.204 I/StartupViewModel(  987): [TIMER] setKeepTimerAlive(true)
+04-06 22:37:17.205 I/StartupViewModel(  987): [STARTUP][STATUS] Waiting for agent...
+04-06 22:37:17.449 I/CIRISApp(  987):  Agent state: WORK
+04-06 22:37:17.451 I/StartupViewModel(  987): [STARTUP][STATUS] Agent state: WORK
+04-06 22:37:17.452 I/CIRISApp(  987):  Agent reached WORK state!
+04-06 22:37:17.453 I/StartupViewModel(  987): [STARTUP][STATUS] Agent ready!
+04-06 22:37:17.956 I/StartupViewModel(  987): [TIMER] setKeepTimerAlive(false)
+04-06 22:37:17.957 I/CIRISApp(  987):  Triggering data load for ViewModels after token set
+04-06 22:37:17.958 I/BillingViewModel(  987): [loadBalance] Loading credit balance...
+04-06 22:37:17.970 I/CIRISApiClient(  987): [listAdapters] Listing adapters
+04-06 22:37:17.979 I/InteractViewModel(  987): [startPolling] Starting polling and SSE streams
+04-06 22:37:17.981 I/InteractViewModel(  987): [startStatusPolling] Starting status polling (fast until agent ready)
+04-06 22:37:17.989 I/InteractViewModel(  987): [startMessagePolling] Starting message polling (interval=3000ms)
+04-06 22:37:18.002 I/InteractViewModel(  987): [startHealthPolling] Starting health polling (fast until LLM ready)
+04-06 22:37:18.012 I/InteractViewModel(  987): [startTrustPendingPolling] Starting trust pending polling (interval=5000ms)
+04-06 22:37:18.014 I/InteractViewModel(  987): [startSseStream] Starting SSE reasoning stream
+04-06 22:37:18.023 I/InteractViewModel(  987): [startFileInjectionObserver] Starting file injection observer for test automation
+04-06 22:37:18.026 I/InteractViewModel(  987): [fetchWalletStatus] Fetching adapters list to check wallet status
+04-06 22:37:18.027 I/CIRISApiClient(  987): [listAdapters] Listing adapters
+04-06 22:37:18.037 I/CIRISApp(  987):  Running boot-time attestation check...
+04-06 22:37:18.038 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:37:18.039 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:37:18.046 D/CIRISApp(  987): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-06 22:37:18.929 I/CIRISApiClient(  987): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-06 22:37:18.931 I/CIRISApiClient(  987): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-06 22:37:19.863 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:25.515 I/InteractViewModel(  987): [startStatusPolling] Agent ready with state: WORK
+04-06 22:37:25.517 I/InteractViewModel(  987): [startStatusPolling] Connection state changed: false -> true
+04-06 22:37:25.653 I/CIRISApiClient(  987): [listAdapters] API response: total=3, running=3, adapters.size=3
+04-06 22:37:25.655 I/CIRISApiClient(  987): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+04-06 22:37:25.656 I/CIRISApiClient(  987): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+04-06 22:37:25.658 I/CIRISApiClient(  987): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+04-06 22:37:25.660 I/AdaptersViewModel(  987): [fetchAdaptersInternal] Fetched 3 adapters (3 running), raw list size=3
+04-06 22:37:25.661 I/AdaptersViewModel(  987): [fetchAdaptersInternal]   [0] id=cirisverify_bootstrap, type=cirisverify, running=true
+04-06 22:37:25.663 I/AdaptersViewModel(  987): [fetchAdaptersInternal]   [1] id=wallet_bootstrap, type=wallet, running=true
+04-06 22:37:25.664 I/AdaptersViewModel(  987): [fetchAdaptersInternal]   [2] id=api_bootstrap, type=api, running=true
+04-06 22:37:25.667 I/AdaptersViewModel(  987): [fetchAdapters] First load complete
+04-06 22:37:25.689 I/CIRISApp(  987):  Boot attestation: loaded=true, maxLevel=1, dns_us=true, dns_eu=true, https=true
+04-06 22:37:27.457 I/InteractViewModel(  987): [fetchTrustStatus] Trust level changed: 0 -> 1
+04-06 22:37:27.458 I/InteractViewModel(  987): [fetchTrustStatus] Level pending changed: false -> true
+04-06 22:37:27.459 I/InteractViewModel(  987): [startTrustPendingPolling] Level pending=true, triggering device attestation automatically...
+04-06 22:37:27.461 I/MainActivity(  987): Device attestation requested
+04-06 22:37:27.465 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+04-06 22:37:27.608 I/InteractViewModel(  987): [startSseStream] SSE connected
+04-06 22:37:27.661 I/InteractViewModel(  987): [fetchHistory] Added 5 new messages to chat
+04-06 22:37:27.825 I/CIRISApiClient(  987): [listAdapters] API response: total=3, running=3, adapters.size=3
+04-06 22:37:27.827 I/CIRISApiClient(  987): [listAdapters]   API adapter[0]: id=cirisverify_bootstrap, type=cirisverify, running=true
+04-06 22:37:27.828 I/CIRISApiClient(  987): [listAdapters]   API adapter[1]: id=wallet_bootstrap, type=wallet, running=true
+04-06 22:37:27.830 I/CIRISApiClient(  987): [listAdapters]   API adapter[2]: id=api_bootstrap, type=api, running=true
+04-06 22:37:27.831 I/InteractViewModel(  987): [fetchWalletStatus] Wallet adapter found: isRunning=true
+04-06 22:37:29.210 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Got nonce: uluWV7JigMmk3-hiltS_...
+04-06 22:37:29.452 I/CIRISApiClient(  987): [getGraphData] <<< DONE in 10523ms (single API call)
+04-06 22:37:29.454 I/CIRISApiClient(  987): [getGraphData]     Nodes: 77 ({local=72, identity=5})
+04-06 22:37:29.456 I/CIRISApiClient(  987): [getGraphData]     Edges: 0 total, 0 visible
+04-06 22:37:29.457 I/CIRISApiClient(  987): [getGraphData]     Edge types: {}
+04-06 22:37:29.459 I/CIRISApiClient(  987): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+04-06 22:37:29.879 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:30.973 I/InteractViewModel(  987): [fetchAuditActions] Adding 15 action entries to timeline
+04-06 22:37:30.979 I/InteractViewModel(  987): [startMessagePolling] First load complete
+04-06 22:37:31.110 I/BillingViewModel(  987): [loadBalance] Credit status loaded: hasCredit=true, creditsRemaining=32, freeUsesRemaining=0, dailyFreeUsesRemaining=0, planName=CIRIS Mobile
+04-06 22:37:31.112 I/BillingViewModel(  987): [loadBalance] Total credits calculated: 32
+04-06 22:37:31.807 I/InteractViewModel(  987): [startHealthPolling] LLM health ready: provider=other
+04-06 22:37:35.090 I/MainActivity(  987): Device attestation result: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+04-06 22:37:35.090 I/MainActivity(  987): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+04-06 22:37:35.090 I/MainActivity(  987):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+04-06 22:37:35.090 I/InteractViewModel(  987): [startTrustPendingPolling] Device attestation completed: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+04-06 22:37:35.090 I/InteractViewModel(  987): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+04-06 22:37:35.090 I/InteractViewModel(  987):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+04-06 22:37:37.914 I/InteractViewModel(  987): [startTrustPendingPolling] Trust status refreshed after device attestation
+04-06 22:37:39.885 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:49.903 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:37:59.922 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:09.936 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:14.089 D/CIRISApp(  987): [INFO] Opening Trust page
+04-06 22:38:14.095 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:38:14.102 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:38:14.643 I/MainActivity(  987): Device attestation requested
+04-06 22:38:14.644 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+04-06 22:38:15.152 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Got nonce: gbb9ve7OfxKTql4tpXP5...
+04-06 22:38:17.441 I/MainActivity(  987): Device attestation result: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+04-06 22:38:17.441 I/MainActivity(  987): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+04-06 22:38:17.441 I/MainActivity(  987):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+04-06 22:38:18.904 I/CIRISApp(  987): [Screen.Trust] Navigating back to Interact
+04-06 22:38:18.909 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:38:18.911 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:38:18.925 D/CIRISApp(  987): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-06 22:38:19.184 I/CIRISApiClient(  987): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-06 22:38:19.186 I/CIRISApiClient(  987): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-06 22:38:19.938 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:20.602 I/CIRISApiClient(  987): [getGraphData] <<< DONE in 1418ms (single API call)
+04-06 22:38:20.603 I/CIRISApiClient(  987): [getGraphData]     Nodes: 77 ({local=72, identity=5})
+04-06 22:38:20.605 I/CIRISApiClient(  987): [getGraphData]     Edges: 0 total, 0 visible
+04-06 22:38:20.606 I/CIRISApiClient(  987): [getGraphData]     Edge types: {}
+04-06 22:38:20.607 I/CIRISApiClient(  987): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+04-06 22:38:29.957 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:39.963 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:49.973 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:38:59.993 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:39:10.002 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:39:20.009 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:39:30.013 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:39:40.025 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:39:50.039 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:00.040 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:10.050 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:20.059 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:30.064 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:40.068 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:40:50.075 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:00.078 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:10.092 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:20.103 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:30.106 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:40.124 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:41:50.128 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:00.140 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:10.158 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:20.200 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:30.215 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:40.219 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:42:50.226 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:00.244 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:10.259 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:20.267 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:30.285 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:40.303 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:43:50.308 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:00.309 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:10.313 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:20.325 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:30.328 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:40.331 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:44:50.339 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:00.347 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:10.347 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:20.366 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:30.375 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:40.389 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:45:50.403 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:00.416 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:10.423 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:20.441 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:30.443 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:40.448 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:46:50.457 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:00.469 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:10.487 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:20.499 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:30.507 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:40.512 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:47:50.523 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:00.532 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:10.548 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:20.550 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:30.556 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:40.558 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:48:50.574 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:00.592 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:10.600 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:20.604 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:30.607 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:40.624 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:49:50.627 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:00.637 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:10.643 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:20.656 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:30.661 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:40.663 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:49.494 D/CIRISApp(  987): [INFO] Opening Trust page
+04-06 22:50:49.497 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 22:50:49.501 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 22:50:50.665 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:50:50.984 I/MainActivity(  987): Device attestation requested
+04-06 22:50:50.985 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Requesting Play Integrity nonce from Python API
+04-06 22:50:51.497 I/CIRISApiClient(  987): [getPlayIntegrityNonce] Got nonce: 0wlnRA7Fu4fME1IYoKAn...
+04-06 22:50:53.884 I/MainActivity(  987): Device attestation result: Error(message=Failed to get Play Integrity token: -16: Integrity API error (-16): The provided cloud project number is invalid.
+04-06 22:50:53.884 I/MainActivity(  987): Use the cloud project number which can be found in Project info in your Google Cloud Console for the cloud project where Play Integrity API is enabled.
+04-06 22:50:53.884 I/MainActivity(  987):  (https://developer.android.com/google/play/integrity/reference/com/google/android/play/core/integrity/model/IntegrityErrorCode.html#CLOUD_PROJECT_NUMBER_IS_INVALID).)
+04-06 22:51:00.666 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:51:10.668 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:51:20.670 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:51:30.670 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:51:40.671 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:51:50.674 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:00.675 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:10.677 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:20.678 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:30.680 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:40.682 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:52:50.684 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:00.686 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:10.687 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:20.688 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:30.690 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:40.691 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:53:50.692 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:00.693 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:10.694 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:20.695 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:30.697 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:40.698 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:54:50.699 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:00.701 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:10.702 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:20.704 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:30.705 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:40.706 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:55:50.707 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:00.708 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:10.709 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:20.710 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:30.711 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:40.712 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:56:50.713 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:00.714 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:10.715 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:20.716 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:30.718 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:40.719 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:57:50.720 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:00.721 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:10.722 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:20.723 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:30.724 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:40.725 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:58:50.726 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:00.726 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:10.728 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:20.760 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:30.761 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:40.762 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 22:59:50.763 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:00.764 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:04.452 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 23:00:04.455 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 23:00:04.469 D/CIRISApp(  987): [CIRISApp] >>> liveBackgroundEnabled=true, apiClient=present
+04-06 23:00:04.691 I/CIRISApiClient(  987): [getGraphData] >>> START: hours=24, scope=ALL_SCOPES, type=null, limit=200
+04-06 23:00:04.692 I/CIRISApiClient(  987): [getGraphData] Fetching timeline: http://localhost:8080/v1/memory/timeline?hours=24&include_edges=true&include_metrics=false
+04-06 23:00:06.061 I/CIRISApiClient(  987): [getGraphData] <<< DONE in 1370ms (single API call)
+04-06 23:00:06.063 I/CIRISApiClient(  987): [getGraphData]     Nodes: 77 ({local=72, identity=5})
+04-06 23:00:06.064 I/CIRISApiClient(  987): [getGraphData]     Edges: 0 total, 0 visible
+04-06 23:00:06.066 I/CIRISApiClient(  987): [getGraphData]     Edge types: {}
+04-06 23:00:06.067 I/CIRISApiClient(  987): [getGraphData]     INFO: No edges found - nodes may not have relationships yet
+04-06 23:00:09.865 D/CIRISApp(  987): [INIT] CIRISApp composable invoked - googleSignInCallback=PRESENT (168488535)
+04-06 23:00:09.868 I/InteractViewModel(  987): [setDeviceAttestationCallback] Device attestation callback SET
+04-06 23:00:09.923 I/CIRISApp(  987): [Screen.Consent] Starting consent polling
+04-06 23:00:09.926 I/ConsentViewModel(  987): [startPolling] Starting consent data loading
+04-06 23:00:09.928 I/ConsentViewModel(  987): [loadConsentData] Loading consent data
+04-06 23:00:09.932 I/CIRISApiClient(  987): [getConsentStatus] Fetching consent status
+04-06 23:00:10.765 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:12.223 I/CIRISApiClient(  987): [getConsentStatus] Consent status: stream=temporary, expiresAt=2026-04-21T04:00:11.043305+00:00
+04-06 23:00:12.227 I/CIRISApiClient(  987): [getConsentStreams] Fetching consent streams
+04-06 23:00:12.310 I/CIRISApiClient(  987): [getConsentStreams] Consent streams: 3 available, default=temporary
+04-06 23:00:12.312 I/CIRISApiClient(  987): [getPartnershipStatus] Fetching partnership status
+04-06 23:00:15.956 I/CIRISApiClient(  987): [getPartnershipStatus] Partnership status: none
+04-06 23:00:15.959 I/CIRISApiClient(  987): [getConsentAudit] Fetching consent audit, limit=10
+04-06 23:00:18.624 I/CIRISApiClient(  987): [getConsentAudit] Audit entries: 1
+04-06 23:00:18.627 I/ConsentViewModel(  987): [loadConsentData] Consent data loaded: hasConsent=true, stream=temporary, partnershipPending=false
+04-06 23:00:20.767 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:30.770 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:40.771 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris
+04-06 23:00:50.772 D/EnvFileUpdater(  987): Found CIRIS_HOME from env: /data/user/0/ai.ciris.mobile.debug/files/ciris

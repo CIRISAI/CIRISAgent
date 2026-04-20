@@ -381,7 +381,7 @@ class TestConsciencePromptIntegration:
         conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
 
         # The _create_entropy_messages method should use the loader
-        messages = conscience._create_entropy_messages("Test text")
+        messages, _user_prompt = conscience._create_entropy_messages("Test text")
 
         # Verify the messages contain expected content from YAML
         system_contents = [m.content for m in messages if m.role == "system"]
@@ -400,7 +400,7 @@ class TestConsciencePromptIntegration:
         get_conscience_prompt_loader(language="en")
 
         conscience = CoherenceConscience(mock_service_registry, mock_config, time_service=mock_time_service)
-        messages = conscience._create_coherence_messages("Test text")
+        messages, _user_prompt = conscience._create_coherence_messages("Test text")
 
         system_contents = [m.content for m in messages if m.role == "system"]
         assert any(
@@ -422,7 +422,7 @@ class TestConsciencePromptIntegration:
         set_conscience_prompt_language("fr")
 
         conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
-        messages = conscience._create_entropy_messages("Test text")
+        messages, _user_prompt = conscience._create_entropy_messages("Test text")
 
         # Verify French content appears
         system_contents = [str(m.content) for m in messages if m.role == "system"]

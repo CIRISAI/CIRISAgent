@@ -42,7 +42,7 @@ class CIRISAppConfig:
 
     PACKAGE = "ai.ciris.mobile"
     MAIN_ACTIVITY = "ai.ciris.mobile.MainActivity"
-    APK_PATH = "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+    APK_PATH = "client/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
 
     # UI Texts (for finding elements)
     TEXT_CIRIS = "CIRIS"

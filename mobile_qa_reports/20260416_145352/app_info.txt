@@ -1,7 +1,0 @@
-=== Device Info ===
-Model: 
-Android: 
-
-=== Package Info ===
-
-=== Process Info ===

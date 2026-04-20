@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
@@ -17,7 +17,7 @@ from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
 
-from .encryption import SecretsEncryption
+from .encryption import KeyStorageMode, SecretsEncryption
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ class SecretsStore:
         master_key: Optional[bytes] = None,
         max_accesses_per_minute: int = 10,
         max_accesses_per_hour: int = 100,
+        key_storage_mode: Union[KeyStorageMode, str] = "auto",
     ):
         """
         Initialize secrets store.
@@ -44,9 +45,10 @@ class SecretsStore:
         Args:
             time_service: Time service for consistent timestamps
             db_path: Path to SQLite database file
-            master_key: Master encryption key (generated if None)
+            master_key: Master encryption key (generated if None, software mode only)
             max_accesses_per_minute: Rate limit for secret access
             max_accesses_per_hour: Hourly access limit
+            key_storage_mode: Key storage mode - 'software', 'hardware', or 'auto'
         """
         self.time_service = time_service
         # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
@@ -55,7 +57,14 @@ class SecretsStore:
             self.db_path = db_path
         else:
             self.db_path = Path(db_path)
-        self.encryption = SecretsEncryption(master_key)
+
+        # Validate and cast key_storage_mode
+        valid_modes: tuple[KeyStorageMode, ...] = ("software", "hardware", "auto")
+        if key_storage_mode not in valid_modes:
+            logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
+            key_storage_mode = "auto"
+
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=cast(KeyStorageMode, key_storage_mode))
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}
@@ -84,9 +93,17 @@ class SecretsStore:
 
     def _init_database(self) -> None:
         """Initialize database with required tables."""
+        import os
+        import stat
+
         # Ensure directory exists (only for SQLite file paths)
         if isinstance(self.db_path, Path):
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            # Secure parent directory permissions (0o700 - owner only)
+            try:
+                os.chmod(self.db_path.parent, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+            except OSError as e:
+                logger.warning(f"Failed to set secure permissions on secrets directory: {e}")
 
         # Detect database type - PostgreSQL uses BYTEA instead of BLOB
         db_path_str = str(self.db_path)
@@ -143,6 +160,14 @@ class SecretsStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_secret ON secret_access_log(secret_uuid)")
 
             conn.commit()
+
+        # Secure database file permissions after creation (0o600 - owner read/write only)
+        if isinstance(self.db_path, Path) and self.db_path.exists():
+            try:
+                os.chmod(self.db_path, stat.S_IRUSR | stat.S_IWUSR)
+                logger.info(f"Set secure permissions (0o600) on secrets database: {self.db_path}")
+            except OSError as e:
+                logger.warning(f"Failed to set secure permissions on secrets.db: {e}")
 
     async def store_secret(self, secret: DetectedSecret, source_id: Optional[str] = None) -> SecretRecord:
         """
@@ -237,7 +262,15 @@ class SecretsStore:
 
             except Exception as e:  # pragma: no cover - error path
                 logger.error(f"Failed to store secret {secret.secret_uuid}: {type(e).__name__}")
-                await self._log_access(secret.secret_uuid, "STORE", "system", "Initial secret storage", False, str(e))
+                logger.debug(f"Secret storage error details: {e}")
+                await self._log_access(
+                    secret.secret_uuid,
+                    "STORE",
+                    "system",
+                    "Initial secret storage",
+                    False,
+                    f"{type(e).__name__} - see debug logs for details",
+                )
                 raise
 
     async def retrieve_secret(self, secret_uuid: str, decrypt: bool = False) -> Optional[SecretRecord]:
@@ -310,7 +343,10 @@ class SecretsStore:
 
             except Exception as e:  # pragma: no cover - error path
                 logger.error(f"Failed to retrieve secret {secret_uuid}: {type(e).__name__}")
-                await self._log_access(secret_uuid, "VIEW", "system", "retrieve", False, str(e))
+                logger.debug(f"Secret retrieval error details: {e}")
+                await self._log_access(
+                    secret_uuid, "VIEW", "system", "retrieve", False, f"{type(e).__name__} - see debug logs for details"
+                )
                 return None
 
     def decrypt_secret_value(self, secret_record: SecretRecord) -> Optional[str]:
@@ -667,3 +703,123 @@ class SecretsStore:
             log_entry.success,
             log_entry.failure_reason,
         )
+
+    async def migrate_to_hardware_key(self) -> bool:
+        """Migrate secrets master key to hardware-backed storage via CIRISVerify.
+
+        This method:
+        1. Checks if hardware backend is available
+        2. Checks if we're currently in software mode with a file-based key
+        3. Stores the current master key in CIRISVerify hardware
+        4. Re-encrypts all secrets with hardware-backed key derivation
+        5. Updates encryption_key_ref to "hardware_v1"
+
+        Returns:
+            True if migration successful, False otherwise
+        """
+        try:
+            # Check if hardware is available
+            if not self.encryption._hardware_available:
+                logger.info("Hardware key storage not available - skipping migration")
+                return False
+
+            # Check if already using hardware
+            if self.encryption.key_storage_mode == "hardware":
+                logger.info("Already using hardware key storage")
+                return True
+
+            # Check if hardware key already exists
+            if self.encryption.has_hardware_key():
+                logger.info("Hardware key already exists - switching to hardware mode")
+                # Just switch modes - key is already there
+                self.encryption.key_storage_mode = "hardware"
+                return True
+
+            # Get current software master key
+            current_master_key = self.encryption.master_key
+            if not current_master_key or len(current_master_key) != 32:
+                logger.error("Invalid master key - cannot migrate")
+                return False
+
+            logger.info("Starting secrets master key migration to hardware")
+
+            # Store master key in hardware
+            if not self.encryption.store_key_in_hardware(current_master_key):
+                logger.error("Failed to store key in hardware")
+                return False
+
+            # Get all secrets that need re-encryption
+            with get_db_connection(str(self.db_path)) as conn:
+                cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets")
+                secrets = cursor.fetchall()
+
+            if not secrets:
+                logger.info("No secrets to re-encrypt - switching to hardware mode")
+                self.encryption.key_storage_mode = "hardware"
+                return True
+
+            logger.info(f"Re-encrypting {len(secrets)} secrets with hardware-backed key")
+
+            # Re-encrypt all secrets
+            updated_secrets = []
+            for row in secrets:
+                # Handle both tuple (SQLite) and dict (PostgreSQL) rows
+                if isinstance(row, dict):
+                    secret_uuid = row["secret_uuid"]
+                    encrypted_value = row["encrypted_value"]
+                    salt = row["salt"]
+                    nonce = row["nonce"]
+                    current_key_ref = row["encryption_key_ref"]
+                else:
+                    secret_uuid = row[0]
+                    encrypted_value = row[1]
+                    salt = row[2]
+                    nonce = row[3]
+                    current_key_ref = row[4]
+
+                try:
+                    # Skip if already hardware-encrypted
+                    if current_key_ref == "hardware_v1":
+                        continue
+
+                    # Decrypt with current software key
+                    decrypted_value = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
+
+                    # Switch to hardware mode for re-encryption
+                    old_mode = self.encryption.key_storage_mode
+                    self.encryption.key_storage_mode = "hardware"
+
+                    # Re-encrypt with hardware-backed key derivation
+                    new_encrypted_value, new_salt, new_nonce = self.encryption.encrypt_secret(decrypted_value)
+
+                    # Restore mode (will be set to hardware at the end)
+                    self.encryption.key_storage_mode = old_mode
+
+                    updated_secrets.append((new_encrypted_value, new_salt, new_nonce, "hardware_v1", secret_uuid))
+
+                except Exception as decrypt_error:
+                    logger.error(f"Failed to re-encrypt secret {secret_uuid}: {decrypt_error}")
+                    return False
+
+            # Update all secrets in database
+            if updated_secrets:
+                with get_db_connection(str(self.db_path)) as conn:
+                    conn.executemany(
+                        """
+                        UPDATE secrets
+                        SET encrypted_value = ?, salt = ?, nonce = ?, encryption_key_ref = ?
+                        WHERE secret_uuid = ?
+                    """,
+                        updated_secrets,
+                    )
+                    conn.commit()
+
+            # Switch to hardware mode permanently
+            self.encryption.key_storage_mode = "hardware"
+
+            logger.info(f"Successfully migrated {len(updated_secrets)} secrets to hardware-backed encryption")
+            return True
+
+        except Exception as e:
+            logger.error(f"Secrets master key migration failed: {e}")
+            return False

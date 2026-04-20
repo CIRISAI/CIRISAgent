@@ -30,13 +30,29 @@ try:
 
     # Add CIRIS_CONFIG_DIR if set (HA addon mode, etc.)
     if os.environ.get("CIRIS_CONFIG_DIR"):
-        config_paths.append(Path(os.environ["CIRIS_CONFIG_DIR"]) / ".env")
+        try:
+            from ciris_engine.logic.utils.path_resolution import validate_path_safety
+            validated_config_dir = validate_path_safety(
+                Path(os.environ["CIRIS_CONFIG_DIR"]).expanduser(),
+                context="CIRIS_CONFIG_DIR"
+            )
+            config_paths.append(validated_config_dir / ".env")
+        except (ValueError, ImportError) as e:
+            print(f"[CIRIS STARTUP] Warning: Invalid CIRIS_CONFIG_DIR, skipping: {e}")
 
     # Add CIRIS_HOME if set and different from CIRIS_CONFIG_DIR
     if os.environ.get("CIRIS_HOME"):
-        ciris_home_env = Path(os.environ["CIRIS_HOME"]) / ".env"
-        if ciris_home_env not in config_paths:
-            config_paths.append(ciris_home_env)
+        try:
+            from ciris_engine.logic.utils.path_resolution import validate_path_safety
+            validated_home = validate_path_safety(
+                Path(os.environ["CIRIS_HOME"]).expanduser(),
+                context="CIRIS_HOME"
+            )
+            ciris_home_env = validated_home / ".env"
+            if ciris_home_env not in config_paths:
+                config_paths.append(ciris_home_env)
+        except (ValueError, ImportError) as e:
+            print(f"[CIRIS STARTUP] Warning: Invalid CIRIS_HOME, skipping: {e}")
 
     # Standard fallback paths
     config_paths.extend([

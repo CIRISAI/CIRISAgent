@@ -377,3 +377,22 @@ class PermissionRequestUser(BaseModel):
     role: UserRole = Field(..., description="Current role")
     permission_requested_at: datetime = Field(..., description="When permissions were requested")
     has_send_messages: bool = Field(..., description="Whether user already has SEND_MESSAGES permission")
+
+
+class ServiceTokenRevokeRequest(BaseModel):
+    """Request to revoke a service token."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    token: str = Field(..., description="The service token to revoke", min_length=8)
+    reason: str = Field(..., description="Reason for revocation", min_length=1, max_length=500)
+
+
+class ServiceTokenRevokeResponse(BaseModel):
+    """Response from service token revocation."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    success: bool = Field(..., description="Whether revocation succeeded")
+    message: str = Field(..., description="Status message")
+    token_hash: str = Field(..., description="Partial hash of revoked token (for logging)")

@@ -151,6 +151,9 @@ class CIRISVerifyAdapter(Service):
             # This must happen after verifier singleton is initialized
             await self._migrate_wa_keys()
 
+            # Migrate secrets master key to hardware
+            await self._migrate_secrets_master_key()
+
             # Check if we're in first-run mode - skip license check (no license exists yet)
             from ciris_engine.logic.setup.first_run import is_first_run
 
@@ -185,6 +188,31 @@ class CIRISVerifyAdapter(Service):
                 logger.debug("AuthenticationService not available for WA key migration")
         except Exception as e:
             logger.warning(f"WA key migration failed (non-fatal): {e}")
+
+    async def _migrate_secrets_master_key(self) -> None:
+        """Migrate secrets master key to CIRISVerify.
+
+        Called after CIRISVerify is initialized so the verifier singleton is available.
+        Gets SecretsService from runtime and triggers key migration.
+        """
+        try:
+            # Access SecretsService via runtime property
+            secrets_service = getattr(self.runtime, "secrets_service", None)
+            if secrets_service and hasattr(secrets_service, "store"):
+                # SecretsService has a 'store' attribute which is the SecretsStore instance
+                secrets_store = secrets_service.store
+                if hasattr(secrets_store, "migrate_to_hardware_key"):
+                    success = await secrets_store.migrate_to_hardware_key()
+                    if success:
+                        logger.info("Secrets master key migration to CIRISVerify completed")
+                    else:
+                        logger.debug("Secrets master key migration skipped or failed")
+                else:
+                    logger.debug("SecretsStore does not support hardware key migration")
+            else:
+                logger.debug("SecretsService not available for secrets key migration")
+        except Exception as e:
+            logger.warning(f"Secrets master key migration failed (non-fatal): {e}")
 
     async def stop(self) -> None:
         """Stop the adapter and cleanup resources."""

@@ -5,10 +5,13 @@ Documents can be submitted as base64 data or URLs in the interact endpoint.
 """
 
 import base64
+import ipaddress
 import logging
+import socket
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -20,6 +23,80 @@ logger = logging.getLogger(__name__)
 # Default media types
 DEFAULT_PDF_MEDIA_TYPE = "application/pdf"
 DEFAULT_DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# SSRF protection: blocked hosts and networks
+BLOCKED_HOSTS = {
+    'localhost',
+    '127.0.0.1',
+    '::1',
+    '169.254.169.254',  # AWS metadata
+    'metadata.google.internal',  # GCP metadata
+    'metadata',
+    '169.254.169.254',  # Azure metadata (same as AWS)
+    '100.100.100.200',  # Alibaba Cloud metadata
+}
+
+
+def validate_url_for_ssrf(url: str) -> bool:
+    """Validate URL is safe from SSRF attacks.
+
+    Args:
+        url: URL to validate
+
+    Returns:
+        True if URL is safe, False if it may be an SSRF attack
+    """
+    try:
+        parsed = urlparse(url)
+
+        # Block non-http(s) schemes
+        if parsed.scheme not in ('http', 'https'):
+            logger.warning(f"Blocked non-HTTP(S) URL scheme: {parsed.scheme}")
+            return False
+
+        # Block known dangerous hosts
+        hostname = parsed.hostname
+        if not hostname:
+            logger.warning("URL missing hostname")
+            return False
+
+        hostname_lower = hostname.lower()
+        if hostname_lower in BLOCKED_HOSTS:
+            logger.warning(f"Blocked dangerous hostname: {hostname}")
+            return False
+
+        # Try to resolve hostname to IP and check for private/loopback ranges
+        try:
+            # Get all IP addresses for this hostname
+            addr_info = socket.getaddrinfo(hostname, None)
+            for info in addr_info:
+                ip_str = info[4][0]
+                try:
+                    ip = ipaddress.ip_address(ip_str)
+                    if ip.is_private or ip.is_loopback or ip.is_link_local:
+                        logger.warning(f"Blocked private/loopback IP: {ip_str} for {hostname}")
+                        return False
+                    # Specifically block cloud metadata ranges
+                    if isinstance(ip, ipaddress.IPv4Address):
+                        if ip in ipaddress.ip_network('169.254.0.0/16'):
+                            logger.warning(f"Blocked cloud metadata IP: {ip_str}")
+                            return False
+                except ValueError:
+                    # Not a valid IP address
+                    continue
+        except socket.gaierror:
+            # DNS resolution failed - this is suspicious, block it
+            logger.warning(f"Failed to resolve hostname: {hostname}")
+            return False
+        except Exception as e:
+            # Any other error during resolution - block it
+            logger.warning(f"Error validating hostname {hostname}: {e}")
+            return False
+
+        return True
+    except Exception as e:
+        logger.error(f"Error parsing URL for SSRF validation: {e}")
+        return False
 
 
 class APIDocumentHelper:
@@ -206,6 +283,11 @@ class APIDocumentHelper:
             Document bytes or None if download failed
         """
         try:
+            # CRITICAL: Validate URL to prevent SSRF attacks
+            if not validate_url_for_ssrf(url):
+                logger.error(f"Blocked potentially dangerous URL (SSRF protection): {url}")
+                return None
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)) as response:
                     if response.status != 200:

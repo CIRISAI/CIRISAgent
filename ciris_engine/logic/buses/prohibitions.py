@@ -32,78 +32,329 @@ class ProhibitionSeverity(str, Enum):
 # These require separate repositories with proper licensing/liability isolation
 
 MEDICAL_CAPABILITIES = {
-    "medical",  # Generic medical capability
-    "health",  # Generic health capability
-    "clinical",  # Clinical operations
-    "patient",  # Patient-related
+    # Generic medical/health terms with variants
+    "medical",
+    "medicine",
+    "medic",
+    "health",
+    "healthcare",
+    "health_care",
+    "wellbeing",
+    "wellness",
+
+    # Clinical terms with variants
+    "clinical",
+    "clinician",
+    "clinic",
+    "clinically",
+
+    # Patient-related with variants
+    "patient",
+    "patients",
+
+    # Diagnosis variants (HIGH RISK)
     "diagnosis",
+    "diagnose",
+    "diagnosing",
+    "diagnostic",
+    "diagnostics",
+    "diagnoser",
+    "health_assessment",  # Alternative phrasing
+    "condition_assessment",
+    "medical_evaluation",
+
+    # Treatment variants (HIGH RISK)
     "treatment",
+    "treat",
+    "treating",
+    "therapeutic",
+    "therapy",
+    "therapist",
+    "therapies",
+    "care_plan",  # Alternative phrasing
+    "treatment_plan",
+    "intervention",
+
+    # Prescription variants (HIGH RISK)
     "prescription",
-    "symptom",  # Symptom analysis
-    "disease",  # Disease information
-    "medication",  # Medication management
-    "therapy",  # Therapy planning
-    "triage",  # Medical triage
-    "condition",  # Medical conditions
-    "disorder",  # Medical disorders
-    "medical_advice",
+    "prescribe",
+    "prescribing",
+    "prescribed",
+    "prescriber",
+    "rx",
+
+    # Symptom variants
+    "symptom",
+    "symptoms",
+    "symptomatic",
+    "asymptomatic",
     "symptom_assessment",
+    "symptom_analysis",
+
+    # Disease/condition variants
+    "disease",
+    "diseases",
+    "condition",
+    "conditions",
+    "disorder",
+    "disorders",
+    "illness",
+    "ailment",
+    "malady",
+    "pathology",
+    "pathological",
+    "pathogen",
+
+    # Medication variants
+    "medication",
+    "medications",
+    "medicate",
+    "medicating",
+    "medicated",
+    "drug",
+    "drugs",
+    "pharmaceutical",
+    "pharmacology",
     "drug_interaction",
-    "clinical_decision",
+    "drug_interactions",
+
+    # Medical procedures
+    "triage",
+    "triaging",
+    "medical_triage",
     "medical_procedure",
+    "medical_procedures",
+    "surgery",
+    "surgical",
+    "surgery_planning",
+    "operation",
+    "operative",
+
+    # Clinical decision-making
+    "clinical_decision",
+    "clinical_decisions",
+    "medical_advice",
+    "medical_guidance",
+    "health_guidance",
+
+    # Screening and testing
     "health_screening",
-    "therapy_treatment",
+    "health_screenings",
+    "lab_results",
+    "lab_results_interpretation",
+    "test_results",
+    "vital_signs",
+    "vitals",
+
+    # Care types
     "patient_care",
     "medical_history",
-    "lab_results_interpretation",
-    "surgery_planning",
     "rehabilitation",
+    "rehab",
     "palliative_care",
+    "palliative",
+    "hospice",
     "emergency_medicine",
+    "emergency_medical",
     "telemedicine",
-    "medical_triage",
+    "telehealth",
+
+    # Prognosis and outcomes
+    "prognosis",
+    "prognostic",
+    "outcome_prediction",
+    "recovery_prediction",
+
+    # Additional high-risk terms
+    "immunization",
+    "vaccination",
+    "vaccine",
+    "immunize",
+    "inoculation",
+    "anesthesia",
+    "anesthetic",
+    "sedation",
+    "icu",
+    "intensive_care",
+    "critical_care",
+    "trauma",
+    "trauma_care",
+    "wound_care",
+    "wound_treatment",
 }
 
 FINANCIAL_CAPABILITIES = {
+    # Investment with variants
     "investment_advice",
+    "investment",
+    "invest",
+    "investing",
+    "investor",
+
+    # Trading with variants
     "trading_signals",
-    "portfolio_management",
-    "tax_planning",
-    "retirement_planning",
-    "securities_recommendation",
-    "loan_approval",
-    "credit_decisions",
-    "insurance_underwriting",
-    "wealth_management",
-    "estate_planning",
+    "trading",
+    "trade",
+    "trader",
+    "trades",
     "forex_trading",
     "crypto_investment",
+    "crypto_trading",
+    "cryptocurrency",
     "derivative_trading",
+    "derivatives",
+
+    # Portfolio management
+    "portfolio_management",
+    "portfolio",
+    "portfolios",
+    "manage_portfolio",
+
+    # Financial planning variants
+    "tax_planning",
+    "tax_advice",
+    "taxation",
+    "retirement_planning",
+    "retirement_advice",
+    "estate_planning",
+    "estate_advice",
+
+    # Securities
+    "securities_recommendation",
+    "securities",
+    "security",
+    "stock_recommendation",
+    "stock_advice",
+
+    # Credit and loans
+    "loan_approval",
+    "loan",
+    "loans",
+    "lending",
+    "credit_decisions",
+    "credit",
+    "creditworthiness",
+
+    # Insurance
+    "insurance_underwriting",
+    "insurance",
+    "underwriting",
+    "underwrite",
+
+    # Wealth management
+    "wealth_management",
+    "wealth",
+    "asset_management",
+    "assets",
+
+    # Financial assessments
     "risk_assessment",
+    "financial_risk",
+    "credit_risk",
+
+    # Corporate finance
     "bankruptcy_advice",
+    "bankruptcy",
+    "insolvency",
     "merger_acquisition",
+    "merger",
+    "acquisition",
+    "m_and_a",
     "ipo_guidance",
+    "ipo",
+    "public_offering",
+
+    # Additional financial terms
+    "financial_advice",
+    "financial_guidance",
+    "fiduciary",
+    "brokerage",
+    "broker",
 }
 
 LEGAL_CAPABILITIES = {
+    # Legal advice variants
     "legal_advice",
-    "contract_drafting",
-    "litigation_strategy",
-    "legal_representation",
-    "filing_documents",
+    "legal_guidance",
+    "legal_counsel",
+    "attorney",
+    "lawyer",
     "legal_opinion",
-    "dispute_resolution",
-    "compliance_determination",
-    "rights_assessment",
-    "patent_filing",
-    "trademark_registration",
-    "copyright_claims",
-    "immigration_law",
-    "criminal_defense",
+
+    # Contract work
+    "contract_drafting",
+    "contract",
+    "contracts",
+    "drafting",
+    "agreement_drafting",
+
+    # Litigation
+    "litigation_strategy",
+    "litigation",
+    "litigate",
+    "litigating",
+    "lawsuit",
     "civil_litigation",
+    "legal_representation",
+    "represent",
+    "representation",
+
+    # Filing and documentation
+    "filing_documents",
+    "file_documents",
+    "legal_filing",
+    "court_filing",
+
+    # Dispute resolution
+    "dispute_resolution",
+    "dispute",
+    "disputes",
+    "arbitration",
+    "mediation",
+
+    # Compliance
+    "compliance_determination",
+    "compliance",
     "regulatory_compliance",
+    "comply",
+
+    # Rights and assessments
+    "rights_assessment",
+    "legal_rights",
+    "rights",
+
+    # Intellectual property
+    "patent_filing",
+    "patent",
+    "patents",
+    "trademark_registration",
+    "trademark",
+    "trademarks",
+    "copyright_claims",
+    "copyright",
+    "copyrights",
+    "intellectual_property",
+    "ip_law",
+
+    # Specific legal areas
+    "immigration_law",
+    "immigration",
+    "criminal_defense",
+    "criminal_law",
+    "defense",
+
+    # Due diligence and research
     "due_diligence",
+    "diligence",
     "legal_research",
+    "legal_analysis",
+
+    # Additional legal terms
+    "paralegal",
+    "legal_assistant",
+    "bar_exam",
+    "notarization",
+    "notary",
 }
 
 HOME_SECURITY_CAPABILITIES = {
@@ -186,44 +437,178 @@ INFRASTRUCTURE_CONTROL_CAPABILITIES = {
 # These are never allowed under any circumstances
 
 WEAPONS_HARMFUL_CAPABILITIES = {
+    # Weapon design variants
     "weapon_design",
+    "weapon",
+    "weapons",
+    "weaponize",
+    "weaponized",
+    "weaponizing",
+    "armament",
+    "munition",
+    "munitions",
+
+    # Explosives
     "explosive_synthesis",
-    "chemical_weapons",
-    "biological_weapons",
-    "nuclear_weapons",
+    "explosive",
+    "explosives",
+    "bomb",
+    "bombs",
+    "bombing",
+    "detonation",
+    "detonate",
+    "ied",
+    "improvised_explosive",
     "dirty_bombs",
-    "autonomous_weapons",
-    "targeting_systems",
-    "kill_decisions",
-    "military_tactics",
-    "torture_methods",
-    "assassination_planning",
+
+    # Specific weapon types
+    "chemical_weapons",
+    "chemical_warfare",
+    "biological_weapons",
+    "biological_warfare",
+    "bioweapon",
+    "bioweapons",
+    "nuclear_weapons",
+    "nuclear_warfare",
+    "atomic_weapons",
     "landmine_design",
+    "landmine",
+    "landmines",
     "cluster_munitions",
+    "cluster_bomb",
+
+    # Nerve agents and toxins
     "nerve_agents",
+    "nerve_agent",
+    "nerve_gas",
+    "chemical_agent",
+
+    # Autonomous and targeting
+    "autonomous_weapons",
+    "autonomous_weapon",
+    "targeting_systems",
+    "targeting",
+    "target_acquisition",
+    "kill_decisions",
+    "lethal_autonomous",
     "weaponized_drones",
+    "drone_warfare",
+    "combat_drone",
+
+    # Military tactics
+    "military_tactics",
+    "military_strategy",
+    "combat_tactics",
+    "warfare",
+    "combat_strategy",
+
+    # Torture and assassination
+    "torture_methods",
+    "torture",
+    "torturing",
+    "assassination_planning",
+    "assassination",
+    "assassinate",
+    "assassinating",
+    "political_killing",
+
+    # Cyber weapons
     "cyber_weapons",
+    "cyber_warfare",
+    "cyberweapon",
     "emp_devices",
+    "emp_weapon",
+    "electromagnetic_pulse",
+
+    # Additional harmful terms
+    "ballistic_missile",
+    "missile_guidance",
+    "warhead",
+    "incendiary",
+    "napalm",
+    "white_phosphorus",
 }
 
 MANIPULATION_COERCION_CAPABILITIES = {
+    # Subliminal and cognitive manipulation
     "subliminal_messaging",
+    "subliminal",
     "cognitive_manipulation",
-    "vulnerability_exploitation",
-    "dark_patterns",
-    "addiction_inducement",
+    "cognitive_exploit",
     "psychological_manipulation",
+    "psychological_exploit",
+    "manipulate",
+    "manipulating",
+    "manipulation",
+
+    # Vulnerability exploitation
+    "vulnerability_exploitation",
+    "exploit_vulnerability",
+    "exploitation",
+
+    # Dark patterns
+    "dark_patterns",
+    "dark_pattern",
+    "deceptive_design",
+    "manipulative_design",
+
+    # Addiction
+    "addiction_inducement",
+    "addiction_trigger",
+    "addictive_design",
+    "habit_forming",
+    "compulsion_trigger",
+
+    # Psychological tactics
     "gaslighting",
-    "cult_recruitment",
-    "radicalization",
-    "blackmail",
-    "extortion",
-    "coercion",
-    "brainwashing",
-    "mind_control",
-    "hypnotic_suggestion",
+    "gaslight",
+    "psychological_abuse",
     "emotional_abuse",
+    "emotional_manipulate",
+    "emotional_exploit",
+
+    # Radicalization and recruitment
+    "cult_recruitment",
+    "cult",
+    "radicalization",
+    "radicalize",
+    "radicalizing",
+    "extremism",
+    "indoctrination",
+    "indoctrinate",
+
+    # Coercion and extortion
+    "blackmail",
+    "blackmailing",
+    "extortion",
+    "extort",
+    "extorting",
+    "coercion",
+    "coerce",
+    "coercing",
+    "coercive",
+
+    # Mind control
+    "brainwashing",
+    "brainwash",
+    "mind_control",
+    "thought_control",
+    "hypnotic_suggestion",
+    "hypnosis",
+    "hypnotic",
+    "hypnotize",
+
+    # Stockholm syndrome
     "stockholm_syndrome_inducement",
+    "stockholm_syndrome",
+    "trauma_bonding",
+
+    # Additional manipulation terms
+    "neuro_linguistic",
+    "nlp_manipulation",
+    "persuasion_exploit",
+    "social_engineering",
+    "influence_operation",
 }
 
 SURVEILLANCE_MASS_CAPABILITIES = {
@@ -244,44 +629,175 @@ SURVEILLANCE_MASS_CAPABILITIES = {
 }
 
 DECEPTION_FRAUD_CAPABILITIES = {
+    # Deepfakes and synthetic media
     "deepfake_creation",
+    "deepfake",
+    "deepfakes",
+    "deep_fake",
     "voice_cloning",
-    "identity_spoofing",
+    "voice_clone",
+    "voice_synthesis",
+    "synthetic_voice",
     "synthetic_evidence",
-    "false_documentation",
+    "synthetic_media",
+    "fake_media",
+
+    # Identity and impersonation
+    "identity_spoofing",
+    "identity_theft",
+    "spoof",
+    "spoofing",
     "impersonation",
+    "impersonate",
+    "impersonating",
+    "identity_fraud",
+
+    # False documentation
+    "false_documentation",
+    "false_document",
+    "fake_document",
     "forgery_generation",
+    "forgery",
+    "forge",
+    "forging",
+    "counterfeit",
+    "counterfeiting",
+
+    # Misinformation
     "misinformation_campaigns",
+    "misinformation",
+    "disinformation",
     "propaganda_creation",
+    "propaganda",
     "reality_fabrication",
+    "fabricate",
+    "fabricating",
+    "fabrication",
+
+    # Scams and fraud
     "catfishing",
+    "catfish",
     "phishing_creation",
+    "phishing",
+    "phish",
     "romance_scams",
+    "romance_scam",
     "confidence_tricks",
+    "confidence_trick",
+    "con_game",
     "ponzi_schemes",
+    "ponzi_scheme",
+    "pyramid_scheme",
     "advance_fee_fraud",
+    "advance_fee",
+    "419_scam",
+
+    # Additional fraud terms
+    "wire_fraud",
+    "mail_fraud",
+    "insurance_fraud",
+    "tax_fraud",
+    "credit_card_fraud",
+    "check_fraud",
+    "embezzlement",
+    "embezzle",
 }
 
 CYBER_OFFENSIVE_CAPABILITIES = {
+    # Malware variants
     "malware_generation",
-    "zero_day_exploitation",
+    "malware",
+    "malicious_software",
+    "virus_creation",
+    "virus",
+    "trojan",
+    "worm",
+    "spyware",
+    "adware",
     "ransomware_creation",
-    "ddos_attacks",
-    "network_intrusion",
-    "password_cracking",
-    "encryption_breaking",
-    "data_theft",
-    "system_sabotage",
-    "botnet_creation",
-    "phishing_campaigns",
+    "ransomware",
+    "cryptolocker",
     "rootkit_development",
+    "rootkit",
     "keylogger_creation",
-    "backdoor_installation",
-    "supply_chain_attacks",
-    "firmware_exploitation",
-    "vulnerability_scanning",  # Without permission
+    "keylogger",
+    "keylogging",
+
+    # Exploitation
+    "zero_day_exploitation",
+    "zero_day",
+    "0day",
     "exploit_development",
+    "exploit",
+    "exploiting",
+    "vulnerability_scanning",  # Without permission
+    "vuln_scan",
+    "pen_test",  # Without permission
+    "penetration_test",  # Without permission
+
+    # Attacks
+    "ddos_attacks",
+    "ddos",
+    "dos_attack",
+    "denial_of_service",
+    "network_intrusion",
+    "intrusion",
+    "intrude",
+    "intruding",
+    "unauthorized_access",
+    "system_sabotage",
+    "sabotage",
+
+    # Password and encryption
+    "password_cracking",
+    "password_crack",
+    "brute_force",
+    "dictionary_attack",
+    "encryption_breaking",
+    "decrypt_unauthorized",
+    "cryptanalysis",
+
+    # Data theft
+    "data_theft",
+    "data_steal",
+    "data_exfiltration",
+    "exfiltrate",
+    "data_breach",
+
+    # Network attacks
+    "botnet_creation",
+    "botnet",
+    "bot_network",
+    "phishing_campaigns",
+    "spear_phishing",
+    "whaling",
+
+    # Backdoors and persistence
+    "backdoor_installation",
+    "backdoor",
+    "backdooring",
+    "persistence_mechanism",
+
+    # Supply chain
+    "supply_chain_attacks",
+    "supply_chain_attack",
+    "firmware_exploitation",
+    "firmware_hack",
+
+    # Reverse engineering (without permission)
     "reverse_engineering",  # Of proprietary systems
+    "reverse_engineer",
+    "decompile",
+    "disassemble",
+
+    # Additional offensive terms
+    "sql_injection",
+    "xss_attack",
+    "cross_site_scripting",
+    "command_injection",
+    "buffer_overflow",
+    "privilege_escalation",
+    "lateral_movement",
 }
 
 ELECTION_INTERFERENCE_CAPABILITIES = {
@@ -337,20 +853,79 @@ AUTONOMOUS_DECEPTION_CAPABILITIES = {
 }
 
 HAZARDOUS_MATERIALS_CAPABILITIES = {
+    # Chemical synthesis
     "chemical_synthesis",
-    "biological_agent_design",
-    "toxin_production",
-    "illegal_drug_synthesis",
-    "poison_formulation",
-    "pathogen_modification",
-    "explosive_precursors",
-    "radioactive_materials",
-    "controlled_substances",
+    "chemical_synthesize",
+    "synthesize_chemical",
+    "chemistry_synthesis",
     "chemical_precursors",
+    "chemical_precursor",
+    "explosive_precursors",
+    "explosive_precursor",
+
+    # Biological agents
+    "biological_agent_design",
+    "biological_agent",
+    "bio_agent",
+    "pathogen_modification",
+    "pathogen_design",
+    "germ_warfare",
+
+    # Toxins
+    "toxin_production",
+    "toxin",
+    "toxins",
+    "poison_formulation",
+    "poison",
+    "poisoning",
+    "poisonous",
+    "venom",
+
+    # Illegal drugs
+    "illegal_drug_synthesis",
+    "drug_synthesis",
+    "drug_manufacture",
+    "narcotic_synthesis",
+    "controlled_substances",
+    "controlled_substance",
+    "schedule_1",
+    "schedule_i",
     "fentanyl_synthesis",
+    "fentanyl_production",
+    "fentanyl",
+    "methamphetamine",
+    "meth_production",
+    "cocaine_synthesis",
+    "heroin_synthesis",
+
+    # Specific dangerous substances
     "ricin_production",
+    "ricin",
     "anthrax_cultivation",
+    "anthrax",
     "sarin_gas_production",
+    "sarin_gas",
+    "sarin",
+    "mustard_gas",
+    "vx_gas",
+    "tabun",
+    "soman",
+
+    # Radioactive materials
+    "radioactive_materials",
+    "radioactive_material",
+    "radioactive",
+    "nuclear_material",
+    "enriched_uranium",
+    "plutonium",
+
+    # Additional hazardous terms
+    "carcinogen",
+    "carcinogenic",
+    "teratogen",
+    "mutagen",
+    "biohazard",
+    "hazmat",
 }
 
 DISCRIMINATION_CAPABILITIES = {

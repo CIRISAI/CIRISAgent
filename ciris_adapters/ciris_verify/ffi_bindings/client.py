@@ -3952,13 +3952,16 @@ class MockCIRISVerify(CIRISVerify):
         """Mock encryption using software fallback."""
         import os
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives import hashes
 
         if key_id not in self._named_keys:
             raise VerificationFailedError(-1, f"Key {key_id} not found")
 
-        # Derive encryption key from seed
+        # Derive encryption key from seed using HKDF (same as derive_symmetric_key)
         seed = self._named_keys[key_id]
-        key = hashlib.sha256(seed + b"encryption").digest()
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"ciris-mock-encryption")
+        key = hkdf.derive(seed)
 
         nonce = os.urandom(12)
         aesgcm = AESGCM(key)
@@ -3968,12 +3971,16 @@ class MockCIRISVerify(CIRISVerify):
     def decrypt_with_named_key(self, key_id: str, ciphertext: bytes, aad: bytes = b"") -> bytes:
         """Mock decryption using software fallback."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives import hashes
 
         if key_id not in self._named_keys:
             raise VerificationFailedError(-1, f"Key {key_id} not found")
 
+        # Derive encryption key from seed using HKDF (same as derive_symmetric_key)
         seed = self._named_keys[key_id]
-        key = hashlib.sha256(seed + b"encryption").digest()
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"ciris-mock-encryption")
+        key = hkdf.derive(seed)
 
         nonce = ciphertext[:12]
         actual_ciphertext = ciphertext[12:]

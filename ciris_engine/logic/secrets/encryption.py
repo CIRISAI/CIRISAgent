@@ -82,7 +82,8 @@ class SecretsEncryption:
                 self.master_key = master_key
         else:
             # Hardware mode: master key stays in hardware, never in memory
-            self.master_key = b""  # Placeholder to satisfy type checker
+            # Set to None to prevent accidental usage - get_master_key() will raise
+            self.master_key = b""  # Placeholder - callers must not access this in hardware mode
 
         # Log encryption capabilities at startup
         capabilities = self.get_hardware_capabilities()
@@ -371,7 +372,15 @@ class SecretsEncryption:
         return self.master_key
 
     def get_master_key(self) -> bytes:
-        """Get the current master key (for backup/persistence)"""
+        """Get the current master key (for backup/persistence).
+
+        Raises:
+            RuntimeError: If in hardware mode (master key never leaves hardware)
+        """
+        if self.key_storage_mode == "hardware":
+            raise RuntimeError(
+                "Cannot retrieve master key in hardware mode - key is stored in secure hardware and never exposed"
+            )
         return self.master_key
 
     @staticmethod

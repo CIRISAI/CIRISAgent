@@ -1,0 +1,19 @@
+{
+  "version": "1.2b",
+  "files": {
+    "accord_1.2b_POLYGLOT.txt": {
+      "sha256": "807724094c5eef40702b0194ec264760187fe5afce0789b2ec9ba994bf62a7dd"
+    },
+    "accord_1.2b_POLYGLOT_compressed.txt": {
+      "sha256": "2b09d346d199d7c28858d842012c87036986673ec7dbbaf5b102d92af161ba4a"
+    },
+    "CIRIS_COMPREHENSIVE_GUIDE.md": {
+      "sha256": "0515a63e8feab3acdd361ea047d27255dbc75382a0f00ab19e7859bfcb75e58f"
+    },
+    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md": {
+      "sha256": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d"
+    }
+  },
+  "signed_at": "2026-04-20T00:00:00Z",
+  "signer": "wa-ROOT-00"
+}

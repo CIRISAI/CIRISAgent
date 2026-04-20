@@ -55,7 +55,7 @@ def main() -> int:
 
         print("📝 Re-staging modified files...")
         for file in new_modifications:
-            run_command(["git", "add", file])
+            run_command(["git", "add", "--", file])
 
         print("✅ Files re-staged successfully!")
         print("💡 Tip: The commit will proceed with the hook-modified files.")

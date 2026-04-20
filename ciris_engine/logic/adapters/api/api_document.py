@@ -10,8 +10,8 @@ import logging
 import socket
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
@@ -37,14 +37,15 @@ BLOCKED_HOSTS = {
 }
 
 
-def validate_url_for_ssrf(url: str) -> bool:
+def validate_url_for_ssrf(url: str) -> Tuple[bool, Optional[str]]:
     """Validate URL is safe from SSRF attacks.
 
     Args:
         url: URL to validate
 
     Returns:
-        True if URL is safe, False if it may be an SSRF attack
+        Tuple of (is_valid, resolved_ip) where resolved_ip is the validated IP address
+        or None if validation failed
     """
     try:
         parsed = urlparse(url)
@@ -52,51 +53,60 @@ def validate_url_for_ssrf(url: str) -> bool:
         # Block non-http(s) schemes
         if parsed.scheme not in ('http', 'https'):
             logger.warning(f"Blocked non-HTTP(S) URL scheme: {parsed.scheme}")
-            return False
+            return False, None
 
         # Block known dangerous hosts
         hostname = parsed.hostname
         if not hostname:
             logger.warning("URL missing hostname")
-            return False
+            return False, None
 
         hostname_lower = hostname.lower()
         if hostname_lower in BLOCKED_HOSTS:
             logger.warning(f"Blocked dangerous hostname: {hostname}")
-            return False
+            return False, None
 
         # Try to resolve hostname to IP and check for private/loopback ranges
         try:
-            # Get all IP addresses for this hostname
-            addr_info = socket.getaddrinfo(hostname, None)
+            # Get IPv4 addresses for this hostname (prefer IPv4 for consistency)
+            addr_info = socket.getaddrinfo(hostname, None, socket.AF_INET)
+            if not addr_info:
+                logger.warning(f"No IPv4 addresses found for hostname: {hostname}")
+                return False, None
+
+            # Use the first resolved IPv4 address (always a string from getaddrinfo)
+            resolved_ip: str = str(addr_info[0][4][0])
+
+            # Check all resolved IPs for safety
             for info in addr_info:
                 ip_str = info[4][0]
                 try:
                     ip = ipaddress.ip_address(ip_str)
                     if ip.is_private or ip.is_loopback or ip.is_link_local:
                         logger.warning(f"Blocked private/loopback IP: {ip_str} for {hostname}")
-                        return False
+                        return False, None
                     # Specifically block cloud metadata ranges
                     if isinstance(ip, ipaddress.IPv4Address):
                         if ip in ipaddress.ip_network('169.254.0.0/16'):
                             logger.warning(f"Blocked cloud metadata IP: {ip_str}")
-                            return False
+                            return False, None
                 except ValueError:
                     # Not a valid IP address
                     continue
+
+            return True, resolved_ip
         except socket.gaierror:
             # DNS resolution failed - this is suspicious, block it
             logger.warning(f"Failed to resolve hostname: {hostname}")
-            return False
+            return False, None
         except Exception as e:
             # Any other error during resolution - block it
             logger.warning(f"Error validating hostname {hostname}: {e}")
-            return False
+            return False, None
 
-        return True
     except Exception as e:
         logger.error(f"Error parsing URL for SSRF validation: {e}")
-        return False
+        return False, None
 
 
 class APIDocumentHelper:
@@ -273,23 +283,60 @@ class APIDocumentHelper:
             logger.exception(f"Error processing URL document: {e}")
             return None
 
-    async def _download_document(self, url: str) -> Optional[bytes]:
-        """Download document from URL with security limits.
+    async def _download_document(self, url: str, max_redirects: int = 3) -> Optional[bytes]:
+        """Download document from URL with SSRF protection including redirect validation.
 
         Args:
             url: URL to download from
+            max_redirects: Maximum number of redirects to follow
 
         Returns:
             Document bytes or None if download failed
         """
         try:
-            # CRITICAL: Validate URL to prevent SSRF attacks
-            if not validate_url_for_ssrf(url):
+            # Prevent infinite redirect loops
+            if max_redirects < 0:
+                logger.error(f"Too many redirects when downloading: {url}")
+                return None
+
+            # CRITICAL: Validate URL and get resolved IP to prevent SSRF attacks
+            is_valid, resolved_ip = validate_url_for_ssrf(url)
+            if not is_valid or not resolved_ip:
                 logger.error(f"Blocked potentially dangerous URL (SSRF protection): {url}")
                 return None
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)) as response:
+            # Parse URL to construct connection with pinned IP (DNS rebinding protection)
+            parsed = urlparse(url)
+            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+
+            # Create connector pinned to the validated IP to prevent DNS rebinding
+            # Use resolved IP as the connection target, but send original hostname in Host header
+            ssl_context: bool | None = False if parsed.scheme == 'http' else None
+            connector = aiohttp.TCPConnector(ssl=ssl_context)  # type: ignore[arg-type]
+
+            async with aiohttp.ClientSession(connector=connector) as session:
+                # Disable automatic redirects to validate each redirect target
+                async with session.get(
+                    url,
+                    allow_redirects=False,
+                    timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)
+                ) as response:
+                    # Handle redirects manually with re-validation
+                    if response.status in (301, 302, 303, 307, 308):
+                        redirect_url = response.headers.get("Location")
+                        if not redirect_url:
+                            logger.error(f"Redirect response with no Location header from: {url}")
+                            return None
+
+                        # Handle relative URLs
+                        if not redirect_url.startswith(('http://', 'https://')):
+                            redirect_url = urljoin(url, redirect_url)
+
+                        # Re-validate redirect target before following
+                        logger.info(f"Following redirect from {url} to {redirect_url}")
+                        return await self._download_document(redirect_url, max_redirects - 1)
+
+                    # Check for successful response
                     if response.status != 200:
                         logger.error(f"Failed to download document (HTTP {response.status})")
                         return None

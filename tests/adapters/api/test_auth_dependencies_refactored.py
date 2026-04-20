@@ -102,6 +102,10 @@ class TestHandleServiceTokenAuth:
     def test_handle_service_token_auth_invalid_token(self):
         """Test handling of invalid service token."""
         mock_request = Mock(spec=Request)
+        mock_request.headers = Mock()
+        mock_request.headers.get = Mock(return_value="test-user-agent")
+        mock_request.client = Mock()
+        mock_request.client.host = "127.0.0.1"
         mock_auth_service = Mock()
         mock_auth_service.validate_service_token.return_value = None
 

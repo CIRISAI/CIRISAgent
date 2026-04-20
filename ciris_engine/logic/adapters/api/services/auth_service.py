@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import aiofiles
+import aiosqlite
 import bcrypt
 
 logger = logging.getLogger(__name__)
@@ -132,13 +133,55 @@ class APIAuthService:
         self._users_loaded = False
 
         # Revoked service tokens (in-memory set of token hashes)
-        # Note: Service tokens are single-use per deployment, so in-memory is sufficient
-        # For multi-instance deployments, consider a shared cache (Redis) or database
+        # Persisted to database for multi-occurrence deployment support
         self._revoked_service_tokens: set[str] = set()
+
+        # Database path for revocation persistence
+        self._revocations_db_path = os.path.join(
+            os.environ.get("CIRIS_DATA_DIR", os.path.expanduser("~/.ciris")),
+            "revoked_service_tokens.db"
+        )
 
         # Don't load from DB in __init__ - this causes asyncio.run() errors
         # Instead, we'll load lazily on first access
         # Users are created via setup wizard (or test fixtures for unit tests)
+
+    # ==========================================================================
+    # Service Token Revocation Persistence
+    # ==========================================================================
+
+    async def _init_revocations_db(self) -> None:
+        """Initialize the revocations database table."""
+        try:
+            async with aiosqlite.connect(self._revocations_db_path) as db:
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS revoked_service_tokens (
+                        token_hash TEXT PRIMARY KEY,
+                        revoked_at TEXT NOT NULL,
+                        revoked_by TEXT NOT NULL,
+                        reason TEXT NOT NULL
+                    )
+                """)
+                await db.commit()
+                logger.debug("[AUTH] Revocations database initialized")
+        except Exception as e:
+            logger.error(f"[AUTH] Failed to initialize revocations database: {type(e).__name__}: {e}")
+
+    async def _load_revoked_tokens(self) -> None:
+        """Load revoked tokens from database into memory."""
+        try:
+            # Ensure database exists
+            await self._init_revocations_db()
+
+            async with aiosqlite.connect(self._revocations_db_path) as db:
+                async with db.execute("SELECT token_hash FROM revoked_service_tokens") as cursor:
+                    rows = await cursor.fetchall()
+                    self._revoked_service_tokens = {row[0] for row in rows}
+                    logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from database")
+        except Exception as e:
+            logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
+            # Initialize empty set on error to avoid blocking startup
+            self._revoked_service_tokens = set()
 
     # ==========================================================================
     # Attestation Methods (delegate to infrastructure AuthenticationService)
@@ -165,7 +208,9 @@ class APIAuthService:
         if self._users_loaded:
             return
 
+        # Load users and revoked tokens in parallel
         await self._load_users_from_db()
+        await self._load_revoked_tokens()
         self._users_loaded = True
 
     async def reload_users_from_db(self) -> None:
@@ -1125,6 +1170,20 @@ class APIAuthService:
 
         # Add to revoked set
         self._revoked_service_tokens.add(token_hash)
+
+        # Persist to database
+        try:
+            # Ensure database is initialized before writing
+            await self._init_revocations_db()
+
+            async with aiosqlite.connect(self._revocations_db_path) as db:
+                await db.execute(
+                    "INSERT OR IGNORE INTO revoked_service_tokens VALUES (?, ?, ?, ?)",
+                    (token_hash, datetime.now(timezone.utc).isoformat(), revoked_by, reason)
+                )
+                await db.commit()
+        except Exception as e:
+            logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}")
 
         # Log audit event
         logger.info(

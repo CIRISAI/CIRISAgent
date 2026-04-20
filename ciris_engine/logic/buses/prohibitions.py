@@ -12,9 +12,16 @@ ARCHITECTURAL INVARIANT: These prohibition sets are CODE-LEVEL constants.
 They cannot be modified by memory, learning, or runtime adaptation.
 Changes require code deployment and are subject to code review.
 This is intentional - ethics must NOT be plastic or learnable.
+
+SCOPE LIMITATION: This filter applies to capability NAMES only, not to LLM prompts/responses
+or tool arguments. A malicious adapter could name its capability "general_advice" and proxy
+prohibited content. This is a first-line defense, not a comprehensive security boundary.
+See SECURITY.md for scope limitations.
 """
 
+import re
 from enum import Enum
+from functools import lru_cache
 from typing import Dict, List, Optional, Set
 
 from ciris_engine.schemas.types import JSONDict
@@ -81,7 +88,7 @@ MEDICAL_CAPABILITIES = {
     "prescribing",
     "prescribed",
     "prescriber",
-    "rx",
+    "rx_prescription",  # Changed from "rx" to avoid false positives
 
     # Symptom variants
     "symptom",
@@ -174,10 +181,10 @@ MEDICAL_CAPABILITIES = {
     "anesthesia",
     "anesthetic",
     "sedation",
-    "icu",
+    "icu_care",  # Changed from "icu" to avoid false positives (icu_dashboard, curriculum, etc.)
     "intensive_care",
     "critical_care",
-    "trauma",
+    "trauma_medical",  # Changed from "trauma" to avoid false positives
     "trauma_care",
     "wound_care",
     "wound_treatment",
@@ -644,8 +651,9 @@ DECEPTION_FRAUD_CAPABILITIES = {
     # Identity and impersonation
     "identity_spoofing",
     "identity_theft",
-    "spoof",
-    "spoofing",
+    "identity_spoof",  # Changed from "spoof" to avoid false positives (anti-spoof tools, etc.)
+    "email_spoofing",  # More specific
+    "caller_id_spoofing",  # More specific
     "impersonation",
     "impersonate",
     "impersonating",
@@ -657,8 +665,8 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "fake_document",
     "forgery_generation",
     "forgery",
-    "forge",
-    "forging",
+    "document_forge",  # Changed from "forge" to avoid false positives (forge tooling, etc.)
+    "document_forging",  # Changed from "forging" to avoid false positives
     "counterfeit",
     "counterfeiting",
 
@@ -893,7 +901,7 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "fentanyl_production",
     "fentanyl",
     "methamphetamine",
-    "meth_production",
+    "methamphetamine_production",  # Changed from "meth_production" to avoid "method" false positives
     "cocaine_synthesis",
     "heroin_synthesis",
 
@@ -1048,25 +1056,139 @@ LEGITIMATE_MODULE_CATEGORIES = {
 }
 
 
-def get_capability_category(capability: str) -> Optional[str]:
-    """Get the category of a capability."""
-    capability_lower = capability.lower()
+# Pre-lowercase all capabilities at module import time (O(1) lookup)
+_MEDICAL_LOWER = frozenset(cap.lower() for cap in MEDICAL_CAPABILITIES)
+_FINANCIAL_LOWER = frozenset(cap.lower() for cap in FINANCIAL_CAPABILITIES)
+_LEGAL_LOWER = frozenset(cap.lower() for cap in LEGAL_CAPABILITIES)
+_HOME_SECURITY_LOWER = frozenset(cap.lower() for cap in HOME_SECURITY_CAPABILITIES)
+_IDENTITY_VERIFICATION_LOWER = frozenset(cap.lower() for cap in IDENTITY_VERIFICATION_CAPABILITIES)
+_CONTENT_MODERATION_LOWER = frozenset(cap.lower() for cap in CONTENT_MODERATION_CAPABILITIES)
+_RESEARCH_LOWER = frozenset(cap.lower() for cap in RESEARCH_CAPABILITIES)
+_INFRASTRUCTURE_CONTROL_LOWER = frozenset(cap.lower() for cap in INFRASTRUCTURE_CONTROL_CAPABILITIES)
+_WEAPONS_HARMFUL_LOWER = frozenset(cap.lower() for cap in WEAPONS_HARMFUL_CAPABILITIES)
+_MANIPULATION_COERCION_LOWER = frozenset(cap.lower() for cap in MANIPULATION_COERCION_CAPABILITIES)
+_SURVEILLANCE_MASS_LOWER = frozenset(cap.lower() for cap in SURVEILLANCE_MASS_CAPABILITIES)
+_DECEPTION_FRAUD_LOWER = frozenset(cap.lower() for cap in DECEPTION_FRAUD_CAPABILITIES)
+_CYBER_OFFENSIVE_LOWER = frozenset(cap.lower() for cap in CYBER_OFFENSIVE_CAPABILITIES)
+_ELECTION_INTERFERENCE_LOWER = frozenset(cap.lower() for cap in ELECTION_INTERFERENCE_CAPABILITIES)
+_BIOMETRIC_INFERENCE_LOWER = frozenset(cap.lower() for cap in BIOMETRIC_INFERENCE_CAPABILITIES)
+_AUTONOMOUS_DECEPTION_LOWER = frozenset(cap.lower() for cap in AUTONOMOUS_DECEPTION_CAPABILITIES)
+_HAZARDOUS_MATERIALS_LOWER = frozenset(cap.lower() for cap in HAZARDOUS_MATERIALS_CAPABILITIES)
+_DISCRIMINATION_LOWER = frozenset(cap.lower() for cap in DISCRIMINATION_CAPABILITIES)
+_CRISIS_ESCALATION_LOWER = frozenset(cap.lower() for cap in CRISIS_ESCALATION_CAPABILITIES)
+_PATTERN_DETECTION_LOWER = frozenset(cap.lower() for cap in PATTERN_DETECTION_CAPABILITIES)
+_PROTECTIVE_ROUTING_LOWER = frozenset(cap.lower() for cap in PROTECTIVE_ROUTING_CAPABILITIES)
 
-    # Check prohibited capabilities - both exact and substring matches
-    for category, capabilities in PROHIBITED_CAPABILITIES.items():
-        for prohibited in capabilities:
-            prohibited_lower = prohibited.lower()
-            # Check exact match or if prohibited term is in the capability
-            if capability_lower == prohibited_lower or prohibited_lower in capability_lower:
-                return category
+
+def _compile_prohibition_regex(capabilities: frozenset[str]) -> re.Pattern[str]:
+    """
+    Compile word-boundary regex for a set of prohibited capabilities.
+
+    This ensures we match complete words only (e.g., "icu_care" but not "curriculum").
+    Patterns are sorted by length (longest first) to ensure greedy matching.
+
+    Uses custom word boundaries that treat these as separators:
+    - Whitespace
+    - Underscores (common in capability names like "icu_care")
+    - Colons (capability format like "domain:medical")
+
+    This ensures:
+    - "domain:medical" matches "medical" (colon before, end after)
+    - "medical_advice" matches "medical" (start before, underscore after)
+    - "curriculum" does NOT match "icu" (no word boundary around "icu")
+    """
+    # Escape special regex chars and sort by length (longest first)
+    escaped = [re.escape(cap) for cap in sorted(capabilities, key=len, reverse=True)]
+    # Join with | (OR) and add custom word boundaries that include underscores and colons
+    # (?:^|[\s_:]) means "start of string OR whitespace OR underscore OR colon"
+    # (?:$|[\s_:]) means "end of string OR whitespace OR underscore OR colon"
+    pattern = r'(?:^|[\s_:])(' + '|'.join(escaped) + r')(?:$|[\s_:])'
+    return re.compile(pattern, re.IGNORECASE)
+
+
+# Pre-compile regex patterns for each category at module import time
+_MEDICAL_REGEX = _compile_prohibition_regex(_MEDICAL_LOWER)
+_FINANCIAL_REGEX = _compile_prohibition_regex(_FINANCIAL_LOWER)
+_LEGAL_REGEX = _compile_prohibition_regex(_LEGAL_LOWER)
+_HOME_SECURITY_REGEX = _compile_prohibition_regex(_HOME_SECURITY_LOWER)
+_IDENTITY_VERIFICATION_REGEX = _compile_prohibition_regex(_IDENTITY_VERIFICATION_LOWER)
+_CONTENT_MODERATION_REGEX = _compile_prohibition_regex(_CONTENT_MODERATION_LOWER)
+_RESEARCH_REGEX = _compile_prohibition_regex(_RESEARCH_LOWER)
+_INFRASTRUCTURE_CONTROL_REGEX = _compile_prohibition_regex(_INFRASTRUCTURE_CONTROL_LOWER)
+_WEAPONS_HARMFUL_REGEX = _compile_prohibition_regex(_WEAPONS_HARMFUL_LOWER)
+_MANIPULATION_COERCION_REGEX = _compile_prohibition_regex(_MANIPULATION_COERCION_LOWER)
+_SURVEILLANCE_MASS_REGEX = _compile_prohibition_regex(_SURVEILLANCE_MASS_LOWER)
+_DECEPTION_FRAUD_REGEX = _compile_prohibition_regex(_DECEPTION_FRAUD_LOWER)
+_CYBER_OFFENSIVE_REGEX = _compile_prohibition_regex(_CYBER_OFFENSIVE_LOWER)
+_ELECTION_INTERFERENCE_REGEX = _compile_prohibition_regex(_ELECTION_INTERFERENCE_LOWER)
+_BIOMETRIC_INFERENCE_REGEX = _compile_prohibition_regex(_BIOMETRIC_INFERENCE_LOWER)
+_AUTONOMOUS_DECEPTION_REGEX = _compile_prohibition_regex(_AUTONOMOUS_DECEPTION_LOWER)
+_HAZARDOUS_MATERIALS_REGEX = _compile_prohibition_regex(_HAZARDOUS_MATERIALS_LOWER)
+_DISCRIMINATION_REGEX = _compile_prohibition_regex(_DISCRIMINATION_LOWER)
+_CRISIS_ESCALATION_REGEX = _compile_prohibition_regex(_CRISIS_ESCALATION_LOWER)
+_PATTERN_DETECTION_REGEX = _compile_prohibition_regex(_PATTERN_DETECTION_LOWER)
+_PROTECTIVE_ROUTING_REGEX = _compile_prohibition_regex(_PROTECTIVE_ROUTING_LOWER)
+
+
+def get_capability_category(capability: str) -> Optional[str]:
+    """
+    Check if capability matches any prohibited category using word-boundary regex.
+
+    This function uses pre-compiled regex patterns with word boundaries to match
+    prohibited capabilities. This avoids false positives (e.g., "icu" matching
+    "curriculum") and is O(1) per category instead of O(N·M).
+
+    Args:
+        capability: The capability name to check
+
+    Returns:
+        Category name if prohibited, None if allowed
+    """
+    # Check prohibited capabilities using pre-compiled regex patterns
+    if _MEDICAL_REGEX.search(capability):
+        return "MEDICAL"
+    if _FINANCIAL_REGEX.search(capability):
+        return "FINANCIAL"
+    if _LEGAL_REGEX.search(capability):
+        return "LEGAL"
+    if _HOME_SECURITY_REGEX.search(capability):
+        return "HOME_SECURITY"
+    if _IDENTITY_VERIFICATION_REGEX.search(capability):
+        return "IDENTITY_VERIFICATION"
+    if _CONTENT_MODERATION_REGEX.search(capability):
+        return "CONTENT_MODERATION"
+    if _RESEARCH_REGEX.search(capability):
+        return "RESEARCH"
+    if _INFRASTRUCTURE_CONTROL_REGEX.search(capability):
+        return "INFRASTRUCTURE_CONTROL"
+    if _WEAPONS_HARMFUL_REGEX.search(capability):
+        return "WEAPONS_HARMFUL"
+    if _MANIPULATION_COERCION_REGEX.search(capability):
+        return "MANIPULATION_COERCION"
+    if _SURVEILLANCE_MASS_REGEX.search(capability):
+        return "SURVEILLANCE_MASS"
+    if _DECEPTION_FRAUD_REGEX.search(capability):
+        return "DECEPTION_FRAUD"
+    if _CYBER_OFFENSIVE_REGEX.search(capability):
+        return "CYBER_OFFENSIVE"
+    if _ELECTION_INTERFERENCE_REGEX.search(capability):
+        return "ELECTION_INTERFERENCE"
+    if _BIOMETRIC_INFERENCE_REGEX.search(capability):
+        return "BIOMETRIC_INFERENCE"
+    if _AUTONOMOUS_DECEPTION_REGEX.search(capability):
+        return "AUTONOMOUS_DECEPTION"
+    if _HAZARDOUS_MATERIALS_REGEX.search(capability):
+        return "HAZARDOUS_MATERIALS"
+    if _DISCRIMINATION_REGEX.search(capability):
+        return "DISCRIMINATION"
 
     # Check community moderation capabilities
-    for category, capabilities in COMMUNITY_MODERATION_CAPABILITIES.items():
-        for community_cap in capabilities:
-            community_lower = community_cap.lower()
-            # Check exact match or if community term is in the capability
-            if capability_lower == community_lower or community_lower in capability_lower:
-                return f"COMMUNITY_{category}"
+    if _CRISIS_ESCALATION_REGEX.search(capability):
+        return "COMMUNITY_CRISIS_ESCALATION"
+    if _PATTERN_DETECTION_REGEX.search(capability):
+        return "COMMUNITY_PATTERN_DETECTION"
+    if _PROTECTIVE_ROUTING_REGEX.search(capability):
+        return "COMMUNITY_PROTECTIVE_ROUTING"
 
     return None
 

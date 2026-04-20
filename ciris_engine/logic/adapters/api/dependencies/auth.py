@@ -196,9 +196,12 @@ def _handle_service_token_auth(request: Request, auth_service: APIAuthService, s
         # Audit failed service token authentication (security monitoring)
         token_hash = hashlib.sha256(service_token.encode("utf-8")).hexdigest()[:16] + "..."
         client_ip = request.client.host if request.client else "unknown"
+        # Sanitize user-agent to prevent log injection attacks
+        raw_user_agent = request.headers.get('user-agent', 'unknown')
+        sanitized_user_agent = raw_user_agent.replace('\n', '').replace('\r', '')[:200]
         logger.warning(
             f"[AUTH SECURITY] Failed service token authentication: token_hash={token_hash}, client_ip={client_ip}, "
-            f"user_agent={request.headers.get('user-agent', 'unknown')}"
+            f"user_agent={sanitized_user_agent}"
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 

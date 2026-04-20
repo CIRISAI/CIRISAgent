@@ -7,6 +7,7 @@ and comprehensive access auditing.
 
 import asyncio
 import logging
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
@@ -72,6 +73,29 @@ class SecretsStore:
 
         self._init_database()
 
+    def _secure_db_files(self, db_path: Path) -> None:
+        """
+        Secure database and related files (main DB, WAL, SHM).
+
+        Fixes H2: Ensures WAL and SHM files have 0o600 permissions.
+
+        Args:
+            db_path: Path to the main database file
+        """
+        import os
+        import stat
+
+        mode = stat.S_IRUSR | stat.S_IWUSR  # 0o600 - owner read/write only
+
+        for suffix in ["", "-wal", "-shm"]:
+            file_path = Path(str(db_path) + suffix)
+            if file_path.exists():
+                try:
+                    os.chmod(file_path, mode)
+                    logger.debug(f"Secured {file_path.name} with 0o600 permissions")
+                except OSError as e:
+                    logger.warning(f"Could not secure {file_path}: {type(e).__name__}")
+
     def _get_auto_decapsulate_actions(self, sensitivity: str) -> List[str]:
         """
         Get default auto-decapsulation actions based on sensitivity.
@@ -110,64 +134,73 @@ class SecretsStore:
         is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
         blob_type = "BYTEA" if is_postgres else "BLOB"
 
-        with get_db_connection(str(self.db_path)) as conn:
-            # Secrets table
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS secrets (
-                    secret_uuid TEXT PRIMARY KEY,
-                    encrypted_value {blob_type} NOT NULL,
-                    encryption_key_ref TEXT NOT NULL,
-                    salt {blob_type} NOT NULL,
-                    nonce {blob_type} NOT NULL,
-                    description TEXT NOT NULL,
-                    sensitivity_level TEXT NOT NULL,
-                    detected_pattern TEXT NOT NULL,
-                    context_hint TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    last_accessed TEXT,
-                    access_count INTEGER DEFAULT 0,
-                    source_message_id TEXT,
-                    auto_decapsulate_for_actions TEXT,
-                    manual_access_only INTEGER DEFAULT 0
-                )
-            """
-            )
+        # Fix H3: Set restrictive umask before creating database (prevents TOCTOU)
+        # This ensures any new files (including WAL/SHM) are created with secure permissions
+        old_umask = None
+        if isinstance(self.db_path, Path):
+            old_umask = os.umask(0o077)  # Only owner can read/write
 
-            conn.execute(
+        try:
+            with get_db_connection(str(self.db_path)) as conn:
+                # Secrets table
+                conn.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS secrets (
+                        secret_uuid TEXT PRIMARY KEY,
+                        encrypted_value {blob_type} NOT NULL,
+                        encryption_key_ref TEXT NOT NULL,
+                        salt {blob_type} NOT NULL,
+                        nonce {blob_type} NOT NULL,
+                        description TEXT NOT NULL,
+                        sensitivity_level TEXT NOT NULL,
+                        detected_pattern TEXT NOT NULL,
+                        context_hint TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        last_accessed TEXT,
+                        access_count INTEGER DEFAULT 0,
+                        source_message_id TEXT,
+                        auto_decapsulate_for_actions TEXT,
+                        manual_access_only INTEGER DEFAULT 0
+                    )
                 """
-                CREATE TABLE IF NOT EXISTS secret_access_log (
-                    access_id TEXT PRIMARY KEY,
-                    secret_uuid TEXT NOT NULL,
-                    access_type TEXT NOT NULL,
-                    accessor TEXT NOT NULL,
-                    purpose TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    source_ip TEXT,
-                    user_agent TEXT,
-                    action_context TEXT,
-                    success INTEGER DEFAULT 1,
-                    failure_reason TEXT,
-                    FOREIGN KEY (secret_uuid) REFERENCES secrets (secret_uuid)
                 )
-            """
-            )
 
-            # Indexes for performance
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_pattern ON secrets(detected_pattern)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_sensitivity ON secrets(sensitivity_level)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_timestamp ON secret_access_log(timestamp)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_secret ON secret_access_log(secret_uuid)")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS secret_access_log (
+                        access_id TEXT PRIMARY KEY,
+                        secret_uuid TEXT NOT NULL,
+                        access_type TEXT NOT NULL,
+                        accessor TEXT NOT NULL,
+                        purpose TEXT NOT NULL,
+                        timestamp TEXT NOT NULL,
+                        source_ip TEXT,
+                        user_agent TEXT,
+                        action_context TEXT,
+                        success INTEGER DEFAULT 1,
+                        failure_reason TEXT,
+                        FOREIGN KEY (secret_uuid) REFERENCES secrets (secret_uuid)
+                    )
+                """
+                )
 
-            conn.commit()
+                # Indexes for performance
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_pattern ON secrets(detected_pattern)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_secrets_sensitivity ON secrets(sensitivity_level)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_timestamp ON secret_access_log(timestamp)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_access_log_secret ON secret_access_log(secret_uuid)")
 
-        # Secure database file permissions after creation (0o600 - owner read/write only)
+                conn.commit()
+
+        finally:
+            # Restore original umask
+            if old_umask is not None:
+                os.umask(old_umask)
+
+        # Fix H2: Secure all database files including WAL and SHM (not just main DB)
         if isinstance(self.db_path, Path) and self.db_path.exists():
-            try:
-                os.chmod(self.db_path, stat.S_IRUSR | stat.S_IWUSR)
-                logger.info(f"Set secure permissions (0o600) on secrets database: {self.db_path}")
-            except OSError as e:
-                logger.warning(f"Failed to set secure permissions on secrets.db: {e}")
+            self._secure_db_files(self.db_path)
+            logger.info(f"Set secure permissions (0o600) on secrets database and related files: {self.db_path}")
 
     async def store_secret(self, secret: DetectedSecret, source_id: Optional[str] = None) -> SecretRecord:
         """
@@ -704,122 +737,210 @@ class SecretsStore:
             log_entry.failure_reason,
         )
 
+    async def _verify_hardware_key_works(self) -> bool:
+        """Verify hardware key can encrypt/decrypt before trusting it.
+
+        This is critical to prevent data loss from silent hardware failures.
+        C2 FIX: Round-trip canary verification before wiping software key.
+
+        Returns:
+            True if hardware key can successfully round-trip a canary value
+        """
+        canary = b"CIRIS_HARDWARE_KEY_CANARY_" + secrets.token_bytes(16)
+        try:
+            encrypted_value, salt, nonce = self.encryption.encrypt_secret(canary.decode("utf-8"))
+            decrypted = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
+            success = decrypted == canary.decode("utf-8")
+            if success:
+                logger.info("Hardware key canary verification PASSED")
+            else:
+                logger.error("Hardware key canary verification FAILED: decryption mismatch")
+            return success
+        except Exception as e:
+            logger.error(f"Hardware key canary verification FAILED: {type(e).__name__}: {e}")
+            return False
+
     async def migrate_to_hardware_key(self) -> bool:
         """Migrate secrets master key to hardware-backed storage via CIRISVerify.
+
+        SECURITY FIXES:
+        - C1: Atomic transaction for re-encryption (no partial migration)
+        - C2: Canary round-trip verification before trusting hardware key
+        - C3: Hold self._lock for entire migration (no concurrent mode toggling)
 
         This method:
         1. Checks if hardware backend is available
         2. Checks if we're currently in software mode with a file-based key
         3. Stores the current master key in CIRISVerify hardware
-        4. Re-encrypts all secrets with hardware-backed key derivation
-        5. Updates encryption_key_ref to "hardware_v1"
+        4. Verifies hardware key works with canary test (C2)
+        5. Creates backup of existing secrets table (C1)
+        6. Re-encrypts all secrets with hardware-backed key derivation in atomic transaction (C1)
+        7. Updates encryption_key_ref to "hardware_v1"
+        8. Only switches mode after successful migration
 
         Returns:
             True if migration successful, False otherwise
         """
-        try:
-            # Check if hardware is available
-            if not self.encryption._hardware_available:
-                logger.info("Hardware key storage not available - skipping migration")
-                return False
+        # C3 FIX: Hold lock for entire migration to prevent concurrent mode toggling
+        async with self._lock:
+            try:
+                # Check if hardware is available
+                capabilities = self.encryption.get_hardware_capabilities()
+                if not capabilities["hardware_available"]:
+                    logger.info("Hardware key storage not available - skipping migration")
+                    return False
 
-            # Check if already using hardware
-            if self.encryption.key_storage_mode == "hardware":
-                logger.info("Already using hardware key storage")
-                return True
+                # Check if already using hardware
+                if self.encryption.key_storage_mode == "hardware":
+                    logger.info("Already using hardware key storage")
+                    return True
 
-            # Check if hardware key already exists
-            if self.encryption.has_hardware_key():
-                logger.info("Hardware key already exists - switching to hardware mode")
-                # Just switch modes - key is already there
-                self.encryption.key_storage_mode = "hardware"
-                return True
+                # Check if hardware key already exists
+                if self.encryption.has_hardware_key():
+                    logger.info("Hardware key already exists - switching to hardware mode")
 
-            # Get current software master key
-            current_master_key = self.encryption.master_key
-            if not current_master_key or len(current_master_key) != 32:
-                logger.error("Invalid master key - cannot migrate")
-                return False
-
-            logger.info("Starting secrets master key migration to hardware")
-
-            # Store master key in hardware
-            if not self.encryption.store_key_in_hardware(current_master_key):
-                logger.error("Failed to store key in hardware")
-                return False
-
-            # Get all secrets that need re-encryption
-            with get_db_connection(str(self.db_path)) as conn:
-                cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets")
-                secrets = cursor.fetchall()
-
-            if not secrets:
-                logger.info("No secrets to re-encrypt - switching to hardware mode")
-                self.encryption.key_storage_mode = "hardware"
-                return True
-
-            logger.info(f"Re-encrypting {len(secrets)} secrets with hardware-backed key")
-
-            # Re-encrypt all secrets
-            updated_secrets = []
-            for row in secrets:
-                # Handle both tuple (SQLite) and dict (PostgreSQL) rows
-                if isinstance(row, dict):
-                    secret_uuid = row["secret_uuid"]
-                    encrypted_value = row["encrypted_value"]
-                    salt = row["salt"]
-                    nonce = row["nonce"]
-                    current_key_ref = row["encryption_key_ref"]
-                else:
-                    secret_uuid = row[0]
-                    encrypted_value = row[1]
-                    salt = row[2]
-                    nonce = row[3]
-                    current_key_ref = row[4]
-
-                try:
-                    # Skip if already hardware-encrypted
-                    if current_key_ref == "hardware_v1":
-                        continue
-
-                    # Decrypt with current software key
-                    decrypted_value = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
-
-                    # Switch to hardware mode for re-encryption
+                    # C2 FIX: Verify hardware key works before switching mode
+                    # Temporarily switch to hardware mode for verification
                     old_mode = self.encryption.key_storage_mode
                     self.encryption.key_storage_mode = "hardware"
 
-                    # Re-encrypt with hardware-backed key derivation
-                    new_encrypted_value, new_salt, new_nonce = self.encryption.encrypt_secret(decrypted_value)
+                    if not await self._verify_hardware_key_works():
+                        logger.error("Hardware key exists but canary verification failed - NOT switching mode")
+                        self.encryption.key_storage_mode = old_mode
+                        return False
 
-                    # Restore mode (will be set to hardware at the end)
-                    self.encryption.key_storage_mode = old_mode
+                    # Canary passed - safe to stay in hardware mode
+                    logger.info("Hardware key verified - switching to hardware mode")
+                    return True
 
-                    updated_secrets.append((new_encrypted_value, new_salt, new_nonce, "hardware_v1", secret_uuid))
-
-                except Exception as decrypt_error:
-                    logger.error(f"Failed to re-encrypt secret {secret_uuid}: {decrypt_error}")
+                # Get current software master key
+                current_master_key = self.encryption.master_key
+                if not current_master_key or len(current_master_key) != 32:
+                    logger.error("Invalid master key - cannot migrate")
                     return False
 
-            # Update all secrets in database
-            if updated_secrets:
+                logger.info("Starting secrets master key migration to hardware")
+
+                # Store master key in hardware
+                if not self.encryption.store_key_in_hardware(current_master_key):
+                    logger.error("Failed to store key in hardware")
+                    return False
+
+                # C2 FIX: Verify hardware key works BEFORE re-encrypting anything
+                old_mode = self.encryption.key_storage_mode
+                self.encryption.key_storage_mode = "hardware"
+
+                if not await self._verify_hardware_key_works():
+                    logger.error("Hardware key stored but canary verification failed - aborting migration")
+                    self.encryption.key_storage_mode = old_mode
+                    return False
+
+                # Restore mode - will switch at the end after successful migration
+                self.encryption.key_storage_mode = old_mode
+                logger.info("Hardware key canary verification passed - proceeding with re-encryption")
+
+                # Get all secrets that need re-encryption
                 with get_db_connection(str(self.db_path)) as conn:
-                    conn.executemany(
-                        """
-                        UPDATE secrets
-                        SET encrypted_value = ?, salt = ?, nonce = ?, encryption_key_ref = ?
-                        WHERE secret_uuid = ?
-                    """,
-                        updated_secrets,
-                    )
+                    cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets")
+                    secrets_rows = cursor.fetchall()
+
+                if not secrets_rows:
+                    logger.info("No secrets to re-encrypt - switching to hardware mode")
+                    self.encryption.key_storage_mode = "hardware"
+                    return True
+
+                logger.info(f"Re-encrypting {len(secrets_rows)} secrets with hardware-backed key")
+
+                # C1 FIX: Create backup table before migration
+                import time
+                backup_table = f"secrets_backup_{int(time.time())}"
+                with get_db_connection(str(self.db_path)) as conn:
+                    # Detect database type for proper syntax
+                    db_path_str = str(self.db_path)
+                    is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
+
+                    if is_postgres:
+                        conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
+                    else:
+                        conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
                     conn.commit()
+                logger.info(f"Created backup table: {backup_table}")
 
-            # Switch to hardware mode permanently
-            self.encryption.key_storage_mode = "hardware"
+                # Re-encrypt all secrets
+                updated_secrets = []
+                for row in secrets_rows:
+                    # Handle both tuple (SQLite) and dict (PostgreSQL) rows
+                    if isinstance(row, dict):
+                        secret_uuid = row["secret_uuid"]
+                        encrypted_value = row["encrypted_value"]
+                        salt = row["salt"]
+                        nonce = row["nonce"]
+                        current_key_ref = row["encryption_key_ref"]
+                    else:
+                        secret_uuid = row[0]
+                        encrypted_value = row[1]
+                        salt = row[2]
+                        nonce = row[3]
+                        current_key_ref = row[4]
 
-            logger.info(f"Successfully migrated {len(updated_secrets)} secrets to hardware-backed encryption")
-            return True
+                    try:
+                        # Skip if already hardware-encrypted
+                        if current_key_ref == "hardware_v1":
+                            continue
 
-        except Exception as e:
-            logger.error(f"Secrets master key migration failed: {e}")
-            return False
+                        # Decrypt with current software key
+                        decrypted_value = self.encryption.decrypt_secret(encrypted_value, salt, nonce)
+
+                        # Switch to hardware mode for re-encryption
+                        self.encryption.key_storage_mode = "hardware"
+
+                        # Re-encrypt with hardware-backed key derivation
+                        new_encrypted_value, new_salt, new_nonce = self.encryption.encrypt_secret(decrypted_value)
+
+                        # Restore mode (will be set to hardware at the end)
+                        self.encryption.key_storage_mode = old_mode
+
+                        updated_secrets.append((new_encrypted_value, new_salt, new_nonce, "hardware_v1", secret_uuid))
+
+                    except Exception as decrypt_error:
+                        logger.error(f"Failed to re-encrypt secret {secret_uuid}: {decrypt_error}")
+                        # Restore mode before returning
+                        self.encryption.key_storage_mode = old_mode
+                        return False
+
+                # C1 FIX: Update all secrets in a SINGLE transaction (atomic)
+                if updated_secrets:
+                    with get_db_connection(str(self.db_path)) as conn:
+                        # Begin transaction explicitly
+                        conn.execute("BEGIN")
+                        try:
+                            conn.executemany(
+                                """
+                                UPDATE secrets
+                                SET encrypted_value = ?, salt = ?, nonce = ?, encryption_key_ref = ?
+                                WHERE secret_uuid = ?
+                            """,
+                                updated_secrets,
+                            )
+                            # Only commit if ALL updates succeeded
+                            conn.commit()
+                            logger.info(f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction")
+                        except Exception as update_error:
+                            conn.rollback()
+                            logger.error(f"Re-encryption transaction failed, rolled back: {update_error}")
+                            # Restore mode before returning
+                            self.encryption.key_storage_mode = old_mode
+                            return False
+
+                # SUCCESS: Only switch to hardware mode after successful migration
+                self.encryption.key_storage_mode = "hardware"
+
+                logger.info(f"Successfully migrated {len(updated_secrets)} secrets to hardware-backed encryption")
+                return True
+
+            except Exception as e:
+                logger.error(f"Secrets master key migration failed: {e}")
+                # Ensure we're back in software mode if anything failed
+                if self.encryption.key_storage_mode == "hardware":
+                    self.encryption.key_storage_mode = "software"
+                return False

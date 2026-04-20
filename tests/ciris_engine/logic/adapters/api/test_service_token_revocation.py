@@ -103,3 +103,32 @@ class TestServiceTokenRevocation:
         monkeypatch.delenv("CIRIS_SERVICE_TOKEN", raising=False)
         user = auth_service.validate_service_token("any_token")
         assert user is None
+
+    @pytest.mark.asyncio
+    async def test_revocation_persistence_across_instances(self, mock_service_token, tmp_path, monkeypatch):
+        """Test that revocations persist across service instances (multi-occurrence support)."""
+        # Set up a temporary database path
+        db_path = str(tmp_path / "test_revocations.db")
+        monkeypatch.setenv("CIRIS_DATA_DIR", str(tmp_path))
+
+        # Create first instance and revoke a token
+        service1 = APIAuthService(auth_service=None)
+        result = await service1.revoke_service_token(
+            token=mock_service_token, reason="security incident", revoked_by="admin"
+        )
+        assert result is True
+
+        # Verify token is revoked in first instance
+        user = service1.validate_service_token(mock_service_token)
+        assert user is None
+
+        # Create second instance (simulates new process/occurrence)
+        service2 = APIAuthService(auth_service=None)
+
+        # Load revoked tokens from database
+        await service2._load_revoked_tokens()
+
+        # Verify token is still revoked in second instance
+        user = service2.validate_service_token(mock_service_token)
+        assert user is None
+        assert service2.is_service_token_revoked(mock_service_token) is True

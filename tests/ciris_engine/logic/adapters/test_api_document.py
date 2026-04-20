@@ -537,52 +537,68 @@ class TestSSRFProtection:
         """Test that localhost URLs are blocked."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
-        assert validate_url_for_ssrf("http://localhost/file.pdf") is False
-        assert validate_url_for_ssrf("http://127.0.0.1/file.pdf") is False
-        assert validate_url_for_ssrf("http://[::1]/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://localhost/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://127.0.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://[::1]/file.pdf")
+        assert is_valid is False
 
     def test_validate_url_blocks_cloud_metadata(self):
         """Test that cloud metadata endpoints are blocked."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
         # AWS/Azure metadata
-        assert validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/") is False
+        is_valid, _ = validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/")
+        assert is_valid is False
         # GCP metadata
-        assert validate_url_for_ssrf("http://metadata.google.internal/computeMetadata/v1/") is False
+        is_valid, _ = validate_url_for_ssrf("http://metadata.google.internal/computeMetadata/v1/")
+        assert is_valid is False
         # Alibaba Cloud metadata
-        assert validate_url_for_ssrf("http://100.100.100.200/latest/meta-data/") is False
+        is_valid, _ = validate_url_for_ssrf("http://100.100.100.200/latest/meta-data/")
+        assert is_valid is False
 
     def test_validate_url_blocks_file_scheme(self):
         """Test that file:// URLs are blocked."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
-        assert validate_url_for_ssrf("file:///etc/passwd") is False
-        assert validate_url_for_ssrf("file://localhost/etc/passwd") is False
+        is_valid, _ = validate_url_for_ssrf("file:///etc/passwd")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("file://localhost/etc/passwd")
+        assert is_valid is False
 
     def test_validate_url_blocks_private_ips(self):
         """Test that private IP ranges are blocked."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
         # 10.x.x.x
-        assert validate_url_for_ssrf("http://10.0.0.1/file.pdf") is False
-        assert validate_url_for_ssrf("http://10.255.255.255/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://10.0.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://10.255.255.255/file.pdf")
+        assert is_valid is False
 
         # 172.16-31.x.x
-        assert validate_url_for_ssrf("http://172.16.0.1/file.pdf") is False
-        assert validate_url_for_ssrf("http://172.31.255.255/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://172.16.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://172.31.255.255/file.pdf")
+        assert is_valid is False
 
         # 192.168.x.x
-        assert validate_url_for_ssrf("http://192.168.1.1/file.pdf") is False
-        assert validate_url_for_ssrf("http://192.168.255.255/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://192.168.1.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://192.168.255.255/file.pdf")
+        assert is_valid is False
 
     def test_validate_url_blocks_link_local(self):
         """Test that link-local addresses are blocked."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
         # IPv4 link-local
-        assert validate_url_for_ssrf("http://169.254.1.1/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://169.254.1.1/file.pdf")
+        assert is_valid is False
         # IPv6 link-local
-        assert validate_url_for_ssrf("http://[fe80::1]/file.pdf") is False
+        is_valid, _ = validate_url_for_ssrf("http://[fe80::1]/file.pdf")
+        assert is_valid is False
 
     def test_validate_url_allows_public_urls(self):
         """Test that public URLs are allowed."""
@@ -591,32 +607,44 @@ class TestSSRFProtection:
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
         # Mock DNS resolution to return public IPs
-        def mock_getaddrinfo(hostname, port):
+        def mock_getaddrinfo(hostname, port, family=None):
             # Return a public IP (Google's DNS)
             return [
                 (2, 1, 6, '', ('8.8.8.8', 0)),
             ]
 
         with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
-            assert validate_url_for_ssrf("https://example.com/file.pdf") is True
-            assert validate_url_for_ssrf("https://www.google.com/doc.pdf") is True
-            assert validate_url_for_ssrf("https://cdn.example.com/files/document.docx") is True
+            is_valid, resolved_ip = validate_url_for_ssrf("https://example.com/file.pdf")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
+            is_valid, resolved_ip = validate_url_for_ssrf("https://www.google.com/doc.pdf")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
+            is_valid, resolved_ip = validate_url_for_ssrf("https://cdn.example.com/files/document.docx")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
 
     def test_validate_url_requires_http_or_https(self):
         """Test that only http/https schemes are allowed."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
-        assert validate_url_for_ssrf("ftp://example.com/file.pdf") is False
-        assert validate_url_for_ssrf("gopher://example.com/file.pdf") is False
-        assert validate_url_for_ssrf("data:text/plain,hello") is False
-        assert validate_url_for_ssrf("javascript:alert(1)") is False
+        is_valid, _ = validate_url_for_ssrf("ftp://example.com/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("gopher://example.com/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("data:text/plain,hello")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("javascript:alert(1)")
+        assert is_valid is False
 
     def test_validate_url_handles_missing_hostname(self):
         """Test handling of URLs without hostname."""
         from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
 
-        assert validate_url_for_ssrf("http://") is False
-        assert validate_url_for_ssrf("https://") is False
+        is_valid, _ = validate_url_for_ssrf("http://")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("https://")
+        assert is_valid is False
 
     def test_validate_url_handles_dns_failure(self):
         """Test handling of DNS resolution failure."""
@@ -626,7 +654,8 @@ class TestSSRFProtection:
 
         with patch("socket.getaddrinfo", side_effect=OSError("DNS lookup failed")):
             # DNS failure should be treated as suspicious and blocked
-            assert validate_url_for_ssrf("http://this-domain-does-not-exist-12345.com/file.pdf") is False
+            is_valid, _ = validate_url_for_ssrf("http://this-domain-does-not-exist-12345.com/file.pdf")
+            assert is_valid is False
 
     @pytest.mark.asyncio
     async def test_download_document_blocks_ssrf(self):

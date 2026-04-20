@@ -308,6 +308,261 @@ def _get_spending_authority(provider: Any) -> Any:
 
 
 # ============================================================================
+# Wallet Status Helper Functions (extracted to reduce cognitive complexity)
+# ============================================================================
+
+
+class AttestationInfo:
+    """Attestation and spending limit information."""
+
+    def __init__(
+        self,
+        level: int = 0,
+        max_tx: str = "0.00",
+        daily: str = "0.00",
+        is_receive_only: bool = True,
+        hardware_degraded: bool = False,
+        degradation_reason: Optional[str] = None,
+        security_advisories: Optional[List[SecurityAdvisory]] = None,
+    ):
+        self.level = level
+        self.max_tx = max_tx
+        self.daily = daily
+        self.is_receive_only = is_receive_only
+        self.hardware_degraded = hardware_degraded
+        self.degradation_reason = degradation_reason
+        self.security_advisories = security_advisories or []
+
+
+def _get_attestation_info(request: Request) -> AttestationInfo:
+    """Get attestation level and spending limits from auth service.
+
+    Extracts attestation data from the cached CIRISVerify result,
+    computing spending authority limits based on attestation level.
+    """
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        logger.warning("[WALLET_STATUS] Authentication service not available - using level 0 defaults")
+        return AttestationInfo()
+
+    try:
+        cached_result = auth_service.get_cached_attestation(allow_stale=True)
+        if not cached_result:
+            logger.info("[WALLET_STATUS] No cached attestation available - using level 0 defaults")
+            return AttestationInfo()
+
+        attestation_level = cached_result.max_level
+        hardware_degraded = getattr(cached_result, "hardware_trust_degraded", False)
+        degradation_reason = getattr(cached_result, "trust_degradation_reason", None)
+
+        # Extract security advisories
+        security_advisories: List[SecurityAdvisory] = []
+        raw_advisories = getattr(cached_result, "security_advisories", None)
+        if raw_advisories:
+            for adv in raw_advisories:
+                security_advisories.append(
+                    SecurityAdvisory(
+                        cve=adv.get("cve"),
+                        title=adv.get("title", "Unknown"),
+                        impact=adv.get("impact", "Unknown"),
+                        remediation=adv.get("remediation"),
+                    )
+                )
+
+        logger.info(f"[WALLET_STATUS] Using cached attestation: level={attestation_level}")
+
+        from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
+
+        spending_authority = SpendingAuthority.from_attestation(
+            attestation_level=attestation_level,
+            hardware_trust_degraded=hardware_degraded,
+            trust_degradation_reason=degradation_reason,
+        )
+
+        return AttestationInfo(
+            level=attestation_level,
+            max_tx=str(spending_authority.max_transaction),
+            daily=str(spending_authority.max_daily),
+            is_receive_only=spending_authority.max_transaction == Decimal("0"),
+            hardware_degraded=hardware_degraded,
+            degradation_reason=degradation_reason,
+            security_advisories=security_advisories,
+        )
+    except Exception as e:
+        logger.warning(f"[WALLET_STATUS] Failed to get cached attestation: {e}")
+        return AttestationInfo()
+
+
+def _get_balance_info(provider: Any) -> tuple[str, str, bool]:
+    """Get balance and gas status from provider.
+
+    Returns:
+        Tuple of (usdc_balance, eth_balance, needs_gas)
+    """
+    balance = "0.00"
+    eth_balance = "0.00"
+
+    if hasattr(provider, "_balance"):
+        balance = str(provider._balance.available)
+        if provider._balance.metadata:
+            eth_balance = provider._balance.metadata.get("eth_balance", "0.00")
+
+    # Determine if user needs gas
+    try:
+        eth_decimal = Decimal(eth_balance)
+        needs_gas = eth_decimal < Decimal("0.0001")
+    except Exception:
+        needs_gas = True
+
+    return balance, eth_balance, needs_gas
+
+
+def _get_spending_progress(provider: Any) -> Optional[SpendingProgress]:
+    """Get spending progress from validator's spending tracker.
+
+    Returns SpendingProgress or None if not available.
+    """
+    validator = getattr(provider, "_validator", None)
+    if not validator:
+        return None
+
+    try:
+        import time
+
+        tracker = validator.spending_tracker
+
+        # Calculate time until resets
+        now = time.time()
+        session_elapsed = now - tracker.session_start_timestamp
+        session_remaining_secs = max(0, 3600 - session_elapsed)  # 1 hour sessions
+        daily_elapsed = now - tracker.daily_reset_timestamp
+        daily_remaining_secs = max(0, 86400 - daily_elapsed)
+
+        session_spent = tracker.session_spent.get("USDC", Decimal("0"))
+        daily_spent = tracker.daily_spent.get("USDC", Decimal("0"))
+
+        return SpendingProgress(
+            session_spent=str(session_spent),
+            session_remaining=str(max(Decimal("0"), tracker.session_limit - session_spent)),
+            session_limit=str(tracker.session_limit),
+            session_reset_minutes=int(session_remaining_secs / 60),
+            daily_spent=str(daily_spent),
+            daily_remaining=str(max(Decimal("0"), tracker.daily_limit - daily_spent)),
+            daily_reset_hours=int(daily_remaining_secs / 3600),
+        )
+    except Exception as e:
+        logger.debug(f"[WALLET_STATUS] Could not get spending progress: {e}")
+        return None
+
+
+async def _get_gas_estimate(provider: Any) -> Optional[GasEstimate]:
+    """Get gas cost estimates from chain client.
+
+    Uses a 2s timeout to prevent blocking on slow RPC responses.
+    """
+    chain_client = getattr(provider, "_chain_client", None)
+    if not chain_client:
+        return None
+
+    try:
+        import asyncio
+
+        gas_price = await asyncio.wait_for(chain_client.get_gas_price(), timeout=2.0)
+        gas_price_gwei = gas_price / 10**9
+
+        # Calculate costs (assume ETH ~ $2000 for estimate)
+        eth_price_usd = Decimal("2000")  # Could fetch from oracle
+        usdc_gas = 65000
+        usdc_cost_eth = Decimal(usdc_gas * gas_price) / Decimal(10**18)
+        usdc_cost_usd = usdc_cost_eth * eth_price_usd
+
+        return GasEstimate(
+            gas_price_gwei=f"{gas_price_gwei:.2f}",
+            usdc_transfer_gas=65000,
+            eth_transfer_gas=21000,
+            usdc_transfer_cost_eth=f"{usdc_cost_eth:.6f}",
+            usdc_transfer_cost_usd=f"{usdc_cost_usd:.4f}",
+            eth_price_usd=str(eth_price_usd),
+        )
+    except TimeoutError:
+        logger.debug("[WALLET_STATUS] Gas price fetch timed out (2s)")
+        return None
+    except Exception as e:
+        logger.debug(f"[WALLET_STATUS] Could not get gas estimates: {e}")
+        return None
+
+
+def _get_recent_transactions(provider: Any, limit: int = 5) -> List[TransactionSummary]:
+    """Get recent transactions from provider.
+
+    Args:
+        provider: Wallet provider instance
+        limit: Maximum number of transactions to return
+
+    Returns:
+        List of TransactionSummary objects
+    """
+    recent_transactions: List[TransactionSummary] = []
+    transactions = getattr(provider, "_transactions", [])
+
+    for tx in transactions[:limit]:
+        try:
+            explorer_url = None
+            if tx.confirmation and tx.confirmation.get("explorer_url"):
+                explorer_url = tx.confirmation["explorer_url"]
+
+            recent_transactions.append(
+                TransactionSummary(
+                    transaction_id=tx.transaction_id,
+                    type=tx.type.value if hasattr(tx.type, "value") else str(tx.type),
+                    amount=str(abs(tx.amount)),
+                    currency=tx.currency,
+                    recipient=tx.recipient,
+                    sender=tx.sender,
+                    status=tx.status.value if hasattr(tx.status, "value") else str(tx.status),
+                    timestamp=tx.timestamp.isoformat(),
+                    explorer_url=explorer_url,
+                )
+            )
+        except Exception as e:
+            logger.debug(f"[WALLET_STATUS] Could not parse transaction: {e}")
+
+    return recent_transactions
+
+
+def _get_paymaster_status(provider: Any) -> tuple[bool, bool]:
+    """Get paymaster configuration status.
+
+    Checks for both Coinbase Paymaster (preferred) and Arka paymaster.
+
+    Returns:
+        Tuple of (paymaster_enabled, paymaster_key_configured)
+    """
+    # Check for Coinbase Paymaster first (preferred)
+    coinbase_paymaster = getattr(provider, "_coinbase_paymaster", None)
+    if coinbase_paymaster is not None:
+        logger.debug("[WALLET_STATUS] Coinbase Paymaster is active")
+        return True, True  # Coinbase uses embedded URL, no separate key needed
+
+    # Fall back to Arka paymaster
+    paymaster_config = getattr(provider, "paymaster_config", None)
+    if not paymaster_config:
+        return False, False
+
+    paymaster_enabled = getattr(paymaster_config, "enabled", False)
+    paymaster_key_configured = False
+
+    # Check if key is configured
+    if hasattr(provider, "_get_arka_api_key"):
+        key = provider._get_arka_api_key()
+        paymaster_key_configured = key is not None and len(key) > 0
+    elif paymaster_config.arka_api_key:
+        paymaster_key_configured = True
+
+    return paymaster_enabled, paymaster_key_configured
+
+
+# ============================================================================
 # Routes
 # ============================================================================
 
@@ -371,181 +626,17 @@ async def get_wallet_status(
         address = getattr(provider, "_evm_address", None)
         network = getattr(provider.config, "network", "base-mainnet") if hasattr(provider, "config") else "base-mainnet"
 
-        # Get attestation level from auth_service's cached attestation (same source as trust badge)
-        attestation_level = 0
-        max_tx = "0.00"
-        daily = "0.00"
-        is_receive_only = True
-        hardware_degraded = False
-        degradation_reason = None
-        security_advisories_list: List[SecurityAdvisory] = []
-
-        auth_service = getattr(request.app.state, "authentication_service", None)
-        if auth_service:
-            try:
-                cached_result = auth_service.get_cached_attestation(allow_stale=True)
-                if cached_result:
-                    attestation_level = cached_result.max_level
-                    hardware_degraded = getattr(cached_result, "hardware_trust_degraded", False)
-                    degradation_reason = getattr(cached_result, "trust_degradation_reason", None)
-
-                    # Extract security advisories if available
-                    raw_advisories = getattr(cached_result, "security_advisories", None)
-                    if raw_advisories:
-                        for adv in raw_advisories:
-                            security_advisories_list.append(
-                                SecurityAdvisory(
-                                    cve=adv.get("cve"),
-                                    title=adv.get("title", "Unknown"),
-                                    impact=adv.get("impact", "Unknown"),
-                                    remediation=adv.get("remediation"),
-                                )
-                            )
-
-                    logger.info(f"[WALLET_STATUS] Using cached attestation: level={attestation_level}")
-
-                    from ciris_adapters.wallet.providers.x402_provider import SpendingAuthority
-
-                    spending_authority = SpendingAuthority.from_attestation(
-                        attestation_level=attestation_level,
-                        hardware_trust_degraded=hardware_degraded,
-                        trust_degradation_reason=degradation_reason,
-                    )
-                    max_tx = str(spending_authority.max_transaction)
-                    daily = str(spending_authority.max_daily)
-                    is_receive_only = spending_authority.max_transaction == Decimal("0")
-                else:
-                    logger.info("[WALLET_STATUS] No cached attestation available - using level 0 defaults")
-            except Exception as e:
-                logger.warning(f"[WALLET_STATUS] Failed to get cached attestation: {e}")
-        else:
-            logger.warning("[WALLET_STATUS] Authentication service not available - using level 0 defaults")
-
-        # Get balance (cached, don't block on RPC)
-        balance = "0.00"
-        eth_balance = "0.00"
-        if hasattr(provider, "_balance"):
-            balance = str(provider._balance.available)
-            if provider._balance.metadata:
-                eth_balance = provider._balance.metadata.get("eth_balance", "0.00")
-
-        # Determine if user needs gas
-        try:
-            eth_decimal = Decimal(eth_balance)
-            needs_gas = eth_decimal < Decimal("0.0001")
-        except Exception:
-            needs_gas = True
-
-        # Get spending progress from validator
-        spending_progress = None
-        validator = getattr(provider, "_validator", None)
-        if validator:
-            try:
-                import time
-
-                tracker = validator.spending_tracker
-
-                # Calculate time until resets
-                now = time.time()
-                session_elapsed = now - tracker.session_start_timestamp
-                session_remaining_secs = max(0, 3600 - session_elapsed)  # 1 hour sessions
-                daily_elapsed = now - tracker.daily_reset_timestamp
-                daily_remaining_secs = max(0, 86400 - daily_elapsed)
-
-                session_spent = tracker.session_spent.get("USDC", Decimal("0"))
-                daily_spent = tracker.daily_spent.get("USDC", Decimal("0"))
-
-                spending_progress = SpendingProgress(
-                    session_spent=str(session_spent),
-                    session_remaining=str(max(Decimal("0"), tracker.session_limit - session_spent)),
-                    session_limit=str(tracker.session_limit),
-                    session_reset_minutes=int(session_remaining_secs / 60),
-                    daily_spent=str(daily_spent),
-                    daily_remaining=str(max(Decimal("0"), tracker.daily_limit - daily_spent)),
-                    daily_reset_hours=int(daily_remaining_secs / 3600),
-                )
-            except Exception as e:
-                logger.debug(f"[WALLET_STATUS] Could not get spending progress: {e}")
-
-        # Get gas estimates from chain client (with 2s timeout to prevent blocking)
-        gas_estimate = None
-        chain_client = getattr(provider, "_chain_client", None)
-        if chain_client:
-            try:
-                import asyncio
-
-                gas_price = await asyncio.wait_for(chain_client.get_gas_price(), timeout=2.0)
-                gas_price_gwei = gas_price / 10**9
-
-                # Calculate costs (assume ETH ~ $2000 for estimate)
-                eth_price_usd = Decimal("2000")  # Could fetch from oracle
-                usdc_gas = 65000
-                usdc_cost_eth = Decimal(usdc_gas * gas_price) / Decimal(10**18)
-                usdc_cost_usd = usdc_cost_eth * eth_price_usd
-
-                gas_estimate = GasEstimate(
-                    gas_price_gwei=f"{gas_price_gwei:.2f}",
-                    usdc_transfer_gas=65000,
-                    eth_transfer_gas=21000,
-                    usdc_transfer_cost_eth=f"{usdc_cost_eth:.6f}",
-                    usdc_transfer_cost_usd=f"{usdc_cost_usd:.4f}",
-                    eth_price_usd=str(eth_price_usd),
-                )
-            except asyncio.TimeoutError:
-                logger.debug("[WALLET_STATUS] Gas price fetch timed out (2s)")
-            except Exception as e:
-                logger.debug(f"[WALLET_STATUS] Could not get gas estimates: {e}")
-
-        # Get recent transactions
-        recent_transactions: List[TransactionSummary] = []
-        transactions = getattr(provider, "_transactions", [])
-        for tx in transactions[:5]:
-            try:
-                explorer_url = None
-                if tx.confirmation and tx.confirmation.get("explorer_url"):
-                    explorer_url = tx.confirmation["explorer_url"]
-
-                recent_transactions.append(
-                    TransactionSummary(
-                        transaction_id=tx.transaction_id,
-                        type=tx.type.value if hasattr(tx.type, "value") else str(tx.type),
-                        amount=str(abs(tx.amount)),
-                        currency=tx.currency,
-                        recipient=tx.recipient,
-                        sender=tx.sender,
-                        status=tx.status.value if hasattr(tx.status, "value") else str(tx.status),
-                        timestamp=tx.timestamp.isoformat(),
-                        explorer_url=explorer_url,
-                    )
-                )
-            except Exception as e:
-                logger.debug(f"[WALLET_STATUS] Could not parse transaction: {e}")
-
-        # Get paymaster status (check both Coinbase and Arka paymasters)
-        paymaster_enabled = False
-        paymaster_key_configured = False
-
-        # Check for Coinbase Paymaster first (preferred)
-        coinbase_paymaster = getattr(provider, "_coinbase_paymaster", None)
-        if coinbase_paymaster is not None:
-            paymaster_enabled = True
-            paymaster_key_configured = True  # Coinbase uses embedded URL, no separate key needed
-            logger.debug("[WALLET_STATUS] Coinbase Paymaster is active")
-
-        # Fall back to Arka paymaster
-        if not paymaster_enabled:
-            paymaster_config = getattr(provider, "paymaster_config", None)
-            if paymaster_config:
-                paymaster_enabled = getattr(paymaster_config, "enabled", False)
-                # Check if key is configured (via _get_arka_api_key method or config)
-                if hasattr(provider, "_get_arka_api_key"):
-                    key = provider._get_arka_api_key()
-                    paymaster_key_configured = key is not None and len(key) > 0
-                elif paymaster_config.arka_api_key:
-                    paymaster_key_configured = True
+        # Use helper functions to gather wallet state (reduced cognitive complexity)
+        attestation_info = _get_attestation_info(request)
+        balance, eth_balance, needs_gas = _get_balance_info(provider)
+        spending_progress = _get_spending_progress(provider)
+        gas_estimate = await _get_gas_estimate(provider)
+        recent_transactions = _get_recent_transactions(provider)
+        paymaster_enabled, paymaster_key_configured = _get_paymaster_status(provider)
 
         logger.info(
-            f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, eth={eth_balance}, level={attestation_level}, paymaster={paymaster_enabled}"
+            f"[WALLET_STATUS] Returning status: address={address}, balance={balance}, "
+            f"eth={eth_balance}, level={attestation_info.level}, paymaster={paymaster_enabled}"
         )
 
         return WalletStatusResponse(
@@ -560,13 +651,13 @@ async def get_wallet_status(
             address=address,
             paymaster_enabled=paymaster_enabled,
             paymaster_key_configured=paymaster_key_configured,
-            is_receive_only=is_receive_only,
-            attestation_level=attestation_level,
-            max_transaction_limit=max_tx,
-            daily_limit=daily,
-            hardware_trust_degraded=hardware_degraded,
-            trust_degradation_reason=degradation_reason,
-            security_advisories=security_advisories_list,
+            is_receive_only=attestation_info.is_receive_only,
+            attestation_level=attestation_info.level,
+            max_transaction_limit=attestation_info.max_tx,
+            daily_limit=attestation_info.daily,
+            hardware_trust_degraded=attestation_info.hardware_degraded,
+            trust_degradation_reason=attestation_info.degradation_reason,
+            security_advisories=attestation_info.security_advisories,
             spending=spending_progress,
             gas_estimate=gas_estimate,
             recent_transactions=recent_transactions,

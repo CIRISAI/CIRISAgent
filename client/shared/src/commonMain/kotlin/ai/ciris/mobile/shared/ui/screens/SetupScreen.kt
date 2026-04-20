@@ -2,7 +2,7 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.localization.localizedString
-import ai.ciris.mobile.shared.platform.platformImePadding
+import androidx.compose.foundation.layout.imePadding
 import ai.ciris.mobile.shared.models.Platform
 import ai.ciris.mobile.shared.models.SetupMode
 import ai.ciris.mobile.shared.models.filterAdaptersForPlatform
@@ -317,7 +317,7 @@ fun SetupScreen(
     }
 
     Surface(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().imePadding(),
         color = SetupColors.Background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -582,7 +582,6 @@ private fun WelcomeStep(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .platformImePadding()
             .padding(24.dp)
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally

@@ -122,15 +122,20 @@ class SetupViewModel : ViewModel() {
     // ========== Home Assistant Addon Mode ==========
 
     /**
-     * Enable Home Assistant addon mode.
+     * Enable Home Assistant addon mode (also used by CIRISMedical, CIRISLegal, etc. via SSO).
      * In this mode:
-     * - Login is skipped (HA handles auth via SUPERVISOR_TOKEN)
+     * - Login is skipped (HA/SSO handles auth via ingress provider)
      * - User creation is optional (handled in QuickSetup)
      * - Uses unified flow: WELCOME → QUICK_SETUP → COMPLETE
      * - QuickSetup provides BYOK configuration without requiring user account setup
+     * - Defaults to BYOK mode since users provide their own API key
      */
     fun setHAAddonMode(enabled: Boolean) {
-        _state.value = _state.value.copy(isHAAddonMode = enabled)
+        _state.value = _state.value.copy(
+            isHAAddonMode = enabled,
+            // HA/SSO addon mode defaults to BYOK (user provides API key, no CIRIS proxy)
+            setupMode = if (enabled) SetupMode.BYOK else _state.value.setupMode
+        )
     }
 
     /**

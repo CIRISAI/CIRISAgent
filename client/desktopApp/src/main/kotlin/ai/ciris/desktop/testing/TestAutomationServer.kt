@@ -38,7 +38,7 @@ import javax.imageio.ImageIO
 class TestAutomationServer(
     private val port: Int = 9091
 ) {
-    private var server: ApplicationEngine? = null
+    private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
     // Registry of UI elements with their positions and testTags
     // Updated by Compose via registerElement() calls
@@ -125,7 +125,7 @@ class TestAutomationServer(
      */
     fun start() {
         // Bind to localhost only - never expose to LAN (security)
-        server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
+        embeddedServer(CIO, port = port, host = "127.0.0.1") {
             install(ContentNegotiation) {
                 json(Json {
                     prettyPrint = true
@@ -589,9 +589,11 @@ class TestAutomationServer(
                     }
                 }
             }
+        }.also {
+            it.start(wait = false)
+            server = it
         }
 
-        server?.start(wait = false)
         println("[TestAutomation] Server started on http://localhost:$port")
     }
 

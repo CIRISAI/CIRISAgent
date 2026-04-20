@@ -440,6 +440,10 @@ class TestAccordMetricsServiceLifecycle:
         """Test service starts and initializes HTTP with consent."""
         service = AccordMetricsService(config={"consent_given": True})
 
+        # Mock the HTTP calls that happen during start()
+        service._register_public_key = AsyncMock()
+        service._send_connected_event = AsyncMock()
+
         await service.start()
 
         assert service._session is not None
@@ -453,6 +457,10 @@ class TestAccordMetricsServiceLifecycle:
         """Test stop closes HTTP session."""
         service = AccordMetricsService(config={"consent_given": True})
 
+        # Mock the HTTP calls that happen during start/stop
+        service._register_public_key = AsyncMock()
+        service._send_connected_event = AsyncMock()
+
         await service.start()
         assert service._session is not None
 
@@ -463,6 +471,10 @@ class TestAccordMetricsServiceLifecycle:
     async def test_stop_cancels_flush_task(self):
         """Test stop cancels periodic flush task."""
         service = AccordMetricsService(config={"consent_given": True})
+
+        # Mock the HTTP calls that happen during start/stop
+        service._register_public_key = AsyncMock()
+        service._send_connected_event = AsyncMock()
 
         await service.start()
         flush_task = service._flush_task
@@ -502,6 +514,11 @@ class TestAccordMetricsServiceFlush:
     async def test_flush_empty_queue_noop(self):
         """Test flush does nothing with empty queue."""
         service = AccordMetricsService(config={"consent_given": True})
+
+        # Mock the HTTP calls that happen during start/stop
+        service._register_public_key = AsyncMock()
+        service._send_connected_event = AsyncMock()
+
         await service.start()
 
         initial_sent = service._events_sent

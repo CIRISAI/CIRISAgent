@@ -327,6 +327,10 @@ class TestAccordMetricsAdapterLifecycle:
             adapter_config={"consent_given": True},
         )
 
+        # Mock the HTTP calls that happen during start()
+        adapter.metrics_service._register_public_key = AsyncMock()
+        adapter.metrics_service._send_connected_event = AsyncMock()
+
         await adapter.start()
 
         assert adapter._running is True
@@ -343,6 +347,10 @@ class TestAccordMetricsAdapterLifecycle:
             context=None,
             adapter_config={"consent_given": True},
         )
+
+        # Mock the HTTP calls that happen during start/stop
+        adapter.metrics_service._register_public_key = AsyncMock()
+        adapter.metrics_service._send_connected_event = AsyncMock()
 
         await adapter.start()
         await adapter.stop()

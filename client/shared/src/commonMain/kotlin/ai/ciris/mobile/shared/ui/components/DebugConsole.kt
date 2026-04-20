@@ -122,7 +122,7 @@ fun ErrorToast(
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector = CIRISIcons.close,
                     contentDescription = "Dismiss",
                     tint = SemanticColors.Default.error,
                     modifier = Modifier.size(16.dp)
@@ -219,7 +219,7 @@ fun DebugConsole(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Delete,
+                                imageVector = CIRISIcons.delete,
                                 contentDescription = "Clear logs",
                                 tint = Color(0xFF9CA3AF),
                                 modifier = Modifier.size(18.dp)
@@ -231,7 +231,7 @@ fun DebugConsole(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
+                                imageVector = CIRISIcons.arrowDown,
                                 contentDescription = "Close",
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
@@ -413,7 +413,7 @@ private fun LogEntryRow(
                 )
                 // Expand icon
                 Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = Color(0xFF6B7280),
                     modifier = Modifier.size(14.dp)

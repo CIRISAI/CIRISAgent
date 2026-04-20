@@ -80,7 +80,7 @@ fun AdaptersScreen(
                         modifier = Modifier.testableClickable("btn_adapters_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -92,7 +92,7 @@ fun AdaptersScreen(
                         modifier = Modifier.testableClickable("btn_adapters_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.RefreshIcon,
+                            imageVector = CIRISIcons.refreshIcon,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -110,7 +110,7 @@ fun AdaptersScreen(
                 modifier = Modifier.testableClickable("btn_add_menu") { showAddMenu = true }
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Add,
+                    imageVector = CIRISIcons.add,
                     contentDescription = localizedString("mobile.adapter_tap_add")
                 )
             }
@@ -247,7 +247,7 @@ fun AdaptersScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Edit,
+                                CIRISIcons.edit,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
@@ -286,7 +286,7 @@ fun AdaptersScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Add,
+                                CIRISIcons.add,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onTertiaryContainer
                             )
@@ -325,7 +325,7 @@ fun AdaptersScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Add,
+                                CIRISIcons.add,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
@@ -487,7 +487,7 @@ private fun AdapterCard(
                         }
                     )
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        imageVector = CIRISIcons.arrowDown,
                         contentDescription = if (isExpanded) localizedString("mobile.interact_close") else localizedString("mobile.interact_attach_file"),
                         modifier = Modifier.rotate(rotationAngle),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -569,7 +569,7 @@ private fun AdapterCard(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Edit,
+                                imageVector = CIRISIcons.edit,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -729,7 +729,7 @@ private fun AdapterCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.RefreshIcon,
+                        imageVector = CIRISIcons.refreshIcon,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
@@ -744,7 +744,7 @@ private fun AdapterCard(
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.RefreshIcon,
+                            imageVector = CIRISIcons.refreshIcon,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
@@ -761,7 +761,7 @@ private fun AdapterCard(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Delete,
+                        imageVector = CIRISIcons.delete,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )

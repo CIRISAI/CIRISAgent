@@ -371,7 +371,7 @@ fun LocalLlmServerDiscovery(
                 Text("Discovering...", color = primaryColor)
             } else {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = CIRISIcons.refresh,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp)
                 )
@@ -503,7 +503,7 @@ fun LocalLlmServerDiscovery(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = CIRISIcons.play,
                                 contentDescription = null,
                                 tint = primaryColor,
                                 modifier = Modifier.size(24.dp)
@@ -549,7 +549,7 @@ fun LocalLlmServerDiscovery(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Info,
+                                    imageVector = CIRISIcons.info,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.size(14.dp)
@@ -575,7 +575,7 @@ fun LocalLlmServerDiscovery(
                             )
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = CIRISIcons.play,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )

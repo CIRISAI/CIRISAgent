@@ -74,7 +74,7 @@ fun UsersScreen(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_users_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localizedString("mobile.common_back"))
+                        Icon(CIRISIcons.arrowBack, contentDescription = localizedString("mobile.common_back"))
                     }
                 },
                 actions = {
@@ -83,7 +83,7 @@ fun UsersScreen(
                         modifier = Modifier.testableClickable("btn_users_filters") { showFilters = !showFilters }
                     ) {
                         Icon(
-                            Icons.Filled.Search,
+                            CIRISIcons.search,
                             contentDescription = localizedString("users_filters"),
                             tint = if (hasActiveFilters(state.filter))
                                 MaterialTheme.colorScheme.primary
@@ -96,7 +96,7 @@ fun UsersScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier.testableClickable("btn_users_refresh") { onRefresh() }
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = localizedString("mobile.common_refresh"))
+                        Icon(CIRISIcons.refresh, contentDescription = localizedString("mobile.common_refresh"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -195,7 +195,7 @@ fun UsersScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Filled.Person,
+                            CIRISIcons.person,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -266,7 +266,7 @@ private fun SearchBar(
         onValueChange = onQueryChange,
         placeholder = { Text(localizedString("users_search_placeholder")) },
         leadingIcon = {
-            Icon(Icons.Filled.Search, contentDescription = localizedString("users_filters"))
+            Icon(CIRISIcons.search, contentDescription = localizedString("users_filters"))
         },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -274,7 +274,7 @@ private fun SearchBar(
                     onClick = { onQueryChange(""); onSearch() },
                     modifier = Modifier.testableClickable("btn_users_search_clear") { onQueryChange(""); onSearch() }
                 ) {
-                    Icon(Icons.Filled.Clear, contentDescription = localizedString("users_search_clear"))
+                    Icon(CIRISIcons.clear, contentDescription = localizedString("users_search_clear"))
                 }
             }
         },
@@ -549,7 +549,7 @@ private fun UserDetailsPanel(
                 onClick = onClose,
                 modifier = Modifier.testableClickable("btn_user_details_close") { onClose() }
             ) {
-                Icon(Icons.Filled.Close, contentDescription = localizedString("users_close"))
+                Icon(CIRISIcons.close, contentDescription = localizedString("users_close"))
             }
         }
 
@@ -757,7 +757,7 @@ private fun PaginationControls(
             enabled = pagination.page > 1,
             modifier = Modifier.testableClickable("btn_users_previous_page") { onPrevious() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = localizedString("mobile.common_back"))
+            Icon(CIRISIcons.arrowLeft, contentDescription = localizedString("mobile.common_back"))
         }
 
         Text(
@@ -771,7 +771,7 @@ private fun PaginationControls(
             enabled = pagination.page < pagination.totalPages,
             modifier = Modifier.testableClickable("btn_users_next_page") { onNext() }
         ) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = localizedString("mobile.common_next"))
+            Icon(CIRISIcons.arrowRight, contentDescription = localizedString("mobile.common_next"))
         }
     }
 }

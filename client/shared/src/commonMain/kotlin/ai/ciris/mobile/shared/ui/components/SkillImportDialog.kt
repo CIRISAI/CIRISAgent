@@ -122,7 +122,7 @@ fun SkillImportDialog(
                         navigationIcon = {
                             if (phase != ImportPhase.PASTE) {
                                 IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Filled.ArrowBack, localizedString("mobile.common_back"))
+                                    Icon(CIRISIcons.arrowBack, localizedString("mobile.common_back"))
                                 }
                             }
                         },
@@ -131,7 +131,7 @@ fun SkillImportDialog(
                                 onClick = onDismiss,
                                 modifier = Modifier.testableClickable("btn_skill_import_close") { onDismiss() }
                             ) {
-                                Icon(Icons.Filled.Close, localizedString("mobile.common_close"))
+                                Icon(CIRISIcons.close, localizedString("mobile.common_close"))
                             }
                         }
                     )
@@ -589,7 +589,7 @@ fun WorkshopCard(
                     )
                 }
                 Icon(
-                    Icons.Filled.KeyboardArrowDown,
+                    CIRISIcons.arrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -685,7 +685,7 @@ fun ImportedSkillCard(
                 modifier = Modifier.testableClickable("btn_delete_skill_${skill.moduleName}") { onDelete() }
             ) {
                 Icon(
-                    Icons.Filled.Delete,
+                    CIRISIcons.delete,
                     contentDescription = localizedString("mobile.skill_delete_title"),
                     tint = MaterialTheme.colorScheme.error
                 )

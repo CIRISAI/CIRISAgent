@@ -268,7 +268,7 @@ fun DataManagementScreen(
                         modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -279,7 +279,7 @@ fun DataManagementScreen(
                         modifier = Modifier.testableClickable("btn_refresh") { viewModel.refresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }

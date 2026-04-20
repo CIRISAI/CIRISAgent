@@ -857,14 +857,8 @@ class SecretsStore:
                 import time
                 backup_table = f"secrets_backup_{int(time.time())}"
                 with get_db_connection(str(self.db_path)) as conn:
-                    # Detect database type for proper syntax
-                    db_path_str = str(self.db_path)
-                    is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
-
-                    if is_postgres:
-                        conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
-                    else:
-                        conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
+                    # CREATE TABLE ... AS SELECT works for both SQLite and PostgreSQL
+                    conn.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM secrets")
                     conn.commit()
                 logger.info(f"Created backup table: {backup_table}")
 

@@ -65,7 +65,7 @@ fun BillingScreen(
                         modifier = Modifier.testableClickable("btn_billing_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }

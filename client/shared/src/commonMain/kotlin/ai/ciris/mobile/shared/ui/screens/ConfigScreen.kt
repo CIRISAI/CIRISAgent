@@ -73,7 +73,7 @@ fun ConfigScreen(
                         modifier = Modifier.testableClickable("btn_config_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -85,7 +85,7 @@ fun ConfigScreen(
                         modifier = Modifier.testableClickable("btn_config_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -125,7 +125,7 @@ fun ConfigScreen(
                     placeholder = { Text(localizedString("mobile.config_search_placeholder")) },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Filled.Search,
+                            imageVector = CIRISIcons.search,
                             contentDescription = localizedString("mobile.tools_search_placeholder")
                         )
                     },
@@ -303,7 +303,7 @@ private fun ConfigSectionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                    imageVector = if (isExpanded) CIRISIcons.arrowDown else CIRISIcons.arrowRight,
                     contentDescription = null
                 )
                 Column {

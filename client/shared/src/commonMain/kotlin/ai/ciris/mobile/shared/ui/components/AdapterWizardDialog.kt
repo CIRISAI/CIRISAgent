@@ -102,7 +102,7 @@ fun AdapterWizardDialog(
                             ) { if (wizardSession != null) onBack() else onDismiss() }
                         ) {
                             Icon(
-                                imageVector = if (wizardSession != null) Icons.Default.ArrowBack else Icons.Default.Close,
+                                imageVector = if (wizardSession != null) CIRISIcons.arrowBack else CIRISIcons.close,
                                 contentDescription = if (wizardSession != null) localizedString("mobile.common_back") else localizedString("mobile.common_close")
                             )
                         }
@@ -113,7 +113,7 @@ fun AdapterWizardDialog(
                                 onClick = onDismiss,
                                 modifier = Modifier.testableClickable("btn_wizard_dismiss") { onDismiss() }
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = localizedString("mobile.common_close"))
+                                Icon(CIRISIcons.close, contentDescription = localizedString("mobile.common_close"))
                             }
                         }
                     }
@@ -631,7 +631,7 @@ private fun DiscoveryStepContent(
                                     enabled = !isLoading
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Refresh,
+                                        imageVector = CIRISIcons.refresh,
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp)
                                     )

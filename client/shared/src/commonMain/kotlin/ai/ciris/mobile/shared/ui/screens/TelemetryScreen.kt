@@ -87,7 +87,7 @@ fun TelemetryScreen(
                         modifier = Modifier.testableClickable("btn_telemetry_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -99,7 +99,7 @@ fun TelemetryScreen(
                         modifier = Modifier.testableClickable("btn_telemetry_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -197,7 +197,7 @@ fun TelemetryScreen(
                     )
                     IconButton(onClick = onAddDestination) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = CIRISIcons.add,
                             contentDescription = localizedString("mobile.common_create"),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -647,21 +647,21 @@ private fun ExportDestinationCard(
             ) {
                 IconButton(onClick = onTest) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
+                        imageVector = CIRISIcons.play,
                         contentDescription = "Test", // Keep English for accessibility
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
                 IconButton(onClick = onEdit) {
                     Icon(
-                        imageVector = Icons.Default.Edit,
+                        imageVector = CIRISIcons.edit,
                         contentDescription = localizedString("mobile.common_edit"),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
+                        imageVector = CIRISIcons.delete,
                         contentDescription = localizedString("mobile.common_delete"),
                         tint = SemanticColors.Default.error
                     )

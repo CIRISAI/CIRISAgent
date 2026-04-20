@@ -2246,7 +2246,7 @@ private fun ChatInputBarWithBubbles(
                         .testableClickable("btn_attach") { onAttach() }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        imageVector = CIRISIcons.add,
                         contentDescription = localizedString("mobile.interact_attach_file"),
                         tint = if (enabled) theme.textSecondary else theme.inputButtonDisabled,
                         modifier = Modifier.size(20.dp)
@@ -2306,7 +2306,7 @@ private fun ChatInputBarWithBubbles(
                         .testableClickable("btn_send") { onSend() }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Send,
+                        imageVector = CIRISIcons.send,
                         contentDescription = localizedString("mobile.interact_send"),
                         tint = Color.White
                     )
@@ -2381,7 +2381,7 @@ private fun AttachmentChip(
                 modifier = Modifier.size(20.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector = CIRISIcons.close,
                     contentDescription = localizedString("mobile.interact_remove"),
                     tint = Color(0xFF9CA3AF),
                     modifier = Modifier.size(14.dp)
@@ -2440,7 +2440,7 @@ private fun MessageAttachmentRow(
     ) {
         // Attachment icon
         Icon(
-            imageVector = Icons.Default.Add,
+            imageVector = CIRISIcons.add,
             contentDescription = localizedString("mobile.interact_attachments"),
             tint = tintColor,
             modifier = Modifier.size(12.dp)

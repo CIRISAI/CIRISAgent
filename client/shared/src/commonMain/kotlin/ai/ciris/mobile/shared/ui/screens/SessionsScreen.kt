@@ -54,7 +54,7 @@ fun SessionsScreen(
                         modifier = Modifier.testableClickable("btn_sessions_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -66,7 +66,7 @@ fun SessionsScreen(
                         modifier = Modifier.testableClickable("btn_sessions_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }

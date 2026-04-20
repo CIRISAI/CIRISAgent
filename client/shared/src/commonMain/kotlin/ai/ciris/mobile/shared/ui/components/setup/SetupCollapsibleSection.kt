@@ -77,7 +77,7 @@ fun SetupCollapsibleSection(
                     }
                 }
                 Icon(
-                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = SetupCardColors.TextSecondary
                 )

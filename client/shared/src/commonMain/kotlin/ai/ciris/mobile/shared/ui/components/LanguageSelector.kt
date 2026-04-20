@@ -82,7 +82,7 @@ fun LanguageSelector(
                         color = if (compact || centered) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
+                        imageVector = CIRISIcons.arrowDown,
                         contentDescription = "Expand",
                         modifier = Modifier.size(if (centered) 20.dp else 16.dp),
                         tint = if (compact || centered) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant

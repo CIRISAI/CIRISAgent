@@ -81,7 +81,7 @@ fun MemoryScreen(
                         modifier = Modifier.testableClickable("btn_memory_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -112,7 +112,7 @@ fun MemoryScreen(
                         modifier = Modifier.testableClickable("btn_memory_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -139,7 +139,7 @@ fun MemoryScreen(
                     .testable("input_memory_search"),
                 placeholder = { Text(localizedString("memory_search_placeholder")) },
                 leadingIcon = {
-                    Icon(Icons.Filled.Search, contentDescription = localizedString("logs_search_placeholder"))
+                    Icon(CIRISIcons.search, contentDescription = localizedString("logs_search_placeholder"))
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -153,7 +153,7 @@ fun MemoryScreen(
                                 onSearch("")
                             }
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = localizedString("interact_clear"))
+                            Icon(CIRISIcons.close, contentDescription = localizedString("interact_clear"))
                         }
                     }
                 },
@@ -560,7 +560,7 @@ private fun NodeDetailsCard(
                     onClick = onClose,
                     modifier = Modifier.testableClickable("btn_memory_close_details") { onClose() }
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = localizedString("mobile.common_close"))
+                    Icon(CIRISIcons.close, contentDescription = localizedString("mobile.common_close"))
                 }
             }
 

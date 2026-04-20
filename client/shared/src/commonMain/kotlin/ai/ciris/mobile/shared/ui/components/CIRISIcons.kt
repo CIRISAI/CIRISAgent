@@ -61,13 +61,13 @@ object CIRISIcons {
 
     // === UI chrome ===
     val trust: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTrust
-    val log: ImageVector get() = Icons.AutoMirrored.Filled.List
+    val log: ImageVector get() = CIRISMaterialIcons.Filled.CIRISList
     val pkg: ImageVector get() = CIRISMaterialIcons.Filled.Inventory2
     val instructions: ImageVector get() = CIRISMaterialIcons.Filled.Description
     val identity: ImageVector get() = CIRISMaterialIcons.Filled.CIRISIdentity
     val safety: ImageVector get() = CIRISMaterialIcons.Filled.HealthAndSafety
     val lightning: ImageVector get() = CIRISMaterialIcons.Filled.CIRISLightning
-    val play: ImageVector get() = Icons.Default.PlayArrow
+    val play: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPlay
     val welcome: ImageVector get() = CIRISMaterialIcons.Filled.Hub
 
     // === Debug log levels ===
@@ -130,7 +130,31 @@ object CIRISIcons {
     val clear: ImageVector get() = CIRISMaterialIcons.Filled.CIRISClear           // Clear/Cancel
     val close: ImageVector get() = CIRISMaterialIcons.Filled.CIRISXMark           // Alias for xmark
     val pause: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPause           // Pause button
+    val stop: ImageVector get() = CIRISMaterialIcons.Filled.CIRISStop             // Stop button
     val checkCircle: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSuccess   // Green checkmark circle
+    val exit: ImageVector get() = CIRISMaterialIcons.Filled.CIRISExit             // Exit/logout
+    val moreVert: ImageVector get() = CIRISMaterialIcons.Filled.CIRISMoreVert     // Vertical menu dots
+
+    // === Navigation icons ===
+    val arrowBack: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowBack   // Back navigation
+    val arrowForward: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowForward // Forward navigation
+    val arrowUp: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowUp       // Expand/collapse up
+    val arrowDown: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowDown   // Dropdown chevron
+    val arrowRight: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowRight // Right chevron
+    val arrowLeft: ImageVector get() = CIRISMaterialIcons.Filled.CIRISArrowLeft   // Left chevron
+
+    // === Action icons ===
+    val delete: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDelete         // Delete/Trash
+    val edit: ImageVector get() = CIRISMaterialIcons.Filled.CIRISEdit             // Edit/Pencil
+    val send: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSend             // Send message
+
+    // === UI chrome icons ===
+    val settings: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSettings     // Settings gear
+    val person: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPerson         // User profile
+    val build: ImageVector get() = CIRISMaterialIcons.Filled.CIRISBuild           // Build/Wrench
+    val home: ImageVector get() = CIRISMaterialIcons.Filled.CIRISHome             // Home
+    val lock: ImageVector get() = CIRISMaterialIcons.Filled.CIRISLock             // Lock/Security
+    val dateRange: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDateRange   // Calendar/Date
 }
 
 /** Map ActionType enum to its CIRIS icon. */

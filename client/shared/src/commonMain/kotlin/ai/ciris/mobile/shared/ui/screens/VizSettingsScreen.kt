@@ -87,7 +87,7 @@ fun VizSettingsScreen(
                         modifier = Modifier.testableClickable("btn_back") { onBack() },
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = "Back",
                         )
                     }
@@ -356,7 +356,7 @@ fun VizSettingsScreen(
                     .testableClickable("viz_settings_reset") { viewModel.resetCellVizConfig() },
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = CIRISIcons.refresh,
                     contentDescription = null,
                 )
                 Spacer(modifier = Modifier.width(8.dp))

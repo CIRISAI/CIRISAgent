@@ -70,7 +70,7 @@ fun ServicesScreen(
                         modifier = Modifier.testableClickable("btn_services_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -82,7 +82,7 @@ fun ServicesScreen(
                         modifier = Modifier.testableClickable("btn_services_diagnose") { onDiagnose() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Warning,
+                            imageVector = CIRISIcons.warning,
                             contentDescription = localizedString("mobile.services_diagnostics")
                         )
                     }
@@ -92,7 +92,7 @@ fun ServicesScreen(
                         modifier = Modifier.testableClickable("btn_services_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -617,7 +617,7 @@ private fun ServiceProviderRow(
 
                 // Expand chevron
                 Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    imageVector = CIRISIcons.arrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand", // Keep English for accessibility
                     modifier = Modifier
                         .size(20.dp)

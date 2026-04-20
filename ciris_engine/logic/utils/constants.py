@@ -90,7 +90,7 @@ ACCORD_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 
-def _verify_accord_manifest_signature() -> bool:
+def _verify_accord_manifest_signature() -> None:
     """Verify ACCORD manifest signature using Ed25519 (H11/M1 fix).
 
     This addresses security issues H11 and M1:
@@ -99,10 +99,6 @@ def _verify_accord_manifest_signature() -> bool:
 
     By signing the manifest with the root Ed25519 key, we establish a
     separate trust domain for integrity verification.
-
-    Returns:
-        True if signature is valid or if manifest doesn't exist (backward compat),
-        False if signature verification fails
 
     Raises:
         RuntimeError: If manifest exists but signature verification fails (security-critical)
@@ -113,17 +109,17 @@ def _verify_accord_manifest_signature() -> bool:
 
         if not manifest_path.exists():
             logger.debug("[ACCORD] No signed manifest found - using hash verification only")
-            return True  # Fall back to hash-only for backwards compatibility
+            return  # Fall back to hash-only for backwards compatibility
 
         if not sig_path.exists():
             logger.warning("[ACCORD] Manifest exists but no signature - verification skipped")
-            return True  # Tolerate missing signature for development
+            return  # Tolerate missing signature for development
 
         # Load root public key
         root_pub_path = Path(__file__).parent.parent.parent.parent / "seed" / "root_pub.json"
         if not root_pub_path.exists():
             logger.warning("[ACCORD] No root public key found")
-            return True  # Tolerate missing key for development
+            return  # Tolerate missing key for development
 
         try:
             import base64
@@ -148,7 +144,6 @@ def _verify_accord_manifest_signature() -> bool:
 
             public_key.verify(signature, manifest_bytes)
             logger.info("[ACCORD] Manifest signature verified successfully (H11/M1 protection active)")
-            return True
 
         except Exception as e:
             # This is a CRITICAL security failure - the manifest has been tampered with
@@ -187,19 +182,14 @@ def _verify_accord_manifest_signature() -> bool:
         raise
     except Exception as exc:
         logger.error(f"[ACCORD] Signature verification error (non-critical): {exc}")
-        return True  # Don't fail startup on unexpected errors
 
 
-def _verify_accord_integrity(filename: str, content: str) -> bool:
+def _verify_accord_integrity(filename: str, content: str) -> None:
     """Verify ACCORD file integrity via SHA256 hash.
 
     Args:
         filename: Name of the ACCORD file
         content: File content as string
-
-    Returns:
-        True if hash matches expected value or file is unknown (with warning),
-        False if hash mismatch detected
 
     Raises:
         RuntimeError: If hash mismatch is detected (security fail-safe)
@@ -208,7 +198,7 @@ def _verify_accord_integrity(filename: str, content: str) -> bool:
 
     if not expected_hash:
         logger.warning(f"[ACCORD] No expected hash for {filename} - file not in integrity registry")
-        return True  # Allow unknown files but warn
+        return  # Allow unknown files but warn
 
     actual_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -223,10 +213,9 @@ def _verify_accord_integrity(filename: str, content: str) -> bool:
         raise RuntimeError(error_msg)
 
     logger.info(f"[ACCORD] Integrity verified: {filename} (SHA256: {actual_hash[:12]}...)")
-    return True
 
 
-def _verify_guide_integrity(filename: str, content: str) -> bool:
+def _verify_guide_integrity(filename: str, content: str) -> None:
     """Verify comprehensive guide integrity via SHA256 hash (M1 fix).
 
     This addresses M1: The comprehensive guide is appended to ACCORD but has
@@ -237,10 +226,6 @@ def _verify_guide_integrity(filename: str, content: str) -> bool:
         filename: Name of the guide file
         content: File content as string
 
-    Returns:
-        True if hash matches or file is unknown (with warning),
-        False never (raises on mismatch)
-
     Raises:
         RuntimeError: If hash mismatch is detected (security fail-safe)
     """
@@ -248,7 +233,7 @@ def _verify_guide_integrity(filename: str, content: str) -> bool:
 
     if not expected_hash:
         logger.warning(f"[ACCORD] No expected hash for {filename} - guide not in integrity registry")
-        return True  # Allow unknown guides but warn
+        return  # Allow unknown guides but warn
 
     actual_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
@@ -283,7 +268,6 @@ def _verify_guide_integrity(filename: str, content: str) -> bool:
         raise RuntimeError(error_msg)
 
     logger.info(f"[ACCORD] Guide integrity verified: {filename} (SHA256: {actual_hash[:12]}...)")
-    return True
 
 
 def _load_platform_guide(base_path: Path) -> str:

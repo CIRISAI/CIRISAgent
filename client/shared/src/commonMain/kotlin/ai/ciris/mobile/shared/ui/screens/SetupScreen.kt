@@ -636,7 +636,7 @@ private fun WelcomeStep(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.CheckCircle,
+                        imageVector = CIRISIcons.checkCircle,
                         contentDescription = null,
                         tint = SetupColors.SuccessDark,
                         modifier = Modifier.size(28.dp)
@@ -671,7 +671,7 @@ private fun WelcomeStep(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Info,
+                        imageVector = CIRISIcons.info,
                         contentDescription = null,
                         tint = SetupColors.InfoDark,
                         modifier = Modifier.size(28.dp)
@@ -706,7 +706,7 @@ private fun WelcomeStep(
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Info,
+                        imageVector = CIRISIcons.info,
                         contentDescription = null,
                         tint = SetupColors.Primary,
                         modifier = Modifier.size(18.dp)
@@ -1383,7 +1383,7 @@ private fun LlmConfigurationStep(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Info,
+                            imageVector = CIRISIcons.info,
                             contentDescription = null,
                             tint = SetupColors.Primary,
                             modifier = Modifier.size(20.dp)
@@ -1546,7 +1546,7 @@ private fun LlmConfigurationStep(
                             .testableClickable("input_llm_model") { modelExpanded = !modelExpanded },
                         trailingIcon = {
                             if (selectedModel?.cirisRecommended == true) {
-                                Icon(Icons.Default.Star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
+                                Icon(CIRISIcons.star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -2225,7 +2225,7 @@ private fun BenefitRow(text: String) {
         modifier = Modifier.padding(vertical = 2.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Icon(Icons.Default.Check, contentDescription = null, tint = SetupColors.SuccessDark, modifier = Modifier.size(14.dp))
+        Icon(CIRISIcons.check, contentDescription = null, tint = SetupColors.SuccessDark, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = text,
@@ -2620,7 +2620,7 @@ private fun QuickSetupStep(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Icon(
-                    imageVector = if (isBYOKMode) Icons.Filled.Settings else Icons.Filled.CheckCircle,
+                    imageVector = if (isBYOKMode) CIRISIcons.settings else CIRISIcons.checkCircle,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark
@@ -2664,7 +2664,7 @@ private fun QuickSetupStep(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isBYOKMode) Icons.Filled.Settings else Icons.Filled.CheckCircle,
+                    imageVector = if (isBYOKMode) CIRISIcons.settings else CIRISIcons.checkCircle,
                     contentDescription = null,
                     tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
                     modifier = Modifier.size(24.dp)
@@ -2720,7 +2720,7 @@ private fun QuickSetupStep(
                 LocationGranularity.REGION -> "${state.region}, ${state.country}".ifEmpty { localizedString("setup.location_enabled") }
                 LocationGranularity.CITY -> state.city.ifEmpty { localizedString("setup.location_enabled") }
             },
-            icon = Icons.Filled.LocationOn,
+            icon = CIRISIcons.location,
             expanded = locationExpanded,
             onToggle = { locationExpanded = !locationExpanded }
         ) {
@@ -2750,7 +2750,7 @@ private fun QuickSetupStep(
                         } else if (state.locationSearchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.clearLocationSearch() }) {
                                 Icon(
-                                    imageVector = Icons.Filled.Clear,
+                                    imageVector = CIRISIcons.clear,
                                     contentDescription = "Clear"
                                 )
                             }
@@ -2797,7 +2797,7 @@ private fun QuickSetupStep(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.CheckCircle,
+                                imageVector = CIRISIcons.checkCircle,
                                 contentDescription = null,
                                 tint = SetupColors.SuccessDark,
                                 modifier = Modifier.size(18.dp)
@@ -2820,7 +2820,7 @@ private fun QuickSetupStep(
                 localizedString("setup.location_enabled")
             else
                 localizedString("setup.location_disabled"),
-            icon = Icons.Filled.Info,
+            icon = CIRISIcons.info,
             expanded = servicesExpanded,
             onToggle = { servicesExpanded = !servicesExpanded }
         ) {
@@ -2954,7 +2954,7 @@ private fun QuickSetupStep(
                 isBYOKMode -> localizedString("setup.llm_config_subtitle_required")
                 else -> localizedString("setup.llm_config_subtitle_optional")
             },
-            icon = Icons.Filled.Settings,
+            icon = CIRISIcons.settings,
             expanded = llmConfigExpanded,
             onToggle = { llmConfigExpanded = !llmConfigExpanded }
         ) {
@@ -3166,7 +3166,7 @@ private fun QuickSetupStep(
                                     .testableClickable("quick_input_llm_model") { modelExpanded = !modelExpanded },
                                 trailingIcon = {
                                     if (selectedModel?.cirisRecommended == true) {
-                                        Icon(Icons.Default.Star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
+                                        Icon(CIRISIcons.star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
                                     }
                                 },
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -3661,10 +3661,10 @@ private fun PreferencesStep(
                                 )
                             } else if (state.locationSearchQuery.isNotEmpty()) {
                                 IconButton(onClick = { viewModel.clearLocationSearch() }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = SetupColors.TextSecondary)
+                                    Icon(CIRISIcons.clear, contentDescription = "Clear", tint = SetupColors.TextSecondary)
                                 }
                             } else {
-                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = SetupColors.TextSecondary)
+                                Icon(CIRISIcons.location, contentDescription = null, tint = SetupColors.TextSecondary)
                             }
                         }
                     )
@@ -3680,7 +3680,7 @@ private fun PreferencesStep(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            Icons.Default.LocationOn,
+                                            CIRISIcons.location,
                                             contentDescription = null,
                                             tint = Color(0xFF666666),
                                             modifier = Modifier.size(20.dp)
@@ -3728,7 +3728,7 @@ private fun PreferencesStep(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Default.CheckCircle,
+                                CIRISIcons.checkCircle,
                                 contentDescription = null,
                                 tint = SetupColors.SuccessDark,
                                 modifier = Modifier.size(20.dp)
@@ -3758,7 +3758,7 @@ private fun PreferencesStep(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Info,
+                    imageVector = CIRISIcons.info,
                     contentDescription = null,
                     tint = SetupColors.InfoDark,
                     modifier = Modifier.size(18.dp)

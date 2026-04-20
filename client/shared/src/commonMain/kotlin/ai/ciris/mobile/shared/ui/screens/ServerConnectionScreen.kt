@@ -78,7 +78,7 @@ fun ServerConnectionScreen(
                         modifier = Modifier.testable("btn_server_back")
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -115,7 +115,7 @@ fun ServerConnectionScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Close,
+                                imageVector = CIRISIcons.close,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -126,7 +126,7 @@ fun ServerConnectionScreen(
                             )
                             IconButton(onClick = { viewModel.clearError() }) {
                                 Icon(
-                                    imageVector = Icons.Filled.Close,
+                                    imageVector = CIRISIcons.close,
                                     contentDescription = "Dismiss",
                                     tint = MaterialTheme.colorScheme.onErrorContainer
                                 )
@@ -148,7 +148,7 @@ fun ServerConnectionScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.CheckCircle,
+                                imageVector = CIRISIcons.checkCircle,
                                 contentDescription = null,
                                 tint = Color(0xFF388E3C)
                             )
@@ -159,7 +159,7 @@ fun ServerConnectionScreen(
                             )
                             IconButton(onClick = { viewModel.clearStatus() }) {
                                 Icon(
-                                    imageVector = Icons.Filled.Close,
+                                    imageVector = CIRISIcons.close,
                                     contentDescription = "Dismiss",
                                     tint = Color(0xFF388E3C)
                                 )
@@ -271,9 +271,9 @@ private fun ConnectionStatusCard(
                 Icon(
                     imageVector = when (connectionStatus) {
                         ConnectionStatus.CONNECTED_LOCAL,
-                        ConnectionStatus.CONNECTED_REMOTE -> Icons.Filled.CheckCircle
-                        ConnectionStatus.CONNECTING -> Icons.Filled.Refresh
-                        else -> Icons.Filled.Close
+                        ConnectionStatus.CONNECTED_REMOTE -> CIRISIcons.checkCircle
+                        ConnectionStatus.CONNECTING -> CIRISIcons.refresh
+                        else -> CIRISIcons.close
                     },
                     contentDescription = null,
                     tint = getStatusColor(connectionStatus),
@@ -310,7 +310,7 @@ private fun ConnectionStatusCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PlayArrow,
+                    imageVector = CIRISIcons.play,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
@@ -365,7 +365,7 @@ private fun LocalServerControlsCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = CIRISIcons.refresh,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -399,7 +399,7 @@ private fun LocalServerControlsCard(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Refresh,
+                        imageVector = CIRISIcons.refresh,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -417,7 +417,7 @@ private fun LocalServerControlsCard(
                         .testableClickable("btn_stop_server") { onStop() }
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = CIRISIcons.close,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -454,7 +454,7 @@ private fun RemoteConnectionCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PlayArrow,
+                    imageVector = CIRISIcons.play,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -490,7 +490,7 @@ private fun RemoteConnectionCard(
                     onGo = { if (urlInput.isNotBlank()) onConnect() }
                 ),
                 leadingIcon = {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Icon(CIRISIcons.play, contentDescription = null)
                 }
             )
 
@@ -510,7 +510,7 @@ private fun RemoteConnectionCard(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
+                        imageVector = CIRISIcons.play,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -528,7 +528,7 @@ private fun RemoteConnectionCard(
                             .testableClickable("btn_disconnect") { onDisconnect() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Close,
+                            imageVector = CIRISIcons.close,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -567,7 +567,7 @@ private fun RecentConnectionItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Filled.PlayArrow,
+                imageVector = CIRISIcons.play,
                 contentDescription = null,
                 tint = if (isCurrentUrl) MaterialTheme.colorScheme.primary
                        else MaterialTheme.colorScheme.onSurfaceVariant
@@ -599,7 +599,7 @@ private fun RecentConnectionItem(
                     modifier = Modifier.testable("btn_connect_recent")
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
+                        imageVector = CIRISIcons.play,
                         contentDescription = "Connect",
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -611,7 +611,7 @@ private fun RecentConnectionItem(
                 modifier = Modifier.testable("btn_remove_recent")
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Close,
+                    imageVector = CIRISIcons.close,
                     contentDescription = "Remove",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

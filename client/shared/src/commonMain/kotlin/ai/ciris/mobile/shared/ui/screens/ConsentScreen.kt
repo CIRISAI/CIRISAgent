@@ -60,7 +60,7 @@ fun ConsentScreen(
                         modifier = Modifier.testableClickable("btn_consent_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -72,7 +72,7 @@ fun ConsentScreen(
                         modifier = Modifier.testableClickable("btn_consent_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }

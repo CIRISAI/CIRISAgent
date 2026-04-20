@@ -75,7 +75,7 @@ fun LogsScreen(
                         modifier = Modifier.testableClickable("btn_logs_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -94,7 +94,7 @@ fun LogsScreen(
                         modifier = Modifier.testableClickable("btn_logs_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -466,7 +466,7 @@ private fun LogEntryRow(
             // Expand indicator
             if (hasMetadata) {
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (isExpanded) localizedString("mobile.logs_collapse") else localizedString("mobile.logs_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)

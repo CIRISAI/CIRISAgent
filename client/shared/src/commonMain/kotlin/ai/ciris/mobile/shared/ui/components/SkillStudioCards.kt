@@ -51,7 +51,7 @@ fun ExpandableCardHeader(
             )
         }
         Icon(
-            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
             contentDescription = if (isExpanded) "Collapse" else "Expand"
         )
     }
@@ -82,7 +82,7 @@ fun MetadataCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                icon = { Icon(CIRISIcons.info, contentDescription = null) },
                 title = "Metadata",
                 isExpanded = isExpanded,
                 onToggle = onToggle
@@ -147,8 +147,8 @@ fun MetadataCard(
                                 singleLine = true,
                                 trailingIcon = {
                                     Icon(
-                                        if (showCategoryMenu) Icons.Filled.KeyboardArrowUp
-                                        else Icons.Filled.KeyboardArrowDown,
+                                        if (showCategoryMenu) CIRISIcons.arrowUp
+                                        else CIRISIcons.arrowDown,
                                         contentDescription = null
                                     )
                                 },
@@ -196,7 +196,7 @@ fun MetadataCard(
                                             modifier = Modifier.size(18.dp)
                                         ) {
                                             Icon(
-                                                Icons.Filled.Close,
+                                                CIRISIcons.close,
                                                 contentDescription = "Remove tag",
                                                 modifier = Modifier.size(14.dp)
                                             )
@@ -240,7 +240,7 @@ fun ToolsCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Build, contentDescription = null) },
+                icon = { Icon(CIRISIcons.build, contentDescription = null) },
                 title = "Tools",
                 count = tools.size,
                 isExpanded = isExpanded,
@@ -276,7 +276,7 @@ fun ToolsCard(
                         onClick = onAddTool,
                         modifier = Modifier.testable("btn_add_tool")
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Icon(CIRISIcons.add, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
                         Text("Add Tool")
                     }
@@ -333,13 +333,13 @@ private fun ToolListItem(
                     onClick = onEdit,
                     modifier = Modifier.testable("btn_edit_tool_$index")
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit")
+                    Icon(CIRISIcons.edit, contentDescription = "Edit")
                 }
                 IconButton(
                     onClick = onDelete,
                     modifier = Modifier.testable("btn_delete_tool_$index")
                 ) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                    Icon(CIRISIcons.delete, contentDescription = "Delete")
                 }
             }
         }
@@ -366,7 +366,7 @@ fun EnvVarsCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                icon = { Icon(CIRISIcons.settings, contentDescription = null) },
                 title = "Environment Variables",
                 count = envVars.size,
                 isExpanded = isExpanded,
@@ -402,7 +402,7 @@ fun EnvVarsCard(
                         onClick = onAddEnvVar,
                         modifier = Modifier.testable("btn_add_env_var")
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Icon(CIRISIcons.add, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
                         Text("Add Variable")
                     }
@@ -459,10 +459,10 @@ private fun EnvVarListItem(
             }
             Row {
                 IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit")
+                    Icon(CIRISIcons.edit, contentDescription = "Edit")
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                    Icon(CIRISIcons.delete, contentDescription = "Delete")
                 }
             }
         }
@@ -526,7 +526,7 @@ fun BinariesCard(
                                             modifier = Modifier.size(18.dp)
                                         ) {
                                             Icon(
-                                                Icons.Filled.Close,
+                                                CIRISIcons.close,
                                                 contentDescription = "Remove",
                                                 modifier = Modifier.size(14.dp)
                                             )
@@ -557,7 +557,7 @@ fun BinariesCard(
                                 }
                             }
                         ) {
-                            Icon(Icons.Filled.Add, contentDescription = "Add")
+                            Icon(CIRISIcons.add, contentDescription = "Add")
                         }
                     }
 

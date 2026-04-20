@@ -116,7 +116,7 @@ fun TrustPage(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_trust_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -145,7 +145,7 @@ fun TrustPage(
                         },
                         enabled = !loading
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(CIRISIcons.refresh, contentDescription = "Refresh")
                     }
                 }
             )

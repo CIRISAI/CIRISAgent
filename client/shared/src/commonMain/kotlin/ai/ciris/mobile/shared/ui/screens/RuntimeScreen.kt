@@ -59,7 +59,7 @@ fun RuntimeScreen(
                         modifier = Modifier.testableClickable("btn_runtime_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -71,7 +71,7 @@ fun RuntimeScreen(
                         modifier = Modifier.testableClickable("btn_runtime_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -274,7 +274,7 @@ private fun PipelineControlCard(
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.PlayArrow,
+                        imageVector = CIRISIcons.play,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
@@ -564,7 +564,7 @@ private fun AdminWarningCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Filled.PlayArrow,
+                imageVector = CIRISIcons.play,
                 contentDescription = null,
                 tint = colors.warning
             )

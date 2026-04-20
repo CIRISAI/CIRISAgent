@@ -57,7 +57,7 @@ fun DebugIndicator(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = if (errorCount > 0) "[!]" else "[L]",
+                text = if (errorCount > 0) "\u26A0" else "\u2630",
                 fontSize = 14.sp
             )
             Text(
@@ -111,7 +111,7 @@ fun ErrorToast(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "[X]", fontSize = 16.sp)
+                Text(text = "\u2716", fontSize = 16.sp)
                 Text(
                     text = latestError ?: "",
                     fontSize = 12.sp,

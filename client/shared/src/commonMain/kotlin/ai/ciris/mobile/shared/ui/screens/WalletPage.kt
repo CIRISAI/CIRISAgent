@@ -342,7 +342,7 @@ private fun ExperimentalWarningCard() {
             verticalAlignment = Alignment.Top
         ) {
             Text(
-                text = "[!]",
+                text = "\u26A0",
                 fontSize = 24.sp
             )
             Column(

@@ -316,7 +316,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_identity"),
         hint = localizedString("mobile.skill_card_identity_hint"),
-        emoji = "[#]",
+        emoji = "\u2756",  // ❖ identity
         initiallyExpanded = true
     ) {
         SimpleField(localizedString("mobile.skill_field_name"), preview.name)
@@ -329,7 +329,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_tools"),
         hint = localizedString("mobile.skill_card_tools_hint"),
-        emoji = "[T]",
+        emoji = "\u2692",  // ⚒ tools
         initiallyExpanded = true
     ) {
         if (preview.tools.isNotEmpty()) {
@@ -354,7 +354,7 @@ private fun PreviewAsCards(
         WorkshopCard(
             title = localizedString("mobile.skill_card_requires"),
             hint = localizedString("mobile.skill_card_requires_hint"),
-            emoji = "📦",
+            emoji = "\u25A0",  // ■ requirements
             initiallyExpanded = false
         ) {
             if (preview.requiredEnvVars.isNotEmpty()) {
@@ -396,7 +396,7 @@ private fun PreviewAsCards(
         WorkshopCard(
             title = localizedString("mobile.skill_card_instruct"),
             hint = localizedString("mobile.skill_card_instruct_hint"),
-            emoji = "📝",
+            emoji = "\u2261",  // ≡ instructions
             initiallyExpanded = false
         ) {
             Card(
@@ -420,7 +420,7 @@ private fun PreviewAsCards(
     WorkshopCard(
         title = localizedString("mobile.skill_card_behavior"),
         hint = localizedString("mobile.skill_card_behavior_hint"),
-        emoji = "[S]",
+        emoji = "\u25C6",  // ◆ safety
         initiallyExpanded = false
     ) {
         SimpleField(
@@ -514,7 +514,7 @@ private fun ResultContent(
         WorkshopCard(
             title = localizedString("mobile.skill_card_tools"),
             hint = localizedString("mobile.skill_build_success_hint"),
-            emoji = "[T]",
+            emoji = "\u2692",  // ⚒ tools
             initiallyExpanded = true
         ) {
             result.toolsCreated.forEach { tool ->

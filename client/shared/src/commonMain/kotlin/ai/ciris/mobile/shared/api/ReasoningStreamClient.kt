@@ -24,39 +24,39 @@ class ReasoningStreamClient(
 
     // Event type to symbol mapping (ASCII-safe for WASM/Skia)
     private val eventSymbols = mapOf(
-        "thought_start" to "[?]",
-        "snapshot_and_context" to "[>]",
-        "dma_results" to "[~]",
-        "idma_result" to "[i]",       // Intuition DMA - sensing fragility in reasoning (k_eff/CCA)
-        "aspdma_result" to "[*]",
-        "tsaspdma_result" to "[T]",   // Tool-Specific ASPDMA - tool parameter refinement
-        "conscience_result" to "[@]",
-        "action_result" to "[!]"
+        "thought_start" to "\u2753",        // ❓
+        "snapshot_and_context" to "\u25B6",  // ▶
+        "dma_results" to "\u2248",           // ≈
+        "idma_result" to "\u2139",           // ℹ  Intuition DMA - sensing fragility in reasoning (k_eff/CCA)
+        "aspdma_result" to "\u26A0",         // ⚠
+        "tsaspdma_result" to "\u2692",       // ⚒  Tool-Specific ASPDMA - tool parameter refinement
+        "conscience_result" to "\u25CE",     // ◎
+        "action_result" to "\u26A0"          // ⚠
     )
 
-    // All 10 action verbs with their symbols (ASCII-safe for WASM/Skia)
+    // All 10 action verbs with their Unicode symbols
     // External: observe, speak, tool
     // Control: reject, ponder, defer
     // Memory: memorize, recall, forget
     // Terminal: task_complete
     private fun getActionSymbol(action: String?): String {
         return when {
-            action == null -> "[!]"
+            action == null -> "\u26A0"
             // External actions
-            action.contains("observe") -> "[o]"
-            action.contains("speak") -> "[>]"
-            action.contains("tool") -> "[T]"
+            action.contains("observe") -> "\u25CB"       // ○
+            action.contains("speak") -> "\u25B6"         // ▶
+            action.contains("tool") -> "\u2692"          // ⚒
             // Control responses
-            action.contains("reject") -> "[x]"
-            action.contains("ponder") -> "[.]"
-            action.contains("defer") -> "[|]"
+            action.contains("reject") -> "\u2716"        // ✖
+            action.contains("ponder") -> "\u22EF"        // ⋯
+            action.contains("defer") -> "\u275A\u275A"   // ❚❚
             // Memory operations
-            action.contains("memorize") -> "[+]"
-            action.contains("recall") -> "[?]"
-            action.contains("forget") -> "[-]"
+            action.contains("memorize") -> "\u2795"      // ➕
+            action.contains("recall") -> "\u2753"        // ❓
+            action.contains("forget") -> "\u2796"        // ➖
             // Terminal
-            action.contains("task_complete") -> "[v]"
-            else -> "[!]"
+            action.contains("task_complete") -> "\u2714" // ✔
+            else -> "\u26A0"                             // ⚠
         }
     }
 
@@ -169,9 +169,9 @@ class ReasoningStreamClient(
                     }
                     "aspdma_result" -> {
                         val action = event["selected_action"]?.jsonPrimitive?.content
-                        if (action != null) "[*]" else eventSymbols[eventType] ?: "[.]"
+                        if (action != null) "\u26A0" else eventSymbols[eventType] ?: "\u22EF"
                     }
-                    else -> eventSymbols[eventType] ?: "[.]"
+                    else -> eventSymbols[eventType] ?: "\u22EF"
                 }
 
                 // Check if this is a completion event (task_complete or reject)

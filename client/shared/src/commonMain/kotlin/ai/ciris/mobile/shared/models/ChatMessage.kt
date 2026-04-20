@@ -24,16 +24,16 @@ data class ChatMessage(
  */
 @Serializable
 enum class ActionType(val symbol: String, val auditEventType: String, val displayName: String) {
-    SPEAK("[>]", "speak", "Speak"),
-    TOOL("[T]", "tool", "Tool"),
-    OBSERVE("[o]", "observe", "Observe"),
-    MEMORIZE("[+]", "memorize", "Memorize"),
-    RECALL("[?]", "recall", "Recall"),
-    FORGET("[-]", "forget", "Forget"),
-    REJECT("[x]", "reject", "Reject"),
-    PONDER("[.]", "ponder", "Ponder"),
-    DEFER("[|]", "defer", "Defer"),
-    TASK_COMPLETE("[v]", "task_complete", "Task Complete");
+    SPEAK("\u25B6", "speak", "Speak"),
+    TOOL("\u2692", "tool", "Tool"),
+    OBSERVE("\u25CB", "observe", "Observe"),
+    MEMORIZE("\u2795", "memorize", "Memorize"),
+    RECALL("\u2753", "recall", "Recall"),
+    FORGET("\u2796", "forget", "Forget"),
+    REJECT("\u2716", "reject", "Reject"),
+    PONDER("\u22EF", "ponder", "Ponder"),
+    DEFER("\u275A\u275A", "defer", "Defer"),
+    TASK_COMPLETE("\u2714", "task_complete", "Task Complete");
 
     companion object {
         fun fromSymbol(symbol: String): ActionType? = entries.find { it.symbol == symbol }

@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 654fa3311fcf
-Build Time: 2026-04-18T23:18:24.010757
-Git Commit: 16744cbaf40383fe154235f628e3ec6e68ceba68
-Git Branch: feature/cell-viz-redesign
+Code Hash: 5e284790e1ab
+Build Time: 2026-04-20T08:23:24.528273
+Git Commit: 19fa1685b75f6d451821e1ebbd808f234bb9b1ed
+Git Branch: release/2.6.0
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

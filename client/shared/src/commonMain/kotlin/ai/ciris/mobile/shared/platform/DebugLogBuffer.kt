@@ -14,13 +14,13 @@ data class DebugLogEntry(
     val tag: String,
     val message: String
 ) {
-    // ASCII symbols for cross-platform WASM/Skia compatibility
+    // Unicode symbols — render on all platforms including WASM/Skia
     val symbol: String get() = when (level) {
-        "DEBUG" -> "[D]"
-        "INFO" -> "[i]"
-        "WARN" -> "[!]"
-        "ERROR" -> "[X]"
-        else -> "[.]"
+        "DEBUG" -> "\u25CB"  // ○
+        "INFO" -> "\u2139"   // ℹ
+        "WARN" -> "\u26A0"   // ⚠
+        "ERROR" -> "\u2716"  // ✖
+        else -> "\u22EF"     // ⋯
     }
 
     val formattedTime: String get() {

@@ -5,6 +5,10 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
+import ai.ciris.mobile.shared.ui.components.ActionTypeIcon
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import ai.ciris.mobile.shared.models.MessageType
 import ai.ciris.mobile.shared.viewmodels.AgentProcessingState
 import ai.ciris.mobile.shared.viewmodels.BubbleEmoji
@@ -1128,7 +1132,7 @@ private fun TrustShield(
                     color = shieldColor
                 )
             } else {
-                Text(text = "🛡", fontSize = 10.sp)
+                Icon(imageVector = CIRISIcons.trust, contentDescription = null, modifier = Modifier.size(12.dp))
             }
 
             // Compact level text - no wrapping
@@ -1367,16 +1371,27 @@ private fun AIWarningBanner(
     theme: InteractTheme,
     modifier: Modifier = Modifier
 ) {
-    Text(
-        text = "[!] " + localizedString("mobile.interact_hallucination_warning"),
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .background(theme.warningBackground)
             .padding(horizontal = 12.dp, vertical = 4.dp),
-        fontSize = 11.sp,
-        color = theme.warningText,
-        textAlign = TextAlign.Center
-    )
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = CIRISIcons.warning,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = theme.warningText
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = localizedString("mobile.interact_hallucination_warning"),
+            fontSize = 11.sp,
+            color = theme.warningText
+        )
+    }
 }
 
 /**
@@ -1399,9 +1414,11 @@ private fun PendingDeferralsBanner(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "[>]",
-            fontSize = 14.sp
+        Icon(
+            imageVector = CIRISIcons.defer,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = Color(0xFF2563EB)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -1443,10 +1460,10 @@ private fun SystemWarningBanner(
         "warning" -> Color(0xFFF59E0B)
         else -> Color(0xFF2563EB)
     }
-    val icon = when (warning.severity) {
-        "error" -> "[!]"
-        "warning" -> "[*]"
-        else -> "[i]"
+    val iconVector = when (warning.severity) {
+        "error" -> CIRISIcons.error
+        "warning" -> CIRISIcons.warning
+        else -> CIRISIcons.info
     }
 
     Row(
@@ -1458,9 +1475,11 @@ private fun SystemWarningBanner(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = icon,
-            fontSize = 14.sp
+        Icon(
+            imageVector = iconVector,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = textColor
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -1518,10 +1537,11 @@ private fun EmptyStateView(
         verticalArrangement = Arrangement.Center
     ) {
         // Icon placeholder (from fragment_interact.xml:153-158)
-        Text(
-            text = "🤖",
-            fontSize = 64.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+        Icon(
+            imageVector = CIRISIcons.welcome,
+            contentDescription = "CIRIS Agent",
+            modifier = Modifier.size(64.dp).padding(bottom = 24.dp),
+            tint = titleColor
         )
 
         // Welcome text (from fragment_interact.xml:160-167)
@@ -1774,9 +1794,11 @@ private fun SystemMessage(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "[i]", // info icon (ASCII for WASM/Skia)
-                    fontSize = 14.sp
+                Icon(
+                    imageVector = CIRISIcons.info,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = Color(0xFF0369A1)
                 )
                 SelectionContainer {
                     Text(
@@ -1816,9 +1838,11 @@ private fun ErrorMessage(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "[!]", // warning icon (ASCII for WASM/Skia)
-                    fontSize = 14.sp
+                Icon(
+                    imageVector = CIRISIcons.warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = Color(0xFFDC2626)
                 )
                 SelectionContainer {
                     Text(
@@ -1884,8 +1908,8 @@ private fun ActionBubble(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Action symbol (ASCII for WASM/Skia)
-                    Text(text = actionType?.symbol ?: "[?]", fontSize = 16.sp)
+                    // Action icon (Material Design)
+                    ActionTypeIcon(actionType = actionType, size = 20.dp, tint = textColor)
 
                     // Action name and subtitle
                     Column(modifier = Modifier.weight(1f)) {
@@ -2861,13 +2885,13 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[?]", localizedString("mobile.interact_legend_thought_start"))
-                LegendRow("[>]", localizedString("mobile.interact_legend_snapshot"))
-                LegendRow("[~]", localizedString("mobile.interact_legend_dma"))
-                LegendRow("[i]", localizedString("mobile.interact_legend_idma"))
-                LegendRow("[*]", localizedString("mobile.interact_legend_action_selection"))
-                LegendRow("[T]", localizedString("mobile.interact_legend_tsaspdma"))
-                LegendRow("[@]", localizedString("mobile.interact_legend_conscience"))
+                LegendRow(CIRISIcons.thoughtStart, localizedString("mobile.interact_legend_thought_start"))
+                LegendRow(CIRISIcons.snapshot, localizedString("mobile.interact_legend_snapshot"))
+                LegendRow(CIRISIcons.dma, localizedString("mobile.interact_legend_dma"))
+                LegendRow(CIRISIcons.idma, localizedString("mobile.interact_legend_idma"))
+                LegendRow(CIRISIcons.actionSelection, localizedString("mobile.interact_legend_action_selection"))
+                LegendRow(CIRISIcons.tsaspdma, localizedString("mobile.interact_legend_tsaspdma"))
+                LegendRow(CIRISIcons.conscience, localizedString("mobile.interact_legend_conscience"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2878,9 +2902,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[o]", localizedString("mobile.interact_legend_observe"))
-                LegendRow("[>]", localizedString("mobile.interact_legend_speak"))
-                LegendRow("[T]", localizedString("mobile.interact_legend_tool"))
+                LegendRow(CIRISIcons.observe, localizedString("mobile.interact_legend_observe"))
+                LegendRow(CIRISIcons.speak, localizedString("mobile.interact_legend_speak"))
+                LegendRow(CIRISIcons.tool, localizedString("mobile.interact_legend_tool"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2891,9 +2915,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[x]", localizedString("mobile.interact_legend_reject"))
-                LegendRow("[.]", localizedString("mobile.interact_legend_ponder"))
-                LegendRow("[|]", localizedString("mobile.interact_legend_defer"))
+                LegendRow(CIRISIcons.reject, localizedString("mobile.interact_legend_reject"))
+                LegendRow(CIRISIcons.ponder, localizedString("mobile.interact_legend_ponder"))
+                LegendRow(CIRISIcons.defer, localizedString("mobile.interact_legend_defer"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2904,9 +2928,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[+]", localizedString("mobile.interact_legend_memorize"))
-                LegendRow("[?]", localizedString("mobile.interact_legend_recall"))
-                LegendRow("[-]", localizedString("mobile.interact_legend_forget"))
+                LegendRow(CIRISIcons.memorize, localizedString("mobile.interact_legend_memorize"))
+                LegendRow(CIRISIcons.recall, localizedString("mobile.interact_legend_recall"))
+                LegendRow(CIRISIcons.forget, localizedString("mobile.interact_legend_forget"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2917,7 +2941,7 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[v]", localizedString("mobile.interact_legend_task_complete"))
+                LegendRow(CIRISIcons.taskComplete, localizedString("mobile.interact_legend_task_complete"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2928,9 +2952,9 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("[.]", localizedString("mobile.interact_legend_idle"))
-                LegendRow("[~]", localizedString("mobile.interact_legend_processing_icon"))
-                LegendRow("[o]", localizedString("mobile.interact_legend_disconnected"))
+                LegendRow(CIRISIcons.idle, localizedString("mobile.interact_legend_idle"))
+                LegendRow(CIRISIcons.processing, localizedString("mobile.interact_legend_processing_icon"))
+                LegendRow(CIRISIcons.disconnected, localizedString("mobile.interact_legend_disconnected"))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2942,9 +2966,8 @@ private fun EmojiLegendDialog(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LegendRow("<->", "Swipe the background to spin the visualization")
-                LegendRow("[!]", "Flick repeatedly — a bit of energy shatters it, then it reforms")
-                LegendRow("[+]", "Tap the VIZ toggle to expand the scene to full screen")
+                LegendRow(CIRISIcons.processing, "Swipe the background to spin the visualization")
+                LegendRow(CIRISIcons.play, "Tap the VIZ toggle to expand the scene to full screen")
             }
         },
         confirmButton = {
@@ -2963,7 +2986,7 @@ private fun EmojiLegendDialog(
  */
 @Composable
 private fun LegendRow(
-    emoji: String,
+    icon: ImageVector,
     description: String,
     modifier: Modifier = Modifier
 ) {
@@ -2972,10 +2995,11 @@ private fun LegendRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = emoji,
-            fontSize = 18.sp,
-            modifier = Modifier.width(28.dp)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = description,

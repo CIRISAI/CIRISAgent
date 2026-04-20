@@ -793,7 +793,7 @@ private fun TrustSecurityCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🛡", fontSize = 20.sp)
+                    Text("\u25C6", fontSize = 20.sp)  // ◆ trust
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = localizedString("mobile.settings_verify_active"),

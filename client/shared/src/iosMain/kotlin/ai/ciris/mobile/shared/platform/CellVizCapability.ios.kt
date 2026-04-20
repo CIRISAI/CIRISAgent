@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.platform
 
 import platform.Foundation.NSProcessInfo
+import platform.Foundation.NSString
+import platform.Foundation.stringWithFormat
 
 /**
  * iOS implementation of the cell-viz capability probe.
@@ -17,7 +19,7 @@ private const val BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0
 actual fun probeCellVizCapability(): CellVizCapability {
     val totalRamBytes = NSProcessInfo.processInfo.physicalMemory.toDouble()
     val totalRamGb = totalRamBytes / BYTES_PER_GB
-    val ramText = "%.1f".format(totalRamGb)
+    val ramText = NSString.stringWithFormat("%.1f", totalRamGb)
 
     return if (totalRamGb >= IOS_MIN_RAM_GB) {
         CellVizCapability(
@@ -29,7 +31,7 @@ actual fun probeCellVizCapability(): CellVizCapability {
         CellVizCapability(
             isCapable = false,
             totalRamGb = totalRamGb,
-            reason = "iOS has $ramText GB RAM; cell viz requires ${"%.1f".format(IOS_MIN_RAM_GB)} GB",
+            reason = "iOS has $ramText GB RAM; cell viz requires ${NSString.stringWithFormat("%.1f", IOS_MIN_RAM_GB)} GB",
         )
     }
 }

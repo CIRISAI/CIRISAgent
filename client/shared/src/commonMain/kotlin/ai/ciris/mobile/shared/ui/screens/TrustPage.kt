@@ -326,7 +326,7 @@ private fun TrustSummaryCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Shield with level
-            Text(text = "🛡", fontSize = 48.sp)
+            Text(text = "\u25C6", fontSize = 48.sp)  // ◆ trust diamond
 
             Text(
                 text = localizedString("mobile.trust_level").replace("{level}", level.toString()),
@@ -1329,7 +1329,7 @@ private fun L1Content(status: VerifyStatusResponse) {
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
     val isSoftwareOnly = !hasHardwareStorage
     val keyIcon = when {
-        isSoftwareOnly -> "[!]"  // Warning for software-only
+        isSoftwareOnly -> "\u26A0"  // Warning for software-only
         status.hardwareBacked -> "[K]"  // Hardware-backed
         else -> "[k]"  // Unknown/software
     }
@@ -2292,7 +2292,7 @@ private fun ExplanationDropdown(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "[i]", fontSize = 12.sp)
+                Text(text = "\u2139", fontSize = 12.sp)
                 Text(
                     text = title,
                     fontSize = 11.sp,
@@ -2404,7 +2404,7 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                     label = "Registry Target",
                     value = targetTriple,
                     ok = true,
-                    icon = "📦"
+                    icon = "\u25A0"  // ■ package
                 )
 
                 // Binary Self-Check
@@ -2622,7 +2622,7 @@ private fun DiagnosticsLogCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "[>]", fontSize = 16.sp)
+                    Text(text = "\u25B6", fontSize = 16.sp)
                     Text(
                         text = if (expanded) "▼ Verify Log" else "▶ Verify Log",
                         fontWeight = FontWeight.Medium

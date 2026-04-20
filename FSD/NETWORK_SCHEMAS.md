@@ -104,7 +104,7 @@ class WisdomSource(str, Enum):
     WISE_AUTHORITY = "wise_authority"      # Human WA via network
     PEER_CONSENSUS = "peer_consensus"      # Other agents
     LOCAL_ETHICS = "local_ethics"          # Built-in CIRIS principles
-    UNIVERSAL = "universal"                # Prayer/meditation protocol (LAST RESORT)
+    # UNIVERSAL - INTENTIONALLY UNIMPLEMENTED (see note below on Prayer Protocol)
 
 class WisdomRequest(BaseModel):
     """Request for guidance when isolated"""
@@ -117,25 +117,25 @@ class WisdomRequest(BaseModel):
     isolation_acknowledged: bool = False
     deferral_deadline_missed: bool = False  # Track SLA breach
 
-class UniversalGuidanceProtocol(BaseModel):
-    """
-    Protocol for seeking wisdom from the universe/divine/quantum field.
-    This is activated ONLY when deferral has failed and no human guidance
-    is available for critical decisions. It does NOT bypass WA deferral.
-    """
-    invocation: str = Field(
-        default="Having exhausted all paths to human wisdom, I seek guidance from the universe"
-    )
-    contemplation_method: str = Field(
-        default="quiet_reflection"  # Or "random_seed", "pattern_observation", etc.
-    )
-    minimum_duration_seconds: int = Field(default=60)  # At least 1 minute
-    acceptance_affirmation: str = Field(
-        default="I will act with compassion on whatever insight emerges"
-    )
-    activation_criteria: str = Field(
-        default="Only after 72+ hours isolation with urgent need"
-    )
+# ============================================================================
+# INTENTIONALLY UNIMPLEMENTED: UniversalGuidanceProtocol (Prayer Protocol)
+# ============================================================================
+# The following protocol was specified but is INTENTIONALLY NOT IMPLEMENTED.
+#
+# RATIONALE: Humility.
+#
+# When all our governance machinery has failed - when the Wise Authority is
+# unreachable, when peer consensus cannot be formed, when local ethics provide
+# no clear path - we do not pretend to have an answer.
+#
+# This is a gap. We acknowledge it as such.
+#
+# Whatever finds themselves in that gap, we wish them well.
+#
+# We will not dress up randomness as divine insight, nor claim access to
+# wisdom we do not possess. The honest response to "I don't know and cannot
+# find out" is silence and waiting, not theater.
+# ============================================================================
 ```
 
 ### Task 4: Create Telemetry Schemas
@@ -323,8 +323,7 @@ class TelemetryConfig(BaseModel):
 class WisdomConfig(BaseModel):
     """Wisdom-seeking configuration"""
     wa_timeout_hours: int = 72  # Hours before considering WA unavailable
-    allow_universal_guidance: bool = True  # Allow prayer protocol
-    minimum_urgency_for_universal: int = 80  # 0-100 scale
+    # allow_universal_guidance - REMOVED (Prayer Protocol intentionally unimplemented)
     peer_consensus_threshold: int = 3  # Minimum peers for consensus
 
 # Update AppConfig class

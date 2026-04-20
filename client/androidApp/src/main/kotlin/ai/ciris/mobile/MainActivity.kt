@@ -420,9 +420,10 @@ class MainActivity : ComponentActivity() {
             PythonRuntime.resetPrepCount()
             Log.i(TAG, "Starting logcat reader (generation $generation)")
 
-            // Use -T 1 to only read entries from NOW (not buffered history)
-            // This ensures incremental progress tracking instead of reading all at once
-            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "raw", "-T", "1", "python.stdout:I", "python.stderr:W", "CIRISVerify:I", "*:S"))
+            // Use -T 100 to catch recent messages (last 100 lines) plus new ones
+            // This handles the race condition where Python starts outputting prep steps
+            // before the logcat reader is fully initialized
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "raw", "-T", "100", "python.stdout:I", "python.stderr:W", "CIRISVerify:I", "*:S"))
 
             // Register process and check if still valid
             if (!PythonRuntime.registerLogcatProcess(process, generation)) {

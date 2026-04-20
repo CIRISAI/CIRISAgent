@@ -365,7 +365,7 @@ fun EnvVarsCard(
     ) {
         Column {
             ExpandableCardHeader(
-                icon = { Icon(Icons.Filled.Key, contentDescription = null) },
+                icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                 title = "Environment Variables",
                 count = envVars.size,
                 isExpanded = isExpanded,

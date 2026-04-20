@@ -345,7 +345,7 @@ fun LLMSettingsScreen(
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_auth"),
                     subtitle = localizedString("mobile.settings_ciris_access_token"),
-                    icon = Icons.Filled.Key,
+                    icon = Icons.Filled.Person,
                     expanded = authExpanded,
                     onToggle = { authExpanded = !authExpanded }
                 ) {

@@ -2595,8 +2595,10 @@ private fun QuickSetupStep(
     var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
     var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
 
-    // Determine if this is BYOK mode (HA addon or explicit BYOK)
-    val isBYOKMode = state.setupMode == SetupMode.BYOK || state.isHAAddonMode
+    // Determine if this is BYOK mode - use same logic as WelcomeStep for consistency
+    // Anything that is NOT explicitly CIRIS_PROXY is treated as BYOK mode
+    val isCirisMode = state.setupMode == SetupMode.CIRIS_PROXY
+    val isBYOKMode = !isCirisMode
 
     Column(
         modifier = modifier
@@ -2611,16 +2613,27 @@ private fun QuickSetupStep(
             color = if (isBYOKMode) SetupColors.InfoLight else SetupColors.SuccessLight,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
-            Text(
-                text = if (isBYOKMode) {
-                    "🔑 " + localizedString("mobile.setup_byok_badge")
-                } else {
-                    "✓ " + localizedString("mobile.setup_free_badge")
-                },
-                color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
-                fontWeight = FontWeight.SemiBold,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            ) {
+                Icon(
+                    imageVector = if (isBYOKMode) Icons.Filled.Settings else Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark
+                )
+                Text(
+                    text = if (isBYOKMode) {
+                        localizedString("mobile.setup_byok_badge")
+                    } else {
+                        localizedString("mobile.setup_free_badge")
+                    },
+                    color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
 
         // Provider-specific description

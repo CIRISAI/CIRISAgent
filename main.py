@@ -18,14 +18,33 @@ try:
 
     from dotenv import load_dotenv
 
-    # Priority order: ./ciris/.env, ./env (highest), ~/ciris/.env, /etc/ciris/.env (lowest)
+    # Priority order (highest first):
+    # 1. CIRIS_CONFIG_DIR (if set, e.g., HA addon mode: /data/ciris)
+    # 2. CIRIS_HOME (if set, e.g., HA addon mode: /data/ciris)
+    # 3. ./ciris/.env (development)
+    # 4. ./.env (development)
+    # 5. ~/ciris/.env (user install)
+    # 6. /etc/ciris/.env (system install)
     # Note: ~/.ciris/ is for keys/secrets only, NOT config!
-    config_paths = [
+    config_paths = []
+
+    # Add CIRIS_CONFIG_DIR if set (HA addon mode, etc.)
+    if os.environ.get("CIRIS_CONFIG_DIR"):
+        config_paths.append(Path(os.environ["CIRIS_CONFIG_DIR"]) / ".env")
+
+    # Add CIRIS_HOME if set and different from CIRIS_CONFIG_DIR
+    if os.environ.get("CIRIS_HOME"):
+        ciris_home_env = Path(os.environ["CIRIS_HOME"]) / ".env"
+        if ciris_home_env not in config_paths:
+            config_paths.append(ciris_home_env)
+
+    # Standard fallback paths
+    config_paths.extend([
         Path.cwd() / "ciris" / ".env",
         Path.cwd() / ".env",
         Path.home() / "ciris" / ".env",
         Path("/etc/ciris/.env"),
-    ]
+    ])
 
     for config_path in config_paths:
         if config_path.exists():

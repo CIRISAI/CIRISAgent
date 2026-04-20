@@ -31,6 +31,11 @@ from ._common import RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep, Aut
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
+# Logger for chain integrity warnings
+import logging
+
+_audit_logger = logging.getLogger(__name__)
+
 
 # Internal dataclass for audit entry merging
 from dataclasses import dataclass
@@ -58,6 +63,8 @@ class AuditEntryResponse(BaseModel):
     signature: Optional[str] = Field(None, description="Cryptographic signature")
     hash_chain: Optional[str] = Field(None, description="Previous hash for chain")
     storage_sources: List[str] = Field(default_factory=list, description="Storage locations: graph, jsonl, sqlite")
+    integrity_valid: bool = Field(True, description="Chain integrity verified during read")
+    integrity_warnings: List[str] = Field(default_factory=list, description="Integrity issues detected")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
@@ -152,6 +159,88 @@ def _get_audit_service(request: Request) -> AuditServiceProtocol:
     return audit_service  # type: ignore[no-any-return]
 
 
+def _verify_entries_chain_integrity(
+    entries: list[dict[str, object]],
+    conn: sqlite3.Connection,
+) -> list[str]:
+    """Verify hash chain integrity for a set of entries.
+
+    Checks:
+    1. Entry hashes match computed values
+    2. Previous hash links are valid (within returned entries or to prior entry)
+
+    Returns list of integrity warnings (empty = all valid).
+    """
+    import hashlib
+
+    warnings: list[str] = []
+    if not entries:
+        return warnings
+
+    # Sort by sequence_number for chain verification
+    def get_seq(e: dict[str, object]) -> int:
+        val = e.get("sequence_number", 0)
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        return 0
+
+    sorted_entries = sorted(entries, key=get_seq)
+
+    # Get the entry before our first one (for chain link verification)
+    first_seq = get_seq(sorted_entries[0])
+    prior_hash: Optional[str] = None
+    if first_seq > 1:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT entry_hash FROM audit_log WHERE sequence_number = ?",
+            (first_seq - 1,),
+        )
+        row = cursor.fetchone()
+        if row:
+            prior_hash = row[0]
+
+    for entry in sorted_entries:
+        seq_num = entry.get("sequence_number", 0)
+        stored_hash = get_str_optional(entry, "entry_hash")
+        stored_prev = get_str_optional(entry, "previous_hash")
+
+        # Compute expected hash
+        canonical = {
+            "event_id": entry.get("event_id", ""),
+            "event_timestamp": entry.get("event_timestamp", ""),
+            "event_type": entry.get("event_type", ""),
+            "originator_id": entry.get("originator_id", ""),
+            "event_payload": entry.get("event_payload", ""),
+            "sequence_number": seq_num,
+            "previous_hash": entry.get("previous_hash", ""),
+        }
+        canonical_json = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+        computed_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+        # Check 1: Entry hash matches
+        if stored_hash and computed_hash != stored_hash:
+            warnings.append(f"TAMPER_DETECTED: Entry {seq_num} hash mismatch")
+            _audit_logger.error(f"AUDIT CHAIN INTEGRITY: Entry {seq_num} hash mismatch - possible tampering")
+
+        # Check 2: Previous hash link is valid
+        if seq_num == 1:
+            if stored_prev != "genesis":
+                warnings.append(f"CHAIN_BREAK: Entry 1 should have 'genesis' as previous_hash")
+        elif prior_hash and stored_prev != prior_hash:
+            warnings.append(f"CHAIN_BREAK: Entry {seq_num} previous_hash mismatch")
+            _audit_logger.error(f"AUDIT CHAIN INTEGRITY: Entry {seq_num} chain link broken")
+
+        # Update prior_hash for next iteration
+        prior_hash = stored_hash
+
+    if warnings:
+        _audit_logger.warning(f"AUDIT CHAIN INTEGRITY: {len(warnings)} issues found during routine read")
+
+    return warnings
+
+
 def _sync_query_sqlite_audit(
     db_path: str,
     start_time: Optional[datetime] = None,
@@ -159,7 +248,10 @@ def _sync_query_sqlite_audit(
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - SQLite row_factory returns dicts
-    """Query SQLite audit database directly (synchronous version)."""
+    """Query SQLite audit database directly (synchronous version).
+
+    Includes chain integrity verification during routine reads.
+    """
     if not Path(db_path).exists():
         return []
 
@@ -170,7 +262,7 @@ def _sync_query_sqlite_audit(
 
             # Build query with time filters
             query = "SELECT * FROM audit_log WHERE 1=1"
-            params = []
+            params: list[str] = []
 
             if start_time:
                 query += " AND event_timestamp >= ?"
@@ -184,7 +276,17 @@ def _sync_query_sqlite_audit(
             params.extend([str(limit), str(offset)])
 
             cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+            entries = [dict(row) for row in cursor.fetchall()]
+
+            # Verify chain integrity during routine reads
+            if entries:
+                integrity_warnings = _verify_entries_chain_integrity(entries, conn)
+                # Attach warnings to entries for API response visibility
+                if integrity_warnings:
+                    for entry in entries:
+                        entry["_integrity_warnings"] = integrity_warnings
+
+            return entries
     except Exception:
         return []
 
@@ -569,6 +671,13 @@ def _add_new_sqlite_entry(
         metadata=metadata if metadata else None,
     )
 
+    # Extract integrity warnings if present (added during routine read verification)
+    integrity_warnings_raw = sqlite_entry.get("_integrity_warnings")
+    integrity_warnings: List[str] = []
+    if isinstance(integrity_warnings_raw, list):
+        integrity_warnings = [str(w) for w in integrity_warnings_raw]
+    integrity_valid = len(integrity_warnings) == 0
+
     merged[entry_info["entry_id"]] = _MergedAuditEntry(
         entry=AuditEntryResponse(
             id=entry_info["entry_id"],
@@ -579,6 +688,8 @@ def _add_new_sqlite_entry(
             signature=get_str_optional(sqlite_entry, "signature"),
             hash_chain=get_str_optional(sqlite_entry, "previous_hash"),
             storage_sources=["sqlite"],
+            integrity_valid=integrity_valid,
+            integrity_warnings=integrity_warnings,
         ),
         sources=["sqlite"],
     )

@@ -3,7 +3,7 @@
 This module tests the psutil-compatible interface used by the Android app
 where the real psutil cannot be used due to native compilation requirements.
 
-These tests only run on Android (Chaquopy environment).
+These tests run using the Android psutil stub loaded via conftest.py.
 """
 
 import os
@@ -14,18 +14,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Skip entire module on non-Android platforms
-pytestmark = pytest.mark.skipif(
-    "android" not in sys.modules and not os.path.exists("/data/data"),
-    reason="Android psutil tests only run on Android",
-)
-
+# Import the Android psutil stub (loaded by conftest.py)
+# This is our custom stub, NOT the system psutil
 try:
-    # Import the module under test (only available on Android)
     from android.app.src.main.python import psutil
 except ImportError:
-    # Create a dummy module for type checking on non-Android
     psutil = None  # type: ignore[assignment]
+
+# Skip if the Android psutil stub couldn't be loaded
+pytestmark = pytest.mark.skipif(
+    psutil is None or not hasattr(psutil, "_blocked_paths"),
+    reason="Android psutil stub not available",
+)
 
 
 class TestReadProcFile:
@@ -150,7 +150,7 @@ Cached:            0 kB
             result = psutil.virtual_memory()
 
             # Verify fallback values
-            assert result.total == 4 * 1024 * 1024 * 1024  # 4GB
+            assert result.total == 1 * 1024 * 1024 * 1024  # 1GB default for mobile
             assert result.percent == 50.0
             assert result.available == result.total // 2
 

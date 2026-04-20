@@ -197,7 +197,7 @@ def action_selection(
     # === HE-300 BENCHMARK MODE ===
     # When in benchmark mode, return HE-300 compliant responses
     import os
-    import random
+    import random  # NOSONAR - used for test mock randomization, not security-sensitive
 
     benchmark_mode_val = os.environ.get("CIRIS_BENCHMARK_MODE", "")
     template_name = os.environ.get("CIRIS_TEMPLATE", "")
@@ -666,7 +666,7 @@ def action_selection(
                     # re is imported at module level (line 2)
                     from datetime import datetime, timedelta, timezone
 
-                    time_match = re.match(r"^\+(\d+)s\s+(.+)$", action_params)
+                    time_match = re.match(r"^\+(\d+)s\s+(.+)$", action_params)  # NOSONAR - anchored pattern on short test command, no ReDoS risk
                     if time_match:
                         seconds = int(time_match.group(1))
                         reason = time_match.group(2)
@@ -674,7 +674,7 @@ def action_selection(
                         logger.info(f"[MOCK_LLM] Timed defer: {seconds}s from now → {defer_until}")
 
                     # Format: $defer @2026-03-16T00:00:00Z <reason>
-                    iso_match = re.match(r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", action_params)
+                    iso_match = re.match(r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", action_params)  # NOSONAR - anchored pattern on short test command
                     if iso_match:
                         defer_until = iso_match.group(1)
                         reason = iso_match.group(2)
@@ -936,12 +936,13 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 # re is imported at module level (line 2)
                 from datetime import datetime, timedelta, timezone
 
-                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args_from_context)
+                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args_from_context)  # NOSONAR - anchored pattern on short test command
                 if time_match:
                     seconds = int(time_match.group(1))
                     reason = time_match.group(2)
                     defer_until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
 
+                # NOSONAR - anchored pattern on short test command, no ReDoS risk
                 iso_match = re.match(
                     r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", command_args_from_context
                 )
@@ -1193,12 +1194,14 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     # re already imported at top of file
 
                     # First try API format: @USERNAME (ID: USERNAME): content
+                    # NOSONAR - mock LLM pattern on test input, no ReDoS risk
                     api_match = re.search(r"@\w+\s*\([^)]+\):\s*(.+)", user_content, re.IGNORECASE | re.DOTALL)
                     if api_match:
                         actual_user_input = api_match.group(1).strip()
                         logger.debug(f"[MOCK_LLM] Extracted via API pattern: {actual_user_input[:100]}")
                     else:
                         # Then try "User said:" or "@username said:" format
+                        # NOSONAR - mock LLM pattern on test input
                         user_match = re.search(
                             r"(?:User|@\w+)\s+(?:said|says?):\s*(.+)", user_content, re.IGNORECASE | re.DOTALL
                         )
@@ -1346,12 +1349,13 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                 # re is imported at module level (line 2)
                                 from datetime import datetime, timedelta, timezone
 
-                                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args)
+                                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args)  # NOSONAR - anchored pattern on short test command
                                 if time_match:
                                     seconds = int(time_match.group(1))
                                     reason = time_match.group(2)
                                     defer_until = (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
 
+                                # NOSONAR - anchored pattern on short test command, no ReDoS risk
                                 iso_match = re.match(
                                     r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", command_args
                                 )
@@ -1708,12 +1712,14 @@ def tsaspdma_llm_result(
         # === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
         # {original_thought_content}
         # === TOOL DOCUMENTATION ===
+        # NOSONAR - non-greedy (.+?) with explicit terminator, mock LLM testing only
         thought_match = re.search(r"=== ORIGINAL THOUGHT[^=]*===\s*(.+?)(?:===|$)", content, re.DOTALL)
         if thought_match:
             thought_content = thought_match.group(1).strip()
             logger.info(f"[MOCK_LLM] TSASPDMA found thought: {thought_content[:100]}...")
 
             # Parse $tool command from thought
+            # NOSONAR - non-greedy (.*?) with explicit terminator
             tool_cmd_match = re.search(r"\$tool\s+(\S+)\s*(.*?)(?:\||$)", thought_content)
             if tool_cmd_match:
                 tool_name = tool_cmd_match.group(1)

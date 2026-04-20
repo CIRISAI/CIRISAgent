@@ -193,6 +193,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                             # Extract the user message from the new observation
                             # Format: @user (ID: xxx): $command params
+                            # NOSONAR - simple pattern on short test input, no ReDoS risk
                             obs_match = re.search(r"\):\s*(.+)", new_observation)
                             if obs_match:
                                 new_user_message = obs_match.group(1).strip()

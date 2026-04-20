@@ -120,6 +120,17 @@ object CIRISIcons {
     val search: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSearch         // Search
     val filter: ImageVector get() = CIRISMaterialIcons.Filled.CIRISFilter         // Filter
     val tools: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTools           // Tools (replaces ⚒)
+
+    // === UI control icons ===
+    val add: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPlus              // Add/Plus
+    val plus: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPlus             // Alias for add
+    val minus: ImageVector get() = CIRISMaterialIcons.Filled.CIRISMinus           // Minus/Remove
+    val star: ImageVector get() = CIRISMaterialIcons.Filled.CIRISStar             // Rating star
+    val location: ImageVector get() = CIRISMaterialIcons.Filled.CIRISLocation     // Map pin
+    val clear: ImageVector get() = CIRISMaterialIcons.Filled.CIRISClear           // Clear/Cancel
+    val close: ImageVector get() = CIRISMaterialIcons.Filled.CIRISXMark           // Alias for xmark
+    val pause: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPause           // Pause button
+    val checkCircle: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSuccess   // Green checkmark circle
 }
 
 /** Map ActionType enum to its CIRIS icon. */

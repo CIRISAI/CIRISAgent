@@ -5,6 +5,14 @@ on the network by probing common hostnames and ports.
 
 Uses zeroconf-based mDNS resolution for reliable .local hostname resolution
 on all platforms including Android.
+
+Security Note (REVIEWED 2026-04-19):
+    HTTP is used intentionally for local LLM discovery because:
+    1. Local servers (Ollama, llama.cpp, etc.) typically run without TLS
+    2. Connections are localhost/LAN only, not over the internet
+    3. Users explicitly opt-in to local server discovery
+    4. No sensitive data is transmitted during discovery probes
+    This is a deliberate design decision, not a security vulnerability.
 """
 
 import asyncio
@@ -84,7 +92,7 @@ def _build_server_entry(
     return {
         "id": f"{ip}_{port}",
         "label": _build_server_label(hostname, port, models),
-        "url": f"http://{ip}:{port}",
+        "url": f"http://{ip}:{port}",  # NOSONAR - local LLM servers use HTTP (see module docstring)
         "server_type": server_type,
         "model_count": model_count,
         "models": models,
@@ -121,7 +129,7 @@ async def _probe_and_build_entry(
     logger.info(f"[LLM_DISCOVERY] Resolved {hostname} -> {ip}")
 
     # Build URL with resolved IP for reliable connectivity
-    url = f"http://{ip}:{port}"
+    url = f"http://{ip}:{port}"  # NOSONAR - local LLM servers use HTTP
     if url in seen_urls:
         logger.debug(f"[LLM_DISCOVERY] Skipping duplicate URL: {url}")
         return None
@@ -220,7 +228,7 @@ async def discover_local_llm_servers(
         else:
             ip = hostname_map.get(hostname, hostname)
 
-        url = f"http://{ip}:{port}"
+        url = f"http://{ip}:{port}"  # NOSONAR - local LLM servers use HTTP
         if url not in seen_urls:
             seen_urls.add(url)
             probe_tasks.append(asyncio.create_task(
@@ -310,7 +318,7 @@ async def _probe_endpoint_fast(
     hostname: str, port: int, ip: str
 ) -> Optional[Dict[str, Any]]:
     """Probe a single endpoint (IP already resolved)."""
-    url = f"http://{ip}:{port}"
+    url = f"http://{ip}:{port}"  # NOSONAR - local LLM servers use HTTP
 
     result = await _probe_llm_endpoint(url)
     if not result:
@@ -490,7 +498,7 @@ def _success_result(port: int, pid: int, message: str, ready_seconds: int) -> Di
     """Create a success result dict."""
     return {
         "success": True,
-        "server_url": f"http://127.0.0.1:{port}",
+        "server_url": f"http://127.0.0.1:{port}",  # NOSONAR - localhost LLM
         "pid": pid,
         "message": message,
         "estimated_ready_seconds": ready_seconds,

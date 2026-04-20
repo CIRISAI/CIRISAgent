@@ -494,7 +494,9 @@ class ServiceRegistry(_Base):
                     )
                     return True
 
-        logger.warning(f"Provider '{provider_name}' not found for priority update")
+        # Sanitize provider_name for logging (prevent log injection)
+        safe_name = provider_name.replace('\n', '').replace('\r', '')[:100]
+        logger.warning(f"Provider '{safe_name}' not found for priority update")
         return False
 
     def get_provider_by_name(

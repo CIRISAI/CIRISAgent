@@ -549,8 +549,11 @@ async def reset_circuit_breaker(
     """
     llm_bus = get_llm_bus(request)
 
+    # Sanitize name for logging (prevent log injection)
+    safe_name = name.replace('\n', '').replace('\r', '')[:100]
+
     if name not in llm_bus.circuit_breakers:
-        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+        raise HTTPException(status_code=404, detail=f"Provider '{safe_name}' not found")
 
     cb = llm_bus.circuit_breakers[name]
     previous_state = map_circuit_state(cb.state)
@@ -572,7 +575,7 @@ async def reset_circuit_breaker(
     cb.reset()
     new_state = map_circuit_state(cb.state)
 
-    logger.info(f"Circuit breaker for '{name}' reset: {previous_state} -> {new_state}")
+    logger.info(f"Circuit breaker for '{safe_name}' reset: {previous_state} -> {new_state}")
 
     return SuccessResponse(
         data=CircuitBreakerResetResponse(
@@ -611,8 +614,11 @@ async def update_circuit_breaker_config(
     """
     llm_bus = get_llm_bus(request)
 
+    # Sanitize name for logging (prevent log injection)
+    safe_name = name.replace('\n', '').replace('\r', '')[:100]
+
     if name not in llm_bus.circuit_breakers:
-        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+        raise HTTPException(status_code=404, detail=f"Provider '{safe_name}' not found")
 
     cb = llm_bus.circuit_breakers[name]
 
@@ -642,7 +648,7 @@ async def update_circuit_breaker_config(
         timeout_duration_seconds=cb.config.timeout_duration,
     )
 
-    logger.info(f"Circuit breaker config for '{name}' updated")
+    logger.info(f"Circuit breaker config for '{safe_name}' updated")
 
     return SuccessResponse(
         data=CircuitBreakerConfigUpdateResponse(
@@ -853,7 +859,8 @@ async def add_provider(
     # Generate provider name if not provided
     provider_name = body.name
     if not provider_name:
-        # Generate from provider_id and base_url
+        # Generate from provider_id and base_url (strip protocol for ID generation)
+        # NOSONAR - string manipulation, not a connection; local servers commonly use HTTP
         url_part = body.base_url.replace("http://", "").replace("https://", "").replace("/", "_").replace(":", "_")
         provider_name = f"{body.provider_id}_{url_part}"
 

@@ -451,8 +451,26 @@ data class SetupFormState(
             }
 
             SetupStep.QUICK_SETUP -> {
-                // Quick setup requires Google/Apple auth for CIRIS proxy
-                isGoogleAuth && googleIdToken != null
+                // Quick setup can proceed if:
+                // - BYOK/HA addon mode: LLM provider is selected (validation handles API key)
+                // - CIRIS Proxy mode: Google/Apple auth is present
+                val providerLower = llmProvider.lowercase()
+                val isKeylessProvider = providerLower == "localai" ||
+                    providerLower == "local" ||
+                    providerLower == "mobile_local" ||
+                    providerLower.startsWith("mobile local")
+
+                when {
+                    isHAAddonMode || setupMode == SetupMode.BYOK -> {
+                        // BYOK mode: need provider selected, and API key if not keyless
+                        llmProvider.isNotEmpty() && (isKeylessProvider || llmApiKey.isNotEmpty())
+                    }
+                    setupMode == SetupMode.CIRIS_PROXY -> {
+                        // CIRIS Proxy: need Google/Apple auth
+                        isGoogleAuth && googleIdToken != null
+                    }
+                    else -> false
+                }
             }
 
             SetupStep.COMPLETE -> true
@@ -529,11 +547,34 @@ data class SetupFormState(
             }
 
             SetupStep.QUICK_SETUP -> {
-                // Quick setup is only valid for Google/Apple sign-in users
-                if (!isGoogleAuth || googleIdToken == null) {
-                    LocalizationHelper.getString("setup_validation_google_required")
-                } else {
-                    null
+                // Quick setup validation depends on setup mode:
+                // - CIRIS_PROXY: requires Google/Apple OAuth
+                // - BYOK (HA addon, local): requires LLM configuration
+                val providerLower = llmProvider.lowercase()
+                val isKeylessProvider = providerLower == "localai" ||
+                    providerLower == "local" ||
+                    providerLower == "mobile_local" ||
+                    providerLower.startsWith("mobile local")
+
+                when {
+                    // HA addon mode or BYOK mode: validate LLM config
+                    isHAAddonMode || setupMode == SetupMode.BYOK -> {
+                        when {
+                            llmProvider.isEmpty() -> LocalizationHelper.getString("setup_validation_select_provider")
+                            !isKeylessProvider && llmApiKey.isEmpty() -> LocalizationHelper.getString("setup_validation_api_key_required")
+                            else -> null
+                        }
+                    }
+                    // CIRIS Proxy mode: requires Google/Apple auth
+                    setupMode == SetupMode.CIRIS_PROXY -> {
+                        if (!isGoogleAuth || googleIdToken == null) {
+                            LocalizationHelper.getString("setup_validation_google_required")
+                        } else {
+                            null
+                        }
+                    }
+                    // No mode selected yet
+                    else -> LocalizationHelper.getString("setup_validation_select_mode")
                 }
             }
 

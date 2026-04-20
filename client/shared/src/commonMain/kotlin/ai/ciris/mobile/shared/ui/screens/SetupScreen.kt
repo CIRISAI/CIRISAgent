@@ -700,13 +700,24 @@ private fun WelcomeStep(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "[i] ${localizedString("mobile.setup_what_ciris")}",
-                    color = SetupColors.TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp)
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = SetupColors.Primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = localizedString("mobile.setup_what_ciris"),
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
                     text = localizedString("mobile.setup_what_ciris_desc"),
                     color = SetupColors.TextSecondary,
@@ -2555,6 +2566,7 @@ private fun SummaryRow(label: String, value: String) {
  * - Services toggle (navigation, weather - collapsed)
  * - Adapters note (collapsed)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuickSetupStep(
     viewModel: SetupViewModel,
@@ -2569,12 +2581,20 @@ private fun QuickSetupStep(
     var languageExpanded by remember { mutableStateOf(true) }
     var locationExpanded by remember { mutableStateOf(true) }
     var servicesExpanded by remember { mutableStateOf(true) }
-    var localLlmExpanded by remember { mutableStateOf(false) }
+    var llmConfigExpanded by remember { mutableStateOf(state.setupMode == SetupMode.BYOK || state.isHAAddonMode) }
     var adaptersExpanded by remember { mutableStateOf(false) }
 
     // Local LLM discovery
     val discoveryState = rememberLocalLlmDiscoveryState()
     val localInferenceCapability = remember { probeLocalInferenceCapability() }
+
+    // LLM connection testing state
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
+    var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
+
+    // Determine if this is BYOK mode (HA addon or explicit BYOK)
+    val isBYOKMode = state.setupMode == SetupMode.BYOK || state.isHAAddonMode
 
     Column(
         modifier = modifier
@@ -2583,15 +2603,19 @@ private fun QuickSetupStep(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header - "100% Free & Open Source" badge
+        // Header - mode-appropriate badge
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = SetupColors.SuccessLight,
+            color = if (isBYOKMode) SetupColors.InfoLight else SetupColors.SuccessLight,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
             Text(
-                text = "✓ " + localizedString("mobile.setup_free_badge"),
-                color = SetupColors.SuccessDark,
+                text = if (isBYOKMode) {
+                    "🔑 " + localizedString("mobile.setup_byok_badge")
+                } else {
+                    "✓ " + localizedString("mobile.setup_free_badge")
+                },
+                color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
@@ -2604,15 +2628,19 @@ private fun QuickSetupStep(
             else -> "OAuth"
         }
         Text(
-            text = localizedString("setup.quick_desc").replace("{provider}", providerName),
+            text = if (isBYOKMode) {
+                localizedString("setup.quick_byok_desc")
+            } else {
+                localizedString("setup.quick_desc").replace("{provider}", providerName)
+            },
             fontSize = 14.sp,
             color = SetupColors.TextSecondary
         )
 
-        // CIRIS Proxy info card
+        // Mode info card - CIRIS Proxy (green) or BYOK (blue)
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = SetupColors.SuccessLight,
+            color = if (isBYOKMode) SetupColors.InfoLight else SetupColors.SuccessLight,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -2620,22 +2648,30 @@ private fun QuickSetupStep(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.CheckCircle,
+                    imageVector = if (isBYOKMode) Icons.Filled.Settings else Icons.Filled.CheckCircle,
                     contentDescription = null,
-                    tint = SetupColors.SuccessDark,
+                    tint = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = localizedString("setup.quick_ciris_active"),
+                        text = if (isBYOKMode) {
+                            localizedString("setup.quick_byok_active")
+                        } else {
+                            localizedString("setup.quick_ciris_active")
+                        },
                         fontWeight = FontWeight.SemiBold,
-                        color = SetupColors.SuccessDark
+                        color = if (isBYOKMode) SetupColors.InfoDark else SetupColors.SuccessDark
                     )
                     Text(
-                        text = localizedString("setup.quick_ciris_desc"),
+                        text = if (isBYOKMode) {
+                            localizedString("setup.quick_byok_card_desc")
+                        } else {
+                            localizedString("setup.quick_ciris_desc")
+                        },
                         fontSize = 12.sp,
-                        color = SetupColors.SuccessDark.copy(alpha = 0.8f)
+                        color = if (isBYOKMode) SetupColors.InfoDark.copy(alpha = 0.8f) else SetupColors.SuccessDark.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -2807,52 +2843,410 @@ private fun QuickSetupStep(
             }
         }
 
-        // Local LLM Section (optional - for advanced users who want local inference)
+        // LLM Configuration Section (always shown, required in BYOK mode, optional in CIRIS Proxy mode)
         SetupCollapsibleSection(
-            title = localizedString("setup.local_llm_title"),
-            subtitle = if (discoveryState.discoveredServers.isNotEmpty())
-                "${discoveryState.discoveredServers.size} ${localizedString("setup.servers_found")}"
-            else
-                localizedString("setup.optional"),
+            title = localizedString("setup.llm_config_title"),
+            subtitle = when {
+                state.llmProvider.isNotEmpty() && (testResult?.valid == true || state.llmApiKey.isNotEmpty()) ->
+                    localizedString("setup.llm_config_subtitle_configured")
+                isBYOKMode -> localizedString("setup.llm_config_subtitle_required")
+                else -> localizedString("setup.llm_config_subtitle_optional")
+            },
             icon = Icons.Filled.Settings,
-            expanded = localLlmExpanded,
-            onToggle = { localLlmExpanded = !localLlmExpanded }
+            expanded = llmConfigExpanded,
+            onToggle = { llmConfigExpanded = !llmConfigExpanded }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Mode-specific description
                 Text(
-                    text = localizedString("setup.local_llm_desc"),
+                    text = if (isBYOKMode) {
+                        localizedString("mobile.setup_byok_llm_desc")
+                    } else {
+                        localizedString("mobile.setup_ciris_llm_desc")
+                    },
                     fontSize = 13.sp,
                     color = SetupColors.TextSecondary
                 )
 
-                LocalLlmServerDiscovery(
-                    state = discoveryState,
-                    apiClient = apiClient,
-                    onServerSelected = { server ->
-                        discoveryState.selectedServer = server
-                    },
-                    onAddAsProvider = { server, model ->
-                        // Add local server as additional provider
-                        coroutineScope.launch {
-                            try {
-                                apiClient.addLlmProvider(
-                                    providerId = "local-${server.id.take(20).replace(":", "-").lowercase()}",
-                                    providerBaseUrl = server.url,
-                                    name = server.label,
-                                    model = model ?: server.models.firstOrNull(),
-                                    apiKey = null
+                // Provider selection dropdown
+                var providerExpanded by remember { mutableStateOf(false) }
+                val providers = viewModel.availableProviders
+                val currentProviderDisplay = providers.find { it.first == state.llmProvider }?.second ?: state.llmProvider
+
+                Text(
+                    text = localizedString("mobile.setup_provider"),
+                    color = SetupColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = providerExpanded,
+                    onExpandedChange = { providerExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = currentProviderDisplay.ifEmpty { localizedString("mobile.setup_select_provider") },
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testableClickable("quick_input_llm_provider") { providerExpanded = !providerExpanded },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SetupColors.TextPrimary,
+                            unfocusedTextColor = SetupColors.TextPrimary,
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                            cursorColor = SetupColors.Primary
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = providerExpanded,
+                        onDismissRequest = { providerExpanded = false }
+                    ) {
+                        providers.forEach { (key, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    viewModel.setLlmProvider(key)
+                                    providerExpanded = false
+                                    testResult = null
+                                    availableModels = emptyList()
+                                },
+                                modifier = Modifier.testableClickable("quick_menu_provider_$key") {
+                                    viewModel.setLlmProvider(key)
+                                    providerExpanded = false
+                                }
+                            )
+                        }
+
+                        // On-device option if capable
+                        val showOnDeviceProvider = localInferenceCapability.isReady || localInferenceCapability.isComingSoon
+                        if (showOnDeviceProvider) {
+                            val isStub = localInferenceCapability.isComingSoon
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            text = if (isStub) {
+                                                "${SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME} — Coming Soon"
+                                            } else {
+                                                SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
+                                            },
+                                            color = if (isStub) SetupColors.TextSecondary else SetupColors.TextPrimary,
+                                        )
+                                        Text(
+                                            text = localInferenceCapability.reason,
+                                            color = SetupColors.TextSecondary,
+                                            fontSize = 11.sp,
+                                        )
+                                    }
+                                },
+                                enabled = !isStub,
+                                onClick = {
+                                    viewModel.selectLocalOnDeviceProvider()
+                                    providerExpanded = false
+                                },
+                                modifier = Modifier.testableClickable("quick_menu_provider_mobile_local") {
+                                    if (!isStub) {
+                                        viewModel.selectLocalOnDeviceProvider()
+                                        providerExpanded = false
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Local LLM Server Discovery (shown when local_inference provider selected)
+                if (state.llmProvider == "local_inference") {
+                    LocalLlmServerDiscovery(
+                        state = discoveryState,
+                        apiClient = apiClient,
+                        onServerSelected = { server ->
+                            val baseUrl = "${server.url}/v1"
+                            viewModel.setLlmBaseUrl(baseUrl)
+                            if (server.models.isNotEmpty()) {
+                                availableModels = server.models.map { modelId ->
+                                    ModelInfo(
+                                        id = modelId,
+                                        displayName = modelId,
+                                        contextWindow = null,
+                                        cirisCompatible = true,
+                                        cirisRecommended = false
+                                    )
+                                }
+                                viewModel.setLlmModel(server.models.first())
+                            }
+                        },
+                        localInferenceCapability = localInferenceCapability,
+                        primaryColor = SetupColors.Primary,
+                        surfaceColor = SetupColors.GrayLight,
+                        textColor = SetupColors.TextPrimary,
+                        secondaryTextColor = SetupColors.TextSecondary
+                    )
+                }
+
+                // API Key input (skip for keyless providers)
+                val isKeylessProvider = state.llmProvider in listOf("local", "local_inference", "LocalAI")
+                val isMobileLocalProvider = state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_PROVIDER_ID ||
+                    state.llmProvider == SetupViewModel.LOCAL_ON_DEVICE_DISPLAY_NAME
+
+                if (state.llmProvider.isNotEmpty() && !isKeylessProvider && !isMobileLocalProvider) {
+                    val apiKeyLabel = if (state.llmProvider == "OpenAI Compatible") {
+                        "API Key (optional)"
+                    } else {
+                        localizedString("mobile.setup_api_key_label")
+                    }
+
+                    Text(
+                        text = apiKeyLabel,
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    var showApiKey by remember { mutableStateOf(false) }
+
+                    OutlinedTextField(
+                        value = state.llmApiKey,
+                        onValueChange = { viewModel.setLlmApiKey(it) },
+                        modifier = Modifier.fillMaxWidth().testable("quick_input_api_key"),
+                        placeholder = { Text("sk-...", color = SetupColors.TextSecondary) },
+                        visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(
+                                onClick = { showApiKey = !showApiKey },
+                                modifier = Modifier.testableClickable("quick_btn_toggle_api_key") { showApiKey = !showApiKey }
+                            ) {
+                                Text(
+                                    text = if (showApiKey) "Hide" else "Show",
+                                    color = SetupColors.Primary,
+                                    fontSize = 12.sp
                                 )
-                            } catch (e: Exception) {
-                                PlatformLogger.e(TAG, "Failed to add local LLM provider: ${e.message}")
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SetupColors.TextPrimary,
+                            unfocusedTextColor = SetupColors.TextPrimary,
+                            focusedBorderColor = SetupColors.Primary,
+                            unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f),
+                            cursorColor = SetupColors.Primary
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                // Model selection
+                if (state.llmProvider.isNotEmpty()) {
+                    Text(
+                        text = if (availableModels.isNotEmpty()) "Model" else "Model (optional)",
+                        color = SetupColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    if (availableModels.isNotEmpty()) {
+                        // Dropdown with available models
+                        var modelExpanded by remember { mutableStateOf(false) }
+                        val selectedModel = availableModels.find { it.id == state.llmModel }
+
+                        ExposedDropdownMenuBox(
+                            expanded = modelExpanded,
+                            onExpandedChange = { modelExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedModel?.displayName ?: state.llmModel.ifEmpty { "Select a model" },
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor()
+                                    .testableClickable("quick_input_llm_model") { modelExpanded = !modelExpanded },
+                                trailingIcon = {
+                                    if (selectedModel?.cirisRecommended == true) {
+                                        Icon(Icons.Default.Star, contentDescription = "Recommended", tint = SetupColors.Primary, modifier = Modifier.size(16.dp))
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = SetupColors.TextPrimary,
+                                    unfocusedTextColor = SetupColors.TextPrimary,
+                                    focusedBorderColor = SetupColors.Primary,
+                                    unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
+                                )
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = modelExpanded,
+                                onDismissRequest = { modelExpanded = false }
+                            ) {
+                                val sortedModels = availableModels.sortedByDescending {
+                                    when {
+                                        it.cirisRecommended -> 2
+                                        it.cirisCompatible -> 1
+                                        else -> 0
+                                    }
+                                }
+                                sortedModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    text = model.displayName,
+                                                    fontWeight = if (model.cirisRecommended) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                                if (model.contextWindow != null) {
+                                                    Text(
+                                                        text = "${model.contextWindow / 1000}K context",
+                                                        fontSize = 11.sp,
+                                                        color = SetupColors.TextSecondary
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            viewModel.setLlmModel(model.id)
+                                            modelExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
-                    },
-                    localInferenceCapability = localInferenceCapability,
-                    primaryColor = SetupColors.Primary,
-                    surfaceColor = SetupColors.GrayLight,
-                    textColor = SetupColors.TextPrimary,
-                    secondaryTextColor = SetupColors.TextSecondary
-                )
+                    } else {
+                        // Text input for model
+                        OutlinedTextField(
+                            value = state.llmModel,
+                            onValueChange = { viewModel.setLlmModel(it) },
+                            modifier = Modifier.fillMaxWidth().testable("quick_input_llm_model_text"),
+                            placeholder = {
+                                Text(
+                                    text = when (state.llmProvider) {
+                                        "openai" -> "gpt-4o"
+                                        "anthropic" -> "claude-sonnet-4-5-20250514"
+                                        "google" -> "gemini-2.0-flash"
+                                        "openrouter" -> "anthropic/claude-sonnet-4"
+                                        "groq" -> "llama-3.3-70b-versatile"
+                                        "together" -> "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+                                        "local", "local_inference" -> "llama3.2"
+                                        else -> "model-name"
+                                    },
+                                    color = SetupColors.TextSecondary
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = SetupColors.TextPrimary,
+                                unfocusedTextColor = SetupColors.TextPrimary,
+                                focusedBorderColor = SetupColors.Primary,
+                                unfocusedBorderColor = SetupColors.TextSecondary.copy(alpha = 0.5f)
+                            ),
+                            singleLine = true
+                        )
+                    }
+                }
+
+                // Test Connection button
+                if (state.llmProvider.isNotEmpty()) {
+                    val isLocalProvider = state.llmProvider in listOf("local", "local_inference", "openai_compatible", "other")
+                    OutlinedButton(
+                        onClick = {
+                            if (!isTesting) {
+                                isTesting = true
+                                testResult = null
+                                coroutineScope.launch(Dispatchers.Default) {
+                                    try {
+                                        val result = apiClient.validateLlmConfiguration(
+                                            provider = state.llmProvider,
+                                            apiKey = state.llmApiKey,
+                                            baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() },
+                                            model = state.llmModel.takeIf { it.isNotEmpty() }
+                                        )
+
+                                        val models = if (result.valid) {
+                                            apiClient.listModels(
+                                                provider = state.llmProvider,
+                                                apiKey = state.llmApiKey,
+                                                baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
+                                            )
+                                        } else emptyList()
+
+                                        withContext(Dispatchers.Main) {
+                                            testResult = result
+                                            availableModels = models
+                                            isTesting = false
+
+                                            if (models.isNotEmpty() && state.llmModel.isEmpty()) {
+                                                val bestModel = models.firstOrNull { it.cirisRecommended }
+                                                    ?: models.firstOrNull { it.cirisCompatible }
+                                                    ?: models.first()
+                                                viewModel.setLlmModel(bestModel.id)
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            testResult = LlmValidationResult(
+                                                valid = false,
+                                                message = "Connection failed",
+                                                error = e.message ?: "Unknown error"
+                                            )
+                                            isTesting = false
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testable("quick_btn_test_connection"),
+                        enabled = !isTesting && (isLocalProvider || isMobileLocalProvider || state.llmApiKey.isNotEmpty()),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SetupColors.Primary)
+                    ) {
+                        if (isTesting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = SetupColors.Primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(localizedString("mobile.setup_testing"))
+                        } else {
+                            Text(localizedString("mobile.setup_test_connection"))
+                        }
+                    }
+
+                    // Show test result
+                    testResult?.let { result ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (result.valid) SetupColors.SuccessLight else SetupColors.ErrorLight,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (result.valid) "✓" else "✗",
+                                    color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorText,
+                                    fontSize = 18.sp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = result.message,
+                                        color = if (result.valid) SetupColors.SuccessDark else SetupColors.ErrorText,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    result.error?.let { error ->
+                                        Text(
+                                            text = error,
+                                            fontSize = 12.sp,
+                                            color = SetupColors.ErrorText.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -3260,9 +3654,15 @@ private fun PreferencesStep(
         ) {
             Row(
                 modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "[i]", fontSize = 16.sp)
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = SetupColors.InfoDark,
+                    modifier = Modifier.size(18.dp)
+                )
                 Text(
                     text = localizedString("mobile.setup_location_note"),
                     fontSize = 12.sp,

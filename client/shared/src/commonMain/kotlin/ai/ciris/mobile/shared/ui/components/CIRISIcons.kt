@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.size
@@ -17,60 +18,111 @@ import ai.ciris.mobile.shared.models.ActionType
 
 /**
  * Centralized icon mapping for CIRIS.
- * Uses Material Design Icons (vector-based, renders identically on all platforms).
+ *
+ * Uses custom CIRIS icons from the Icon Redesign spec. Each icon family uses
+ * a dedicated bus color (comm, llm, memory, tool, wise, runtime) so the
+ * UI reads as a color-coded transcript.
+ *
+ * Icon design principles:
+ * - Two-tone chip: surface at 16% alpha, glyph at 100%
+ * - 24dp viewBox, 2px strokes, 20px target
+ * - Colors from the bus palette (CIRISColors.Bus*)
  */
 object CIRISIcons {
     // === Action types (H3ERE pipeline) ===
-    val speak: ImageVector get() = Icons.AutoMirrored.Filled.Send
-    val tool: ImageVector get() = Icons.Default.Build
-    val observe: ImageVector get() = CIRISMaterialIcons.Filled.Visibility
-    val memorize: ImageVector get() = Icons.Default.Add
-    val recall: ImageVector get() = CIRISMaterialIcons.Filled.History
-    val forget: ImageVector get() = Icons.Default.Delete
-    val reject: ImageVector get() = Icons.Default.Close
-    val ponder: ImageVector get() = CIRISMaterialIcons.Filled.Lightbulb
-    val defer: ImageVector get() = CIRISMaterialIcons.Filled.Schedule
-    val taskComplete: ImageVector get() = Icons.Default.Check
+    // Custom CIRIS icons replacing generic Material icons
+    val speak: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSpeak          // COMM bus
+    val tool: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTool            // TOOL bus
+    val observe: ImageVector get() = CIRISMaterialIcons.Filled.CIRISObserve      // COMM bus
+    val memorize: ImageVector get() = CIRISMaterialIcons.Filled.CIRISMemorize    // MEMORY bus
+    val recall: ImageVector get() = CIRISMaterialIcons.Filled.CIRISRecall        // MEMORY bus (FIX for red "?")
+    val forget: ImageVector get() = CIRISMaterialIcons.Filled.CIRISForget        // MEMORY bus
+    val reject: ImageVector get() = CIRISMaterialIcons.Filled.CIRISReject        // RUNTIME bus
+    val ponder: ImageVector get() = CIRISMaterialIcons.Filled.CIRISPonder        // WISE bus
+    val defer: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDefer          // WISE bus
+    val taskComplete: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTaskComplete // TOOL bus
 
     // === Pipeline stages ===
-    val thoughtStart: ImageVector get() = CIRISMaterialIcons.Filled.Psychology
-    val snapshot: ImageVector get() = CIRISMaterialIcons.Filled.CameraAlt
-    val dma: ImageVector get() = CIRISMaterialIcons.Filled.Analytics
-    val idma: ImageVector get() = CIRISMaterialIcons.Filled.Insights
-    val actionSelection: ImageVector get() = CIRISMaterialIcons.Filled.Tune
-    val tsaspdma: ImageVector get() = CIRISMaterialIcons.Filled.Construction
-    val conscience: ImageVector get() = CIRISMaterialIcons.Filled.Shield
+    // Custom CIRIS icons for H3ERE pipeline visualization
+    val thoughtStart: ImageVector get() = CIRISMaterialIcons.Filled.CIRISThoughtStart  // LLM bus
+    val snapshot: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSnapshot          // MEMORY bus
+    val dma: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDMA                    // LLM bus
+    val idma: ImageVector get() = CIRISMaterialIcons.Filled.CIRISIDMA                  // LLM bus
+    val actionSelection: ImageVector get() = CIRISMaterialIcons.Filled.CIRISActionSelection // LLM bus
+    val tsaspdma: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTSASPDMA          // LLM bus
+    val conscience: ImageVector get() = CIRISMaterialIcons.Filled.CIRISConscience      // LLM bus
 
     // === Status / severity ===
-    val warning: ImageVector get() = Icons.Default.Warning
-    val error: ImageVector get() = CIRISMaterialIcons.Filled.Error
-    val info: ImageVector get() = Icons.Default.Info
-    val success: ImageVector get() = Icons.Default.CheckCircle
+    // Custom CIRIS status icons with semantic colors
+    val warning: ImageVector get() = CIRISMaterialIcons.Filled.CIRISWarning
+    val error: ImageVector get() = CIRISMaterialIcons.Filled.CIRISError
+    val info: ImageVector get() = CIRISMaterialIcons.Filled.CIRISInfo
+    val success: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSuccess
 
     // === UI chrome ===
-    val trust: ImageVector get() = CIRISMaterialIcons.Filled.Security
+    val trust: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTrust
     val log: ImageVector get() = Icons.AutoMirrored.Filled.List
     val pkg: ImageVector get() = CIRISMaterialIcons.Filled.Inventory2
     val instructions: ImageVector get() = CIRISMaterialIcons.Filled.Description
-    val identity: ImageVector get() = CIRISMaterialIcons.Filled.Badge
+    val identity: ImageVector get() = CIRISMaterialIcons.Filled.CIRISIdentity
     val safety: ImageVector get() = CIRISMaterialIcons.Filled.HealthAndSafety
-    val lightning: ImageVector get() = CIRISMaterialIcons.Filled.FlashOn
+    val lightning: ImageVector get() = CIRISMaterialIcons.Filled.CIRISLightning
     val play: ImageVector get() = Icons.Default.PlayArrow
     val welcome: ImageVector get() = CIRISMaterialIcons.Filled.Hub
 
     // === Debug log levels ===
     val debugLevel: ImageVector get() = CIRISMaterialIcons.Filled.BugReport
-    val infoLevel: ImageVector get() = Icons.Default.Info
-    val warnLevel: ImageVector get() = Icons.Default.Warning
-    val errorLevel: ImageVector get() = CIRISMaterialIcons.Filled.Error
+    val infoLevel: ImageVector get() = CIRISMaterialIcons.Filled.CIRISInfo
+    val warnLevel: ImageVector get() = CIRISMaterialIcons.Filled.CIRISWarning
+    val errorLevel: ImageVector get() = CIRISMaterialIcons.Filled.CIRISError
 
     // === Agent status ===
-    val idle: ImageVector get() = CIRISMaterialIcons.Filled.RadioButtonUnchecked
-    val processing: ImageVector get() = CIRISMaterialIcons.Filled.Sync
-    val disconnected: ImageVector get() = CIRISMaterialIcons.Filled.CloudOff
+    val idle: ImageVector get() = CIRISMaterialIcons.Filled.CIRISIdle
+    val processing: ImageVector get() = CIRISMaterialIcons.Filled.CIRISProcessing
+    val disconnected: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDisconnected
+
+    // === Emoji replacement icons ===
+    // Complete set from Icon Redesign spec - replaces all Unicode emoji
+    val check: ImageVector get() = CIRISMaterialIcons.Filled.CIRISCheck           // replaces ✓
+    val xmark: ImageVector get() = CIRISMaterialIcons.Filled.CIRISXMark           // replaces ✗ ✖
+    val circle: ImageVector get() = CIRISMaterialIcons.Filled.CIRISCircle         // replaces ○
+    val question: ImageVector get() = CIRISMaterialIcons.Filled.CIRISQuestion     // replaces ?
+    val keySecure: ImageVector get() = CIRISMaterialIcons.Filled.CIRISKeySecure   // replaces 🔐
+    val globe: ImageVector get() = CIRISMaterialIcons.Filled.CIRISGlobe           // replaces 🌍
+    val refresh: ImageVector get() = CIRISMaterialIcons.Filled.CIRISRefresh       // replaces 🔄
+    val wallet: ImageVector get() = CIRISMaterialIcons.Filled.CIRISWallet         // replaces 💰
+    val gas: ImageVector get() = CIRISMaterialIcons.Filled.CIRISGas               // replaces ⛽
+    val telemetry: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTelemetry   // replaces 📊
+    val requirements: ImageVector get() = CIRISMaterialIcons.Filled.CIRISRequirements  // replaces ■
+    val instruct: ImageVector get() = CIRISMaterialIcons.Filled.CIRISInstructions // replaces ≡
+    val shield: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSafety         // replaces ◆
+    val diamond: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDiamond       // replaces ❖ (no dot)
+    val identityDiamond: ImageVector get() = CIRISMaterialIcons.Filled.CIRISIdentity  // replaces ❖ (with center dot)
+
+    // === Domain concept icons ===
+    val memory: ImageVector get() = CIRISMaterialIcons.Filled.CIRISMemory         // Memory chip
+    val skill: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSkill           // SkillStudio
+    val model: ImageVector get() = CIRISMaterialIcons.Filled.CIRISModel           // LLM model
+    val audit: ImageVector get() = CIRISMaterialIcons.Filled.CIRISAudit           // Audit log
+    val adapter: ImageVector get() = CIRISMaterialIcons.Filled.CIRISAdapter       // Adapter plug
+    val key: ImageVector get() = CIRISMaterialIcons.Filled.CIRISKey               // Simple key
+    val thought: ImageVector get() = CIRISMaterialIcons.Filled.CIRISThought       // Chat bubble
+    val task: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTask             // Task clipboard
+    val handler: ImageVector get() = CIRISMaterialIcons.Filled.CIRISHandler       // Action handler
+    val graph: ImageVector get() = CIRISMaterialIcons.Filled.CIRISGraph           // Memory graph
+    val agent: ImageVector get() = CIRISMaterialIcons.Filled.CIRISAgent           // Wise Authority
+    val bus: ImageVector get() = CIRISMaterialIcons.Filled.CIRISBus               // Message bus
+    val stage: ImageVector get() = CIRISMaterialIcons.Filled.CIRISStage           // Pipeline stage
+
+    // === Action chrome icons ===
+    val upload: ImageVector get() = CIRISMaterialIcons.Filled.CIRISUpload         // Upload
+    val download: ImageVector get() = CIRISMaterialIcons.Filled.CIRISDownload     // Download
+    val search: ImageVector get() = CIRISMaterialIcons.Filled.CIRISSearch         // Search
+    val filter: ImageVector get() = CIRISMaterialIcons.Filled.CIRISFilter         // Filter
+    val tools: ImageVector get() = CIRISMaterialIcons.Filled.CIRISTools           // Tools (replaces ⚒)
 }
 
-/** Map ActionType enum to its Material icon. */
+/** Map ActionType enum to its CIRIS icon. */
 fun ActionType.icon(): ImageVector = when (this) {
     ActionType.SPEAK -> CIRISIcons.speak
     ActionType.TOOL -> CIRISIcons.tool
@@ -85,19 +137,58 @@ fun ActionType.icon(): ImageVector = when (this) {
 }
 
 /**
+ * Map ActionType to its bus color for automatic tinting.
+ *
+ * Bus colors (from Icon Redesign spec):
+ * - COMM (#419CA0 SignetTeal): Speak, Observe
+ * - MEMORY (#7A6FD6 Cool violet): Memorize, Recall, Forget
+ * - TOOL (#C96A38 Burnt rust): Tool, Task Complete
+ * - WISE (#B08A3E Vintage brass): Ponder, Defer
+ * - RUNTIME (#E14B7F Magenta-rose): Reject
+ */
+fun ActionType.busColor(): Color = when (this) {
+    ActionType.SPEAK -> CIRISColors.BusComm
+    ActionType.OBSERVE -> CIRISColors.BusComm
+    ActionType.MEMORIZE -> CIRISColors.BusMemory
+    ActionType.RECALL -> CIRISColors.BusMemory
+    ActionType.FORGET -> CIRISColors.BusMemory
+    ActionType.TOOL -> CIRISColors.BusTool
+    ActionType.TASK_COMPLETE -> CIRISColors.BusTool
+    ActionType.PONDER -> CIRISColors.BusWise
+    ActionType.DEFER -> CIRISColors.BusWise
+    ActionType.REJECT -> CIRISColors.BusRuntime
+}
+
+/**
  * Convenience composable — drop-in replacement for Text(actionType.symbol).
+ *
+ * Icons are automatically tinted with their bus color by default.
+ * Pass a specific tint to override, or Color.Unspecified to use theme default.
+ *
+ * @param actionType The action type to display
+ * @param modifier Modifier to apply
+ * @param size Icon size (default 20dp as per design spec)
+ * @param tint Color tint (defaults to bus color for the action type)
+ * @param useBusColor Whether to auto-tint with bus color (default true)
  */
 @Composable
 fun ActionTypeIcon(
     actionType: ActionType?,
     modifier: Modifier = Modifier,
     size: Dp = 20.dp,
-    tint: Color = Color.Unspecified
+    tint: Color = Color.Unspecified,
+    useBusColor: Boolean = true
 ) {
+    val effectiveTint = when {
+        tint != Color.Unspecified -> tint
+        useBusColor && actionType != null -> actionType.busColor()
+        else -> Color.Unspecified
+    }
+
     Icon(
         imageVector = actionType?.icon() ?: CIRISIcons.thoughtStart,
         contentDescription = actionType?.displayName ?: "Unknown",
         modifier = modifier.then(Modifier.size(size)),
-        tint = tint
+        tint = effectiveTint
     )
 }

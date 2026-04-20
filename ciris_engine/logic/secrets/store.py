@@ -65,8 +65,8 @@ class SecretsStore:
             logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
             key_storage_mode = "auto"
 
-        # key_storage_mode is guaranteed valid after line 66 check, but mypy needs hint
-        self.encryption = SecretsEncryption(master_key, key_storage_mode=key_storage_mode)  # type: ignore[arg-type]
+        # key_storage_mode is guaranteed valid after line 66 check
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=key_storage_mode)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}

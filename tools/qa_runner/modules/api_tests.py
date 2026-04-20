@@ -11,10 +11,12 @@ class APITestModule:
     """Test module for API endpoints."""
 
     @staticmethod
-    def get_auth_tests(admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
+    def get_auth_tests(admin_username: str = "jeff", admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
         """Get authentication test cases.
 
         Args:
+            admin_username: The admin username to use for login tests.
+                            Defaults to "jeff" (QA runner default).
             admin_password: The admin password to use for login tests.
                             Defaults to "__DYNAMIC__" which should be replaced
                             by the QA runner with the actual password.
@@ -25,7 +27,7 @@ class APITestModule:
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": admin_password},
+                payload={"username": admin_username, "password": admin_password},
                 expected_status=200,
                 requires_auth=False,
                 description="Test login with default admin credentials",
@@ -35,7 +37,7 @@ class APITestModule:
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": "wrong_password"},
+                payload={"username": admin_username, "password": "wrong_password"},
                 expected_status=401,
                 requires_auth=False,
                 description="Test login failure with wrong password",

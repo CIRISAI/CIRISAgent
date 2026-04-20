@@ -197,10 +197,11 @@ class QAConfig:
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
         effective_password = admin_password or self.admin_password
+        effective_username = self.admin_username
 
         # API test modules
         if module == QAModule.AUTH:
-            return APITestModule.get_auth_tests(admin_password=effective_password)
+            return APITestModule.get_auth_tests(admin_username=effective_username, admin_password=effective_password)
         elif module == QAModule.TELEMETRY:
             return APITestModule.get_telemetry_tests()
         elif module == QAModule.AGENT:
@@ -309,7 +310,7 @@ class QAConfig:
 
         # SDK test modules
         elif module == QAModule.SDK:
-            return SDKTestModule.get_sdk_tests(admin_password=effective_password)
+            return SDKTestModule.get_sdk_tests(admin_username=effective_username, admin_password=effective_password)
 
         # Extended API tests
         elif module == QAModule.EXTENDED_API:

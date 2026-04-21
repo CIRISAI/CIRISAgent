@@ -313,7 +313,12 @@ class MemoryBenchmarkTests(BaseTestModule):
         message_count: int,
         stats: ChannelStats,
     ) -> None:
-        """Send messages to a specific channel."""
+        """Send messages to a specific channel.
+
+        Uses fire-and-forget pattern with small delay for true concurrency.
+        We don't wait for task completion since we're stress-testing memory,
+        not validating responses.
+        """
         stats.start_time = time.time()
         snapshot_interval = max(5, message_count // 5)
 
@@ -328,12 +333,10 @@ class MemoryBenchmarkTests(BaseTestModule):
                 )
 
                 if submission.accepted:
-                    # Wait for completion via SSE (with shorter timeout for concurrent)
-                    if self.sse_helper:
-                        self._wait_for_any_action(timeout=min(10.0, self.test_timeout))
-                    else:
-                        await asyncio.sleep(0.5)
                     stats.messages_succeeded += 1
+                    # Small async delay to allow other channels to run
+                    # Don't wait for completion - fire and forget for max throughput
+                    await asyncio.sleep(0.1)
                 else:
                     stats.messages_failed += 1
 
@@ -352,21 +355,6 @@ class MemoryBenchmarkTests(BaseTestModule):
                 self.console.print(f"    [{channel_id}] Message {i + 1} failed: {e}")
 
         stats.end_time = time.time()
-
-    def _wait_for_any_action(self, timeout: float = 10.0) -> bool:
-        """Wait for any action completion in SSE stream (shorter timeout for concurrent)."""
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            # Check for any completed task
-            completed_tasks = getattr(self.sse_helper, "completed_tasks", set())
-            if len(completed_tasks) > 0:
-                return True
-            if getattr(self.sse_helper, "task_complete_seen", False):
-                return True
-            time.sleep(0.05)
-
-        return False
 
     def _report_results(self, initial: MemorySnapshot) -> None:
         """Report memory benchmark results."""

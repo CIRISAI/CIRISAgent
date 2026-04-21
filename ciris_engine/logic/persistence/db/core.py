@@ -650,7 +650,7 @@ def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
     """
     # Thread-local cache key
     cache_attr = f"_sqlite_conn_{hash(db_path)}"
-    cached = getattr(_ios_thread_local, cache_attr, None)
+    cached: sqlite3.Connection | None = getattr(_ios_thread_local, cache_attr, None)
 
     # Reuse existing connection if it's still valid
     if cached is not None:

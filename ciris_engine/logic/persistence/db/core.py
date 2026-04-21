@@ -14,6 +14,12 @@ from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 _ios_sqlite_lock: Optional[threading.RLock] = None
 _is_ios_platform: Optional[bool] = None
 
+# iOS thread-local connection cache: Apple's SQLiteDatabaseTracking (iOS 26+) asserts if a
+# sqlite3* handle is used from a different thread than the one that called sqlite3_open().
+# Python-level locks don't help — the check is in Apple's C interposer. The fix: reuse
+# the same connection per (thread, db_path) pair so the opening thread always matches.
+_ios_thread_local = threading.local()
+
 
 def _check_ios_platform() -> bool:
     """Check if running on iOS."""
@@ -636,10 +642,31 @@ def _create_postgres_connection(adapter: Any) -> Any:
 
 
 def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
-    """Create SQLite connection with iOS-specific settings."""
-    logger.debug("[DB_CONNECT] iOS mode: using serialized connection settings")
+    """Create or reuse SQLite connection with iOS-specific settings.
+
+    Uses thread-local connection cache to satisfy Apple's SQLiteDatabaseTracking
+    which asserts if a sqlite3* handle is used from a different thread than the
+    one that opened it. Each thread gets its own persistent connection per db_path.
+    """
+    # Thread-local cache key
+    cache_attr = f"_sqlite_conn_{hash(db_path)}"
+    cached = getattr(_ios_thread_local, cache_attr, None)
+
+    # Reuse existing connection if it's still valid
+    if cached is not None:
+        try:
+            cached.execute("SELECT 1")
+            logger.debug(f"[DB_CONNECT] iOS: reusing thread-local connection for {db_path}")
+            return cached
+        except Exception:
+            logger.debug("[DB_CONNECT] iOS: cached connection invalid, creating new one")
+            try:
+                cached.close()
+            except Exception:
+                pass
+
+    logger.debug(f"[DB_CONNECT] iOS: creating new thread-local connection for {db_path}")
     try:
-        logger.debug(f"[DB_CONNECT] Calling sqlite3.connect({db_path})...")
         conn = sqlite3.connect(
             db_path,
             check_same_thread=False,
@@ -647,7 +674,8 @@ def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
             isolation_level=None,  # Autocommit mode - avoids transaction state issues
             timeout=30.0,  # Longer timeout for iOS
         )
-        logger.debug(f"[DB_CONNECT] sqlite3.connect succeeded, conn={conn}")
+        setattr(_ios_thread_local, cache_attr, conn)
+        logger.debug(f"[DB_CONNECT] iOS: thread-local connection created and cached")
         return conn
     except Exception as e:
         logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
@@ -733,11 +761,11 @@ def get_db_connection(
     logger.debug("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
 
-    # Wrap iOS connection before executing PRAGMAs
-    if is_ios:
-        logger.debug("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
-        conn = IOSSerializedConnection(conn)  # type: ignore[assignment]
-        logger.debug("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
+    # iOS: thread-local connections mean each thread owns its handle.
+    # No need for IOSSerializedConnection wrapper — it was needed when connections
+    # were shared across threads, but thread-local caching fixes the root cause.
+    # The wrapper's global lock actually makes things worse by serializing independent
+    # threads and can cause the main thread to block on DB operations from other threads.
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
     _execute_pragmas(conn, adapter, pragma_statements)

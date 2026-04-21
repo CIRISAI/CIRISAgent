@@ -392,11 +392,22 @@ class SecretsStore:
 
         Returns:
             Decrypted secret value or None if decryption fails
+
+        Raises:
+            RuntimeError: If secret was encrypted with v1.6.0+ native encryption
+                         but current CIRISVerify binary doesn't support it.
         """
         try:
             return self.encryption.decrypt_secret(
-                secret_record.encrypted_value, secret_record.salt, secret_record.nonce
+                secret_record.encrypted_value,
+                secret_record.salt,
+                secret_record.nonce,
+                encryption_key_ref=secret_record.encryption_key_ref,
             )
+        except RuntimeError:
+            # Re-raise RuntimeError for encryption method mismatch
+            # This gives a clear error about CIRISVerify version incompatibility
+            raise
         except Exception as e:  # pragma: no cover - error path
             logger.error(f"Failed to decrypt secret {secret_record.secret_uuid}: {type(e).__name__}")
             return None

@@ -304,7 +304,13 @@ class SecretsEncryption:
         logger.debug(f"Encrypted secret of length {len(value)} characters")
         return encrypted_value, salt, nonce
 
-    def decrypt_secret(self, encrypted_value: bytes, salt: bytes, nonce: bytes) -> str:
+    def decrypt_secret(
+        self,
+        encrypted_value: bytes,
+        salt: bytes,
+        nonce: bytes,
+        encryption_key_ref: Optional[str] = None,
+    ) -> str:
         """
         Decrypt a secret value using AES-256-GCM
 
@@ -315,18 +321,39 @@ class SecretsEncryption:
             encrypted_value: The encrypted secret data
             salt: The salt used for key derivation
             nonce: The nonce used for encryption
+            encryption_key_ref: Optional key reference to validate compatibility.
+                               If "hardware_v1" but v1.6.0 native encryption is unavailable,
+                               raises an error instead of silently failing.
 
         Returns:
             The decrypted secret string
 
         Raises:
             InvalidSignature: If decryption fails (wrong key, corrupted data, etc.)
+            RuntimeError: If encryption_key_ref indicates v1.6.0 native encryption
+                         but the current CIRISVerify binary doesn't support it.
         """
+        # Check for encryption method mismatch (v1.6.0 secret on v1.5.x binary)
+        has_native_encryption = False
+        if self._hardware_available and self._verifier is not None:
+            try:
+                has_native_encryption = self._verifier.has_encryption_support()
+            except (AttributeError, NotImplementedError):
+                has_native_encryption = False
+
+        if encryption_key_ref == "hardware_v1" and not has_native_encryption:
+            # Secret was encrypted with v1.6.0 native encryption but we don't have it
+            raise RuntimeError(
+                f"Secret was encrypted with CIRISVerify v1.6.0+ native encryption "
+                f"(encryption_key_ref={encryption_key_ref}) but current binary does not "
+                f"support native encryption. Upgrade CIRISVerify to v1.6.0 or later."
+            )
+
         # Try native hardware decryption first (v1.6.0+)
         if self.key_storage_mode == "hardware" and self._hardware_available and self._verifier is not None:
             try:
                 # Check if native encryption is available
-                if self._verifier.has_encryption_support():
+                if has_native_encryption:
                     # Reconstruct the ciphertext format: nonce || ciphertext || tag
                     ciphertext_with_nonce = nonce + encrypted_value
                     decrypted_bytes: bytes = self._verifier.decrypt_with_named_key(

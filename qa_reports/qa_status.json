@@ -107,13 +107,22 @@
       "status": "passing",
       "duration_seconds": 23.53,
       "context": null
+    },
+    "secrets_encryption": {
+      "last_run": "2026-04-21T15:31:04.381452+00:00",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 0.66,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 12,
-    "passing": 12,
+    "total_modules": 13,
+    "passing": 13,
     "failing": 0,
     "not_run": 0
   },
-  "last_updated": "2026-04-20T23:26:50.851154+00:00"
+  "last_updated": "2026-04-21T15:31:04.381473+00:00"
 }

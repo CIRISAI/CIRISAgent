@@ -23,11 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.platform.LocalUriHandler
@@ -116,7 +118,7 @@ fun TrustPage(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_trust_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -145,7 +147,7 @@ fun TrustPage(
                         },
                         enabled = !loading
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(CIRISIcons.refresh, contentDescription = "Refresh")
                     }
                 }
             )
@@ -326,8 +328,8 @@ private fun TrustSummaryCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Shield with level
-            Text(text = "\u25C6", fontSize = 48.sp)  // ◆ trust diamond
+            // Shield with level - trust diamond icon
+            Icon(CIRISIcons.diamond, contentDescription = null, modifier = Modifier.size(48.dp), tint = textColor)
 
             Text(
                 text = localizedString("mobile.trust_level").replace("{level}", level.toString()),
@@ -415,10 +417,11 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (expanded) "▼" else "▶",
-                fontSize = 10.sp,
-                color = textColor.copy(alpha = 0.6f)
+            Icon(
+                if (expanded) CIRISIcons.arrowDown else CIRISIcons.arrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(10.dp),
+                tint = textColor.copy(alpha = 0.6f)
             )
             Text(
                 text = localizedString("mobile.trust_level_debug"),
@@ -574,7 +577,7 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
             AttestationLevel(
                 level = 2,
                 title = "Environment",
-                description = "Platform: ${status.platformOs?.uppercase() ?: "Unknown"} • HW: ${status.hardwareType?.replace("_", " ") ?: "Unknown"}",
+                description = "Platform: ${status.platformOs?.uppercase() ?: "Unknown"} -HW: ${status.hardwareType?.replace("_", " ") ?: "Unknown"}",
                 passed = status.envOk,
                 previousFailed = !status.binaryOk
             )
@@ -1183,10 +1186,11 @@ private fun ExpandableTierCard(
                     }
                 }
                 // Expand icon
-                Text(
-                    text = if (expanded) "▼" else "▶",
-                    fontSize = 12.sp,
-                    color = Color(0xFF9CA3AF)
+                Icon(
+                    if (expanded) CIRISIcons.arrowDown else CIRISIcons.arrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = Color(0xFF9CA3AF)
                 )
             }
 
@@ -1212,7 +1216,7 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
     val passed = listOf(binaryOk, funcOk).count { it }
     val isIos = status.targetTriple?.contains("apple-ios") == true
     val binLabel = if (isIos) "__TEXT" else "Binary"
-    return "$passed/2 checks • $binLabel: ${if (binaryOk) "✓" else "○"} Func: ${if (funcOk) "✓" else "○"}"
+    return "$passed/2 checks -$binLabel: ${if (binaryOk) "✓" else "○"} Func: ${if (funcOk) "✓" else "○"}"
 }
 
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
@@ -1243,7 +1247,7 @@ private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: Device
         isAndroid -> "Play"
         else -> "Device"
     }
-    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
+    return "$passed/2 checks -HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
 }
 
 private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
@@ -1255,7 +1259,7 @@ private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
         agreement >= 2 -> "◐"  // Partial (2/3 is still passing)
         else -> "✗"  // Failing (0-1/3)
     }
-    return "$agreement/$sources sources • $icon"
+    return "$agreement/$sources sources -$icon"
 }
 
 private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
@@ -1270,7 +1274,7 @@ private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
         val expected = totalManifest - mobileExcluded
 
         return if (failed > 0) {
-            "$verified/$expected • $failed failed"
+            "$verified/$expected -$failed failed"
         } else {
             "$verified/$expected files"
         }
@@ -1298,7 +1302,7 @@ private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
     val failed = status.filesFailed ?: 0
 
     return if (failed > 0) {
-        "$totalVerified/$totalExpected • $failed failed"
+        "$totalVerified/$totalExpected -$failed failed"
     } else {
         "$totalVerified/$totalExpected files"
     }
@@ -1308,7 +1312,7 @@ private fun buildL5ChecksInfo(status: VerifyStatusResponse): String {
     val keyOk = status.registryKeyStatus?.contains("active", ignoreCase = true) == true
     val auditOk = status.auditOk
     val passed = listOf(keyOk, auditOk).count { it }
-    return "$passed/2 checks • Key: ${if (keyOk) "✓" else "○"} Audit: ${if (auditOk) "✓" else "○"}"
+    return "$passed/2 checks -Key: ${if (keyOk) "✓" else "○"} Audit: ${if (auditOk) "✓" else "○"}"
 }
 
 // L1 Content: Binary & Self-Verification
@@ -1329,11 +1333,12 @@ private fun L1Content(status: VerifyStatusResponse) {
     val hasHardwareStorage = status.hardwareBacked &&
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
     val isSoftwareOnly = !hasHardwareStorage
-    val keyIcon = when {
-        isSoftwareOnly -> "\u26A0"  // Warning for software-only
+    val keyIconText = when {
+        isSoftwareOnly -> null  // Use iconVector instead
         status.hardwareBacked -> "[K]"  // Hardware-backed
         else -> "[k]"  // Unknown/software
     }
+    val keyIconVector = if (isSoftwareOnly) CIRISIcons.warning else null
     val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
     val displayValue = if (isSoftwareOnly) {
         "$storageMode (Software-Only)"
@@ -1341,7 +1346,8 @@ private fun L1Content(status: VerifyStatusResponse) {
         storageMode
     }
     DetailRow(
-        icon = keyIcon,
+        icon = keyIconText,
+        iconVector = keyIconVector,
         label = "Identity Key (Ed25519)",
         value = displayValue,
         ok = !isSoftwareOnly,
@@ -1393,7 +1399,7 @@ private fun L1Content(status: VerifyStatusResponse) {
         )
         failedFuncs.take(5).forEach { func ->
             Text(
-                text = "  • $func",
+                text = "  -$func",
                 fontSize = 9.sp,
                 color = Color(0xFFEF4444),
                 modifier = Modifier.padding(start = 12.dp)
@@ -1453,7 +1459,7 @@ private fun L2Content(
     DetailRow(
         icon = if (isTpm) "[PC]" else "[M]",
         label = "Platform",
-        value = "${status.platformOs ?: "?"} • ${status.platformArch ?: "?"}",
+        value = "${status.platformOs ?: "?"} -${status.platformArch ?: "?"}",
         ok = true
     )
 
@@ -1500,9 +1506,9 @@ private fun L2Content(
             pending = status.hardwareBacked  // Yellow: quote exists but not remotely verified
         )
         if (status.hardwareBacked) {
-            DetailSubtext("• AK-signed PCR quote generated")
-            DetailSubtext("• EK certificate retrieved")
-            DetailSubtext("• Remote verification: not implemented")
+            DetailSubtext("-AK-signed PCR quote generated")
+            DetailSubtext("-EK certificate retrieved")
+            DetailSubtext("-Remote verification: not implemented")
         }
     } else if (isMacPlatform) {
         // macOS: App Store distribution provides attestation via codesigning + notarization
@@ -1514,8 +1520,8 @@ private fun L2Content(
             pending = !isAppStoreDistributed
         )
         if (!isAppStoreDistributed) {
-            DetailSubtext("• SE hardware available but entitlements require App Store distribution")
-            DetailSubtext("• Install from Mac App Store for full L2 attestation")
+            DetailSubtext("-SE hardware available but entitlements require App Store distribution")
+            DetailSubtext("-Install from Mac App Store for full L2 attestation")
         }
     } else {
         // Mobile attestation: App Attest (iOS) / Play Integrity (Android)
@@ -1530,9 +1536,9 @@ private fun L2Content(
                         value = if (deviceResult.verified) deviceResult.verdict else "Failed",
                         ok = deviceResult.verified
                     )
-                    if (deviceResult.meetsStrongIntegrity) DetailSubtext("• Strong integrity")
-                    if (deviceResult.meetsDeviceIntegrity) DetailSubtext("• Device integrity")
-                    if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
+                    if (deviceResult.meetsStrongIntegrity) DetailSubtext("-Strong integrity")
+                    if (deviceResult.meetsDeviceIntegrity) DetailSubtext("-Device integrity")
+                    if (deviceResult.meetsBasicIntegrity) DetailSubtext("-Basic integrity")
                 }
                 is DeviceAttestationResult.Error -> {
                     DetailRow(label = attestLabel, value = "Error", ok = false)
@@ -1968,7 +1974,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             if (diskAgentMismatchExpanded) {
                 diskAgentMismatch.keys.take(20).forEach { path ->
                     Text(
-                        text = "    • $path",
+                        text = "    -$path",
                         fontSize = 10.sp,
                         color = Color(0xFFEF4444),
                         fontFamily = FontFamily.Monospace
@@ -2006,7 +2012,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             if (registryMismatchExpanded) {
                 registryMismatch.keys.take(20).forEach { path ->
                     Text(
-                        text = "    • $path",
+                        text = "    -$path",
                         fontSize = 10.sp,
                         color = Color(0xFFEF4444),
                         fontFamily = FontFamily.Monospace
@@ -2097,7 +2103,7 @@ private fun CollapsibleFileSection(
     if (expanded && files.isNotEmpty()) {
         files.forEach { file ->
             Text(
-                text = "  • $file",
+                text = "  -$file",
                 fontSize = 9.sp,
                 color = fileColor,
                 modifier = Modifier.padding(start = 20.dp)
@@ -2214,7 +2220,8 @@ private fun DetailRow(
     value: String,
     ok: Boolean,
     pending: Boolean = false,
-    icon: String? = null
+    icon: String? = null,
+    iconVector: ImageVector? = null
 ) {
     val color = when {
         ok -> SemanticColors.Default.success
@@ -2222,9 +2229,9 @@ private fun DetailRow(
         else -> SemanticColors.Default.error
     }
     val statusIcon = when {
-        ok -> "✓"
-        pending -> "○"
-        else -> "✗"
+        ok -> CIRISIcons.check
+        pending -> CIRISIcons.circle
+        else -> CIRISIcons.xmark
     }
 
     Row(
@@ -2233,11 +2240,14 @@ private fun DetailRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (icon != null) Text(text = icon, fontSize = 12.sp)
+            when {
+                iconVector != null -> Icon(iconVector, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4B5563))
+                icon != null -> Text(text = icon, fontSize = 12.sp, color = Color(0xFF4B5563))
+            }
             Text(text = label, fontSize = 12.sp, color = Color(0xFF4B5563))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(text = statusIcon, fontSize = 11.sp, color = color)
+            Icon(statusIcon, contentDescription = null, modifier = Modifier.size(11.dp), tint = color)
             Text(
                 text = value,
                 fontSize = 11.sp,
@@ -2293,7 +2303,7 @@ private fun ExplanationDropdown(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "\u2139", fontSize = 12.sp)
+                Icon(CIRISIcons.info, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF0369A1))
                 Text(
                     text = title,
                     fontSize = 11.sp,
@@ -2389,13 +2399,13 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                 badge = "Local"
             ) {
                 // Identity Key
-                val keyIcon = if (status.hardwareBacked) "🔐" else "🔑"
+                val keyIconVector = if (status.hardwareBacked) CIRISIcons.keySecure else CIRISIcons.key
                 val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
                 CheckRow(
                     label = "Identity Key",
                     value = storageMode,
                     ok = true,
-                    icon = keyIcon,
+                    iconVector = keyIconVector,
                     detail = status.ed25519Fingerprint?.let { "Fingerprint: ${it.take(16)}..." }
                 )
 
@@ -2405,7 +2415,7 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                     label = "Registry Target",
                     value = targetTriple,
                     ok = true,
-                    icon = "\u25A0"  // ■ package
+                    iconVector = CIRISIcons.pkg  // package icon
                 )
 
                 // Binary Self-Check
@@ -2549,6 +2559,7 @@ private fun CheckRow(
     ok: Boolean,
     pending: Boolean = false,
     icon: String? = null,
+    iconVector: ImageVector? = null,
     detail: String? = null
 ) {
     val color = when {
@@ -2557,9 +2568,9 @@ private fun CheckRow(
         else -> SemanticColors.Default.error
     }
     val statusIcon = when {
-        ok -> "✓"
-        pending -> "○"
-        else -> "✗"
+        ok -> CIRISIcons.check
+        pending -> CIRISIcons.circle
+        else -> CIRISIcons.xmark
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -2569,8 +2580,9 @@ private fun CheckRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (icon != null) {
-                    Text(text = icon, fontSize = 12.sp)
+                when {
+                    iconVector != null -> Icon(iconVector, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4B5563))
+                    icon != null -> Text(text = icon, fontSize = 12.sp, color = Color(0xFF4B5563))
                 }
                 Text(
                     text = label,
@@ -2582,7 +2594,7 @@ private fun CheckRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = statusIcon, fontSize = 11.sp, color = color)
+                Icon(statusIcon, contentDescription = null, modifier = Modifier.size(11.dp), tint = color)
                 Text(
                     text = value,
                     fontSize = 11.sp,
@@ -2623,9 +2635,9 @@ private fun DiagnosticsLogCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "\u25B6", fontSize = 16.sp)
+                    Icon(if (expanded) CIRISIcons.arrowDown else CIRISIcons.play, contentDescription = null, modifier = Modifier.size(16.dp))
                     Text(
-                        text = if (expanded) "▼ Verify Log" else "▶ Verify Log",
+                        text = "Verify Log",
                         fontWeight = FontWeight.Medium
                     )
                 }

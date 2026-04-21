@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -173,7 +174,7 @@ fun SettingsScreen(
                         modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.settings_back")
                         )
                     }
@@ -184,7 +185,7 @@ fun SettingsScreen(
                         modifier = Modifier.testableClickable("btn_refresh") { viewModel.refresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.settings_refresh")
                         )
                     }
@@ -283,7 +284,7 @@ fun SettingsScreen(
                             )
                         }
                         Icon(
-                            imageVector = Icons.Filled.ArrowForward,
+                            imageVector = CIRISIcons.arrowForward,
                             contentDescription = localizedString("mobile.settings_llm_goto"),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -341,7 +342,7 @@ fun SettingsScreen(
                             )
                         }
                         Icon(
-                            imageVector = Icons.Filled.ArrowForward,
+                            imageVector = CIRISIcons.arrowForward,
                             contentDescription = "Open visualization settings",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -483,7 +484,7 @@ fun SettingsScreen(
                             )
                         }
                         Icon(
-                            imageVector = Icons.Filled.ArrowForward,
+                            imageVector = CIRISIcons.arrowForward,
                             contentDescription = localizedString("mobile.settings_data_management_goto"),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -794,7 +795,7 @@ private fun TrustSecurityCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("\u25C6", fontSize = 20.sp)  // ◆ trust
+                    Icon(CIRISIcons.diamond, contentDescription = null, modifier = Modifier.size(20.dp), tint = TrustColors.EmeraldDark)  // trust diamond
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = localizedString("mobile.settings_verify_active"),
@@ -1048,7 +1049,7 @@ private fun TrustSecurityCard(
                                     append(" (${status.platformArch})")
                                 }
                                 // Add HW security info
-                                append(" • HW: ")
+                                append(" - HW: ")
                                 append(status.hardwareType?.replace("_", " ") ?: localizedString("mobile.settings_unknown"))
                             }
                             Text(
@@ -1860,7 +1861,7 @@ private fun LocationSection(viewModel: SettingsViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Check,
+                        imageVector = CIRISIcons.check,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
@@ -1898,7 +1899,7 @@ private fun LocationSection(viewModel: SettingsViewModel) {
                         } else if (locationSearchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.clearLocationSearch() }) {
                                 Icon(
-                                    imageVector = Icons.Filled.ArrowBack,
+                                    imageVector = CIRISIcons.arrowBack,
                                     contentDescription = "Clear"
                                 )
                             }
@@ -2039,7 +2040,7 @@ private fun PreferencesSection() {
                             leadingIcon = {
                                 if (currentLanguage.code == language.code) {
                                     Icon(
-                                        imageVector = Icons.Filled.Check,
+                                        imageVector = CIRISIcons.check,
                                         contentDescription = localizedString("mobile.settings_selected"),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
@@ -2117,7 +2118,7 @@ private fun PreferencesSection() {
                             leadingIcon = {
                                 if (currentCurrency.code == curr.code) {
                                     Icon(
-                                        imageVector = Icons.Filled.Check,
+                                        imageVector = CIRISIcons.check,
                                         contentDescription = localizedString("mobile.settings_selected"),
                                         tint = MaterialTheme.colorScheme.primary
                                     )

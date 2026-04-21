@@ -59,6 +59,18 @@ object CIRISColors {
     val BusTool = Color(0xFFC96A38)             // Burnt rust — industrial, not Google orange
     val BusWise = Color(0xFFB08A3E)             // Vintage brass — wisdom patina, not Google yellow
     val BusRuntime = Color(0xFFE14B7F)          // Magenta-rose — alarm without Google red
+
+    // ---------------------------------------------------------------------
+    // Semantic status colors (from icon redesign spec).
+    // ---------------------------------------------------------------------
+    //
+    // These replace the old SuccessGreen/WarningYellow/ErrorRed with values
+    // from the unified icon design spec. They're designed to sit comfortably
+    // alongside the bus palette and read clearly at small sizes.
+    val StatusOk = Color(0xFF4ADE80)            // Status green — success
+    val StatusWarn = Color(0xFFFBBF24)          // Status amber — warning
+    val StatusErr = Color(0xFFF87171)           // Status red — error
+    val StatusInfo = Color(0xFF60A5FA)          // Status blue — info
 }
 
 /**

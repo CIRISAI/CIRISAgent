@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,7 +63,7 @@ fun AuditScreen(
                         modifier = Modifier.testableClickable("btn_audit_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -81,7 +82,7 @@ fun AuditScreen(
                         modifier = Modifier.testableClickable("btn_audit_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -403,7 +404,7 @@ private fun AuditEntryCard(
 
                 // Expand/collapse icon
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (isExpanded) localizedString("interact_close") else localizedString("setup_details_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

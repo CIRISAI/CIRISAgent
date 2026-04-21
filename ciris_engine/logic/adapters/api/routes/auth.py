@@ -32,6 +32,8 @@ from ciris_engine.schemas.api.auth import (
     AuthContext,
     LoginRequest,
     LoginResponse,
+    ServiceTokenRevokeRequest,
+    ServiceTokenRevokeResponse,
     TokenRefreshRequest,
     UserInfo,
     UserRole,
@@ -2099,6 +2101,62 @@ async def delete_api_key(
     logger.info(f"User {auth.user_id} deleted API key {key_id}")
 
     return None
+
+
+# ========== Service Token Management Endpoints ==========
+
+
+@router.post("/auth/service-token/revoke")
+async def revoke_service_token(
+    request: Request,
+    revoke_request: "ServiceTokenRevokeRequest",
+    auth: AuthDep,
+    auth_service: AuthServiceDep,
+) -> "ServiceTokenRevokeResponse":
+    """
+    Revoke a service token.
+
+    This endpoint allows SYSTEM_ADMIN users to revoke service tokens for security purposes.
+    Once revoked, the token cannot be used for authentication.
+
+    Requires SYSTEM_ADMIN role for security reasons.
+    """
+    from ciris_engine.schemas.api.auth import ServiceTokenRevokeRequest, ServiceTokenRevokeResponse
+
+    # Check permissions - only SYSTEM_ADMIN can revoke service tokens
+    if auth.role != UserRole.SYSTEM_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SYSTEM_ADMIN users can revoke service tokens",
+        )
+
+    # Revoke the token
+    success = await auth_service.revoke_service_token(
+        token=revoke_request.token,
+        reason=revoke_request.reason,
+        revoked_by=auth.user_id,
+    )
+
+    # Generate partial hash for response
+    import hashlib
+
+    token_hash = hashlib.sha256(revoke_request.token.encode("utf-8")).hexdigest()[:16] + "..."
+
+    if success:
+        logger.info(
+            f"[AUTH] SYSTEM_ADMIN {auth.user_id} revoked service token {token_hash}: {revoke_request.reason}"
+        )
+        return ServiceTokenRevokeResponse(
+            success=True,
+            message="Service token revoked successfully",
+            token_hash=token_hash,
+        )
+    else:
+        return ServiceTokenRevokeResponse(
+            success=False,
+            message="Service token was already revoked",
+            token_hash=token_hash,
+        )
 
 
 # ========== Attestation Helpers ==========

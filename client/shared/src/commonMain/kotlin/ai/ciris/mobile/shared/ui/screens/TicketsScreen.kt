@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,7 +86,7 @@ fun TicketsScreen(
                         modifier = Modifier.testableClickable("btn_tickets_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -106,7 +107,7 @@ fun TicketsScreen(
                         modifier = Modifier.testableClickable("btn_tickets_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -437,7 +438,7 @@ private fun TicketCard(
                 }
                 // Expand/collapse icon
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (isExpanded) localizedString("mobile.tickets_collapse") else localizedString("mobile.tickets_expand"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -726,7 +727,7 @@ private fun SOPCard(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Add,
+                    imageVector = CIRISIcons.add,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )

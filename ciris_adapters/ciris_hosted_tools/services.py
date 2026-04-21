@@ -175,13 +175,23 @@ class CIRISHostedToolService:
             try:
                 from pathlib import Path
 
+                from ciris_engine.logic.utils.path_resolution import validate_path_safety
+
                 # Try common .env locations - Android path first
                 env_paths = [
                     Path("/data/data/ai.ciris.mobile/files/ciris/.env"),  # Android
-                    Path(os.environ.get("CIRIS_HOME", ".")) / ".env",
                     Path.home() / ".env",
                     Path(".env"),
                 ]
+
+                # Add CIRIS_HOME if set and valid
+                ciris_home = os.environ.get("CIRIS_HOME")
+                if ciris_home:
+                    try:
+                        validated_home = validate_path_safety(Path(ciris_home).expanduser())
+                        env_paths.insert(1, validated_home / ".env")
+                    except ValueError as e:
+                        logger.warning(f"[HOSTED_TOOLS] Invalid CIRIS_HOME, skipping: {e}")
                 for env_path in env_paths:
                     logger.info(f"[HOSTED_TOOLS] Checking {env_path} exists={env_path.exists()}")
                     if env_path.exists():

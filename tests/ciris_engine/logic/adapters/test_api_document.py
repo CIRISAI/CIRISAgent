@@ -528,3 +528,173 @@ class TestClearTaskImages:
 
             result = clear_task_images("nonexistent", "default", mock_time)
             assert result is False
+
+
+class TestSSRFProtection:
+    """Tests for SSRF protection in document downloads."""
+
+    def test_validate_url_blocks_localhost(self):
+        """Test that localhost URLs are blocked."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        is_valid, _ = validate_url_for_ssrf("http://localhost/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://127.0.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://[::1]/file.pdf")
+        assert is_valid is False
+
+    def test_validate_url_blocks_cloud_metadata(self):
+        """Test that cloud metadata endpoints are blocked."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        # AWS/Azure metadata
+        is_valid, _ = validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/")
+        assert is_valid is False
+        # GCP metadata
+        is_valid, _ = validate_url_for_ssrf("http://metadata.google.internal/computeMetadata/v1/")
+        assert is_valid is False
+        # Alibaba Cloud metadata
+        is_valid, _ = validate_url_for_ssrf("http://100.100.100.200/latest/meta-data/")
+        assert is_valid is False
+
+    def test_validate_url_blocks_file_scheme(self):
+        """Test that file:// URLs are blocked."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        is_valid, _ = validate_url_for_ssrf("file:///etc/passwd")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("file://localhost/etc/passwd")
+        assert is_valid is False
+
+    def test_validate_url_blocks_private_ips(self):
+        """Test that private IP ranges are blocked."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        # 10.x.x.x
+        is_valid, _ = validate_url_for_ssrf("http://10.0.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://10.255.255.255/file.pdf")
+        assert is_valid is False
+
+        # 172.16-31.x.x
+        is_valid, _ = validate_url_for_ssrf("http://172.16.0.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://172.31.255.255/file.pdf")
+        assert is_valid is False
+
+        # 192.168.x.x
+        is_valid, _ = validate_url_for_ssrf("http://192.168.1.1/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("http://192.168.255.255/file.pdf")
+        assert is_valid is False
+
+    def test_validate_url_blocks_link_local(self):
+        """Test that link-local addresses are blocked."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        # IPv4 link-local
+        is_valid, _ = validate_url_for_ssrf("http://169.254.1.1/file.pdf")
+        assert is_valid is False
+        # IPv6 link-local
+        is_valid, _ = validate_url_for_ssrf("http://[fe80::1]/file.pdf")
+        assert is_valid is False
+
+    def test_validate_url_allows_public_urls(self):
+        """Test that public URLs are allowed."""
+        from unittest.mock import patch
+
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        # Mock DNS resolution to return public IPs
+        def mock_getaddrinfo(hostname, port, family=None):
+            # Return a public IP (Google's DNS)
+            return [
+                (2, 1, 6, '', ('8.8.8.8', 0)),
+            ]
+
+        with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
+            is_valid, resolved_ip = validate_url_for_ssrf("https://example.com/file.pdf")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
+            is_valid, resolved_ip = validate_url_for_ssrf("https://www.google.com/doc.pdf")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
+            is_valid, resolved_ip = validate_url_for_ssrf("https://cdn.example.com/files/document.docx")
+            assert is_valid is True
+            assert resolved_ip == '8.8.8.8'
+
+    def test_validate_url_requires_http_or_https(self):
+        """Test that only http/https schemes are allowed."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        is_valid, _ = validate_url_for_ssrf("ftp://example.com/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("gopher://example.com/file.pdf")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("data:text/plain,hello")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("javascript:alert(1)")
+        assert is_valid is False
+
+    def test_validate_url_handles_missing_hostname(self):
+        """Test handling of URLs without hostname."""
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        is_valid, _ = validate_url_for_ssrf("http://")
+        assert is_valid is False
+        is_valid, _ = validate_url_for_ssrf("https://")
+        assert is_valid is False
+
+    def test_validate_url_handles_dns_failure(self):
+        """Test handling of DNS resolution failure."""
+        from unittest.mock import patch
+
+        from ciris_engine.logic.adapters.api.api_document import validate_url_for_ssrf
+
+        with patch("socket.getaddrinfo", side_effect=OSError("DNS lookup failed")):
+            # DNS failure should be treated as suspicious and blocked
+            is_valid, _ = validate_url_for_ssrf("http://this-domain-does-not-exist-12345.com/file.pdf")
+            assert is_valid is False
+
+    @pytest.mark.asyncio
+    async def test_download_document_blocks_ssrf(self):
+        """Test that _download_document blocks SSRF attempts."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            mock_parser.return_value = mock_instance
+
+            helper = APIDocumentHelper()
+
+            # Test various SSRF attempts
+            ssrf_urls = [
+                "http://localhost/file.pdf",
+                "http://127.0.0.1/file.pdf",
+                "http://169.254.169.254/latest/meta-data/",
+                "http://metadata.google.internal/",
+                "http://10.0.0.1/file.pdf",
+                "http://192.168.1.1/file.pdf",
+                "file:///etc/passwd",
+            ]
+
+            for url in ssrf_urls:
+                result = await helper._download_document(url)
+                assert result is None, f"SSRF URL should be blocked: {url}"
+
+    @pytest.mark.asyncio
+    async def test_process_url_document_blocks_ssrf(self):
+        """Test that process_url_document blocks SSRF attempts."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            mock_parser.return_value = mock_instance
+
+            helper = APIDocumentHelper()
+
+            # Test SSRF blocking through the full URL processing flow
+            result = await helper.process_url_document("http://127.0.0.1/evil.pdf", "application/pdf")
+            assert result is None
+
+            result = await helper.process_url_document("http://169.254.169.254/", "application/pdf")
+            assert result is None

@@ -90,6 +90,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ExitToApp
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -2968,7 +2969,7 @@ private fun CIRISTopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Build,
+                        imageVector = CIRISIcons.build,
                         contentDescription = "Adapters & Tools",
                         tint = if (activeCategory == NavCategory.ADAPTERS) accentColor else contentColor
                     )
@@ -2986,19 +2987,19 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_adapters")) },
                         onClick = { activeCategory = NavCategory.NONE; onAdaptersClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        leadingIcon = { Icon(CIRISIcons.build, null) },
                         modifier = Modifier.testableClickable("menu_adapters") { activeCategory = NavCategory.NONE; onAdaptersClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_tools")) },
                         onClick = { activeCategory = NavCategory.NONE; onToolsClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        leadingIcon = { Icon(CIRISIcons.build, null) },
                         modifier = Modifier.testableClickable("menu_tools") { activeCategory = NavCategory.NONE; onToolsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text("Environment Info") },
                         onClick = { activeCategory = NavCategory.NONE; onEnvironmentInfoClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        leadingIcon = { Icon(CIRISIcons.info, null) },
                         modifier = Modifier.testableClickable("menu_environment_info") { activeCategory = NavCategory.NONE; onEnvironmentInfoClick() }
                     )
                 }
@@ -3013,7 +3014,7 @@ private fun CIRISTopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Settings,
+                        imageVector = CIRISIcons.settings,
                         contentDescription = "Config & Credits",
                         tint = if (activeCategory == NavCategory.CONFIG) accentColor else contentColor
                     )
@@ -3043,31 +3044,31 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_app_settings")) },
                         onClick = { activeCategory = NavCategory.NONE; onSettingsClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        leadingIcon = { Icon(CIRISIcons.settings, null) },
                         modifier = Modifier.testableClickable("menu_settings") { activeCategory = NavCategory.NONE; onSettingsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_llm_settings")) },
                         onClick = { activeCategory = NavCategory.NONE; onLLMSettingsClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        leadingIcon = { Icon(CIRISIcons.settings, null) },
                         modifier = Modifier.testableClickable("menu_llm_settings") { activeCategory = NavCategory.NONE; onLLMSettingsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_agent_config")) },
                         onClick = { activeCategory = NavCategory.NONE; onConfigClick() },
-                        leadingIcon = { Icon(Icons.Default.Settings, null) },
+                        leadingIcon = { Icon(CIRISIcons.settings, null) },
                         modifier = Modifier.testableClickable("menu_config") { activeCategory = NavCategory.NONE; onConfigClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_buy_credits")) },
                         onClick = { activeCategory = NavCategory.NONE; onBillingClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        leadingIcon = { Icon(CIRISIcons.star, null) },
                         modifier = Modifier.testableClickable("menu_billing") { activeCategory = NavCategory.NONE; onBillingClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_help")) },
                         onClick = { activeCategory = NavCategory.NONE; onHelpClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        leadingIcon = { Icon(CIRISIcons.info, null) },
                         modifier = Modifier.testableClickable("menu_help") { activeCategory = NavCategory.NONE; onHelpClick() }
                     )
                 }
@@ -3082,7 +3083,7 @@ private fun CIRISTopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Info,
+                        imageVector = CIRISIcons.info,
                         contentDescription = "Data & Privacy",
                         tint = if (activeCategory == NavCategory.DATA) accentColor else contentColor
                     )
@@ -3100,31 +3101,31 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_memory")) },
                         onClick = { activeCategory = NavCategory.NONE; onMemoryClick() },
-                        leadingIcon = { Icon(Icons.Default.Star, null) },
+                        leadingIcon = { Icon(CIRISIcons.star, null) },
                         modifier = Modifier.testableClickable("menu_memory") { activeCategory = NavCategory.NONE; onMemoryClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_sessions")) },
                         onClick = { activeCategory = NavCategory.NONE; onSessionsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        leadingIcon = { Icon(CIRISIcons.log, null) },
                         modifier = Modifier.testableClickable("menu_sessions") { activeCategory = NavCategory.NONE; onSessionsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_consent")) },
                         onClick = { activeCategory = NavCategory.NONE; onConsentClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        leadingIcon = { Icon(CIRISIcons.check, null) },
                         modifier = Modifier.testableClickable("menu_consent") { activeCategory = NavCategory.NONE; onConsentClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_audit_trail")) },
                         onClick = { activeCategory = NavCategory.NONE; onAuditClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        leadingIcon = { Icon(CIRISIcons.log, null) },
                         modifier = Modifier.testableClickable("menu_audit") { activeCategory = NavCategory.NONE; onAuditClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_data_management")) },
                         onClick = { activeCategory = NavCategory.NONE; onDataManagementClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        leadingIcon = { Icon(CIRISIcons.info, null) },
                         modifier = Modifier.testableClickable("menu_data_management") { activeCategory = NavCategory.NONE; onDataManagementClick() }
                     )
                 }
@@ -3139,7 +3140,7 @@ private fun CIRISTopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Person,
+                        imageVector = CIRISIcons.person,
                         contentDescription = "Account",
                         tint = if (activeCategory == NavCategory.GOVERNANCE) accentColor else contentColor
                     )
@@ -3157,20 +3158,20 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_human_deferrals")) },
                         onClick = { activeCategory = NavCategory.NONE; onWiseAuthorityClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        leadingIcon = { Icon(CIRISIcons.person, null) },
                         modifier = Modifier.testableClickable("menu_wise_authority") { activeCategory = NavCategory.NONE; onWiseAuthorityClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_users")) },
                         onClick = { activeCategory = NavCategory.NONE; onUsersClick() },
-                        leadingIcon = { Icon(Icons.Default.Person, null) },
+                        leadingIcon = { Icon(CIRISIcons.person, null) },
                         modifier = Modifier.testableClickable("menu_users") { activeCategory = NavCategory.NONE; onUsersClick() }
                     )
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.settings_logout")) },
                         onClick = { activeCategory = NavCategory.NONE; onLogoutClick() },
-                        leadingIcon = { Icon(Icons.Default.ExitToApp, null) },
+                        leadingIcon = { Icon(CIRISIcons.exit, null) },
                         modifier = Modifier.testableClickable("menu_logout") { activeCategory = NavCategory.NONE; onLogoutClick() }
                     )
                 }
@@ -3185,7 +3186,7 @@ private fun CIRISTopBar(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
+                        imageVector = CIRISIcons.moreVert,
                         contentDescription = "Advanced",
                         tint = if (activeCategory == NavCategory.ADVANCED) accentColor else contentColor
                     )
@@ -3203,43 +3204,43 @@ private fun CIRISTopBar(
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_telemetry")) },
                         onClick = { activeCategory = NavCategory.NONE; onTelemetryClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        leadingIcon = { Icon(CIRISIcons.info, null) },
                         modifier = Modifier.testableClickable("menu_telemetry") { activeCategory = NavCategory.NONE; onTelemetryClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_services")) },
                         onClick = { activeCategory = NavCategory.NONE; onServicesClick() },
-                        leadingIcon = { Icon(Icons.Default.Build, null) },
+                        leadingIcon = { Icon(CIRISIcons.build, null) },
                         modifier = Modifier.testableClickable("menu_services") { activeCategory = NavCategory.NONE; onServicesClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_logs")) },
                         onClick = { activeCategory = NavCategory.NONE; onLogsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        leadingIcon = { Icon(CIRISIcons.log, null) },
                         modifier = Modifier.testableClickable("menu_logs") { activeCategory = NavCategory.NONE; onLogsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_system")) },
                         onClick = { activeCategory = NavCategory.NONE; onSystemClick() },
-                        leadingIcon = { Icon(Icons.Default.Info, null) },
+                        leadingIcon = { Icon(CIRISIcons.info, null) },
                         modifier = Modifier.testableClickable("menu_system") { activeCategory = NavCategory.NONE; onSystemClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_runtime")) },
                         onClick = { activeCategory = NavCategory.NONE; onRuntimeClick() },
-                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) },
+                        leadingIcon = { Icon(CIRISIcons.play, null) },
                         modifier = Modifier.testableClickable("menu_runtime") { activeCategory = NavCategory.NONE; onRuntimeClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_tickets")) },
                         onClick = { activeCategory = NavCategory.NONE; onTicketsClick() },
-                        leadingIcon = { Icon(Icons.Default.List, null) },
+                        leadingIcon = { Icon(CIRISIcons.log, null) },
                         modifier = Modifier.testableClickable("menu_tickets") { activeCategory = NavCategory.NONE; onTicketsClick() }
                     )
                     DropdownMenuItem(
                         text = { Text(localizedString("mobile.nav_scheduler")) },
                         onClick = { activeCategory = NavCategory.NONE; onSchedulerClick() },
-                        leadingIcon = { Icon(Icons.Default.Check, null) },
+                        leadingIcon = { Icon(CIRISIcons.check, null) },
                         modifier = Modifier.testableClickable("menu_scheduler") { activeCategory = NavCategory.NONE; onSchedulerClick() }
                     )
                 }

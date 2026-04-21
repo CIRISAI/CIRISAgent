@@ -325,7 +325,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             raise RuntimeError("TimeService must be initialized before SecretsService")
 
         self.secrets_service = SecretsService(
-            db_path=secrets_db_path, time_service=self.time_service, master_key=master_key
+            db_path=secrets_db_path,
+            time_service=self.time_service,
+            master_key=master_key,
+            key_storage_mode=self.essential_config.security.secrets_key_storage_mode,
         )
         await self.secrets_service.start()
         self._services_started_count += 1

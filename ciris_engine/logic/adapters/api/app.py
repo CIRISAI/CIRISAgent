@@ -159,7 +159,14 @@ def _initialize_app_state(app: FastAPI, runtime: Any) -> None:
 
 
 def _mount_gui_assets(app: FastAPI) -> None:
-    """Mount GUI static assets or configure API-only mode."""
+    """Mount GUI static assets or configure API-only mode.
+
+    Priority order:
+    1. WASM app (wasm_static/) - for HA addon and web deployments
+    2. Android GUI (android_gui_static/) - for Android app
+    3. Next.js dashboard (gui_static/) - for standalone deployments
+    4. API-only mode - no GUI served
+    """
     from pathlib import Path
 
     from fastapi.staticfiles import StaticFiles
@@ -169,16 +176,38 @@ def _mount_gui_assets(app: FastAPI) -> None:
     package_root = Path(__file__).resolve().parent.parent.parent.parent
     android_gui_dir = package_root.parent / "android_gui_static"
     gui_static_dir = package_root / "gui_static"
+    wasm_static_dir = package_root / "wasm_static"
+
+    # Also check common Docker/HA addon locations
+    alt_wasm_dirs = [
+        Path("/app/wasm_static"),
+        Path("/app/ciris_engine/wasm_static"),
+        package_root.parent / "wasm_static",
+    ]
+
+    # Find WASM directory (priority for web/HA deployments)
+    wasm_dir = None
+    if wasm_static_dir.exists() and any(wasm_static_dir.iterdir()):
+        wasm_dir = wasm_static_dir
+    else:
+        for alt_dir in alt_wasm_dirs:
+            if alt_dir.exists() and any(alt_dir.iterdir()):
+                wasm_dir = alt_dir
+                break
 
     # Choose appropriate GUI directory
     if is_android() and android_gui_dir.exists() and any(android_gui_dir.iterdir()):
         gui_static_dir = android_gui_dir
         print(f"📱 Using Android GUI static assets: {gui_static_dir}")
 
-    # Skip GUI in managed/Docker mode
-    if is_managed():
+    # Skip GUI in managed/Docker mode (unless WASM is available)
+    if is_managed() and not wasm_dir:
         print("ℹ️  GUI disabled in managed mode (manager provides frontend)")
         _add_api_root_endpoint(app, "managed_mode", "Running in managed mode - GUI provided by CIRIS Manager")
+    elif wasm_dir:
+        # WASM app takes priority - mount at root for HA addon
+        app.mount("/", StaticFiles(directory=str(wasm_dir), html=True), name="wasm_gui")
+        print(f"✅ WASM GUI enabled at / (static assets: {wasm_dir})")
     elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
         app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
         print(f"✅ GUI enabled at / (static assets: {gui_static_dir})")
@@ -189,17 +218,28 @@ def _mount_gui_assets(app: FastAPI) -> None:
 
 def _add_api_root_endpoint(app: FastAPI, gui_status: str, message: str) -> None:
     """Add a root endpoint for API-only mode."""
+    from ciris_engine import __version__
 
     @app.get("/")
     def root() -> dict[str, str]:
         return {
             "name": "CIRIS API",
-            "version": "1.0.0",
+            "version": __version__,
             "docs": "/docs",
             "redoc": "/redoc",
             "openapi": "/openapi.json",
+            "health": "/health",
             "gui": gui_status,
             "message": message,
+        }
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        """Root-level health check (no /v1 prefix needed)."""
+        return {
+            "status": "ok",
+            "version": __version__,
+            "api": "running",
         }
 
 

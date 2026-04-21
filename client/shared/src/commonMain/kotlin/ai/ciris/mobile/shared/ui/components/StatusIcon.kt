@@ -1,11 +1,5 @@
 package ai.ciris.mobile.shared.ui.components
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Warning
-import ai.ciris.mobile.shared.ui.icons.*
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,15 +7,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * Status icons using Material Icons instead of Unicode emoji.
+ * Status icons using CIRIS custom icons.
  * This ensures consistent rendering across all platforms including WASM/Skia
  * where emoji may appear as tofu boxes.
  */
 enum class StatusIconType(val icon: ImageVector, val contentDescription: String) {
-    Check(Icons.Default.Check, "Success"),
-    Close(Icons.Default.Close, "Error"),
-    Warning(Icons.Default.Warning, "Warning"),
-    Star(Icons.Default.Star, "Featured")
+    Check(CIRISIcons.check, "Success"),
+    Close(CIRISIcons.close, "Error"),
+    Warning(CIRISIcons.warning, "Warning"),
+    Star(CIRISIcons.star, "Featured")
 }
 
 /**

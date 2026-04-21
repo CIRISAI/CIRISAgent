@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,7 +50,7 @@ fun HelpScreen(
                         modifier = Modifier.testableClickable("btn_help_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -224,7 +225,7 @@ private fun HelpSectionCard(
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

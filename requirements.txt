@@ -13,6 +13,7 @@ instructor>=1.11.3,<2.0.0
 PyYAML>=6.0.1,<7.0.0
 
 # Database
+aiosqlite>=0.20.0,<1.0.0  # Async SQLite for lightweight data persistence
 psycopg2-binary>=2.9.0,<3.0.0  # PostgreSQL adapter for production deployments
 SQLAlchemy>=2.0.0,<3.0.0  # SQL toolkit and ORM for external data sources
 

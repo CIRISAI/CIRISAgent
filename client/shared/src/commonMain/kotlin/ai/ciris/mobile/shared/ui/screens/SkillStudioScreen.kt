@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -222,7 +223,7 @@ private fun EditingScreen(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_skill_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -246,7 +247,7 @@ private fun EditingScreen(
                 onClick = onShowAddToolDialog,
                 modifier = Modifier.testable("fab_add_tool")
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Tool")
+                Icon(CIRISIcons.add, contentDescription = "Add Tool")
             }
         }
     ) { paddingValues ->
@@ -349,7 +350,7 @@ private fun PreviewScreen(
                         onClick = onBack,
                         modifier = Modifier.testableClickable("btn_preview_back") { onBack() }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -446,7 +447,7 @@ private fun SecurityReviewScreen(
                         onClick = onBack,
                         modifier = Modifier.testableClickable("btn_security_back") { onBack() }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(CIRISIcons.arrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -563,7 +564,7 @@ private fun ImportSuccessScreen(
             modifier = Modifier.padding(32.dp)
         ) {
             Icon(
-                Icons.Filled.CheckCircle,
+                CIRISIcons.checkCircle,
                 contentDescription = null,
                 tint = SemanticColors.Default.success,
                 modifier = Modifier.size(64.dp)
@@ -609,7 +610,7 @@ private fun ValidationErrorsCard(errors: List<String>) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Filled.Warning,
+                    CIRISIcons.warning,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error
                 )
@@ -623,7 +624,7 @@ private fun ValidationErrorsCard(errors: List<String>) {
             Spacer(Modifier.height(8.dp))
             errors.forEach { error ->
                 Text(
-                    text = "• $error",
+                    text = "- $error",
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -677,7 +678,7 @@ private fun SecuritySummaryCard(report: SecurityReport) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (report.safeToImport) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                    imageVector = if (report.safeToImport) CIRISIcons.checkCircle else CIRISIcons.warning,
                     contentDescription = null,
                     tint = if (report.safeToImport) SemanticColors.Default.success else MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(32.dp)
@@ -726,9 +727,9 @@ private fun SeverityCount(label: String, count: Int, color: androidx.compose.ui.
 private fun SecurityFindingCard(finding: SecurityFinding) {
     val (icon, color) = when (finding.severity.lowercase()) {
         "critical" -> CIRISMaterialIcons.Filled.Error to MaterialTheme.colorScheme.error
-        "high" -> Icons.Filled.Warning to SemanticColors.Default.warning
-        "medium" -> Icons.Filled.Info to SemanticColors.Default.info
-        else -> Icons.Filled.Info to MaterialTheme.colorScheme.outline
+        "high" -> CIRISIcons.warning to SemanticColors.Default.warning
+        "medium" -> CIRISIcons.info to SemanticColors.Default.info
+        else -> CIRISIcons.info to MaterialTheme.colorScheme.outline
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {

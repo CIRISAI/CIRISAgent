@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -107,7 +108,7 @@ fun GraphMemoryScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("common_back"),
                             tint = GraphColors.LabelColor
                         )
@@ -116,7 +117,7 @@ fun GraphMemoryScreen(
                     // List view button
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Filled.List,
+                            imageVector = CIRISIcons.log,
                             contentDescription = localizedString("graph_title"),
                             tint = GraphColors.LabelColor
                         )
@@ -155,8 +156,8 @@ fun GraphMemoryScreen(
                         }
                     ) {
                         Icon(
-                            imageVector = if (state.isSimulationRunning) Icons.Filled.Close
-                            else Icons.Filled.PlayArrow,
+                            imageVector = if (state.isSimulationRunning) CIRISIcons.close
+                            else CIRISIcons.play,
                             contentDescription = if (state.isSimulationRunning) localizedString("interact_stop") else localizedString("runtime_resume"),
                             tint = GraphColors.LabelColor
                         )
@@ -165,7 +166,7 @@ fun GraphMemoryScreen(
                     // Refresh
                     IconButton(onClick = onRefresh, enabled = !state.isLoading) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("common_refresh"),
                             tint = GraphColors.LabelColor
                         )
@@ -385,7 +386,7 @@ private fun GraphFiltersPanel(
             )
             IconButton(onClick = onClose) {
                 Icon(
-                    imageVector = Icons.Filled.Close,
+                    imageVector = CIRISIcons.close,
                     contentDescription = localizedString("common_close"),
                     tint = GraphColors.LabelColorMuted
                 )
@@ -497,7 +498,7 @@ private fun NodeDetailsPanel(
             }
             IconButton(onClick = onClose) {
                 Icon(
-                    imageVector = Icons.Filled.Close,
+                    imageVector = CIRISIcons.close,
                     contentDescription = localizedString("common_close"),
                     tint = GraphColors.LabelColorMuted
                 )

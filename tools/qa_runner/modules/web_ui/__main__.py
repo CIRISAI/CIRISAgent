@@ -566,7 +566,7 @@ def _find_desktop_jar() -> Optional[Path]:
     """Locate the built desktop uber jar."""
     repo_root = Path(__file__).resolve().parents[4]
     candidates = sorted(
-        glob.glob(str(repo_root / "mobile" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar")),
+        glob.glob(str(repo_root / "client" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar")),
         key=os.path.getmtime,
         reverse=True,
     )
@@ -667,7 +667,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         print("[4/5] Launching desktop app (CIRIS_TEST_MODE=true)...")
         jar = _find_desktop_jar()
         if not jar:
-            print("  ❌ No desktop jar found — run: cd mobile && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+            print("  ❌ No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
             server.stop()
             return 1
         env = os.environ.copy()
@@ -739,7 +739,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         print(f"\n❌ CIRIS Desktop app is not running with test mode enabled.")
         print(f"\nTo start the desktop app with test mode:")
         print(f"  export CIRIS_TEST_MODE=true")
-        print(f"  cd mobile && ./gradlew :desktopApp:run")
+        print(f"  cd client && ./gradlew :desktopApp:run")
         return 1
 
     print("✅ Desktop app running with test mode")

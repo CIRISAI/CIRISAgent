@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -64,7 +65,7 @@ fun ToolEditDialog(
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
+                        Icon(CIRISIcons.close, contentDescription = "Close")
                     }
                 }
 
@@ -164,7 +165,7 @@ fun ToolEditDialog(
                             onClick = onAddParameter,
                             modifier = Modifier.testable("btn_add_parameter")
                         ) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Icon(CIRISIcons.add, contentDescription = null)
                             Spacer(Modifier.width(4.dp))
                             Text("Add Parameter")
                         }
@@ -262,7 +263,7 @@ private fun ParameterListItem(
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                Icon(CIRISIcons.delete, contentDescription = "Delete")
             }
         }
     }
@@ -317,8 +318,8 @@ fun ParameterEditDialog(
                         singleLine = true,
                         trailingIcon = {
                             Icon(
-                                if (showTypeMenu) Icons.Filled.KeyboardArrowUp
-                                else Icons.Filled.KeyboardArrowDown,
+                                if (showTypeMenu) CIRISIcons.arrowUp
+                                else CIRISIcons.arrowDown,
                                 contentDescription = null
                             )
                         },
@@ -567,7 +568,7 @@ fun ConfirmDeleteDialog(
         modifier = modifier.testable("dialog_confirm_delete"),
         icon = {
             Icon(
-                Icons.Filled.Warning,
+                CIRISIcons.warning,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error
             )

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,7 +67,7 @@ fun ToolsScreen(
                         modifier = Modifier.testableClickable("btn_tools_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -78,7 +79,7 @@ fun ToolsScreen(
                         modifier = Modifier.testableClickable("btn_tools_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -150,7 +151,7 @@ fun ToolsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text(localizedString("mobile.tools_search_placeholder")) },
                         leadingIcon = {
-                            Icon(Icons.Filled.Search, contentDescription = null)
+                            Icon(CIRISIcons.search, contentDescription = null)
                         },
                         singleLine = true
                     )
@@ -380,7 +381,7 @@ private fun ToolCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Build,
+                        imageVector = CIRISIcons.build,
                         contentDescription = null,
                         tint = categoryColor,
                         modifier = Modifier.size(20.dp)
@@ -418,7 +419,7 @@ private fun ToolCard(
 
                     // Expand Icon
                     Icon(
-                        imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        imageVector = if (isExpanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                         contentDescription = if (isExpanded) localizedString("mobile.common_collapse") else localizedString("mobile.common_expand"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

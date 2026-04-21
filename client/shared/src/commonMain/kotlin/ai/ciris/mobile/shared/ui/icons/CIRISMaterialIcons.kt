@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.icons
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
@@ -2219,4 +2221,4357 @@ val CIRISMaterialIcons.Filled.AutoMode: ImageVector
             }
         }.build()
         return _autoMode!!
+    }
+
+// =============================================================================
+// CIRIS Custom Icons (from Icon Redesign spec)
+// =============================================================================
+// These icons are custom-designed for CIRIS to replace generic Material icons.
+// Each icon uses the bus color palette and is designed for 24dp at 2px strokes.
+
+// ─── CIRISSpeak (paper-plane) ───────────────────────────────────────────────────
+
+private var _cirisSpeak: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSpeak: ImageVector
+    get() {
+        if (_cirisSpeak != null) return _cirisSpeak!!
+        _cirisSpeak = ImageVector.Builder(
+            name = "Filled.CIRISSpeak",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Paper-plane outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4f, 5.5f)
+                lineTo(20f, 12f)
+                lineTo(4f, 18.5f)
+                lineTo(6.5f, 12f)
+                close()
+            }
+            // Inner message spine
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
+                pathFillType = androidx.compose.ui.graphics.PathFillType.NonZero
+            ) {
+                moveTo(6.5f, 12f)
+                lineTo(13f, 12f)
+            }
+        }.build()
+        return _cirisSpeak!!
+    }
+
+// ─── CIRISObserve (eye with catchlight) ─────────────────────────────────────────
+
+private var _cirisObserve: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISObserve: ImageVector
+    get() {
+        if (_cirisObserve != null) return _cirisObserve!!
+        _cirisObserve = ImageVector.Builder(
+            name = "Filled.CIRISObserve",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Eye outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(2.5f, 12f)
+                curveTo(5f, 7f, 9f, 5f, 12f, 5f)
+                curveTo(15f, 5f, 19f, 7f, 21.5f, 12f)
+                curveTo(19f, 17f, 15f, 19f, 12f, 19f)
+                curveTo(9f, 19f, 5f, 17f, 2.5f, 12f)
+                close()
+            }
+            // Filled iris
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 8.8f)
+                curveToRelative(1.77f, 0f, 3.2f, 1.43f, 3.2f, 3.2f)
+                reflectiveCurveToRelative(-1.43f, 3.2f, -3.2f, 3.2f)
+                reflectiveCurveToRelative(-3.2f, -1.43f, -3.2f, -3.2f)
+                reflectiveCurveToRelative(1.43f, -3.2f, 3.2f, -3.2f)
+                close()
+            }
+        }.build()
+        return _cirisObserve!!
+    }
+
+// ─── CIRISMemorize (graph node with timestamp) ──────────────────────────────────
+
+private var _cirisMemorize: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISMemorize: ImageVector
+    get() {
+        if (_cirisMemorize != null) return _cirisMemorize!!
+        _cirisMemorize = ImageVector.Builder(
+            name = "Filled.CIRISMemorize",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Outer ring
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 4.5f)
+                curveToRelative(4.14f, 0f, 7.5f, 3.36f, 7.5f, 7.5f)
+                reflectiveCurveToRelative(-3.36f, 7.5f, -7.5f, 7.5f)
+                reflectiveCurveToRelative(-7.5f, -3.36f, -7.5f, -7.5f)
+                reflectiveCurveToRelative(3.36f, -7.5f, 7.5f, -7.5f)
+            }
+            // Center node (filled)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 8.8f)
+                curveToRelative(1.77f, 0f, 3.2f, 1.43f, 3.2f, 3.2f)
+                reflectiveCurveToRelative(-1.43f, 3.2f, -3.2f, 3.2f)
+                reflectiveCurveToRelative(-3.2f, -1.43f, -3.2f, -3.2f)
+                reflectiveCurveToRelative(1.43f, -3.2f, 3.2f, -3.2f)
+                close()
+            }
+            // Timestamp ticks
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4.5f)
+                verticalLineTo(2.5f)
+                moveTo(12f, 21.5f)
+                verticalLineTo(19.5f)
+                moveTo(4.5f, 12f)
+                horizontalLineTo(2.5f)
+                moveTo(21.5f, 12f)
+                horizontalLineTo(19.5f)
+            }
+        }.build()
+        return _cirisMemorize!!
+    }
+
+// ─── CIRISRecall (edges to center - FIX for red ?) ──────────────────────────────
+
+private var _cirisRecall: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISRecall: ImageVector
+    get() {
+        if (_cirisRecall != null) return _cirisRecall!!
+        _cirisRecall = ImageVector.Builder(
+            name = "Filled.CIRISRecall",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Center node (filled)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 8.8f)
+                curveToRelative(1.77f, 0f, 3.2f, 1.43f, 3.2f, 3.2f)
+                reflectiveCurveToRelative(-1.43f, 3.2f, -3.2f, 3.2f)
+                reflectiveCurveToRelative(-3.2f, -1.43f, -3.2f, -3.2f)
+                reflectiveCurveToRelative(1.43f, -3.2f, 3.2f, -3.2f)
+                close()
+            }
+            // Satellite nodes
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                // Top-left satellite
+                moveTo(5f, 6.8f)
+                curveToRelative(0f, 0.94f, 0.76f, 1.7f, 1.7f, 1.7f)
+                reflectiveCurveToRelative(1.7f, -0.76f, 1.7f, -1.7f)
+                reflectiveCurveToRelative(-0.76f, -1.7f, -1.7f, -1.7f)
+                reflectiveCurveToRelative(-1.7f, 0.76f, -1.7f, 1.7f)
+                // Top-right satellite
+                moveTo(17.3f, 6.8f)
+                curveToRelative(0f, 0.94f, 0.76f, 1.7f, 1.7f, 1.7f)
+                reflectiveCurveToRelative(1.7f, -0.76f, 1.7f, -1.7f)
+                reflectiveCurveToRelative(-0.76f, -1.7f, -1.7f, -1.7f)
+                reflectiveCurveToRelative(-1.7f, 0.76f, -1.7f, 1.7f)
+                // Bottom-left satellite
+                moveTo(5f, 17.2f)
+                curveToRelative(0f, 0.94f, 0.76f, 1.7f, 1.7f, 1.7f)
+                reflectiveCurveToRelative(1.7f, -0.76f, 1.7f, -1.7f)
+                reflectiveCurveToRelative(-0.76f, -1.7f, -1.7f, -1.7f)
+                reflectiveCurveToRelative(-1.7f, 0.76f, -1.7f, 1.7f)
+                // Bottom-right satellite
+                moveTo(17.3f, 17.2f)
+                curveToRelative(0f, 0.94f, 0.76f, 1.7f, 1.7f, 1.7f)
+                reflectiveCurveToRelative(1.7f, -0.76f, 1.7f, -1.7f)
+                reflectiveCurveToRelative(-0.76f, -1.7f, -1.7f, -1.7f)
+                reflectiveCurveToRelative(-1.7f, 0.76f, -1.7f, 1.7f)
+            }
+            // Edge lines to center
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(6.3f, 9.3f)
+                lineTo(10f, 11.2f)
+                moveTo(17.7f, 9.3f)
+                lineTo(14f, 11.2f)
+                moveTo(6.3f, 14.7f)
+                lineTo(10f, 12.8f)
+                moveTo(17.7f, 14.7f)
+                lineTo(14f, 12.8f)
+            }
+        }.build()
+        return _cirisRecall!!
+    }
+
+// ─── CIRISForget (dissolving node) ──────────────────────────────────────────────
+
+private var _cirisForget: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISForget: ImageVector
+    get() {
+        if (_cirisForget != null) return _cirisForget!!
+        _cirisForget = ImageVector.Builder(
+            name = "Filled.CIRISForget",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Main node (fading left)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(9f, 9f)
+                curveToRelative(1.66f, 0f, 3f, 1.34f, 3f, 3f)
+                reflectiveCurveToRelative(-1.34f, 3f, -3f, 3f)
+                reflectiveCurveToRelative(-3f, -1.34f, -3f, -3f)
+                reflectiveCurveToRelative(1.34f, -3f, 3f, -3f)
+                close()
+            }
+            // Dissolving circles (fading right)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(14f, 9.8f)
+                curveToRelative(1.21f, 0f, 2.2f, 0.99f, 2.2f, 2.2f)
+                reflectiveCurveToRelative(-0.99f, 2.2f, -2.2f, 2.2f)
+                reflectiveCurveToRelative(-2.2f, -0.99f, -2.2f, -2.2f)
+                reflectiveCurveToRelative(0.99f, -2.2f, 2.2f, -2.2f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(18f, 10.6f)
+                curveToRelative(0.77f, 0f, 1.4f, 0.63f, 1.4f, 1.4f)
+                reflectiveCurveToRelative(-0.63f, 1.4f, -1.4f, 1.4f)
+                reflectiveCurveToRelative(-1.4f, -0.63f, -1.4f, -1.4f)
+                reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(21.2f, 11.2f)
+                curveToRelative(0.44f, 0f, 0.8f, 0.36f, 0.8f, 0.8f)
+                reflectiveCurveToRelative(-0.36f, 0.8f, -0.8f, 0.8f)
+                reflectiveCurveToRelative(-0.8f, -0.36f, -0.8f, -0.8f)
+                reflectiveCurveToRelative(0.36f, -0.8f, 0.8f, -0.8f)
+            }
+            // Fade arrow
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(3f, 8f)
+                lineTo(6.5f, 12f)
+                lineTo(3f, 16f)
+            }
+        }.build()
+        return _cirisForget!!
+    }
+
+// ─── CIRISTool (wrench head) ────────────────────────────────────────────────────
+
+private var _cirisTool: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTool: ImageVector
+    get() {
+        if (_cirisTool != null) return _cirisTool!!
+        _cirisTool = ImageVector.Builder(
+            name = "Filled.CIRISTool",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Handle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4.5f, 19.5f)
+                lineTo(11f, 13f)
+            }
+            // Wrench head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(10f, 9f)
+                lineTo(15f, 14f)
+                lineTo(19f, 10f)
+                curveTo(19f, 10f, 20f, 8f, 18.5f, 6.5f)
+                curveTo(17f, 5f, 15f, 6f, 15f, 6f)
+                lineTo(10f, 9f)
+                close()
+            }
+            // Handle end dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(5.2f, 17.8f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+                close()
+            }
+        }.build()
+        return _cirisTool!!
+    }
+
+// ─── CIRISPonder (orbiting thought) ─────────────────────────────────────────────
+
+private var _cirisPonder: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISPonder: ImageVector
+    get() {
+        if (_cirisPonder != null) return _cirisPonder!!
+        _cirisPonder = ImageVector.Builder(
+            name = "Filled.CIRISPonder",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Center kernel (filled)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 9.8f)
+                curveToRelative(1.21f, 0f, 2.2f, 0.99f, 2.2f, 2.2f)
+                reflectiveCurveToRelative(-0.99f, 2.2f, -2.2f, 2.2f)
+                reflectiveCurveToRelative(-2.2f, -0.99f, -2.2f, -2.2f)
+                reflectiveCurveToRelative(0.99f, -2.2f, 2.2f, -2.2f)
+                close()
+            }
+            // Inner orbit
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.5f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 6.5f)
+                curveToRelative(3.04f, 0f, 5.5f, 2.46f, 5.5f, 5.5f)
+                reflectiveCurveToRelative(-2.46f, 5.5f, -5.5f, 5.5f)
+                reflectiveCurveToRelative(-5.5f, -2.46f, -5.5f, -5.5f)
+                reflectiveCurveToRelative(2.46f, -5.5f, 5.5f, -5.5f)
+            }
+            // Outer orbit (dashed)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                curveToRelative(4.97f, 0f, 9f, 4.03f, 9f, 9f)
+                reflectiveCurveToRelative(-4.03f, 9f, -9f, 9f)
+                reflectiveCurveToRelative(-9f, -4.03f, -9f, -9f)
+                reflectiveCurveToRelative(4.03f, -9f, 9f, -9f)
+            }
+            // Orbiting satellite
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(20f, 6f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+                close()
+            }
+        }.build()
+        return _cirisPonder!!
+    }
+
+// ─── CIRISDefer (escalation path) ───────────────────────────────────────────────
+
+private var _cirisDefer: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDefer: ImageVector
+    get() {
+        if (_cirisDefer != null) return _cirisDefer!!
+        _cirisDefer = ImageVector.Builder(
+            name = "Filled.CIRISDefer",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Escalation path
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(5f, 18f)
+                lineTo(10f, 13f)
+                lineTo(13f, 16f)
+                lineTo(19f, 10f)
+            }
+            // Arrow head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(15f, 10f)
+                horizontalLineTo(19f)
+                verticalLineTo(14f)
+            }
+            // Base line (faded)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(5f, 18f)
+                horizontalLineTo(19f)
+            }
+            // Endpoint dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(19f, 8.6f)
+                curveToRelative(0.77f, 0f, 1.4f, 0.63f, 1.4f, 1.4f)
+                reflectiveCurveToRelative(-0.63f, 1.4f, -1.4f, 1.4f)
+                reflectiveCurveToRelative(-1.4f, -0.63f, -1.4f, -1.4f)
+                reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
+                close()
+            }
+        }.build()
+        return _cirisDefer!!
+    }
+
+// ─── CIRISReject (circle-slash) ─────────────────────────────────────────────────
+
+private var _cirisReject: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISReject: ImageVector
+    get() {
+        if (_cirisReject != null) return _cirisReject!!
+        _cirisReject = ImageVector.Builder(
+            name = "Filled.CIRISReject",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+            // Slash
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(6.5f, 6.5f)
+                lineTo(17.5f, 17.5f)
+            }
+        }.build()
+        return _cirisReject!!
+    }
+
+// ─── CIRISTaskComplete (check-disc) ─────────────────────────────────────────────
+
+private var _cirisTaskComplete: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTaskComplete: ImageVector
+    get() {
+        if (_cirisTaskComplete != null) return _cirisTaskComplete!!
+        _cirisTaskComplete = ImageVector.Builder(
+            name = "Filled.CIRISTaskComplete",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Filled circle background (will be tinted)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+                close()
+            }
+            // Checkmark (will show through as background color)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(7.5f, 12.2f)
+                lineTo(10.8f, 15.5f)
+                lineTo(16.5f, 8.5f)
+            }
+        }.build()
+        return _cirisTaskComplete!!
+    }
+
+// ─── CIRISThoughtStart (radiating seed) ─────────────────────────────────────────
+
+private var _cirisThoughtStart: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISThoughtStart: ImageVector
+    get() {
+        if (_cirisThoughtStart != null) return _cirisThoughtStart!!
+        _cirisThoughtStart = ImageVector.Builder(
+            name = "Filled.CIRISThoughtStart",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Center seed (filled)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 9.6f)
+                curveToRelative(1.32f, 0f, 2.4f, 1.08f, 2.4f, 2.4f)
+                reflectiveCurveToRelative(-1.08f, 2.4f, -2.4f, 2.4f)
+                reflectiveCurveToRelative(-2.4f, -1.08f, -2.4f, -2.4f)
+                reflectiveCurveToRelative(1.08f, -2.4f, 2.4f, -2.4f)
+                close()
+            }
+            // Radiating rays (strong)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 12f)
+                lineTo(12f, 3f)
+                moveTo(12f, 12f)
+                lineTo(19f, 8f)
+                moveTo(12f, 12f)
+                lineTo(19f, 16f)
+            }
+            // Radiating rays (faded)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 12f)
+                lineTo(12f, 21f)
+                moveTo(12f, 12f)
+                lineTo(5f, 16f)
+                moveTo(12f, 12f)
+                lineTo(5f, 8f)
+            }
+        }.build()
+        return _cirisThoughtStart!!
+    }
+
+// ─── CIRISSnapshot (camera viewport) ────────────────────────────────────────────
+
+private var _cirisSnapshot: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSnapshot: ImageVector
+    get() {
+        if (_cirisSnapshot != null) return _cirisSnapshot!!
+        _cirisSnapshot = ImageVector.Builder(
+            name = "Filled.CIRISSnapshot",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Camera body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(3.5f, 8.5f)
+                curveToRelative(0f, -1.38f, 1.12f, -2.5f, 2.5f, -2.5f)
+                horizontalLineToRelative(12f)
+                curveToRelative(1.38f, 0f, 2.5f, 1.12f, 2.5f, 2.5f)
+                verticalLineToRelative(10f)
+                curveToRelative(0f, 1.38f, -1.12f, 2.5f, -2.5f, 2.5f)
+                horizontalLineToRelative(-12f)
+                curveToRelative(-1.38f, 0f, -2.5f, -1.12f, -2.5f, -2.5f)
+                close()
+            }
+            // Top notch
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(9f, 6f)
+                lineTo(9.8f, 4.2f)
+                horizontalLineTo(14.2f)
+                lineTo(15f, 6f)
+            }
+            // Lens (filled center)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 11.3f)
+                curveToRelative(0.66f, 0f, 1.2f, 0.54f, 1.2f, 1.2f)
+                reflectiveCurveToRelative(-0.54f, 1.2f, -1.2f, 1.2f)
+                reflectiveCurveToRelative(-1.2f, -0.54f, -1.2f, -1.2f)
+                reflectiveCurveToRelative(0.54f, -1.2f, 1.2f, -1.2f)
+                close()
+            }
+            // Lens ring
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.6f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 9.3f)
+                curveToRelative(1.77f, 0f, 3.2f, 1.43f, 3.2f, 3.2f)
+                reflectiveCurveToRelative(-1.43f, 3.2f, -3.2f, 3.2f)
+                reflectiveCurveToRelative(-3.2f, -1.43f, -3.2f, -3.2f)
+                reflectiveCurveToRelative(1.43f, -3.2f, 3.2f, -3.2f)
+            }
+        }.build()
+        return _cirisSnapshot!!
+    }
+
+// ─── CIRISDMA (bar chart ensemble) ──────────────────────────────────────────────
+
+private var _cirisDMA: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDMA: ImageVector
+    get() {
+        if (_cirisDMA != null) return _cirisDMA!!
+        _cirisDMA = ImageVector.Builder(
+            name = "Filled.CIRISDMA",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Base line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(3f, 20f)
+                horizontalLineTo(21f)
+            }
+            // Bars
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(6f, 20f)
+                verticalLineTo(14f)
+                moveTo(10f, 20f)
+                verticalLineTo(10f)
+                moveTo(14f, 20f)
+                verticalLineTo(6f)
+                moveTo(18f, 20f)
+                verticalLineTo(12f)
+            }
+            // Active highlight on tallest bar
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(14f, 4.4f)
+                curveToRelative(0.88f, 0f, 1.6f, 0.72f, 1.6f, 1.6f)
+                reflectiveCurveToRelative(-0.72f, 1.6f, -1.6f, 1.6f)
+                reflectiveCurveToRelative(-1.6f, -0.72f, -1.6f, -1.6f)
+                reflectiveCurveToRelative(0.72f, -1.6f, 1.6f, -1.6f)
+                close()
+            }
+        }.build()
+        return _cirisDMA!!
+    }
+
+// ─── CIRISIDMA (coherence ring with probe) ──────────────────────────────────────
+
+private var _cirisIDMA: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISIDMA: ImageVector
+    get() {
+        if (_cirisIDMA != null) return _cirisIDMA!!
+        _cirisIDMA = ImageVector.Builder(
+            name = "Filled.CIRISIDMA",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Center kernel
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 9.4f)
+                curveToRelative(1.44f, 0f, 2.6f, 1.16f, 2.6f, 2.6f)
+                reflectiveCurveToRelative(-1.16f, 2.6f, -2.6f, 2.6f)
+                reflectiveCurveToRelative(-2.6f, -1.16f, -2.6f, -2.6f)
+                reflectiveCurveToRelative(1.16f, -2.6f, 2.6f, -2.6f)
+                close()
+            }
+            // Inner coherence ring (dashed)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 6.5f)
+                curveToRelative(3.04f, 0f, 5.5f, 2.46f, 5.5f, 5.5f)
+                reflectiveCurveToRelative(-2.46f, 5.5f, -5.5f, 5.5f)
+                reflectiveCurveToRelative(-5.5f, -2.46f, -5.5f, -5.5f)
+                reflectiveCurveToRelative(2.46f, -5.5f, 5.5f, -5.5f)
+            }
+            // Outer ring (more dashed)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                curveToRelative(4.97f, 0f, 9f, 4.03f, 9f, 9f)
+                reflectiveCurveToRelative(-4.03f, 9f, -9f, 9f)
+                reflectiveCurveToRelative(-9f, -4.03f, -9f, -9f)
+                reflectiveCurveToRelative(4.03f, -9f, 9f, -9f)
+            }
+            // Vertical probe
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.6f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                lineTo(12f, 7f)
+            }
+        }.build()
+        return _cirisIDMA!!
+    }
+
+// ─── CIRISActionSelection (tuning axis) ─────────────────────────────────────────
+
+private var _cirisActionSelection: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISActionSelection: ImageVector
+    get() {
+        if (_cirisActionSelection != null) return _cirisActionSelection!!
+        _cirisActionSelection = ImageVector.Builder(
+            name = "Filled.CIRISActionSelection",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Horizontal axis
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(4f, 12f)
+                horizontalLineTo(20f)
+            }
+            // Active node (first/selected)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(8f, 10.6f)
+                curveToRelative(0.77f, 0f, 1.4f, 0.63f, 1.4f, 1.4f)
+                reflectiveCurveToRelative(-0.63f, 1.4f, -1.4f, 1.4f)
+                reflectiveCurveToRelative(-1.4f, -0.63f, -1.4f, -1.4f)
+                reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
+                close()
+            }
+            // Inactive nodes
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(13f, 10.6f)
+                curveToRelative(0.77f, 0f, 1.4f, 0.63f, 1.4f, 1.4f)
+                reflectiveCurveToRelative(-0.63f, 1.4f, -1.4f, 1.4f)
+                reflectiveCurveToRelative(-1.4f, -0.63f, -1.4f, -1.4f)
+                reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
+                moveTo(18f, 10.6f)
+                curveToRelative(0.77f, 0f, 1.4f, 0.63f, 1.4f, 1.4f)
+                reflectiveCurveToRelative(-0.63f, 1.4f, -1.4f, 1.4f)
+                reflectiveCurveToRelative(-1.4f, -0.63f, -1.4f, -1.4f)
+                reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
+            }
+            // Vertical selection lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.6f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(8f, 4f)
+                verticalLineTo(12f)
+                moveTo(8f, 20f)
+                verticalLineTo(12f)
+            }
+            // Selection endpoints
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(8f, 2.4f)
+                curveToRelative(0.88f, 0f, 1.6f, 0.72f, 1.6f, 1.6f)
+                reflectiveCurveToRelative(-0.72f, 1.6f, -1.6f, 1.6f)
+                reflectiveCurveToRelative(-1.6f, -0.72f, -1.6f, -1.6f)
+                reflectiveCurveToRelative(0.72f, -1.6f, 1.6f, -1.6f)
+                moveTo(8f, 18.4f)
+                curveToRelative(0.88f, 0f, 1.6f, 0.72f, 1.6f, 1.6f)
+                reflectiveCurveToRelative(-0.72f, 1.6f, -1.6f, 1.6f)
+                reflectiveCurveToRelative(-1.6f, -0.72f, -1.6f, -1.6f)
+                reflectiveCurveToRelative(0.72f, -1.6f, 1.6f, -1.6f)
+            }
+        }.build()
+        return _cirisActionSelection!!
+    }
+
+// ─── CIRISTSASPDMA (wireframe cube) ─────────────────────────────────────────────
+
+private var _cirisTSASPDMA: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTSASPDMA: ImageVector
+    get() {
+        if (_cirisTSASPDMA != null) return _cirisTSASPDMA!!
+        _cirisTSASPDMA = ImageVector.Builder(
+            name = "Filled.CIRISTSASPDMA",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Hexagonal outline (3-axis wireframe)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 3f)
+                lineTo(19.5f, 7.5f)
+                verticalLineTo(16.5f)
+                lineTo(12f, 21f)
+                lineTo(4.5f, 16.5f)
+                verticalLineTo(7.5f)
+                close()
+            }
+            // Internal spokes to center
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                verticalLineTo(12f)
+                moveTo(19.5f, 7.5f)
+                lineTo(12f, 12f)
+                moveTo(4.5f, 7.5f)
+                lineTo(12f, 12f)
+                moveTo(12f, 12f)
+                verticalLineTo(21f)
+            }
+            // Center node
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 10.2f)
+                curveToRelative(0.99f, 0f, 1.8f, 0.81f, 1.8f, 1.8f)
+                reflectiveCurveToRelative(-0.81f, 1.8f, -1.8f, 1.8f)
+                reflectiveCurveToRelative(-1.8f, -0.81f, -1.8f, -1.8f)
+                reflectiveCurveToRelative(0.81f, -1.8f, 1.8f, -1.8f)
+                close()
+            }
+        }.build()
+        return _cirisTSASPDMA!!
+    }
+
+// ─── CIRISConscience (shield + cross) ───────────────────────────────────────────
+
+private var _cirisConscience: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISConscience: ImageVector
+    get() {
+        if (_cirisConscience != null) return _cirisConscience!!
+        _cirisConscience = ImageVector.Builder(
+            name = "Filled.CIRISConscience",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Shield outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 3f)
+                lineTo(20f, 6f)
+                verticalLineTo(12f)
+                curveTo(20f, 17f, 16f, 20.5f, 12f, 21.5f)
+                curveTo(8f, 20.5f, 4f, 17f, 4f, 12f)
+                verticalLineTo(6f)
+                close()
+            }
+            // Ethical cross
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 8.5f)
+                verticalLineTo(15.5f)
+                moveTo(8.5f, 12f)
+                horizontalLineTo(15.5f)
+            }
+        }.build()
+        return _cirisConscience!!
+    }
+
+// ─── CIRISWarning (triangle) ────────────────────────────────────────────────────
+
+private var _cirisWarning: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISWarning: ImageVector
+    get() {
+        if (_cirisWarning != null) return _cirisWarning!!
+        _cirisWarning = ImageVector.Builder(
+            name = "Filled.CIRISWarning",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Triangle outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 3f)
+                lineTo(21f, 20f)
+                horizontalLineTo(3f)
+                close()
+            }
+            // Exclamation line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 9f)
+                verticalLineTo(14f)
+            }
+            // Exclamation dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 16.5f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+                close()
+            }
+        }.build()
+        return _cirisWarning!!
+    }
+
+// ─── CIRISError (circle exclamation) ────────────────────────────────────────────
+
+private var _cirisError: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISError: ImageVector
+    get() {
+        if (_cirisError != null) return _cirisError!!
+        _cirisError = ImageVector.Builder(
+            name = "Filled.CIRISError",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+            // Exclamation line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 7.5f)
+                verticalLineTo(13f)
+            }
+            // Exclamation dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 15.5f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+                close()
+            }
+        }.build()
+        return _cirisError!!
+    }
+
+// ─── CIRISInfo (circle with i) ──────────────────────────────────────────────────
+
+private var _cirisInfo: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISInfo: ImageVector
+    get() {
+        if (_cirisInfo != null) return _cirisInfo!!
+        _cirisInfo = ImageVector.Builder(
+            name = "Filled.CIRISInfo",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+            // Info line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 11f)
+                verticalLineTo(16f)
+            }
+            // Info dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 7f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+                close()
+            }
+        }.build()
+        return _cirisInfo!!
+    }
+
+// ─── CIRISSuccess (check circle) ────────────────────────────────────────────────
+
+private var _cirisSuccess: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSuccess: ImageVector
+    get() {
+        if (_cirisSuccess != null) return _cirisSuccess!!
+        _cirisSuccess = ImageVector.Builder(
+            name = "Filled.CIRISSuccess",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+            // Checkmark
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(8f, 12.4f)
+                lineTo(10.8f, 15f)
+                lineTo(16.5f, 9f)
+            }
+        }.build()
+        return _cirisSuccess!!
+    }
+
+// ─── CIRISTrust (shield with check) ─────────────────────────────────────────────
+
+private var _cirisTrust: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTrust: ImageVector
+    get() {
+        if (_cirisTrust != null) return _cirisTrust!!
+        _cirisTrust = ImageVector.Builder(
+            name = "Filled.CIRISTrust",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Shield outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 3f)
+                lineTo(20f, 6f)
+                verticalLineTo(12f)
+                curveTo(20f, 17f, 16f, 20.5f, 12f, 21.5f)
+                curveTo(8f, 20.5f, 4f, 17f, 4f, 12f)
+                verticalLineTo(6f)
+                close()
+            }
+            // Checkmark
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(8.5f, 12f)
+                lineTo(11f, 14.5f)
+                lineTo(16f, 9.5f)
+            }
+        }.build()
+        return _cirisTrust!!
+    }
+
+// ─── CIRISIdle (concentric rings) ───────────────────────────────────────────────
+
+private var _cirisIdle: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISIdle: ImageVector
+    get() {
+        if (_cirisIdle != null) return _cirisIdle!!
+        _cirisIdle = ImageVector.Builder(
+            name = "Filled.CIRISIdle",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Center dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 9f)
+                curveToRelative(1.66f, 0f, 3f, 1.34f, 3f, 3f)
+                reflectiveCurveToRelative(-1.34f, 3f, -3f, 3f)
+                reflectiveCurveToRelative(-3f, -1.34f, -3f, -3f)
+                reflectiveCurveToRelative(1.34f, -3f, 3f, -3f)
+                close()
+            }
+            // Inner ring
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4.5f)
+                curveToRelative(4.14f, 0f, 7.5f, 3.36f, 7.5f, 7.5f)
+                reflectiveCurveToRelative(-3.36f, 7.5f, -7.5f, 7.5f)
+                reflectiveCurveToRelative(-7.5f, -3.36f, -7.5f, -7.5f)
+                reflectiveCurveToRelative(3.36f, -7.5f, 7.5f, -7.5f)
+            }
+            // Outer ring (dashed effect)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 0.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 2f)
+                curveToRelative(5.52f, 0f, 10f, 4.48f, 10f, 10f)
+                reflectiveCurveToRelative(-4.48f, 10f, -10f, 10f)
+                reflectiveCurveToRelative(-10f, -4.48f, -10f, -10f)
+                reflectiveCurveToRelative(4.48f, -10f, 10f, -10f)
+            }
+        }.build()
+        return _cirisIdle!!
+    }
+
+// ─── CIRISProcessing (sync arrows) ──────────────────────────────────────────────
+
+private var _cirisProcessing: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISProcessing: ImageVector
+    get() {
+        if (_cirisProcessing != null) return _cirisProcessing!!
+        _cirisProcessing = ImageVector.Builder(
+            name = "Filled.CIRISProcessing",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Upper arc with arrow
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4f, 12f)
+                curveToRelative(0f, -4.42f, 3.58f, -8f, 8f, -8f)
+                curveToRelative(2.76f, 0f, 5.2f, 1.4f, 6.64f, 3.52f)
+                moveTo(17f, 3f)
+                verticalLineTo(7f)
+                horizontalLineTo(13f)
+            }
+            // Lower arc with arrow (faded)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(20f, 12f)
+                curveToRelative(0f, 4.42f, -3.58f, 8f, -8f, 8f)
+                curveToRelative(-2.76f, 0f, -5.2f, -1.4f, -6.64f, -3.52f)
+                moveTo(7f, 21f)
+                verticalLineTo(17f)
+                horizontalLineTo(11f)
+            }
+        }.build()
+        return _cirisProcessing!!
+    }
+
+// ─── CIRISDisconnected (cloud off slash) ────────────────────────────────────────
+
+private var _cirisDisconnected: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDisconnected: ImageVector
+    get() {
+        if (_cirisDisconnected != null) return _cirisDisconnected!!
+        _cirisDisconnected = ImageVector.Builder(
+            name = "Filled.CIRISDisconnected",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Cloud outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(6f, 16f)
+                curveTo(3.5f, 16f, 2f, 14f, 2f, 12f)
+                curveTo(2f, 10f, 3.5f, 8f, 6f, 8f)
+                curveTo(6.3f, 6f, 8.5f, 4f, 11f, 4f)
+                curveTo(13f, 4f, 15f, 5f, 16f, 7f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(16f, 11f)
+                curveTo(18.5f, 11f, 20f, 13f, 20f, 15f)
+                curveTo(20f, 17f, 18.5f, 19f, 16f, 19f)
+                horizontalLineTo(10f)
+            }
+            // Strike-through
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(4f, 4f)
+                lineTo(20f, 20f)
+            }
+        }.build()
+        return _cirisDisconnected!!
+    }
+
+// ─── CIRISLightning (bolt) ──────────────────────────────────────────────────────
+
+private var _cirisLightning: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISLightning: ImageVector
+    get() {
+        if (_cirisLightning != null) return _cirisLightning!!
+        _cirisLightning = ImageVector.Builder(
+            name = "Filled.CIRISLightning",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Lightning bolt
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(13f, 3f)
+                lineTo(5f, 13f)
+                horizontalLineTo(11f)
+                lineTo(10f, 21f)
+                lineTo(18f, 11f)
+                horizontalLineTo(12f)
+                close()
+            }
+        }.build()
+        return _cirisLightning!!
+    }
+
+// ─── CIRISIdentity (badge/ID card) ──────────────────────────────────────────────
+
+private var _cirisIdentity: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISIdentity: ImageVector
+    get() {
+        if (_cirisIdentity != null) return _cirisIdentity!!
+        _cirisIdentity = ImageVector.Builder(
+            name = "Filled.CIRISIdentity",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Card outline
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(3.5f, 7.5f)
+                curveToRelative(0f, -1.38f, 1.12f, -2.5f, 2.5f, -2.5f)
+                horizontalLineToRelative(12f)
+                curveToRelative(1.38f, 0f, 2.5f, 1.12f, 2.5f, 2.5f)
+                verticalLineToRelative(9f)
+                curveToRelative(0f, 1.38f, -1.12f, 2.5f, -2.5f, 2.5f)
+                horizontalLineToRelative(-12f)
+                curveToRelative(-1.38f, 0f, -2.5f, -1.12f, -2.5f, -2.5f)
+                close()
+            }
+            // Avatar circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(9f, 9.2f)
+                curveToRelative(1.27f, 0f, 2.3f, 1.03f, 2.3f, 2.3f)
+                reflectiveCurveToRelative(-1.03f, 2.3f, -2.3f, 2.3f)
+                reflectiveCurveToRelative(-2.3f, -1.03f, -2.3f, -2.3f)
+                reflectiveCurveToRelative(1.03f, -2.3f, 2.3f, -2.3f)
+            }
+            // Avatar shoulders
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(5.5f, 16.5f)
+                curveTo(6.5f, 14.8f, 11.5f, 14.8f, 12.5f, 16.5f)
+            }
+            // Text lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(15f, 10f)
+                horizontalLineTo(18f)
+                moveTo(15f, 13f)
+                horizontalLineTo(18f)
+                moveTo(15f, 16f)
+                horizontalLineTo(17f)
+            }
+        }.build()
+        return _cirisIdentity!!
+    }
+
+// =============================================================================
+// CIRIS Utility Icons (replacements for emoji)
+// =============================================================================
+// These icons replace emoji characters for cross-platform consistency.
+
+// ─── CIRISCheck (checkmark ✓) ───────────────────────────────────────────────────
+
+private var _cirisCheck: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISCheck: ImageVector
+    get() {
+        if (_cirisCheck != null) return _cirisCheck!!
+        _cirisCheck = ImageVector.Builder(
+            name = "Filled.CIRISCheck",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.5f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(5f, 12f)
+                lineTo(10f, 17f)
+                lineTo(19f, 7f)
+            }
+        }.build()
+        return _cirisCheck!!
+    }
+
+// ─── CIRISXMark (x mark ✗) ──────────────────────────────────────────────────────
+
+private var _cirisXMark: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISXMark: ImageVector
+    get() {
+        if (_cirisXMark != null) return _cirisXMark!!
+        _cirisXMark = ImageVector.Builder(
+            name = "Filled.CIRISXMark",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.5f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(6f, 6f)
+                lineTo(18f, 18f)
+                moveTo(18f, 6f)
+                lineTo(6f, 18f)
+            }
+        }.build()
+        return _cirisXMark!!
+    }
+
+// ─── CIRISKey (key/lock 🔐) ─────────────────────────────────────────────────────
+
+private var _cirisKey: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISKey: ImageVector
+    get() {
+        if (_cirisKey != null) return _cirisKey!!
+        _cirisKey = ImageVector.Builder(
+            name = "Filled.CIRISKey",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Key head (circle)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(8f, 4f)
+                curveToRelative(2.21f, 0f, 4f, 1.79f, 4f, 4f)
+                curveToRelative(0f, 2.21f, -1.79f, 4f, -4f, 4f)
+                reflectiveCurveToRelative(-4f, -1.79f, -4f, -4f)
+                curveToRelative(0f, -2.21f, 1.79f, -4f, 4f, -4f)
+            }
+            // Key inner circle
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(8f, 6.5f)
+                curveToRelative(0.83f, 0f, 1.5f, 0.67f, 1.5f, 1.5f)
+                reflectiveCurveToRelative(-0.67f, 1.5f, -1.5f, 1.5f)
+                reflectiveCurveToRelative(-1.5f, -0.67f, -1.5f, -1.5f)
+                reflectiveCurveToRelative(0.67f, -1.5f, 1.5f, -1.5f)
+            }
+            // Key shaft and teeth
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(11f, 11f)
+                lineTo(20f, 20f)
+                moveTo(17f, 17f)
+                lineTo(20f, 14f)
+                moveTo(14f, 14f)
+                lineTo(17f, 11f)
+            }
+        }.build()
+        return _cirisKey!!
+    }
+
+// ─── CIRISGlobe (world 🌍) ──────────────────────────────────────────────────────
+
+private var _cirisGlobe: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISGlobe: ImageVector
+    get() {
+        if (_cirisGlobe != null) return _cirisGlobe!!
+        _cirisGlobe = ImageVector.Builder(
+            name = "Filled.CIRISGlobe",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Outer circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                curveToRelative(4.97f, 0f, 9f, 4.03f, 9f, 9f)
+                reflectiveCurveToRelative(-4.03f, 9f, -9f, 9f)
+                reflectiveCurveToRelative(-9f, -4.03f, -9f, -9f)
+                reflectiveCurveToRelative(4.03f, -9f, 9f, -9f)
+            }
+            // Vertical meridian
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 3f)
+                curveToRelative(-2.5f, 0f, -4.5f, 4.03f, -4.5f, 9f)
+                reflectiveCurveToRelative(2f, 9f, 4.5f, 9f)
+                curveToRelative(2.5f, 0f, 4.5f, -4.03f, 4.5f, -9f)
+                reflectiveCurveToRelative(-2f, -9f, -4.5f, -9f)
+            }
+            // Horizontal lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(3f, 12f)
+                horizontalLineTo(21f)
+                moveTo(4f, 8f)
+                horizontalLineTo(20f)
+                moveTo(4f, 16f)
+                horizontalLineTo(20f)
+            }
+        }.build()
+        return _cirisGlobe!!
+    }
+
+// ─── CIRISChart (telemetry 📊) ──────────────────────────────────────────────────
+
+private var _cirisChart: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISChart: ImageVector
+    get() {
+        if (_cirisChart != null) return _cirisChart!!
+        _cirisChart = ImageVector.Builder(
+            name = "Filled.CIRISChart",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Bars
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(5f, 18f)
+                verticalLineTo(12f)
+                moveTo(9f, 18f)
+                verticalLineTo(8f)
+                moveTo(13f, 18f)
+                verticalLineTo(14f)
+                moveTo(17f, 18f)
+                verticalLineTo(6f)
+            }
+            // Base line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(3f, 20f)
+                horizontalLineTo(21f)
+            }
+        }.build()
+        return _cirisChart!!
+    }
+
+// ─── CIRISRefresh (sync/reload 🔄) ──────────────────────────────────────────────
+
+private var _cirisRefresh: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISRefresh: ImageVector
+    get() {
+        if (_cirisRefresh != null) return _cirisRefresh!!
+        _cirisRefresh = ImageVector.Builder(
+            name = "Filled.CIRISRefresh",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circular arrow
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4f, 12f)
+                curveToRelative(0f, -4.42f, 3.58f, -8f, 8f, -8f)
+                curveToRelative(3.1f, 0f, 5.8f, 1.77f, 7.12f, 4.35f)
+                moveTo(17f, 4f)
+                lineTo(20f, 8f)
+                lineTo(16f, 9f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(20f, 12f)
+                curveToRelative(0f, 4.42f, -3.58f, 8f, -8f, 8f)
+                curveToRelative(-3.1f, 0f, -5.8f, -1.77f, -7.12f, -4.35f)
+                moveTo(7f, 20f)
+                lineTo(4f, 16f)
+                lineTo(8f, 15f)
+            }
+        }.build()
+        return _cirisRefresh!!
+    }
+
+// ─── CIRISWallet (money 💰) ─────────────────────────────────────────────────────
+
+private var _cirisWallet: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISWallet: ImageVector
+    get() {
+        if (_cirisWallet != null) return _cirisWallet!!
+        _cirisWallet = ImageVector.Builder(
+            name = "Filled.CIRISWallet",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Wallet body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(3f, 7f)
+                curveToRelative(0f, -1.1f, 0.9f, -2f, 2f, -2f)
+                horizontalLineToRelative(14f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f)
+                verticalLineToRelative(10f)
+                curveToRelative(0f, 1.1f, -0.9f, 2f, -2f, 2f)
+                horizontalLineTo(5f)
+                curveToRelative(-1.1f, 0f, -2f, -0.9f, -2f, -2f)
+                close()
+            }
+            // Flap
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(3f, 10f)
+                horizontalLineTo(21f)
+            }
+            // Clasp area
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(17f, 13f)
+                horizontalLineTo(21f)
+                verticalLineTo(16f)
+                horizontalLineTo(17f)
+                curveToRelative(-0.83f, 0f, -1.5f, -0.67f, -1.5f, -1.5f)
+                reflectiveCurveToRelative(0.67f, -1.5f, 1.5f, -1.5f)
+            }
+            // Coin dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(17.5f, 13.5f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+            }
+        }.build()
+        return _cirisWallet!!
+    }
+
+// ─── CIRISGas (gas pump ⛽) ─────────────────────────────────────────────────────
+
+private var _cirisGas: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISGas: ImageVector
+    get() {
+        if (_cirisGas != null) return _cirisGas!!
+        _cirisGas = ImageVector.Builder(
+            name = "Filled.CIRISGas",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Pump body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4f, 20f)
+                verticalLineTo(6f)
+                curveToRelative(0f, -1.1f, 0.9f, -2f, 2f, -2f)
+                horizontalLineToRelative(6f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f)
+                verticalLineToRelative(14f)
+                horizontalLineTo(4f)
+            }
+            // Display window
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.4f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(6f, 6f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(4f)
+                horizontalLineTo(6f)
+                close()
+            }
+            // Nozzle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(14f, 8f)
+                horizontalLineTo(16f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f)
+                verticalLineTo(14f)
+                moveTo(18f, 14f)
+                lineTo(20f, 12f)
+            }
+            // Base
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(2f, 20f)
+                horizontalLineTo(16f)
+            }
+        }.build()
+        return _cirisGas!!
+    }
+
+// ─── CIRISQuestion (question mark ❓) ───────────────────────────────────────────
+
+private var _cirisQuestion: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISQuestion: ImageVector
+    get() {
+        if (_cirisQuestion != null) return _cirisQuestion!!
+        _cirisQuestion = ImageVector.Builder(
+            name = "Filled.CIRISQuestion",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Question mark curve
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(8f, 8f)
+                curveToRelative(0f, -2.21f, 1.79f, -4f, 4f, -4f)
+                reflectiveCurveToRelative(4f, 1.79f, 4f, 4f)
+                curveToRelative(0f, 2f, -1.5f, 3f, -2.5f, 3.5f)
+                curveTo(12.5f, 12f, 12f, 13f, 12f, 14f)
+            }
+            // Dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 17f)
+                curveToRelative(0.55f, 0f, 1f, 0.45f, 1f, 1f)
+                reflectiveCurveToRelative(-0.45f, 1f, -1f, 1f)
+                reflectiveCurveToRelative(-1f, -0.45f, -1f, -1f)
+                reflectiveCurveToRelative(0.45f, -1f, 1f, -1f)
+            }
+        }.build()
+        return _cirisQuestion!!
+    }
+
+// ─── CIRISPlus (plus ➕) ────────────────────────────────────────────────────────
+
+private var _cirisPlus: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISPlus: ImageVector
+    get() {
+        if (_cirisPlus != null) return _cirisPlus!!
+        _cirisPlus = ImageVector.Builder(
+            name = "Filled.CIRISPlus",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.5f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 5f)
+                verticalLineTo(19f)
+                moveTo(5f, 12f)
+                horizontalLineTo(19f)
+            }
+        }.build()
+        return _cirisPlus!!
+    }
+
+// ─── CIRISMinus (minus ➖) ──────────────────────────────────────────────────────
+
+private var _cirisMinus: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISMinus: ImageVector
+    get() {
+        if (_cirisMinus != null) return _cirisMinus!!
+        _cirisMinus = ImageVector.Builder(
+            name = "Filled.CIRISMinus",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.5f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(5f, 12f)
+                horizontalLineTo(19f)
+            }
+        }.build()
+        return _cirisMinus!!
+    }
+
+// ─── CIRISPause (pause ❚❚) ──────────────────────────────────────────────────────
+
+private var _cirisPause: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISPause: ImageVector
+    get() {
+        if (_cirisPause != null) return _cirisPause!!
+        _cirisPause = ImageVector.Builder(
+            name = "Filled.CIRISPause",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 3f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(8f, 5f)
+                verticalLineTo(19f)
+                moveTo(16f, 5f)
+                verticalLineTo(19f)
+            }
+        }.build()
+        return _cirisPause!!
+    }
+
+// ─── CIRISStar (star ⭐) ────────────────────────────────────────────────────────
+
+private var _cirisStar: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISStar: ImageVector
+    get() {
+        if (_cirisStar != null) return _cirisStar!!
+        _cirisStar = ImageVector.Builder(
+            name = "Filled.CIRISStar",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 2f)
+                lineTo(14.4f, 8.8f)
+                lineTo(22f, 9.2f)
+                lineTo(16.2f, 14f)
+                lineTo(18f, 21.5f)
+                lineTo(12f, 17.5f)
+                lineTo(6f, 21.5f)
+                lineTo(7.8f, 14f)
+                lineTo(2f, 9.2f)
+                lineTo(9.6f, 8.8f)
+                close()
+            }
+        }.build()
+        return _cirisStar!!
+    }
+
+// ─── CIRISCircle (empty circle ○) ──────────────────────────────────────────────
+
+private var _cirisCircle: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISCircle: ImageVector
+    get() {
+        if (_cirisCircle != null) return _cirisCircle!!
+        _cirisCircle = ImageVector.Builder(
+            name = "Filled.CIRISCircle",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+        }.build()
+        return _cirisCircle!!
+    }
+
+// ─── CIRISLocation (map pin 📍) ────────────────────────────────────────────────
+
+private var _cirisLocation: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISLocation: ImageVector
+    get() {
+        if (_cirisLocation != null) return _cirisLocation!!
+        _cirisLocation = ImageVector.Builder(
+            name = "Filled.CIRISLocation",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 2f)
+                curveToRelative(-4f, 0f, -7f, 3f, -7f, 7f)
+                curveToRelative(0f, 5.25f, 7f, 13f, 7f, 13f)
+                reflectiveCurveToRelative(7f, -7.75f, 7f, -13f)
+                curveToRelative(0f, -4f, -3f, -7f, -7f, -7f)
+            }
+            // Center dot
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 6.5f)
+                curveToRelative(1.38f, 0f, 2.5f, 1.12f, 2.5f, 2.5f)
+                reflectiveCurveToRelative(-1.12f, 2.5f, -2.5f, 2.5f)
+                reflectiveCurveToRelative(-2.5f, -1.12f, -2.5f, -2.5f)
+                reflectiveCurveToRelative(1.12f, -2.5f, 2.5f, -2.5f)
+            }
+        }.build()
+        return _cirisLocation!!
+    }
+
+// ─── CIRISClear (clear/close ✕) ────────────────────────────────────────────────
+
+private var _cirisClear: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISClear: ImageVector
+    get() {
+        if (_cirisClear != null) return _cirisClear!!
+        _cirisClear = ImageVector.Builder(
+            name = "Filled.CIRISClear",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Circle background
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(12f, 4f)
+                curveToRelative(4.42f, 0f, 8f, 3.58f, 8f, 8f)
+                reflectiveCurveToRelative(-3.58f, 8f, -8f, 8f)
+                reflectiveCurveToRelative(-8f, -3.58f, -8f, -8f)
+                reflectiveCurveToRelative(3.58f, -8f, 8f, -8f)
+            }
+            // X inside
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
+            ) {
+                moveTo(8f, 8f)
+                lineTo(16f, 16f)
+                moveTo(16f, 8f)
+                lineTo(8f, 16f)
+            }
+        }.build()
+        return _cirisClear!!
+    }
+
+// ─── CIRISTools (hammer ⚒) ─────────────────────────────────────────────────────
+
+private var _cirisTools: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTools: ImageVector
+    get() {
+        if (_cirisTools != null) return _cirisTools!!
+        _cirisTools = ImageVector.Builder(
+            name = "Filled.CIRISTools",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            // Wrench
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(4f, 17f)
+                lineTo(9f, 12f)
+                moveTo(7f, 5f)
+                curveToRelative(2f, -2f, 5f, -1f, 6f, 1f)
+                lineTo(9f, 10f)
+                lineTo(14f, 15f)
+                lineTo(18f, 11f)
+                curveToRelative(2f, 1f, 3f, 4f, 1f, 6f)
+            }
+            // Hammer head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(15f, 15f)
+                lineTo(20f, 20f)
+            }
+        }.build()
+        return _cirisTools!!
+    }
+
+// ─── CIRISDiamond (diamond ❖) ──────────────────────────────────────────────────
+
+private var _cirisDiamond: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDiamond: ImageVector
+    get() {
+        if (_cirisDiamond != null) return _cirisDiamond!!
+        _cirisDiamond = ImageVector.Builder(
+            name = "Filled.CIRISDiamond",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+            ) {
+                moveTo(12f, 2f)
+                lineTo(22f, 12f)
+                lineTo(12f, 22f)
+                lineTo(2f, 12f)
+                close()
+            }
+            // Inner diamond
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(12f, 7f)
+                lineTo(17f, 12f)
+                lineTo(12f, 17f)
+                lineTo(7f, 12f)
+                close()
+            }
+        }.build()
+        return _cirisDiamond!!
+    }
+
+// ============================================================================
+// EMOJI REPLACEMENT ICONS - From CIRIS Icon Redesign spec
+// 22x22 viewport with 1.75 stroke width, scaled to 24dp
+// ============================================================================
+
+// ─── CIRISKeySecure (replaces 🔐, hardware key) ───────────────────────────────
+
+private var _cirisKeySecure: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISKeySecure: ImageVector
+    get() {
+        if (_cirisKeySecure != null) return _cirisKeySecure!!
+        _cirisKeySecure = ImageVector.Builder(
+            name = "Filled.CIRISKeySecure",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Shield
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 2.5f)
+                lineTo(18f, 5f)
+                lineTo(18f, 11f)
+                curveTo(18f, 15f, 15f, 18f, 11f, 19.5f)
+                curveTo(7f, 18f, 4f, 15f, 4f, 11f)
+                lineTo(4f, 5f)
+                close()
+            }
+            // Key circle (approximated with curves)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10.75f, 10f)
+                curveTo(10.75f, 8.5f, 9.5f, 8.25f, 9f, 8.25f)
+                curveTo(7.75f, 8.25f, 7.25f, 9.5f, 7.25f, 10f)
+                curveTo(7.25f, 11.5f, 8.5f, 11.75f, 9f, 11.75f)
+                curveTo(10.25f, 11.75f, 10.75f, 10.5f, 10.75f, 10f)
+                close()
+            }
+            // Key shaft
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10.5f, 10.5f)
+                lineTo(14.5f, 14.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(12.5f, 12.5f)
+                lineTo(13.75f, 11.25f)
+            }
+        }.build()
+        return _cirisKeySecure!!
+    }
+
+// ─── CIRISTelemetry (replaces 📊) ─────────────────────────────────────────────
+
+private var _cirisTelemetry: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
+    get() {
+        if (_cirisTelemetry != null) return _cirisTelemetry!!
+        _cirisTelemetry = ImageVector.Builder(
+            name = "Filled.CIRISTelemetry",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Axes
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 3.5f)
+                lineTo(3.5f, 18.5f)
+                lineTo(18.5f, 18.5f)
+            }
+            // Bars
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7f, 14.5f)
+                lineTo(7f, 18.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10.5f, 10f)
+                lineTo(10.5f, 18.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14f, 12.5f)
+                lineTo(14f, 18.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(17.5f, 6.5f)
+                lineTo(17.5f, 18.5f)
+            }
+        }.build()
+        return _cirisTelemetry!!
+    }
+
+// ─── CIRISRequirements (replaces ■) ───────────────────────────────────────────
+
+private var _cirisRequirements: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
+    get() {
+        if (_cirisRequirements != null) return _cirisRequirements!!
+        _cirisRequirements = ImageVector.Builder(
+            name = "Filled.CIRISRequirements",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Left bracket
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 3.5f)
+                lineTo(4f, 18.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 3.5f)
+                lineTo(6f, 3.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 18.5f)
+                lineTo(6f, 18.5f)
+            }
+            // First checkbox
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 6.25f)
+                lineTo(10f, 8.25f)
+                lineTo(13.5f, 4.75f)
+            }
+            // First line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 11f)
+                lineTo(18f, 11f)
+            }
+            // Second checkbox
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 15.75f)
+                lineTo(10f, 17.75f)
+                lineTo(13.5f, 14.25f)
+            }
+        }.build()
+        return _cirisRequirements!!
+    }
+
+// ─── CIRISInstructions (replaces ≡) ───────────────────────────────────────────
+
+private var _cirisInstructions: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
+    get() {
+        if (_cirisInstructions != null) return _cirisInstructions!!
+        _cirisInstructions = ImageVector.Builder(
+            name = "Filled.CIRISInstructions",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Number 1
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 5.75f)
+                lineTo(4.5f, 5f)
+                lineTo(4.5f, 8.25f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 8.25f)
+                lineTo(5.25f, 8.25f)
+            }
+            // Number 2
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.25f, 12.5f)
+                lineTo(4f, 12f)
+                lineTo(5f, 12f)
+                lineTo(5f, 13f)
+                lineTo(3.25f, 14.5f)
+                lineTo(5.25f, 14.5f)
+            }
+            // Number 3
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 18f)
+                lineTo(4.5f, 17.25f)
+                lineTo(5f, 17.75f)
+                lineTo(4.25f, 18.5f)
+                lineTo(5f, 19.25f)
+                lineTo(4.5f, 19.75f)
+                lineTo(3.5f, 19f)
+            }
+            // Lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 6.25f)
+                lineTo(18.5f, 6.25f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 12.25f)
+                lineTo(18.5f, 12.25f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 18.25f)
+                lineTo(18.5f, 18.25f)
+            }
+        }.build()
+        return _cirisInstructions!!
+    }
+
+// ─── CIRISSafety (replaces ◆, shield) ─────────────────────────────────────────
+
+private var _cirisSafety: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSafety: ImageVector
+    get() {
+        if (_cirisSafety != null) return _cirisSafety!!
+        _cirisSafety = ImageVector.Builder(
+            name = "Filled.CIRISSafety",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Shield
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 2.5f)
+                lineTo(18.25f, 5f)
+                lineTo(18.25f, 11f)
+                curveTo(18.25f, 15.25f, 15f, 18.5f, 11f, 19.75f)
+                curveTo(7f, 18.5f, 3.75f, 15.25f, 3.75f, 11f)
+                lineTo(3.75f, 5f)
+                close()
+            }
+            // Inner diamond
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 7.75f)
+                lineTo(14f, 11f)
+                lineTo(11f, 14.25f)
+                lineTo(8f, 11f)
+                close()
+            }
+        }.build()
+        return _cirisSafety!!
+    }
+
+// ─── CIRISMemory (memory chip) ────────────────────────────────────────────────
+
+private var _cirisMemory: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
+    get() {
+        if (_cirisMemory != null) return _cirisMemory!!
+        _cirisMemory = ImageVector.Builder(
+            name = "Filled.CIRISMemory",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Chip body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 6f)
+                lineTo(18.5f, 6f)
+                lineTo(18.5f, 16f)
+                lineTo(3.5f, 16f)
+                close()
+            }
+            // Internal lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 9.5f)
+                lineTo(18.5f, 9.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 12.5f)
+                lineTo(18.5f, 12.5f)
+            }
+            // Top pins
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6.5f, 4f)
+                lineTo(6.5f, 6f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10f, 4f)
+                lineTo(10f, 6f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.5f, 4f)
+                lineTo(13.5f, 6f)
+            }
+            // Bottom pins
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6.5f, 16f)
+                lineTo(6.5f, 18f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10f, 16f)
+                lineTo(10f, 18f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.5f, 16f)
+                lineTo(13.5f, 18f)
+            }
+        }.build()
+        return _cirisMemory!!
+    }
+
+// ─── CIRISSkill (skill card) ──────────────────────────────────────────────────
+
+private var _cirisSkill: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSkill: ImageVector
+    get() {
+        if (_cirisSkill != null) return _cirisSkill!!
+        _cirisSkill = ImageVector.Builder(
+            name = "Filled.CIRISSkill",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Outer box
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.75f, 3.75f)
+                lineTo(18.25f, 3.75f)
+                lineTo(18.25f, 18.25f)
+                lineTo(3.75f, 18.25f)
+                close()
+            }
+            // Inner diamond
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 7f)
+                lineTo(14.25f, 11f)
+                lineTo(11f, 15f)
+                lineTo(7.75f, 11f)
+                close()
+            }
+            // Cross inside diamond
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 7f)
+                lineTo(11f, 15f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.75f, 11f)
+                lineTo(14.25f, 11f)
+            }
+        }.build()
+        return _cirisSkill!!
+    }
+
+// ─── CIRISModel (LLM model) ───────────────────────────────────────────────────
+
+private var _cirisModel: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
+    get() {
+        if (_cirisModel != null) return _cirisModel!!
+        _cirisModel = ImageVector.Builder(
+            name = "Filled.CIRISModel",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Three layers
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 3.75f)
+                lineTo(17f, 3.75f)
+                lineTo(17f, 7.25f)
+                lineTo(5f, 7.25f)
+                close()
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 9.25f)
+                lineTo(17f, 9.25f)
+                lineTo(17f, 12.75f)
+                lineTo(5f, 12.75f)
+                close()
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 14.75f)
+                lineTo(17f, 14.75f)
+                lineTo(17f, 18.25f)
+                lineTo(5f, 18.25f)
+                close()
+            }
+            // Connectors
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 7.25f)
+                lineTo(11f, 9.25f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 12.75f)
+                lineTo(11f, 14.75f)
+            }
+            // Lines in layers
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 5.5f)
+                lineTo(14f, 5.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 11f)
+                lineTo(14f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 16.5f)
+                lineTo(14f, 16.5f)
+            }
+        }.build()
+        return _cirisModel!!
+    }
+
+// ─── CIRISAudit (log/audit) ───────────────────────────────────────────────────
+
+private var _cirisAudit: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
+    get() {
+        if (_cirisAudit != null) return _cirisAudit!!
+        _cirisAudit = ImageVector.Builder(
+            name = "Filled.CIRISAudit",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Document body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4.5f, 2.75f)
+                lineTo(14.5f, 2.75f)
+                lineTo(17.5f, 5.75f)
+                lineTo(17.5f, 19.25f)
+                lineTo(4.5f, 19.25f)
+                close()
+            }
+            // Corner fold
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14.5f, 2.75f)
+                lineTo(14.5f, 5.75f)
+                lineTo(17.5f, 5.75f)
+            }
+            // Lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.5f, 9.5f)
+                lineTo(14.5f, 9.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.5f, 12.5f)
+                lineTo(14.5f, 12.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.5f, 15.5f)
+                lineTo(11.5f, 15.5f)
+            }
+        }.build()
+        return _cirisAudit!!
+    }
+
+// ─── CIRISAdapter (adapter plug) ──────────────────────────────────────────────
+
+private var _cirisAdapter: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
+    get() {
+        if (_cirisAdapter != null) return _cirisAdapter!!
+        _cirisAdapter = ImageVector.Builder(
+            name = "Filled.CIRISAdapter",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Left side
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 11f)
+                lineTo(8.5f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8.5f, 8f)
+                lineTo(8.5f, 14f)
+                lineTo(11f, 14f)
+                lineTo(11f, 8f)
+                close()
+            }
+            // Connector
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 11f)
+                lineTo(14f, 11f)
+            }
+            // Right side
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14f, 7.5f)
+                lineTo(18.5f, 7.5f)
+                lineTo(18.5f, 14.5f)
+                lineTo(14f, 14.5f)
+                close()
+            }
+            // Pins
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(15.75f, 9.5f)
+                lineTo(16.75f, 9.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(15.75f, 12.5f)
+                lineTo(16.75f, 12.5f)
+            }
+        }.build()
+        return _cirisAdapter!!
+    }
+
+// ─── CIRISThought (chat bubble with plus) ─────────────────────────────────────
+
+private var _cirisThought: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISThought: ImageVector
+    get() {
+        if (_cirisThought != null) return _cirisThought!!
+        _cirisThought = ImageVector.Builder(
+            name = "Filled.CIRISThought",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Chat bubble
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 4f)
+                lineTo(18.5f, 4f)
+                lineTo(18.5f, 15f)
+                lineTo(12f, 15f)
+                lineTo(8.5f, 18.5f)
+                lineTo(8.5f, 15f)
+                lineTo(3.5f, 15f)
+                close()
+            }
+            // Plus sign
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 7f)
+                lineTo(11f, 12f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8.5f, 9.5f)
+                lineTo(13.5f, 9.5f)
+            }
+        }.build()
+        return _cirisThought!!
+    }
+
+// ─── CIRISTask (task clipboard) ───────────────────────────────────────────────
+
+private var _cirisTask: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISTask: ImageVector
+    get() {
+        if (_cirisTask != null) return _cirisTask!!
+        _cirisTask = ImageVector.Builder(
+            name = "Filled.CIRISTask",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Clipboard body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 3.5f)
+                lineTo(13f, 3.5f)
+                lineTo(13f, 6f)
+                lineTo(18.5f, 6f)
+                lineTo(18.5f, 18.5f)
+                lineTo(3.5f, 18.5f)
+                close()
+            }
+            // Checkmark
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7f, 12f)
+                lineTo(10f, 15f)
+                lineTo(15f, 9.5f)
+            }
+        }.build()
+        return _cirisTask!!
+    }
+
+// ─── CIRISHandler (action handler) ────────────────────────────────────────────
+
+private var _cirisHandler: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISHandler: ImageVector
+    get() {
+        if (_cirisHandler != null) return _cirisHandler!!
+        _cirisHandler = ImageVector.Builder(
+            name = "Filled.CIRISHandler",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Box
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 3.5f)
+                lineTo(18.5f, 3.5f)
+                lineTo(18.5f, 18.5f)
+                lineTo(3.5f, 18.5f)
+                close()
+            }
+            // Lightning bolt
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(12f, 5.5f)
+                lineTo(7f, 12f)
+                lineTo(10.5f, 12f)
+                lineTo(9.5f, 16.5f)
+                lineTo(14.5f, 10f)
+                lineTo(11f, 10f)
+                close()
+            }
+        }.build()
+        return _cirisHandler!!
+    }
+
+// ─── CIRISGraph (memory graph) ────────────────────────────────────────────────
+
+private var _cirisGraph: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
+    get() {
+        if (_cirisGraph != null) return _cirisGraph!!
+        _cirisGraph = ImageVector.Builder(
+            name = "Filled.CIRISGraph",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Three nodes (circles drawn with curves)
+            // Top-left node
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.75f, 5.5f)
+                curveTo(7.75f, 6.74f, 6.74f, 7.75f, 5.5f, 7.75f)
+                curveTo(4.26f, 7.75f, 3.25f, 6.74f, 3.25f, 5.5f)
+                curveTo(3.25f, 4.26f, 4.26f, 3.25f, 5.5f, 3.25f)
+                curveTo(6.74f, 3.25f, 7.75f, 4.26f, 7.75f, 5.5f)
+                close()
+            }
+            // Top-right node
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(18.75f, 5.5f)
+                curveTo(18.75f, 6.74f, 17.74f, 7.75f, 16.5f, 7.75f)
+                curveTo(15.26f, 7.75f, 14.25f, 6.74f, 14.25f, 5.5f)
+                curveTo(14.25f, 4.26f, 15.26f, 3.25f, 16.5f, 3.25f)
+                curveTo(17.74f, 3.25f, 18.75f, 4.26f, 18.75f, 5.5f)
+                close()
+            }
+            // Bottom node
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.25f, 16.5f)
+                curveTo(13.25f, 17.74f, 12.24f, 18.75f, 11f, 18.75f)
+                curveTo(9.76f, 18.75f, 8.75f, 17.74f, 8.75f, 16.5f)
+                curveTo(8.75f, 15.26f, 9.76f, 14.25f, 11f, 14.25f)
+                curveTo(12.24f, 14.25f, 13.25f, 15.26f, 13.25f, 16.5f)
+                close()
+            }
+            // Edges
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.75f, 5.5f)
+                lineTo(14.25f, 5.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6.75f, 7.5f)
+                lineTo(9.75f, 14.5f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(15.25f, 7.5f)
+                lineTo(12.25f, 14.5f)
+            }
+        }.build()
+        return _cirisGraph!!
+    }
+
+// ─── CIRISAgent (wise authority shield) ───────────────────────────────────────
+
+private var _cirisAgent: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISAgent: ImageVector
+    get() {
+        if (_cirisAgent != null) return _cirisAgent!!
+        _cirisAgent = ImageVector.Builder(
+            name = "Filled.CIRISAgent",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Shield
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 2.5f)
+                lineTo(18f, 5.5f)
+                lineTo(18f, 11f)
+                curveTo(18f, 15f, 15f, 18f, 11f, 19.5f)
+                curveTo(7f, 18f, 4f, 15f, 4f, 11f)
+                lineTo(4f, 5.5f)
+                close()
+            }
+            // Cross inside
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.25f, 10f)
+                lineTo(14.75f, 10f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 8f)
+                lineTo(11f, 13f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(9f, 13f)
+                lineTo(13f, 13f)
+            }
+        }.build()
+        return _cirisAgent!!
+    }
+
+// ─── CIRISBus (message bus) ───────────────────────────────────────────────────
+
+private var _cirisBus: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
+    get() {
+        if (_cirisBus != null) return _cirisBus!!
+        _cirisBus = ImageVector.Builder(
+            name = "Filled.CIRISBus",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Main bus line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3f, 11f)
+                lineTo(19f, 11f)
+            }
+            // End caps
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3f, 8f)
+                lineTo(3f, 14f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(19f, 8f)
+                lineTo(19f, 14f)
+            }
+            // Top connectors
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7.5f, 11f)
+                lineTo(7.5f, 5f)
+            }
+            // Connector boxes (filled rectangles drawn with paths)
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(6f, 3f)
+                lineTo(9f, 3f)
+                lineTo(9f, 5f)
+                lineTo(6f, 5f)
+                close()
+            }
+            // Bottom connector
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 11f)
+                lineTo(11f, 17f)
+            }
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(9.5f, 17f)
+                lineTo(12.5f, 17f)
+                lineTo(12.5f, 19f)
+                lineTo(9.5f, 19f)
+                close()
+            }
+            // Right top connector
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14.5f, 11f)
+                lineTo(14.5f, 5f)
+            }
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(13f, 3f)
+                lineTo(16f, 3f)
+                lineTo(16f, 5f)
+                lineTo(13f, 5f)
+                close()
+            }
+        }.build()
+        return _cirisBus!!
+    }
+
+// ─── CIRISStage (pipeline stage) ──────────────────────────────────────────────
+
+private var _cirisStage: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISStage: ImageVector
+    get() {
+        if (_cirisStage != null) return _cirisStage!!
+        _cirisStage = ImageVector.Builder(
+            name = "Filled.CIRISStage",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Chevron shape
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(2.5f, 7f)
+                lineTo(10f, 7f)
+                lineTo(13f, 11f)
+                lineTo(10f, 15f)
+                lineTo(2.5f, 15f)
+                close()
+            }
+            // Arrow
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13f, 11f)
+                lineTo(19.5f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(17f, 8.5f)
+                lineTo(19.5f, 11f)
+                lineTo(17f, 13.5f)
+            }
+        }.build()
+        return _cirisStage!!
+    }
+
+// ─── CIRISUpload ──────────────────────────────────────────────────────────────
+
+private var _cirisUpload: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISUpload: ImageVector
+    get() {
+        if (_cirisUpload != null) return _cirisUpload!!
+        _cirisUpload = ImageVector.Builder(
+            name = "Filled.CIRISUpload",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Base
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 14f)
+                lineTo(3.5f, 18.5f)
+                lineTo(18.5f, 18.5f)
+                lineTo(18.5f, 14f)
+            }
+            // Arrow shaft
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 3f)
+                lineTo(11f, 14f)
+            }
+            // Arrow head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6f, 8f)
+                lineTo(11f, 3f)
+                lineTo(16f, 8f)
+            }
+        }.build()
+        return _cirisUpload!!
+    }
+
+// ─── CIRISDownload ────────────────────────────────────────────────────────────
+
+private var _cirisDownload: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDownload: ImageVector
+    get() {
+        if (_cirisDownload != null) return _cirisDownload!!
+        _cirisDownload = ImageVector.Builder(
+            name = "Filled.CIRISDownload",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Base
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 14f)
+                lineTo(3.5f, 18.5f)
+                lineTo(18.5f, 18.5f)
+                lineTo(18.5f, 14f)
+            }
+            // Arrow shaft
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(11f, 3f)
+                lineTo(11f, 14f)
+            }
+            // Arrow head pointing down
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6f, 9f)
+                lineTo(11f, 14f)
+                lineTo(16f, 9f)
+            }
+        }.build()
+        return _cirisDownload!!
+    }
+
+// ─── CIRISSearch ──────────────────────────────────────────────────────────────
+
+private var _cirisSearch: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSearch: ImageVector
+    get() {
+        if (_cirisSearch != null) return _cirisSearch!!
+        _cirisSearch = ImageVector.Builder(
+            name = "Filled.CIRISSearch",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Circle (magnifying glass lens)
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14.5f, 9.25f)
+                curveTo(14.5f, 12.15f, 12.15f, 14.5f, 9.25f, 14.5f)
+                curveTo(6.35f, 14.5f, 4f, 12.15f, 4f, 9.25f)
+                curveTo(4f, 6.35f, 6.35f, 4f, 9.25f, 4f)
+                curveTo(12.15f, 4f, 14.5f, 6.35f, 14.5f, 9.25f)
+                close()
+            }
+            // Handle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.25f, 13.25f)
+                lineTo(18.25f, 18.25f)
+            }
+        }.build()
+        return _cirisSearch!!
+    }
+
+// ─── CIRISFilter ──────────────────────────────────────────────────────────────
+
+private var _cirisFilter: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISFilter: ImageVector
+    get() {
+        if (_cirisFilter != null) return _cirisFilter!!
+        _cirisFilter = ImageVector.Builder(
+            name = "Filled.CIRISFilter",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Funnel
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 4f)
+                lineTo(18.5f, 4f)
+                lineTo(13f, 11f)
+                lineTo(13f, 18f)
+                lineTo(9f, 16.5f)
+                lineTo(9f, 11f)
+                close()
+            }
+        }.build()
+        return _cirisFilter!!
+    }
+
+// ─── CIRISArrowBack ───────────────────────────────────────────────────────────
+
+private var _cirisArrowBack: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowBack: ImageVector
+    get() {
+        if (_cirisArrowBack != null) return _cirisArrowBack!!
+        _cirisArrowBack = ImageVector.Builder(
+            name = "Filled.CIRISArrowBack",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(17f, 11f)
+                lineTo(5f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(10f, 5f)
+                lineTo(4f, 11f)
+                lineTo(10f, 17f)
+            }
+        }.build()
+        return _cirisArrowBack!!
+    }
+
+// ─── CIRISArrowForward ────────────────────────────────────────────────────────
+
+private var _cirisArrowForward: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowForward: ImageVector
+    get() {
+        if (_cirisArrowForward != null) return _cirisArrowForward!!
+        _cirisArrowForward = ImageVector.Builder(
+            name = "Filled.CIRISArrowForward",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 11f)
+                lineTo(17f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(12f, 5f)
+                lineTo(18f, 11f)
+                lineTo(12f, 17f)
+            }
+        }.build()
+        return _cirisArrowForward!!
+    }
+
+// ─── CIRISArrowUp ─────────────────────────────────────────────────────────────
+
+private var _cirisArrowUp: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowUp: ImageVector
+    get() {
+        if (_cirisArrowUp != null) return _cirisArrowUp!!
+        _cirisArrowUp = ImageVector.Builder(
+            name = "Filled.CIRISArrowUp",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 13.5f)
+                lineTo(11f, 7.5f)
+                lineTo(17f, 13.5f)
+            }
+        }.build()
+        return _cirisArrowUp!!
+    }
+
+// ─── CIRISArrowDown ───────────────────────────────────────────────────────────
+
+private var _cirisArrowDown: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowDown: ImageVector
+    get() {
+        if (_cirisArrowDown != null) return _cirisArrowDown!!
+        _cirisArrowDown = ImageVector.Builder(
+            name = "Filled.CIRISArrowDown",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 8.5f)
+                lineTo(11f, 14.5f)
+                lineTo(17f, 8.5f)
+            }
+        }.build()
+        return _cirisArrowDown!!
+    }
+
+// ─── CIRISArrowRight ──────────────────────────────────────────────────────────
+
+private var _cirisArrowRight: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowRight: ImageVector
+    get() {
+        if (_cirisArrowRight != null) return _cirisArrowRight!!
+        _cirisArrowRight = ImageVector.Builder(
+            name = "Filled.CIRISArrowRight",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8.5f, 5f)
+                lineTo(14.5f, 11f)
+                lineTo(8.5f, 17f)
+            }
+        }.build()
+        return _cirisArrowRight!!
+    }
+
+// ─── CIRISDelete ──────────────────────────────────────────────────────────────
+
+private var _cirisDelete: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
+    get() {
+        if (_cirisDelete != null) return _cirisDelete!!
+        _cirisDelete = ImageVector.Builder(
+            name = "Filled.CIRISDelete",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Lid
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 6f)
+                lineTo(18f, 6f)
+            }
+            // Handle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 6f)
+                lineTo(8f, 4f)
+                lineTo(14f, 4f)
+                lineTo(14f, 6f)
+            }
+            // Body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5.5f, 6f)
+                lineTo(6.5f, 19f)
+                lineTo(15.5f, 19f)
+                lineTo(16.5f, 6f)
+            }
+            // Lines
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(9f, 9f)
+                lineTo(9f, 16f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13f, 9f)
+                lineTo(13f, 16f)
+            }
+        }.build()
+        return _cirisDelete!!
+    }
+
+// ─── CIRISEdit ────────────────────────────────────────────────────────────────
+
+private var _cirisEdit: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISEdit: ImageVector
+    get() {
+        if (_cirisEdit != null) return _cirisEdit!!
+        _cirisEdit = ImageVector.Builder(
+            name = "Filled.CIRISEdit",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Pencil body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14f, 3.5f)
+                lineTo(18.5f, 8f)
+                lineTo(7.5f, 19f)
+                lineTo(3f, 19f)
+                lineTo(3f, 14.5f)
+                close()
+            }
+            // Collar line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(12f, 5.5f)
+                lineTo(16.5f, 10f)
+            }
+        }.build()
+        return _cirisEdit!!
+    }
+
+// ─── CIRISSettings ────────────────────────────────────────────────────────────
+
+private var _cirisSettings: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSettings: ImageVector
+    get() {
+        if (_cirisSettings != null) return _cirisSettings!!
+        _cirisSettings = ImageVector.Builder(
+            name = "Filled.CIRISSettings",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Center circle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.75f, 11f)
+                curveTo(13.75f, 12.52f, 12.52f, 13.75f, 11f, 13.75f)
+                curveTo(9.48f, 13.75f, 8.25f, 12.52f, 8.25f, 11f)
+                curveTo(8.25f, 9.48f, 9.48f, 8.25f, 11f, 8.25f)
+                curveTo(12.52f, 8.25f, 13.75f, 9.48f, 13.75f, 11f)
+                close()
+            }
+            // Spokes
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(11f, 3f); lineTo(11f, 5.5f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(11f, 16.5f); lineTo(11f, 19f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(3f, 11f); lineTo(5.5f, 11f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(16.5f, 11f); lineTo(19f, 11f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(5.5f, 5.5f); lineTo(7.25f, 7.25f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(14.75f, 14.75f); lineTo(16.5f, 16.5f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(5.5f, 16.5f); lineTo(7.25f, 14.75f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(14.75f, 7.25f); lineTo(16.5f, 5.5f)
+            }
+        }.build()
+        return _cirisSettings!!
+    }
+
+// ─── CIRISPerson ──────────────────────────────────────────────────────────────
+
+private var _cirisPerson: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISPerson: ImageVector
+    get() {
+        if (_cirisPerson != null) return _cirisPerson!!
+        _cirisPerson = ImageVector.Builder(
+            name = "Filled.CIRISPerson",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Head
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14.25f, 7.5f)
+                curveTo(14.25f, 9.3f, 12.8f, 10.75f, 11f, 10.75f)
+                curveTo(9.2f, 10.75f, 7.75f, 9.3f, 7.75f, 7.5f)
+                curveTo(7.75f, 5.7f, 9.2f, 4.25f, 11f, 4.25f)
+                curveTo(12.8f, 4.25f, 14.25f, 5.7f, 14.25f, 7.5f)
+                close()
+            }
+            // Body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 18.5f)
+                curveTo(4f, 14.75f, 7f, 12.5f, 11f, 12.5f)
+                curveTo(15f, 12.5f, 18f, 14.75f, 18f, 18.5f)
+            }
+        }.build()
+        return _cirisPerson!!
+    }
+
+// ─── CIRISBuild ───────────────────────────────────────────────────────────────
+
+private var _cirisBuild: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISBuild: ImageVector
+    get() {
+        if (_cirisBuild != null) return _cirisBuild!!
+        _cirisBuild = ImageVector.Builder(
+            name = "Filled.CIRISBuild",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Wrench shape
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(14.5f, 3f)
+                lineTo(19f, 7.5f)
+                lineTo(17f, 9.5f)
+                lineTo(15.5f, 8f)
+                lineTo(13.5f, 10f)
+                lineTo(15f, 11.5f)
+                lineTo(13f, 13.5f)
+                lineTo(11.5f, 12f)
+                lineTo(9f, 14.5f)
+                lineTo(10.5f, 16f)
+                lineTo(8f, 18.5f)
+                lineTo(3.5f, 14f)
+                close()
+            }
+        }.build()
+        return _cirisBuild!!
+    }
+
+// ─── CIRISHome ────────────────────────────────────────────────────────────────
+
+private var _cirisHome: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISHome: ImageVector
+    get() {
+        if (_cirisHome != null) return _cirisHome!!
+        _cirisHome = ImageVector.Builder(
+            name = "Filled.CIRISHome",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3f, 10f)
+                lineTo(11f, 3f)
+                lineTo(19f, 10f)
+                lineTo(19f, 19f)
+                lineTo(13f, 19f)
+                lineTo(13f, 13f)
+                lineTo(9f, 13f)
+                lineTo(9f, 19f)
+                lineTo(3f, 19f)
+                close()
+            }
+        }.build()
+        return _cirisHome!!
+    }
+
+// ─── CIRISLock ────────────────────────────────────────────────────────────────
+
+private var _cirisLock: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISLock: ImageVector
+    get() {
+        if (_cirisLock != null) return _cirisLock!!
+        _cirisLock = ImageVector.Builder(
+            name = "Filled.CIRISLock",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Lock body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4f, 10f)
+                lineTo(18f, 10f)
+                lineTo(18f, 19f)
+                lineTo(4f, 19f)
+                close()
+            }
+            // Shackle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7f, 10f)
+                lineTo(7f, 7f)
+                curveTo(7f, 5f, 8.75f, 3f, 11f, 3f)
+                curveTo(13.25f, 3f, 15f, 5f, 15f, 7f)
+                lineTo(15f, 10f)
+            }
+            // Keyhole
+            path(
+                fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)
+            ) {
+                moveTo(10.25f, 13.25f)
+                lineTo(11.75f, 13.25f)
+                lineTo(11.75f, 15.75f)
+                lineTo(10.25f, 15.75f)
+                close()
+            }
+        }.build()
+        return _cirisLock!!
+    }
+
+// ─── CIRISDateRange ───────────────────────────────────────────────────────────
+
+private var _cirisDateRange: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISDateRange: ImageVector
+    get() {
+        if (_cirisDateRange != null) return _cirisDateRange!!
+        _cirisDateRange = ImageVector.Builder(
+            name = "Filled.CIRISDateRange",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Calendar body
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 5f)
+                lineTo(18.5f, 5f)
+                lineTo(18.5f, 18.5f)
+                lineTo(3.5f, 18.5f)
+                close()
+            }
+            // Header line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3.5f, 9f)
+                lineTo(18.5f, 9f)
+            }
+            // Hangers
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(7f, 3f)
+                lineTo(7f, 6f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(15f, 3f)
+                lineTo(15f, 6f)
+            }
+            // Date dots
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(6.5f, 11.5f); lineTo(8.5f, 11.5f); lineTo(8.5f, 13.5f); lineTo(6.5f, 13.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(10f, 11.5f); lineTo(12f, 11.5f); lineTo(12f, 13.5f); lineTo(10f, 13.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(13.5f, 11.5f); lineTo(15.5f, 11.5f); lineTo(15.5f, 13.5f); lineTo(13.5f, 13.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(6.5f, 15f); lineTo(8.5f, 15f); lineTo(8.5f, 17f); lineTo(6.5f, 17f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(10f, 15f); lineTo(12f, 15f); lineTo(12f, 17f); lineTo(10f, 17f); close()
+            }
+        }.build()
+        return _cirisDateRange!!
+    }
+
+// ─── CIRISSend ────────────────────────────────────────────────────────────────
+
+private var _cirisSend: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISSend: ImageVector
+    get() {
+        if (_cirisSend != null) return _cirisSend!!
+        _cirisSend = ImageVector.Builder(
+            name = "Filled.CIRISSend",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Paper plane
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(3f, 3f)
+                lineTo(19f, 11f)
+                lineTo(3f, 19f)
+                lineTo(5f, 11f)
+                close()
+            }
+            // Center line
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(5f, 11f)
+                lineTo(12f, 11f)
+            }
+        }.build()
+        return _cirisSend!!
+    }
+
+// ─── CIRISPlay ────────────────────────────────────────────────────────────────
+
+private var _cirisPlay: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISPlay: ImageVector
+    get() {
+        if (_cirisPlay != null) return _cirisPlay!!
+        _cirisPlay = ImageVector.Builder(
+            name = "Filled.CIRISPlay",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Play triangle
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(6f, 4f)
+                lineTo(18f, 11f)
+                lineTo(6f, 18f)
+                close()
+            }
+        }.build()
+        return _cirisPlay!!
+    }
+
+// ─── CIRISStop ────────────────────────────────────────────────────────────────
+
+private var _cirisStop: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISStop: ImageVector
+    get() {
+        if (_cirisStop != null) return _cirisStop!!
+        _cirisStop = ImageVector.Builder(
+            name = "Filled.CIRISStop",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(4.5f, 4.5f)
+                lineTo(17.5f, 4.5f)
+                lineTo(17.5f, 17.5f)
+                lineTo(4.5f, 17.5f)
+                close()
+            }
+        }.build()
+        return _cirisStop!!
+    }
+
+// ─── CIRISArrowLeft ───────────────────────────────────────────────────────────
+
+private var _cirisArrowLeft: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISArrowLeft: ImageVector
+    get() {
+        if (_cirisArrowLeft != null) return _cirisArrowLeft!!
+        _cirisArrowLeft = ImageVector.Builder(
+            name = "Filled.CIRISArrowLeft",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(13.5f, 5f)
+                lineTo(7.5f, 11f)
+                lineTo(13.5f, 17f)
+            }
+        }.build()
+        return _cirisArrowLeft!!
+    }
+
+// ─── CIRISList ────────────────────────────────────────────────────────────────
+
+private var _cirisList: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISList: ImageVector
+    get() {
+        if (_cirisList != null) return _cirisList!!
+        _cirisList = ImageVector.Builder(
+            name = "Filled.CIRISList",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Bullets
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(3.5f, 5.5f); lineTo(5.5f, 5.5f); lineTo(5.5f, 7.5f); lineTo(3.5f, 7.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(3.5f, 10f); lineTo(5.5f, 10f); lineTo(5.5f, 12f); lineTo(3.5f, 12f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(3.5f, 14.5f); lineTo(5.5f, 14.5f); lineTo(5.5f, 16.5f); lineTo(3.5f, 16.5f); close()
+            }
+            // Lines
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(7.5f, 6.5f); lineTo(18.5f, 6.5f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(7.5f, 11f); lineTo(18.5f, 11f)
+            }
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+                moveTo(7.5f, 15.5f); lineTo(18.5f, 15.5f)
+            }
+        }.build()
+        return _cirisList!!
+    }
+
+// ─── CIRISExit ────────────────────────────────────────────────────────────────
+
+private var _cirisExit: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISExit: ImageVector
+    get() {
+        if (_cirisExit != null) return _cirisExit!!
+        _cirisExit = ImageVector.Builder(
+            name = "Filled.CIRISExit",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Door frame
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(9f, 3f)
+                lineTo(3f, 3f)
+                lineTo(3f, 19f)
+                lineTo(9f, 19f)
+            }
+            // Arrow
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(8f, 11f)
+                lineTo(19f, 11f)
+            }
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.75f,
+                strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
+                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
+            ) {
+                moveTo(15f, 7f)
+                lineTo(19f, 11f)
+                lineTo(15f, 15f)
+            }
+        }.build()
+        return _cirisExit!!
+    }
+
+// ─── CIRISMoreVert ────────────────────────────────────────────────────────────
+
+private var _cirisMoreVert: ImageVector? = null
+val CIRISMaterialIcons.Filled.CIRISMoreVert: ImageVector
+    get() {
+        if (_cirisMoreVert != null) return _cirisMoreVert!!
+        _cirisMoreVert = ImageVector.Builder(
+            name = "Filled.CIRISMoreVert",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 22f,
+            viewportHeight = 22f
+        ).apply {
+            // Three vertical dots
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(9.5f, 4f); lineTo(12.5f, 4f); lineTo(12.5f, 7f); lineTo(9.5f, 7f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(9.5f, 9.5f); lineTo(12.5f, 9.5f); lineTo(12.5f, 12.5f); lineTo(9.5f, 12.5f); close()
+            }
+            path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+                moveTo(9.5f, 15f); lineTo(12.5f, 15f); lineTo(12.5f, 18f); lineTo(9.5f, 18f); close()
+            }
+        }.build()
+        return _cirisMoreVert!!
     }

@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.components.emojiToIconOrDefault
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -122,7 +124,7 @@ fun SkillImportDialog(
                         navigationIcon = {
                             if (phase != ImportPhase.PASTE) {
                                 IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Filled.ArrowBack, localizedString("mobile.common_back"))
+                                    Icon(CIRISIcons.arrowBack, localizedString("mobile.common_back"))
                                 }
                             }
                         },
@@ -131,7 +133,7 @@ fun SkillImportDialog(
                                 onClick = onDismiss,
                                 modifier = Modifier.testableClickable("btn_skill_import_close") { onDismiss() }
                             ) {
-                                Icon(Icons.Filled.Close, localizedString("mobile.common_close"))
+                                Icon(CIRISIcons.close, localizedString("mobile.common_close"))
                             }
                         }
                     )
@@ -569,10 +571,11 @@ fun WorkshopCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = emoji,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(end = 12.dp)
+                Icon(
+                    imageVector = emojiToIconOrDefault(emoji),
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 12.dp).size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -589,7 +592,7 @@ fun WorkshopCard(
                     )
                 }
                 Icon(
-                    Icons.Filled.KeyboardArrowDown,
+                    CIRISIcons.arrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -685,7 +688,7 @@ fun ImportedSkillCard(
                 modifier = Modifier.testableClickable("btn_delete_skill_${skill.moduleName}") { onDelete() }
             ) {
                 Icon(
-                    Icons.Filled.Delete,
+                    CIRISIcons.delete,
                     contentDescription = localizedString("mobile.skill_delete_title"),
                     tint = MaterialTheme.colorScheme.error
                 )

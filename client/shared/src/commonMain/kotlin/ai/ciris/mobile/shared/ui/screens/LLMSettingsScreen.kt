@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -166,7 +167,7 @@ fun LLMSettingsScreen(
     if (providerPendingDelete != null) {
         AlertDialog(
             onDismissRequest = { llmViewModel.cancelDeleteProvider() },
-            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+            icon = { Icon(CIRISIcons.warning, contentDescription = null) },
             title = { Text("Delete System Provider?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -206,7 +207,7 @@ fun LLMSettingsScreen(
                         modifier = Modifier.testableClickable("btn_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.settings_back")
                         )
                     }
@@ -229,7 +230,7 @@ fun LLMSettingsScreen(
                         modifier = Modifier.testableClickable("btn_refresh") { viewModel.refresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.settings_refresh")
                         )
                     }
@@ -286,7 +287,7 @@ fun LLMSettingsScreen(
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_providers"),
                     subtitle = localizedString("mobile.llm_settings_providers_count", "count", llmProviders.size.toString()),
-                    icon = Icons.Filled.Settings,
+                    icon = CIRISIcons.settings,
                     expanded = providersExpanded,
                     onToggle = { llmViewModel.toggleProvidersExpanded() }
                 ) {
@@ -309,7 +310,7 @@ fun LLMSettingsScreen(
                         localInferenceCapability.isReady -> "On-device available"
                         else -> "Local, Server, or Cloud"
                     },
-                    icon = Icons.Filled.Add,
+                    icon = CIRISIcons.add,
                     expanded = addProviderExpanded,
                     onToggle = { llmViewModel.toggleAddProviderExpanded() }
                 ) {
@@ -346,7 +347,7 @@ fun LLMSettingsScreen(
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_auth"),
                     subtitle = localizedString("mobile.settings_ciris_access_token"),
-                    icon = Icons.Filled.Person,
+                    icon = CIRISIcons.person,
                     expanded = authExpanded,
                     onToggle = { authExpanded = !authExpanded }
                 ) {
@@ -482,7 +483,7 @@ private fun StatusOverviewCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = if (allHealthy) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                            imageVector = if (allHealthy) CIRISIcons.checkCircle else CIRISIcons.warning,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = if (allHealthy) semantic.onSuccess else semantic.onWarning
@@ -582,7 +583,7 @@ private fun AdaptersContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = if (adapter.isRunning) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Error,
+                                    imageVector = if (adapter.isRunning) CIRISIcons.checkCircle else CIRISMaterialIcons.Filled.Error,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = if (adapter.isRunning) semantic.success else semantic.error
@@ -642,7 +643,7 @@ private fun AdaptersContent(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Refresh,
+                                    imageVector = CIRISIcons.refresh,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -662,7 +663,7 @@ private fun AdaptersContent(
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Delete,
+                                        imageVector = CIRISIcons.delete,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -738,7 +739,7 @@ private fun CollapsibleSection(
                     }
                 }
                 Icon(
-                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    imageVector = if (expanded) CIRISIcons.arrowUp else CIRISIcons.arrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -791,7 +792,7 @@ private fun RegisteredProvidersContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Check,
+                    imageVector = CIRISIcons.check,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -856,7 +857,7 @@ private fun RegisteredProvidersContent(
                         ) {
                             // Health indicator
                             Icon(
-                                imageVector = if (provider.healthy) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Error,
+                                imageVector = if (provider.healthy) CIRISIcons.checkCircle else CIRISMaterialIcons.Filled.Error,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = if (provider.healthy) semantic.success else semantic.error
@@ -899,7 +900,7 @@ private fun RegisteredProvidersContent(
                                 val metrics = provider.metrics
                                 if (metrics.totalRequests > 0) {
                                     Text(
-                                        text = "${metrics.totalRequests} requests • ${metrics.averageLatencyMs.toInt()}ms avg",
+                                        text = "${metrics.totalRequests} requests - ${metrics.averageLatencyMs.toInt()}ms avg",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )
@@ -914,7 +915,7 @@ private fun RegisteredProvidersContent(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Delete,
+                                imageVector = CIRISIcons.delete,
                                 contentDescription = "Remove provider",
                                 tint = semantic.error,
                                 modifier = Modifier.size(18.dp)
@@ -971,7 +972,7 @@ private fun CirisServicesCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = if (enabled) Icons.Filled.CheckCircle else CIRISMaterialIcons.Filled.Cancel,
+                    imageVector = if (enabled) CIRISIcons.checkCircle else CIRISMaterialIcons.Filled.Cancel,
                     contentDescription = null,
                     tint = if (enabled) semantic.success else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
@@ -1020,7 +1021,7 @@ private fun CirisServicesCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Info,
+                        imageVector = CIRISIcons.info,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1088,7 +1089,7 @@ private fun AddProviderCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = CIRISIcons.add,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
@@ -1208,7 +1209,7 @@ private fun AddProviderCard(
                             .testable("btn_fetch_models")
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Search,
+                            imageVector = CIRISIcons.search,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -1264,7 +1265,7 @@ private fun AddProviderCard(
                             trailingIcon = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (displayModel?.cirisRecommended == true) {
-                                        Icon(Icons.Default.Star, contentDescription = "Recommended", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        Icon(CIRISIcons.star, contentDescription = "Recommended", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     }
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded)
                                 }
@@ -1370,7 +1371,7 @@ private fun AddProviderCard(
                         .testable("btn_add_provider_submit")
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = CIRISIcons.add,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1393,7 +1394,7 @@ private fun CirisProxyContent() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Filled.Check,
+                imageVector = CIRISIcons.check,
                 contentDescription = null,
                 modifier = Modifier.size(32.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -1840,7 +1841,7 @@ private fun AddProviderCardLocal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.CheckCircle,
+                            imageVector = CIRISIcons.checkCircle,
                             contentDescription = null,
                             tint = semantic.success,
                             modifier = Modifier.size(16.dp)
@@ -1902,7 +1903,7 @@ private fun AddProviderCardLocal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Info,
+                            imageVector = CIRISIcons.info,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
@@ -2026,7 +2027,7 @@ private fun LocalServersContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.CheckCircle,
+                        imageVector = CIRISIcons.checkCircle,
                         contentDescription = null,
                         tint = SemanticColors.Default.success,
                         modifier = Modifier.size(20.dp)
@@ -2255,7 +2256,7 @@ private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Warning,
+                        imageVector = CIRISIcons.warning,
                         contentDescription = null,
                         tint = semantic.warning,
                         modifier = Modifier.size(14.dp)
@@ -2276,7 +2277,7 @@ private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel) {
             onDismissRequest = { showDisableDialog = false },
             icon = {
                 Icon(
-                    imageVector = Icons.Filled.Warning,
+                    imageVector = CIRISIcons.warning,
                     contentDescription = null,
                     tint = semantic.warning,
                     modifier = Modifier.size(32.dp)
@@ -2350,7 +2351,7 @@ private fun ProviderCircuitBreakerRow(
                 // Status indicator
                 Icon(
                     imageVector = when (cb.state) {
-                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> Icons.Filled.CheckCircle
+                        ai.ciris.mobile.shared.models.CircuitBreakerState.CLOSED -> CIRISIcons.checkCircle
                         ai.ciris.mobile.shared.models.CircuitBreakerState.OPEN -> CIRISMaterialIcons.Filled.Error
                         ai.ciris.mobile.shared.models.CircuitBreakerState.HALF_OPEN -> CIRISMaterialIcons.Filled.Schedule
                     },

@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,7 +57,7 @@ fun EnvironmentInfoScreen(
                         modifier = Modifier.testableClickable("btn_environment_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -68,7 +69,7 @@ fun EnvironmentInfoScreen(
                         modifier = Modifier.testableClickable("btn_environment_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -86,7 +87,7 @@ fun EnvironmentInfoScreen(
                 onClick = onAddItem,
                 modifier = Modifier.testableClickable("btn_add_item") { onAddItem() }
             ) {
-                Icon(Icons.Filled.Add, contentDescription = localizedString("mobile.env_add_item"))
+                Icon(CIRISIcons.add, contentDescription = localizedString("mobile.env_add_item"))
             }
         }
     ) { paddingValues ->
@@ -122,7 +123,7 @@ fun EnvironmentInfoScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Close,
+                                imageVector = CIRISIcons.close,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error
                             )
@@ -179,7 +180,7 @@ fun EnvironmentInfoScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Info,
+                                imageVector = CIRISIcons.info,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -236,7 +237,7 @@ fun EnvironmentInfoScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Info,
+                            imageVector = CIRISIcons.info,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             modifier = Modifier.size(16.dp)
@@ -362,7 +363,7 @@ private fun ItemCard(
                     // Delete button
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
-                            imageVector = Icons.Filled.Delete,
+                            imageVector = CIRISIcons.delete,
                             contentDescription = localizedString("mobile.env_delete"),
                             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
@@ -809,11 +810,11 @@ private fun extractJsonNumber(json: String, key: String): Double? {
 
 @Composable
 private fun getEnrichmentIcon(key: String) = when {
-    key.contains("entities") || key.contains("ha_") -> Icons.Filled.Home
+    key.contains("entities") || key.contains("ha_") -> CIRISIcons.home
     key.contains("players") || key.contains("ma_") -> CIRISMaterialIcons.Filled.Speaker
     key.contains("weather") -> CIRISMaterialIcons.Filled.WbSunny
     key.contains("wallet") || key.contains("balance") -> CIRISMaterialIcons.Filled.AccountBalance
-    key.contains("location") || key.contains("navigation") -> Icons.Filled.LocationOn
+    key.contains("location") || key.contains("navigation") -> CIRISIcons.location
     else -> CIRISMaterialIcons.Filled.DataObject
 }
 
@@ -866,7 +867,7 @@ private fun ItemGroupSection(group: String, items: List<EnrichmentItem>) {
                     )
                 }
                 Icon(
-                    if (expanded) CIRISMaterialIcons.Filled.Remove else Icons.Filled.Add,
+                    if (expanded) CIRISMaterialIcons.Filled.Remove else CIRISIcons.add,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -1073,7 +1074,7 @@ private fun getJsonSummary(value: String, isJson: Boolean): String {
             trimmed.contains("\"tool_name\"") -> {
                 val toolName = extractJsonString(trimmed, "tool_name")
                 val success = trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true")
-                val status = if (success) "\u2714" else "\u26A0"
+                val status = if (success) "[OK]" else "[!]"
                 "$status Tool: $toolName"
             }
             // Players list: {"success":true, "players":[...]}
@@ -1247,10 +1248,10 @@ private fun getDomainIcon(domain: String) = when (domain) {
     "binary_sensor" -> CIRISMaterialIcons.Filled.RadioButtonChecked
     "cover" -> CIRISMaterialIcons.Filled.Blinds
     "fan" -> CIRISMaterialIcons.Filled.Air
-    "lock" -> Icons.Filled.Lock
+    "lock" -> CIRISIcons.lock
     "camera" -> CIRISMaterialIcons.Filled.CameraAlt
     "automation" -> CIRISMaterialIcons.Filled.AutoMode
-    "person" -> Icons.Filled.Person
+    "person" -> CIRISIcons.person
     else -> CIRISMaterialIcons.Filled.Devices
 }
 
@@ -1278,7 +1279,7 @@ private fun EntityEnrichmentCard(key: String, value: String) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Filled.Home,
+                        CIRISIcons.home,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -1353,7 +1354,7 @@ private fun DomainSection(domain: String, entities: List<EntityInfo>) {
                     )
                 }
                 Icon(
-                    if (expanded) CIRISMaterialIcons.Filled.Remove else Icons.Filled.Add,
+                    if (expanded) CIRISMaterialIcons.Filled.Remove else CIRISIcons.add,
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary

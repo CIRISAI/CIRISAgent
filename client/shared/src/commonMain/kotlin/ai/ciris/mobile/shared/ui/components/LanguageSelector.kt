@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -82,7 +83,7 @@ fun LanguageSelector(
                         color = if (compact || centered) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
+                        imageVector = CIRISIcons.arrowDown,
                         contentDescription = "Expand",
                         modifier = Modifier.size(if (centered) 20.dp else 16.dp),
                         tint = if (compact || centered) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant

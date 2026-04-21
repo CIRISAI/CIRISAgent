@@ -3391,6 +3391,174 @@ class CIRISVerify:
             if json_out.value:
                 self._lib.ciris_verify_free_string(json_out)
 
+    # =========================================================================
+    # NAMED KEY ENCRYPTION (v1.6.0+)
+    # Hardware-backed symmetric encryption using named keys
+    # =========================================================================
+
+    def _has_encryption_support(self) -> bool:
+        """Check if encryption functions are available in the library."""
+        if not self._lib:
+            return False
+        return hasattr(self._lib, "ciris_verify_encrypt_with_named_key")
+
+    def encrypt_with_named_key(self, key_id: str, plaintext: bytes, aad: bytes = b"") -> bytes:
+        """Encrypt data with a hardware-backed named key.
+
+        Uses AES-256-GCM with a key derived from the named Ed25519 seed.
+        The nonce is randomly generated and prepended to the ciphertext.
+
+        Args:
+            key_id: Key identifier (must exist via store_named_key).
+            plaintext: Data to encrypt.
+            aad: Additional authenticated data (optional, authenticated but not encrypted).
+
+        Returns:
+            Encrypted data: nonce (12 bytes) || ciphertext || tag (16 bytes)
+
+        Raises:
+            NotImplementedError: If encryption support is not available (library < 1.6.0).
+            VerificationFailedError: If the key is not found or encryption fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_encryption_support():
+            raise NotImplementedError(
+                "Encryption functions not available (library version < 1.6.0). "
+                "Use sign_with_named_key for signing-based key derivation as fallback."
+            )
+
+        ciphertext_data = ctypes.c_void_p()
+        ciphertext_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_encrypt_with_named_key(
+            self._handle,
+            key_id_bytes,
+            plaintext,
+            len(plaintext),
+            aad,
+            len(aad),
+            ctypes.byref(ciphertext_data),
+            ctypes.byref(ciphertext_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("encrypt_with_named_key")
+        if ret != 0:
+            raise VerificationFailedError(ret, f"encrypt_with_named_key failed with code {ret}")
+
+        try:
+            return ctypes.string_at(ciphertext_data.value, ciphertext_len.value)
+        finally:
+            if ciphertext_data.value:
+                self._lib.ciris_verify_free(ciphertext_data.value)
+
+    def decrypt_with_named_key(self, key_id: str, ciphertext: bytes, aad: bytes = b"") -> bytes:
+        """Decrypt data with a hardware-backed named key.
+
+        Args:
+            key_id: Key identifier.
+            ciphertext: Encrypted data (nonce || ciphertext || tag).
+            aad: Additional authenticated data (must match encryption).
+
+        Returns:
+            Decrypted plaintext.
+
+        Raises:
+            NotImplementedError: If encryption support is not available (library < 1.6.0).
+            VerificationFailedError: If decryption fails (wrong key, tampered data, wrong AAD).
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not self._has_encryption_support():
+            raise NotImplementedError(
+                "Encryption functions not available (library version < 1.6.0). "
+                "Use sign_with_named_key for signing-based key derivation as fallback."
+            )
+
+        plaintext_data = ctypes.c_void_p()
+        plaintext_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_decrypt_with_named_key(
+            self._handle,
+            key_id_bytes,
+            ciphertext,
+            len(ciphertext),
+            aad,
+            len(aad),
+            ctypes.byref(plaintext_data),
+            ctypes.byref(plaintext_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("decrypt_with_named_key")
+        if ret != 0:
+            raise VerificationFailedError(ret, f"decrypt_with_named_key failed with code {ret}")
+
+        try:
+            return ctypes.string_at(plaintext_data.value, plaintext_len.value)
+        finally:
+            if plaintext_data.value:
+                self._lib.ciris_verify_free(plaintext_data.value)
+
+    def derive_symmetric_key(self, key_id: str, context: bytes, key_length: int = 32) -> bytes:
+        """Derive a symmetric key from a named key using HKDF.
+
+        This is useful for generating encryption keys for external use.
+        The derivation happens in hardware when available.
+
+        Args:
+            key_id: Key identifier.
+            context: Context/info bytes for HKDF (e.g., b"secrets-encryption-v1").
+            key_length: Desired key length (default 32 bytes for AES-256).
+
+        Returns:
+            Derived symmetric key bytes.
+
+        Raises:
+            NotImplementedError: If key derivation is not available (library < 1.6.0).
+            VerificationFailedError: If the key is not found or derivation fails.
+            AttestationInProgressError: If attestation is currently running.
+        """
+        if not hasattr(self._lib, "ciris_verify_derive_symmetric_key"):
+            raise NotImplementedError(
+                "Key derivation not available (library version < 1.6.0). "
+                "Use sign_with_named_key and hash the signature as fallback."
+            )
+
+        key_data = ctypes.c_void_p()
+        key_len = ctypes.c_size_t()
+        key_id_bytes = key_id.encode("utf-8")
+
+        ret = self._lib.ciris_verify_derive_symmetric_key(
+            self._handle,
+            key_id_bytes,
+            context,
+            len(context),
+            key_length,
+            ctypes.byref(key_data),
+            ctypes.byref(key_len),
+        )
+
+        if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
+            raise AttestationInProgressError("derive_symmetric_key")
+        if ret != 0:
+            raise VerificationFailedError(ret, f"derive_symmetric_key failed with code {ret}")
+
+        try:
+            return ctypes.string_at(key_data.value, key_len.value)
+        finally:
+            if key_data.value:
+                self._lib.ciris_verify_free(key_data.value)
+
+    def has_encryption_support(self) -> bool:
+        """Check if hardware-backed encryption is available.
+
+        Returns:
+            True if encrypt/decrypt functions are available (library >= 1.6.0).
+        """
+        return self._has_encryption_support()
+
 
 class MockCIRISVerify(CIRISVerify):
     """Mock CIRISVerify client for testing without the actual binary.
@@ -3420,6 +3588,7 @@ class MockCIRISVerify(CIRISVerify):
         self._mock_hardware = mock_hardware
         self._mock_capabilities = mock_capabilities
         self._timeout = 10.0
+        self._named_keys: dict = {}  # key_id -> seed for named key operations
         # Don't call parent __init__ - no binary needed
 
     def _find_binary(self, path):
@@ -3722,3 +3891,114 @@ class MockCIRISVerify(CIRISVerify):
     def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
         """Generate default disclosure for mock."""
         return super()._default_disclosure(status, reason=reason)
+
+    # =========================================================================
+    # NAMED KEY METHODS (Mock implementations)
+    # =========================================================================
+
+    def store_named_key(self, key_id: str, seed: bytes) -> bool:
+        """Mock implementation - store key in memory."""
+        if len(seed) != 32:
+            raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
+        self._named_keys[key_id] = seed
+        return True
+
+    def sign_with_named_key(self, key_id: str, data: bytes) -> bytes:
+        """Mock implementation - sign using stored key."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        if key_id not in self._named_keys:
+            raise VerificationFailedError(-1, f"Key {key_id} not found")
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._named_keys[key_id])
+        return private_key.sign(data)
+
+    def has_named_key(self, key_id: str) -> bool:
+        """Mock implementation - check if key exists in memory."""
+        return key_id in self._named_keys
+
+    def delete_named_key(self, key_id: str) -> bool:
+        """Mock implementation - delete key from memory."""
+        if key_id in self._named_keys:
+            del self._named_keys[key_id]
+            return True
+        return False
+
+    def get_named_key_public(self, key_id: str) -> bytes:
+        """Mock implementation - derive public key from stored seed."""
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+        from cryptography.hazmat.primitives import serialization
+
+        if key_id not in self._named_keys:
+            raise VerificationFailedError(-1, f"Key {key_id} not found")
+        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._named_keys[key_id])
+        return private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+    def list_named_keys(self) -> list:
+        """Mock implementation - list all stored keys."""
+        return list(self._named_keys.keys())
+
+    # =========================================================================
+    # NAMED KEY ENCRYPTION (Mock implementations)
+    # =========================================================================
+
+    def _has_encryption_support(self) -> bool:
+        """Mock always has encryption support for testing."""
+        return True
+
+    def encrypt_with_named_key(self, key_id: str, plaintext: bytes, aad: bytes = b"") -> bytes:
+        """Mock encryption using software fallback."""
+        import os
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives import hashes
+
+        if key_id not in self._named_keys:
+            raise VerificationFailedError(-1, f"Key {key_id} not found")
+
+        # Derive encryption key from seed using HKDF (same as derive_symmetric_key)
+        seed = self._named_keys[key_id]
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"ciris-mock-encryption")
+        key = hkdf.derive(seed)
+
+        nonce = os.urandom(12)
+        aesgcm = AESGCM(key)
+        ciphertext = aesgcm.encrypt(nonce, plaintext, aad if aad else None)
+        return nonce + ciphertext
+
+    def decrypt_with_named_key(self, key_id: str, ciphertext: bytes, aad: bytes = b"") -> bytes:
+        """Mock decryption using software fallback."""
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives import hashes
+
+        if key_id not in self._named_keys:
+            raise VerificationFailedError(-1, f"Key {key_id} not found")
+
+        # Derive encryption key from seed using HKDF (same as derive_symmetric_key)
+        seed = self._named_keys[key_id]
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"ciris-mock-encryption")
+        key = hkdf.derive(seed)
+
+        nonce = ciphertext[:12]
+        actual_ciphertext = ciphertext[12:]
+        aesgcm = AESGCM(key)
+        return aesgcm.decrypt(nonce, actual_ciphertext, aad if aad else None)
+
+    def derive_symmetric_key(self, key_id: str, context: bytes, key_length: int = 32) -> bytes:
+        """Mock key derivation using HKDF."""
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        from cryptography.hazmat.primitives import hashes
+
+        if key_id not in self._named_keys:
+            raise VerificationFailedError(-1, f"Key {key_id} not found")
+
+        seed = self._named_keys[key_id]
+        hkdf = HKDF(algorithm=hashes.SHA256(), length=key_length, salt=None, info=context)
+        return hkdf.derive(seed)
+
+    def has_encryption_support(self) -> bool:
+        """Mock always has encryption support."""
+        return True

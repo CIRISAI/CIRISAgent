@@ -71,6 +71,40 @@ server {
 - Implement role-based access control (RBAC)
 - Consider implementing API key rotation
 
+#### Service Token Management
+Service tokens (`CIRIS_SERVICE_TOKEN`) are used for service-to-service authentication, typically by the CIRIS Manager. These tokens have elevated privileges and should be protected carefully.
+
+**Security Features:**
+- **Revocation Support**: Service tokens can be revoked via the API endpoint
+- **Audit Logging**: All failed authentication attempts are logged with IP and user agent
+- **Constant-Time Comparison**: Tokens are validated using timing-attack-resistant comparison
+- **Hash-Based Revocation**: Revoked tokens are stored as SHA-256 hashes for fast lookup
+
+**Revocation Endpoint:**
+```bash
+# Revoke a service token (requires SYSTEM_ADMIN role)
+curl -X POST http://localhost:8080/v1/auth/service-token/revoke \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "service_token_to_revoke",
+    "reason": "Security incident - token potentially compromised"
+  }'
+```
+
+**When to Revoke Service Tokens:**
+1. **Security Incident**: Token may have been exposed or compromised
+2. **Token Rotation**: Replacing old token with new one
+3. **Service Decommissioning**: Service no longer needs access
+4. **Suspicious Activity**: Detected unusual authentication patterns
+
+**Best Practices:**
+- Rotate service tokens regularly (e.g., every 90 days)
+- Store service tokens in secure secret management systems (not in code)
+- Monitor failed authentication attempts for anomalies
+- Revoke immediately upon suspected compromise
+- Use different service tokens for different environments (dev/staging/prod)
+
 ### Additional Security Measures
 1. Enable rate limiting to prevent abuse
 2. Configure CORS appropriately (don't use `*` in production)

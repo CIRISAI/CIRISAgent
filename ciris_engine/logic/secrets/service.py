@@ -46,6 +46,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         detection_config: Optional[SecretsDetectionConfig] = None,
         db_path: str = "secrets.db",
         master_key: Optional[bytes] = None,
+        key_storage_mode: str = "auto",
     ) -> None:
         """
         Initialize secrets service.
@@ -56,10 +57,16 @@ class SecretsService(BaseService, SecretsServiceProtocol):
             filter_obj: Secrets filter instance (created if None)
             detection_config: Secrets detection configuration
             db_path: Database path for storage
-            master_key: Master encryption key
+            master_key: Master encryption key (software mode only)
+            key_storage_mode: Key storage mode - 'software', 'hardware', or 'auto'
         """
         super().__init__(time_service=time_service)
-        self.store = store or SecretsStore(time_service=time_service, db_path=db_path, master_key=master_key)
+        self.store = store or SecretsStore(
+            time_service=time_service,
+            db_path=db_path,
+            master_key=master_key,
+            key_storage_mode=key_storage_mode,
+        )
         self.filter = filter_obj or SecretsFilter(detection_config)
         self._auto_forget_enabled = True
         self._current_task_secrets: Dict[str, str] = {}  # UUID -> original_value

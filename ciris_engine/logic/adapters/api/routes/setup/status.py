@@ -5,7 +5,7 @@ This module provides the /status endpoint to check setup status.
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from ciris_engine.logic.setup.first_run import get_default_config_path, is_first_run
 from ciris_engine.schemas.api.responses import SuccessResponse
@@ -13,6 +13,9 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from .models import SetupStatusResponse
 
 router = APIRouter()
+
+# Cache duration for status endpoint (reduces polling frequency)
+STATUS_CACHE_SECONDS = 5
 
 
 def _get_ingress_auth_info() -> tuple[bool, Optional[str]]:
@@ -36,7 +39,7 @@ def _get_ingress_auth_info() -> tuple[bool, Optional[str]]:
 
 
 @router.get("/status")
-async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
+async def get_setup_status(response: Response) -> SuccessResponse[SetupStatusResponse]:
     """Check setup status.
 
     Returns information about whether setup is required.
@@ -44,6 +47,8 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
 
     When running with ingress auth (e.g., HA Supervisor), the user creation
     step should be skipped since authentication is handled externally.
+
+    Includes Cache-Control header to reduce excessive client polling.
     """
     first_run = is_first_run()
     config_path = get_default_config_path()
@@ -60,5 +65,8 @@ async def get_setup_status() -> SuccessResponse[SetupStatusResponse]:
         skip_user_step=skip_user_step,
         auth_provider=auth_provider,
     )
+
+    # Add cache header to reduce polling frequency
+    response.headers["Cache-Control"] = f"private, max-age={STATUS_CACHE_SECONDS}"
 
     return SuccessResponse(data=status)

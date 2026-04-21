@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -87,7 +88,7 @@ fun VizSettingsScreen(
                         modifier = Modifier.testableClickable("btn_back") { onBack() },
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = "Back",
                         )
                     }
@@ -356,7 +357,7 @@ fun VizSettingsScreen(
                     .testableClickable("viz_settings_reset") { viewModel.resetCellVizConfig() },
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = CIRISIcons.refresh,
                     contentDescription = null,
                 )
                 Spacer(modifier = Modifier.width(8.dp))

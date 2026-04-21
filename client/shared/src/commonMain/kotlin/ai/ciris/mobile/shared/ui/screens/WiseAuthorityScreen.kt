@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,7 +68,7 @@ fun WiseAuthorityScreen(
                         modifier = Modifier.testableClickable("btn_wa_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -79,7 +80,7 @@ fun WiseAuthorityScreen(
                         modifier = Modifier.testableClickable("btn_wa_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -538,7 +539,7 @@ private fun ResolveDeferralDialog(
                                     if (guidance.isNotBlank()) onResolve("approve", guidance)
                                 }
                         ) {
-                            Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(18.dp))
+                            Icon(CIRISIcons.check, contentDescription = null, Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(localizedString("wa_approve"))
                         }
@@ -558,7 +559,7 @@ private fun ResolveDeferralDialog(
                                     if (guidance.isNotBlank()) onResolve("reject", guidance)
                                 }
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = null, Modifier.size(18.dp))
+                            Icon(CIRISIcons.close, contentDescription = null, Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(localizedString("wa_reject"))
                         }

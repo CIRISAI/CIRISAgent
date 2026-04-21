@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -56,7 +57,7 @@ fun SchedulerScreen(
                         modifier = Modifier.testableClickable("btn_scheduler_back") { onNavigateBack() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = CIRISIcons.arrowBack,
                             contentDescription = localizedString("mobile.common_back")
                         )
                     }
@@ -67,7 +68,7 @@ fun SchedulerScreen(
                         modifier = Modifier.testableClickable("btn_scheduler_create") { onShowCreateDialog() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Add,
+                            imageVector = CIRISIcons.add,
                             contentDescription = localizedString("mobile.scheduler_create_title")
                         )
                     }
@@ -77,7 +78,7 @@ fun SchedulerScreen(
                         modifier = Modifier.testableClickable("btn_scheduler_refresh") { onRefresh() }
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = CIRISIcons.refresh,
                             contentDescription = localizedString("mobile.common_refresh")
                         )
                     }
@@ -95,7 +96,7 @@ fun SchedulerScreen(
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Add,
+                    imageVector = CIRISIcons.add,
                     contentDescription = localizedString("mobile.scheduler_create_title")
                 )
             }
@@ -187,7 +188,7 @@ fun SchedulerScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.DateRange,
+                                imageVector = CIRISIcons.dateRange,
                                 contentDescription = null,
                                 modifier = Modifier.size(48.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -272,7 +273,7 @@ private fun CognitiveStateCard(state: String) {
                 )
             }
             Icon(
-                imageVector = Icons.Filled.PlayArrow,
+                imageVector = CIRISIcons.play,
                 contentDescription = null,
                 tint = color,
                 modifier = Modifier.size(48.dp)
@@ -289,21 +290,21 @@ private fun SchedulerStatsRow(overview: SchedulerOverviewData) {
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SchedulerStatCard(
-            icon = Icons.Filled.DateRange,
+            icon = CIRISIcons.dateRange,
             label = localizedString("mobile.scheduler_stat_pending"),
             value = overview.pendingCount.toString(),
             color = if (overview.pendingCount > 0) semantic.warning else semantic.success,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
-            icon = Icons.Filled.Refresh,
+            icon = CIRISIcons.refresh,
             label = localizedString("mobile.scheduler_stat_recurring"),
             value = overview.recurringCount.toString(),
             color = semantic.info,
             modifier = Modifier.weight(1f)
         )
         SchedulerStatCard(
-            icon = Icons.Filled.CheckCircle,
+            icon = CIRISIcons.checkCircle,
             label = localizedString("mobile.scheduler_stat_completed"),
             value = overview.completedTotal.toString(),
             color = semantic.success,
@@ -387,7 +388,7 @@ private fun ScheduledTaskCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = if (task.isRecurring) Icons.Filled.Refresh else Icons.Filled.DateRange,
+                        imageVector = if (task.isRecurring) CIRISIcons.refresh else CIRISIcons.dateRange,
                         contentDescription = if (task.isRecurring) {
                             localizedString("mobile.scheduler_stat_recurring")
                         } else {
@@ -453,7 +454,7 @@ private fun ScheduledTaskCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Close,
+                            imageVector = CIRISIcons.close,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )

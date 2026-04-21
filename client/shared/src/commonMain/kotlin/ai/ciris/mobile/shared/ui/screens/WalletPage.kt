@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import ai.ciris.mobile.shared.ui.icons.*
+import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -180,7 +181,7 @@ fun WalletPage(
                         onClick = onNavigateBack,
                         modifier = Modifier.testableClickable("btn_wallet_back") { onNavigateBack() }
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = localizedString("mobile.common_back"))
+                        Icon(CIRISIcons.arrowBack, contentDescription = localizedString("mobile.common_back"))
                     }
                 },
                 actions = {
@@ -197,7 +198,7 @@ fun WalletPage(
                         },
                         enabled = !loading
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = localizedString("mobile.common_refresh"))
+                        Icon(CIRISIcons.refresh, contentDescription = localizedString("mobile.common_refresh"))
                     }
                 }
             )
@@ -342,9 +343,11 @@ private fun ExperimentalWarningCard() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Text(
-                text = "\u26A0",
-                fontSize = 24.sp
+            Icon(
+                CIRISIcons.warning,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = Color(0xFF856404)  // Dark amber
             )
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -484,8 +487,8 @@ private fun WalletBalanceCard(status: WalletStatusResponse) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Wallet emoji
-                Text(text = "💰", fontSize = 48.sp)
+                // Wallet icon
+                Icon(CIRISIcons.wallet, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.White)
 
                 // Converted Balance (primary, if different currency selected)
                 if (showConversion && convertedBalance != null) {
@@ -1040,9 +1043,9 @@ private fun WalletTransferCard(
                 trailingIcon = {
                     when {
                         isValidatingAddress -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        addressValidation?.valid == true && addressValidation?.checksumValid == true -> Icon(Icons.Default.Check, contentDescription = "Valid", tint = SemanticColors.Default.success, modifier = Modifier.size(20.dp))
-                        addressValidation?.valid == true && addressValidation?.checksumValid == false -> Icon(Icons.Default.Warning, contentDescription = "Warning", tint = SemanticColors.Default.warning, modifier = Modifier.size(20.dp))
-                        addressValidation?.valid == false -> Icon(Icons.Default.Close, contentDescription = "Invalid", tint = SemanticColors.Default.error, modifier = Modifier.size(20.dp))
+                        addressValidation?.valid == true && addressValidation?.checksumValid == true -> Icon(CIRISIcons.check, contentDescription = "Valid", tint = SemanticColors.Default.success, modifier = Modifier.size(20.dp))
+                        addressValidation?.valid == true && addressValidation?.checksumValid == false -> Icon(CIRISIcons.warning, contentDescription = "Warning", tint = SemanticColors.Default.warning, modifier = Modifier.size(20.dp))
+                        addressValidation?.valid == false -> Icon(CIRISIcons.close, contentDescription = "Invalid", tint = SemanticColors.Default.error, modifier = Modifier.size(20.dp))
                         else -> {}
                     }
                 },
@@ -1052,14 +1055,14 @@ private fun WalletTransferCard(
                         when {
                             addressValidation?.isZeroAddress == true -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = SemanticColors.Default.error, modifier = Modifier.size(12.dp))
+                                    Icon(CIRISIcons.warning, contentDescription = null, tint = SemanticColors.Default.error, modifier = Modifier.size(12.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Zero address - funds will be burned!", color = SemanticColors.Default.error, fontSize = 10.sp)
                                 }
                             }
                             addressValidation?.checksumValid == false && addressValidation?.computedChecksum != null -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = SemanticColors.Default.warning, modifier = Modifier.size(12.dp))
+                                    Icon(CIRISIcons.warning, contentDescription = null, tint = SemanticColors.Default.warning, modifier = Modifier.size(12.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Invalid checksum. Use: ${addressValidation?.computedChecksum}", color = SemanticColors.Default.warning, fontSize = 10.sp)
                                 }
@@ -1069,7 +1072,7 @@ private fun WalletTransferCard(
                             }
                             addressValidation?.checksumValid == true -> {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = SemanticColors.Default.success, modifier = Modifier.size(12.dp))
+                                    Icon(CIRISIcons.check, contentDescription = null, tint = SemanticColors.Default.success, modifier = Modifier.size(12.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Valid EIP-55 checksum", color = SemanticColors.Default.success, fontSize = 10.sp)
                                 }
@@ -1102,7 +1105,7 @@ private fun WalletTransferCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Warning, contentDescription = "Warning", modifier = Modifier.size(20.dp))
+                        Icon(CIRISIcons.warning, contentDescription = "Warning", modifier = Modifier.size(20.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Possible Duplicate",

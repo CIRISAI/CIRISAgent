@@ -1,0 +1,103 @@
+name: Memory Benchmark
+
+on:
+  # Run weekly for baseline tracking
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 6am UTC
+  # Allow manual triggering
+  workflow_dispatch:
+  # Run on PRs that modify core engine code
+  pull_request:
+    paths:
+      - 'ciris_engine/**'
+      - 'main.py'
+      - 'requirements.txt'
+
+jobs:
+  memory-benchmark:
+    name: Memory Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install psutil
+
+      - name: System Info
+        run: |
+          echo "## System Info" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Python: $(python3 --version)" >> $GITHUB_STEP_SUMMARY
+          echo "OS: $(uname -a)" >> $GITHUB_STEP_SUMMARY
+          echo "RAM: $(free -h | grep Mem | awk '{print $2}')" >> $GITHUB_STEP_SUMMARY
+          echo "CPU: $(nproc) cores" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Cold Start Benchmark
+        run: |
+          echo "## Cold Start Benchmark (30s)" >> $GITHUB_STEP_SUMMARY
+          python3 tools/introspect_memory.py --adapters cli --duration 30 | tee cold_start.log
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -20 cold_start.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: 100 Message Benchmark
+        run: |
+          echo "## 100 Message Benchmark" >> $GITHUB_STEP_SUMMARY
+          python3 tools/memory_benchmark.py --messages 100 --adapter api | tee 100msg.log || echo "100-msg benchmark skipped"
+          if [ -f 100msg.log ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -20 100msg.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 1000 Message Benchmark
+        run: |
+          echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
+          python3 tools/memory_benchmark.py --messages 1000 --adapter api | tee 1000msg.log || echo "1000-msg benchmark skipped"
+          if [ -f 1000msg.log ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -20 1000msg.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Save Benchmark Results
+        run: |
+          echo "## Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Date | $(date -u +%Y-%m-%d) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          PEAK=$(grep -o "Peak:.*" cold_start.log | head -1 || echo "N/A")
+          echo "| Cold Start Peak | ${PEAK:-N/A} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Benchmark Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-benchmark-${{ github.run_id }}
+          path: |
+            cold_start.log
+            100msg.log
+            1000msg.log
+          retention-days: 90

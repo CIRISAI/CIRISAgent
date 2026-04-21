@@ -267,6 +267,7 @@ class QARunner:
             QAModule.WALLET,
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
+            QAModule.SECRETS_ENCRYPTION,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -912,6 +913,7 @@ class QARunner:
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
         from .modules.wallet_tests import WalletTests
+        from .modules.secrets_encryption_tests import SecretsEncryptionTests
 
         all_passed = True
 
@@ -953,6 +955,7 @@ class QARunner:
             QAModule.WALLET: WalletTests,
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
+            QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

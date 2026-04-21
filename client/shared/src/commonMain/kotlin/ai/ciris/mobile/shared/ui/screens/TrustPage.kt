@@ -577,7 +577,7 @@ private fun AttestationLevelsCard(status: VerifyStatusResponse) {
             AttestationLevel(
                 level = 2,
                 title = "Environment",
-                description = "Platform: ${status.platformOs?.uppercase() ?: "Unknown"} • HW: ${status.hardwareType?.replace("_", " ") ?: "Unknown"}",
+                description = "Platform: ${status.platformOs?.uppercase() ?: "Unknown"} -HW: ${status.hardwareType?.replace("_", " ") ?: "Unknown"}",
                 passed = status.envOk,
                 previousFailed = !status.binaryOk
             )
@@ -1216,7 +1216,7 @@ private fun buildL1ChecksInfo(status: VerifyStatusResponse): String {
     val passed = listOf(binaryOk, funcOk).count { it }
     val isIos = status.targetTriple?.contains("apple-ios") == true
     val binLabel = if (isIos) "__TEXT" else "Binary"
-    return "$passed/2 checks • $binLabel: ${if (binaryOk) "✓" else "○"} Func: ${if (funcOk) "✓" else "○"}"
+    return "$passed/2 checks -$binLabel: ${if (binaryOk) "✓" else "○"} Func: ${if (funcOk) "✓" else "○"}"
 }
 
 private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: DeviceAttestationResult?): String {
@@ -1247,7 +1247,7 @@ private fun buildL2ChecksInfo(status: VerifyStatusResponse, deviceResult: Device
         isAndroid -> "Play"
         else -> "Device"
     }
-    return "$passed/2 checks • HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
+    return "$passed/2 checks -HW: ${if (hwOk) "✓" else "○"} $attestLabel: ${if (attestOk) "✓" else "○"}"
 }
 
 private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
@@ -1259,7 +1259,7 @@ private fun buildL3ChecksInfo(status: VerifyStatusResponse): String {
         agreement >= 2 -> "◐"  // Partial (2/3 is still passing)
         else -> "✗"  // Failing (0-1/3)
     }
-    return "$agreement/$sources sources • $icon"
+    return "$agreement/$sources sources -$icon"
 }
 
 private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
@@ -1274,7 +1274,7 @@ private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
         val expected = totalManifest - mobileExcluded
 
         return if (failed > 0) {
-            "$verified/$expected • $failed failed"
+            "$verified/$expected -$failed failed"
         } else {
             "$verified/$expected files"
         }
@@ -1302,7 +1302,7 @@ private fun buildL4ChecksInfo(status: VerifyStatusResponse): String {
     val failed = status.filesFailed ?: 0
 
     return if (failed > 0) {
-        "$totalVerified/$totalExpected • $failed failed"
+        "$totalVerified/$totalExpected -$failed failed"
     } else {
         "$totalVerified/$totalExpected files"
     }
@@ -1312,7 +1312,7 @@ private fun buildL5ChecksInfo(status: VerifyStatusResponse): String {
     val keyOk = status.registryKeyStatus?.contains("active", ignoreCase = true) == true
     val auditOk = status.auditOk
     val passed = listOf(keyOk, auditOk).count { it }
-    return "$passed/2 checks • Key: ${if (keyOk) "✓" else "○"} Audit: ${if (auditOk) "✓" else "○"}"
+    return "$passed/2 checks -Key: ${if (keyOk) "✓" else "○"} Audit: ${if (auditOk) "✓" else "○"}"
 }
 
 // L1 Content: Binary & Self-Verification
@@ -1399,7 +1399,7 @@ private fun L1Content(status: VerifyStatusResponse) {
         )
         failedFuncs.take(5).forEach { func ->
             Text(
-                text = "  • $func",
+                text = "  -$func",
                 fontSize = 9.sp,
                 color = Color(0xFFEF4444),
                 modifier = Modifier.padding(start = 12.dp)
@@ -1459,7 +1459,7 @@ private fun L2Content(
     DetailRow(
         icon = if (isTpm) "[PC]" else "[M]",
         label = "Platform",
-        value = "${status.platformOs ?: "?"} • ${status.platformArch ?: "?"}",
+        value = "${status.platformOs ?: "?"} -${status.platformArch ?: "?"}",
         ok = true
     )
 
@@ -1506,9 +1506,9 @@ private fun L2Content(
             pending = status.hardwareBacked  // Yellow: quote exists but not remotely verified
         )
         if (status.hardwareBacked) {
-            DetailSubtext("• AK-signed PCR quote generated")
-            DetailSubtext("• EK certificate retrieved")
-            DetailSubtext("• Remote verification: not implemented")
+            DetailSubtext("-AK-signed PCR quote generated")
+            DetailSubtext("-EK certificate retrieved")
+            DetailSubtext("-Remote verification: not implemented")
         }
     } else if (isMacPlatform) {
         // macOS: App Store distribution provides attestation via codesigning + notarization
@@ -1520,8 +1520,8 @@ private fun L2Content(
             pending = !isAppStoreDistributed
         )
         if (!isAppStoreDistributed) {
-            DetailSubtext("• SE hardware available but entitlements require App Store distribution")
-            DetailSubtext("• Install from Mac App Store for full L2 attestation")
+            DetailSubtext("-SE hardware available but entitlements require App Store distribution")
+            DetailSubtext("-Install from Mac App Store for full L2 attestation")
         }
     } else {
         // Mobile attestation: App Attest (iOS) / Play Integrity (Android)
@@ -1536,9 +1536,9 @@ private fun L2Content(
                         value = if (deviceResult.verified) deviceResult.verdict else "Failed",
                         ok = deviceResult.verified
                     )
-                    if (deviceResult.meetsStrongIntegrity) DetailSubtext("• Strong integrity")
-                    if (deviceResult.meetsDeviceIntegrity) DetailSubtext("• Device integrity")
-                    if (deviceResult.meetsBasicIntegrity) DetailSubtext("• Basic integrity")
+                    if (deviceResult.meetsStrongIntegrity) DetailSubtext("-Strong integrity")
+                    if (deviceResult.meetsDeviceIntegrity) DetailSubtext("-Device integrity")
+                    if (deviceResult.meetsBasicIntegrity) DetailSubtext("-Basic integrity")
                 }
                 is DeviceAttestationResult.Error -> {
                     DetailRow(label = attestLabel, value = "Error", ok = false)
@@ -1974,7 +1974,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             if (diskAgentMismatchExpanded) {
                 diskAgentMismatch.keys.take(20).forEach { path ->
                     Text(
-                        text = "    • $path",
+                        text = "    -$path",
                         fontSize = 10.sp,
                         color = Color(0xFFEF4444),
                         fontFamily = FontFamily.Monospace
@@ -2012,7 +2012,7 @@ private fun L4ContentUnified(status: VerifyStatusResponse, summary: Map<String, 
             if (registryMismatchExpanded) {
                 registryMismatch.keys.take(20).forEach { path ->
                     Text(
-                        text = "    • $path",
+                        text = "    -$path",
                         fontSize = 10.sp,
                         color = Color(0xFFEF4444),
                         fontFamily = FontFamily.Monospace
@@ -2103,7 +2103,7 @@ private fun CollapsibleFileSection(
     if (expanded && files.isNotEmpty()) {
         files.forEach { file ->
             Text(
-                text = "  • $file",
+                text = "  -$file",
                 fontSize = 9.sp,
                 color = fileColor,
                 modifier = Modifier.padding(start = 20.dp)

@@ -1049,7 +1049,7 @@ private fun TrustSecurityCard(
                                     append(" (${status.platformArch})")
                                 }
                                 // Add HW security info
-                                append(" • HW: ")
+                                append(" - HW: ")
                                 append(status.hardwareType?.replace("_", " ") ?: localizedString("mobile.settings_unknown"))
                             }
                             Text(

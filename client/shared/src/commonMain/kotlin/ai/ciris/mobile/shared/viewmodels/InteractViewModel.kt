@@ -2229,7 +2229,7 @@ class InteractViewModel(
         is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.AdapterPort -> {
             val details = apiClient.getAdapterDetails(kind.adapterId)
             SelectionDetail.AdapterPort(
-                summaryLine = "${kind.adapterType}:${kind.adapterId.take(12)} • " +
+                summaryLine = "${kind.adapterType}:${kind.adapterId.take(12)} -" +
                     (if (details.isRunning) "running" else "stopped"),
                 adapterId = kind.adapterId,
                 adapterType = kind.adapterType,
@@ -2262,8 +2262,8 @@ class InteractViewModel(
                 }
                 SelectionDetail.BusArc(
                     summaryLine = if (status != null) {
-                        "LLM • ${status.providersAvailable}/${status.providersTotal} providers • " +
-                            "${status.totalRequests} req • ${status.circuitBreakersSummary}"
+                        "LLM -${status.providersAvailable}/${status.providersTotal} providers -" +
+                            "${status.totalRequests} req -${status.circuitBreakersSummary}"
                     } else "LLM bus",
                     bus = kind.bus,
                     messagesSent = status?.totalRequests?.toLong() ?: 0L,
@@ -2289,7 +2289,7 @@ class InteractViewModel(
                 SelectionDetail.BusArc(
                     summaryLine = if (t != null) {
                         val health = if (t.healthy) "healthy" else "degraded"
-                        "${kind.bus.name} • $health • ${t.messagesSent} msg"
+                        "${kind.bus.name} -$health -${t.messagesSent} msg"
                     } else "${kind.bus.name} bus",
                     bus = kind.bus,
                     messagesSent = t?.messagesSent ?: 0L,
@@ -2303,7 +2303,7 @@ class InteractViewModel(
             val recent = _stageEvents.value[kind.eventType].orEmpty()
             SelectionDetail.NucleusShell(
                 summaryLine = kind.eventType.replace('_', ' ')
-                    .replaceFirstChar { it.uppercase() } + " • ${recent.size} recent",
+                    .replaceFirstChar { it.uppercase() } + " -${recent.size} recent",
                 stageIndex = kind.stageIndex,
                 stageLabel = kind.eventType.replace('_', ' ').uppercase(),
                 eventType = kind.eventType,
@@ -2314,7 +2314,7 @@ class InteractViewModel(
             val status = apiClient.getSystemStatus()
             val cog = status.cognitive_state ?: "unknown"
             SelectionDetail.NucleusCore(
-                summaryLine = "$cog • ${status.services_online}/${status.services_total} services",
+                summaryLine = "$cog -${status.services_online}/${status.services_total} services",
                 cognitiveState = cog,
                 systemStatus = status.status,
                 servicesOnline = status.services_online,
@@ -2324,7 +2324,7 @@ class InteractViewModel(
         is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.CytoplasmMote -> {
             val node = apiClient.getMemoryNode(kind.nodeId)
             SelectionDetail.Mote(
-                summaryLine = "${node.type} • ${node.scope}",
+                summaryLine = "${node.type} -${node.scope}",
                 nodeId = kind.nodeId,
                 scope = kind.scope,
                 nodeType = node.type,
@@ -2357,7 +2357,7 @@ class InteractViewModel(
             val rows = audits?.entries.orEmpty().map { e ->
                 val desc = e.context?.description ?: e.context?.entityId ?: e.id
                 val ts = e.timestamp.take(19).replace('T', ' ')
-                "$ts • $desc"
+                "$ts -$desc"
             }
             SelectionDetail.Gratitude(
                 summaryLine = if (rows.isEmpty()) {

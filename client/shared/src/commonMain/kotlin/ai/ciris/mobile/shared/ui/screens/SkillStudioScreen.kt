@@ -624,7 +624,7 @@ private fun ValidationErrorsCard(errors: List<String>) {
             Spacer(Modifier.height(8.dp))
             errors.forEach { error ->
                 Text(
-                    text = "• $error",
+                    text = "- $error",
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     style = MaterialTheme.typography.bodyMedium
                 )

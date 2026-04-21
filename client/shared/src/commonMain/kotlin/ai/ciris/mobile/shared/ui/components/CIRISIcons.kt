@@ -227,3 +227,62 @@ fun ActionTypeIcon(
         tint = effectiveTint
     )
 }
+
+/**
+ * Map emoji/symbol strings to CIRIS icons for WASM/Skia rendering.
+ * SSE events and backend use Unicode symbols; these need conversion to ImageVectors
+ * because WASM/Skia doesn't include emoji font support (renders as "tofu" boxes).
+ */
+fun emojiToIcon(emoji: String): ImageVector? = when (emoji) {
+    // Event type symbols
+    "\u2753" -> CIRISIcons.thoughtStart       // ❓ thought_start / recall
+    "\u25B6" -> CIRISIcons.speak              // ▶ snapshot_and_context / speak
+    "\u2248" -> CIRISIcons.dma                // ≈ dma_results
+    "\u2139" -> CIRISIcons.idma               // ℹ idma_result
+    "\u26A0" -> CIRISIcons.warning            // ⚠ aspdma_result / action_result / default
+    "\u2692" -> CIRISIcons.tool               // ⚒ tsaspdma_result / tool
+    "\u25CE" -> CIRISIcons.conscience         // ◎ conscience_result
+    // Action symbols
+    "\u25CB" -> CIRISIcons.observe            // ○ observe
+    "\u2716" -> CIRISIcons.reject             // ✖ reject
+    "\u22EF" -> CIRISIcons.ponder             // ⋯ ponder
+    "\u275A\u275A" -> CIRISIcons.defer        // ❚❚ defer
+    "\u2795" -> CIRISIcons.memorize           // ➕ memorize
+    "\u2796" -> CIRISIcons.forget             // ➖ forget
+    "\u2714" -> CIRISIcons.taskComplete       // ✔ task_complete
+    // Common fallbacks
+    "\u2705" -> CIRISIcons.check              // ✅ check
+    "\u274C" -> CIRISIcons.xmark              // ❌ x-mark
+    // Skill dialog symbols
+    "\u2756" -> CIRISIcons.identityDiamond    // ❖ identity
+    "\u25A0" -> CIRISIcons.requirements       // ■ requirements
+    "\u2261" -> CIRISIcons.instruct           // ≡ instructions
+    "\u25C6" -> CIRISIcons.shield             // ◆ safety
+    else -> null
+}
+
+/**
+ * Get icon with default fallback for unrecognized emojis.
+ */
+fun emojiToIconOrDefault(emoji: String): ImageVector =
+    emojiToIcon(emoji) ?: CIRISIcons.circle
+
+/**
+ * Get bus color for an emoji symbol.
+ * Used for tinting icons in the bubble overlay.
+ */
+fun emojiBusColor(emoji: String): Color = when (emoji) {
+    // LLM bus (purple-ish)
+    "\u2753", "\u2248", "\u2139", "\u26A0", "\u25CE" -> CIRISColors.BusLLM
+    // COMM bus (teal)
+    "\u25B6", "\u25CB" -> CIRISColors.BusComm
+    // TOOL bus (orange)
+    "\u2692", "\u2714" -> CIRISColors.BusTool
+    // MEMORY bus (violet)
+    "\u2795", "\u2796" -> CIRISColors.BusMemory
+    // WISE bus (brass)
+    "\u22EF", "\u275A\u275A" -> CIRISColors.BusWise
+    // RUNTIME bus (magenta)
+    "\u2716" -> CIRISColors.BusRuntime
+    else -> Color.Unspecified
+}

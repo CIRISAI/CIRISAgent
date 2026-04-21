@@ -900,7 +900,7 @@ private fun RegisteredProvidersContent(
                                 val metrics = provider.metrics
                                 if (metrics.totalRequests > 0) {
                                     Text(
-                                        text = "${metrics.totalRequests} requests • ${metrics.averageLatencyMs.toInt()}ms avg",
+                                        text = "${metrics.totalRequests} requests - ${metrics.averageLatencyMs.toInt()}ms avg",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                     )

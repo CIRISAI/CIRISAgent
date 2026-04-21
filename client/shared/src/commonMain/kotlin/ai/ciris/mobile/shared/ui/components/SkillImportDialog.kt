@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import ai.ciris.mobile.shared.ui.icons.*
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.components.emojiToIconOrDefault
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -570,10 +571,11 @@ fun WorkshopCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = emoji,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(end = 12.dp)
+                Icon(
+                    imageVector = emojiToIconOrDefault(emoji),
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 12.dp).size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

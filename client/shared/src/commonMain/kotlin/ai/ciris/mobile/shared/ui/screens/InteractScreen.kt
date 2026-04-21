@@ -7,6 +7,8 @@ import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.ui.components.ActionTypeIcon
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
+import ai.ciris.mobile.shared.ui.components.emojiToIconOrDefault
+import ai.ciris.mobile.shared.ui.components.emojiBusColor
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import ai.ciris.mobile.shared.models.MessageType
@@ -2140,7 +2142,7 @@ private fun ActionExpandedDetails(
                         )
                         questions.forEach { question ->
                             Text(
-                                text = "• $question",
+                                text = "- $question",
                                 fontSize = 10.sp,
                                 color = Color(0xFF6B7280),
                                 lineHeight = 14.sp
@@ -2620,14 +2622,16 @@ private fun FullScreenFloatingBubble(
             .padding(4.dp)
     } else Modifier
 
-    Text(
-        text = emoji,
-        fontSize = 28.sp,
+    Icon(
+        imageVector = emojiToIconOrDefault(emoji),
+        contentDescription = null,
         modifier = modifier
+            .size(28.dp)
             .offset(x = wobble.dp, y = offsetY)
             .alpha(alpha)
             .zIndex(100f) // Ensure bubbles are on top
-            .then(tappableModifier)
+            .then(tappableModifier),
+        tint = emojiBusColor(emoji)
     )
 }
 
@@ -2680,7 +2684,12 @@ private fun CaughtBubblesPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(text = b.emoji, fontSize = 14.sp)
+                    Icon(
+                        imageVector = emojiToIconOrDefault(b.emoji),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = emojiBusColor(b.emoji)
+                    )
                     Text(
                         text = b.payload ?: "",
                         fontSize = 11.sp,
@@ -3404,7 +3413,12 @@ private fun NucleusShellBody(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
-                    Text(text = ev.emoji, fontSize = 14.sp)
+                    Icon(
+                        imageVector = emojiToIconOrDefault(ev.emoji),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = emojiBusColor(ev.emoji)
+                    )
                     Text(
                         text = ev.payload ?: "(no payload)",
                         fontSize = 11.sp,
@@ -3481,7 +3495,7 @@ private fun GratitudeBody(
         if (detail.recentCompletions.isNotEmpty()) {
             detail.recentCompletions.forEach { line ->
                 Text(
-                    text = "• $line",
+                    text = "- $line",
                     fontSize = 11.sp,
                     color = theme.textPrimary,
                     lineHeight = 14.sp,

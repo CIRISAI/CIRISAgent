@@ -10,7 +10,7 @@ import logging
 import secrets
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
@@ -38,7 +38,7 @@ class SecretsStore:
         master_key: Optional[bytes] = None,
         max_accesses_per_minute: int = 10,
         max_accesses_per_hour: int = 100,
-        key_storage_mode: Union[KeyStorageMode, str] = "auto",
+        key_storage_mode: KeyStorageMode | str = "auto",
     ):
         """
         Initialize secrets store.

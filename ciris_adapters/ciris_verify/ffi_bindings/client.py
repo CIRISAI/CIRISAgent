@@ -752,6 +752,51 @@ class CIRISVerify:
         except AttributeError:
             self._has_named_key_support = False
 
+        # v1.6.0+ native encryption FFI signatures
+        self._has_encryption_support = False
+        try:
+            # ciris_verify_derive_symmetric_key(handle, key_id, context, context_len, key_len, out, out_len) -> i32
+            self._lib.ciris_verify_derive_symmetric_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # context
+                ctypes.c_size_t,  # context_len
+                ctypes.c_size_t,  # key_len
+                ctypes.POINTER(ctypes.c_void_p),  # out
+                ctypes.POINTER(ctypes.c_size_t),  # out_len
+            ]
+            self._lib.ciris_verify_derive_symmetric_key.restype = ctypes.c_int
+
+            # ciris_verify_encrypt_with_named_key(handle, key_id, plaintext, plaintext_len, aad, aad_len, out, out_len) -> i32
+            self._lib.ciris_verify_encrypt_with_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # plaintext
+                ctypes.c_size_t,  # plaintext_len
+                ctypes.c_char_p,  # aad (nullable)
+                ctypes.c_size_t,  # aad_len
+                ctypes.POINTER(ctypes.c_void_p),  # out
+                ctypes.POINTER(ctypes.c_size_t),  # out_len
+            ]
+            self._lib.ciris_verify_encrypt_with_named_key.restype = ctypes.c_int
+
+            # ciris_verify_decrypt_with_named_key(handle, key_id, ciphertext, ciphertext_len, aad, aad_len, out, out_len) -> i32
+            self._lib.ciris_verify_decrypt_with_named_key.argtypes = [
+                ctypes.c_void_p,  # handle
+                ctypes.c_char_p,  # key_id
+                ctypes.c_char_p,  # ciphertext
+                ctypes.c_size_t,  # ciphertext_len
+                ctypes.c_char_p,  # aad (nullable)
+                ctypes.c_size_t,  # aad_len
+                ctypes.POINTER(ctypes.c_void_p),  # out
+                ctypes.POINTER(ctypes.c_size_t),  # out_len
+            ]
+            self._lib.ciris_verify_decrypt_with_named_key.restype = ctypes.c_int
+
+            self._has_encryption_support = True
+        except AttributeError:
+            pass  # _has_encryption_support already False
+
         # Initialize handle
         self._handle = self._lib.ciris_verify_init()
         if not self._handle:
@@ -3070,15 +3115,7 @@ class CIRISVerify:
             in the loaded library. If not available, callers should fall back to
             software encryption with signing-based key derivation.
         """
-        if not hasattr(self, "_lib") or self._lib is None:
-            return False
-
-        # Check if the encryption function exists in the library
-        try:
-            _ = self._lib.ciris_verify_encrypt_with_named_key
-            return True
-        except AttributeError:
-            return False
+        return getattr(self, "_has_encryption_support", False)
 
     def derive_symmetric_key(
         self,

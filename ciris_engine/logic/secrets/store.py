@@ -65,10 +65,8 @@ class SecretsStore:
             logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
             key_storage_mode = "auto"
 
-        # key_storage_mode is guaranteed valid after the check above
-        # Cast to satisfy mypy (we've validated it's one of the valid literals)
-        validated_mode: KeyStorageMode = key_storage_mode  # type: ignore[assignment]
-        self.encryption = SecretsEncryption(master_key, key_storage_mode=validated_mode)
+        # key_storage_mode is guaranteed valid after the check above - use cast for mypy
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=cast(KeyStorageMode, key_storage_mode))
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}
@@ -222,10 +220,11 @@ class SecretsStore:
                 encrypted_value, salt, nonce = self.encryption.encrypt_secret(secret.original_value)
 
                 # Create secret record with encryption data
+                # Use actual encryption method to properly track hardware vs software encryption
                 secret_record = SecretRecord(
                     secret_uuid=secret.secret_uuid,
                     encrypted_value=encrypted_value,
-                    encryption_key_ref="master_key_v1",  # Key versioning
+                    encryption_key_ref=self.encryption.get_encryption_key_ref(),
                     salt=salt,
                     nonce=nonce,
                     description=secret.description,

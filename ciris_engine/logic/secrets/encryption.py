@@ -154,6 +154,23 @@ class SecretsEncryption:
             "software_only": False,
         }
 
+    def get_encryption_key_ref(self) -> str:
+        """Get the encryption key reference for secrets encrypted with current configuration.
+
+        Returns:
+            Key reference string:
+            - "hardware_v1" - Native hardware AES-GCM encryption (v1.6.0+)
+            - "master_key_v1" - Software encryption (or hardware with signing derivation)
+        """
+        if self.key_storage_mode == "hardware" and self._hardware_available:
+            if self._verifier is not None:
+                try:
+                    if self._verifier.has_encryption_support():
+                        return "hardware_v1"
+                except (AttributeError, NotImplementedError):
+                    pass
+        return "master_key_v1"
+
     def _get_key_from_hardware(self, salt: bytes) -> bytes:
         """Derive encryption key from hardware-backed master key.
 

@@ -3055,6 +3055,189 @@ class CIRISVerify:
             if json_out.value:
                 self._lib.ciris_verify_free_string(json_out)
 
+    # ==========================================================================
+    # v1.6.0+ Native Encryption Methods
+    # ==========================================================================
+
+    def has_encryption_support(self) -> bool:
+        """Check if native AES-256-GCM encryption is available (v1.6.0+).
+
+        Returns:
+            True if native encryption is supported, False otherwise.
+
+        Note:
+            This method checks if the v1.6.0+ encryption functions are available
+            in the loaded library. If not available, callers should fall back to
+            software encryption with signing-based key derivation.
+        """
+        if not hasattr(self, "_lib") or self._lib is None:
+            return False
+
+        # Check if the encryption function exists in the library
+        try:
+            _ = self._lib.ciris_verify_encrypt_with_named_key
+            return True
+        except AttributeError:
+            return False
+
+    def derive_symmetric_key(
+        self,
+        key_id: str,
+        context: bytes,
+        key_length: int = 32,
+    ) -> bytes:
+        """Derive a symmetric key using HKDF (v1.6.0+).
+
+        Args:
+            key_id: Named key identifier to use for derivation.
+            context: Context/info bytes for HKDF (e.g., salt + purpose).
+            key_length: Length of derived key in bytes (default 32 for AES-256).
+
+        Returns:
+            Derived key bytes.
+
+        Raises:
+            NotImplementedError: If v1.6.0+ encryption is not available.
+            VerificationFailedError: If derivation fails.
+        """
+        if not self.has_encryption_support():
+            raise NotImplementedError(
+                "Symmetric key derivation requires CIRISVerify v1.6.0+"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        derived_key = ctypes.c_void_p()
+        derived_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_derive_symmetric_key(
+            self._handle,
+            key_id_bytes,
+            context,
+            len(context),
+            key_length,
+            ctypes.byref(derived_key),
+            ctypes.byref(derived_len),
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"derive_symmetric_key failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(derived_key.value, derived_len.value)
+        finally:
+            if derived_key.value:
+                self._lib.ciris_verify_free(derived_key.value)
+
+    def encrypt_with_named_key(
+        self,
+        key_id: str,
+        plaintext: bytes,
+        aad: Optional[bytes] = None,
+    ) -> bytes:
+        """Encrypt data using AES-256-GCM with hardware-backed key (v1.6.0+).
+
+        Args:
+            key_id: Named key identifier.
+            plaintext: Data to encrypt.
+            aad: Additional authenticated data (optional).
+
+        Returns:
+            Ciphertext in format: nonce (12 bytes) || ciphertext || tag (16 bytes)
+
+        Raises:
+            NotImplementedError: If v1.6.0+ encryption is not available.
+            VerificationFailedError: If encryption fails.
+        """
+        if not self.has_encryption_support():
+            raise NotImplementedError(
+                "Native encryption requires CIRISVerify v1.6.0+"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        ciphertext = ctypes.c_void_p()
+        ciphertext_len = ctypes.c_size_t()
+
+        aad_ptr = aad if aad else None
+        aad_len = len(aad) if aad else 0
+
+        ret = self._lib.ciris_verify_encrypt_with_named_key(
+            self._handle,
+            key_id_bytes,
+            plaintext,
+            len(plaintext),
+            aad_ptr,
+            aad_len,
+            ctypes.byref(ciphertext),
+            ctypes.byref(ciphertext_len),
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"encrypt_with_named_key failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(ciphertext.value, ciphertext_len.value)
+        finally:
+            if ciphertext.value:
+                self._lib.ciris_verify_free(ciphertext.value)
+
+    def decrypt_with_named_key(
+        self,
+        key_id: str,
+        ciphertext: bytes,
+        aad: Optional[bytes] = None,
+    ) -> bytes:
+        """Decrypt data using AES-256-GCM with hardware-backed key (v1.6.0+).
+
+        Args:
+            key_id: Named key identifier.
+            ciphertext: Data in format: nonce (12 bytes) || ciphertext || tag (16 bytes)
+            aad: Additional authenticated data (must match encryption AAD).
+
+        Returns:
+            Decrypted plaintext.
+
+        Raises:
+            NotImplementedError: If v1.6.0+ encryption is not available.
+            VerificationFailedError: If decryption fails (wrong key, tampered data).
+        """
+        if not self.has_encryption_support():
+            raise NotImplementedError(
+                "Native decryption requires CIRISVerify v1.6.0+"
+            )
+
+        key_id_bytes = key_id.encode("utf-8")
+        plaintext = ctypes.c_void_p()
+        plaintext_len = ctypes.c_size_t()
+
+        aad_ptr = aad if aad else None
+        aad_len = len(aad) if aad else 0
+
+        ret = self._lib.ciris_verify_decrypt_with_named_key(
+            self._handle,
+            key_id_bytes,
+            ciphertext,
+            len(ciphertext),
+            aad_ptr,
+            aad_len,
+            ctypes.byref(plaintext),
+            ctypes.byref(plaintext_len),
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"decrypt_with_named_key failed with code {ret}"
+            )
+
+        try:
+            return ctypes.string_at(plaintext.value, plaintext_len.value)
+        finally:
+            if plaintext.value:
+                self._lib.ciris_verify_free(plaintext.value)
+
 
 class MockCIRISVerify(CIRISVerify):
     """Mock CIRISVerify client for testing without the actual binary.

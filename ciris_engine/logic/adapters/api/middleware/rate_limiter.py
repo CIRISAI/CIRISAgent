@@ -274,6 +274,10 @@ class RateLimitMiddleware:
 
         if not allowed:
             retry_after = self.limiter.get_retry_after(client_id)
+            logger.warning(
+                "Rate limit exceeded for %s on %s %s (retry_after=%ds)",
+                client_id, request.method, request.url.path, retry_after
+            )
             return JSONResponse(
                 status_code=429,
                 content={

@@ -59,14 +59,16 @@ class SecretsStore:
         else:
             self.db_path = Path(db_path)
 
-        # Validate and cast key_storage_mode
+        # Validate key_storage_mode and ensure it's a valid KeyStorageMode
         valid_modes: tuple[KeyStorageMode, ...] = ("software", "hardware", "auto")
         if key_storage_mode not in valid_modes:
             logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
-            key_storage_mode = "auto"
+            validated_mode: KeyStorageMode = "auto"
+        else:
+            # key_storage_mode is in valid_modes, so it's a valid KeyStorageMode
+            validated_mode = key_storage_mode  # type: ignore[assignment]
 
-        # key_storage_mode is guaranteed valid after the check above
-        self.encryption = SecretsEncryption(master_key, key_storage_mode=key_storage_mode)  # type: ignore[arg-type]
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=validated_mode)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}

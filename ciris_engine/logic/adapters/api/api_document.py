@@ -29,10 +29,9 @@ BLOCKED_HOSTS = {
     'localhost',
     '127.0.0.1',
     '::1',
-    '169.254.169.254',  # AWS metadata
-    'metadata.google.internal',  # GCP metadata
+    '169.254.169.254',  # AWS/Azure/GCP metadata endpoint
+    'metadata.google.internal',  # GCP metadata hostname
     'metadata',
-    '169.254.169.254',  # Azure metadata (same as AWS)
     '100.100.100.200',  # Alibaba Cloud metadata
 }
 

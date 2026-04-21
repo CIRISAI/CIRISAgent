@@ -5,6 +5,70 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-04-21
+
+### Security
+
+- **Hardware-Backed Secret Encryption** - Master key migration to TPM/Keystore/SecureEnclave
+  - CIRISVerify v1.6.0 encryption API (AES-256-GCM)
+  - Key storage mode config: `auto`/`hardware`/`software`
+  - Atomic migration with canary verification
+
+- **Critical Fixes (C1-C3)**
+  - Sanitize exception messages in secrets audit log
+  - Fix shell injection in smart-commit-hook.py (`shell=False`)
+  - Fix path traversal with `validate_path_safety()`
+
+- **High Fixes (H1-H11)**
+  - SSRF protection for document download (URL validation, DNS rebinding)
+  - Service token revocation endpoint with database persistence
+  - WAL/SHM file permissions (0600) with TOCTOU mitigation
+  - Remove debug logging of exception objects
+  - Add `--` separator to git commands
+
+- **Medium Fixes (M1-M13)**
+  - Ed25519 signature verification for ACCORD manifest
+  - Word-boundary regex for capability matching
+  - Expand PROHIBITED_CAPABILITIES with 500+ stemming variants
+  - Remove overly broad 'compliance' from LEGAL_CAPABILITIES
+
+- **Low Fixes (L1-L4)**
+  - User-agent sanitization
+  - Hardware mode config fixes
+
+### Added
+
+- **WASM Icon System** - Replace Unicode emojis with SVG-based ImageVectors for Skia
+  - `emojiToIcon()` / `emojiBusColor()` mapping functions
+  - Icons render correctly in SSE bubbles, timeline bar, skill import dialog
+  - CIRISMaterialIcons with stroke color on 225 path() calls
+
+- **WASM Static File Serving** - Support `wasm_static/` directory for HA addon
+  - Multiple lookup paths for production/development
+  - Root `/health` endpoint for diagnostics
+
+- **HA Addon Mode Detection** - Auto-detect HA ingress context in WASM
+  - Checks URL path, query params, referrer for HA patterns
+
+### Fixed
+
+- **SonarCloud Issues**
+  - Duplicate key in BLOCKED_HOSTS set
+  - Union type to modern syntax (`KeyStorageMode | str`)
+  - Redundant inner try/except in guide loading
+
+- **Rate Limiter Logging** - 429 responses now logged with client ID and retry_after
+
+- **Mobile Adapter Loading** - Increased timeout to 60s (was 30s)
+
+- **Polling Reduction** - Cache-Control headers on setup/status (5s) and adapter-list (10s)
+
+## [2.6.1] - 2026-04-20
+
+### Fixed
+
+- **HA Addon .env Path Discovery** - Add `CIRIS_CONFIG_DIR`/`CIRIS_HOME` to early path search
+
 ## [2.6.0] - 2026-04-19
 
 ### Added

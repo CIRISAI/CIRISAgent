@@ -35,10 +35,10 @@ GITHUB_REPO = "CIRISAI/CIRISVerify"
 
 # Project paths (relative to repo root)
 REPO_ROOT = Path(__file__).parent.parent
-MOBILE_ROOT = REPO_ROOT / "mobile"
+CLIENT_ROOT = REPO_ROOT / "client"
 
 # Android paths
-JNI_LIBS_DIR = MOBILE_ROOT / "androidApp" / "src" / "main" / "jniLibs"
+JNI_LIBS_DIR = CLIENT_ROOT / "androidApp" / "src" / "main" / "jniLibs"
 
 # Canonical FFI bindings location (used by both mobile and server)
 FFI_BINDINGS_DIR = REPO_ROOT / "ciris_adapters" / "ciris_verify" / "ffi_bindings"
@@ -47,7 +47,7 @@ FFI_BINDINGS_DIR = REPO_ROOT / "ciris_adapters" / "ciris_verify" / "ffi_bindings
 ANDROID_PYTHON_DIR = FFI_BINDINGS_DIR
 
 # iOS paths
-IOS_APP_DIR = MOBILE_ROOT / "iosApp"
+IOS_APP_DIR = CLIENT_ROOT / "iosApp"
 IOS_FRAMEWORKS_DIR = IOS_APP_DIR / "Frameworks"
 IOS_XCFRAMEWORK_DIR = IOS_FRAMEWORKS_DIR / "CIRISVerify.xcframework"
 IOS_PYTHON_DIR = IOS_APP_DIR / "Resources" / "app_packages" / "ciris_verify"
@@ -1119,13 +1119,13 @@ def update_from_local(ciris_verify_root: Path, android: bool, ios: bool, desktop
 
     if ios:
         print("\niOS next steps:")
-        print("  1. Open mobile/iosApp/iosApp.xcodeproj in Xcode")
+        print("  1. Open client/iosApp/iosApp.xcodeproj in Xcode")
         print("  2. DELETE the app from the device (Resources.zip cache!)")
         print("  3. Cmd+R to build and run")
 
     if android:
         print("\nAndroid next steps:")
-        print("  1. cd mobile && ./gradlew :androidApp:assembleDebug")
+        print("  1. cd client && ./gradlew :androidApp:assembleDebug")
         print("  2. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 
 
@@ -1248,7 +1248,7 @@ Examples:
 
     if do_android:
         print("\nAndroid next steps:")
-        print("  1. cd mobile && ./gradlew :androidApp:assembleDebug")
+        print("  1. cd client && ./gradlew :androidApp:assembleDebug")
         print("  2. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 
     if do_ios:

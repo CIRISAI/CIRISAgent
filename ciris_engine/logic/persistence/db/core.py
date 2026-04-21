@@ -761,11 +761,11 @@ def get_db_connection(
     logger.debug("[DB_CONNECT] Setting row_factory...")
     conn.row_factory = sqlite3.Row
 
-    # Wrap iOS connection before executing PRAGMAs
-    if is_ios:
-        logger.debug("[DB_CONNECT] Wrapping connection with IOSSerializedConnection BEFORE PRAGMAs...")
-        conn = IOSSerializedConnection(conn)  # type: ignore[assignment]
-        logger.debug("[DB_CONNECT] iOS wrapper created, now executing PRAGMAs through wrapper")
+    # iOS: thread-local connections mean each thread owns its handle.
+    # No need for IOSSerializedConnection wrapper — it was needed when connections
+    # were shared across threads, but thread-local caching fixes the root cause.
+    # The wrapper's global lock actually makes things worse by serializing independent
+    # threads and can cause the main thread to block on DB operations from other threads.
 
     pragma_statements = _get_pragma_statements(is_ios, busy_timeout)
     _execute_pragmas(conn, adapter, pragma_statements)

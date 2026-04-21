@@ -577,11 +577,14 @@ class CIRISRuntime(ServicePropertyMixin):
             critical=True,
         )
 
+        # Adapter loading can be slow on mobile due to graph DB queries
+        adapter_load_timeout = 60.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Load Saved Adapters",
             handler=self._load_saved_adapters,
             critical=False,  # Non-critical - system can run without saved adapters
+            timeout=adapter_load_timeout,
         )
 
         init_manager.register_step(

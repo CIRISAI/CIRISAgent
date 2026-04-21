@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import ValidationError
 
 from ciris_engine.logic.persistence.llm_providers import disable_adapter_in_env
@@ -157,12 +157,20 @@ def _convert_adapter_to_status(adapter: AdapterInfo) -> AdapterStatusSchema:
 # ============================================================================
 
 
+# Cache duration for adapter list (reduces polling frequency)
+ADAPTERS_CACHE_SECONDS = 10
+
+
 @router.get("/adapters", responses=RESPONSES_500_503)
 async def list_adapters(
     request: Request,
+    response: Response,
     auth: Annotated[AuthContext, Depends(require_observer)],
 ) -> SuccessResponse[AdapterListResponse]:
-    """List all loaded adapters with their type, status, and metrics."""
+    """List all loaded adapters with their type, status, and metrics.
+
+    Includes Cache-Control header to reduce excessive client polling.
+    """
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
         raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
@@ -201,6 +209,9 @@ async def list_adapters(
                 logger.info("[LIST_ADAPTERS]   is AdapterInfo, converting to status")
                 adapter_statuses.append(_convert_adapter_to_status(a))
         running_count = sum(1 for a in adapter_statuses if a.is_running)
+
+        # Add cache header to reduce polling frequency
+        response.headers["Cache-Control"] = f"private, max-age={ADAPTERS_CACHE_SECONDS}"
 
         return SuccessResponse(
             data=AdapterListResponse(

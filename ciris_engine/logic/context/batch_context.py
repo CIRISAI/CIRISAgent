@@ -447,29 +447,17 @@ async def prefetch_batch_context(
                 # CRITICAL: Attestation MUST have run at startup and be cached
                 # If it's not there, something has gone wrong - fail fast
                 attestation_result = None
+                # First try: Get from authentication service's cache (proper AttestationResult)
                 try:
-                    import secrets
-
-                    from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
-                        get_verifier,
-                    )
-
-                    cv = get_verifier()
-                    if cv is not None:
-                        # Get attestation result (uses cached data if available)
-                        challenge_nonce = secrets.token_bytes(32)
-                        result = cv.export_attestation_sync(challenge_nonce)
-                        if result and isinstance(result, dict):
-                            # Convert dict to AttestationResult schema for type safety
-                            try:
-                                attestation_result = AttestationResult.model_validate(result)
-                                logger.debug(
-                                    f"[BATCH] Got cached attestation from verifier singleton: level={attestation_result.max_level}"
-                                )
-                            except Exception as validation_error:
-                                logger.warning(f"[BATCH] Failed to validate attestation result: {validation_error}")
+                    auth_service = service_registry.get_authentication()
+                    if auth_service and hasattr(auth_service, "get_cached_attestation"):
+                        attestation_result = auth_service.get_cached_attestation(allow_stale=True)
+                        if attestation_result:
+                            logger.debug(
+                                f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
+                            )
                 except Exception as e:
-                    logger.warning(f"[BATCH] Could not get attestation from verifier singleton: {e}")
+                    logger.debug(f"[BATCH] Could not get attestation from auth service: {e}")
 
                 # Fallback: try through adapter's service (legacy path)
                 if (

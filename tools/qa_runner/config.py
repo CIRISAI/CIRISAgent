@@ -182,6 +182,10 @@ class QAConfig:
     fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
     test_timeout: float = 30.0  # Timeout for individual test interactions
 
+    # Memory benchmark configuration
+    message_count: int = 100  # Number of messages to send in memory benchmark
+    concurrent_channels: int = 4  # Number of concurrent channels for parallel testing
+
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.
 

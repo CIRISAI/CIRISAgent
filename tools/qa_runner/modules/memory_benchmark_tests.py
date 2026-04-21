@@ -3,12 +3,16 @@ Memory benchmark module for QA runner.
 
 Measures RSS memory growth under message load.
 Uses QA runner's server lifecycle management for reliable benchmarking.
+
+Supports concurrent channel testing to avoid serial bottlenecks from
+updated_info_available flag triggering conscience retries when messages
+arrive in a channel with an active task.
 """
 
 import asyncio
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -22,6 +26,28 @@ class MemorySnapshot:
     timestamp: float
     rss_bytes: int
     messages_sent: int
+
+
+@dataclass
+class ChannelStats:
+    """Statistics for a single benchmark channel."""
+    channel_id: str
+    messages_sent: int = 0
+    messages_succeeded: int = 0
+    messages_failed: int = 0
+    start_time: float = field(default_factory=time.time)
+    end_time: Optional[float] = None
+
+    @property
+    def elapsed(self) -> float:
+        end = self.end_time or time.time()
+        return end - self.start_time
+
+    @property
+    def throughput(self) -> float:
+        if self.elapsed > 0:
+            return self.messages_succeeded / self.elapsed
+        return 0.0
 
 
 def format_size(size: float) -> str:
@@ -85,6 +111,13 @@ class MemoryBenchmarkTests(BaseTestModule):
 
     Sends a configurable number of messages and tracks memory growth.
     Reports initial, final, peak memory and per-message overhead.
+
+    Supports two modes:
+    - Serial (concurrent_channels=1): Messages sent one at a time, waiting for completion
+    - Concurrent (concurrent_channels>1): Messages spread across N channels, sent in parallel
+
+    Concurrent mode avoids the updated_info_available bottleneck by using
+    separate channels that don't interfere with each other.
     """
 
     def __init__(
@@ -95,11 +128,14 @@ class MemoryBenchmarkTests(BaseTestModule):
         test_timeout: float = 30.0,
         message_count: int = 100,
         server_pid: Optional[int] = None,
+        concurrent_channels: int = 1,
     ):
         super().__init__(client, console, fail_fast, test_timeout)
         self.message_count = message_count
         self.server_pid = server_pid
+        self.concurrent_channels = max(1, concurrent_channels)
         self.snapshots: List[MemorySnapshot] = []
+        self.channel_stats: Dict[str, ChannelStats] = {}
 
     def _take_snapshot(self, messages_sent: int) -> Optional[MemorySnapshot]:
         """Take a memory snapshot."""
@@ -123,6 +159,10 @@ class MemoryBenchmarkTests(BaseTestModule):
         """Run memory benchmark tests."""
         self.console.print("\n[bold cyan]Memory Benchmark[/bold cyan]")
         self.console.print(f"  Messages to send: {self.message_count}")
+        self.console.print(f"  Concurrent channels: {self.concurrent_channels}")
+        if self.concurrent_channels > 1:
+            msgs_per_channel = self.message_count // self.concurrent_channels
+            self.console.print(f"  Messages per channel: ~{msgs_per_channel}")
 
         # Start SSE monitoring for task completion
         self._start_sse_monitoring()
@@ -138,7 +178,10 @@ class MemoryBenchmarkTests(BaseTestModule):
                 return self.results
 
             # Send messages and track memory
-            await self._test_message_load(initial)
+            if self.concurrent_channels > 1:
+                await self._test_concurrent_channels(initial)
+            else:
+                await self._test_message_load(initial)
 
             # Report results
             self._report_results(initial)
@@ -202,6 +245,128 @@ class MemoryBenchmarkTests(BaseTestModule):
             f"\n  Completed: {success_count}/{self.message_count} in {elapsed:.1f}s "
             f"({success_count / elapsed:.1f} msg/s)"
         )
+
+    async def _test_concurrent_channels(self, initial: MemorySnapshot) -> None:
+        """Send messages across multiple channels concurrently."""
+        self.console.print(f"\n  Testing with {self.concurrent_channels} concurrent channels...")
+
+        # Initialize channel stats
+        for i in range(self.concurrent_channels):
+            channel_id = f"benchmark_channel_{i}"
+            self.channel_stats[channel_id] = ChannelStats(channel_id=channel_id)
+
+        # Distribute messages across channels
+        messages_per_channel = self.message_count // self.concurrent_channels
+        remainder = self.message_count % self.concurrent_channels
+
+        start_time = time.time()
+
+        # Create concurrent tasks for each channel
+        tasks = []
+        for i, (channel_id, stats) in enumerate(self.channel_stats.items()):
+            # Add remainder messages to first channels
+            count = messages_per_channel + (1 if i < remainder else 0)
+            task = asyncio.create_task(
+                self._send_channel_messages(channel_id, count, stats)
+            )
+            tasks.append(task)
+
+        # Run all channels concurrently
+        await asyncio.gather(*tasks)
+
+        elapsed = time.time() - start_time
+
+        # Final snapshot
+        self._take_snapshot(self.message_count)
+
+        # Aggregate results
+        total_success = sum(s.messages_succeeded for s in self.channel_stats.values())
+        total_failed = sum(s.messages_failed for s in self.channel_stats.values())
+
+        # Print channel summaries
+        self.console.print("\n  [bold]Channel Performance:[/bold]")
+        for channel_id, stats in self.channel_stats.items():
+            self.console.print(
+                f"    {channel_id}: {stats.messages_succeeded}/{stats.messages_sent} "
+                f"({stats.throughput:.1f} msg/s)"
+            )
+
+        # Record test result
+        success_rate = total_success / self.message_count * 100 if self.message_count > 0 else 0
+        passed = success_rate >= 90  # 90% success threshold
+
+        self._record_result(
+            f"concurrent_{self.concurrent_channels}_channels_{self.message_count}_messages",
+            passed,
+            None if passed else f"Only {total_success}/{self.message_count} succeeded",
+        )
+
+        throughput = total_success / elapsed if elapsed > 0 else 0
+        self.console.print(
+            f"\n  Completed: {total_success}/{self.message_count} in {elapsed:.1f}s "
+            f"({throughput:.1f} msg/s total)"
+        )
+
+    async def _send_channel_messages(
+        self,
+        channel_id: str,
+        message_count: int,
+        stats: ChannelStats,
+    ) -> None:
+        """Send messages to a specific channel."""
+        stats.start_time = time.time()
+        snapshot_interval = max(5, message_count // 5)
+
+        for i in range(message_count):
+            stats.messages_sent += 1
+            try:
+                # Submit message to specific channel using context
+                context = {"channel_id": channel_id}
+                submission = await self.client.agent.submit_message(
+                    f"Benchmark message {i + 1}/{message_count} on {channel_id}",
+                    context=context,
+                )
+
+                if submission.accepted:
+                    # Wait for completion via SSE (with shorter timeout for concurrent)
+                    if self.sse_helper:
+                        self._wait_for_any_action(timeout=min(10.0, self.test_timeout))
+                    else:
+                        await asyncio.sleep(0.5)
+                    stats.messages_succeeded += 1
+                else:
+                    stats.messages_failed += 1
+
+                # Progress update at intervals
+                if (i + 1) % snapshot_interval == 0:
+                    snapshot = self._take_snapshot(stats.messages_sent)
+                    if snapshot:
+                        growth = snapshot.rss_bytes - self.snapshots[0].rss_bytes
+                        self.console.print(
+                            f"    [{channel_id}] {i + 1}/{message_count}: "
+                            f"{format_size(snapshot.rss_bytes)} (+{format_size(growth)})"
+                        )
+
+            except Exception as e:
+                stats.messages_failed += 1
+                self.console.print(f"    [{channel_id}] Message {i + 1} failed: {e}")
+
+        stats.end_time = time.time()
+
+    def _wait_for_any_action(self, timeout: float = 10.0) -> bool:
+        """Wait for any action completion in SSE stream (shorter timeout for concurrent)."""
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            # Check for any completed task
+            completed_tasks = getattr(self.sse_helper, "completed_tasks", set())
+            if len(completed_tasks) > 0:
+                return True
+            if getattr(self.sse_helper, "task_complete_seen", False):
+                return True
+            time.sleep(0.05)
+
+        return False
 
     def _report_results(self, initial: MemorySnapshot) -> None:
         """Report memory benchmark results."""

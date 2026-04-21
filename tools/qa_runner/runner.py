@@ -997,6 +997,18 @@ class QARunner:
                         fail_fast=self.config.fail_fast,
                         test_timeout=self.config.test_timeout,
                     )
+                elif module == QAModule.MEMORY_BENCHMARK:
+                    # Memory benchmark supports concurrent channels for faster testing
+                    concurrent_channels = getattr(self.config, "concurrent_channels", 4)
+                    message_count = getattr(self.config, "message_count", 100)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                        message_count=message_count,
+                        concurrent_channels=concurrent_channels,
+                    )
                 else:
                     test_instance = test_class(client, self.console)
 

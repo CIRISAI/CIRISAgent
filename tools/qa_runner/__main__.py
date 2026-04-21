@@ -202,6 +202,20 @@ Available modules:
         help="Timeout for individual test interactions in seconds (default: 30)",
     )
 
+    # Memory benchmark configuration
+    parser.add_argument(
+        "--message-count",
+        type=int,
+        default=100,
+        help="Number of messages to send in memory_benchmark (default: 100)",
+    )
+    parser.add_argument(
+        "--concurrent-channels",
+        type=int,
+        default=4,
+        help="Number of concurrent channels for memory_benchmark parallel testing (default: 4)",
+    )
+
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Generate JSON report")
@@ -418,6 +432,9 @@ def main():
         test_timeout=args.test_timeout,
         # Data management
         wipe_data=args.wipe_data,
+        # Memory benchmark configuration
+        message_count=args.message_count,
+        concurrent_channels=args.concurrent_channels,
     )
 
     # Create and run runner

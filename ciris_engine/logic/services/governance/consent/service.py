@@ -799,32 +799,57 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def cleanup_expired(self) -> int:
         """
         Clean up all expired TEMPORARY consents.
-        HARD DELETE after 14 days.
+        HARD DELETE after 14 days - removes from both cache AND graph storage.
         """
         self._expired_cleanups += 1
         current_time = self._now()
 
-        # Get expired user IDs from graph or cache
-        expired_user_ids = await self._find_expired_user_ids(current_time)
+        # Get expired nodes from graph (with full node data for deletion)
+        expired_nodes, expired_user_ids = await self._find_expired_nodes(current_time)
 
-        # Perform cleanup operations
-        cleanup_count = self._perform_cleanup(expired_user_ids)
+        # Delete from graph storage via memory bus
+        graph_deleted = await self._delete_expired_from_graph(expired_nodes)
 
-        return cleanup_count
+        # Delete from local cache
+        cache_deleted = self._delete_expired_from_cache(expired_user_ids)
 
-    async def _find_expired_user_ids(self, current_time: datetime) -> List[str]:
-        """Find all user IDs with expired temporary consents."""
+        total_deleted = graph_deleted + cache_deleted
+        if total_deleted > 0:
+            logger.info(f"Consent cleanup: deleted {graph_deleted} graph nodes, {cache_deleted} cache entries")
+
+        return total_deleted
+
+    async def _find_expired_nodes(self, current_time: datetime) -> tuple[List[GraphNode], List[str]]:
+        """Find all expired temporary consent nodes and their user IDs.
+
+        Returns:
+            Tuple of (list of expired GraphNodes, list of user IDs)
+        """
+        expired_nodes: List[GraphNode] = []
+        expired_user_ids: List[str] = []
+
         if self._memory_bus:
-            return await self._find_expired_from_graph(current_time)
-        else:
-            return self._find_expired_from_cache(current_time)
+            expired_nodes, expired_user_ids = await self._find_expired_from_graph(current_time)
 
-    async def _find_expired_from_graph(self, current_time: datetime) -> List[str]:
-        """Find expired consents from memory graph nodes."""
-        expired = []
+        # Also check cache for any entries not in graph
+        cache_expired = self._find_expired_from_cache(current_time)
+        for user_id in cache_expired:
+            if user_id not in expired_user_ids:
+                expired_user_ids.append(user_id)
+
+        return expired_nodes, expired_user_ids
+
+    async def _find_expired_from_graph(self, current_time: datetime) -> tuple[List[GraphNode], List[str]]:
+        """Find expired consents from memory graph nodes.
+
+        Returns:
+            Tuple of (list of expired GraphNodes, list of user IDs)
+        """
+        expired_nodes: List[GraphNode] = []
+        expired_user_ids: List[str] = []
 
         if self._memory_bus is None:
-            return []
+            return expired_nodes, expired_user_ids
 
         try:
             consent_nodes = await self._memory_bus.search(
@@ -839,16 +864,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             for node in consent_nodes:
                 user_id = self._extract_expired_user_from_node(node, current_time)
                 if user_id:
-                    expired.append(user_id)
+                    expired_nodes.append(node)
+                    expired_user_ids.append(user_id)
 
-            logger.debug(f"Found {len(expired)} expired consent nodes in graph")
+            logger.debug(f"Found {len(expired_nodes)} expired consent nodes in graph")
 
         except Exception as e:
             logger.warning(f"Failed to query consent nodes for expiry cleanup: {e}")
-            # Fall back to cache-based cleanup on graph query failure
-            expired = self._find_expired_from_cache(current_time)
 
-        return expired
+        return expired_nodes, expired_user_ids
 
     def _extract_expired_user_from_node(self, node: Any, current_time: datetime) -> Optional[str]:
         """Extract user ID if the consent node represents an expired temporary consent."""
@@ -892,15 +916,49 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             and current_time > status.expires_at
         )
 
-    def _perform_cleanup(self, expired_user_ids: List[str]) -> int:
-        """Remove expired consents from cache and return count."""
-        count = 0
+    async def _delete_expired_from_graph(self, expired_nodes: List[GraphNode]) -> int:
+        """Delete expired consent nodes from graph storage via memory bus.
 
+        Args:
+            expired_nodes: List of GraphNode objects to delete
+
+        Returns:
+            Number of nodes successfully deleted
+        """
+        from ciris_engine.schemas.services.operations import MemoryOpStatus
+
+        if not self._memory_bus or not expired_nodes:
+            return 0
+
+        deleted_count = 0
+        for node in expired_nodes:
+            try:
+                result = await self._memory_bus.forget(node)
+                if result.status == MemoryOpStatus.OK:
+                    deleted_count += 1
+                    logger.debug(f"Deleted expired consent node: {node.id}")
+                else:
+                    logger.warning(f"Failed to delete consent node {node.id}: {result.error}")
+            except Exception as e:
+                logger.warning(f"Error deleting consent node {node.id}: {e}")
+
+        return deleted_count
+
+    def _delete_expired_from_cache(self, expired_user_ids: List[str]) -> int:
+        """Remove expired consents from local cache.
+
+        Args:
+            expired_user_ids: List of user IDs to remove
+
+        Returns:
+            Number of cache entries removed
+        """
+        count = 0
         for user_id in expired_user_ids:
             if user_id in self._consent_cache:
                 del self._consent_cache[user_id]
                 count += 1
-                logger.info(f"Cleaned up expired consent for {user_id}")
+                logger.debug(f"Removed expired consent from cache for user {user_id}")
 
         return count
 

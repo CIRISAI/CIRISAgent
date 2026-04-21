@@ -217,9 +217,13 @@ class AuditVerifier:
         # Check previous hash link
         previous_hash_valid = True  # Assume valid unless we find otherwise
         sequence_number = get_int(entry, "sequence_number", 0)
-        if sequence_number > 1 and entry.get("previous_hash") == "genesis":
+        prev_hash = entry.get("previous_hash", "")
+        # "genesis" is only valid for sequence 1
+        # REANCHOR_* markers are valid anchor points (from retention cleanup)
+        if sequence_number > 1 and prev_hash == "genesis":
             previous_hash_valid = False
             errors.append("Invalid previous hash: 'genesis' only valid for first entry")
+        # Note: REANCHOR_* is valid as an anchor point after retention cleanup
 
         return EntryVerificationResult(
             valid=len(errors) == 0,

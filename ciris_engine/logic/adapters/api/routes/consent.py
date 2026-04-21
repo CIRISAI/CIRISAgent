@@ -31,7 +31,7 @@ from ciris_engine.schemas.consent.core import (
     StreamMetadata,
 )
 
-from ._common import RESPONSES_400, RESPONSES_403, RESPONSES_404, RESPONSES_500, AuthDep, AuthObserverDep
+from ._common import RESPONSES_400, RESPONSES_403, RESPONSES_404, RESPONSES_500, AuthAdminDep, AuthDep, AuthObserverDep
 
 logger = logging.getLogger(__name__)
 
@@ -454,13 +454,14 @@ async def check_partnership_status(
 
 @router.post("/cleanup")
 async def cleanup_expired(
-    _auth: AuthObserverDep,
+    _auth: AuthAdminDep,
     manager: ConsentManagerDep,
 ) -> ConsentCleanupResponse:
     """
     Clean up expired TEMPORARY consents (admin only).
 
     HARD DELETE after 14 days - NO GRACE PERIOD.
+    Requires ADMIN role - maintenance operation.
     """
     count = await manager.cleanup_expired()
     return ConsentCleanupResponse(

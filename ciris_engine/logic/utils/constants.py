@@ -305,12 +305,8 @@ def _load_platform_guide(base_path: Path) -> str:
                 content = f.read()
                 logger.debug("Loaded runtime guide from: %s", guide_path)
 
-                # M1 FIX: Verify guide integrity
-                try:
-                    _verify_guide_integrity(guide_path.name, content)
-                except RuntimeError:
-                    # Re-raise integrity failures (security-critical)
-                    raise
+                # M1 FIX: Verify guide integrity (RuntimeError propagates to outer handler)
+                _verify_guide_integrity(guide_path.name, content)
 
                 return content
         except RuntimeError:

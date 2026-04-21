@@ -1,5 +1,7 @@
 package ai.ciris.mobile.shared.ui.icons
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
@@ -2242,6 +2244,7 @@ val CIRISMaterialIcons.Filled.CIRISSpeak: ImageVector
         ).apply {
             // Paper-plane outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2254,6 +2257,7 @@ val CIRISMaterialIcons.Filled.CIRISSpeak: ImageVector
             }
             // Inner message spine
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
@@ -2281,6 +2285,7 @@ val CIRISMaterialIcons.Filled.CIRISObserve: ImageVector
         ).apply {
             // Eye outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2322,6 +2327,7 @@ val CIRISMaterialIcons.Filled.CIRISMemorize: ImageVector
         ).apply {
             // Outer ring
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2345,6 +2351,7 @@ val CIRISMaterialIcons.Filled.CIRISMemorize: ImageVector
             }
             // Timestamp ticks
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2387,6 +2394,7 @@ val CIRISMaterialIcons.Filled.CIRISRecall: ImageVector
             }
             // Satellite nodes
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2417,6 +2425,7 @@ val CIRISMaterialIcons.Filled.CIRISRecall: ImageVector
             }
             // Edge lines to center
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2459,6 +2468,7 @@ val CIRISMaterialIcons.Filled.CIRISForget: ImageVector
             }
             // Dissolving circles (fading right)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2469,6 +2479,7 @@ val CIRISMaterialIcons.Filled.CIRISForget: ImageVector
                 reflectiveCurveToRelative(0.99f, -2.2f, 2.2f, -2.2f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2479,6 +2490,7 @@ val CIRISMaterialIcons.Filled.CIRISForget: ImageVector
                 reflectiveCurveToRelative(0.63f, -1.4f, 1.4f, -1.4f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2490,6 +2502,7 @@ val CIRISMaterialIcons.Filled.CIRISForget: ImageVector
             }
             // Fade arrow
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2516,6 +2529,7 @@ val CIRISMaterialIcons.Filled.CIRISTool: ImageVector
         ).apply {
             // Handle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2525,6 +2539,7 @@ val CIRISMaterialIcons.Filled.CIRISTool: ImageVector
             }
             // Wrench head
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2578,6 +2593,7 @@ val CIRISMaterialIcons.Filled.CIRISPonder: ImageVector
             }
             // Inner orbit
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.5f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2589,6 +2605,7 @@ val CIRISMaterialIcons.Filled.CIRISPonder: ImageVector
             }
             // Outer orbit (dashed)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2628,6 +2645,7 @@ val CIRISMaterialIcons.Filled.CIRISDefer: ImageVector
         ).apply {
             // Escalation path
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2639,6 +2657,7 @@ val CIRISMaterialIcons.Filled.CIRISDefer: ImageVector
             }
             // Arrow head
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2649,6 +2668,7 @@ val CIRISMaterialIcons.Filled.CIRISDefer: ImageVector
             }
             // Base line (faded)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2685,6 +2705,7 @@ val CIRISMaterialIcons.Filled.CIRISReject: ImageVector
         ).apply {
             // Circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2697,6 +2718,7 @@ val CIRISMaterialIcons.Filled.CIRISReject: ImageVector
             }
             // Slash
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2733,6 +2755,7 @@ val CIRISMaterialIcons.Filled.CIRISTaskComplete: ImageVector
             }
             // Checkmark (will show through as background color)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2771,6 +2794,7 @@ val CIRISMaterialIcons.Filled.CIRISThoughtStart: ImageVector
             }
             // Radiating rays (strong)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2783,6 +2807,7 @@ val CIRISMaterialIcons.Filled.CIRISThoughtStart: ImageVector
             }
             // Radiating rays (faded)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2812,6 +2837,7 @@ val CIRISMaterialIcons.Filled.CIRISSnapshot: ImageVector
         ).apply {
             // Camera body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2828,6 +2854,7 @@ val CIRISMaterialIcons.Filled.CIRISSnapshot: ImageVector
             }
             // Top notch
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -2850,6 +2877,7 @@ val CIRISMaterialIcons.Filled.CIRISSnapshot: ImageVector
             }
             // Lens ring
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.6f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2878,6 +2906,7 @@ val CIRISMaterialIcons.Filled.CIRISDMA: ImageVector
         ).apply {
             // Base line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2886,6 +2915,7 @@ val CIRISMaterialIcons.Filled.CIRISDMA: ImageVector
             }
             // Bars
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2939,6 +2969,7 @@ val CIRISMaterialIcons.Filled.CIRISIDMA: ImageVector
             }
             // Inner coherence ring (dashed)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2950,6 +2981,7 @@ val CIRISMaterialIcons.Filled.CIRISIDMA: ImageVector
             }
             // Outer ring (more dashed)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2961,6 +2993,7 @@ val CIRISMaterialIcons.Filled.CIRISIDMA: ImageVector
             }
             // Vertical probe
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.6f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -2986,6 +3019,7 @@ val CIRISMaterialIcons.Filled.CIRISActionSelection: ImageVector
         ).apply {
             // Horizontal axis
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3005,6 +3039,7 @@ val CIRISMaterialIcons.Filled.CIRISActionSelection: ImageVector
             }
             // Inactive nodes
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3021,6 +3056,7 @@ val CIRISMaterialIcons.Filled.CIRISActionSelection: ImageVector
             }
             // Vertical selection lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.6f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3031,6 +3067,7 @@ val CIRISMaterialIcons.Filled.CIRISActionSelection: ImageVector
             }
             // Selection endpoints
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3064,6 +3101,7 @@ val CIRISMaterialIcons.Filled.CIRISTSASPDMA: ImageVector
         ).apply {
             // Hexagonal outline (3-axis wireframe)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3078,6 +3116,7 @@ val CIRISMaterialIcons.Filled.CIRISTSASPDMA: ImageVector
             }
             // Internal spokes to center
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3120,6 +3159,7 @@ val CIRISMaterialIcons.Filled.CIRISConscience: ImageVector
         ).apply {
             // Shield outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3134,6 +3174,7 @@ val CIRISMaterialIcons.Filled.CIRISConscience: ImageVector
             }
             // Ethical cross
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3161,6 +3202,7 @@ val CIRISMaterialIcons.Filled.CIRISWarning: ImageVector
         ).apply {
             // Triangle outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3172,6 +3214,7 @@ val CIRISMaterialIcons.Filled.CIRISWarning: ImageVector
             }
             // Exclamation line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3208,6 +3251,7 @@ val CIRISMaterialIcons.Filled.CIRISError: ImageVector
         ).apply {
             // Circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3219,6 +3263,7 @@ val CIRISMaterialIcons.Filled.CIRISError: ImageVector
             }
             // Exclamation line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3255,6 +3300,7 @@ val CIRISMaterialIcons.Filled.CIRISInfo: ImageVector
         ).apply {
             // Circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3266,6 +3312,7 @@ val CIRISMaterialIcons.Filled.CIRISInfo: ImageVector
             }
             // Info line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3302,6 +3349,7 @@ val CIRISMaterialIcons.Filled.CIRISSuccess: ImageVector
         ).apply {
             // Circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3313,6 +3361,7 @@ val CIRISMaterialIcons.Filled.CIRISSuccess: ImageVector
             }
             // Checkmark
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3340,6 +3389,7 @@ val CIRISMaterialIcons.Filled.CIRISTrust: ImageVector
         ).apply {
             // Shield outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3354,6 +3404,7 @@ val CIRISMaterialIcons.Filled.CIRISTrust: ImageVector
             }
             // Checkmark
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3392,6 +3443,7 @@ val CIRISMaterialIcons.Filled.CIRISIdle: ImageVector
             }
             // Inner ring
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3403,6 +3455,7 @@ val CIRISMaterialIcons.Filled.CIRISIdle: ImageVector
             }
             // Outer ring (dashed effect)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 0.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3431,6 +3484,7 @@ val CIRISMaterialIcons.Filled.CIRISProcessing: ImageVector
         ).apply {
             // Upper arc with arrow
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3444,6 +3498,7 @@ val CIRISMaterialIcons.Filled.CIRISProcessing: ImageVector
             }
             // Lower arc with arrow (faded)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3474,6 +3529,7 @@ val CIRISMaterialIcons.Filled.CIRISDisconnected: ImageVector
         ).apply {
             // Cloud outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3485,6 +3541,7 @@ val CIRISMaterialIcons.Filled.CIRISDisconnected: ImageVector
                 curveTo(13f, 4f, 15f, 5f, 16f, 7f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3496,6 +3553,7 @@ val CIRISMaterialIcons.Filled.CIRISDisconnected: ImageVector
             }
             // Strike-through
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3521,6 +3579,7 @@ val CIRISMaterialIcons.Filled.CIRISLightning: ImageVector
         ).apply {
             // Lightning bolt
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3552,6 +3611,7 @@ val CIRISMaterialIcons.Filled.CIRISIdentity: ImageVector
         ).apply {
             // Card outline
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3568,6 +3628,7 @@ val CIRISMaterialIcons.Filled.CIRISIdentity: ImageVector
             }
             // Avatar circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3579,6 +3640,7 @@ val CIRISMaterialIcons.Filled.CIRISIdentity: ImageVector
             }
             // Avatar shoulders
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3587,6 +3649,7 @@ val CIRISMaterialIcons.Filled.CIRISIdentity: ImageVector
             }
             // Text lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3620,6 +3683,7 @@ val CIRISMaterialIcons.Filled.CIRISCheck: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.5f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3646,6 +3710,7 @@ val CIRISMaterialIcons.Filled.CIRISXMark: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.5f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3673,6 +3738,7 @@ val CIRISMaterialIcons.Filled.CIRISKey: ImageVector
         ).apply {
             // Key head (circle)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3694,6 +3760,7 @@ val CIRISMaterialIcons.Filled.CIRISKey: ImageVector
             }
             // Key shaft and teeth
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3724,6 +3791,7 @@ val CIRISMaterialIcons.Filled.CIRISGlobe: ImageVector
         ).apply {
             // Outer circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3735,6 +3803,7 @@ val CIRISMaterialIcons.Filled.CIRISGlobe: ImageVector
             }
             // Vertical meridian
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3746,6 +3815,7 @@ val CIRISMaterialIcons.Filled.CIRISGlobe: ImageVector
             }
             // Horizontal lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3775,6 +3845,7 @@ val CIRISMaterialIcons.Filled.CIRISChart: ImageVector
         ).apply {
             // Bars
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3789,6 +3860,7 @@ val CIRISMaterialIcons.Filled.CIRISChart: ImageVector
             }
             // Base line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3814,6 +3886,7 @@ val CIRISMaterialIcons.Filled.CIRISRefresh: ImageVector
         ).apply {
             // Circular arrow
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3826,6 +3899,7 @@ val CIRISMaterialIcons.Filled.CIRISRefresh: ImageVector
                 lineTo(16f, 9f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3856,6 +3930,7 @@ val CIRISMaterialIcons.Filled.CIRISWallet: ImageVector
         ).apply {
             // Wallet body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3872,6 +3947,7 @@ val CIRISMaterialIcons.Filled.CIRISWallet: ImageVector
             }
             // Flap
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3880,6 +3956,7 @@ val CIRISMaterialIcons.Filled.CIRISWallet: ImageVector
             }
             // Clasp area
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3920,6 +3997,7 @@ val CIRISMaterialIcons.Filled.CIRISGas: ImageVector
         ).apply {
             // Pump body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3934,6 +4012,7 @@ val CIRISMaterialIcons.Filled.CIRISGas: ImageVector
             }
             // Display window
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.4f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3946,6 +4025,7 @@ val CIRISMaterialIcons.Filled.CIRISGas: ImageVector
             }
             // Nozzle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -3959,6 +4039,7 @@ val CIRISMaterialIcons.Filled.CIRISGas: ImageVector
             }
             // Base
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -3984,6 +4065,7 @@ val CIRISMaterialIcons.Filled.CIRISQuestion: ImageVector
         ).apply {
             // Question mark curve
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -4022,6 +4104,7 @@ val CIRISMaterialIcons.Filled.CIRISPlus: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.5f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4048,6 +4131,7 @@ val CIRISMaterialIcons.Filled.CIRISMinus: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2.5f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4072,6 +4156,7 @@ val CIRISMaterialIcons.Filled.CIRISPause: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 3f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4130,6 +4215,7 @@ val CIRISMaterialIcons.Filled.CIRISCircle: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4157,6 +4243,7 @@ val CIRISMaterialIcons.Filled.CIRISLocation: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -4196,6 +4283,7 @@ val CIRISMaterialIcons.Filled.CIRISClear: ImageVector
         ).apply {
             // Circle background
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4207,6 +4295,7 @@ val CIRISMaterialIcons.Filled.CIRISClear: ImageVector
             }
             // X inside
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round
             ) {
@@ -4234,6 +4323,7 @@ val CIRISMaterialIcons.Filled.CIRISTools: ImageVector
         ).apply {
             // Wrench
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -4249,6 +4339,7 @@ val CIRISMaterialIcons.Filled.CIRISTools: ImageVector
             }
             // Hammer head
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -4274,6 +4365,7 @@ val CIRISMaterialIcons.Filled.CIRISDiamond: ImageVector
             viewportHeight = 24f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.8f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round
@@ -4318,6 +4410,7 @@ val CIRISMaterialIcons.Filled.CIRISKeySecure: ImageVector
         ).apply {
             // Shield
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4332,6 +4425,7 @@ val CIRISMaterialIcons.Filled.CIRISKeySecure: ImageVector
             }
             // Key circle (approximated with curves)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4345,6 +4439,7 @@ val CIRISMaterialIcons.Filled.CIRISKeySecure: ImageVector
             }
             // Key shaft
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4353,6 +4448,7 @@ val CIRISMaterialIcons.Filled.CIRISKeySecure: ImageVector
                 lineTo(14.5f, 14.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4379,6 +4475,7 @@ val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
         ).apply {
             // Axes
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4389,6 +4486,7 @@ val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
             }
             // Bars
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4397,6 +4495,7 @@ val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
                 lineTo(7f, 18.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4405,6 +4504,7 @@ val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
                 lineTo(10.5f, 18.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4413,6 +4513,7 @@ val CIRISMaterialIcons.Filled.CIRISTelemetry: ImageVector
                 lineTo(14f, 18.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4439,6 +4540,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
         ).apply {
             // Left bracket
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4447,6 +4549,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
                 lineTo(4f, 18.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4455,6 +4558,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
                 lineTo(6f, 3.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4464,6 +4568,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
             }
             // First checkbox
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4474,6 +4579,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
             }
             // First line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4483,6 +4589,7 @@ val CIRISMaterialIcons.Filled.CIRISRequirements: ImageVector
             }
             // Second checkbox
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4510,6 +4617,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
         ).apply {
             // Number 1
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4519,6 +4627,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
                 lineTo(4.5f, 8.25f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4528,6 +4637,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
             }
             // Number 2
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4541,6 +4651,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
             }
             // Number 3
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4555,6 +4666,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
             }
             // Lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4563,6 +4675,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
                 lineTo(18.5f, 6.25f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4571,6 +4684,7 @@ val CIRISMaterialIcons.Filled.CIRISInstructions: ImageVector
                 lineTo(18.5f, 12.25f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4597,6 +4711,7 @@ val CIRISMaterialIcons.Filled.CIRISSafety: ImageVector
         ).apply {
             // Shield
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4611,6 +4726,7 @@ val CIRISMaterialIcons.Filled.CIRISSafety: ImageVector
             }
             // Inner diamond
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4640,6 +4756,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
         ).apply {
             // Chip body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4652,6 +4769,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
             }
             // Internal lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4660,6 +4778,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
                 lineTo(18.5f, 9.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4669,6 +4788,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
             }
             // Top pins
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4677,6 +4797,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
                 lineTo(6.5f, 6f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4685,6 +4806,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
                 lineTo(10f, 6f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4694,6 +4816,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
             }
             // Bottom pins
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4702,6 +4825,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
                 lineTo(6.5f, 18f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4710,6 +4834,7 @@ val CIRISMaterialIcons.Filled.CIRISMemory: ImageVector
                 lineTo(10f, 18f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4736,6 +4861,7 @@ val CIRISMaterialIcons.Filled.CIRISSkill: ImageVector
         ).apply {
             // Outer box
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4748,6 +4874,7 @@ val CIRISMaterialIcons.Filled.CIRISSkill: ImageVector
             }
             // Inner diamond
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4760,6 +4887,7 @@ val CIRISMaterialIcons.Filled.CIRISSkill: ImageVector
             }
             // Cross inside diamond
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4768,6 +4896,7 @@ val CIRISMaterialIcons.Filled.CIRISSkill: ImageVector
                 lineTo(11f, 15f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4794,6 +4923,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
         ).apply {
             // Three layers
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4805,6 +4935,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
                 close()
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4816,6 +4947,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
                 close()
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4828,6 +4960,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
             }
             // Connectors
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4836,6 +4969,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
                 lineTo(11f, 9.25f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4845,6 +4979,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
             }
             // Lines in layers
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4853,6 +4988,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
                 lineTo(14f, 5.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4861,6 +4997,7 @@ val CIRISMaterialIcons.Filled.CIRISModel: ImageVector
                 lineTo(14f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4887,6 +5024,7 @@ val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
         ).apply {
             // Document body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4900,6 +5038,7 @@ val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
             }
             // Corner fold
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4910,6 +5049,7 @@ val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
             }
             // Lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4918,6 +5058,7 @@ val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
                 lineTo(14.5f, 9.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4926,6 +5067,7 @@ val CIRISMaterialIcons.Filled.CIRISAudit: ImageVector
                 lineTo(14.5f, 12.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4952,6 +5094,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
         ).apply {
             // Left side
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4960,6 +5103,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
                 lineTo(8.5f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4972,6 +5116,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
             }
             // Connector
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4981,6 +5126,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
             }
             // Right side
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -4993,6 +5139,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
             }
             // Pins
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5001,6 +5148,7 @@ val CIRISMaterialIcons.Filled.CIRISAdapter: ImageVector
                 lineTo(16.75f, 9.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5027,6 +5175,7 @@ val CIRISMaterialIcons.Filled.CIRISThought: ImageVector
         ).apply {
             // Chat bubble
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5042,6 +5191,7 @@ val CIRISMaterialIcons.Filled.CIRISThought: ImageVector
             }
             // Plus sign
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5050,6 +5200,7 @@ val CIRISMaterialIcons.Filled.CIRISThought: ImageVector
                 lineTo(11f, 12f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5076,6 +5227,7 @@ val CIRISMaterialIcons.Filled.CIRISTask: ImageVector
         ).apply {
             // Clipboard body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5090,6 +5242,7 @@ val CIRISMaterialIcons.Filled.CIRISTask: ImageVector
             }
             // Checkmark
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5117,6 +5270,7 @@ val CIRISMaterialIcons.Filled.CIRISHandler: ImageVector
         ).apply {
             // Box
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5129,6 +5283,7 @@ val CIRISMaterialIcons.Filled.CIRISHandler: ImageVector
             }
             // Lightning bolt
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5161,6 +5316,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
             // Three nodes (circles drawn with curves)
             // Top-left node
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5174,6 +5330,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
             }
             // Top-right node
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5187,6 +5344,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
             }
             // Bottom node
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5200,6 +5358,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
             }
             // Edges
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5208,6 +5367,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
                 lineTo(14.25f, 5.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5216,6 +5376,7 @@ val CIRISMaterialIcons.Filled.CIRISGraph: ImageVector
                 lineTo(9.75f, 14.5f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5242,6 +5403,7 @@ val CIRISMaterialIcons.Filled.CIRISAgent: ImageVector
         ).apply {
             // Shield
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5256,6 +5418,7 @@ val CIRISMaterialIcons.Filled.CIRISAgent: ImageVector
             }
             // Cross inside
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5264,6 +5427,7 @@ val CIRISMaterialIcons.Filled.CIRISAgent: ImageVector
                 lineTo(14.75f, 10f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5272,6 +5436,7 @@ val CIRISMaterialIcons.Filled.CIRISAgent: ImageVector
                 lineTo(11f, 13f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5298,6 +5463,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
         ).apply {
             // Main bus line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5307,6 +5473,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
             }
             // End caps
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5315,6 +5482,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
                 lineTo(3f, 14f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5324,6 +5492,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
             }
             // Top connectors
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5343,6 +5512,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
             }
             // Bottom connector
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5361,6 +5531,7 @@ val CIRISMaterialIcons.Filled.CIRISBus: ImageVector
             }
             // Right top connector
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5396,6 +5567,7 @@ val CIRISMaterialIcons.Filled.CIRISStage: ImageVector
         ).apply {
             // Chevron shape
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5409,6 +5581,7 @@ val CIRISMaterialIcons.Filled.CIRISStage: ImageVector
             }
             // Arrow
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5417,6 +5590,7 @@ val CIRISMaterialIcons.Filled.CIRISStage: ImageVector
                 lineTo(19.5f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5444,6 +5618,7 @@ val CIRISMaterialIcons.Filled.CIRISUpload: ImageVector
         ).apply {
             // Base
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5455,6 +5630,7 @@ val CIRISMaterialIcons.Filled.CIRISUpload: ImageVector
             }
             // Arrow shaft
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5464,6 +5640,7 @@ val CIRISMaterialIcons.Filled.CIRISUpload: ImageVector
             }
             // Arrow head
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5491,6 +5668,7 @@ val CIRISMaterialIcons.Filled.CIRISDownload: ImageVector
         ).apply {
             // Base
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5502,6 +5680,7 @@ val CIRISMaterialIcons.Filled.CIRISDownload: ImageVector
             }
             // Arrow shaft
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5511,6 +5690,7 @@ val CIRISMaterialIcons.Filled.CIRISDownload: ImageVector
             }
             // Arrow head pointing down
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5538,6 +5718,7 @@ val CIRISMaterialIcons.Filled.CIRISSearch: ImageVector
         ).apply {
             // Circle (magnifying glass lens)
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5551,6 +5732,7 @@ val CIRISMaterialIcons.Filled.CIRISSearch: ImageVector
             }
             // Handle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5577,6 +5759,7 @@ val CIRISMaterialIcons.Filled.CIRISFilter: ImageVector
         ).apply {
             // Funnel
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5607,6 +5790,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowBack: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5615,6 +5799,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowBack: ImageVector
                 lineTo(5f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5641,6 +5826,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowForward: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5649,6 +5835,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowForward: ImageVector
                 lineTo(17f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5675,6 +5862,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowUp: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5701,6 +5889,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowDown: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5727,6 +5916,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowRight: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5754,6 +5944,7 @@ val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
         ).apply {
             // Lid
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5763,6 +5954,7 @@ val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
             }
             // Handle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5774,6 +5966,7 @@ val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
             }
             // Body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5785,6 +5978,7 @@ val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
             }
             // Lines
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5793,6 +5987,7 @@ val CIRISMaterialIcons.Filled.CIRISDelete: ImageVector
                 lineTo(9f, 16f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5819,6 +6014,7 @@ val CIRISMaterialIcons.Filled.CIRISEdit: ImageVector
         ).apply {
             // Pencil body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5832,6 +6028,7 @@ val CIRISMaterialIcons.Filled.CIRISEdit: ImageVector
             }
             // Collar line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5858,6 +6055,7 @@ val CIRISMaterialIcons.Filled.CIRISSettings: ImageVector
         ).apply {
             // Center circle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5870,28 +6068,28 @@ val CIRISMaterialIcons.Filled.CIRISSettings: ImageVector
                 close()
             }
             // Spokes
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(11f, 3f); lineTo(11f, 5.5f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(11f, 16.5f); lineTo(11f, 19f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(3f, 11f); lineTo(5.5f, 11f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(16.5f, 11f); lineTo(19f, 11f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(5.5f, 5.5f); lineTo(7.25f, 7.25f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(14.75f, 14.75f); lineTo(16.5f, 16.5f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(5.5f, 16.5f); lineTo(7.25f, 14.75f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(14.75f, 7.25f); lineTo(16.5f, 5.5f)
             }
         }.build()
@@ -5913,6 +6111,7 @@ val CIRISMaterialIcons.Filled.CIRISPerson: ImageVector
         ).apply {
             // Head
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5926,6 +6125,7 @@ val CIRISMaterialIcons.Filled.CIRISPerson: ImageVector
             }
             // Body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5953,6 +6153,7 @@ val CIRISMaterialIcons.Filled.CIRISBuild: ImageVector
         ).apply {
             // Wrench shape
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -5989,6 +6190,7 @@ val CIRISMaterialIcons.Filled.CIRISHome: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6023,6 +6225,7 @@ val CIRISMaterialIcons.Filled.CIRISLock: ImageVector
         ).apply {
             // Lock body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6035,6 +6238,7 @@ val CIRISMaterialIcons.Filled.CIRISLock: ImageVector
             }
             // Shackle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6074,6 +6278,7 @@ val CIRISMaterialIcons.Filled.CIRISDateRange: ImageVector
         ).apply {
             // Calendar body
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6086,6 +6291,7 @@ val CIRISMaterialIcons.Filled.CIRISDateRange: ImageVector
             }
             // Header line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6095,6 +6301,7 @@ val CIRISMaterialIcons.Filled.CIRISDateRange: ImageVector
             }
             // Hangers
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6103,6 +6310,7 @@ val CIRISMaterialIcons.Filled.CIRISDateRange: ImageVector
                 lineTo(7f, 6f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6145,6 +6353,7 @@ val CIRISMaterialIcons.Filled.CIRISSend: ImageVector
         ).apply {
             // Paper plane
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6157,6 +6366,7 @@ val CIRISMaterialIcons.Filled.CIRISSend: ImageVector
             }
             // Center line
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6183,6 +6393,7 @@ val CIRISMaterialIcons.Filled.CIRISPlay: ImageVector
         ).apply {
             // Play triangle
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6210,6 +6421,7 @@ val CIRISMaterialIcons.Filled.CIRISStop: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6238,6 +6450,7 @@ val CIRISMaterialIcons.Filled.CIRISArrowLeft: ImageVector
             viewportHeight = 22f
         ).apply {
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6274,13 +6487,13 @@ val CIRISMaterialIcons.Filled.CIRISList: ImageVector
                 moveTo(3.5f, 14.5f); lineTo(5.5f, 14.5f); lineTo(5.5f, 16.5f); lineTo(3.5f, 16.5f); close()
             }
             // Lines
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(7.5f, 6.5f); lineTo(18.5f, 6.5f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(7.5f, 11f); lineTo(18.5f, 11f)
             }
-            path(strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.75f, strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square, strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter) {
                 moveTo(7.5f, 15.5f); lineTo(18.5f, 15.5f)
             }
         }.build()
@@ -6302,6 +6515,7 @@ val CIRISMaterialIcons.Filled.CIRISExit: ImageVector
         ).apply {
             // Door frame
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6313,6 +6527,7 @@ val CIRISMaterialIcons.Filled.CIRISExit: ImageVector
             }
             // Arrow
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter
@@ -6321,6 +6536,7 @@ val CIRISMaterialIcons.Filled.CIRISExit: ImageVector
                 lineTo(19f, 11f)
             }
             path(
+                stroke = SolidColor(Color.Black),
                 strokeLineWidth = 1.75f,
                 strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Square,
                 strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Miter

@@ -1074,7 +1074,7 @@ private fun getJsonSummary(value: String, isJson: Boolean): String {
             trimmed.contains("\"tool_name\"") -> {
                 val toolName = extractJsonString(trimmed, "tool_name")
                 val success = trimmed.contains("\"success\":true") || trimmed.contains("\"success\": true")
-                val status = if (success) "\u2714" else "\u26A0"
+                val status = if (success) "[OK]" else "[!]"
                 "$status Tool: $toolName"
             }
             // Players list: {"success":true, "players":[...]}

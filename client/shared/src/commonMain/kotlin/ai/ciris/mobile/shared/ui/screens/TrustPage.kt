@@ -29,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.platform.LocalUriHandler
@@ -416,10 +417,11 @@ private fun LevelDebugExpansion(status: VerifyStatusResponse, textColor: Color) 
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (expanded) "▼" else "▶",
-                fontSize = 10.sp,
-                color = textColor.copy(alpha = 0.6f)
+            Icon(
+                if (expanded) CIRISIcons.arrowDown else CIRISIcons.arrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(10.dp),
+                tint = textColor.copy(alpha = 0.6f)
             )
             Text(
                 text = localizedString("mobile.trust_level_debug"),
@@ -1184,10 +1186,11 @@ private fun ExpandableTierCard(
                     }
                 }
                 // Expand icon
-                Text(
-                    text = if (expanded) "▼" else "▶",
-                    fontSize = 12.sp,
-                    color = Color(0xFF9CA3AF)
+                Icon(
+                    if (expanded) CIRISIcons.arrowDown else CIRISIcons.arrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = Color(0xFF9CA3AF)
                 )
             }
 
@@ -1330,11 +1333,12 @@ private fun L1Content(status: VerifyStatusResponse) {
     val hasHardwareStorage = status.hardwareBacked &&
         status.keyStorageMode?.contains("HW", ignoreCase = true) == true
     val isSoftwareOnly = !hasHardwareStorage
-    val keyIcon = when {
-        isSoftwareOnly -> "\u26A0"  // Warning for software-only
+    val keyIconText = when {
+        isSoftwareOnly -> null  // Use iconVector instead
         status.hardwareBacked -> "[K]"  // Hardware-backed
         else -> "[k]"  // Unknown/software
     }
+    val keyIconVector = if (isSoftwareOnly) CIRISIcons.warning else null
     val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
     val displayValue = if (isSoftwareOnly) {
         "$storageMode (Software-Only)"
@@ -1342,7 +1346,8 @@ private fun L1Content(status: VerifyStatusResponse) {
         storageMode
     }
     DetailRow(
-        icon = keyIcon,
+        icon = keyIconText,
+        iconVector = keyIconVector,
         label = "Identity Key (Ed25519)",
         value = displayValue,
         ok = !isSoftwareOnly,
@@ -2215,7 +2220,8 @@ private fun DetailRow(
     value: String,
     ok: Boolean,
     pending: Boolean = false,
-    icon: String? = null
+    icon: String? = null,
+    iconVector: ImageVector? = null
 ) {
     val color = when {
         ok -> SemanticColors.Default.success
@@ -2223,9 +2229,9 @@ private fun DetailRow(
         else -> SemanticColors.Default.error
     }
     val statusIcon = when {
-        ok -> "✓"
-        pending -> "○"
-        else -> "✗"
+        ok -> CIRISIcons.check
+        pending -> CIRISIcons.circle
+        else -> CIRISIcons.xmark
     }
 
     Row(
@@ -2234,11 +2240,14 @@ private fun DetailRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (icon != null) Text(text = icon, fontSize = 12.sp)
+            when {
+                iconVector != null -> Icon(iconVector, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4B5563))
+                icon != null -> Text(text = icon, fontSize = 12.sp, color = Color(0xFF4B5563))
+            }
             Text(text = label, fontSize = 12.sp, color = Color(0xFF4B5563))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(text = statusIcon, fontSize = 11.sp, color = color)
+            Icon(statusIcon, contentDescription = null, modifier = Modifier.size(11.dp), tint = color)
             Text(
                 text = value,
                 fontSize = 11.sp,
@@ -2294,7 +2303,7 @@ private fun ExplanationDropdown(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "\u2139", fontSize = 12.sp)
+                Icon(CIRISIcons.info, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF0369A1))
                 Text(
                     text = title,
                     fontSize = 11.sp,
@@ -2390,13 +2399,13 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                 badge = "Local"
             ) {
                 // Identity Key
-                val keyIcon = if (status.hardwareBacked) "🔐" else "🔑"
+                val keyIconVector = if (status.hardwareBacked) CIRISIcons.keySecure else CIRISIcons.key
                 val storageMode = status.keyStorageMode ?: (if (status.hardwareBacked) "Hardware-backed" else "Software")
                 CheckRow(
                     label = "Identity Key",
                     value = storageMode,
                     ok = true,
-                    icon = keyIcon,
+                    iconVector = keyIconVector,
                     detail = status.ed25519Fingerprint?.let { "Fingerprint: ${it.take(16)}..." }
                 )
 
@@ -2406,7 +2415,7 @@ private fun VerificationDetailsCard(status: VerifyStatusResponse) {
                     label = "Registry Target",
                     value = targetTriple,
                     ok = true,
-                    icon = "\u25A0"  // ■ package
+                    iconVector = CIRISIcons.pkg  // package icon
                 )
 
                 // Binary Self-Check
@@ -2550,6 +2559,7 @@ private fun CheckRow(
     ok: Boolean,
     pending: Boolean = false,
     icon: String? = null,
+    iconVector: ImageVector? = null,
     detail: String? = null
 ) {
     val color = when {
@@ -2558,9 +2568,9 @@ private fun CheckRow(
         else -> SemanticColors.Default.error
     }
     val statusIcon = when {
-        ok -> "✓"
-        pending -> "○"
-        else -> "✗"
+        ok -> CIRISIcons.check
+        pending -> CIRISIcons.circle
+        else -> CIRISIcons.xmark
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -2570,8 +2580,9 @@ private fun CheckRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (icon != null) {
-                    Text(text = icon, fontSize = 12.sp)
+                when {
+                    iconVector != null -> Icon(iconVector, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF4B5563))
+                    icon != null -> Text(text = icon, fontSize = 12.sp, color = Color(0xFF4B5563))
                 }
                 Text(
                     text = label,
@@ -2583,7 +2594,7 @@ private fun CheckRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = statusIcon, fontSize = 11.sp, color = color)
+                Icon(statusIcon, contentDescription = null, modifier = Modifier.size(11.dp), tint = color)
                 Text(
                     text = value,
                     fontSize = 11.sp,
@@ -2624,9 +2635,9 @@ private fun DiagnosticsLogCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "\u25B6", fontSize = 16.sp)
+                    Icon(if (expanded) CIRISIcons.arrowDown else CIRISIcons.play, contentDescription = null, modifier = Modifier.size(16.dp))
                     Text(
-                        text = if (expanded) "▼ Verify Log" else "▶ Verify Log",
+                        text = "Verify Log",
                         fontWeight = FontWeight.Medium
                     )
                 }

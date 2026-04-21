@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 import androidx.compose.ui.unit.dp
@@ -256,9 +257,11 @@ private fun CurrentConsentBanner(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = streamIcon,
-                style = MaterialTheme.typography.headlineMedium
+            Icon(
+                streamIcon,
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = streamColor
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -411,9 +414,11 @@ private fun StreamCard(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = getStreamIcon(stream.id),
-                style = MaterialTheme.typography.headlineLarge
+            Icon(
+                getStreamIcon(stream.id),
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = getStreamColor(stream.id)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -630,12 +635,12 @@ private fun getStreamColor(stream: String?): Color {
     }
 }
 
-private fun getStreamIcon(stream: String?): String {
+private fun getStreamIcon(stream: String?): ImageVector {
     return when (stream?.lowercase()) {
-        "temporary" -> "\uD83D\uDEE1\uFE0F" // Shield
-        "partnered" -> "\uD83E\uDD1D" // Handshake
-        "anonymous" -> "\uD83D\uDC64" // Person silhouette
-        else -> "\uD83D\uDCCB" // Clipboard
+        "temporary" -> CIRISIcons.shield      // Shield
+        "partnered" -> CIRISIcons.trust       // Partnership/handshake
+        "anonymous" -> CIRISIcons.person      // Person silhouette
+        else -> CIRISIcons.task               // Clipboard/task
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
@@ -273,9 +274,11 @@ private fun SystemOverviewCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = getHealthIcon(health),
-                            style = MaterialTheme.typography.titleMedium
+                        Icon(
+                            getHealthIcon(health),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = healthColor
                         )
                         Text(
                             text = health?.uppercase() ?: "UNKNOWN",
@@ -436,7 +439,7 @@ private fun EnvironmentalImpactCard(
             ) {
                 // CO2
                 ImpactCard(
-                    icon = "\uD83C\uDF0D", // Earth
+                    icon = CIRISIcons.globe,  // Earth/Globe
                     value = "${formatDecimal(carbonGrams / 1000, 3)} kg",
                     label = localizedString("mobile.telemetry_co2_hour"),
                     color = SemanticColors.Default.success
@@ -444,7 +447,7 @@ private fun EnvironmentalImpactCard(
 
                 // Energy
                 ImpactCard(
-                    icon = "\u26A1", // Lightning
+                    icon = CIRISIcons.lightning,  // Lightning bolt
                     value = "${formatDecimal(energyKwh, 4)} kWh",
                     label = localizedString("mobile.telemetry_energy_hour"),
                     color = SemanticColors.Default.info
@@ -452,7 +455,7 @@ private fun EnvironmentalImpactCard(
 
                 // Cost
                 ImpactCard(
-                    icon = "\uD83D\uDCB2", // Dollar
+                    icon = CIRISIcons.wallet,  // Dollar/Wallet
                     value = "$${formatDecimal(costCents / 100, 2)}",
                     label = localizedString("mobile.telemetry_cost_hour"),
                     color = SemanticColors.Default.accentTertiary
@@ -481,7 +484,7 @@ private fun EnvironmentalImpactCard(
 
 @Composable
 private fun ImpactCard(
-    icon: String,
+    icon: ImageVector,
     value: String,
     label: String,
     color: Color,
@@ -496,9 +499,11 @@ private fun ImpactCard(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = icon,
-                style = MaterialTheme.typography.titleLarge
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = color
             )
             Text(
                 text = value,
@@ -820,12 +825,12 @@ private fun getHealthColor(health: String?): Color {
     }
 }
 
-private fun getHealthIcon(health: String?): String {
+private fun getHealthIcon(health: String?): ImageVector {
     return when (health?.lowercase()) {
-        "healthy" -> "\u2713" // Checkmark
-        "degraded" -> "!"
-        "unhealthy" -> "\u2717" // X
-        else -> "?"
+        "healthy" -> CIRISIcons.check
+        "degraded" -> CIRISIcons.warning
+        "unhealthy" -> CIRISIcons.xmark
+        else -> CIRISIcons.question
     }
 }
 

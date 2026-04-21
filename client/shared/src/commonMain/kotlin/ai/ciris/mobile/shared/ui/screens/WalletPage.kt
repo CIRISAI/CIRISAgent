@@ -343,9 +343,11 @@ private fun ExperimentalWarningCard() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Text(
-                text = "\u26A0",
-                fontSize = 24.sp
+            Icon(
+                CIRISIcons.warning,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = Color(0xFF856404)  // Dark amber
             )
             Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp)

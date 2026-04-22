@@ -133,19 +133,19 @@ def _run_desktop_mode() -> None:
         print(f"{'=' * 60}\n", file=sys.stderr)
         sys.exit(exit_code if exit_code != 0 else 1)
 
-    # Wait for server to be actually healthy before launching desktop
-    # This prevents the desktop app from trying to start its own server
-    print("Waiting for server to be ready...")
-    if not _wait_for_server_health(server_url, timeout=60.0):
-        # Check if process crashed while we were waiting
-        exit_code = server_proc.poll()
-        if exit_code is not None:
-            print(f"ERROR: Server process exited with code {exit_code}", file=sys.stderr)
-            sys.exit(exit_code if exit_code != 0 else 1)
-        print("WARNING: Server not responding to health checks yet, launching desktop anyway...")
-        print("         The desktop app will retry connecting to the server.")
-
     try:
+        # Wait for server to be actually healthy before launching desktop
+        # This prevents the desktop app from trying to start its own server
+        print("Waiting for server to be ready...")
+        if not _wait_for_server_health(server_url, timeout=60.0):
+            # Check if process crashed while we were waiting
+            exit_code = server_proc.poll()
+            if exit_code is not None:
+                print(f"ERROR: Server process exited with code {exit_code}", file=sys.stderr)
+                sys.exit(exit_code if exit_code != 0 else 1)
+            print("WARNING: Server not responding to health checks yet, launching desktop anyway...")
+            print("         The desktop app will retry connecting to the server.")
+
         # Launch bundled desktop app (it has its own server detection logic)
         try:
             from ciris_engine.desktop_launcher import launch_desktop_app

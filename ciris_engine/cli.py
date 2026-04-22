@@ -48,7 +48,9 @@ def main() -> None:
         _run_desktop_mode()
 
 
-def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
+def _wait_for_server_health(
+    server_url: str, server_proc: "subprocess.Popen[bytes]", timeout: float = 60.0
+) -> bool:
     """Wait for server to be healthy (responding to startup-status).
 
     Uses /v1/system/startup-status which is available during boot before
@@ -56,10 +58,11 @@ def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
 
     Args:
         server_url: Base URL of the server
+        server_proc: The server subprocess to monitor for early exit
         timeout: Maximum seconds to wait
 
     Returns:
-        True if server became healthy, False if timed out
+        True if server became healthy, False if timed out or process died
     """
     import json
     import time
@@ -73,6 +76,10 @@ def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
     last_services = 0
 
     while time.time() - start < timeout:
+        # Check if server process died
+        if server_proc.poll() is not None:
+            return False
+
         attempt += 1
         try:
             with urllib.request.urlopen(status_url, timeout=3) as resp:
@@ -82,14 +89,17 @@ def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
                     services_online = data.get("services_online", 0)
                     services_total = data.get("services_total", 22)
                     phase = data.get("phase", "unknown")
+                    api_status = data.get("api_status", "")
 
                     # Print progress when services change
                     if services_online != last_services:
                         print(f"Server starting: {services_online}/{services_total} services ({phase})")
                         last_services = services_online
 
-                    # Consider ready when all services are online
-                    if services_online >= services_total:
+                    # Ready when api_status is "server_ready" (works for both
+                    # normal mode with all 22 services and first-run mode with
+                    # only 10 minimal services)
+                    if api_status == "server_ready":
                         elapsed = time.time() - start
                         print(f"Server ready: {services_online}/{services_total} services ({elapsed:.1f}s)")
                         return True
@@ -157,7 +167,7 @@ def _run_desktop_mode() -> None:
         # Wait for server to be actually healthy before launching desktop
         # This prevents the desktop app from trying to start its own server
         print("Waiting for server to be ready...")
-        if not _wait_for_server_health(server_url, timeout=60.0):
+        if not _wait_for_server_health(server_url, server_proc, timeout=60.0):
             # Check if process crashed while we were waiting
             exit_code = server_proc.poll()
             if exit_code is not None:

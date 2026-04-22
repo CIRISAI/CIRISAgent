@@ -48,6 +48,43 @@ def main() -> None:
         _run_desktop_mode()
 
 
+def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
+    """Wait for server to be healthy (responding to health checks).
+
+    Args:
+        server_url: Base URL of the server
+        timeout: Maximum seconds to wait
+
+    Returns:
+        True if server became healthy, False if timed out
+    """
+    import time
+    import urllib.request
+    import urllib.error
+
+    health_url = f"{server_url}/v1/system/health"
+    start = time.time()
+    attempt = 0
+
+    while time.time() - start < timeout:
+        attempt += 1
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as resp:
+                if resp.status == 200:
+                    print(f"Server healthy after {attempt} attempts ({time.time() - start:.1f}s)")
+                    return True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            pass
+
+        # Print progress every 5 attempts
+        if attempt % 5 == 0:
+            print(f"Waiting for server... (attempt {attempt})")
+
+        time.sleep(0.5)
+
+    return False
+
+
 def _run_desktop_mode() -> None:
     """Start API server and launch desktop application."""
     import time
@@ -97,6 +134,18 @@ def _run_desktop_mode() -> None:
         sys.exit(exit_code if exit_code != 0 else 1)
 
     try:
+        # Wait for server to be actually healthy before launching desktop
+        # This prevents the desktop app from trying to start its own server
+        print("Waiting for server to be ready...")
+        if not _wait_for_server_health(server_url, timeout=60.0):
+            # Check if process crashed while we were waiting
+            exit_code = server_proc.poll()
+            if exit_code is not None:
+                print(f"ERROR: Server process exited with code {exit_code}", file=sys.stderr)
+                sys.exit(exit_code if exit_code != 0 else 1)
+            print("WARNING: Server not responding to health checks yet, launching desktop anyway...")
+            print("         The desktop app will retry connecting to the server.")
+
         # Launch bundled desktop app (it has its own server detection logic)
         try:
             from ciris_engine.desktop_launcher import launch_desktop_app

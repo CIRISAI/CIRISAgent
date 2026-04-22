@@ -1276,8 +1276,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             conn.close()
 
         await asyncio.to_thread(_create_tables)
-        self._db_connection = get_safe_sqlite_connection(str(self.db_path))
+        # iOS returns proxy, desktop returns Connection - both are API-compatible
+        self._db_connection = get_safe_sqlite_connection(str(self.db_path))  # type: ignore[assignment]
         # Apply PRAGMA settings to persistent connection
+        assert self._db_connection is not None
         self._db_connection.execute(PRAGMA_JOURNAL_MODE_WAL)
         self._db_connection.execute(PRAGMA_BUSY_TIMEOUT_5000)
         self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)

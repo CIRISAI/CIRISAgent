@@ -682,11 +682,13 @@ class _IOSCursorProxy:
     def fetchone(self) -> Any:
         return object.__getattribute__(self, '_cursor').fetchone()
 
-    def fetchall(self) -> list:
-        return object.__getattribute__(self, '_cursor').fetchall()
+    def fetchall(self) -> list[Any]:
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        return cursor.fetchall()
 
-    def fetchmany(self, size: int = -1) -> list:
-        return object.__getattribute__(self, '_cursor').fetchmany(size)
+    def fetchmany(self, size: int = -1) -> list[Any]:
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        return cursor.fetchmany(size)
 
     @property
     def description(self) -> Any:
@@ -694,7 +696,8 @@ class _IOSCursorProxy:
 
     @property
     def rowcount(self) -> int:
-        return object.__getattribute__(self, '_cursor').rowcount
+        cursor = cast(sqlite3.Cursor, object.__getattribute__(self, '_cursor'))
+        return cursor.rowcount
 
     @property
     def lastrowid(self) -> Any:
@@ -930,8 +933,9 @@ def get_safe_sqlite_connection(
     if read_only and not db_path.startswith("file:"):
         db_path = f"file:{db_path}?mode=ro"
 
+    conn: Union[_IOSConnectionProxy, sqlite3.Connection]
     if is_ios:
-        conn: Any = _create_sqlite_connection_ios(db_path)
+        conn = _create_sqlite_connection_ios(db_path)
     else:
         uri = db_path.startswith("file:")
         conn = sqlite3.connect(db_path, uri=uri, check_same_thread=False, timeout=timeout)

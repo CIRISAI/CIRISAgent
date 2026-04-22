@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, HTTPException
 from fastapi import Path as FastAPIPath
@@ -280,7 +280,8 @@ def _sync_query_sqlite_audit(
 
             # Verify chain integrity during routine reads
             if entries:
-                integrity_warnings = _verify_entries_chain_integrity(entries, conn)
+                # conn may be iOS proxy, but is API-compatible with Connection
+                integrity_warnings = _verify_entries_chain_integrity(entries, conn)  # type: ignore[arg-type]
                 # Attach warnings to entries for API response visibility
                 if integrity_warnings:
                     for entry in entries:

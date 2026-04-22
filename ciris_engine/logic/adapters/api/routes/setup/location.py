@@ -77,7 +77,8 @@ class CountriesResponse(BaseModel):
 def _get_db_connection() -> sqlite3.Connection:
     """Get a connection to the cities database."""
     conn = get_safe_sqlite_connection(str(GEO_DB_PATH), row_factory=sqlite3.Row)
-    return conn
+    # iOS returns proxy, desktop returns Connection - both work identically
+    return conn  # type: ignore[return-value]
 
 
 def _search_locations_impl(

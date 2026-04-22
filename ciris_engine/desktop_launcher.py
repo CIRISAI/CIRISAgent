@@ -192,7 +192,20 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     Returns:
         Exit code from the desktop app
     """
-    # Find Java
+    # Check for desktop JAR first — if missing, guide to headless mode
+    # (avoids telling users to install Java when desktop isn't available)
+    jar_path = find_desktop_jar()
+    if not jar_path:
+        print("ERROR: Desktop app JAR not found.", file=sys.stderr)
+        print("\nThe desktop app JAR was not included in this installation.", file=sys.stderr)
+        print("This can happen if you installed the headless wheel.\n", file=sys.stderr)
+        print("To fix, try reinstalling with the platform-specific wheel:", file=sys.stderr)
+        print("  pip install --force-reinstall ciris-agent", file=sys.stderr)
+        print("\nOr run in headless server mode:", file=sys.stderr)
+        print("  ciris-agent --server", file=sys.stderr)
+        return 1
+
+    # Find Java (only needed if desktop JAR is present)
     java = find_java()
     if not java:
         print("ERROR: Java not found!", file=sys.stderr)
@@ -204,18 +217,6 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     if not is_valid:
         print(f"ERROR: Java 17+ required, but found: {version_info}", file=sys.stderr)
         _print_java_install_instructions()
-        return 1
-
-    # Find desktop JAR
-    jar_path = find_desktop_jar()
-    if not jar_path:
-        print("ERROR: Desktop app JAR not found.", file=sys.stderr)
-        print("\nThe desktop app JAR was not included in this installation.", file=sys.stderr)
-        print("This can happen if you installed the headless wheel.\n", file=sys.stderr)
-        print("To fix, try reinstalling with the platform-specific wheel:", file=sys.stderr)
-        print("  pip install --force-reinstall ciris-agent", file=sys.stderr)
-        print("\nOr run in headless server mode:", file=sys.stderr)
-        print("  ciris-agent --server", file=sys.stderr)
         return 1
 
     print(f"Launching CIRIS Desktop from: {jar_path}")

@@ -28,7 +28,7 @@ Logging:
 
 import logging as _logging
 
-from .client import CIRISVerify, MockCIRISVerify
+from .client import CIRISVerify
 from .types import (
     LicenseStatus,
     LicenseTier,
@@ -114,7 +114,6 @@ def get_library_version() -> str:
 __version__ = "1.6.3"
 __all__ = [
     "CIRISVerify",
-    "MockCIRISVerify",
     "get_library_version",
     "setup_logging",
     "LicenseStatus",

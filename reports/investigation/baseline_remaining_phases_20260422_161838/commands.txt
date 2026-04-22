@@ -1,0 +1,23 @@
+rg -n "5.?minute|24.?hour|timestamp" ciris_engine tests docs
+rg -n "v2.6.2|security fix|security-fix" docs tests ciris_engine
+rg -n "/verify|/commons|/compliance|/post-quantum|/principles|/sage|/scout|/medical|/trust" docs client ciris_engine
+rg -n "oauth|api key|wise authority|attestation|certificate|verify" ciris_engine tests
+rg -n "ed25519|ml-dsa|mldsa|dual signature|hybrid" ciris_engine tests
+rg -n "kill switch|killswitch|shutdown signal|terminate" ciris_engine tests
+rg -n "accord" ciris_engine tests tools docs
+rg -n "test vector|vectors|accord" tests tools docs
+rg -n "1,494|1494|line count" docs
+rg -n "theorem|lemma|sorry|axiom|admit" --glob "*.lean" .
+rg -n "CONSISTENT-LIE|consistent lie|NP-complete|ETH" docs .
+rg -n "DetectionEngine|GeometricEngine|ComplexityEngine|FederationEngine|RATCHET" .
+rg -n "RT-0[1-5]|red-team|falsification|F-[1-5]" tests docs .
+rg -n "getting started|quickstart|run locally|setup wizard" README.md docs CLAUDE.md
+rg -n "succession|designated successor|dissolution|trademark|domain" docs
+rg -n "audit chain|wise authority|conscience|parasocial|kill switch|attestation" tests
+rg -n "adversarial|red-team|negative|attack|regression" tests
+rg -n "14 days|30.?min|20.?msg|timestamp|threshold|magic" ciris_engine docs
+rg -n "os\.environ|getenv" ciris_engine ciris_adapters ciris_sdk tools
+rg -n "deploy|agents\.ciris\.ai|docker-compose|vultr|hetzner|replication|backup|restore" docs deployment CLAUDE.md
+rg -n "alert|metrics|incidents|audit-chain-integrity|kill-switch|deferral failure" docs ciris_engine
+rg -n "CIRISVerify|CIRISRegistry|CIRISLens|crates\.io|Cargo\.toml" .
+rg -n "Want|Need|Have|Lend|Barter|commons graph|/commons" docs ciris_engine client

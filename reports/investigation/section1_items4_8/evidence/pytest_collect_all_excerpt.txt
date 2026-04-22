@@ -1,0 +1,120 @@
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:200: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:219
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:219: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:239
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:239: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:266
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:266: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:315
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:315: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:348
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:348: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:394
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:394: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:446
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:446: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_wise_bus_deferrals.py:486
+  /workspace/CIRISAgent/tests/test_wise_bus_deferrals.py:486: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/tools/qa_runner/test_server_config.py:15
+  /workspace/CIRISAgent/tests/tools/qa_runner/test_server_config.py:15: PytestUnknownMarkWarning: Unknown pytest.mark.timeout - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.timeout(30)
+
+tests/wa_minting_persistence_bug_test.py:59
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:59: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:95
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:95: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:134
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:134: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:170
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:170: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:214
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:214: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:245
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:245: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:274
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:274: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:281
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:281: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:313
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:313: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/wa_minting_persistence_bug_test.py:343
+  /workspace/CIRISAgent/tests/wa_minting_persistence_bug_test.py:343: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/adapters/test_discord/test_discord_adapter_unit.py
+ERROR tests/ciris_adapters/external_data_sql/test_sql_service_metadata.py
+ERROR tests/ciris_engine/logic/buses/test_bus_telemetry.py
+ERROR tests/ciris_engine/logic/persistence/test_maintenance_telemetry.py
+ERROR tests/ciris_engine/logic/processors/states/test_work_processor_tickets.py
+ERROR tests/ciris_engine/logic/secrets/test_secrets_service_telemetry.py
+ERROR tests/ciris_engine/logic/services/governance/test_filter_simple.py
+ERROR tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py
+ERROR tests/ciris_engine/logic/services/governance/test_wise_authority_service.py
+ERROR tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py
+ERROR tests/ciris_engine/logic/services/graph/test_audit_service.py
+ERROR tests/ciris_engine/logic/services/graph/test_audit_service_unit.py
+ERROR tests/ciris_engine/logic/services/graph/test_config_node_fix.py
+ERROR tests/ciris_engine/logic/services/graph/test_config_service.py
+ERROR tests/ciris_engine/logic/services/graph/test_config_service_bootstrap.py
+ERROR tests/ciris_engine/logic/services/graph/test_graph_metrics_agg.py
+ERROR tests/ciris_engine/logic/services/graph/test_memory_service.py
+ERROR tests/ciris_engine/logic/services/graph/test_memory_service_refactored.py
+ERROR tests/ciris_engine/logic/services/graph/test_telemetry_service_aggregation.py
+ERROR tests/ciris_engine/logic/services/graph/test_telemetry_service_collection.py
+ERROR tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py
+ERROR tests/ciris_engine/logic/services/infrastructure/test_infra_metrics_agg.py
+ERROR tests/ciris_engine/logic/services/test_telemetry_summary.py
+ERROR tests/ciris_engine/logic/services/tools/core_tool_service/test_ticket_tools.py
+ERROR tests/integration - ModuleNotFoundError: No module named 'pytest_asyncio'
+ERROR tests/logic/runtime/test_ciris_runtime.py
+ERROR tests/logic/runtime/test_ciris_runtime_coverage.py
+ERROR tests/logic/runtime/test_ciris_runtime_initialization.py
+ERROR tests/logic/runtime/test_ciris_runtime_logging.py
+ERROR tests/test_authentication_service.py
+ERROR tests/test_metrics_base.py
+ERROR tests/test_metrics_integration.py
+ERROR tests/test_metrics_runtime_objects.py
+ERROR tests/test_metrics_runtime_services.py
+ERROR tests/test_metrics_tool_services.py
+ERROR tests/test_password_persistence_comprehensive.py
+ERROR tests/tools/qa_runner/test_he300_benchmark_module.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 37 errors during collection !!!!!!!!!!!!!!!!!!!
+10662 tests collected, 37 errors in 41.95s

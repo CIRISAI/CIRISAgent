@@ -1,0 +1,226 @@
+tests/test_agent_credits.py:55:    def test_create_ed25519_only(self) -> None:
+tests/test_agent_credits.py:57:            ed25519_signature="abc123",
+tests/test_agent_credits.py:58:            ed25519_key_id="agent-abc123def456",
+tests/test_agent_credits.py:60:        assert sig.ed25519_signature == "abc123"
+tests/test_agent_credits.py:65:            ed25519_signature="abc123",
+tests/test_agent_credits.py:66:            ed25519_key_id="agent-abc123def456",
+tests/test_agent_credits.py:76:            ed25519_signature="test_sig",
+tests/test_agent_credits.py:77:            ed25519_key_id="agent-testkey123",
+tests/test_agent_credits.py:139:            ed25519_signature="test",
+tests/test_agent_credits.py:140:            ed25519_key_id="agent-test",
+tests/test_agent_credits.py:162:                signature=DualSignature(ed25519_signature="s", ed25519_key_id="k"),
+tests/test_agent_credits.py:650:        sig = DualSignature(ed25519_signature="batch_sig", ed25519_key_id="agent-key")
+tests/test_agent_credits.py:651:        record_sig = DualSignature(ed25519_signature="rec_sig", ed25519_key_id="agent-key")
+tests/test_authentication_service.py:311:    def test_ed25519_operations(self, auth_service):
+ciris_engine/logic/persistence/migrations/sqlite/001_initial_schema.sql:184:    CHECK(algorithm IN ('rsa-pss', 'ed25519'))
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:86:        mock_verifier.get_ed25519_public_key_sync.return_value = test_pubkey
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:112:        mock_verifier.get_ed25519_public_key_sync.return_value = None
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:132:        mock_verifier.sign_ed25519_sync.return_value = test_signature
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:142:        mock_verifier.sign_ed25519_sync.assert_called_once_with(b"test message")
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:157:        """Should return error when sign_ed25519_sync method not available."""
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:168:        assert "sign_ed25519_sync not available" in str(error)
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:373:            assert "ed25519_private" not in str(json_data).lower(), "Private key found in request!"
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:377:                assert "ed25519_public_key" in json_data
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:380:                    len(json_data["ed25519_public_key"]) == 64
+tests/adapters/api/routes/setup/test_device_auth_helpers.py:381:                ), f"Expected 64 hex chars, got {len(json_data['ed25519_public_key'])}"
+tests/adapters/api/test_setup_routes.py:20:from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/adapters/api/test_setup_routes.py:40:    private_key = ed25519.Ed25519PrivateKey.generate()
+tests/adapters/api/test_setup_routes.py:49:    mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/adapters/api/test_setup_routes.py:50:    mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:14:    get_ed25519_fingerprint,
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:112:    """Tests for get_ed25519_fingerprint function."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:117:        mock_verifier.get_ed25519_public_key_sync.return_value = b"test_public_key"
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:119:        fingerprint = get_ed25519_fingerprint(mock_verifier)
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:127:        mock_verifier.get_ed25519_public_key_sync.return_value = None
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:129:        fingerprint = get_ed25519_fingerprint(mock_verifier)
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:137:        fingerprint = get_ed25519_fingerprint(mock_verifier)
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:144:        mock_verifier.get_ed25519_public_key_sync.side_effect = Exception("FFI error")
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:146:        fingerprint = get_ed25519_fingerprint(mock_verifier)
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:682:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:686:        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._keys[key_id])
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:692:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:696:        private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._keys[key_id])
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:781:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/infrastructure/test_authentication_service.py:784:        pubkey = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+tests/ciris_engine/logic/services/graph/test_graph_metrics_agg.py:284:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/graph/test_graph_metrics_agg.py:287:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/services/graph/test_graph_metrics_agg.py:297:        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/ciris_engine/logic/services/graph/test_graph_metrics_agg.py:298:        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+tests/ciris_engine/logic/services/graph/test_audit_service_unit.py:49:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/graph/test_audit_service_unit.py:52:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/services/graph/test_audit_service_unit.py:62:        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/ciris_engine/logic/services/graph/test_audit_service_unit.py:64:        # sign_ed25519_sync returns real signature
+tests/ciris_engine/logic/services/graph/test_audit_service_unit.py:68:        mock_verifier.sign_ed25519_sync.side_effect = mock_sign
+tests/ciris_engine/logic/services/graph/test_audit_service.py:63:    from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/graph/test_audit_service.py:66:    private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/services/graph/test_audit_service.py:76:    mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/ciris_engine/logic/services/graph/test_audit_service.py:77:    mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:59:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:62:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:71:        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:72:        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:429:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:431:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:442:        mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+tests/ciris_engine/logic/services/graph/test_audit_retention_cleanup.py:443:        mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+tests/ciris_engine/logic/audit/test_signing_protocol.py:66:    def test_ed25519_value(self):
+tests/ciris_engine/logic/audit/test_signing_protocol.py:68:        assert SigningAlgorithm.ED25519.value == "ed25519"
+tests/ciris_engine/logic/audit/test_signing_protocol.py:77:        assert SigningAlgorithm.ED25519 == "ed25519"
+tests/ciris_engine/logic/audit/test_signing_protocol.py:99:        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:116:        mock_client.get_ed25519_public_key_sync.return_value = b"e" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:153:        mock_client.sign_ed25519_sync.return_value = b"signature" * 8  # 64 bytes
+tests/ciris_engine/logic/audit/test_signing_protocol.py:160:        mock_client.sign_ed25519_sync.assert_called_once_with(b"test data")
+tests/ciris_engine/logic/audit/test_signing_protocol.py:166:        mock_client.sign_ed25519_sync.return_value = b"x" * 64
+tests/ciris_engine/logic/audit/test_signing_protocol.py:167:        mock_client.get_ed25519_public_key_sync.return_value = b"pubkey" + b"\x00" * 26
+tests/ciris_engine/logic/audit/test_signing_protocol.py:175:        mock_client.get_ed25519_public_key_sync.assert_called_once()
+tests/ciris_engine/logic/audit/test_signing_protocol.py:179:    def test_verify_ed25519_signature(self):
+tests/ciris_engine/logic/audit/test_signing_protocol.py:182:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/audit/test_signing_protocol.py:184:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/audit/test_signing_protocol.py:205:        from cryptography.hazmat.primitives.asymmetric import ed25519
+tests/ciris_engine/logic/audit/test_signing_protocol.py:207:        private_key = ed25519.Ed25519PrivateKey.generate()
+tests/ciris_engine/logic/audit/test_signing_protocol.py:263:        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:277:        mock_client.get_ed25519_public_key_sync.return_value = b"y" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:292:        mock_client.get_ed25519_public_key_sync.return_value = b"z" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:307:        mock_client.get_ed25519_public_key_sync.return_value = b"a" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:308:        mock_client.sign_ed25519_sync.return_value = b"sig" * 22  # ~64 bytes
+tests/ciris_engine/logic/audit/test_signing_protocol.py:321:        mock_client.get_ed25519_public_key_sync.return_value = b"b" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:322:        mock_client.sign_ed25519_sync.return_value = b"x" * 64
+tests/ciris_engine/logic/audit/test_signing_protocol.py:339:        mock_client.get_ed25519_public_key_sync.return_value = b"c" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:349:            assert payload["algorithm"] == "ed25519"
+tests/ciris_engine/logic/audit/test_signing_protocol.py:355:        mock_client.get_ed25519_public_key_sync.return_value = b"d" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:383:        mock_client.get_ed25519_public_key_sync.return_value = b"f" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:396:        mock_client.get_ed25519_public_key_sync.return_value = b"g" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:408:        mock_client.get_ed25519_public_key_sync.return_value = b"h" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:482:        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:500:        mock_client.get_ed25519_public_key_sync.return_value = b"p" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:513:            assert call_kwargs["algorithm"] == "ed25519"
+tests/ciris_engine/logic/audit/test_signing_protocol.py:519:        mock_client.get_ed25519_public_key_sync.return_value = b"q" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:520:        mock_client.sign_ed25519_sync.return_value = b"r" * 64
+tests/ciris_engine/logic/audit/test_signing_protocol.py:537:        mock_client.get_ed25519_public_key_sync.return_value = b"t" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:583:        mock_client.get_ed25519_public_key_sync.return_value = b"recovered" + b"\x00" * 24
+tests/ciris_engine/logic/audit/test_signing_protocol.py:629:        mock_client.sign_ed25519_sync.side_effect = sign_side_effect
+tests/ciris_engine/logic/audit/test_signing_protocol.py:631:        mock_client.get_ed25519_public_key_sync.return_value = b"newkey" + b"\x00" * 26
+tests/ciris_engine/logic/audit/test_signing_protocol.py:650:        mock_client.sign_ed25519_sync.side_effect = RuntimeError(
+tests/ciris_engine/logic/audit/test_signing_protocol.py:671:        mock_client.sign_ed25519_sync.side_effect = RuntimeError(
+tests/ciris_engine/logic/audit/test_signing_protocol.py:676:        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+tests/ciris_engine/logic/audit/test_signing_protocol.py:691:        mock_client.sign_ed25519_sync.side_effect = RuntimeError("TPM communication timeout")
+tests/ciris_engine/logic/audit/test_key_migration.py:24:    migrate_audit_key_to_ed25519,
+tests/ciris_engine/logic/audit/test_key_migration.py:294:    def test_register_ed25519_key(self, temp_db, mock_time_service):
+tests/ciris_engine/logic/audit/test_key_migration.py:299:        migration._register_ed25519_key(mock_key)
+tests/ciris_engine/logic/audit/test_key_migration.py:309:        assert result[0] == "ed25519"
+tests/ciris_engine/logic/audit/test_key_migration.py:312:    def test_register_ed25519_key_idempotent(self, temp_db, mock_time_service):
+tests/ciris_engine/logic/audit/test_key_migration.py:318:        migration._register_ed25519_key(mock_key)
+tests/ciris_engine/logic/audit/test_key_migration.py:319:        migration._register_ed25519_key(mock_key)
+tests/ciris_engine/logic/audit/test_key_migration.py:381:        result = await migration.migrate_to_ed25519(backup=False)
+tests/ciris_engine/logic/audit/test_key_migration.py:387:    async def test_migrate_already_ed25519(self, temp_db, mock_time_service):
+tests/ciris_engine/logic/audit/test_key_migration.py:395:            VALUES ('agent-ed25519key', 'pubkey', 'ed25519', 256, '2024-01-01T00:00:00Z')
+tests/ciris_engine/logic/audit/test_key_migration.py:403:        result = await migration.migrate_to_ed25519(backup=False)
+tests/ciris_engine/logic/audit/test_key_migration.py:426:            result = await migration.migrate_to_ed25519(backup=False)
+tests/ciris_engine/logic/audit/test_key_migration.py:439:            result = await migration.migrate_to_ed25519(backup=False, verify_after=False)
+tests/ciris_engine/logic/audit/test_key_migration.py:451:    async def test_migrate_audit_key_to_ed25519(self, temp_db, mock_time_service):
+tests/ciris_engine/logic/audit/test_key_migration.py:466:            result = await migrate_audit_key_to_ed25519(temp_db, mock_time_service, backup=False)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:191:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:195:        private_bytes, public_bytes = seed_to_ed25519_keypair(seed)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:202:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:207:        private1, public1 = seed_to_ed25519_keypair(seed)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:208:        private2, public2 = seed_to_ed25519_keypair(seed)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:215:        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+tests/ciris_engine/logic/accord/test_accord_keygen.py:217:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:221:        private_bytes, public_bytes = seed_to_ed25519_keypair(seed)
+ciris_engine/logic/services/infrastructure/authentication/attestation/__init__.py:17:from .paths import find_audit_db_path, get_agent_root, get_ed25519_fingerprint
+ciris_engine/logic/services/infrastructure/authentication/attestation/__init__.py:37:    "get_ed25519_fingerprint",
+ciris_engine/logic/services/infrastructure/authentication/attestation/verifier_runner.py:53:from .paths import find_audit_db_path, get_agent_root, get_ed25519_fingerprint
+ciris_engine/logic/services/infrastructure/authentication/attestation/verifier_runner.py:221:            key_fingerprint = get_ed25519_fingerprint(verifier)
+ciris_engine/logic/services/infrastructure/authentication/attestation/result_builder.py:301:        ed25519_fingerprint=key_attestation.get("ed25519_fingerprint"),
+ciris_engine/logic/services/infrastructure/authentication/attestation/paths.py:88:def get_ed25519_fingerprint(verifier: Any) -> Optional[str]:
+ciris_engine/logic/services/infrastructure/authentication/attestation/paths.py:98:        if hasattr(verifier, "get_ed25519_public_key_sync"):
+ciris_engine/logic/services/infrastructure/authentication/attestation/paths.py:99:            pub_key = verifier.get_ed25519_public_key_sync()
+ciris_engine/logic/services/infrastructure/authentication/service.py:21:from cryptography.hazmat.primitives.asymmetric import ed25519
+ciris_engine/logic/services/infrastructure/authentication/service.py:675:        signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
+ciris_engine/logic/services/infrastructure/authentication/service.py:718:                    public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+ciris_engine/logic/services/infrastructure/authentication/service.py:748:                    public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+ciris_engine/logic/services/infrastructure/authentication/service.py:813:        private_key = ed25519.Ed25519PrivateKey.generate()
+ciris_engine/logic/services/infrastructure/authentication/service.py:830:        signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
+ciris_engine/logic/services/infrastructure/authentication/service.py:838:            verify_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:1170:    async def migrate_audit_key_to_ed25519(self, backup: bool = True) -> "MigrationResult":
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:1186:        from ciris_engine.logic.audit import migrate_audit_key_to_ed25519
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:1199:        return await migrate_audit_key_to_ed25519(
+ciris_engine/logic/services/skill_import/scanner.py:102:    (r"id_rsa|id_ed25519|id_ecdsa", "References SSH private key files"),
+ciris_engine/logic/services/runtime/control_service/service.py:666:            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ciris_engine/logic/services/runtime/control_service/service.py:731:                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as Ed25519PublicKeyImpl
+ciris_engine/logic/audit/signing_protocol.py:36:    ED25519 = "ed25519"
+ciris_engine/logic/audit/signing_protocol.py:166:            signature = cast(bytes, self._client.sign_ed25519_sync(data))
+ciris_engine/logic/audit/signing_protocol.py:171:                    self._public_key_cache = self._client.get_ed25519_public_key_sync()
+ciris_engine/logic/audit/signing_protocol.py:192:                            signature = cast(bytes, self._client.sign_ed25519_sync(data))
+ciris_engine/logic/audit/signing_protocol.py:194:                            self._public_key_cache = self._client.get_ed25519_public_key_sync()
+ciris_engine/logic/audit/signing_protocol.py:209:                from cryptography.hazmat.primitives.asymmetric import ed25519
+ciris_engine/logic/audit/signing_protocol.py:211:                pub = ed25519.Ed25519PublicKey.from_public_bytes(self.public_key_bytes)
+ciris_engine/logic/audit/signing_protocol.py:334:                key_bytes = client.get_ed25519_public_key_sync()  # type: ignore[attr-defined, unused-ignore]
+ciris_engine/logic/audit/signing_protocol.py:476:    def load_provisioned_key(self, ed25519_private_key_b64: str) -> None:
+ciris_engine/logic/audit/signing_protocol.py:488:            ed25519_private_key_b64: DEPRECATED - not used
+ciris_engine/logic/audit/signing_protocol.py:511:                    algorithm="ed25519",
+ciris_engine/logic/audit/key_migration.py:90:    async def migrate_to_ed25519(
+ciris_engine/logic/audit/key_migration.py:120:            if old_algorithm == "ed25519":
+ciris_engine/logic/audit/key_migration.py:151:                self._register_ed25519_key(unified_key)
+ciris_engine/logic/audit/key_migration.py:366:    def _register_ed25519_key(self, unified_key: Any) -> None:
+ciris_engine/logic/audit/key_migration.py:390:                    "ed25519",
+ciris_engine/logic/audit/key_migration.py:473:async def migrate_audit_key_to_ed25519(
+ciris_engine/logic/audit/key_migration.py:489:    return await migration.migrate_to_ed25519(backup=backup)
+ciris_engine/logic/audit/signature_manager.py:9:- Existing RSA installations can migrate via database_maintenance.migrate_audit_key_to_ed25519()
+ciris_engine/logic/audit/signature_manager.py:46:        self._using_ed25519 = False
+ciris_engine/logic/audit/signature_manager.py:73:        self._using_ed25519 = True
+ciris_engine/logic/audit/signature_manager.py:103:                    256 if algorithm == "ed25519" else 2048,
+ciris_engine/logic/audit/signature_manager.py:134:            algorithm="ed25519",
+ciris_engine/logic/audit/signature_manager.py:175:            if algorithm == "ed25519":
+ciris_engine/logic/audit/signature_manager.py:176:                return self._verify_ed25519(entry_hash, signature_bytes, public_key_data)
+ciris_engine/logic/audit/signature_manager.py:193:    def _verify_ed25519(self, entry_hash: str, signature_bytes: bytes, public_key_b64: str) -> bool:
+ciris_engine/logic/audit/signature_manager.py:196:            from cryptography.hazmat.primitives.asymmetric import ed25519
+ciris_engine/logic/audit/signature_manager.py:200:            public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+ciris_engine/logic/audit/signature_manager.py:254:        Use database_maintenance.migrate_audit_key_to_ed25519() for migration.
+ciris_engine/logic/audit/signature_manager.py:316:                    "using_unified_key": self._using_ed25519,
+ciris_engine/logic/audit/signature_manager.py:332:        Retries with backoff if attestation is in progress (sign_ed25519 blocked).
+ciris_engine/logic/audit/signature_manager.py:358:                if "Attestation in progress" in error_msg or "sign_ed25519 blocked" in error_msg:
+ciris_engine/logic/audit/__init__.py:18:from .key_migration import AuditKeyMigration, MigrationResult, migrate_audit_key_to_ed25519
+ciris_engine/logic/audit/__init__.py:44:    "migrate_audit_key_to_ed25519",
+ciris_engine/logic/accord/bip39_english.txt:897:hybrid
+ciris_engine/logic/adapters/api/services/auth_service.py:1293:        from cryptography.hazmat.primitives.asymmetric import ed25519
+ciris_engine/logic/adapters/api/services/auth_service.py:1311:            public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+ciris_engine/logic/adapters/api/routes/auth.py:2335:            "ed25519_fingerprint": cached.ed25519_fingerprint,
+ciris_engine/logic/utils/constants.py:128:            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ciris_engine/logic/adapters/api/routes/system/data_management.py:146:    # - Android/iOS/macOS: {alias}.ed25519.enc (HW-encrypted)
+ciris_engine/logic/adapters/api/routes/system/data_management.py:147:    # - Linux/Windows TPM: {alias}.ed25519.tpm (TPM-wrapped)
+ciris_engine/logic/adapters/api/routes/system/data_management.py:149:    preserve_patterns = {"signing_key", "agent_key", ".key", ".ed25519"} if preserve_signing_key else set()
+ciris_engine/logic/adapters/api/routes/setup/models.py:162:    ed25519_fingerprint: Optional[str] = Field(default=None, description="Ed25519 public key fingerprint (SHA-256 hex)")
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:339:        if hasattr(verifier, "get_ed25519_public_key_sync"):
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:340:            public_key = verifier.get_ed25519_public_key_sync()
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:367:        if hasattr(verifier, "sign_ed25519_sync"):
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:368:            signature = verifier.sign_ed25519_sync(message)
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:374:            return None, RuntimeError("CIRISVerify.sign_ed25519_sync not available")
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:447:        "ed25519_public_key": public_key_hex,
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:448:        "ed25519_signature": signature_hex,
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:497:        "ed25519_signature": signature_hex,
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:77:    ed25519_fingerprint: Optional[str] = Field(default=None)
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:217:        ed25519_fingerprint=result.ed25519_fingerprint,
+ciris_engine/logic/adapters/api/routes/users.py:830:        from cryptography.hazmat.primitives.asymmetric import ed25519
+ciris_engine/logic/adapters/api/routes/users.py:863:            private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+ciris_engine/logic/adapters/api/routes/emergency.py:21:    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ciris_engine/schemas/persistence/postgres/tables.py:198:    algorithm TEXT NOT NULL DEFAULT 'rsa-pss' CHECK(algorithm IN ('rsa-pss', 'ed25519')),
+ciris_engine/schemas/persistence/sqlite/tables.py:202:    CHECK(algorithm IN ('rsa-pss', 'ed25519'))
+ciris_engine/logic/buses/wise_bus.py:355:                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ciris_engine/schemas/accord.py:325:    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+ciris_engine/schemas/accord.py:362:    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ciris_engine/ciris_templates/datum.yaml:278:    signature: ed25519:OkzaIAsmz+QfzVGJhQzvR8LcNrfKO25ggfNJ6NpWZjHerouT5ViTgiWE4i8F33XZJUNSJKEMSZaEY6OL5WbKAw==
+ciris_engine/ciris_templates/echo.yaml:484:    signature: ed25519:yNUrC6MHbOMT+72McNC6boIg313kAl0fgKk6Tq2IH3nWveAKqS8tery5q3cvFXdaBZb+DAnyfUqcAx/lJhpWCw==
+ciris_engine/ciris_templates/echo-core.yaml:59:    signature: ed25519:b3z2xmFla7KgTdbXhY85x7OxN3r975oNOIv7fiMXNomC8d3Hz6Pf9nj3/GQBBK/1Rz3MiO04Y0QqaX3xHQ3yAw==
+ciris_engine/ciris_templates/scout.yaml:223:    signature: ed25519:P0yufDewjRUZ7dKSAbEUBcML0ySlSUMMzqFFnxvW2oPc+PjAEWRebDT8VOCXeoigA9ZvWGPKRVVMUW86Bj09BA==
+ciris_engine/ciris_templates/sage.yaml:199:    signature: ed25519:RHqKn0gV7Trqlw4QfNk3BgzBMp7HjV6iojKkBt7qAruAfN1Hm8eZTE2wB9gGDTEBQBc9I8jxb8+dnwH7iCDTBQ==
+ciris_engine/ciris_templates/default.yaml:540:    signature: ed25519:X0zLSleRO+qZMwm+mvS48RCCeRsGDkSojYSZdtgY8iwry9u9Wd4ojbeu/CF+KxTjvOpefOU8imhrIGVCks4kAg==
+ciris_engine/ciris_templates/echo-speculative.yaml:58:    signature: ed25519:cRy9uC5UmVSlDgBI2+L6k6Z891Bdix5HjKzpfC3hXM2djo6xrFZIN+HPxH4xNiYRX6HgCe9s1pJdPamjVOvjBg==
+ciris_engine/schemas/services/agent_credits.py:55:    """Ed25519 + ML-DSA-65 dual signature for quantum safety.
+ciris_engine/schemas/services/agent_credits.py:63:    ed25519_signature: str = Field(..., description="Base64url-encoded Ed25519 signature")
+ciris_engine/schemas/services/agent_credits.py:64:    ed25519_key_id: str = Field(..., description="Signing key ID (agent-{hash[:12]})")
+ciris_engine/schemas/services/attestation.py:88:    ed25519_fingerprint: Optional[str] = Field(default=None, description="Ed25519 public key fingerprint (SHA-256 hex)")
+ciris_engine/schemas/services/attestation.py:275:    ed25519_fingerprint: Optional[str] = Field(None, description="Ed25519 public key SHA-256 fingerprint")
+ciris_engine/schemas/services/attestation.py:352:            ed25519_fingerprint=result.ed25519_fingerprint,
+ciris_engine/schemas/services/attestation.py:379:            if self.ed25519_fingerprint:
+ciris_engine/schemas/services/attestation.py:380:                key_info += f" (fingerprint: {self.ed25519_fingerprint[:16]}...)"

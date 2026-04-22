@@ -123,10 +123,13 @@ def _initialize_app_state(app: FastAPI, runtime: Any) -> None:
     app.state.incident_management_service = None
     app.state.tsdb_consolidation_service = None
 
-    # Infrastructure Services (7)
+    # Lifecycle Services (4)
     app.state.time_service = None
     app.state.shutdown_service = None
     app.state.initialization_service = None
+    app.state.task_scheduler = None
+
+    # Infrastructure Services (4)
     app.state.authentication_service = None
     app.state.resource_monitor = None
     app.state.database_maintenance_service = None
@@ -139,10 +142,9 @@ def _initialize_app_state(app: FastAPI, runtime: Any) -> None:
     app.state.visibility_service = None
     app.state.self_observation_service = None
 
-    # Runtime Services (3)
+    # Runtime Services (2)
     app.state.llm_service = None
     app.state.runtime_control_service = None
-    app.state.task_scheduler = None
 
     # Tool Services (1)
     app.state.secrets_tool_service = None

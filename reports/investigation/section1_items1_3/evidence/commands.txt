@@ -1,0 +1,9 @@
+rg "22 core services|Graph Services|Infrastructure Services|Governance Services|Runtime Services|Tool Services|Lifecycle Services" -n CLAUDE.md AGENTS.md docs ciris_engine | head -n 80
+rg "class HandlerActionType" -n ciris_engine tests
+rg "class (EntropyConscience|CoherenceConscience|OptimizationVetoConscience|EpistemicHumilityConscience)" -n ciris_engine/logic/conscience/core.py
+rg "class Test(EntropyConscience|CoherenceConscience|OptimizationVetoConscience|EpistemicHumilityConscience)" -n tests/test_conscience_core.py
+nl -ba ciris_engine/logic/adapters/api/service_configuration.py | sed -n '1,220p'
+nl -ba ciris_engine/logic/runtime/startup_logging.py | sed -n '1,170p'
+nl -ba ciris_engine/logic/infrastructure/handlers/handler_registry.py | sed -n '1,220p'
+nl -ba ciris_engine/schemas/runtime/enums.py | sed -n '35,110p'
+pytest -o addopts='' --collect-only -q tests/ciris_engine/logic/handlers tests/handlers/test_speak_handler.py tests/test_conscience_core.py

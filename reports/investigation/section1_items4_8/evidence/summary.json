@@ -1,0 +1,17 @@
+{
+  "section": "section1_items4_8",
+  "date_utc": "2026-04-22",
+  "claims_checked": 5,
+  "verdicts": {
+    "item_4_tests_3500_passing": "unverified_in_env",
+    "item_5_99_rest_endpoints": "contradicted_static_count_256",
+    "item_6_ed25519_audit_chain": "partial",
+    "item_7_228mb_ram": "unverified",
+    "item_8_google_oauth_14day_retention": "partial_confirmed"
+  },
+  "endpoint_static_count": 256,
+  "collection_errors": 37,
+  "tests_collected": 10662,
+  "endpoint_count_requires_auth_heuristic": 13,
+  "endpoint_count_without_auth_dependency_heuristic": 243
+}

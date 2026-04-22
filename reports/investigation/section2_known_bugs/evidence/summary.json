@@ -1,0 +1,15 @@
+{
+  "section": "section2_known_bugs",
+  "date_utc": "2026-04-22",
+  "items": {
+    "item_1_accord_timestamp_mismatch": "confirmed_and_fixed_docstring_alignment",
+    "item_2_v262_security_batch": "located_in_commit_aa38b09e_partial_local_verification",
+    "item_3_broken_nav_404": "pending",
+    "item_4_trust_pricing": "pending"
+  },
+  "item_2_notes": {
+    "security_release_commit": "aa38b09e4ae294178efc27341326f99374bd373e",
+    "local_targeted_tests": "32_failed_80_passed_environment_not_authoritative"
+  },
+  "policy_recommendation": "retain_24h_window_unless_formal_security_policy_change"
+}

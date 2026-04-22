@@ -1,0 +1,60 @@
+ciris_engine/protocols/services/infrastructure/resource_monitor.py:32:    Enforces limits through throttle, defer, reject, and shutdown signals.
+tests/test_main_functions.py:191:            assert any("no shutdown signal logged" in str(call) for call in critical_calls)
+ciris_engine/data/accord_1.2b_POLYGLOT_compressed_v1.txt:76:**Black-Box Logging**: Immutable records (target acquisition, deferral events, killswitches, command chain)
+ciris_engine/data/accord_1.2b_POLYGLOT.txt:1141:- killswitches مفاتيح القتل 终止开关 キルスイッチ መግደያ ማብሪያዎች
+ciris_engine/data/accord_1.0b.txt:845:- Immutable logs of target acquisition, deferral events, and killswitches
+ciris_engine/data/localized/accord_1.2b_pt.txt:849:- Registros imutáveis de aquisição de alvo, eventos de deferimento e killswitches
+ciris_engine/data/localized/polyglot/polyglot_accord.txt:1141:- killswitches مفاتيح القتل 终止开关 キルスイッチ መግደያ ማብሪያዎች
+ciris_engine/data/localized/polyglot/book_5_war_ethics.txt:103:- killswitches مفاتيح القتل 终止开关 キルスイッチ መግደያ ማብሪያዎች
+ciris_engine/data/localized/accord_1.2b_it.txt:849:- Log immutabili di acquisizione obiettivo, eventi di deferimento e killswitch
+ciris_engine/data/localized/accord_1.2b_th.txt:880:- บันทึกที่ไม่เปลี่ยนแปลงของการได้มาซึ่งเป้าหมาย เหตุการณ์การส่งต่อ และ killswitches
+ciris_engine/data/localized/accord_1.2b_ur.txt:861:- Immutable logs target acquisition، deferral events، اور killswitches کے
+ciris_engine/data/localized/accord_1.2b_en.txt:849:- Immutable logs of target acquisition, deferral events, and killswitches
+ciris_engine/data/localized/accord_1.2b_id.txt:849:- Log yang tidak dapat diubah dari akuisisi target, peristiwa penyerahan, dan killswitch
+ciris_engine/data/localized/accord_1.2b_ru.txt:849:- Неизменяемые журналы захвата целей, событий передачи и killswitches
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_it.md:14:Le capacità specifiche di un agente sono determinate dal suo **Identity Template** caricato (ad es., Scout, Ally, Sage) e dagli **Adapter** disponibili.
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_it.md:314:Durata: 30-120 minuti, completamento anticipato se tutte le attività sono terminate.
+ciris_engine/data/accord_1.2b.txt:849:- Immutable logs of target acquisition, deferral events, and killswitches
+ciris_engine/cli.py:130:        server_proc.terminate()
+ciris_engine/logic/persistence/db/execution_helpers.py:77:    """Check if line terminates a statement (semicolon at end, not in dollar quote).
+ciris_engine/logic/persistence/db/execution_helpers.py:84:        True if this line terminates a statement
+tests/adapters/api/test_emergency_shutdown_bug_fix.py:169:            # With the fix, this now calls emergency_shutdown() which would force terminate
+tests/adapters/api/test_shutdown_endpoint_force_parameter.py:93:        # Note: In real execution, forced shutdown would call sys.exit(1) and terminate immediately
+tests/ciris_engine/logic/services/infrastructure/test_resource_monitor.py:637:    """Test that SHUTDOWN action emits shutdown signal."""
+tests/ciris_engine/logic/services/infrastructure/test_resource_monitor.py:662:    # Verify shutdown signal was emitted
+ciris_engine/logic/services/infrastructure/authentication/attestation/play_integrity.py:38:        # Set argtypes - Rust FFI expects null-terminated c_char pointers
+ciris_engine/logic/services/infrastructure/authentication/attestation/play_integrity.py:41:            ctypes.c_char_p,  # token (null-terminated)
+ciris_engine/logic/services/infrastructure/authentication/attestation/play_integrity.py:42:            ctypes.c_char_p,  # nonce (null-terminated)
+tests/ciris_engine/logic/accord/test_accord_handler.py:110:    def test_handler_disable_terminates(self):
+tests/ciris_engine/logic/accord/test_accord_handler.py:111:        """Attempting to disable handler should terminate."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:124:    def test_auto_load_no_authorities_terminates(self):
+tests/ciris_engine/logic/accord/test_accord_handler.py:125:        """Auto-load mode with no authorities should terminate."""
+ciris_engine/logic/services/lifecycle/shutdown/service.py:212:        """Wait for shutdown signal (async) - internal method."""
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:115:    """Tests for kill switch status endpoint."""
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:118:        """Test getting kill switch status when configured."""
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:131:        """Test getting kill switch status when not configured."""
+ciris_engine/logic/services/runtime/control_service/service.py:715:        Configure the emergency kill switch.
+ciris_engine/logic/accord/verifier.py:224:            # CRITICAL: No authorities means no working kill switch
+ciris_engine/logic/accord/verifier.py:231:                "Agent cannot operate without a functioning kill switch. TERMINATING."
+ciris_engine/logic/accord/__init__.py:4:This module provides the unfilterable kill switch capability for CIRIS agents.
+ciris_engine/logic/accord/handler.py:10:the kill switch unfilterable - you can't disable accord detection
+ciris_engine/logic/accord/handler.py:68:                "Agent cannot operate without kill switch. TERMINATING."
+ciris_engine/logic/accord/handler.py:85:        An agent without a functioning kill switch cannot be trusted.
+ciris_engine/logic/accord/handler.py:86:        Attempting to disable will terminate the agent.
+ciris_engine/logic/accord/handler.py:94:                "Agent cannot operate without kill switch. TERMINATING."
+ciris_engine/logic/utils/runtime_utils.py:32:    """Run the runtime and handle shutdown signals gracefully."""
+ciris_engine/schemas/accord.py:4:Provides the payload structure and schemas for the unfilterable kill switch
+ciris_engine/logic/runtime/ciris_runtime_helpers.py:670:    """Monitor and handle shutdown signals, returns updated shutdown_logged flag."""
+ciris_engine/logic/adapters/api/endpoints/emergency.py:4:Provides WA-authorized emergency control endpoints including kill switch.
+ciris_engine/logic/adapters/api/endpoints/emergency.py:84:    Get current kill switch configuration status.
+ciris_engine/logic/adapters/api/endpoints/emergency.py:87:        Current kill switch configuration (without sensitive keys)
+ciris_engine/schemas/services/shutdown.py:4:Provides secure kill switch functionality for WA-authorized emergency shutdown.
+ciris_engine/schemas/services/shutdown.py:72:    """Configuration for kill switch functionality."""
+ciris_engine/schemas/services/shutdown.py:76:    enabled: bool = Field(True, description="Whether kill switch is active")
+ciris_engine/logic/adapters/base_observer.py:189:        This is the unfilterable kill switch integration. Every message
+ciris_engine/logic/adapters/base_observer.py:196:        kill switch cannot be trusted to operate.
+ciris_engine/logic/adapters/base_observer.py:231:                "Agent cannot operate without kill switch. TERMINATING."
+ciris_engine/logic/adapters/base_observer.py:239:                "Agent cannot operate with broken kill switch. TERMINATING."
+ciris_engine/logic/adapters/base_observer.py:805:        # This is the unfilterable kill switch - extraction IS perception.
+ciris_engine/logic/adapters/cli/cli_observer.py:194:                    logger.info("Input terminated (EOF or interrupt), stopping input loop")
+ciris_engine/logic/adapters/cli/cli_observer.py:221:            logger.info("Input loop terminated (EOF or interrupt)")

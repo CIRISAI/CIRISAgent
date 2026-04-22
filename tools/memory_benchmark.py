@@ -13,7 +13,6 @@ Prerequisites:
 """
 import argparse
 import asyncio
-import json
 import os
 import subprocess
 import sys
@@ -71,7 +70,9 @@ async def send_messages(base_url: str, messages: int, token: str) -> tuple[int, 
     """Send N messages to the API and return (success_count, elapsed_time)."""
     import httpx
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     success = 0
     start = time.time()
 
@@ -134,9 +135,12 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
         str(port),
     ]
 
+    server_log_path = project_root / f"memory_benchmark_{messages}.server.log"
+    server_log = server_log_path.open("w", encoding="utf-8")
+
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=server_log,
         stderr=subprocess.STDOUT,
         cwd=str(project_root),
         env=env,
@@ -149,7 +153,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     print(f"\n[2/4] Waiting for server...")
     import httpx
 
-    for _ in range(30):
+    for _ in range(60):
         try:
             r = httpx.get(f"{base_url}/health", timeout=2.0)
             if r.status_code == 200:
@@ -161,6 +165,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     else:
         print("  ERROR: Server failed to start")
         process.terminate()
+        server_log.close()
         return 1
 
     # Measure initial memory
@@ -180,6 +185,8 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     # Send messages
     print(f"\n[4/4] Sending {messages} messages...")
     samples = []
+    success = 0
+    elapsed = 0.0
     try:
         success, elapsed = asyncio.run(send_messages(base_url, messages, token))
         print(f"  Sent {success}/{messages} messages in {elapsed:.1f}s")
@@ -201,6 +208,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             process.kill()
+        server_log.close()
 
     # Report
     print("\n" + "=" * 70)
@@ -221,6 +229,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     print(f"\n  Adapter:        {adapter}")
     print(f"  Mock LLM:       True")
     print(f"  Success Rate:   {success}/{messages} ({100*success/messages:.1f}%)")
+    print(f"  Server Log:     {server_log_path}")
     print("=" * 70)
 
     return 0

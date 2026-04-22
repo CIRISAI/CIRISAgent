@@ -164,13 +164,13 @@ class AccordPayload(BaseModel):
 
     def is_timestamp_valid(self, current_time: Optional[int] = None) -> bool:
         """
-        Check if timestamp is within the valid window.
+        Check if timestamp is within the valid ACCORD replay window.
 
         Args:
             current_time: Current unix timestamp (default: now)
 
         Returns:
-            True if within 5-minute window
+            True if within the configured 24-hour window
         """
         if current_time is None:
             current_time = int(time.time())

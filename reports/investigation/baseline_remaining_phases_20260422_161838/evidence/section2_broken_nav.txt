@@ -1,0 +1,142 @@
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_uk.md:152:| `/v1/setup/verify-status` | GET | Повне підтвердження (mode=partial або full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_uk.md:155:| `/v1/setup/app-attest/verify` | POST | Перевірка App Attest для iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_uk.md:157:| `/v1/setup/play-integrity/verify` | POST | Перевірка Play Integrity для Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ja.md:152:| `/v1/setup/verify-status` | GET | 完全認証(mode=partialまたはfull) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ja.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest検証 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ja.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity検証 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_hi.md:152:| `/v1/setup/verify-status` | GET | पूर्ण प्रमाणीकरण (mode=partial या full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_hi.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest सत्यापन |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_hi.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity सत्यापन |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_vi.md:152:| `/v1/setup/verify-status` | GET | Xác thực đầy đủ (mode=partial hoặc full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_vi.md:155:| `/v1/setup/app-attest/verify` | POST | Xác minh iOS App Attest |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_vi.md:157:| `/v1/setup/play-integrity/verify` | POST | Xác minh Android Play Integrity |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_zh.md:152:| `/v1/setup/verify-status` | GET | 完整证明(mode=partial 或 full)|
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_zh.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest 验证 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_zh.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity 验证 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ar.md:152:| `/v1/setup/verify-status` | GET | التصديق الكامل (mode=partial أو full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ar.md:155:| `/v1/setup/app-attest/verify` | POST | التحقق من App Attest لـ iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ar.md:157:| `/v1/setup/play-integrity/verify` | POST | التحقق من Play Integrity لـ Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_th.md:152:| `/v1/setup/verify-status` | GET | การรับรองแบบเต็ม (mode=partial หรือ full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_th.md:155:| `/v1/setup/app-attest/verify` | POST | การตรวจสอบ App Attest ของ iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_th.md:157:| `/v1/setup/play-integrity/verify` | POST | การตรวจสอบ Play Integrity ของ Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fa.md:152:| `/v1/setup/verify-status` | GET | التصديق الكامل (mode=partial أو full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fa.md:155:| `/v1/setup/app-attest/verify` | POST | التحقق من App Attest لـ iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fa.md:157:| `/v1/setup/play-integrity/verify` | POST | التحقق من Play Integrity لـ Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_sw.md:152:| `/v1/setup/verify-status` | GET | Uthibitisho kamili (mode=partial au full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_sw.md:155:| `/v1/setup/app-attest/verify` | POST | Uthibitishaji wa iOS App Attest |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_sw.md:157:| `/v1/setup/play-integrity/verify` | POST | Uthibitishaji wa Android Play Integrity |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ha.md:150:| `/v1/setup/verify-status` | GET | Inganta gida (mode=partial ko full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ha.md:153:| `/v1/setup/app-attest/verify` | POST | iOS App Attest gwaji |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ha.md:155:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity gwaji |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ru.md:152:| `/v1/setup/verify-status` | GET | Полная аттестация (mode=partial или full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ru.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest верификация |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ru.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity верификация |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fr.md:152:| `/v1/setup/verify-status` | GET | Attestation complète (mode=partial ou full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fr.md:155:| `/v1/setup/app-attest/verify` | POST | Vérification App Attest iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fr.md:157:| `/v1/setup/play-integrity/verify` | POST | Vérification Play Integrity Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_te.md:152:| `/v1/setup/verify-status` | GET | పూర్తి తనిఖీ (mode=partial లేదా full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_te.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest తనిఖీ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_te.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity తనిఖీ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_id.md:152:| `/v1/setup/verify-status` | GET | Atestasi penuh (mode=partial atau full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_id.md:155:| `/v1/setup/app-attest/verify` | POST | Verifikasi App Attest untuk iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_id.md:157:| `/v1/setup/play-integrity/verify` | POST | Verifikasi Play Integrity untuk Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_es.md:152:| `/v1/setup/verify-status` | GET | Certificación completa (modo=partial o full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_es.md:155:| `/v1/setup/app-attest/verify` | POST | Verificación de App Attest de iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_es.md:157:| `/v1/setup/play-integrity/verify` | POST | Verificación de Play Integrity de Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ko.md:152:| `/v1/setup/verify-status` | GET | 전체 증명(mode=partial 또는 full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ko.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest 검증 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ko.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity 검증 |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_bn.md:152:| `/v1/setup/verify-status` | GET | সম্পূর্ণ প্রমাণীকরণ (mode=partial বা full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_bn.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest যাচাইকরণ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_bn.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity যাচাইকরণ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_am.md:152:| `/v1/setup/verify-status` | GET | ሙሉ ማረጋገጫ (mode=partial ወይም full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_am.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest ማረጋገጫ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_am.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity ማረጋገጫ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_yo.md:152:| `/v1/setup/verify-status` | GET | Ìjẹ́rìí kíkún (mode=partial tàbí full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_yo.md:155:| `/v1/setup/app-attest/verify` | POST | Ìfọwọ́sí iOS App Attest |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_yo.md:157:| `/v1/setup/play-integrity/verify` | POST | Ìfọwọ́sí Android Play Integrity |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pt.md:152:| `/v1/setup/verify-status` | GET | Atestação completa (mode=partial ou full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pt.md:155:| `/v1/setup/app-attest/verify` | POST | Verificação App Attest iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pt.md:157:| `/v1/setup/play-integrity/verify` | POST | Verificação Play Integrity Android |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_mr.md:152:| `/v1/setup/verify-status` | GET | पूर्ण प्रमाणन (mode=partial किंवा full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_mr.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest सत्यापन |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_mr.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity सत्यापन |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_tr.md:152:| `/v1/setup/verify-status` | GET | Tam tasdik (mode=partial veya full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_tr.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest doğrulaması |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_tr.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity doğrulaması |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ur.md:152:| `/v1/setup/verify-status` | GET | مکمل تصدیق (mode=partial یا full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ur.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest تصدیق |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ur.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity تصدیق |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pa.md:152:| `/v1/setup/verify-status` | GET | ਪੂਰਾ ਹੋਇਆ প্রমাণীকরণ (mode=partial বা full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pa.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest যাচাইকরণ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_pa.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity যাচাইকরণ |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ta.md:152:| `/v1/setup/verify-status` | GET | முழு சான்றளிப்பு (mode=partial அல்லது full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ta.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest சரிபார்ப்பு |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_ta.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity சரிபார்ப்பு |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_de.md:152:| `/v1/setup/verify-status` | GET | Vollständige Attestierung (mode=partial oder full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_de.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest Verifizierung |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_de.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity Verifizierung |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_my.md:152:| `/v1/setup/verify-status` | GET | ပြည့်စုံသော အတည်ပြုချက် (mode=partial သို့မဟုတ် full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_my.md:155:| `/v1/setup/app-attest/verify` | POST | iOS App Attest အတည်ပြုမှု |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_my.md:157:| `/v1/setup/play-integrity/verify` | POST | Android Play Integrity အတည်ပြုမှု |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_it.md:152:| `/v1/setup/verify-status` | GET | Attestazione completa (mode=partial o full) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_it.md:155:| `/v1/setup/app-attest/verify` | POST | Verifica App Attest iOS |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_it.md:157:| `/v1/setup/play-integrity/verify` | POST | Verifica Play Integrity Android |
+client/iosApp/iosApp/AppAttestManager.swift:266:        let url = URL(string: "http://127.0.0.1:8080/v1/setup/app-attest/verify")!
+client/iosApp/iosApp/StoreKitManager.swift:167:        let url = URL(string: "\(billingBaseURL)/v1/user/apple-storekit/verify")!
+client/generated-api/docs/VerificationApi.md:9:| [**manualSignatureVerificationV1VerificationVerifySignaturePost**](VerificationApi.md#manualSignatureVerificationV1VerificationVerifySignaturePost) | **POST** /v1/verification/verify-signature | Manual Signature Verification |
+client/generated-api/docs/BillingApi.md:11:| [**verifyGooglePlayPurchaseV1ApiBillingGooglePlayVerifyPost**](BillingApi.md#verifyGooglePlayPurchaseV1ApiBillingGooglePlayVerifyPost) | **POST** /v1/api/billing/google-play/verify | Verify Google Play Purchase |
+client/generated-api/docs/AuditApi.md:11:| [**verifyAuditEntryV1AuditVerifyEntryIdPost**](AuditApi.md#verifyAuditEntryV1AuditVerifyEntryIdPost) | **POST** /v1/audit/verify/{entry_id} | Verify Audit Entry |
+ciris_engine/logic/audit/README.md:158:curl http://localhost:8080/v1/audit/verify
+ciris_engine/logic/audit/README.md:319:GET  /v1/audit/verify         # Verify integrity
+ciris_engine/logic/runtime/bootstrap_helpers.py:174:    # CIRISVerify is always loaded first — it handles signing/trust
+ciris_engine/logic/adapters/api/routes/audit.py:1039:@router.post("/verify/{entry_id}", responses=RESPONSES_500_503)
+ciris_engine/logic/adapters/api/routes/verification.py:286:@router.post("/verify-signature")
+ciris_engine/logic/adapters/api/routes/auth.py:64:OAUTH_FRONTEND_URL = os.getenv("OAUTH_FRONTEND_URL")  # e.g., https://scout.ciris.ai
+ciris_engine/logic/adapters/api/routes/auth.py:1115:        OAUTH_FRONTEND_URL: Frontend base URL (e.g., https://scout.ciris.ai)
+ciris_engine/logic/adapters/api/routes/auth.py:2272:        Attestation result in the same format as /v1/setup/verify-status
+ciris_engine/logic/adapters/api/routes/auth.py:2300:    # This matches the format returned by /v1/setup/verify-status
+client/generated-api/src/commonMain/kotlin/ai/ciris/api/apis/BillingApi.kt:214:            "/v1/api/billing/google-play/verify",
+client/generated-api/src/commonMain/kotlin/ai/ciris/api/apis/AuditApi.kt:251:            "/v1/audit/verify/{entry_id}".replace("{" + "entry_id" + "}", "$entryId"),
+client/generated-api/src/commonMain/kotlin/ai/ciris/api/apis/VerificationApi.kt:131:            "/v1/verification/verify-signature",
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:280:@router.get("/verify-status")
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:423:@router.post("/app-attest/verify")
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:430:    Calls CIRISVerify FFI -> registry POST /v1/integrity/ios/verify.
+ciris_engine/logic/adapters/api/routes/setup/attestation.py:592:@router.post("/play-integrity/verify")
+ciris_engine/logic/adapters/api/routes/billing.py:906:@router.post("/google-play/verify")
+ciris_engine/logic/adapters/api/routes/billing.py:981:        result = await _billing_post(base_url, "/v1/billing/google-play/verify", headers, verify_payload)
+ciris_engine/logic/adapters/api/routes/tools.py:55:    VERIFY_PURCHASE = "/v1/tools/purchase/verify"
+ciris_engine/logic/adapters/api/config.py:47:        default="", description="Base path when running behind reverse proxy (e.g., /api/sage-2wnuc8)"
+ciris_engine/schemas/infrastructure/identity_variance.py:20:    HIGH = "high"  # Capabilities/trust changes
+ciris_engine/schemas/resources/crisis.py:68:    # Legal/compliance
+client/generated-api/README.md:49:| *AuditApi* | [**verifyAuditEntryV1AuditVerifyEntryIdPost**](docs/AuditApi.md#verifyauditentryv1auditverifyentryidpost) | **POST** /v1/audit/verify/{entry_id} | Verify Audit Entry |
+client/generated-api/README.md:66:| *BillingApi* | [**verifyGooglePlayPurchaseV1ApiBillingGooglePlayVerifyPost**](docs/BillingApi.md#verifygoogleplaypurchasev1apibillinggoogleplayverifypost) | **POST** /v1/api/billing/google-play/verify | Verify Google Play Purchase |
+client/generated-api/README.md:201:| *VerificationApi* | [**manualSignatureVerificationV1VerificationVerifySignaturePost**](docs/VerificationApi.md#manualsignatureverificationv1verificationverifysignaturepost) | **POST** /v1/verification/verify-signature | Manual Signature Verification |
+docs/OAUTH_REDIRECT_CONFIGURATION.md:15:OAUTH_FRONTEND_URL=https://scout.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:71:OAUTH_CALLBACK_BASE_URL=https://scoutapi.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:86:OAUTH_CALLBACK_BASE_URL=https://scoutapi.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:89:OAUTH_FRONTEND_URL=https://scout.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:101:https://scout.ciris.ai/oauth-complete.html?access_token=...&email=...&marketing_opt_in=true&agent=scout&provider=google
+docs/OAUTH_REDIRECT_CONFIGURATION.md:143:GET /api/scout/v1/auth/oauth/google/login
+docs/OAUTH_REDIRECT_CONFIGURATION.md:144:  ?redirect_uri=https://scout.ciris.ai/oauth-complete.html?marketing_opt_in=true
+docs/OAUTH_REDIRECT_CONFIGURATION.md:151:https://scout.ciris.ai/oauth-complete.html
+docs/OAUTH_REDIRECT_CONFIGURATION.md:183:export OAUTH_FRONTEND_URL=https://scout.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:189:curl "https://scoutapi.ciris.ai/api/scout/v1/auth/oauth/google/login?redirect_uri=https%3A%2F%2Fscout.ciris.ai%2Foauth-complete.html%3Fmarketing_opt_in%3Dtrue"
+docs/OAUTH_REDIRECT_CONFIGURATION.md:194:https://scout.ciris.ai/oauth-complete.html
+docs/OAUTH_CALLBACK_URLS.md:22:- **Google OAuth**: `https://agents.ciris.ai/v1/auth/oauth/scout/google/callback`
+docs/OAUTH_CALLBACK_URLS.md:23:- **Discord OAuth**: `https://agents.ciris.ai/v1/auth/oauth/scout/discord/callback`
+docs/OAUTH_CALLBACK_URLS.md:43:- `https://agents.ciris.ai/v1/auth/oauth/scout/google/callback` (if using Scout)
+docs/COMPARATIVE_ANALYSIS.md:214:| **CIRIS 2.0** | 250-600MB RAM | Baseline: ~207MB (CLI + Mock LLM, 22 services). Production: [scout.ciris.ai](https://scout.ciris.ai) shows 545MB (33 services, multi-occurrence, llama4scout). Run `python3 tools/introspect_memory.py` for local profiling. |
+docs/COMPARATIVE_ANALYSIS.md:346:- Production reference: [scout.ciris.ai](https://scout.ciris.ai) - Multi-occurrence agent (545MB, 33 services)
+docs/SECURITY_SETUP.md:726:    filename = f"/var/log/ciris/compliance_report_{report['report_id']}.json"
+docs/releases/1.0.7-RC1-patch7.md:19:$memorize adaptive_filter/trust_decay_rate CONFIG LOCAL value=0.05
+docs/releases/1.0.7-RC1-patch7.md:115:  $memorize filter/trust_decay CONFIG LOCAL value=0.05
+docs/releases/1.0.7-RC1-patch7.md:152:$memorize adaptive_filter/trust_threshold CONFIG LOCAL value=0.5
+docs/releases/1.0.7-RC1-patch7.md:153:$memorize adaptive_filter/trust_decay_rate CONFIG LOCAL value=0.05
+client/openapi.json:1015:    "/v1/api/billing/google-play/verify": {
+client/openapi.json:5795:    "/v1/audit/verify/{entry_id}": {
+client/openapi.json:10055:    "/v1/verification/verify-signature": {
+client/openapi-spec.json:918:    "/v1/api/billing/google-play/verify": {
+client/openapi-spec.json:5485:    "/v1/audit/verify/{entry_id}": {
+client/openapi-spec.json:9688:    "/v1/verification/verify-signature": {
+client/shared/FILES_CREATED.md:98:**Path**: `/home/emoore/CIRISAgent/mobile/shared/verify_extraction.sh`

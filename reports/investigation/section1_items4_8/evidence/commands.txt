@@ -1,0 +1,6 @@
+python tools/investigation/generate_endpoint_inventory.py
+pytest -o addopts='' --collect-only -q tests > reports/investigation/section1_items4_8/evidence/pytest_collect_all.txt
+# retained excerpt committed as: reports/investigation/section1_items4_8/evidence/pytest_collect_all_excerpt.txt
+rg "google|oauth|OAuth|provider" -n ciris_engine/logic/adapters/api/routes ciris_engine/logic/services/infrastructure/authentication
+rg "14.?day|retention|cleanup_expired|delete" -n ciris_engine/logic/services/governance/consent ciris_engine/logic/infrastructure/handlers
+rg "ed25519|Ed25519|previous_hash|signature|verify" -n ciris_engine/logic/audit ciris_engine/schemas

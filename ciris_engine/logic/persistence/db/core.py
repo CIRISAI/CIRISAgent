@@ -5,7 +5,7 @@ import threading
 import time
 import types
 from datetime import datetime
-from typing import Any, Dict, Optional, TypedDict, Union
+from typing import Any, Dict, Optional, TypedDict, Union, cast
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
@@ -670,16 +670,20 @@ class _IOSConnectionProxy:
         return getattr(object.__getattribute__(self, '_conn'), name)
 
     def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        return object.__getattribute__(self, '_conn').execute(*args, **kwargs)
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        return conn.execute(*args, **kwargs)
 
     def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        return object.__getattribute__(self, '_conn').executemany(*args, **kwargs)
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        return conn.executemany(*args, **kwargs)
 
     def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
-        return object.__getattribute__(self, '_conn').executescript(*args, **kwargs)
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        return conn.executescript(*args, **kwargs)
 
     def cursor(self) -> sqlite3.Cursor:
-        return object.__getattribute__(self, '_conn').cursor()
+        conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
+        return conn.cursor()
 
     def commit(self) -> None:
         object.__getattribute__(self, '_conn').commit()
@@ -804,6 +808,8 @@ def get_db_connection(
     logger.debug(f"[DB_CONNECT] Platform detection: is_ios={is_ios}")
 
     # Create connection based on platform
+    # Use union type since conn can be either proxy or raw connection
+    conn: Union[_IOSConnectionProxy, sqlite3.Connection]
     if is_ios:
         conn = _create_sqlite_connection_ios(db_path)
     else:
@@ -824,7 +830,8 @@ def get_db_connection(
     # Return wrapped connection with retry logic by default
     if enable_retry and not is_ios:
         logger.debug("[DB_CONNECT] Returning RetryConnection wrapper")
-        return RetryConnection(conn)
+        # At this point we know is_ios=False so conn is sqlite3.Connection
+        return RetryConnection(cast(sqlite3.Connection, conn))
 
     logger.debug(f"[DB_CONNECT] Returning connection: {type(conn).__name__}")
     return conn

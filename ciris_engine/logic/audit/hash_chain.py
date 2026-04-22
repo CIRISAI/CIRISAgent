@@ -12,6 +12,7 @@ import sqlite3
 import threading
 from typing import List, Optional
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.audit.hash_chain import ChainSummary, HashChainVerificationResult
 from ciris_engine.schemas.types import JSONDict
@@ -110,8 +111,7 @@ class AuditHashChain:
             Last audit entry as JSON-compatible dict, or None if chain is empty
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             cursor.execute(
@@ -138,8 +138,7 @@ class AuditHashChain:
         conn = None
         result = None
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             # Build query
@@ -277,7 +276,7 @@ class AuditHashChain:
             self.initialize()
 
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_safe_sqlite_connection(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute("SELECT COUNT(*), MIN(sequence_number), MAX(sequence_number) FROM audit_log")

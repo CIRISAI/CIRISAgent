@@ -10,7 +10,7 @@ import sqlite3
 from typing import Any, List, Optional, Union
 
 from ciris_engine.logic.persistence.db import get_db_connection
-from ciris_engine.logic.persistence.db.core import RetryConnection
+from ciris_engine.logic.persistence.db.core import RetryConnection, get_safe_sqlite_connection
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,7 @@ def discover_active_occurrences(within_minutes: int = 10, db_path: Optional[str]
     try:
         # If explicit db_path provided, connect directly (for testing)
         if db_path:
-            test_conn = sqlite3.connect(db_path)
-            test_conn.row_factory = sqlite3.Row
+            test_conn = get_safe_sqlite_connection(db_path, row_factory=sqlite3.Row)
             try:
                 cursor = test_conn.cursor()
                 cursor.execute(sql, (cutoff_iso,))

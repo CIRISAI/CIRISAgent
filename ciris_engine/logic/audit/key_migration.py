@@ -22,8 +22,9 @@ import hashlib
 import json
 import logging
 import shutil
-import sqlite3
 from dataclasses import dataclass, field
+
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -208,7 +209,7 @@ class AuditKeyMigration:
     def _get_current_key_info(self) -> Optional[Tuple[str, str]]:
         """Get current signing key info (key_id, algorithm)."""
         try:
-            conn = sqlite3.connect(str(self.db_path))
+            conn = get_safe_sqlite_connection(str(self.db_path))
             cursor = conn.cursor()
 
             # Get the most recent non-revoked key
@@ -255,7 +256,7 @@ class AuditKeyMigration:
 
     def _load_all_entries(self) -> List[AuditEntry]:
         """Load all audit entries in order."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = get_safe_sqlite_connection(str(self.db_path))
         cursor = conn.cursor()
 
         cursor.execute(
@@ -330,7 +331,7 @@ class AuditKeyMigration:
 
     def _update_database(self, entries: List[AuditEntry]) -> None:
         """Update database with re-signed entries atomically."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = get_safe_sqlite_connection(str(self.db_path))
         cursor = conn.cursor()
 
         try:
@@ -365,7 +366,7 @@ class AuditKeyMigration:
 
     def _register_ed25519_key(self, unified_key: Any) -> None:
         """Register the Ed25519 key in the database."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = get_safe_sqlite_connection(str(self.db_path))
         cursor = conn.cursor()
 
         try:
@@ -405,7 +406,7 @@ class AuditKeyMigration:
 
     def _archive_old_key(self, old_key_id: str) -> None:
         """Mark old RSA key as archived in database (not revoked, for verification)."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = get_safe_sqlite_connection(str(self.db_path))
         cursor = conn.cursor()
 
         try:

@@ -22,6 +22,8 @@ from typing import Annotated, Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
+
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
 
@@ -873,14 +875,12 @@ def _count_recent_task_completes_sqlite(hours: int = 1) -> int:
     sources and merges). For σ we only need the cheap rate signal, so we
     query SQLite directly with a COUNT.
     """
-    import sqlite3
-
     try:
         from ciris_engine.logic.utils.path_resolution import get_data_dir
 
         db_path = str(get_data_dir() / "ciris_audit.db")
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0) as conn:
+        with get_safe_sqlite_connection(db_path, read_only=True, timeout=2.0) as conn:
             cur = conn.execute(
                 "SELECT COUNT(*) FROM audit_log WHERE event_type = ? AND event_timestamp >= ?",
                 ("task_complete", since),

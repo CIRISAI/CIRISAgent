@@ -900,6 +900,48 @@ def get_db_connection(
     return conn
 
 
+def get_safe_sqlite_connection(
+    db_path: str,
+    row_factory: Any = None,
+    read_only: bool = False,
+    timeout: float = 5.0,
+) -> Union["_IOSConnectionProxy", sqlite3.Connection]:
+    """Get a SQLite connection that is safe on all platforms including iOS.
+
+    This is the ONLY way to open a SQLite database in CIRIS. Do NOT use
+    sqlite3.connect() directly — iOS requires thread-local connection
+    proxies to prevent Apple's libRPAC SQLiteDatabaseTracking assertions.
+
+    Use this instead of sqlite3.connect() everywhere:
+        - Audit routes, key migration, auth service, occurrence utils, etc.
+        - Any one-off DB access outside the main persistence layer
+
+    Args:
+        db_path: Path to SQLite database file (or URI like file:path?mode=ro)
+        row_factory: Optional row factory (e.g., sqlite3.Row)
+        read_only: If True, open in read-only mode via URI
+        timeout: Connection timeout in seconds
+
+    Returns:
+        Connection (or iOS proxy) safe for the current platform.
+    """
+    is_ios = _check_ios_platform()
+
+    if read_only and not db_path.startswith("file:"):
+        db_path = f"file:{db_path}?mode=ro"
+
+    if is_ios:
+        conn: Any = _create_sqlite_connection_ios(db_path)
+    else:
+        uri = db_path.startswith("file:")
+        conn = sqlite3.connect(db_path, uri=uri, check_same_thread=False, timeout=timeout)
+
+    if row_factory is not None:
+        conn.row_factory = row_factory
+
+    return conn
+
+
 # Removed unused schema getter functions - only graph schemas are used
 
 

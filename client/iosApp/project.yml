@@ -148,6 +148,17 @@ targets:
       - name: Embed Python Native Modules
         script: "${PROJECT_DIR}/scripts/embed_native_frameworks.sh"
         basedOnDependencyAnalysis: false
+      - name: Remove Static shared.framework from Frameworks
+        script: |
+          # Xcode's Embed Frameworks phase copies shared.framework into
+          # Frameworks/ even though it's a static archive (.a). iOS rejects
+          # static archives in Frameworks/ at install time. Remove it.
+          SHARED_FW="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework/shared"
+          if [ -f "$SHARED_FW" ] && file "$SHARED_FW" | grep -q "ar archive"; then
+            echo "Removing static shared.framework from Frameworks/ (iOS rejects static archives here)"
+            rm -rf "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
+          fi
+        basedOnDependencyAnalysis: false
 
 schemes:
   iosApp:

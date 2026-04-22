@@ -147,7 +147,7 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
     step "Quick overlay: latest ciris_engine source..."
 
     # Overlay ciris_engine
-    rsync -a --delete --exclude='__pycache__' --exclude='gui_static' \
+    rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
         "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
     ok "ciris_engine overlaid"
 

@@ -148,7 +148,7 @@ def bump_version(bump_type: str):
         print(f"  Updated README.md to {release_type} {new_version}")
 
     # Update iOS Info.plist CFBundleVersion + CFBundleShortVersionString
-    ios_plist_file = Path(__file__).parent.parent.parent / "mobile" / "iosApp" / "iosApp" / "Info.plist"
+    ios_plist_file = Path(__file__).parent.parent.parent / "client" / "iosApp" / "iosApp" / "Info.plist"
     if ios_plist_file.exists():
         with open(ios_plist_file, "r") as f:
             plist_content = f.read()
@@ -181,7 +181,7 @@ def bump_version(bump_type: str):
             f.write(plist_content)
 
     # Update Android build.gradle
-    android_gradle_file = Path(__file__).parent.parent.parent / "mobile" / "androidApp" / "build.gradle"
+    android_gradle_file = Path(__file__).parent.parent.parent / "client" / "androidApp" / "build.gradle"
     if android_gradle_file.exists():
         with open(android_gradle_file, "r") as f:
             gradle_content = f.read()

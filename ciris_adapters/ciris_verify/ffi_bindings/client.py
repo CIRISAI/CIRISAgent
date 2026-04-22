@@ -4,39 +4,44 @@ This module provides a high-level Python interface to the CIRISVerify
 Rust binary via C FFI. It handles JSON encoding/decoding and type conversion.
 """
 
-import asyncio
-import ctypes
-import hashlib
-import json
 import os
+import json
+import ctypes
+import asyncio
+import hashlib
 import platform
 import socket
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Set
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
-from .exceptions import AttestationInProgressError, BinaryNotFoundError, BinaryTamperedError, CommunicationError
-from .exceptions import TimeoutError as CIRISTimeoutError
-from .exceptions import VerificationFailedError
 from .types import (
-    AttestationData,
-    CapabilityCheckResult,
-    DisclosureSeverity,
-    FileIntegrityResult,
-    HardwareInfo,
-    HardwareLimitation,
-    HardwareType,
-    LicenseDetails,
     LicenseStatus,
-    LicenseStatusResponse,
     LicenseTier,
+    LicenseDetails,
     MandatoryDisclosure,
-    PythonIntegrityResult,
-    PythonModuleHashes,
-    SecurityAdvisory,
-    SourceDetails,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    CapabilityCheckResult,
+    FileIntegrityResult,
+    HardwareType,
     ValidationStatus,
+    SourceDetails,
+    AttestationData,
+    PythonModuleHashes,
+    PythonIntegrityResult,
+    SecurityAdvisory,
+    HardwareLimitation,
+    HardwareInfo,
+)
+from .exceptions import (
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    VerificationFailedError,
+    TimeoutError as CIRISTimeoutError,
+    CommunicationError,
+    AttestationInProgressError,
 )
 
 # FFI error codes
@@ -196,7 +201,6 @@ class CIRISVerify:
         # Check for Chaquopy-specific marker
         try:
             import java  # noqa: F401
-
             return True
         except ImportError:
             pass
@@ -241,13 +245,11 @@ class CIRISVerify:
         Java context to get nativeLibraryDir.
         """
         import logging
-
         logger = logging.getLogger(__name__)
 
         # Use Chaquopy's Java context to get nativeLibraryDir
         try:
             from java import jclass
-
             context = jclass("com.chaquo.python.Python").getPlatform().getApplication()
             native_lib_dir = context.getApplicationInfo().nativeLibraryDir
             logger.info(f"[CIRISVerify] Android nativeLibraryDir: {native_lib_dir}")
@@ -284,7 +286,8 @@ class CIRISVerify:
             if ios_path:
                 return ios_path
             raise BinaryNotFoundError(
-                "CIRISVerify.framework not found in app bundle. " "Ensure CIRISVerify.xcframework is linked in Xcode."
+                "CIRISVerify.framework not found in app bundle. "
+                "Ensure CIRISVerify.xcframework is linked in Xcode."
             )
 
         # Android-specific library search (Chaquopy)
@@ -293,7 +296,8 @@ class CIRISVerify:
             if android_path:
                 return android_path
             raise BinaryNotFoundError(
-                "libciris_verify_ffi.so not found on Android. " "Ensure the native library is included in jniLibs."
+                "libciris_verify_ffi.so not found on Android. "
+                "Ensure the native library is included in jniLibs."
             )
 
         # Search default paths
@@ -323,18 +327,18 @@ class CIRISVerify:
                     raise BinaryTamperedError("Empty binary file")
 
                 valid_magic = [
-                    b"\x7fELF",  # ELF
+                    b"\x7fELF",           # ELF
                     b"\xfe\xed\xfa\xce",  # Mach-O 32 BE
                     b"\xfe\xed\xfa\xcf",  # Mach-O 64 BE
                     b"\xce\xfa\xed\xfe",  # Mach-O 32 LE
                     b"\xcf\xfa\xed\xfe",  # Mach-O 64 LE (macOS/iOS arm64)
                     b"\xca\xfe\xba\xbe",  # Mach-O Universal
-                    b"!\x0a<arch>",  # Static library (ar archive)
-                    b"MZ\x90\x00",  # PE
-                    b"MZ\x00\x00",  # PE variant
+                    b"!\x0a<arch>",       # Static library (ar archive)
+                    b"MZ\x90\x00",        # PE
+                    b"MZ\x00\x00",        # PE variant
                 ]
 
-                if not any(magic.startswith(m[: len(magic)]) for m in valid_magic):
+                if not any(magic.startswith(m[:len(magic)]) for m in valid_magic):
                     raise BinaryTamperedError(f"Invalid binary magic: {magic.hex()}")
 
         except (OSError, IOError) as e:
@@ -355,45 +359,45 @@ class CIRISVerify:
         # NOTE: response_data is JSON text (no null bytes), but use c_void_p for
         # consistency with other output pointer patterns.
         self._lib.ciris_verify_get_status.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_char_p,  # request_data (JSON bytes, input)
-            ctypes.c_size_t,  # request_len
-            ctypes.POINTER(ctypes.c_void_p),  # response_data (out)
-            ctypes.POINTER(ctypes.c_size_t),  # response_len (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.c_char_p,                    # request_data (JSON bytes, input)
+            ctypes.c_size_t,                    # request_len
+            ctypes.POINTER(ctypes.c_void_p),    # response_data (out)
+            ctypes.POINTER(ctypes.c_size_t),    # response_len (out)
         ]
         self._lib.ciris_verify_get_status.restype = ctypes.c_int
 
         # ciris_verify_check_capability(handle, capability, action, required_tier, allowed) -> i32
         self._lib.ciris_verify_check_capability.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_char_p,  # capability
-            ctypes.c_char_p,  # action
-            ctypes.c_int,  # required_tier
-            ctypes.POINTER(ctypes.c_int),  # allowed (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.c_char_p,                    # capability
+            ctypes.c_char_p,                    # action
+            ctypes.c_int,                       # required_tier
+            ctypes.POINTER(ctypes.c_int),       # allowed (out)
         ]
         self._lib.ciris_verify_check_capability.restype = ctypes.c_int
 
         # ciris_verify_check_agent_integrity(handle, manifest_data, manifest_len,
         #   agent_root, spot_check_count, response_data, response_len) -> i32
         self._lib.ciris_verify_check_agent_integrity.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_char_p,  # manifest_data (JSON bytes, input)
-            ctypes.c_size_t,  # manifest_len
-            ctypes.c_char_p,  # agent_root (null-terminated path, input)
-            ctypes.c_uint32,  # spot_check_count (0 = full)
-            ctypes.POINTER(ctypes.c_void_p),  # response_data (out)
-            ctypes.POINTER(ctypes.c_size_t),  # response_len (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.c_char_p,                    # manifest_data (JSON bytes, input)
+            ctypes.c_size_t,                    # manifest_len
+            ctypes.c_char_p,                    # agent_root (null-terminated path, input)
+            ctypes.c_uint32,                    # spot_check_count (0 = full)
+            ctypes.POINTER(ctypes.c_void_p),    # response_data (out)
+            ctypes.POINTER(ctypes.c_size_t),    # response_len (out)
         ]
         self._lib.ciris_verify_check_agent_integrity.restype = ctypes.c_int
 
         # ciris_verify_sign(handle, data, data_len, sig_data, sig_len) -> i32
         # NOTE: Use c_void_p for output sig_data — c_char_p truncates at null bytes.
         self._lib.ciris_verify_sign.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_char_p,  # data (input, null-terminated OK)
-            ctypes.c_size_t,  # data_len
-            ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
-            ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.c_char_p,                    # data (input, null-terminated OK)
+            ctypes.c_size_t,                    # data_len
+            ctypes.POINTER(ctypes.c_void_p),    # signature_data (out)
+            ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
         ]
         self._lib.ciris_verify_sign.restype = ctypes.c_int
 
@@ -401,21 +405,21 @@ class CIRISVerify:
         # NOTE: Use c_void_p (not c_char_p) for output data pointers because
         # c_char_p truncates at null bytes, and public keys contain 0x00 bytes.
         self._lib.ciris_verify_get_public_key.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.POINTER(ctypes.c_void_p),  # key_data (out)
-            ctypes.POINTER(ctypes.c_size_t),  # key_len (out)
-            ctypes.POINTER(ctypes.c_void_p),  # algorithm (out)
-            ctypes.POINTER(ctypes.c_size_t),  # algorithm_len (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.POINTER(ctypes.c_void_p),    # key_data (out)
+            ctypes.POINTER(ctypes.c_size_t),    # key_len (out)
+            ctypes.POINTER(ctypes.c_void_p),    # algorithm (out)
+            ctypes.POINTER(ctypes.c_size_t),    # algorithm_len (out)
         ]
         self._lib.ciris_verify_get_public_key.restype = ctypes.c_int
 
         # ciris_verify_export_attestation(handle, challenge, challenge_len, proof_data, proof_len) -> i32
         self._lib.ciris_verify_export_attestation.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_char_p,  # challenge (input)
-            ctypes.c_size_t,  # challenge_len
-            ctypes.POINTER(ctypes.c_void_p),  # proof_data (out)
-            ctypes.POINTER(ctypes.c_size_t),  # proof_len (out)
+            ctypes.c_void_p,                    # handle
+            ctypes.c_char_p,                    # challenge (input)
+            ctypes.c_size_t,                    # challenge_len
+            ctypes.POINTER(ctypes.c_void_p),    # proof_data (out)
+            ctypes.POINTER(ctypes.c_size_t),    # proof_len (out)
         ]
         self._lib.ciris_verify_export_attestation.restype = ctypes.c_int
 
@@ -456,26 +460,25 @@ class CIRISVerify:
 
             # ciris_verify_sign_ed25519(handle, data, data_len, sig_data, sig_len) -> i32
             self._lib.ciris_verify_sign_ed25519.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_char_p,  # data
-                ctypes.c_size_t,  # data_len
-                ctypes.POINTER(ctypes.c_void_p),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # data
+                ctypes.c_size_t,                    # data_len
+                ctypes.POINTER(ctypes.c_void_p),    # signature_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
             ]
             self._lib.ciris_verify_sign_ed25519.restype = ctypes.c_int
 
             # ciris_verify_get_ed25519_public_key(handle, key_data, key_len) -> i32
             self._lib.ciris_verify_get_ed25519_public_key.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_void_p),  # key_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # key_len (out)
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_void_p),    # key_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # key_len (out)
             ]
             self._lib.ciris_verify_get_ed25519_public_key.restype = ctypes.c_int
 
             self._has_ed25519_support = True
         except AttributeError:
             import logging
-
             logging.getLogger(__name__).info(
                 "[CIRISVerify] Ed25519 key functions not available in this library version"
             )
@@ -483,9 +486,9 @@ class CIRISVerify:
         # ciris_verify_get_diagnostics (optional - added in 0.4.3)
         try:
             self._lib.ciris_verify_get_diagnostics.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_void_p),  # diag_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # diag_len (out)
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_void_p),    # diag_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # diag_len (out)
             ]
             self._lib.ciris_verify_get_diagnostics.restype = ctypes.c_int
         except AttributeError:
@@ -494,12 +497,12 @@ class CIRISVerify:
         # ciris_verify_audit_trail (optional - added in 0.6.16)
         try:
             self._lib.ciris_verify_audit_trail.argtypes = [
-                ctypes.c_void_p,  # handle (can be null)
-                ctypes.c_char_p,  # db_path
-                ctypes.c_char_p,  # jsonl_path (optional)
-                ctypes.c_char_p,  # portal_key_id (optional)
-                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+                ctypes.c_void_p,                    # handle (can be null)
+                ctypes.c_char_p,                    # db_path
+                ctypes.c_char_p,                    # jsonl_path (optional)
+                ctypes.c_char_p,                    # portal_key_id (optional)
+                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
             ]
             self._lib.ciris_verify_audit_trail.restype = ctypes.c_int
             self._has_audit_trail_support = True
@@ -510,11 +513,11 @@ class CIRISVerify:
         # Full unified attestation running all 5 levels
         try:
             self._lib.ciris_verify_run_attestation.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_char_p,  # request_json (input)
-                ctypes.c_size_t,  # request_len
-                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # request_json (input)
+                ctypes.c_size_t,                    # request_len
+                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
             ]
             self._lib.ciris_verify_run_attestation.restype = ctypes.c_int
             self._has_run_attestation_support = True
@@ -525,10 +528,10 @@ class CIRISVerify:
         # Report device attestation failure (Play Integrity / App Attest token acquisition failed)
         try:
             self._lib.ciris_verify_device_attestation_failed.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_char_p,  # platform ("android" or "ios")
-                ctypes.c_int,  # error_code
-                ctypes.c_char_p,  # error_message (nullable)
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # platform ("android" or "ios")
+                ctypes.c_int,                       # error_code
+                ctypes.c_char_p,                    # error_message (nullable)
             ]
             self._lib.ciris_verify_device_attestation_failed.restype = ctypes.c_int
             self._has_device_attestation_failed_support = True
@@ -539,25 +542,25 @@ class CIRISVerify:
         # Save manifests with hardware signature for offline L1
         try:
             self._lib.ciris_verify_save_manifest_cache.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_char_p,  # binary_manifest_json
-                ctypes.c_size_t,  # binary_manifest_len
-                ctypes.c_char_p,  # function_manifest_json (nullable)
-                ctypes.c_size_t,  # function_manifest_len
-                ctypes.c_char_p,  # build_record_json (nullable)
-                ctypes.c_size_t,  # build_record_len
+                ctypes.c_void_p,                    # handle
+                ctypes.c_char_p,                    # binary_manifest_json
+                ctypes.c_size_t,                    # binary_manifest_len
+                ctypes.c_char_p,                    # function_manifest_json (nullable)
+                ctypes.c_size_t,                    # function_manifest_len
+                ctypes.c_char_p,                    # build_record_json (nullable)
+                ctypes.c_size_t,                    # build_record_len
             ]
             self._lib.ciris_verify_save_manifest_cache.restype = ctypes.c_int
 
             self._lib.ciris_verify_load_manifest_cache.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_void_p),  # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_void_p),    # result_json (out)
+                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
             ]
             self._lib.ciris_verify_load_manifest_cache.restype = ctypes.c_int
 
             self._lib.ciris_verify_manifest_cache_exists.argtypes = [
-                ctypes.c_void_p,  # handle (can be null)
+                ctypes.c_void_p,                    # handle (can be null)
             ]
             self._lib.ciris_verify_manifest_cache_exists.restype = ctypes.c_int
             self._has_manifest_cache_support = True
@@ -568,22 +571,22 @@ class CIRISVerify:
         # Get hardware information and security limitations
         try:
             self._lib.ciris_verify_get_hardware_info.argtypes = [
-                ctypes.c_void_p,  # handle (can be null)
+                ctypes.c_void_p,                    # handle (can be null)
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json
-                ctypes.POINTER(ctypes.c_size_t),  # result_len
+                ctypes.POINTER(ctypes.c_size_t),   # result_len
             ]
             self._lib.ciris_verify_get_hardware_info.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_hardware_info_android.argtypes = [
-                ctypes.c_void_p,  # handle (can be null)
-                ctypes.c_char_p,  # hardware
-                ctypes.c_char_p,  # board
-                ctypes.c_char_p,  # manufacturer
-                ctypes.c_char_p,  # model
-                ctypes.c_char_p,  # security_patch
-                ctypes.c_char_p,  # fingerprint
+                ctypes.c_void_p,                    # handle (can be null)
+                ctypes.c_char_p,                    # hardware
+                ctypes.c_char_p,                    # board
+                ctypes.c_char_p,                    # manufacturer
+                ctypes.c_char_p,                    # model
+                ctypes.c_char_p,                    # security_patch
+                ctypes.c_char_p,                    # fingerprint
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json
-                ctypes.POINTER(ctypes.c_size_t),  # result_len
+                ctypes.POINTER(ctypes.c_size_t),   # result_len
             ]
             self._lib.ciris_verify_get_hardware_info_android.restype = ctypes.c_int
             self._has_hardware_info_support = True
@@ -596,8 +599,8 @@ class CIRISVerify:
             # Callback signature: void callback(int level, const char* target, const char* message)
             # Level: 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG, 5=TRACE
             self._log_callback_type = ctypes.CFUNCTYPE(
-                None,  # return type (void)
-                ctypes.c_int,  # level
+                None,           # return type (void)
+                ctypes.c_int,   # level
                 ctypes.c_char_p,  # target
                 ctypes.c_char_p,  # message
             )
@@ -615,72 +618,72 @@ class CIRISVerify:
         # Derive secp256k1 public key for EVM wallet
         try:
             self._lib.ciris_verify_derive_secp256k1_pubkey.argtypes = [
-                ctypes.c_void_p,  # handle
+                ctypes.c_void_p,                    # handle
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # pubkey_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # pubkey_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # pubkey_len (out)
             ]
             self._lib.ciris_verify_derive_secp256k1_pubkey.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_evm_address.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),  # pubkey
-                ctypes.c_size_t,  # pubkey_len
+                ctypes.POINTER(ctypes.c_uint8),     # pubkey
+                ctypes.c_size_t,                    # pubkey_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # address_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
             ]
             self._lib.ciris_verify_get_evm_address.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_evm_address_checksummed.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),  # pubkey
-                ctypes.c_size_t,  # pubkey_len
-                ctypes.POINTER(ctypes.c_char_p),  # address_str (out)
-                ctypes.POINTER(ctypes.c_size_t),  # address_str_len (out)
+                ctypes.POINTER(ctypes.c_uint8),     # pubkey
+                ctypes.c_size_t,                    # pubkey_len
+                ctypes.POINTER(ctypes.c_char_p),    # address_str (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_str_len (out)
             ]
             self._lib.ciris_verify_get_evm_address_checksummed.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_secp256k1.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_uint8),  # message_hash
-                ctypes.c_size_t,  # hash_len
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # hash_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
             ]
             self._lib.ciris_verify_sign_secp256k1.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_evm_transaction.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_uint8),  # tx_hash
-                ctypes.c_size_t,  # hash_len
-                ctypes.c_uint64,  # chain_id
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # tx_hash
+                ctypes.c_size_t,                    # hash_len
+                ctypes.c_uint64,                    # chain_id
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
             ]
             self._lib.ciris_verify_sign_evm_transaction.restype = ctypes.c_int
 
             self._lib.ciris_verify_sign_typed_data.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.POINTER(ctypes.c_uint8),  # domain_hash
-                ctypes.c_size_t,  # domain_len
-                ctypes.POINTER(ctypes.c_uint8),  # message_hash
-                ctypes.c_size_t,  # message_len
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_uint8),     # domain_hash
+                ctypes.c_size_t,                    # domain_len
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # message_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # signature_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # signature_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # signature_len (out)
             ]
             self._lib.ciris_verify_sign_typed_data.restype = ctypes.c_int
 
             self._lib.ciris_verify_recover_evm_address.argtypes = [
-                ctypes.POINTER(ctypes.c_uint8),  # message_hash
-                ctypes.c_size_t,  # hash_len
-                ctypes.POINTER(ctypes.c_uint8),  # signature
-                ctypes.c_size_t,  # signature_len
+                ctypes.POINTER(ctypes.c_uint8),     # message_hash
+                ctypes.c_size_t,                    # hash_len
+                ctypes.POINTER(ctypes.c_uint8),     # signature
+                ctypes.c_size_t,                    # signature_len
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # address_data (out)
-                ctypes.POINTER(ctypes.c_size_t),  # address_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # address_len (out)
             ]
             self._lib.ciris_verify_recover_evm_address.restype = ctypes.c_int
 
             self._lib.ciris_verify_get_wallet_info.argtypes = [
-                ctypes.c_void_p,  # handle
+                ctypes.c_void_p,                    # handle
                 ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8)),  # result_json (out)
-                ctypes.POINTER(ctypes.c_size_t),  # result_len (out)
+                ctypes.POINTER(ctypes.c_size_t),    # result_len (out)
             ]
             self._lib.ciris_verify_get_wallet_info.restype = ctypes.c_int
 
@@ -758,24 +761,24 @@ class CIRISVerify:
         """Clean up resources."""
         # Clear log callback first to prevent calls during destruction
         # Use getattr to handle partial initialization
-        if getattr(self, "_has_log_callback_support", False) and getattr(self, "_lib", None):
+        if getattr(self, '_has_log_callback_support', False) and getattr(self, '_lib', None):
             try:
                 # Pass null function pointer to disable callback
-                log_cb_type = getattr(self, "_log_callback_type", None)
+                log_cb_type = getattr(self, '_log_callback_type', None)
                 if log_cb_type:
                     null_callback = ctypes.cast(None, log_cb_type)
                     self._lib.ciris_verify_set_log_callback(null_callback)
             except Exception:
                 pass
         # Clear the reference after FFI call
-        if hasattr(self, "_active_log_callback"):
+        if hasattr(self, '_active_log_callback'):
             self._active_log_callback = None
-        if getattr(self, "_handle", None) and getattr(self, "_lib", None):
+        if getattr(self, '_handle', None) and getattr(self, '_lib', None):
             try:
                 self._lib.ciris_verify_destroy(self._handle)
             except Exception:
                 pass
-        if getattr(self, "_executor", None):
+        if getattr(self, '_executor', None):
             self._executor.shutdown(wait=False)
 
     def set_log_callback(self, callback=None, level: int = 3):
@@ -799,7 +802,6 @@ class CIRISVerify:
         """
         if not self._has_log_callback_support:
             import warnings
-
             warnings.warn("Log callback not supported in this library version (requires 0.9.1+)")
             return
 
@@ -906,14 +908,14 @@ class CIRISVerify:
             dns_us_reachable=dns_us.get("reachable", False),
             dns_eu_reachable=dns_eu.get("reachable", False),
             https_reachable=https_src.get("reachable", False),
-            validation_status=_RUST_VALIDATION_MAP.get(overall_str, ValidationStatus.VALIDATION_ERROR),
-            sources_agreeing=sum(
-                [
-                    dns_us.get("valid", False),
-                    dns_eu.get("valid", False),
-                    https_src.get("valid", False),
-                ]
+            validation_status=_RUST_VALIDATION_MAP.get(
+                overall_str, ValidationStatus.VALIDATION_ERROR
             ),
+            sources_agreeing=sum([
+                dns_us.get("valid", False),
+                dns_eu.get("valid", False),
+                https_src.get("valid", False),
+            ]),
             # Error details (added in v0.6.6)
             dns_us_error=dns_us.get("error_details") or dns_us.get("error"),
             dns_us_error_category=dns_us.get("error_category"),
@@ -995,7 +997,10 @@ class CIRISVerify:
             )
         else:
             reason_text = f"Reason: {reason} " if reason else ""
-            return f"CRITICAL: License verification failed. {reason_text}" "Agent capabilities are severely restricted."
+            return (
+                f"CRITICAL: License verification failed. {reason_text}"
+                "Agent capabilities are severely restricted."
+            )
 
     async def get_license_status(
         self,
@@ -1057,7 +1062,7 @@ class CIRISVerify:
                 self._handle,
                 capability.encode("utf-8"),
                 b"",  # action (default empty)
-                0,  # required_tier (default 0)
+                0,    # required_tier (default 0)
                 ctypes.byref(result),
             )
 
@@ -1430,9 +1435,9 @@ class CIRISVerify:
             result_len = ctypes.c_size_t()
 
             # Encode paths as C strings
-            db_path_bytes = db_path.encode("utf-8")
-            jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
-            portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
+            db_path_bytes = db_path.encode('utf-8')
+            jsonl_path_bytes = jsonl_path.encode('utf-8') if jsonl_path else None
+            portal_key_bytes = portal_key_id.encode('utf-8') if portal_key_id else None
 
             ret = self._lib.ciris_verify_audit_trail(
                 self._handle,
@@ -1489,9 +1494,9 @@ class CIRISVerify:
         result_len = ctypes.c_size_t()
 
         # Encode paths as C strings
-        db_path_bytes = db_path.encode("utf-8")
-        jsonl_path_bytes = jsonl_path.encode("utf-8") if jsonl_path else None
-        portal_key_bytes = portal_key_id.encode("utf-8") if portal_key_id else None
+        db_path_bytes = db_path.encode('utf-8')
+        jsonl_path_bytes = jsonl_path.encode('utf-8') if jsonl_path else None
+        portal_key_bytes = portal_key_id.encode('utf-8') if portal_key_id else None
 
         ret = self._lib.ciris_verify_audit_trail(
             self._handle,
@@ -1799,7 +1804,9 @@ class CIRISVerify:
             VerificationFailedError: If the call fails.
         """
         if not self.has_device_attestation_failed_support:
-            raise RuntimeError("device_attestation_failed not available in this library version (requires >= 1.5.3)")
+            raise RuntimeError(
+                "device_attestation_failed not available in this library version (requires >= 1.5.3)"
+            )
 
         if platform not in ("android", "ios"):
             raise ValueError("platform must be 'android' or 'ios'")
@@ -1815,7 +1822,9 @@ class CIRISVerify:
         )
 
         if ret != 0:
-            raise VerificationFailedError(ret, f"device_attestation_failed failed with code {ret}")
+            raise VerificationFailedError(
+                ret, f"device_attestation_failed failed with code {ret}"
+            )
 
     async def device_attestation_failed(
         self,
@@ -2101,35 +2110,29 @@ class CIRISVerify:
                 elif "VulnerableSoC" in lim:
                     vuln = lim["VulnerableSoC"]
                     advisory = vuln.get("advisory", {})
-                    limitations.append(
-                        HardwareLimitation(
-                            limitation_type="VulnerableSoC",
-                            manufacturer=vuln.get("manufacturer"),
-                            advisory=SecurityAdvisory(
-                                cve=advisory.get("cve", ""),
-                                title=advisory.get("title", ""),
-                                impact=advisory.get("impact", ""),
-                                software_patchable=advisory.get("software_patchable", False),
-                                min_patch_level=advisory.get("min_patch_level"),
-                            ),
-                        )
-                    )
+                    limitations.append(HardwareLimitation(
+                        limitation_type="VulnerableSoC",
+                        manufacturer=vuln.get("manufacturer"),
+                        advisory=SecurityAdvisory(
+                            cve=advisory.get("cve", ""),
+                            title=advisory.get("title", ""),
+                            impact=advisory.get("impact", ""),
+                            software_patchable=advisory.get("software_patchable", False),
+                            min_patch_level=advisory.get("min_patch_level"),
+                        ),
+                    ))
                 elif "WeakTEE" in lim:
-                    limitations.append(
-                        HardwareLimitation(
-                            limitation_type="WeakTEE",
-                            reason=lim["WeakTEE"].get("reason"),
-                        )
-                    )
+                    limitations.append(HardwareLimitation(
+                        limitation_type="WeakTEE",
+                        reason=lim["WeakTEE"].get("reason"),
+                    ))
                 elif "OutdatedPatchLevel" in lim:
                     patch = lim["OutdatedPatchLevel"]
-                    limitations.append(
-                        HardwareLimitation(
-                            limitation_type="OutdatedPatchLevel",
-                            current_patch=patch.get("current"),
-                            minimum_patch=patch.get("minimum_required"),
-                        )
-                    )
+                    limitations.append(HardwareLimitation(
+                        limitation_type="OutdatedPatchLevel",
+                        current_patch=patch.get("current"),
+                        minimum_patch=patch.get("minimum_required"),
+                    ))
 
         return HardwareInfo(
             platform=data.get("platform", "unknown"),
@@ -2246,7 +2249,9 @@ class CIRISVerify:
                 attestation = verifier.attestation_with_challenge(challenge)
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_await_key_registration"):
@@ -2276,7 +2281,6 @@ class CIRISVerify:
 
         if result_ptr.value:
             import json
-
             result_json = result_ptr.value.decode("utf-8")
             self._lib.ciris_verify_free_string(result_ptr)
             return json.loads(result_json)
@@ -2300,7 +2304,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
         ret = self._lib.ciris_verify_has_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("has_key")
@@ -2317,7 +2323,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
         ret = self._lib.ciris_verify_delete_key(self._handle)
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("delete_key")
@@ -2353,12 +2361,15 @@ class CIRISVerify:
             # attestation["key_attestation"]["key_type"] == "ephemeral"
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
 
         # Check if the FFI function exists
         if not hasattr(self._lib, "ciris_verify_generate_key"):
             raise NotImplementedError(
-                "generate_key not available in this library version. " "Update to ciris-verify >= 1.1.16."
+                "generate_key not available in this library version. "
+                "Update to ciris-verify >= 1.1.16."
             )
 
         ret = self._lib.ciris_verify_generate_key(self._handle)
@@ -2384,7 +2395,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
 
@@ -2419,7 +2432,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_ed25519_support:
-            raise NotImplementedError("Ed25519 key functions not available in this library version.")
+            raise NotImplementedError(
+                "Ed25519 key functions not available in this library version."
+            )
         key_data = ctypes.c_void_p()
         key_len = ctypes.c_size_t()
 
@@ -2497,7 +2512,7 @@ class CIRISVerify:
             CommunicationError: If wallet info retrieval fails.
             VerificationFailedError: If no Ed25519 key is loaded.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         result_json = ctypes.POINTER(ctypes.c_uint8)()
@@ -2534,7 +2549,7 @@ class CIRISVerify:
             CommunicationError: If derivation fails.
             VerificationFailedError: If no Ed25519 key is loaded.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         pubkey_data = ctypes.POINTER(ctypes.c_uint8)()
@@ -2574,7 +2589,7 @@ class CIRISVerify:
             CommunicationError: If address derivation fails.
             ValueError: If pubkey is not 65 bytes.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if pubkey is None:
@@ -2619,7 +2634,7 @@ class CIRISVerify:
             CommunicationError: If address derivation fails.
             ValueError: If pubkey is not 65 bytes.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if pubkey is None:
@@ -2662,7 +2677,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If message_hash is not 32 bytes.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(message_hash) != 32:
@@ -2706,7 +2721,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If tx_hash is not 32 bytes.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(tx_hash) != 32:
@@ -2751,7 +2766,7 @@ class CIRISVerify:
             VerificationFailedError: If no Ed25519 key is loaded.
             ValueError: If hashes are not 32 bytes.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(domain_hash) != 32:
@@ -2799,7 +2814,7 @@ class CIRISVerify:
             CommunicationError: If recovery fails (invalid signature).
             ValueError: If arguments are wrong length.
         """
-        if not getattr(self, "_has_wallet_support", False):
+        if not getattr(self, '_has_wallet_support', False):
             raise CommunicationError("Wallet support not available (library version < 1.3.0)")
 
         if len(message_hash) != 32:
@@ -2853,12 +2868,16 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
         if len(seed) != 32:
             raise ValueError(f"seed must be 32 bytes, got {len(seed)}")
 
         key_id_bytes = key_id.encode("utf-8")
-        ret = self._lib.ciris_verify_store_named_key(self._handle, key_id_bytes, seed, len(seed))
+        ret = self._lib.ciris_verify_store_named_key(
+            self._handle, key_id_bytes, seed, len(seed)
+        )
 
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("store_named_key")
@@ -2880,7 +2899,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
 
         sig_data = ctypes.c_void_p()
         sig_len = ctypes.c_size_t()
@@ -2898,7 +2919,9 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("sign_with_named_key")
         if ret != 0:
-            raise VerificationFailedError(ret, f"sign_with_named_key failed with code {ret}")
+            raise VerificationFailedError(
+                ret, f"sign_with_named_key failed with code {ret}"
+            )
 
         try:
             return ctypes.string_at(sig_data.value, sig_len.value)
@@ -2920,7 +2943,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_has_named_key(self._handle, key_id_bytes)
@@ -2943,7 +2968,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
 
         key_id_bytes = key_id.encode("utf-8")
         ret = self._lib.ciris_verify_delete_named_key(self._handle, key_id_bytes)
@@ -2967,7 +2994,9 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
 
         pk_data = ctypes.c_void_p()
         pk_len = ctypes.c_size_t()
@@ -2983,7 +3012,9 @@ class CIRISVerify:
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("get_named_key_public")
         if ret != 0:
-            raise VerificationFailedError(ret, f"get_named_key_public failed with code {ret}")
+            raise VerificationFailedError(
+                ret, f"get_named_key_public failed with code {ret}"
+            )
 
         try:
             return ctypes.string_at(pk_data.value, pk_len.value)
@@ -3003,10 +3034,14 @@ class CIRISVerify:
             AttestationInProgressError: If attestation is currently running.
         """
         if not self._has_named_key_support:
-            raise NotImplementedError("Named key functions not available (library version < 1.5.0)")
+            raise NotImplementedError(
+                "Named key functions not available (library version < 1.5.0)"
+            )
 
         json_out = ctypes.c_char_p()
-        ret = self._lib.ciris_verify_list_named_keys(self._handle, ctypes.byref(json_out))
+        ret = self._lib.ciris_verify_list_named_keys(
+            self._handle, ctypes.byref(json_out)
+        )
 
         if ret == CIRIS_ERROR_ATTESTATION_IN_PROGRESS:
             raise AttestationInProgressError("list_named_keys")
@@ -3127,7 +3162,10 @@ class MockCIRISVerify(CIRISVerify):
         """
         # Standard operations are always allowed, even in community mode
         cap_lower = capability.lower()
-        is_standard = cap_lower.startswith("standard:") or cap_lower.startswith("tool:")
+        is_standard = (
+            cap_lower.startswith("standard:")
+            or cap_lower.startswith("tool:")
+        )
 
         if not self._mock_status.allows_licensed_operation():
             if is_standard:
@@ -3185,7 +3223,6 @@ class MockCIRISVerify(CIRISVerify):
         # Use a mock Ed25519 signing key
         if not hasattr(self, "_mock_private_key"):
             from cryptography.hazmat.primitives.asymmetric import ed25519
-
             self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
             self._mock_public_key = self._mock_private_key.public_key()
 
@@ -3198,12 +3235,10 @@ class MockCIRISVerify(CIRISVerify):
         """Mock get_public_key — returns software Ed25519 key."""
         if not hasattr(self, "_mock_private_key"):
             from cryptography.hazmat.primitives.asymmetric import ed25519
-
             self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
             self._mock_public_key = self._mock_private_key.public_key()
 
         from cryptography.hazmat.primitives import serialization
-
         key_bytes = self._mock_public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
@@ -3251,17 +3286,13 @@ class MockCIRISVerify(CIRISVerify):
                 "https": {"reachable": True, "valid": True},
             },
             "audit_trail": None,  # Skipped in mock
-            "python_integrity": (
-                {
-                    "valid": True,
-                    "modules_checked": python_hashes.module_count if python_hashes else 0,
-                    "modules_passed": python_hashes.module_count if python_hashes else 0,
-                    "modules_failed": 0,
-                    "total_hash_valid": True,
-                }
-                if python_hashes
-                else None
-            ),
+            "python_integrity": {
+                "valid": True,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
+                "modules_failed": 0,
+                "total_hash_valid": True,
+            } if python_hashes else None,
             "registry_key_status": "active" if key_fingerprint else "not_checked",
             "checks_passed": 3,
             "checks_total": 3,
@@ -3304,17 +3335,13 @@ class MockCIRISVerify(CIRISVerify):
                 "https": {"reachable": True, "valid": True},
             },
             "audit_trail": None,
-            "python_integrity": (
-                {
-                    "valid": True,
-                    "modules_checked": python_hashes.module_count if python_hashes else 0,
-                    "modules_passed": python_hashes.module_count if python_hashes else 0,
-                    "modules_failed": 0,
-                    "total_hash_valid": True,
-                }
-                if python_hashes
-                else None
-            ),
+            "python_integrity": {
+                "valid": True,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
+                "modules_failed": 0,
+                "total_hash_valid": True,
+            } if python_hashes else None,
             "registry_key_status": "active" if key_fingerprint else "not_checked",
             "checks_passed": 3,
             "checks_total": 3,

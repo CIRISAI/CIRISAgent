@@ -104,7 +104,7 @@ for dir in "$BEEWARE_APP/app/"*; do
     if [ -d "$dir" ]; then
         echo "  Copying $dirname..."
         # Use rsync to exclude gui_static subdirectories
-        rsync -a --exclude='gui_static' --exclude='__pycache__' "$dir" "$RESOURCES_DIR/app/"
+        rsync -a --exclude='gui_static' --exclude='desktop_app' --exclude='__pycache__' "$dir" "$RESOURCES_DIR/app/"
     else
         cp "$dir" "$RESOURCES_DIR/app/"
     fi
@@ -173,7 +173,7 @@ fi
 
 # Overlay latest CIRIS source from main repo (includes any fixes not in BeeWare build)
 echo "Overlaying latest ciris_engine from main repo..."
-rsync -a --exclude='__pycache__' --exclude='gui_static' "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+rsync -a --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
 
 echo "Overlaying latest ciris_adapters from main repo..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"

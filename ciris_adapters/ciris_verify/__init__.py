@@ -32,7 +32,6 @@ from .ffi_bindings import (  # noqa: F401
     LicenseStatusResponse,
     LicenseTier,
     MandatoryDisclosure,
-    MockCIRISVerify,
     PythonIntegrityResult,
     PythonModuleHashes,
     TimeoutError,
@@ -57,7 +56,6 @@ __all__ = [
     "VerificationConfig",
     # Re-exports from FFI bindings
     "CIRISVerify",
-    "MockCIRISVerify",
     "get_library_version",
     "setup_logging",
     "LicenseStatus",

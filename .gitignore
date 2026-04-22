@@ -189,3 +189,4 @@ nohup.out
 # Ad-hoc screenshots dropped at repo root during design work
 /ciris_interact_cell_*.png
 startup_python_hashes.json
+mobile/

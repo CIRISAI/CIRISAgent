@@ -111,15 +111,25 @@ def _execute_postgresql_migration(conn: Any, statements: list[str], name: str, a
         cursor.close()
 
 
-def _execute_sqlite_migration(conn: Any, sql: str, name: str) -> None:
+def _execute_sqlite_migration(conn: Any, statements: list[str], name: str) -> None:
     """Execute migration SQL for SQLite (desktop).
+
+    Uses individual statement execution instead of executescript() for consistency
+    with iOS/PostgreSQL paths and to satisfy static analysis tools.
 
     Args:
         conn: Database connection
-        sql: Raw SQL text
+        statements: List of SQL statements (from trusted migration files)
         name: Migration filename
     """
-    conn.executescript(sql)
+    cursor = conn.cursor()
+    try:
+        for statement in statements:
+            if statement.strip():
+                cursor.execute(statement)
+        conn.commit()
+    finally:
+        cursor.close()
     conn.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (name,))
     conn.commit()
 
@@ -179,7 +189,7 @@ def _apply_migration(conn: Any, migration_file: Path, adapter: Any) -> None:
         elif is_ios:
             _execute_ios_sqlite_migration(conn, statements, name)
         else:
-            _execute_sqlite_migration(conn, sql, name)
+            _execute_sqlite_migration(conn, statements, name)
 
         logger.info(f"Migration {name} applied successfully")
     except Exception as e:

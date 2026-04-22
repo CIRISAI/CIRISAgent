@@ -641,29 +641,80 @@ def _create_postgres_connection(adapter: Any) -> Any:
     return PostgreSQLConnectionWrapper(conn)
 
 
-def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
+class _IOSConnectionProxy:
+    """Proxy that prevents callers from closing/finalizing the real connection.
+
+    Apple's libRPAC.dylib (SQLiteDatabaseTracking) asserts if sqlite3_finalize()
+    is called from a different thread than sqlite3_open(). Python's GC can call
+    Connection.__del__() from any thread. This proxy suppresses close() and
+    __del__() so the real connection stays alive in thread-local storage and is
+    only ever touched by the thread that created it.
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        object.__setattr__(self, '_conn', conn)
+
+    def close(self) -> None:
+        pass  # Never close — connection lives in thread-local
+
+    def __del__(self) -> None:
+        pass  # Never finalize — prevents cross-thread sqlite3_finalize
+
+    def __enter__(self) -> "_IOSConnectionProxy":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        pass  # Don't close on context manager exit
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(object.__getattribute__(self, '_conn'), name)
+
+    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        return object.__getattribute__(self, '_conn').execute(*args, **kwargs)
+
+    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        return object.__getattribute__(self, '_conn').executemany(*args, **kwargs)
+
+    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        return object.__getattribute__(self, '_conn').executescript(*args, **kwargs)
+
+    def cursor(self) -> sqlite3.Cursor:
+        return object.__getattribute__(self, '_conn').cursor()
+
+    def commit(self) -> None:
+        object.__getattribute__(self, '_conn').commit()
+
+    def rollback(self) -> None:
+        object.__getattribute__(self, '_conn').rollback()
+
+    @property
+    def row_factory(self) -> Any:
+        return object.__getattribute__(self, '_conn').row_factory
+
+    @row_factory.setter
+    def row_factory(self, value: Any) -> None:
+        object.__getattribute__(self, '_conn').row_factory = value
+
+
+def _create_sqlite_connection_ios(db_path: str) -> "_IOSConnectionProxy":
     """Create or reuse SQLite connection with iOS-specific settings.
 
-    Uses thread-local connection cache to satisfy Apple's SQLiteDatabaseTracking
-    which asserts if a sqlite3* handle is used from a different thread than the
-    one that opened it. Each thread gets its own persistent connection per db_path.
+    Returns a proxy that prevents callers from closing/finalizing the connection.
+    The real connection lives in thread-local storage, ensuring sqlite3_finalize()
+    only ever runs on the thread that called sqlite3_open() — satisfying Apple's
+    libRPAC.dylib SQLiteDatabaseTracking assertions.
     """
-    # Thread-local cache key
     cache_attr = f"_sqlite_conn_{hash(db_path)}"
     cached: sqlite3.Connection | None = getattr(_ios_thread_local, cache_attr, None)
 
-    # Reuse existing connection if it's still valid
     if cached is not None:
         try:
             cached.execute("SELECT 1")
             logger.debug(f"[DB_CONNECT] iOS: reusing thread-local connection for {db_path}")
-            return cached
+            return _IOSConnectionProxy(cached)
         except Exception:
             logger.debug("[DB_CONNECT] iOS: cached connection invalid, creating new one")
-            try:
-                cached.close()
-            except Exception:
-                pass
+            # Don't close here — let it die with the thread
 
     logger.debug(f"[DB_CONNECT] iOS: creating new thread-local connection for {db_path}")
     try:
@@ -671,12 +722,12 @@ def _create_sqlite_connection_ios(db_path: str) -> sqlite3.Connection:
             db_path,
             check_same_thread=False,
             detect_types=sqlite3.PARSE_DECLTYPES,
-            isolation_level=None,  # Autocommit mode - avoids transaction state issues
-            timeout=30.0,  # Longer timeout for iOS
+            isolation_level=None,
+            timeout=30.0,
         )
         setattr(_ios_thread_local, cache_attr, conn)
         logger.debug(f"[DB_CONNECT] iOS: thread-local connection created and cached")
-        return conn
+        return _IOSConnectionProxy(conn)
     except Exception as e:
         logger.error(f"[DB_CONNECT] sqlite3.connect FAILED: {e}")
         raise

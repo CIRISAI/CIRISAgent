@@ -21,24 +21,21 @@ from ciris_engine.logic.buses.bus_manager import BusManager
 from ciris_engine.logic.handlers.memory.forget_handler import ForgetHandler
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.secrets.service import SecretsService
-from ciris_engine.schemas.services.operations import MemoryOpStatus
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import ForgetParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
-from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
-from ciris_engine.schemas.services.operations import MemoryOpResult
+from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
 
 
 @contextmanager
 def patch_persistence_properly(test_task: Optional[Task] = None) -> Any:
     """Properly patch persistence in the base handler."""
-    with patch(
-        "ciris_engine.logic.infrastructure.handlers.base_handler.persistence"
-    ) as mock_base_p:
+    with patch("ciris_engine.logic.infrastructure.handlers.base_handler.persistence") as mock_base_p:
         # Configure base handler persistence
         mock_base_p.get_task_by_id.return_value = test_task
         mock_base_p.add_thought = Mock()

@@ -19,7 +19,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Environment variable names (single source of truth)
 # ---------------------------------------------------------------------------

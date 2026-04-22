@@ -138,13 +138,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         else:
             self.db_path = Path(db_path)
 
-        # Retention configuration
-        # TODO: Implement audit trail cleanup using retention_days as a threshold
-        # when the resource monitor signals storage pressure. Currently audit data
-        # is retained indefinitely. When we evolve the resource manager to respond
-        # to disk constraints, add a cleanup_old_entries(retention_days) method that
-        # purges entries older than retention_days while preserving hash chain
-        # integrity (re-anchor the chain after truncation).
+        # Retention configuration (cleanup implemented in cleanup_old_entries)
         self.retention_days = retention_days
 
         # Cache for recent entries
@@ -759,6 +753,160 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             raise ValueError(f"Unsupported export format: {format}")
 
         return str(filename)
+
+    async def cleanup_old_entries(self, retention_days: Optional[int] = None) -> int:
+        """
+        Clean up audit entries older than retention threshold.
+
+        This method deletes audit entries older than the specified retention period
+        while preserving hash chain integrity by re-anchoring the chain at the oldest
+        remaining entry.
+
+        Args:
+            retention_days: Days to retain (defaults to self.retention_days, typically 90)
+
+        Returns:
+            Number of entries deleted
+
+        Note:
+            After truncation, the oldest remaining entry's previous_hash is updated to
+            "REANCHOR_{timestamp}" to mark it as the new chain anchor. This maintains
+            audit integrity while allowing old data to be purged.
+        """
+        days = retention_days or self.retention_days
+        if days <= 0:
+            logger.warning("Invalid retention_days, skipping cleanup")
+            return 0
+
+        cutoff_time = (self._time_service.now() if self._time_service else datetime.now()) - __import__(
+            "datetime"
+        ).timedelta(days=days)
+        cutoff_iso = cutoff_time.isoformat()
+
+        deleted_count = 0
+
+        # Step 1: Delete old entries from SQLite audit_log table and re-anchor chain
+        if self._db_connection and self.enable_hash_chain:
+            try:
+                deleted_count = await self._cleanup_audit_log_table(cutoff_iso)
+            except Exception as e:
+                logger.error(f"Failed to cleanup audit_log table: {e}", exc_info=True)
+
+        # Step 2: Delete old audit graph nodes via memory bus
+        if self._memory_bus:
+            try:
+                graph_deleted = await self._cleanup_audit_graph_nodes(cutoff_time)
+                logger.info(f"Audit cleanup: deleted {graph_deleted} graph nodes older than {days} days")
+            except Exception as e:
+                logger.error(f"Failed to cleanup audit graph nodes: {e}", exc_info=True)
+
+        # Step 3: Clear expired entries from cache
+        self._recent_entries = [e for e in self._recent_entries if e.timestamp >= cutoff_time]
+
+        if deleted_count > 0:
+            logger.info(f"Audit retention cleanup complete: deleted {deleted_count} entries older than {days} days")
+
+        return deleted_count
+
+    async def _cleanup_audit_log_table(self, cutoff_iso: str) -> int:
+        """Delete old entries from audit_log table and re-anchor hash chain."""
+        if not self._db_connection:
+            return 0
+
+        def _do_cleanup() -> int:
+            if not self._db_connection:
+                return 0
+
+            cursor = self._db_connection.cursor()
+
+            # Find the oldest entry that will remain (first entry after cutoff)
+            cursor.execute(
+                """
+                SELECT entry_id, sequence_number, entry_hash
+                FROM audit_log
+                WHERE event_timestamp >= ?
+                ORDER BY sequence_number ASC
+                LIMIT 1
+                """,
+                (cutoff_iso,),
+            )
+            anchor_row = cursor.fetchone()
+
+            if not anchor_row:
+                # All entries are being deleted or table is empty
+                logger.info("No entries remain after cutoff, clearing audit_log")
+                cursor.execute("DELETE FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
+                deleted = cursor.rowcount
+                self._db_connection.commit()
+                return deleted
+
+            anchor_entry_id, anchor_seq, _anchor_hash = anchor_row
+
+            # Count entries to be deleted
+            cursor.execute("SELECT COUNT(*) FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
+            count_to_delete = cursor.fetchone()[0]
+
+            if count_to_delete == 0:
+                return 0
+
+            # Re-anchor the chain: update the oldest remaining entry's previous_hash
+            # This marks it as a new anchor point after truncation
+            reanchor_marker = f"REANCHOR_{cutoff_iso}"
+            cursor.execute(
+                """
+                UPDATE audit_log
+                SET previous_hash = ?
+                WHERE entry_id = ?
+                """,
+                (reanchor_marker, anchor_entry_id),
+            )
+
+            # Delete old entries
+            cursor.execute("DELETE FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
+            deleted = cursor.rowcount
+
+            self._db_connection.commit()
+
+            logger.info(
+                f"Audit chain re-anchored at sequence {anchor_seq}, " f"deleted {deleted} entries before {cutoff_iso}"
+            )
+            return deleted
+
+        return await asyncio.to_thread(_do_cleanup)
+
+    async def _cleanup_audit_graph_nodes(self, cutoff_time: datetime) -> int:
+        """Delete audit nodes older than cutoff from graph storage."""
+        if not self._memory_bus:
+            return 0
+
+        deleted = 0
+
+        # Query for old audit nodes
+        from ciris_engine.schemas.services.graph_core import NodeType
+
+        search_query = f"type:{NodeType.AUDIT_ENTRY.value} scope:{GraphScope.LOCAL.value}"
+        try:
+            nodes = await self._memory_bus.search(search_query, filters=None, handler_name="audit_service")
+
+            for node in nodes:
+                # Extract timestamp from node (updated_at at node level, or created_at in attributes)
+                node_timestamp = node.updated_at
+                if node_timestamp is None and hasattr(node.attributes, "created_at"):
+                    node_timestamp = node.attributes.created_at
+                if node_timestamp and node_timestamp < cutoff_time:
+                    # Delete via forget - pass the full node
+                    result = await self._memory_bus.forget(
+                        node=node,
+                        handler_name="audit_service",
+                        metadata={"reason": f"retention_cleanup_{self.retention_days}d"},
+                    )
+                    if result.status == MemoryOpStatus.OK:
+                        deleted += 1
+
+        except Exception as e:
+            logger.error(f"Error querying/deleting audit graph nodes: {e}")
+
+        return deleted
 
     # ========== GraphServiceProtocol Implementation ==========
 

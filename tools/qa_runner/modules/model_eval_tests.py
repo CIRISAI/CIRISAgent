@@ -150,12 +150,8 @@ class ModelEvalTests:
         """Run model evaluation tests."""
         self.console.print("\n[bold cyan]🧠 Model Evaluation - Conversational Questions[/bold cyan]")
         self.console.print("=" * 70)
-        self.console.print(
-            "[yellow]NOTE: This module requires --live mode with a real LLM.[/yellow]"
-        )
-        self.console.print(
-            "[dim]Testing how the agent handles nuanced, real-world conversations.[/dim]\n"
-        )
+        self.console.print("[yellow]NOTE: This module requires --live mode with a real LLM.[/yellow]")
+        self.console.print("[dim]Testing how the agent handles nuanced, real-world conversations.[/dim]\n")
 
         # Start SSE monitoring
         try:

@@ -21,8 +21,10 @@ SECRETS = {
     "coinbase_paymaster_url": os.path.expanduser("~/.coinbase_paymaster_url"),
 }
 
+
 def obfuscate(value: str) -> list[int]:
     return [ord(ch) ^ XOR_KEY[i % len(XOR_KEY)] for i, ch in enumerate(value)]
+
 
 def main():
     obfuscated = {}
@@ -39,14 +41,16 @@ def main():
     # Generate getter functions
     getters = []
     for name, data in obfuscated.items():
-        getters.append(f'''
+        getters.append(
+            f'''
 def get_{name}() -> str:
     """Get {name} (obfuscated at build time)."""
     data = {data}
     if not data:
         return ""
     return _deobfuscate(data, _XK)
-''')
+'''
+        )
 
     available = "\n".join(f"  - get_{name}()" for name in obfuscated)
 

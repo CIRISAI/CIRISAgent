@@ -303,7 +303,9 @@ async def wipe_signing_key(
 
     # Sanitize user-controlled reason field for safe logging (truncate to prevent log injection)
     safe_reason = body.reason[:100].replace("\n", " ").replace("\r", " ") if body.reason else "No reason"
-    logger.warning("WIPE SIGNING KEY requested by user=%s role=%s reason=%s", auth.user_id, auth.role.value, safe_reason)
+    logger.warning(
+        "WIPE SIGNING KEY requested by user=%s role=%s reason=%s", auth.user_id, auth.role.value, safe_reason
+    )
     logger.warning("THIS WILL PERMANENTLY DESTROY WALLET ACCESS!")
 
     try:

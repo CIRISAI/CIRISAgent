@@ -9,12 +9,7 @@ from ciris_adapters.mobile_local_llm.capability import (
     detect_architecture,
     probe_device_capability,
 )
-from ciris_adapters.mobile_local_llm.config import (
-    DeviceTier,
-    MobileLocalLLMConfig,
-    ModelVariant,
-    Platform,
-)
+from ciris_adapters.mobile_local_llm.config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform
 
 
 def _config(**overrides):

@@ -140,7 +140,6 @@ def client_with_auth(test_db, mock_orchestrator):
     Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
     """
     from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
-
     from tests.fixtures.auth import setup_test_admin_user
 
     app = create_app()

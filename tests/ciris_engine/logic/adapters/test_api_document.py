@@ -610,19 +610,19 @@ class TestSSRFProtection:
         def mock_getaddrinfo(hostname, port, family=None):
             # Return a public IP (Google's DNS)
             return [
-                (2, 1, 6, '', ('8.8.8.8', 0)),
+                (2, 1, 6, "", ("8.8.8.8", 0)),
             ]
 
         with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
             is_valid, resolved_ip = validate_url_for_ssrf("https://example.com/file.pdf")
             assert is_valid is True
-            assert resolved_ip == '8.8.8.8'
+            assert resolved_ip == "8.8.8.8"
             is_valid, resolved_ip = validate_url_for_ssrf("https://www.google.com/doc.pdf")
             assert is_valid is True
-            assert resolved_ip == '8.8.8.8'
+            assert resolved_ip == "8.8.8.8"
             is_valid, resolved_ip = validate_url_for_ssrf("https://cdn.example.com/files/document.docx")
             assert is_valid is True
-            assert resolved_ip == '8.8.8.8'
+            assert resolved_ip == "8.8.8.8"
 
     def test_validate_url_requires_http_or_https(self):
         """Test that only http/https schemes are allowed."""

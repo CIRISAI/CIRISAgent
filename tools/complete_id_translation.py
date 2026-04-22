@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+
 class IndonesianTranslator:
     """Translates CIRIS UI strings to Indonesian using glossary terms."""
 
@@ -28,7 +29,7 @@ class IndonesianTranslator:
             "RECALL": "PANGGIL",
             "FORGET": "LUPAKAN",
             "TASK_COMPLETE": "SELESAI",
-           "Observe": "Amati",
+            "Observe": "Amati",
             "Speak": "Bicara",
             "Tool": "Alat",
             "Reject": "Tolak",
@@ -103,19 +104,13 @@ class IndonesianTranslator:
     def run(self):
         """Main translation process."""
         print("Loading English source...")
-        en_path = self.root / 'localization' / 'en.json'
-        with open(en_path, 'r', encoding='utf-8') as f:
+        en_path = self.root / "localization" / "en.json"
+        with open(en_path, "r", encoding="utf-8") as f:
             en_data = json.load(f)
 
         print("Translating to Indonesian...")
         # Start with metadata
-        id_data = {
-            "_meta": {
-                "language": "id",
-                "language_name": "Indonesian",
-                "direction": "ltr"
-            }
-        }
+        id_data = {"_meta": {"language": "id", "language_name": "Indonesian", "direction": "ltr"}}
 
         # Translate other sections
         for key, value in en_data.items():
@@ -129,13 +124,14 @@ class IndonesianTranslator:
                 id_data[key] = value
 
         # Save result
-        id_path = self.root / 'localization' / 'id.json'
-        with open(id_path, 'w', encoding='utf-8') as f:
+        id_path = self.root / "localization" / "id.json"
+        with open(id_path, "w", encoding="utf-8") as f:
             json.dump(id_data, f, ensure_ascii=False, indent=4)
 
         print(f"✓ Saved Indonesian translation to {id_path}")
         print(f"  File size: {id_path.stat().st_size / 1024:.1f} KB")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     translator = IndonesianTranslator()
     translator.run()

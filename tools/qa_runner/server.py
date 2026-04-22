@@ -778,9 +778,13 @@ class APIServerManager:
                 env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"
             self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
             self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT={env['CIRIS_ACCORD_METRICS_CONSENT']}[/dim]")
-            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={env['CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP']}[/dim]")
+            self.console.print(
+                f"[dim]   CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={env['CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP']}[/dim]"
+            )
             if self.config.live_lens:
-                self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]")
+                self.console.print(
+                    f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]"
+                )
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():

@@ -8,10 +8,7 @@ from unittest import mock
 import pytest
 
 from ciris_adapters.mobile_local_llm.config import MobileLocalLLMConfig
-from ciris_adapters.mobile_local_llm.inference_server import (
-    InferenceServerError,
-    InferenceServerManager,
-)
+from ciris_adapters.mobile_local_llm.inference_server import InferenceServerError, InferenceServerManager
 
 
 def _config(**overrides) -> MobileLocalLLMConfig:

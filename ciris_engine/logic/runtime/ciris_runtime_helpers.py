@@ -635,6 +635,7 @@ def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[An
 
     # In first-run mode or when services are disabled, there is no agent task - just monitor adapters
     from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
+
     first_run = is_first_run()
     services_disabled = get_ciris_services_disabled()
 

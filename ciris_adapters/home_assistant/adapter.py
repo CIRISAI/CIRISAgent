@@ -35,9 +35,7 @@ def _register_ingress_auth_if_supervisor_mode() -> None:
     provider = get_ha_ingress_auth_provider()
     if provider:
         try:
-            from ciris_engine.logic.adapters.api.dependencies.auth import (
-                register_ingress_auth_provider,
-            )
+            from ciris_engine.logic.adapters.api.dependencies.auth import register_ingress_auth_provider
 
             register_ingress_auth_provider(provider, priority=100)
             logger.info("[HA_ADAPTER] Registered HA ingress auth provider (Supervisor mode)")
@@ -186,9 +184,7 @@ class HomeAssistantAdapter(Service):
         provider = get_ha_ingress_auth_provider()
         if provider:
             try:
-                from ciris_engine.logic.adapters.api.dependencies.auth import (
-                    unregister_ingress_auth_provider,
-                )
+                from ciris_engine.logic.adapters.api.dependencies.auth import unregister_ingress_auth_provider
 
                 unregister_ingress_auth_provider(provider)
                 logger.info("[HA_ADAPTER] Unregistered HA ingress auth provider")

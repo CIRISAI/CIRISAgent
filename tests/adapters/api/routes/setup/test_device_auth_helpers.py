@@ -237,7 +237,9 @@ class TestRegisterSelfCustodyKey:
                     return_value=(None, RuntimeError("Signing failed")),
                 ):
                     result = await _register_self_custody_key(
-                        "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                        "device-code",
+                        "https://portal.ciris.ai",
+                        registration_challenge="0102030405060708090a0b0c0d0e0f10",
                     )
 
         assert result is None
@@ -294,7 +296,9 @@ class TestRegisterSelfCustodyKey:
                     with patch("httpx.AsyncClient", return_value=mock_client_cm):
                         with caplog.at_level(logging.INFO):
                             result = await _register_self_custody_key(
-                                "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                                "device-code",
+                                "https://portal.ciris.ai",
+                                registration_challenge="0102030405060708090a0b0c0d0e0f10",
                             )
 
         assert result == "test-key-id"
@@ -357,7 +361,9 @@ class TestSelfCustodySecurityInvariants:
                 ):
                     with patch("httpx.AsyncClient", return_value=mock_client_cm):
                         await _register_self_custody_key(
-                            "device-code", "https://portal.ciris.ai", registration_challenge="0102030405060708090a0b0c0d0e0f10"
+                            "device-code",
+                            "https://portal.ciris.ai",
+                            registration_challenge="0102030405060708090a0b0c0d0e0f10",
                         )
 
         # Verify no private key fields in any request

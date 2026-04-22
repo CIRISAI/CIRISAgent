@@ -21,6 +21,7 @@ os.environ["CIRIS_MOCK_LLM"] = "true"
 def _reload_mobile_main():
     """Reload mobile_main module to get fresh state."""
     import android.app.src.main.python.mobile_main as mobile_main
+
     importlib.reload(mobile_main)
     return mobile_main
 

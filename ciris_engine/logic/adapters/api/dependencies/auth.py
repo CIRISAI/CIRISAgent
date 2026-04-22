@@ -14,10 +14,7 @@ from typing import Any, Callable, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
-from ciris_engine.protocols.services.infrastructure.ingress_auth import (
-    IngressAuthProviderProtocol,
-    IngressUser,
-)
+from ciris_engine.protocols.services.infrastructure.ingress_auth import IngressAuthProviderProtocol, IngressUser
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, APIKeyInfo, AuthContext, UserInfo, UserRole
 
 from ..services.auth_service import APIAuthService
@@ -136,6 +133,7 @@ def get_active_ingress_provider_names() -> List[str]:
     """Get names of all active ingress auth providers (for status/debugging)."""
     return [r.provider.provider_name for r in _ingress_auth_providers]
 
+
 __all__ = [
     # Auth context and service
     "AuthContext",
@@ -197,8 +195,8 @@ def _handle_service_token_auth(request: Request, auth_service: APIAuthService, s
         token_hash = hashlib.sha256(service_token.encode("utf-8")).hexdigest()[:16] + "..."
         client_ip = request.client.host if request.client else "unknown"
         # Sanitize user-agent to prevent log injection attacks
-        raw_user_agent = request.headers.get('user-agent', 'unknown')
-        sanitized_user_agent = raw_user_agent.replace('\n', '').replace('\r', '')[:200]
+        raw_user_agent = request.headers.get("user-agent", "unknown")
+        sanitized_user_agent = raw_user_agent.replace("\n", "").replace("\r", "")[:200]
         logger.warning(
             f"[AUTH SECURITY] Failed service token authentication: token_hash={token_hash}, client_ip={client_ip}, "
             f"user_agent={sanitized_user_agent}"
@@ -341,7 +339,9 @@ async def _handle_ingress_auth(
         # Create the user
         username = ingress_user.display_name or ingress_user.username or ingress_user.external_id
         # SECURITY: Log provider only, not full external_id
-        logger.info(f"[INGRESS_AUTH] Creating new user from ingress: {username} ({ingress_user.provider}), role: {user_role}")
+        logger.info(
+            f"[INGRESS_AUTH] Creating new user from ingress: {username} ({ingress_user.provider}), role: {user_role}"
+        )
 
         # Use a placeholder password - ingress users don't use passwords
         import secrets

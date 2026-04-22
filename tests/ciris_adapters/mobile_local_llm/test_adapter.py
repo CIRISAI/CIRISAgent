@@ -9,12 +9,7 @@ import pytest
 
 from ciris_adapters.mobile_local_llm.adapter import MobileLocalLLMAdapter
 from ciris_adapters.mobile_local_llm.capability import DeviceCapabilityReport
-from ciris_adapters.mobile_local_llm.config import (
-    DeviceTier,
-    MobileLocalLLMConfig,
-    ModelVariant,
-    Platform,
-)
+from ciris_adapters.mobile_local_llm.config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -58,9 +53,7 @@ def _incapable_report() -> DeviceCapabilityReport:
 @pytest.fixture
 def patched_probe():
     """Patch the capability probe used by both adapter and service."""
-    with mock.patch(
-        "ciris_adapters.mobile_local_llm.adapter.probe_device_capability"
-    ) as adapter_probe, mock.patch(
+    with mock.patch("ciris_adapters.mobile_local_llm.adapter.probe_device_capability") as adapter_probe, mock.patch(
         "ciris_adapters.mobile_local_llm.service.probe_device_capability"
     ) as service_probe:
         yield adapter_probe, service_probe
@@ -87,9 +80,7 @@ class TestAdapterRegistration:
         assert adapter.config.model_variant == ModelVariant.GEMMA_4_E4B
 
     async def test_accepts_config_as_dict_overlay(self):
-        adapter = MobileLocalLLMAdapter(
-            runtime=None, adapter_config={"port": 9100, "host": "127.0.0.1"}
-        )
+        adapter = MobileLocalLLMAdapter(runtime=None, adapter_config={"port": 9100, "host": "127.0.0.1"})
         assert adapter.config.port == 9100
 
     async def test_dict_overlay_coerces_enum_strings(self):

@@ -28,7 +28,7 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .capability import DeviceCapabilityReport, probe_device_capability
-from .config import MobileLocalLLMConfig, DeviceTier, load_config_from_env
+from .config import DeviceTier, MobileLocalLLMConfig, load_config_from_env
 from .service import MobileLocalLLMService
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,7 @@ class MobileLocalLLMAdapter(Service):
         # server. Weaker devices never flip to available, so the loop would
         # be pure noise there.
         if self._llm_service.available:
-            self._health_task = asyncio.create_task(
-                self._health_loop(), name="mobile-local-llm-health"
-            )
+            self._health_task = asyncio.create_task(self._health_loop(), name="mobile-local-llm-health")
 
         logger.info(
             "MobileLocalLLMAdapter started (available=%s, tier=%s)",
@@ -217,9 +215,7 @@ class MobileLocalLLMAdapter(Service):
                 continue
 
             consecutive_failures += 1
-            logger.warning(
-                "MobileLocalLLM: health probe failed (consecutive=%s)", consecutive_failures
-            )
+            logger.warning("MobileLocalLLM: health probe failed (consecutive=%s)", consecutive_failures)
             if consecutive_failures >= 3:
                 logger.error(
                     "MobileLocalLLM: marking local provider permanently unavailable after "

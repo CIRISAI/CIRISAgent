@@ -54,6 +54,8 @@ class QAModule(Enum):
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
+    SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
+    MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
 
     # Cognitive state live testing modules
     SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
@@ -179,6 +181,10 @@ class QAConfig:
     # Fail-fast configuration
     fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
     test_timeout: float = 30.0  # Timeout for individual test interactions
+
+    # Memory benchmark configuration
+    message_count: int = 100  # Number of messages to send in memory benchmark
+    concurrent_channels: int = 4  # Number of concurrent channels for parallel testing
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

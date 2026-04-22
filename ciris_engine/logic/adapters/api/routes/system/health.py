@@ -46,13 +46,13 @@ async def _check_provider_health(service_provider: object) -> bool:
         True if the provider is healthy, False otherwise.
     """
     # Get the actual service instance from the ServiceProvider wrapper
-    service = getattr(service_provider, 'instance', service_provider)
-    provider_name = getattr(service_provider, 'name', str(service_provider))
+    service = getattr(service_provider, "instance", service_provider)
+    provider_name = getattr(service_provider, "name", str(service_provider))
 
     try:
-        if hasattr(service, 'is_healthy'):
+        if hasattr(service, "is_healthy"):
             return bool(await service.is_healthy())
-        if hasattr(service, 'healthy'):
+        if hasattr(service, "healthy"):
             return bool(service.healthy)
     except Exception as e:
         logger.debug(f"Provider '{provider_name}' health check failed: {e}")
@@ -70,12 +70,14 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
 
     if not llm_providers:
         logger.debug("No LLM providers registered - degraded_mode=True")
-        return False, [SystemWarning(
-            code="no_llm_provider",
-            message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
-            severity="error",
-            action_url="/settings/llm",
-        )]
+        return False, [
+            SystemWarning(
+                code="no_llm_provider",
+                message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
+                severity="error",
+                action_url="/settings/llm",
+            )
+        ]
 
     # Check if any provider is healthy
     for service_provider in llm_providers:
@@ -83,12 +85,14 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
             return True, []
 
     logger.debug(f"All {len(llm_providers)} providers unhealthy - degraded_mode=True")
-    return False, [SystemWarning(
-        code="llm_providers_unhealthy",
-        message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
-        severity="warning",
-        action_url="/settings/llm",
-    )]
+    return False, [
+        SystemWarning(
+            code="llm_providers_unhealthy",
+            message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
+            severity="warning",
+            action_url="/settings/llm",
+        )
+    ]
 
 
 async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:
@@ -107,12 +111,14 @@ async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWa
             adapter_statuses = await adapter_manager.get_all_adapter_status()
             for status in adapter_statuses:
                 if status.needs_reauth:
-                    warnings.append(SystemWarning(
-                        code="adapter_needs_reauth",
-                        message=f"Adapter '{status.adapter_id}' needs re-authentication: {status.reauth_reason or 'Token expired'}",
-                        severity="warning",
-                        action_url=f"/settings/adapters/{status.adapter_id}",
-                    ))
+                    warnings.append(
+                        SystemWarning(
+                            code="adapter_needs_reauth",
+                            message=f"Adapter '{status.adapter_id}' needs re-authentication: {status.reauth_reason or 'Token expired'}",
+                            severity="warning",
+                            action_url=f"/settings/adapters/{status.adapter_id}",
+                        )
+                    )
         except Exception as e:
             logger.debug(f"Could not check adapter reauth status: {e}")
 

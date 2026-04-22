@@ -269,6 +269,7 @@ def _sync_resolve_via_serviceinfo(
     except Exception as e:
         logger.info(f"[mDNS] Resolution failed for {hostname}: {e}")
         import traceback
+
         logger.debug(f"[mDNS] Traceback: {traceback.format_exc()}")
         return None
     finally:

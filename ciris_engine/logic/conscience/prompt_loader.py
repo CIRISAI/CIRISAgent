@@ -36,6 +36,7 @@ def _sanitize_for_log(value: str, max_length: int = 50) -> str:
         sanitized = sanitized[:max_length] + "..."
     return sanitized
 
+
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"
 

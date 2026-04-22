@@ -114,8 +114,7 @@ class PonderHandler(BaseActionHandler):
         # Note: max_rounds (default 7) is enforced by ThoughtDepthGuardrail
         max_rounds = self.max_rounds
         clarity_hint = (
-            "If the task is unclear, ask for clarification. "
-            "There may be no task at all - just casual conversation."
+            "If the task is unclear, ask for clarification. " "There may be no task at all - just casual conversation."
         )
         if thought_depth <= 3:
             guidance = (

@@ -117,16 +117,12 @@ def _tree(run: Run) -> List[Dict[str, Any]]:
 
 
 def _click(run: Run, tag: str) -> bool:
-    r = requests.post(
-        f"{TEST_BASE}/click", json={"testTag": tag}, timeout=3
-    )
+    r = requests.post(f"{TEST_BASE}/click", json={"testTag": tag}, timeout=3)
     return r.ok and r.json().get("success") is True
 
 
 def _mouse_xy(run: Run, x: int, y: int) -> bool:
-    r = requests.post(
-        f"{TEST_BASE}/mouse-click-xy", json={"x": x, "y": y}, timeout=3
-    )
+    r = requests.post(f"{TEST_BASE}/mouse-click-xy", json={"x": x, "y": y}, timeout=3)
     return r.ok and r.json().get("success") is True
 
 

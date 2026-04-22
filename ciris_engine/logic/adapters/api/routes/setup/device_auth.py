@@ -458,7 +458,9 @@ async def _call_portal_register_key(
 
             if resp.status_code != 200:
                 body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                logger.warning("[SELF-CUSTODY] Portal register-key failed: %s", body.get("error", f"HTTP {resp.status_code}"))
+                logger.warning(
+                    "[SELF-CUSTODY] Portal register-key failed: %s", body.get("error", f"HTTP {resp.status_code}")
+                )
                 return None
 
             data = resp.json()
@@ -509,7 +511,9 @@ async def _call_portal_activate_key(
                 return True
 
             body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-            logger.warning("[SELF-CUSTODY] Portal activate-key failed: %s", body.get("error", f"HTTP {resp.status_code}"))
+            logger.warning(
+                "[SELF-CUSTODY] Portal activate-key failed: %s", body.get("error", f"HTTP {resp.status_code}")
+            )
             return False
 
     except httpx.HTTPError as e:
@@ -552,7 +556,9 @@ async def _register_self_custody_key(
     logger.info("[SELF-CUSTODY] Step 1: Getting public key from CIRISVerify...")
     public_key, error = _get_public_key_on_large_stack()
     if error is not None or public_key is None:
-        logger.warning("[SELF-CUSTODY] Key registration skipped: %s", str(error) if error else "Failed to get public key")
+        logger.warning(
+            "[SELF-CUSTODY] Key registration skipped: %s", str(error) if error else "Failed to get public key"
+        )
         return None
 
     public_key_hex = public_key.hex()
@@ -576,7 +582,9 @@ async def _register_self_custody_key(
 
     registration_signature, sign_error = _sign_challenge_on_large_stack(challenge_bytes)
     if sign_error is not None or registration_signature is None:
-        logger.warning("[SELF-CUSTODY] Registration signing failed: %s", str(sign_error) if sign_error else "Failed to sign")
+        logger.warning(
+            "[SELF-CUSTODY] Registration signing failed: %s", str(sign_error) if sign_error else "Failed to sign"
+        )
         return None
 
     # Step 4: Call Portal /api/device/register-key
@@ -592,7 +600,9 @@ async def _register_self_custody_key(
     activation_challenge = bytes.fromhex(activation_challenge_hex)
     activation_signature, sign_error = _sign_challenge_on_large_stack(activation_challenge)
     if sign_error is not None or activation_signature is None:
-        logger.warning("[SELF-CUSTODY] Activation signing failed: %s", str(sign_error) if sign_error else "Failed to sign")
+        logger.warning(
+            "[SELF-CUSTODY] Activation signing failed: %s", str(sign_error) if sign_error else "Failed to sign"
+        )
         return None
 
     # Step 6: Call Portal /api/device/activate-key

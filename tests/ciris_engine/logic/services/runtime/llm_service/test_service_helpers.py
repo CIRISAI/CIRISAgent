@@ -764,9 +764,9 @@ class TestIsLocalEndpoint:
         # These ports are strong indicators of local servers
         port_urls = [
             "http://myserver:11434",  # Ollama
-            "http://myserver:8080",   # llama.cpp
-            "http://myserver:1234",   # LM Studio
-            "http://myserver:8000",   # vLLM
+            "http://myserver:8080",  # llama.cpp
+            "http://myserver:1234",  # LM Studio
+            "http://myserver:8000",  # vLLM
         ]
 
         for url in port_urls:
@@ -837,9 +837,9 @@ def _check_local_endpoint(base_url: str) -> bool:
         "172.16.",
         ".local",
         ":11434",  # Ollama default port
-        ":8080",   # llama.cpp default port
-        ":1234",   # LM Studio default port
-        ":8000",   # vLLM default port
+        ":8080",  # llama.cpp default port
+        ":1234",  # LM Studio default port
+        ":8000",  # vLLM default port
     ]
 
     return any(indicator in base_url_lower for indicator in local_indicators)

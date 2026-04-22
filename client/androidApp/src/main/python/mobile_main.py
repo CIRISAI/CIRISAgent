@@ -429,6 +429,7 @@ _pydantic_ready = False
 try:
     # Check if we're running on Android (java module available via Chaquopy)
     import importlib.util
+
     if importlib.util.find_spec("java") is not None:
         _pydantic_ready = setup_pydantic_core()
     else:

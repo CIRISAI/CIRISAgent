@@ -69,7 +69,7 @@ class SecurityConfig(BaseModel):
     secrets_key_path: Path = Field(Path(".ciris_keys"), description="Directory containing secrets master key")
     secrets_key_storage_mode: str = Field(
         "auto",
-        description="Key storage mode: 'software' (file-based), 'hardware' (CIRISVerify), 'auto' (hardware if available)"
+        description="Key storage mode: 'software' (file-based), 'hardware' (CIRISVerify), 'auto' (hardware if available)",
     )
     enable_signed_audit: bool = Field(True, description="Enable cryptographic signing of audit entries")
     max_thought_depth: int = Field(7, description="Maximum thought chain depth before auto-defer")

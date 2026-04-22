@@ -986,8 +986,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Cloud/CIRIS providers get "ciris_primary"
         effective_url = base_url or ""
         is_local_provider = any(
-            x in effective_url.lower()
-            for x in ["localhost", "127.0.0.1", "192.168.", "10.", "172.16."]
+            x in effective_url.lower() for x in ["localhost", "127.0.0.1", "192.168.", "10.", "172.16."]
         )
         service_name = "local_primary" if is_local_provider else "ciris_primary"
 
@@ -1186,10 +1185,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         This enables providers added via the API to survive restarts.
         """
-        from ciris_engine.logic.persistence.llm_providers import (
-            LLMProviderConfig,
-            list_providers,
-        )
+        from ciris_engine.logic.persistence.llm_providers import LLMProviderConfig, list_providers
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
         from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
@@ -1218,9 +1214,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             for provider_name, config in providers.items():
                 try:
                     # Check if already registered (avoid duplicates)
-                    existing = self.service_registry.get_provider_by_name(
-                        provider_name, ServiceType.LLM
-                    )
+                    existing = self.service_registry.get_provider_by_name(provider_name, ServiceType.LLM)
                     if existing:
                         logger.debug(f"Provider '{provider_name}' already registered, skipping")
                         continue
@@ -1231,10 +1225,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
                         api_key = "local"
 
                     # Use longer timeout for local endpoints (Jetson, llama.cpp, etc.)
-                    is_local = config.provider_id in ("local", "local_inference") or \
-                               "localhost" in config.base_url or \
-                               "192.168." in config.base_url or \
-                               ".local" in config.base_url
+                    is_local = (
+                        config.provider_id in ("local", "local_inference")
+                        or "localhost" in config.base_url
+                        or "192.168." in config.base_url
+                        or ".local" in config.base_url
+                    )
                     timeout = 120 if is_local else 60  # 2 min for local, 1 min for cloud
 
                     llm_config = OpenAIConfig(
@@ -1565,8 +1561,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             # Check critical services (LLM service is optional during first-run or when disabled)
             from typing import Any, List
 
-            from ciris_engine.logic.setup.first_run import is_first_run
             from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
+            from ciris_engine.logic.setup.first_run import is_first_run
 
             # Use named dict for better error messages
             critical_services: dict[str, Any] = {

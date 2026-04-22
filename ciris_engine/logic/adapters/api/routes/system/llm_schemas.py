@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.utils.serialization import serialize_timestamp
 
-
 # ============================================================================
 # Enums
 # ============================================================================
@@ -97,9 +96,7 @@ class ProviderMetrics(BaseModel):
     last_request_time: Optional[datetime] = Field(None, description="Last request timestamp")
     last_failure_time: Optional[datetime] = Field(None, description="Last failure timestamp")
     is_rate_limited: bool = Field(False, description="Currently in rate limit cooldown")
-    rate_limit_cooldown_remaining_seconds: Optional[float] = Field(
-        None, description="Seconds remaining in cooldown"
-    )
+    rate_limit_cooldown_remaining_seconds: Optional[float] = Field(None, description="Seconds remaining in cooldown")
 
     @field_serializer("last_request_time", "last_failure_time")
     def serialize_times(self, dt: Optional[datetime], _info: Any) -> Optional[str]:

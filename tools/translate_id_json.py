@@ -11,11 +11,7 @@ from pathlib import Path
 # Based on /home/emoore/CIRISAgent/docs/localization/glossaries/id_glossary.md
 
 TRANSLATIONS = {
-    "_meta": {
-        "language": "id",
-        "language_name": "Indonesian",
-        "direction": "ltr"
-    },
+    "_meta": {"language": "id", "language_name": "Indonesian", "direction": "ltr"},
     "setup": {
         "welcome_title": "Selamat Datang di CIRIS",
         "welcome_desc": "CIRIS adalah asisten AI etis yang berjalan di perangkat Anda. Percakapan dan data Anda tetap bersifat pribadi.",
@@ -46,7 +42,7 @@ TRANSLATIONS = {
         "next": "Berikutnya",
         "finish": "Selesaikan Pengaturan",
         "complete_message": "Pengaturan berhasil diselesaikan. Memulai prosesor agen...",
-        "error_runtime": "Runtime tidak tersedia - tidak dapat menyelesaikan pengaturan"
+        "error_runtime": "Runtime tidak tersedia - tidak dapat menyelesaikan pengaturan",
     },
     "agent": {
         "greeting": "Halo! Bagaimana saya dapat membantu Anda hari ini?",
@@ -63,7 +59,7 @@ TRANSLATIONS = {
         "credit_blocked": "Interaksi diblokir oleh kebijakan kredit.",
         "billing_error": "Kesalahan layanan penagihan LLM. Silakan periksa akun Anda atau coba lagi nanti.",
         "new_messages_arrived": "Agen menyelesaikan tugas tetapi pesan baru tiba yang belum ditangani",
-        "restarted_stale_task": "Saya dimulai ulang saat memproses permintaan Anda. Tugas sebelumnya diselesaikan secara otomatis. Silakan kirim ulang pesan Anda jika Anda masih membutuhkan respons."
+        "restarted_stale_task": "Saya dimulai ulang saat memproses permintaan Anda. Tugas sebelumnya diselesaikan secara otomatis. Silakan kirim ulang pesan Anda jika Anda masih membutuhkan respons.",
     },
     "status": {
         "executing": "Mengeksekusi...",
@@ -73,24 +69,27 @@ TRANSLATIONS = {
         "online": "Online",
         "offline": "Offline",
         "success": "Berhasil",
-        "all_operational": "Semua sistem operasional"
+        "all_operational": "Semua sistem operasional",
     },
 }
 
+
 def load_en_json():
     """Load the English source file."""
-    en_path = Path(__file__).parent.parent / 'localization' / 'en.json'
-    with open(en_path, 'r', encoding='utf-8') as f:
+    en_path = Path(__file__).parent.parent / "localization" / "en.json"
+    with open(en_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
 
 def save_id_json(data):
     """Save the Indonesian translation file."""
-    id_path = Path(__file__).parent.parent / 'localization' / 'id.json'
-    with open(id_path, 'w', encoding='utf-8') as f:
+    id_path = Path(__file__).parent.parent / "localization" / "id.json"
+    with open(id_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
     print(f"✓ Saved to {id_path}")
 
-def count_keys(d, prefix=''):
+
+def count_keys(d, prefix=""):
     """Recursively count all leaf keys in a nested dict."""
     count = 0
     for k, v in d.items():
@@ -99,6 +98,7 @@ def count_keys(d, prefix=''):
         else:
             count += 1
     return count
+
 
 def main():
     print("Loading English source...")
@@ -117,5 +117,6 @@ def main():
     print(f"\nTranslated {id_count} keys out of {en_count}")
     print(f"Coverage: {id_count/en_count*100:.1f}%")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

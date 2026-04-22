@@ -95,10 +95,7 @@ class TestWriteMobileLocalLlmConfig:
     def test_writes_model_when_provided(self) -> None:
         """Test that model is written when provided."""
         f = StringIO()
-        setup = _create_mock_setup(
-            enabled_adapters=["mobile_local_llm"],
-            llm_model="gemma-4-e4b"
-        )
+        setup = _create_mock_setup(enabled_adapters=["mobile_local_llm"], llm_model="gemma-4-e4b")
 
         _write_mobile_local_llm_config(f, setup)
 
@@ -108,10 +105,7 @@ class TestWriteMobileLocalLlmConfig:
     def test_no_model_when_not_provided(self) -> None:
         """Test that model line is not written when not provided."""
         f = StringIO()
-        setup = _create_mock_setup(
-            enabled_adapters=["mobile_local_llm"],
-            llm_model=None
-        )
+        setup = _create_mock_setup(enabled_adapters=["mobile_local_llm"], llm_model=None)
 
         _write_mobile_local_llm_config(f, setup)
 
@@ -143,12 +137,14 @@ class TestWriteAdapterSpecificConfig:
     def test_maps_home_assistant_keys(self) -> None:
         """Test that Home Assistant keys are properly mapped."""
         f = StringIO()
-        setup = _create_mock_setup(adapter_config={
-            "access_token": "test_token",
-            "refresh_token": "refresh_token",
-            "base_url": "http://homeassistant.local:8123",
-            "client_id": "ciris_client",
-        })
+        setup = _create_mock_setup(
+            adapter_config={
+                "access_token": "test_token",
+                "refresh_token": "refresh_token",
+                "base_url": "http://homeassistant.local:8123",
+                "client_id": "ciris_client",
+            }
+        )
 
         _write_adapter_specific_config(f, setup)
 
@@ -161,9 +157,11 @@ class TestWriteAdapterSpecificConfig:
     def test_preserves_unmapped_keys(self) -> None:
         """Test that unmapped keys are preserved as-is."""
         f = StringIO()
-        setup = _create_mock_setup(adapter_config={
-            "custom_key": "custom_value",
-        })
+        setup = _create_mock_setup(
+            adapter_config={
+                "custom_key": "custom_value",
+            }
+        )
 
         _write_adapter_specific_config(f, setup)
 
@@ -198,11 +196,7 @@ class TestWriteLocationConfig:
     def test_writes_full_location(self) -> None:
         """Test writing full location with city, region, country."""
         f = StringIO()
-        setup = _create_mock_setup(
-            location_city="Seattle",
-            location_region="WA",
-            location_country="US"
-        )
+        setup = _create_mock_setup(location_city="Seattle", location_region="WA", location_country="US")
 
         _write_location_config(f, setup)
 
@@ -215,10 +209,7 @@ class TestWriteLocationConfig:
     def test_writes_partial_location_display(self) -> None:
         """Test location display with partial info (no city)."""
         f = StringIO()
-        setup = _create_mock_setup(
-            location_region="WA",
-            location_country="US"
-        )
+        setup = _create_mock_setup(location_region="WA", location_country="US")
 
         _write_location_config(f, setup)
 
@@ -230,10 +221,7 @@ class TestWriteLocationConfig:
     def test_writes_coordinates(self) -> None:
         """Test writing latitude and longitude."""
         f = StringIO()
-        setup = _create_mock_setup(
-            location_latitude=47.6062,
-            location_longitude=-122.3321
-        )
+        setup = _create_mock_setup(location_latitude=47.6062, location_longitude=-122.3321)
 
         _write_location_config(f, setup)
 
@@ -254,10 +242,7 @@ class TestWriteLocationConfig:
     def test_zero_coordinates_are_written(self) -> None:
         """Test that zero coordinates are written (not treated as falsy)."""
         f = StringIO()
-        setup = _create_mock_setup(
-            location_latitude=0.0,
-            location_longitude=0.0
-        )
+        setup = _create_mock_setup(location_latitude=0.0, location_longitude=0.0)
 
         _write_location_config(f, setup)
 

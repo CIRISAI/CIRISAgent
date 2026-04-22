@@ -139,8 +139,7 @@ class APIAuthService:
 
         # Database path for revocation persistence
         self._revocations_db_path = os.path.join(
-            os.environ.get("CIRIS_DATA_DIR", os.path.expanduser("~/.ciris")),
-            "revoked_service_tokens.db"
+            os.environ.get("CIRIS_DATA_DIR", os.path.expanduser("~/.ciris")), "revoked_service_tokens.db"
         )
 
         # Don't load from DB in __init__ - this causes asyncio.run() errors
@@ -155,14 +154,16 @@ class APIAuthService:
         """Initialize the revocations database table."""
         try:
             async with aiosqlite.connect(self._revocations_db_path) as db:
-                await db.execute("""
+                await db.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS revoked_service_tokens (
                         token_hash TEXT PRIMARY KEY,
                         revoked_at TEXT NOT NULL,
                         revoked_by TEXT NOT NULL,
                         reason TEXT NOT NULL
                     )
-                """)
+                """
+                )
                 await db.commit()
                 logger.debug("[AUTH] Revocations database initialized")
         except Exception as e:
@@ -179,7 +180,9 @@ class APIAuthService:
                     rows = await cursor.fetchall()
                     self._revoked_service_tokens = {row[0] for row in rows}
                     self._revoked_tokens_loaded = True
-                    logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from database")
+                    logger.info(
+                        f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from database"
+                    )
         except Exception as e:
             logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
             # Initialize empty set on error to avoid blocking startup
@@ -1160,14 +1163,12 @@ class APIAuthService:
         # This prevents revoked tokens from being accepted after restart
         # before the async load has run
         import sqlite3
+
         try:
             if not os.path.exists(self._revocations_db_path):
                 return False  # No revocations DB yet
             with sqlite3.connect(self._revocations_db_path) as conn:
-                cursor = conn.execute(
-                    "SELECT 1 FROM revoked_service_tokens WHERE token_hash = ?",
-                    (token_hash,)
-                )
+                cursor = conn.execute("SELECT 1 FROM revoked_service_tokens WHERE token_hash = ?", (token_hash,))
                 return cursor.fetchone() is not None
         except Exception as e:
             logger.warning(f"[AUTH] Failed to check revocation synchronously: {e}")
@@ -1203,16 +1204,14 @@ class APIAuthService:
             async with aiosqlite.connect(self._revocations_db_path) as db:
                 await db.execute(
                     "INSERT OR IGNORE INTO revoked_service_tokens VALUES (?, ?, ?, ?)",
-                    (token_hash, datetime.now(timezone.utc).isoformat(), revoked_by, reason)
+                    (token_hash, datetime.now(timezone.utc).isoformat(), revoked_by, reason),
                 )
                 await db.commit()
         except Exception as e:
             logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}")
 
         # Log audit event
-        logger.info(
-            f"[AUTH] Service token revoked: hash={token_hash[:8]}..., reason={reason}, revoked_by={revoked_by}"
-        )
+        logger.info(f"[AUTH] Service token revoked: hash={token_hash[:8]}..., reason={reason}, revoked_by={revoked_by}")
 
         # Audit through infrastructure auth service if available
         if self._auth_service and hasattr(self._auth_service, "audit"):

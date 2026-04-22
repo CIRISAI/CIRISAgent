@@ -666,7 +666,9 @@ def action_selection(
                     # re is imported at module level (line 2)
                     from datetime import datetime, timedelta, timezone
 
-                    time_match = re.match(r"^\+(\d+)s\s+(.+)$", action_params)  # NOSONAR - anchored pattern on short test command, no ReDoS risk
+                    time_match = re.match(
+                        r"^\+(\d+)s\s+(.+)$", action_params
+                    )  # NOSONAR - anchored pattern on short test command, no ReDoS risk
                     if time_match:
                         seconds = int(time_match.group(1))
                         reason = time_match.group(2)
@@ -674,7 +676,9 @@ def action_selection(
                         logger.info(f"[MOCK_LLM] Timed defer: {seconds}s from now → {defer_until}")
 
                     # Format: $defer @2026-03-16T00:00:00Z <reason>
-                    iso_match = re.match(r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", action_params)  # NOSONAR - anchored pattern on short test command
+                    iso_match = re.match(
+                        r"^@(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z\+\-\d:]*)\s+(.+)$", action_params
+                    )  # NOSONAR - anchored pattern on short test command
                     if iso_match:
                         defer_until = iso_match.group(1)
                         reason = iso_match.group(2)
@@ -936,7 +940,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 # re is imported at module level (line 2)
                 from datetime import datetime, timedelta, timezone
 
-                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args_from_context)  # NOSONAR - anchored pattern on short test command
+                time_match = re.match(
+                    r"^\+(\d+)s\s+(.+)$", command_args_from_context
+                )  # NOSONAR - anchored pattern on short test command
                 if time_match:
                     seconds = int(time_match.group(1))
                     reason = time_match.group(2)
@@ -1349,7 +1355,9 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                                 # re is imported at module level (line 2)
                                 from datetime import datetime, timedelta, timezone
 
-                                time_match = re.match(r"^\+(\d+)s\s+(.+)$", command_args)  # NOSONAR - anchored pattern on short test command
+                                time_match = re.match(
+                                    r"^\+(\d+)s\s+(.+)$", command_args
+                                )  # NOSONAR - anchored pattern on short test command
                                 if time_match:
                                     seconds = int(time_match.group(1))
                                     reason = time_match.group(2)

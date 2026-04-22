@@ -21,7 +21,6 @@ from ciris_engine.schemas.services.agent_credits import (
 )
 from ciris_engine.schemas.services.context import DeferralContext
 
-
 # =========================================================================
 # Schema Tests
 # =========================================================================
@@ -39,9 +38,14 @@ class TestDomainCategory:
     def test_all_requires_separate_module_domains(self) -> None:
         """Verify DomainCategory covers all REQUIRES_SEPARATE_MODULE domains."""
         expected = {
-            "MEDICAL", "FINANCIAL", "LEGAL", "HOME_SECURITY",
-            "IDENTITY_VERIFICATION", "CONTENT_MODERATION",
-            "RESEARCH", "INFRASTRUCTURE_CONTROL",
+            "MEDICAL",
+            "FINANCIAL",
+            "LEGAL",
+            "HOME_SECURITY",
+            "IDENTITY_VERIFICATION",
+            "CONTENT_MODERATION",
+            "RESEARCH",
+            "INFRASTRUCTURE_CONTROL",
         }
         actual = {d.value for d in DomainCategory}
         assert actual == expected

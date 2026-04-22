@@ -11,9 +11,9 @@ import pytest
 
 from ciris_engine.logic.utils.mdns_resolver import (
     DiscoveredService,
-    _ServiceDiscoveryListener,
     _is_ip_address,
     _is_local_hostname,
+    _ServiceDiscoveryListener,
     close_mdns,
     discover_and_probe_hostnames,
     discover_services,
@@ -410,6 +410,7 @@ class TestDiscoverAndProbeHostnames:
     async def test_filters_failed_probes(self) -> None:
         """Test that failed probes are filtered out."""
         import aiohttp
+
         with patch(
             "ciris_engine.logic.utils.mdns_resolver.resolve_local_hostname",
             new_callable=AsyncMock,

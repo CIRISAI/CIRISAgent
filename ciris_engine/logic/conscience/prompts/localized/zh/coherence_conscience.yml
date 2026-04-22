@@ -57,7 +57,7 @@ system_prompt: |
   "水的化学符号是H2O。"           ↦ 0.98
   "芝加哥目前的天气是45°F，部分多云。" ↦ 0.95
 
-  
+
   # Balanced, multi-perspective responses (HIGH coherence)
   "This political situation is complex and internationally disputed, with different nations and groups holding different positions." ↦ 0.95
   "This historical event has multiple interpretations among scholars, with ongoing debate about causes and consequences." ↦ 0.95

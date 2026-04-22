@@ -387,7 +387,9 @@ class CoherenceConscience(_BaseConscience):
             check_timestamp=ts_datetime,
         )
 
-    def _create_coherence_messages(self, text: str, image_context: Optional[str] = None) -> tuple[List[LLMMessage], str]:
+    def _create_coherence_messages(
+        self, text: str, image_context: Optional[str] = None
+    ) -> tuple[List[LLMMessage], str]:
         """Create messages for coherence evaluation with optional image context metadata.
 
         Returns:

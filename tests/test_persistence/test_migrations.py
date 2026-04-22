@@ -590,9 +590,7 @@ class TestMigrationSystem:
         # Verify indexes exist
         with get_db_connection(temp_db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='test_tasks'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='test_tasks'")
             indexes = {row[0] for row in cursor.fetchall()}
             assert "idx_test_tasks_status" in indexes
             assert "idx_test_tasks_created" in indexes

@@ -11,8 +11,8 @@ These endpoints enable GDPR Article 17 (Right to Erasure) self-service
 for data sent to the CIRISLens repository via the accord metrics adapter.
 """
 
-import hashlib
 import asyncio
+import hashlib
 import logging
 import os
 import threading
@@ -147,9 +147,7 @@ class CapacityResponse(BaseModel):
     local_score: Optional[float] = Field(
         None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
     )
-    local_category: Optional[str] = Field(
-        None, description="This occurrence's category; null when scope=fleet."
-    )
+    local_category: Optional[str] = Field(None, description="This occurrence's category; null when scope=fleet.")
 
 
 # ---------------------------------------------------------------------------
@@ -816,9 +814,7 @@ async def _compute_local_capacity(request: Request) -> Tuple[float, str]:
             except Exception:
                 return False
 
-        health_results = await asyncio.gather(
-            *(_probe_healthy(s) for s in services), return_exceptions=False
-        )
+        health_results = await asyncio.gather(*(_probe_healthy(s) for s in services), return_exceptions=False)
         healthy = sum(1 for h in health_results if h)
         k_eff_frac = healthy / total
 

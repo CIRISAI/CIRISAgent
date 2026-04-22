@@ -59,14 +59,16 @@ class SecretsStore:
         else:
             self.db_path = Path(db_path)
 
-        # Validate and cast key_storage_mode
+        # Validate key_storage_mode and ensure it's a valid KeyStorageMode
         valid_modes: tuple[KeyStorageMode, ...] = ("software", "hardware", "auto")
         if key_storage_mode not in valid_modes:
             logger.warning(f"Invalid key_storage_mode '{key_storage_mode}', defaulting to 'auto'")
-            key_storage_mode = "auto"
+            validated_mode: KeyStorageMode = "auto"
+        else:
+            # key_storage_mode is in valid_modes, so it's a valid KeyStorageMode
+            validated_mode = key_storage_mode  # type: ignore[assignment]
 
-        # key_storage_mode is guaranteed valid after line 66 check
-        self.encryption = SecretsEncryption(master_key, key_storage_mode=key_storage_mode)
+        self.encryption = SecretsEncryption(master_key, key_storage_mode=validated_mode)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
         self._access_counts: Dict[str, List[datetime]] = {}
@@ -220,10 +222,11 @@ class SecretsStore:
                 encrypted_value, salt, nonce = self.encryption.encrypt_secret(secret.original_value)
 
                 # Create secret record with encryption data
+                # Use actual encryption method to properly track hardware vs software encryption
                 secret_record = SecretRecord(
                     secret_uuid=secret.secret_uuid,
                     encrypted_value=encrypted_value,
-                    encryption_key_ref="master_key_v1",  # Key versioning
+                    encryption_key_ref=self.encryption.get_encryption_key_ref(),
                     salt=salt,
                     nonce=nonce,
                     description=secret.description,
@@ -392,11 +395,22 @@ class SecretsStore:
 
         Returns:
             Decrypted secret value or None if decryption fails
+
+        Raises:
+            RuntimeError: If secret was encrypted with v1.6.0+ native encryption
+                         but current CIRISVerify binary doesn't support it.
         """
         try:
             return self.encryption.decrypt_secret(
-                secret_record.encrypted_value, secret_record.salt, secret_record.nonce
+                secret_record.encrypted_value,
+                secret_record.salt,
+                secret_record.nonce,
+                encryption_key_ref=secret_record.encryption_key_ref,
             )
+        except RuntimeError:
+            # Re-raise RuntimeError for encryption method mismatch
+            # This gives a clear error about CIRISVerify version incompatibility
+            raise
         except Exception as e:  # pragma: no cover - error path
             logger.error(f"Failed to decrypt secret {secret_record.secret_uuid}: {type(e).__name__}")
             return None
@@ -843,7 +857,9 @@ class SecretsStore:
 
                 # Get all secrets that need re-encryption
                 with get_db_connection(str(self.db_path)) as conn:
-                    cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets")
+                    cursor = conn.execute(
+                        "SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets"
+                    )
                     secrets_rows = cursor.fetchall()
 
                 if not secrets_rows:
@@ -855,6 +871,7 @@ class SecretsStore:
 
                 # C1 FIX: Create backup table before migration
                 import time
+
                 backup_table = f"secrets_backup_{int(time.time())}"
                 with get_db_connection(str(self.db_path)) as conn:
                     # CREATE TABLE ... AS SELECT works for both SQLite and PostgreSQL
@@ -920,7 +937,9 @@ class SecretsStore:
                             )
                             # Only commit if ALL updates succeeded
                             conn.commit()
-                            logger.info(f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction")
+                            logger.info(
+                                f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction"
+                            )
                         except Exception as update_error:
                             conn.rollback()
                             logger.error(f"Re-encryption transaction failed, rolled back: {update_error}")

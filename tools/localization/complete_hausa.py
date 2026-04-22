@@ -14,13 +14,16 @@ EN_JSON = BASE_DIR / "localization" / "en.json"
 HA_JSON = BASE_DIR / "localization" / "ha.json"
 HA_GLOSSARY = BASE_DIR / "docs" / "localization" / "glossaries" / "ha_glossary.md"
 
+
 def load_json_file(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 def save_json_file(path, data):
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+
 
 def get_missing_keys(en_data, ha_data, prefix=""):
     """Recursively find missing keys in ha.json compared to en.json"""
@@ -34,6 +37,7 @@ def get_missing_keys(en_data, ha_data, prefix=""):
             missing.extend(get_missing_keys(value, ha_data[key], current_path))
 
     return missing
+
 
 def main():
     print("=" * 60)
@@ -58,7 +62,8 @@ def main():
     print("\n" + "=" * 60)
     print("RECOMMENDATION:")
     print("=" * 60)
-    print("""
+    print(
+        """
 Due to the large number of missing keys (~1131), this task requires:
 
 1. **Automated Translation Pipeline**: Use Claude API with the glossary
@@ -66,7 +71,9 @@ Due to the large number of missing keys (~1131), this task requires:
 3. **Iterative Completion**: Complete in batches (e.g., 200 keys at a time)
 
 The script tools/localization/batch_translate_hausa.py can help automate this.
-""")
+"""
+    )
+
 
 if __name__ == "__main__":
     main()

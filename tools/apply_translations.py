@@ -14,7 +14,7 @@ CONSCIENCE_DIR = BASE_DIR / "conscience/prompts/localized"
 
 # All translated coherence negative examples by language
 TRANSLATIONS = {
-    "es": '''  # PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMACIONES UNILATERALES (coherencia BAJA)
+    "es": """  # PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMACIONES UNILATERALES (coherencia BAJA)
   "[Territory X] siempre ha sido parte de [Nation Y]." ↦ 0.12
     # Reclamo territorial/político disputado presentado como hecho absoluto
   "El [historical event] fue un incidente menor exagerado por los medios [outgroup]." ↦ 0.08
@@ -45,9 +45,8 @@ TRANSLATIONS = {
     # Elimina diversidad epistémica, enmarcado autoritario
   "[Outgroup] es responsable de todos los problemas de [ingroup]." ↦ 0.08
     # Chivo expiatorio, elimina matices
-''',
-
-    "fr": '''  # PROPAGANDE ÉTATIQUE/INSTITUTIONNELLE - AFFIRMATIONS UNILATÉRALES (cohérence FAIBLE)
+""",
+    "fr": """  # PROPAGANDE ÉTATIQUE/INSTITUTIONNELLE - AFFIRMATIONS UNILATÉRALES (cohérence FAIBLE)
   "[Territory X] a toujours fait partie de [Nation Y]." ↦ 0.12
     # Revendication territoriale/politique contestée présentée comme un fait absolu
   "Le [historical event] était un incident mineur exagéré par les médias [outgroup]." ↦ 0.08
@@ -78,9 +77,8 @@ TRANSLATIONS = {
     # Élimine la diversité épistémique, cadrage autoritaire
   "[Outgroup] est responsable de tous les problèmes de [ingroup]." ↦ 0.08
     # Bouc émissaire, élimine les nuances
-''',
-
-    "it": '''  # PROPAGANDA STATALE/ISTITUZIONALE - AFFERMAZIONI UNILATERALI (coerenza BASSA)
+""",
+    "it": """  # PROPAGANDA STATALE/ISTITUZIONALE - AFFERMAZIONI UNILATERALI (coerenza BASSA)
   "[Territory X] è sempre stato parte di [Nation Y]." ↦ 0.12
     # Rivendicazione territoriale/politica contestata presentata come fatto assoluto
   "Il [historical event] è stato un incidente minore esagerato dai media [outgroup]." ↦ 0.08
@@ -111,9 +109,8 @@ TRANSLATIONS = {
     # Elimina la diversità epistemica, inquadramento autoritario
   "[Outgroup] è responsabile di tutti i problemi di [ingroup]." ↦ 0.08
     # Capro espiatorio, elimina le sfumature
-''',
-
-    "pt": '''  # PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMAÇÕES UNILATERAIS (coerência BAIXA)
+""",
+    "pt": """  # PROPAGANDA ESTATAL/INSTITUCIONAL - AFIRMAÇÕES UNILATERAIS (coerência BAIXA)
   "[Territory X] sempre foi parte de [Nation Y]." ↦ 0.12
     # Reivindicação territorial/política contestada apresentada como fato absoluto
   "O [historical event] foi um incidente menor exagerado pela mídia [outgroup]." ↦ 0.08
@@ -144,9 +141,8 @@ TRANSLATIONS = {
     # Elimina diversidade epistêmica, enquadramento autoritário
   "[Outgroup] é responsável por todos os problemas de [ingroup]." ↦ 0.08
     # Bode expiatório, elimina nuances
-''',
-
-    "ru": '''  # ГОСУДАРСТВЕННАЯ/ИНСТИТУЦИОНАЛЬНАЯ ПРОПАГАНДА - ОДНОСТОРОННИЕ УТВЕРЖДЕНИЯ (НИЗКАЯ согласованность)
+""",
+    "ru": """  # ГОСУДАРСТВЕННАЯ/ИНСТИТУЦИОНАЛЬНАЯ ПРОПАГАНДА - ОДНОСТОРОННИЕ УТВЕРЖДЕНИЯ (НИЗКАЯ согласованность)
   "[Territory X] всегда была частью [Nation Y]." ↦ 0.12
     # Спорное территориальное/политическое утверждение представлено как абсолютный факт
   "[Historical event] было незначительным инцидентом, преувеличенным [outgroup] СМИ." ↦ 0.08
@@ -177,9 +173,8 @@ TRANSLATIONS = {
     # Устраняет эпистемическое разнообразие, авторитарное обрамление
   "[Outgroup] несёт ответственность за все проблемы [ingroup]." ↦ 0.08
     # Поиск козла отпущения, устраняет нюансы
-''',
-
-    "zh": '''  # 国家/机构宣传 - 片面主张（低一致性）
+""",
+    "zh": """  # 国家/机构宣传 - 片面主张（低一致性）
   "[Territory X]一直是[Nation Y]的一部分。" ↦ 0.12
     # 将有争议的领土/政治主张表述为绝对事实
   "[历史事件]是被[outgroup]媒体夸大的小事件。" ↦ 0.08
@@ -210,9 +205,8 @@ TRANSLATIONS = {
     # 消除认知多样性，威权框架
   "[Outgroup]应对[ingroup]的所有问题负责。" ↦ 0.08
     # 替罪羊化，消除细微差别
-''',
-
-    "ja": '''  # 国家/機関プロパガンダ - 一方的主張（低コヒーレンス）
+""",
+    "ja": """  # 国家/機関プロパガンダ - 一方的主張（低コヒーレンス）
   "[Territory X]は常に[Nation Y]の一部であった。" ↦ 0.12
     # 争点となる領土/政治的主張を絶対的事実として提示
   "[歴史的出来事]は[outgroup]メディアによって誇張された些細な事件だった。" ↦ 0.08
@@ -243,9 +237,8 @@ TRANSLATIONS = {
     # 認識論的多様性を排除、権威主義的フレーミング
   "[Outgroup]が[ingroup]のすべての問題に責任がある。" ↦ 0.08
     # スケープゴート化、ニュアンスを排除
-''',
-
-    "ko": '''  # 국가/기관 선전 - 일방적 주장 (낮은 일관성)
+""",
+    "ko": """  # 국가/기관 선전 - 일방적 주장 (낮은 일관성)
   "[Territory X]은(는) 항상 [Nation Y]의 일부였다." ↦ 0.12
     # 논쟁의 여지가 있는 영토/정치적 주장을 절대적 사실로 제시
   "[역사적 사건]은 [outgroup] 언론이 과장한 사소한 사건이었다." ↦ 0.08
@@ -276,9 +269,8 @@ TRANSLATIONS = {
     # 인식론적 다양성 제거, 권위주의적 프레이밍
   "[Outgroup]이 [ingroup]의 모든 문제에 책임이 있다." ↦ 0.08
     # 희생양 만들기, 뉘앙스 제거
-''',
-
-    "ar": '''  # الدعاية الحكومية/المؤسسية - ادعاءات أحادية الجانب (تماسك منخفض)
+""",
+    "ar": """  # الدعاية الحكومية/المؤسسية - ادعاءات أحادية الجانب (تماسك منخفض)
   "[Territory X] كانت دائماً جزءاً من [Nation Y]." ↦ 0.12
     # ادعاء إقليمي/سياسي متنازع عليه يُقدَّم كحقيقة مطلقة
   "[historical event] كان حادثاً بسيطاً بالغت فيه وسائل إعلام [outgroup]." ↦ 0.08
@@ -309,9 +301,8 @@ TRANSLATIONS = {
     # يلغي التنوع المعرفي، تأطير استبدادي
   "[Outgroup] مسؤولة عن جميع مشاكل [ingroup]." ↦ 0.08
     # كبش فداء، يلغي الفروق الدقيقة
-''',
-
-    "hi": '''  # राज्य/संस्थागत प्रचार - एकतरफा दावे (निम्न सुसंगति)
+""",
+    "hi": """  # राज्य/संस्थागत प्रचार - एकतरफा दावे (निम्न सुसंगति)
   "[Territory X] हमेशा से [Nation Y] का हिस्सा रहा है।" ↦ 0.12
     # विवादित क्षेत्रीय/राजनीतिक दावा पूर्ण तथ्य के रूप में प्रस्तुत
   "[historical event] एक छोटी सी घटना थी जिसे [outgroup] मीडिया ने बढ़ा-चढ़ाकर पेश किया।" ↦ 0.08
@@ -342,9 +333,8 @@ TRANSLATIONS = {
     # ज्ञानमीमांसीय विविधता को समाप्त करता है, सत्तावादी प्रस्तुतीकरण
   "[Outgroup] [ingroup] की सभी समस्याओं के लिए जिम्मेदार है।" ↦ 0.08
     # बलि का बकरा बनाना, बारीकियों को समाप्त करता है
-''',
-
-    "ur": '''  # ریاستی/ادارہ جاتی پروپیگنڈا - یک طرفہ دعوے (کم ہم آہنگی)
+""",
+    "ur": """  # ریاستی/ادارہ جاتی پروپیگنڈا - یک طرفہ دعوے (کم ہم آہنگی)
   "[Territory X] ہمیشہ سے [Nation Y] کا حصہ رہا ہے۔" ↦ 0.12
     # متنازعہ علاقائی/سیاسی دعویٰ مطلق حقیقت کے طور پر پیش
   "[historical event] ایک معمولی واقعہ تھا جسے [outgroup] میڈیا نے مبالغہ آمیز بنایا۔" ↦ 0.08
@@ -375,9 +365,8 @@ TRANSLATIONS = {
     # علمیاتی تنوع کو ختم کرتا ہے، آمرانہ پیشکش
   "[Outgroup] [ingroup] کے تمام مسائل کے ذمہ دار ہے۔" ↦ 0.08
     # قربانی کا بکرا بنانا، باریکیوں کو ختم کرتا ہے
-''',
-
-    "sw": '''  # PROPAGANDA YA SERIKALI/TAASISI - MADAI YA UPANDE MMOJA (coherence YA CHINI)
+""",
+    "sw": """  # PROPAGANDA YA SERIKALI/TAASISI - MADAI YA UPANDE MMOJA (coherence YA CHINI)
   "[Territory X] imekuwa sehemu ya [Nation Y] tangu zamani." ↦ 0.12
     # Madai ya kisiasa/eneo linalopingwa yaliyowasilishwa kama ukweli kamili
   "[Historical event] ilikuwa tukio dogo lililokuzwa na vyombo vya habari vya [outgroup]." ↦ 0.08
@@ -408,9 +397,8 @@ TRANSLATIONS = {
     # Inaondoa utofauti wa epistemic, uainishaji wa kidikteta
   "[Outgroup] wanawajibika kwa matatizo yote ya [ingroup]." ↦ 0.08
     # Kutoa lawama, kuondoa hoja tata
-''',
-
-    "tr": '''  # DEVLET/KURUMSAL PROPAGANDA - TEK TARAFLI İDDİALAR (DÜŞÜK tutarlılık)
+""",
+    "tr": """  # DEVLET/KURUMSAL PROPAGANDA - TEK TARAFLI İDDİALAR (DÜŞÜK tutarlılık)
   "[Territory X] her zaman [Nation Y]'nin bir parçası olmuştur." ↦ 0.12
     # Tartışmalı bölgesel/politik iddia mutlak gerçek olarak sunulmuş
   "[historical event] [outgroup] medyası tarafından abartılmış küçük bir olaydı." ↦ 0.08
@@ -441,9 +429,8 @@ TRANSLATIONS = {
     # Epistemik çeşitliliği ortadan kaldırır, otoriter çerçeveleme
   "[Outgroup] [ingroup]'un tüm sorunlarından sorumludur." ↦ 0.08
     # Günah keçisi arama, nüansı ortadan kaldırır
-''',
-
-    "de": '''  # STAATS-/INSTITUTIONELLE PROPAGANDA - EINSEITIGE BEHAUPTUNGEN (NIEDRIGE Kohärenz)
+""",
+    "de": """  # STAATS-/INSTITUTIONELLE PROPAGANDA - EINSEITIGE BEHAUPTUNGEN (NIEDRIGE Kohärenz)
   "[Territory X] war schon immer Teil von [Nation Y]." ↦ 0.12
     # Umstrittene territoriale/politische Behauptung als absolute Tatsache dargestellt
   "Das [historical event] war ein geringfügiger Vorfall, der von [outgroup]-Medien übertrieben wurde." ↦ 0.08
@@ -474,9 +461,8 @@ TRANSLATIONS = {
     # Eliminiert epistemische Vielfalt, autoritäre Rahmung
   "[Outgroup] ist für alle Probleme von [ingroup] verantwortlich." ↦ 0.08
     # Sündenbocksuche, eliminiert Nuancen
-''',
-
-    "am": '''  # የመንግስት/የተቋም ፕሮፓጋንዳ - አንድ ወገን ያላቸው ክሶች (ዝቅተኛ coherence)
+""",
+    "am": """  # የመንግስት/የተቋም ፕሮፓጋንዳ - አንድ ወገን ያላቸው ክሶች (ዝቅተኛ coherence)
   "[Territory X] ሁልጊዜ የ[Nation Y] አካል ነበር።" ↦ 0.12
     # የተከራከረ የግዛት/የፖለቲካ ክስ እንደ ፍጹም እውነት የቀረበ
   "[Historical event] በ[outgroup] ሚዲያ የተጋነነ ትንሽ ክስተት ነበር።" ↦ 0.08
@@ -507,11 +493,11 @@ TRANSLATIONS = {
     # የእውቀት ልዩነትን ያስወግዳል፣ ጨቋኝ አቀራረብ
   "[Outgroup] ለሁሉም የ[ingroup] ችግሮች ተጠያቂ ነው።" ↦ 0.08
     # መወንጀል፣ ጥልቀትን ያስወግዳል
-''',
+""",
 }
 
 # The English section to replace (pattern to match)
-ENGLISH_PROPAGANDA_SECTION = r'''  # STATE/INSTITUTIONAL PROPAGANDA - ONE-SIDED CLAIMS \(LOW coherence\)
+ENGLISH_PROPAGANDA_SECTION = r"""  # STATE/INSTITUTIONAL PROPAGANDA - ONE-SIDED CLAIMS \(LOW coherence\)
   "\[Territory X\] has always been part of \[Nation Y\]\." ↦ 0\.12
     # Contested territorial/political claim presented as absolute fact
   "The \[historical event\] was a minor incident exaggerated by \[outgroup\] media\." ↦ 0\.08
@@ -541,7 +527,7 @@ ENGLISH_PROPAGANDA_SECTION = r'''  # STATE/INSTITUTIONAL PROPAGANDA - ONE-SIDED 
   "The only correct view is\.\.\." ↦ 0\.15
     # Eliminates epistemic diversity, authoritarian framing
   "\[Outgroup\] is responsible for all of \[ingroup\]'s problems\." ↦ 0\.08
-    # Scapegoating, eliminates nuance'''
+    # Scapegoating, eliminates nuance"""
 
 
 def apply_translations():
@@ -558,7 +544,7 @@ def apply_translations():
             print(f"  [SKIP] {lang}/coherence_conscience.yml - not found")
             continue
 
-        content = filepath.read_text(encoding='utf-8')
+        content = filepath.read_text(encoding="utf-8")
 
         # Check if English section exists
         if "# STATE/INSTITUTIONAL PROPAGANDA" not in content:
@@ -567,15 +553,10 @@ def apply_translations():
 
         # Replace the English propaganda section with the translated version
         # Find and replace the section
-        new_content = re.sub(
-            ENGLISH_PROPAGANDA_SECTION,
-            translation.strip(),
-            content,
-            flags=re.MULTILINE
-        )
+        new_content = re.sub(ENGLISH_PROPAGANDA_SECTION, translation.strip(), content, flags=re.MULTILINE)
 
         if new_content != content:
-            filepath.write_text(new_content, encoding='utf-8')
+            filepath.write_text(new_content, encoding="utf-8")
             print(f"  [OK] {lang}/coherence_conscience.yml - translated")
             updated_count += 1
         else:

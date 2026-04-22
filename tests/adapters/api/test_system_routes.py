@@ -239,7 +239,7 @@ class TestDegradedMode:
     @pytest.mark.asyncio
     async def test_degraded_mode_when_no_llm_providers(self):
         """Test that degraded_mode=True when no LLM providers are registered."""
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
 
@@ -262,7 +262,7 @@ class TestDegradedMode:
     @pytest.mark.asyncio
     async def test_not_degraded_when_healthy_llm_provider(self):
         """Test that degraded_mode=False when a healthy LLM provider exists."""
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -292,13 +292,13 @@ class TestDegradedMode:
     @pytest.mark.asyncio
     async def test_degraded_when_all_llm_providers_unhealthy(self):
         """Test that degraded_mode=True when all LLM providers are unhealthy."""
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Mock the actual LLM service (unhealthy)
-        mock_service = MagicMock(spec=['is_healthy'])
+        mock_service = MagicMock(spec=["is_healthy"])
         mock_service.is_healthy = AsyncMock(return_value=False)
 
         # Wrap in ServiceProvider-like structure
@@ -324,7 +324,7 @@ class TestDegradedMode:
     @pytest.mark.asyncio
     async def test_degraded_when_provider_health_check_throws(self):
         """Test that degraded_mode=True when provider health check raises exception."""
-        from unittest.mock import MagicMock, AsyncMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         from ciris_engine.logic.adapters.api.routes.system.health import check_llm_availability
         from ciris_engine.schemas.runtime.enums import ServiceType

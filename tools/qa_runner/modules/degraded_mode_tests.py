@@ -197,10 +197,14 @@ class DegradedModeTests:
         test_provider_name = "qa_test_degraded_mode_provider"
 
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            } if token else {"Content-Type": "application/json"}
+            headers = (
+                {
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                }
+                if token
+                else {"Content-Type": "application/json"}
+            )
 
             # Add a local LLM provider (test endpoint - doesn't need to exist)
             payload = {
@@ -243,10 +247,14 @@ class DegradedModeTests:
         test_provider_name = "qa_test_delete_provider"
 
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            } if token else {"Content-Type": "application/json"}
+            headers = (
+                {
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                }
+                if token
+                else {"Content-Type": "application/json"}
+            )
 
             # First add a local provider
             payload = {
@@ -265,7 +273,9 @@ class DegradedModeTests:
             )
 
             if add_response.status_code != 200 and "already exists" not in add_response.text.lower():
-                raise ValueError(f"Add provider for delete test failed: {add_response.status_code}: {add_response.text[:200]}")
+                raise ValueError(
+                    f"Add provider for delete test failed: {add_response.status_code}: {add_response.text[:200]}"
+                )
 
             # Now delete it
             delete_response = await http_client.delete(
@@ -274,7 +284,9 @@ class DegradedModeTests:
             )
 
             if delete_response.status_code != 200:
-                raise ValueError(f"Delete provider returned {delete_response.status_code}: {delete_response.text[:200]}")
+                raise ValueError(
+                    f"Delete provider returned {delete_response.status_code}: {delete_response.text[:200]}"
+                )
 
             data = delete_response.json()
             if "data" not in data:
@@ -317,7 +329,9 @@ class DegradedModeTests:
             providers = providers_data.get("providers", [])
 
             # Log the state for debugging
-            self.console.print(f"    [dim]Initial degraded_mode={initial_degraded_mode}, providers={len(providers)}[/dim]")
+            self.console.print(
+                f"    [dim]Initial degraded_mode={initial_degraded_mode}, providers={len(providers)}[/dim]"
+            )
 
             # Verify consistency: if we have providers, degraded mode should be false
             # (assuming mock LLM is healthy)
@@ -343,10 +357,14 @@ class DegradedModeTests:
         test_provider_name = "qa_test_hotload_provider"
 
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            } if token else {"Content-Type": "application/json"}
+            headers = (
+                {
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                }
+                if token
+                else {"Content-Type": "application/json"}
+            )
 
             # Check initial state
             health_response = await http_client.get(f"{base_url}/v1/system/health", headers=headers)

@@ -16,9 +16,9 @@ from .dependencies import SetupOnlyDep
 from .helpers import _is_setup_allowed_without_auth
 from .llm_validation import _list_models_for_provider, _validate_llm_connection
 from .models import (
+    DiscoveredLLMServer,
     DiscoverLocalLLMRequest,
     DiscoverLocalLLMResponse,
-    DiscoveredLLMServer,
     ListModelsResponse,
     LLMValidationRequest,
     LLMValidationResponse,

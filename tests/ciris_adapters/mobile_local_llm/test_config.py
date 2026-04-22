@@ -8,7 +8,6 @@ from unittest import mock
 import pytest
 
 from ciris_adapters.mobile_local_llm.config import (
-    DeviceTier,
     ENV_ALLOW_DESKTOP,
     ENV_ENABLED,
     ENV_FORCE_CAPABILITY,
@@ -23,6 +22,7 @@ from ciris_adapters.mobile_local_llm.config import (
     ENV_SERVER_BINARY,
     ENV_SERVER_HOST,
     ENV_SERVER_PORT,
+    DeviceTier,
     MobileLocalLLMConfig,
     ModelVariant,
     load_config_from_env,

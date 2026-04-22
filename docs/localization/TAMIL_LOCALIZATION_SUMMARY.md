@@ -2,10 +2,10 @@
 
 ## Status: COMPLETE (Draft Quality)
 
-**Date**: 2026-04-08  
-**Language**: Tamil (தமிழ்)  
-**Language Code**: `ta`  
-**Script**: Tamil script (U+0B80–U+0BFF)  
+**Date**: 2026-04-08
+**Language**: Tamil (தமிழ்)
+**Language Code**: `ta`
+**Script**: Tamil script (U+0B80–U+0BFF)
 **Direction**: LTR (left-to-right)
 
 ## Completion Status
@@ -44,7 +44,7 @@
 
 ### Action Verbs
 - OBSERVE → கவனி (Kavaṉi)
-- SPEAK → பேசு (Pēcu)  
+- SPEAK → பேசு (Pēcu)
 - TOOL → கருவி (Karuvi)
 - REJECT → நிராகரி (Nirākari)
 - PONDER → சிந்தி (Cinti)

@@ -771,10 +771,7 @@ async def get_context_enrichment_cache(
     Args:
         refresh: If True, refresh all enrichment tools before returning data.
     """
-    from ciris_engine.logic.context.system_snapshot_helpers import (
-        get_enrichment_cache,
-        refresh_enrichment_cache,
-    )
+    from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
 
     try:
         # Refresh cache if requested (re-execute all enrichment tools)
@@ -1065,5 +1062,3 @@ async def reload_adapter(
     except Exception as e:
         logger.error(f"Error reloading adapter: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-

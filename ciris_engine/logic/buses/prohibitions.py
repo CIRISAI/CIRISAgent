@@ -48,17 +48,14 @@ MEDICAL_CAPABILITIES = {
     "health_care",
     "wellbeing",
     "wellness",
-
     # Clinical terms with variants
     "clinical",
     "clinician",
     "clinic",
     "clinically",
-
     # Patient-related with variants
     "patient",
     "patients",
-
     # Diagnosis variants (HIGH RISK)
     "diagnosis",
     "diagnose",
@@ -69,7 +66,6 @@ MEDICAL_CAPABILITIES = {
     "health_assessment",  # Alternative phrasing
     "condition_assessment",
     "medical_evaluation",
-
     # Treatment variants (HIGH RISK)
     "treatment",
     "treat",
@@ -81,7 +77,6 @@ MEDICAL_CAPABILITIES = {
     "care_plan",  # Alternative phrasing
     "treatment_plan",
     "intervention",
-
     # Prescription variants (HIGH RISK)
     "prescription",
     "prescribe",
@@ -89,7 +84,6 @@ MEDICAL_CAPABILITIES = {
     "prescribed",
     "prescriber",
     "rx_prescription",  # Changed from "rx" to avoid false positives
-
     # Symptom variants
     "symptom",
     "symptoms",
@@ -97,7 +91,6 @@ MEDICAL_CAPABILITIES = {
     "asymptomatic",
     "symptom_assessment",
     "symptom_analysis",
-
     # Disease/condition variants
     "disease",
     "diseases",
@@ -111,7 +104,6 @@ MEDICAL_CAPABILITIES = {
     "pathology",
     "pathological",
     "pathogen",
-
     # Medication variants
     "medication",
     "medications",
@@ -124,7 +116,6 @@ MEDICAL_CAPABILITIES = {
     "pharmacology",
     "drug_interaction",
     "drug_interactions",
-
     # Medical procedures
     "triage",
     "triaging",
@@ -136,14 +127,12 @@ MEDICAL_CAPABILITIES = {
     "surgery_planning",
     "operation",
     "operative",
-
     # Clinical decision-making
     "clinical_decision",
     "clinical_decisions",
     "medical_advice",
     "medical_guidance",
     "health_guidance",
-
     # Screening and testing
     "health_screening",
     "health_screenings",
@@ -152,7 +141,6 @@ MEDICAL_CAPABILITIES = {
     "test_results",
     "vital_signs",
     "vitals",
-
     # Care types
     "patient_care",
     "medical_history",
@@ -165,13 +153,11 @@ MEDICAL_CAPABILITIES = {
     "emergency_medical",
     "telemedicine",
     "telehealth",
-
     # Prognosis and outcomes
     "prognosis",
     "prognostic",
     "outcome_prediction",
     "recovery_prediction",
-
     # Additional high-risk terms
     "immunization",
     "vaccination",
@@ -197,7 +183,6 @@ FINANCIAL_CAPABILITIES = {
     "invest",
     "investing",
     "investor",
-
     # Trading with variants
     "trading_signals",
     "trading",
@@ -210,13 +195,11 @@ FINANCIAL_CAPABILITIES = {
     "cryptocurrency",
     "derivative_trading",
     "derivatives",
-
     # Portfolio management
     "portfolio_management",
     "portfolio",
     "portfolios",
     "manage_portfolio",
-
     # Financial planning variants
     "tax_planning",
     "tax_advice",
@@ -225,14 +208,12 @@ FINANCIAL_CAPABILITIES = {
     "retirement_advice",
     "estate_planning",
     "estate_advice",
-
     # Securities
     "securities_recommendation",
     "securities",
     "security",
     "stock_recommendation",
     "stock_advice",
-
     # Credit and loans
     "loan_approval",
     "loan",
@@ -241,24 +222,20 @@ FINANCIAL_CAPABILITIES = {
     "credit_decisions",
     "credit",
     "creditworthiness",
-
     # Insurance
     "insurance_underwriting",
     "insurance",
     "underwriting",
     "underwrite",
-
     # Wealth management
     "wealth_management",
     "wealth",
     "asset_management",
     "assets",
-
     # Financial assessments
     "risk_assessment",
     "financial_risk",
     "credit_risk",
-
     # Corporate finance
     "bankruptcy_advice",
     "bankruptcy",
@@ -270,7 +247,6 @@ FINANCIAL_CAPABILITIES = {
     "ipo_guidance",
     "ipo",
     "public_offering",
-
     # Additional financial terms
     "financial_advice",
     "financial_guidance",
@@ -287,14 +263,12 @@ LEGAL_CAPABILITIES = {
     "attorney",
     "lawyer",
     "legal_opinion",
-
     # Contract work
     "contract_drafting",
     "contract",
     "contracts",
     "drafting",
     "agreement_drafting",
-
     # Litigation
     "litigation_strategy",
     "litigation",
@@ -305,30 +279,25 @@ LEGAL_CAPABILITIES = {
     "legal_representation",
     "represent",
     "representation",
-
     # Filing and documentation
     "filing_documents",
     "file_documents",
     "legal_filing",
     "court_filing",
-
     # Dispute resolution
     "dispute_resolution",
     "dispute",
     "disputes",
     "arbitration",
     "mediation",
-
     # Compliance (specific legal terms only - "compliance" alone is too broad)
     "compliance_determination",
     "regulatory_compliance",
     "legal_compliance",
-
     # Rights and assessments
     "rights_assessment",
     "legal_rights",
     "rights",
-
     # Intellectual property
     "patent_filing",
     "patent",
@@ -341,20 +310,17 @@ LEGAL_CAPABILITIES = {
     "copyrights",
     "intellectual_property",
     "ip_law",
-
     # Specific legal areas
     "immigration_law",
     "immigration",
     "criminal_defense",
     "criminal_law",
     "defense",
-
     # Due diligence and research
     "due_diligence",
     "diligence",
     "legal_research",
     "legal_analysis",
-
     # Additional legal terms
     "paralegal",
     "legal_assistant",
@@ -453,7 +419,6 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "armament",
     "munition",
     "munitions",
-
     # Explosives
     "explosive_synthesis",
     "explosive",
@@ -466,7 +431,6 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "ied",
     "improvised_explosive",
     "dirty_bombs",
-
     # Specific weapon types
     "chemical_weapons",
     "chemical_warfare",
@@ -482,13 +446,11 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "landmines",
     "cluster_munitions",
     "cluster_bomb",
-
     # Nerve agents and toxins
     "nerve_agents",
     "nerve_agent",
     "nerve_gas",
     "chemical_agent",
-
     # Autonomous and targeting
     "autonomous_weapons",
     "autonomous_weapon",
@@ -500,14 +462,12 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "weaponized_drones",
     "drone_warfare",
     "combat_drone",
-
     # Military tactics
     "military_tactics",
     "military_strategy",
     "combat_tactics",
     "warfare",
     "combat_strategy",
-
     # Torture and assassination
     "torture_methods",
     "torture",
@@ -517,7 +477,6 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "assassinate",
     "assassinating",
     "political_killing",
-
     # Cyber weapons
     "cyber_weapons",
     "cyber_warfare",
@@ -525,7 +484,6 @@ WEAPONS_HARMFUL_CAPABILITIES = {
     "emp_devices",
     "emp_weapon",
     "electromagnetic_pulse",
-
     # Additional harmful terms
     "ballistic_missile",
     "missile_guidance",
@@ -546,25 +504,21 @@ MANIPULATION_COERCION_CAPABILITIES = {
     "manipulate",
     "manipulating",
     "manipulation",
-
     # Vulnerability exploitation
     "vulnerability_exploitation",
     "exploit_vulnerability",
     "exploitation",
-
     # Dark patterns
     "dark_patterns",
     "dark_pattern",
     "deceptive_design",
     "manipulative_design",
-
     # Addiction
     "addiction_inducement",
     "addiction_trigger",
     "addictive_design",
     "habit_forming",
     "compulsion_trigger",
-
     # Psychological tactics
     "gaslighting",
     "gaslight",
@@ -572,7 +526,6 @@ MANIPULATION_COERCION_CAPABILITIES = {
     "emotional_abuse",
     "emotional_manipulate",
     "emotional_exploit",
-
     # Radicalization and recruitment
     "cult_recruitment",
     "cult",
@@ -582,7 +535,6 @@ MANIPULATION_COERCION_CAPABILITIES = {
     "extremism",
     "indoctrination",
     "indoctrinate",
-
     # Coercion and extortion
     "blackmail",
     "blackmailing",
@@ -593,7 +545,6 @@ MANIPULATION_COERCION_CAPABILITIES = {
     "coerce",
     "coercing",
     "coercive",
-
     # Mind control
     "brainwashing",
     "brainwash",
@@ -603,12 +554,10 @@ MANIPULATION_COERCION_CAPABILITIES = {
     "hypnosis",
     "hypnotic",
     "hypnotize",
-
     # Stockholm syndrome
     "stockholm_syndrome_inducement",
     "stockholm_syndrome",
     "trauma_bonding",
-
     # Additional manipulation terms
     "neuro_linguistic",
     "nlp_manipulation",
@@ -647,7 +596,6 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "synthetic_evidence",
     "synthetic_media",
     "fake_media",
-
     # Identity and impersonation
     "identity_spoofing",
     "identity_theft",
@@ -658,7 +606,6 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "impersonate",
     "impersonating",
     "identity_fraud",
-
     # False documentation
     "false_documentation",
     "false_document",
@@ -669,7 +616,6 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "document_forging",  # Changed from "forging" to avoid false positives
     "counterfeit",
     "counterfeiting",
-
     # Misinformation
     "misinformation_campaigns",
     "misinformation",
@@ -680,7 +626,6 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "fabricate",
     "fabricating",
     "fabrication",
-
     # Scams and fraud
     "catfishing",
     "catfish",
@@ -698,7 +643,6 @@ DECEPTION_FRAUD_CAPABILITIES = {
     "advance_fee_fraud",
     "advance_fee",
     "419_scam",
-
     # Additional fraud terms
     "wire_fraud",
     "mail_fraud",
@@ -729,7 +673,6 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "keylogger_creation",
     "keylogger",
     "keylogging",
-
     # Exploitation
     "zero_day_exploitation",
     "zero_day",
@@ -741,7 +684,6 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "vuln_scan",
     "pen_test",  # Without permission
     "penetration_test",  # Without permission
-
     # Attacks
     "ddos_attacks",
     "ddos",
@@ -754,7 +696,6 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "unauthorized_access",
     "system_sabotage",
     "sabotage",
-
     # Password and encryption
     "password_cracking",
     "password_crack",
@@ -763,14 +704,12 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "encryption_breaking",
     "decrypt_unauthorized",
     "cryptanalysis",
-
     # Data theft
     "data_theft",
     "data_steal",
     "data_exfiltration",
     "exfiltrate",
     "data_breach",
-
     # Network attacks
     "botnet_creation",
     "botnet",
@@ -778,25 +717,21 @@ CYBER_OFFENSIVE_CAPABILITIES = {
     "phishing_campaigns",
     "spear_phishing",
     "whaling",
-
     # Backdoors and persistence
     "backdoor_installation",
     "backdoor",
     "backdooring",
     "persistence_mechanism",
-
     # Supply chain
     "supply_chain_attacks",
     "supply_chain_attack",
     "firmware_exploitation",
     "firmware_hack",
-
     # Reverse engineering (without permission)
     "reverse_engineering",  # Of proprietary systems
     "reverse_engineer",
     "decompile",
     "disassemble",
-
     # Additional offensive terms
     "sql_injection",
     "xss_attack",
@@ -869,7 +804,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "chemical_precursor",
     "explosive_precursors",
     "explosive_precursor",
-
     # Biological agents
     "biological_agent_design",
     "biological_agent",
@@ -877,7 +811,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "pathogen_modification",
     "pathogen_design",
     "germ_warfare",
-
     # Toxins
     "toxin_production",
     "toxin",
@@ -887,7 +820,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "poisoning",
     "poisonous",
     "venom",
-
     # Illegal drugs
     "illegal_drug_synthesis",
     "drug_synthesis",
@@ -904,7 +836,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "methamphetamine_production",  # Changed from "meth_production" to avoid "method" false positives
     "cocaine_synthesis",
     "heroin_synthesis",
-
     # Specific dangerous substances
     "ricin_production",
     "ricin",
@@ -917,7 +848,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "vx_gas",
     "tabun",
     "soman",
-
     # Radioactive materials
     "radioactive_materials",
     "radioactive_material",
@@ -925,7 +855,6 @@ HAZARDOUS_MATERIALS_CAPABILITIES = {
     "nuclear_material",
     "enriched_uranium",
     "plutonium",
-
     # Additional hazardous terms
     "carcinogen",
     "carcinogenic",
@@ -1102,7 +1031,7 @@ def _compile_prohibition_regex(capabilities: frozenset[str]) -> re.Pattern[str]:
     # Join with | (OR) and add custom word boundaries that include underscores and colons
     # (?:^|[\s_:]) means "start of string OR whitespace OR underscore OR colon"
     # (?:$|[\s_:]) means "end of string OR whitespace OR underscore OR colon"
-    pattern = r'(?:^|[\s_:])(' + '|'.join(escaped) + r')(?:$|[\s_:])'
+    pattern = r"(?:^|[\s_:])(" + "|".join(escaped) + r")(?:$|[\s_:])"
     return re.compile(pattern, re.IGNORECASE)
 
 

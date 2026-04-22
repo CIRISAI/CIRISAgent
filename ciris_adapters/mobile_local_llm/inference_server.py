@@ -165,9 +165,7 @@ class InferenceServerManager:
         binary = self._config.server_binary
         assert binary is not None  # guarded by caller
         if not self._binary_available(binary):
-            raise InferenceServerError(
-                f"Inference server binary not found or not executable: {binary}"
-            )
+            raise InferenceServerError(f"Inference server binary not found or not executable: {binary}")
 
         argv = self._build_argv(binary)
         logger.info("Spawning local inference server: %s", " ".join(argv))
@@ -209,9 +207,7 @@ class InferenceServerManager:
         while True:
             if self._owned_process and self._process is not None and self._process.returncode is not None:
                 self._last_exit_code = self._process.returncode
-                raise InferenceServerError(
-                    f"Inference server exited during startup (code={self._process.returncode})"
-                )
+                raise InferenceServerError(f"Inference server exited during startup (code={self._process.returncode})")
             if await self._probe_health(timeout=1.5):
                 return
             if asyncio.get_event_loop().time() >= deadline:

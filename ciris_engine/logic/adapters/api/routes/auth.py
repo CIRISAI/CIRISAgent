@@ -1011,9 +1011,7 @@ def _reject_observer_on_personal_install(user_role: UserRole, email: Optional[st
     is_mobile_platform = is_android() or is_ios()
     if user_role == UserRole.OBSERVER and is_mobile_platform:
         masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "unknown"
-        logger.warning(
-            f"[AUTH] Rejecting OBSERVER login on personal install: {masked_email}"
-        )  # NOSONAR - email masked
+        logger.warning(f"[AUTH] Rejecting OBSERVER login on personal install: {masked_email}")  # NOSONAR - email masked
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -2143,9 +2141,7 @@ async def revoke_service_token(
     token_hash = hashlib.sha256(revoke_request.token.encode("utf-8")).hexdigest()[:16] + "..."
 
     if success:
-        logger.info(
-            f"[AUTH] SYSTEM_ADMIN {auth.user_id} revoked service token {token_hash}: {revoke_request.reason}"
-        )
+        logger.info(f"[AUTH] SYSTEM_ADMIN {auth.user_id} revoked service token {token_hash}: {revoke_request.reason}")
         return ServiceTokenRevokeResponse(
             success=True,
             message="Service token revoked successfully",
@@ -2291,6 +2287,7 @@ async def get_attestation(request: Request, refresh: bool = False) -> Dict[str, 
     def _detect_platform_os() -> str:
         """Fallback platform detection when verify doesn't provide platform_os."""
         import sys
+
         return sys.platform  # 'darwin', 'linux', 'win32', etc.
 
     # Check for cached attestation (allow stale data while refresh runs in background)

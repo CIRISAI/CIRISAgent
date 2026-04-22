@@ -28,10 +28,7 @@ from typing import Any, Dict, Optional, Set
 
 from fastapi import Request
 
-from ciris_engine.protocols.services.infrastructure.ingress_auth import (
-    IngressAuthProviderProtocol,
-    IngressUser,
-)
+from ciris_engine.protocols.services.infrastructure.ingress_auth import IngressAuthProviderProtocol, IngressUser
 from ciris_engine.schemas.api.auth import UserRole
 
 logger = logging.getLogger(__name__)

@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 from ciris_engine.logic.adapters.api.routes.setup.llm_discovery import (
-    LOCALHOST_PORTS,
     LLM_SERVICE_TYPES,
+    LOCALHOST_PORTS,
     PROBE_HOSTNAMES,
     _batch_resolve_hostnames,
     _build_server_entry,
@@ -193,6 +193,7 @@ class TestBatchResolveHostnames:
     @pytest.mark.asyncio
     async def test_resolves_multiple_hostnames(self) -> None:
         """Test resolving multiple hostnames in parallel."""
+
         async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
             if hostname == "jetson.local":
                 return "192.168.1.100"
@@ -204,9 +205,7 @@ class TestBatchResolveHostnames:
             "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.resolve_local_hostname",
             side_effect=mock_resolve,
         ):
-            result = await _batch_resolve_hostnames(
-                ["jetson.local", "ollama.local", "unknown.local"]
-            )
+            result = await _batch_resolve_hostnames(["jetson.local", "ollama.local", "unknown.local"])
 
             assert result["jetson.local"] == "192.168.1.100"
             assert result["ollama.local"] == "192.168.1.101"
@@ -215,6 +214,7 @@ class TestBatchResolveHostnames:
     @pytest.mark.asyncio
     async def test_handles_exceptions(self) -> None:
         """Test that exceptions during resolution return the hostname."""
+
         async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
             if hostname == "error.local":
                 raise Exception("DNS error")
@@ -238,6 +238,7 @@ class TestBatchResolveHostnames:
     @pytest.mark.asyncio
     async def test_single_hostname(self) -> None:
         """Test with single hostname."""
+
         async def mock_resolve(hostname: str, timeout: float = 2.0) -> str:
             return "10.0.0.1"
 
@@ -302,13 +303,14 @@ class TestProbeLlmEndpoint:
     async def test_probe_ollama_server(self) -> None:
         """Test probing an Ollama server."""
         import json
+
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.text = AsyncMock(return_value=json.dumps({
-            "models": [{"name": "llama3"}, {"name": "mistral"}]
-        }))
+        mock_response.text = AsyncMock(return_value=json.dumps({"models": [{"name": "llama3"}, {"name": "mistral"}]}))
 
-        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession"
+        ) as mock_session_class:
             mock_session = MagicMock()
             mock_get_cm = AsyncMock()
             mock_get_cm.__aenter__.return_value = mock_response
@@ -328,17 +330,18 @@ class TestProbeLlmEndpoint:
     async def test_probe_openai_compatible_v1_models(self) -> None:
         """Test probing an OpenAI-compatible /v1/models endpoint."""
         import json
+
         # First call (Ollama) returns 404, second call (/v1/models) returns models
         mock_404 = MagicMock()
         mock_404.status = 404
 
         mock_200 = MagicMock()
         mock_200.status = 200
-        mock_200.text = AsyncMock(return_value=json.dumps({
-            "data": [{"id": "gpt-3.5-turbo"}, {"id": "gpt-4"}]
-        }))
+        mock_200.text = AsyncMock(return_value=json.dumps({"data": [{"id": "gpt-3.5-turbo"}, {"id": "gpt-4"}]}))
 
-        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession"
+        ) as mock_session_class:
             mock_session = MagicMock()
             # Create separate context managers for each get call
             mock_get_cm1 = AsyncMock()
@@ -361,6 +364,7 @@ class TestProbeLlmEndpoint:
     async def test_probe_models_endpoint_list_response(self) -> None:
         """Test probing /models endpoint with list response."""
         import json
+
         mock_404 = MagicMock()
         mock_404.status = 404
 
@@ -368,7 +372,9 @@ class TestProbeLlmEndpoint:
         mock_200.status = 200
         mock_200.text = AsyncMock(return_value=json.dumps([{"id": "model1"}, {"id": "model2"}]))
 
-        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession"
+        ) as mock_session_class:
             mock_session = MagicMock()
             # Ollama fails, /v1/models fails, /models succeeds
             mock_get_cm1 = AsyncMock()
@@ -392,6 +398,7 @@ class TestProbeLlmEndpoint:
     async def test_probe_models_endpoint_dict_response(self) -> None:
         """Test probing /models endpoint with dict response containing data."""
         import json
+
         mock_404 = MagicMock()
         mock_404.status = 404
 
@@ -399,7 +406,9 @@ class TestProbeLlmEndpoint:
         mock_200.status = 200
         mock_200.text = AsyncMock(return_value=json.dumps({"data": [{"id": "model1"}]}))
 
-        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession"
+        ) as mock_session_class:
             mock_session = MagicMock()
             mock_get_cm1 = AsyncMock()
             mock_get_cm1.__aenter__.return_value = mock_404
@@ -420,7 +429,10 @@ class TestProbeLlmEndpoint:
     async def test_probe_all_endpoints_fail(self) -> None:
         """Test when all probe endpoints fail."""
         import aiohttp
-        with patch("ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession") as mock_session_class:
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_discovery.aiohttp.ClientSession"
+        ) as mock_session_class:
             mock_session = MagicMock()
             mock_session.get.side_effect = aiohttp.ClientError("Connection refused")
             mock_session_class.return_value.__aenter__ = AsyncMock(return_value=mock_session)
@@ -514,6 +526,7 @@ class TestDiscoverViaMdnsServicesParallel:
     @pytest.mark.asyncio
     async def test_handles_browse_exceptions(self) -> None:
         """Test that exceptions during browse are handled gracefully."""
+
         async def mock_discover(service_type: str, timeout: float) -> List[Any]:
             raise Exception("Network error")
 
@@ -569,9 +582,7 @@ class TestDiscoverLocalLlmServers:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            servers, methods = await discover_local_llm_servers(
-                timeout_seconds=2.0, include_localhost=False
-            )
+            servers, methods = await discover_local_llm_servers(timeout_seconds=2.0, include_localhost=False)
 
             assert "hostname_probe" in methods
             assert "localhost_scan" not in methods
@@ -649,6 +660,7 @@ class TestDiscoverLocalLlmServers:
     @pytest.mark.asyncio
     async def test_discovery_handles_timeout(self) -> None:
         """Test that discovery handles timeout gracefully."""
+
         async def slow_probe(hostname: str, port: int, ip: str) -> None:
             await asyncio.sleep(10)  # Longer than timeout
             return None
@@ -737,9 +749,7 @@ class TestStartLocalLlmServer:
             new_callable=AsyncMock,
             return_value={"success": True},
         ) as mock_start:
-            result = await start_local_llm_server(
-                server_type="llama_cpp", model="gemma-4-e4b", port=8080
-            )
+            result = await start_local_llm_server(server_type="llama_cpp", model="gemma-4-e4b", port=8080)
 
             mock_start.assert_called_once_with(8080, "gemma-4-e4b", confirm_download=False)
 
@@ -858,9 +868,7 @@ class TestFindLlamaCppBinary:
 
     def test_not_found(self) -> None:
         """Test when binary is not found anywhere."""
-        with patch("shutil.which", return_value=None), patch(
-            "os.path.isfile", return_value=False
-        ):
+        with patch("shutil.which", return_value=None), patch("os.path.isfile", return_value=False):
             result = _find_llama_cpp_binary()
             assert result is None
 

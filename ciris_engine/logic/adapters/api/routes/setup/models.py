@@ -269,10 +269,14 @@ class DiscoveredLLMServer(BaseModel):
     id: str = Field(..., description="Unique server ID (ip_port format)")
     label: str = Field(..., description="Display label (e.g., 'jetson.local:8080 (Gemma 4)')")
     url: str = Field(..., description="Server URL (http://ip:port)")
-    server_type: str = Field(..., description="Server type: ollama, llama_cpp, vllm, lmstudio, localai, openai_compatible")
+    server_type: str = Field(
+        ..., description="Server type: ollama, llama_cpp, vllm, lmstudio, localai, openai_compatible"
+    )
     model_count: int = Field(default=0, description="Number of models available")
     models: List[str] = Field(default_factory=list, description="Model names available on server")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata (hostname, ip, port, source)")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata (hostname, ip, port, source)"
+    )
 
 
 class DiscoverLocalLLMRequest(BaseModel):
@@ -287,7 +291,9 @@ class DiscoverLocalLLMResponse(BaseModel):
 
     servers: List[DiscoveredLLMServer] = Field(default_factory=list, description="Discovered servers")
     total_count: int = Field(default=0, description="Total servers found")
-    discovery_methods: List[str] = Field(default_factory=list, description="Methods used (hostname_probe, localhost_scan)")
+    discovery_methods: List[str] = Field(
+        default_factory=list, description="Methods used (hostname_probe, localhost_scan)"
+    )
     error: Optional[str] = Field(None, description="Error message if discovery partially failed")
 
 
@@ -460,9 +466,7 @@ class SetupCompleteRequest(BaseModel):
         if v.lower() == "admin":
             testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
             if not testing_mode:
-                raise ValueError(
-                    "Username 'admin' is reserved for testing. Please choose a different username."
-                )
+                raise ValueError("Username 'admin' is reserved for testing. Please choose a different username.")
         return v
 
 

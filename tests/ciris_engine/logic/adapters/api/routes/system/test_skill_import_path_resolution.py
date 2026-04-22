@@ -29,54 +29,37 @@ class TestPathMatchesBasePrefix:
 
     def test_matches_exact_base_path(self) -> None:
         """Should match when path equals base exactly."""
-        matches, relative = _path_matches_base_prefix(
-            ["home", "user"], ["/", "home", "user"]
-        )
+        matches, relative = _path_matches_base_prefix(["home", "user"], ["/", "home", "user"])
         assert matches is True
         assert relative == []
 
     def test_matches_path_under_base(self) -> None:
         """Should match when path is under base and return relative components."""
-        matches, relative = _path_matches_base_prefix(
-            ["home", "user", "projects", "skill"],
-            ["/", "home", "user"]
-        )
+        matches, relative = _path_matches_base_prefix(["home", "user", "projects", "skill"], ["/", "home", "user"])
         assert matches is True
         assert relative == ["projects", "skill"]
 
     def test_no_match_when_path_shorter_than_base(self) -> None:
         """Should not match when path has fewer components than base."""
-        matches, relative = _path_matches_base_prefix(
-            ["home"],
-            ["/", "home", "user"]
-        )
+        matches, relative = _path_matches_base_prefix(["home"], ["/", "home", "user"])
         assert matches is False
         assert relative == []
 
     def test_no_match_when_components_differ(self) -> None:
         """Should not match when path components don't match base."""
-        matches, relative = _path_matches_base_prefix(
-            ["home", "other_user", "projects"],
-            ["/", "home", "user"]
-        )
+        matches, relative = _path_matches_base_prefix(["home", "other_user", "projects"], ["/", "home", "user"])
         assert matches is False
         assert relative == []
 
     def test_no_match_with_similar_prefix(self) -> None:
         """Should not match /tmp2 against /tmp base."""
-        matches, relative = _path_matches_base_prefix(
-            ["tmp2", "foo"],
-            ["/", "tmp"]
-        )
+        matches, relative = _path_matches_base_prefix(["tmp2", "foo"], ["/", "tmp"])
         assert matches is False
         assert relative == []
 
     def test_handles_non_root_base_parts(self) -> None:
         """Should handle base paths that don't start with /."""
-        matches, relative = _path_matches_base_prefix(
-            ["projects", "skill"],
-            ["projects"]
-        )
+        matches, relative = _path_matches_base_prefix(["projects", "skill"], ["projects"])
         assert matches is True
         assert relative == ["skill"]
 
@@ -171,9 +154,9 @@ class TestResolveToAllowedPath:
                 result = _resolve_to_allowed_path("skills/my_skill")
 
                 # The result should be within the temp directory (cwd), not home
-                assert str(result).startswith(tmpdir), (
-                    f"Relative path resolved to {result}, expected to be under {tmpdir}"
-                )
+                assert str(result).startswith(
+                    tmpdir
+                ), f"Relative path resolved to {result}, expected to be under {tmpdir}"
                 assert result == test_dir.resolve()
             finally:
                 os.chdir(old_cwd)

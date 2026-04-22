@@ -23,9 +23,34 @@ CONSCIENCE_LANGS = ["am", "ar", "de", "es", "fr", "hi", "it", "ja", "ko", "pt", 
 
 # All DMA languages
 DMA_LANGS = [
-    "am", "ar", "bn", "de", "es", "fa", "fr", "ha", "hi", "id", "it", "ja",
-    "ko", "mr", "my", "pa", "pt", "ru", "sw", "ta", "te", "th", "tr", "uk",
-    "ur", "vi", "yo", "zh"
+    "am",
+    "ar",
+    "bn",
+    "de",
+    "es",
+    "fa",
+    "fr",
+    "ha",
+    "hi",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "mr",
+    "my",
+    "pa",
+    "pt",
+    "ru",
+    "sw",
+    "ta",
+    "te",
+    "th",
+    "tr",
+    "uk",
+    "ur",
+    "vi",
+    "yo",
+    "zh",
 ]
 
 # ============================================================================
@@ -189,7 +214,7 @@ def update_coherence_file(filepath: Path) -> bool:
             # Find end of that line
             line_end = content.find("\n", idx)
             if line_end > 0:
-                content = content[:line_end+1] + "\n" + COHERENCE_CIRIS_PRINCIPLES + content[line_end+1:]
+                content = content[: line_end + 1] + "\n" + COHERENCE_CIRIS_PRINCIPLES + content[line_end + 1 :]
 
     # Add positive examples before the negative section
     if "multi-perspective responses" not in content.lower():

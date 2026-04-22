@@ -12,10 +12,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.parent.parent
 
 # Load files
-with open(BASE_DIR / 'localization/en.json', 'r', encoding='utf-8') as f:
+with open(BASE_DIR / "localization/en.json", "r", encoding="utf-8") as f:
     en_data = json.load(f)
 
-with open(BASE_DIR / 'localization/ta.json', 'r', encoding='utf-8') as f:
+with open(BASE_DIR / "localization/ta.json", "r", encoding="utf-8") as f:
     ta_existing = json.load(f)
 
 # Comprehensive Tamil translation dictionary
@@ -47,7 +47,6 @@ TRANSLATIONS = {
     "TSASPDMA": "TSASPDMA",
     "ID": "அடையாளம்",
     "TSDB": "TSDB",
-
     # Core CIRIS concepts (from glossary)
     "ACCORD": "உடன்படிக்கை",
     "Wise Authority": "அறிவார்ந்த அதிகாரம்",
@@ -60,7 +59,6 @@ TRANSLATIONS = {
     "Signalling Gratitude": "நன்றி தெரிவித்தல்",
     "Flourishing": "செழிப்பு",
     "Ubuntu": "உபுண்டு",
-
     # Action verbs
     "observe": "கவனி",
     "Observe": "கவனி",
@@ -82,7 +80,6 @@ TRANSLATIONS = {
     "Forget": "மற",
     "task_complete": "பணி நிறைவு",
     "Task Complete": "பணி நிறைவு",
-
     # States
     "wakeup": "விழி",
     "Wakeup": "விழி",
@@ -96,7 +93,6 @@ TRANSLATIONS = {
     "Dream": "கனவு",
     "shutdown": "நிறுத்து",
     "Shutdown": "நிறுத்து",
-
     # Common UI elements
     "Login": "உள்நுழை",
     "login": "உள்நுழை",
@@ -831,12 +827,14 @@ TRANSLATIONS = {
     "might": "கூடும்",
 }
 
+
 def preserve_placeholders(text):
     """Extract placeholders from text."""
     if not isinstance(text, str):
         return [], text
-    placeholders = re.findall(r'\{[^}]+\}|%[sd]|%\([^)]+\)[sd]', text)
+    placeholders = re.findall(r"\{[^}]+\}|%[sd]|%\([^)]+\)[sd]", text)
     return placeholders, text
+
 
 def restore_placeholders(text, placeholders):
     """Ensure placeholders are preserved in translated text."""
@@ -844,6 +842,7 @@ def restore_placeholders(text, placeholders):
         return text
     # Placeholders should already be in the text, just return as-is
     return text
+
 
 def translate_string(text):
     """Translate a single string using the translations dictionary."""
@@ -873,10 +872,11 @@ def translate_string(text):
     for eng, tamil in sorted_trans:
         if eng and tamil:  # Skip empty translations
             # Use word boundary matching for better accuracy
-            pattern = r'\b' + re.escape(eng) + r'\b'
+            pattern = r"\b" + re.escape(eng) + r"\b"
             result = re.sub(pattern, tamil, result, flags=re.IGNORECASE)
 
     return restore_placeholders(result, placeholders)
+
 
 def translate_dict(data, existing=None, path=""):
     """Recursively translate dictionary, preserving existing translations."""
@@ -906,6 +906,7 @@ def translate_dict(data, existing=None, path=""):
 
     return result
 
+
 # Translate the entire structure
 print("Translating English to Tamil...")
 print(f"Total keys in English: {sum(1 for _ in json.dumps(en_data).split('\"') if _.strip())}")
@@ -914,17 +915,13 @@ print(f"Total keys in existing Tamil: {sum(1 for _ in json.dumps(ta_existing).sp
 ta_complete = translate_dict(en_data, ta_existing)
 
 # Ensure _meta is correct
-ta_complete["_meta"] = {
-    "language": "ta",
-    "language_name": "தமிழ்",
-    "direction": "ltr"
-}
+ta_complete["_meta"] = {"language": "ta", "language_name": "தமிழ்", "direction": "ltr"}
 
 print(f"Total keys in completed Tamil: {sum(1 for _ in json.dumps(ta_complete).split('\"') if _.strip())}")
 
 # Write the completed file
-output_path = BASE_DIR / 'localization/ta.json'
-with open(output_path, 'w', encoding='utf-8') as f:
+output_path = BASE_DIR / "localization/ta.json"
+with open(output_path, "w", encoding="utf-8") as f:
     json.dump(ta_complete, f, ensure_ascii=False, indent=4)
 
 print(f"\n✓ Complete Tamil localization written to {output_path}")

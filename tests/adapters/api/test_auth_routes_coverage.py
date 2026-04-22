@@ -235,12 +235,14 @@ class TestOAuthHelperMethods:
 
             mock_user_response = Mock()
             mock_user_response.status = 200
-            mock_user_response.json = AsyncMock(return_value={
-                "id": "12345",
-                "email": "test@example.com",
-                "name": "Test User",
-                "picture": "https://example.com/pic.jpg",
-            })
+            mock_user_response.json = AsyncMock(
+                return_value={
+                    "id": "12345",
+                    "email": "test@example.com",
+                    "name": "Test User",
+                    "picture": "https://example.com/pic.jpg",
+                }
+            )
 
             # Create mock session with context managers for post/get
             mock_session = Mock()
@@ -297,13 +299,15 @@ class TestOAuthHelperMethods:
             # Mock user info response
             mock_user_response = Mock()
             mock_user_response.status = 200
-            mock_user_response.json = AsyncMock(return_value={
-                "id": 123,
-                "email": "test@github.com",
-                "name": "GitHub User",
-                "avatar_url": "https://avatars.githubusercontent.com/u/123",
-                "login": "githubuser",
-            })
+            mock_user_response.json = AsyncMock(
+                return_value={
+                    "id": 123,
+                    "email": "test@github.com",
+                    "name": "GitHub User",
+                    "avatar_url": "https://avatars.githubusercontent.com/u/123",
+                    "login": "githubuser",
+                }
+            )
 
             mock_session = Mock()
             mock_post_cm = AsyncMock()
@@ -336,12 +340,14 @@ class TestOAuthHelperMethods:
             # Mock user info response
             mock_user_response = Mock()
             mock_user_response.status = 200
-            mock_user_response.json = AsyncMock(return_value={
-                "email": "test@discord.com",
-                "username": "DiscordUser",
-                "avatar": "avatar123",
-                "id": "123456789",
-            })
+            mock_user_response.json = AsyncMock(
+                return_value={
+                    "email": "test@discord.com",
+                    "username": "DiscordUser",
+                    "avatar": "avatar123",
+                    "id": "123456789",
+                }
+            )
 
             mock_session = Mock()
             mock_post_cm = AsyncMock()
@@ -1471,20 +1477,24 @@ class TestGitHubOAuthErrors:
 
             mock_user_response = Mock()
             mock_user_response.status = 200
-            mock_user_response.json = AsyncMock(return_value={
-                "id": 123,
-                "email": None,  # Private email
-                "name": "GitHub User",
-                "avatar_url": "https://example.com/avatar.png",
-                "login": "githubuser",
-            })
+            mock_user_response.json = AsyncMock(
+                return_value={
+                    "id": 123,
+                    "email": None,  # Private email
+                    "name": "GitHub User",
+                    "avatar_url": "https://example.com/avatar.png",
+                    "login": "githubuser",
+                }
+            )
 
             mock_emails_response = Mock()
             mock_emails_response.status = 200
-            mock_emails_response.json = AsyncMock(return_value=[
-                {"email": "secondary@example.com", "primary": False},
-                {"email": "primary@example.com", "primary": True},
-            ])
+            mock_emails_response.json = AsyncMock(
+                return_value=[
+                    {"email": "secondary@example.com", "primary": False},
+                    {"email": "primary@example.com", "primary": True},
+                ]
+            )
 
             mock_session = Mock()
             mock_post_cm = AsyncMock()
@@ -1950,16 +1960,18 @@ class TestNativeGoogleTokenExchange:
 
             mock_response = Mock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "sub": "google-user-123",
-                "email": "test@gmail.com",
-                "name": "Test User",
-                "picture": "https://example.com/pic.jpg",
-                "aud": "test-client-id.apps.googleusercontent.com",  # Must match config
-                "iss": "accounts.google.com",  # Valid issuer
-                "exp": str(int(time.time()) + 3600),  # Not expired (1 hour in future)
-                "email_verified": "true",
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "sub": "google-user-123",
+                    "email": "test@gmail.com",
+                    "name": "Test User",
+                    "picture": "https://example.com/pic.jpg",
+                    "aud": "test-client-id.apps.googleusercontent.com",  # Must match config
+                    "iss": "accounts.google.com",  # Valid issuer
+                    "exp": str(int(time.time()) + 3600),  # Not expired (1 hour in future)
+                    "email_verified": "true",
+                }
+            )
 
             mock_session = Mock()
             mock_get_cm = AsyncMock()
@@ -2020,13 +2032,15 @@ class TestNativeGoogleTokenExchange:
 
             mock_response = Mock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "sub": "attacker-user",
-                "email": "attacker@example.com",
-                "aud": "different-client-id.apps.googleusercontent.com",  # Wrong audience!
-                "iss": "accounts.google.com",
-                "exp": str(int(time.time()) + 3600),
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "sub": "attacker-user",
+                    "email": "attacker@example.com",
+                    "aud": "different-client-id.apps.googleusercontent.com",  # Wrong audience!
+                    "iss": "accounts.google.com",
+                    "exp": str(int(time.time()) + 3600),
+                }
+            )
 
             mock_session = Mock()
             mock_get_cm = AsyncMock()
@@ -2057,13 +2071,15 @@ class TestNativeGoogleTokenExchange:
 
             mock_response = Mock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "sub": "user-123",
-                "email": "test@example.com",
-                "aud": "test-client-id",
-                "iss": "malicious-issuer.com",  # Wrong issuer!
-                "exp": str(int(time.time()) + 3600),
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "sub": "user-123",
+                    "email": "test@example.com",
+                    "aud": "test-client-id",
+                    "iss": "malicious-issuer.com",  # Wrong issuer!
+                    "exp": str(int(time.time()) + 3600),
+                }
+            )
 
             mock_session = Mock()
             mock_get_cm = AsyncMock()
@@ -2094,13 +2110,15 @@ class TestNativeGoogleTokenExchange:
 
             mock_response = Mock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "sub": "user-123",
-                "email": "test@example.com",
-                "aud": "test-client-id",
-                "iss": "accounts.google.com",
-                "exp": str(int(time.time()) - 3600),  # Expired 1 hour ago!
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "sub": "user-123",
+                    "email": "test@example.com",
+                    "aud": "test-client-id",
+                    "iss": "accounts.google.com",
+                    "exp": str(int(time.time()) - 3600),  # Expired 1 hour ago!
+                }
+            )
 
             mock_session = Mock()
             mock_get_cm = AsyncMock()
@@ -2131,12 +2149,14 @@ class TestNativeGoogleTokenExchange:
 
             mock_response = Mock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={
-                "email": "test@example.com",  # Missing 'sub'!
-                "aud": "test-client-id",
-                "iss": "accounts.google.com",
-                "exp": str(int(time.time()) + 3600),
-            })
+            mock_response.json = AsyncMock(
+                return_value={
+                    "email": "test@example.com",  # Missing 'sub'!
+                    "aud": "test-client-id",
+                    "iss": "accounts.google.com",
+                    "exp": str(int(time.time()) + 3600),
+                }
+            )
 
             mock_session = Mock()
             mock_get_cm = AsyncMock()

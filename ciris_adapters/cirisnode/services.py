@@ -586,9 +586,7 @@ class CIRISNodeService:
         requesting_trace_id = f"trace-{thought_id}-{agent_task_id}"
 
         # Compute deterministic interaction ID from both trace IDs
-        interaction_id = CreditRecord.compute_interaction_id(
-            requesting_trace_id, resolving_trace_id
-        )
+        interaction_id = CreditRecord.compute_interaction_id(requesting_trace_id, resolving_trace_id)
 
         # Determine outcome from decision
         if decision in ("approve", "approved", "resolved"):
@@ -608,6 +606,7 @@ class CIRISNodeService:
         if domain_hint:
             try:
                 from ciris_engine.schemas.services.agent_credits import DomainCategory
+
                 domain_category = DomainCategory(domain_hint)
             except ValueError:
                 pass
@@ -654,9 +653,7 @@ class CIRISNodeService:
             except Exception as e:
                 logger.warning(f"Failed to submit credit record to CIRISNode: {e}")
 
-    def _sign_credit_record(
-        self, interaction_id: str, timestamp: datetime
-    ) -> Optional[DualSignature]:
+    def _sign_credit_record(self, interaction_id: str, timestamp: datetime) -> Optional[DualSignature]:
         """Sign a credit record with the agent's Ed25519 key."""
         try:
             from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key

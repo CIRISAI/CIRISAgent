@@ -247,9 +247,7 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
         that the rest of CIRIS does not have to care where the model lives.
         """
         if not self._available:
-            raise RuntimeError(
-                "MobileLocalLLMService is not available; LLM bus should route to the next provider"
-            )
+            raise RuntimeError("MobileLocalLLMService is not available; LLM bus should route to the next provider")
 
         self._total_requests += 1
         try:
@@ -302,9 +300,7 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
             import instructor  # type: ignore[import-not-found]
             from openai import AsyncOpenAI  # type: ignore[import-not-found]
         except ImportError as exc:  # pragma: no cover - dependency guard
-            raise RuntimeError(
-                "MobileLocalLLMService requires the 'openai' and 'instructor' packages"
-            ) from exc
+            raise RuntimeError("MobileLocalLLMService requires the 'openai' and 'instructor' packages") from exc
 
         client = AsyncOpenAI(
             base_url=self._config.base_url(),

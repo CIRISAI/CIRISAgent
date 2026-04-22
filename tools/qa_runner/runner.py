@@ -267,6 +267,8 @@ class QARunner:
             QAModule.WALLET,
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
+            QAModule.SECRETS_ENCRYPTION,
+            QAModule.MEMORY_BENCHMARK,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -890,10 +892,9 @@ class QARunner:
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
-        from .modules.degraded_mode_tests import DegradedModeTests
-        from .modules.model_eval_tests import ModelEvalTests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.deferral_tests import DeferralTestModule
+        from .modules.degraded_mode_tests import DegradedModeTests
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -903,8 +904,11 @@ class QARunner:
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
+        from .modules.memory_benchmark_tests import MemoryBenchmarkTests
+        from .modules.model_eval_tests import ModelEvalTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
+        from .modules.secrets_encryption_tests import SecretsEncryptionTests
         from .modules.solitude_live_tests import SolitudeLiveTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
@@ -953,6 +957,8 @@ class QARunner:
             QAModule.WALLET: WalletTests,
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
+            QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
+            QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -990,6 +996,18 @@ class QARunner:
                         self.console,
                         fail_fast=self.config.fail_fast,
                         test_timeout=self.config.test_timeout,
+                    )
+                elif module == QAModule.MEMORY_BENCHMARK:
+                    # Memory benchmark supports concurrent channels for faster testing
+                    concurrent_channels = getattr(self.config, "concurrent_channels", 4)
+                    message_count = getattr(self.config, "message_count", 100)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                        message_count=message_count,
+                        concurrent_channels=concurrent_channels,
                     )
                 else:
                     test_instance = test_class(client, self.console)

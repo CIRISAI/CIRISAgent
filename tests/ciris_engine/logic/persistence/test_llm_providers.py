@@ -1,14 +1,15 @@
 """Unit tests for LLM provider persistence CRUD helpers."""
 
-import pytest
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from ciris_engine.logic.persistence.llm_providers import (
     CIRIS_SERVICES_DISABLED_VAR,
-    LLMProviderConfig,
     RUNTIME_PROVIDERS_CONFIG_KEY,
+    LLMProviderConfig,
     clear_all_providers,
     create_provider,
     delete_provider,
@@ -21,7 +22,6 @@ from ciris_engine.logic.persistence.llm_providers import (
     upsert_provider,
     write_providers_to_graph,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -132,9 +132,7 @@ class TestGraphConfigOperations:
     """Tests for GraphConfigService read/write operations."""
 
     @pytest.mark.asyncio
-    async def test_read_providers_from_graph_empty(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_read_providers_from_graph_empty(self, mock_config_service: MagicMock):
         """Test reading from graph with no providers."""
         mock_config_service.get_config.return_value = None
 
@@ -143,9 +141,7 @@ class TestGraphConfigOperations:
         mock_config_service.get_config.assert_called_once_with(RUNTIME_PROVIDERS_CONFIG_KEY)
 
     @pytest.mark.asyncio
-    async def test_read_providers_from_graph_with_providers(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_read_providers_from_graph_with_providers(self, mock_config_service: MagicMock):
         """Test reading providers from graph."""
         mock_config = MagicMock()
         mock_config.value.dict_value = {
@@ -187,9 +183,7 @@ class TestGraphConfigOperations:
         assert "my_provider" in call_kwargs.kwargs["value"]
 
     @pytest.mark.asyncio
-    async def test_write_providers_to_graph_no_service(
-        self, sample_provider_config: LLMProviderConfig
-    ):
+    async def test_write_providers_to_graph_no_service(self, sample_provider_config: LLMProviderConfig):
         """Test writing with no config service."""
         result = await write_providers_to_graph(None, {"test": sample_provider_config})
         assert result is False
@@ -204,9 +198,7 @@ class TestCRUDOperations:
     """Tests for combined CRUD operations."""
 
     @pytest.mark.asyncio
-    async def test_list_providers_from_graph(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_list_providers_from_graph(self, mock_config_service: MagicMock):
         """Test listing providers from graph."""
         mock_config = MagicMock()
         mock_config.value.dict_value = {
@@ -231,9 +223,7 @@ class TestCRUDOperations:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_get_provider_found(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_get_provider_found(self, mock_config_service: MagicMock):
         """Test getting a specific provider."""
         mock_config = MagicMock()
         mock_config.value.dict_value = {
@@ -252,9 +242,7 @@ class TestCRUDOperations:
         assert result.provider_id == "local"
 
     @pytest.mark.asyncio
-    async def test_get_provider_not_found(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_get_provider_not_found(self, mock_config_service: MagicMock):
         """Test getting a nonexistent provider."""
         mock_config_service.get_config.return_value = None
 
@@ -270,9 +258,7 @@ class TestCRUDOperations:
         """Test creating a new provider."""
         mock_config_service.get_config.return_value = None
 
-        result = await create_provider(
-            "new_provider", sample_provider_config, mock_config_service
-        )
+        result = await create_provider("new_provider", sample_provider_config, mock_config_service)
 
         assert result.success is True
         assert result.graph_persisted is True
@@ -290,9 +276,7 @@ class TestCRUDOperations:
         }
         mock_config_service.get_config.return_value = mock_config
 
-        result = await create_provider(
-            "existing", sample_provider_config, mock_config_service
-        )
+        result = await create_provider("existing", sample_provider_config, mock_config_service)
 
         assert result.success is False
         assert "already exists" in result.error
@@ -310,9 +294,7 @@ class TestCRUDOperations:
         }
         mock_config_service.get_config.return_value = mock_config
 
-        result = await update_provider(
-            "existing", sample_provider_config, mock_config_service
-        )
+        result = await update_provider("existing", sample_provider_config, mock_config_service)
 
         assert result.success is True
 
@@ -325,9 +307,7 @@ class TestCRUDOperations:
         """Test updating a nonexistent provider."""
         mock_config_service.get_config.return_value = None
 
-        result = await update_provider(
-            "nonexistent", sample_provider_config, mock_config_service
-        )
+        result = await update_provider("nonexistent", sample_provider_config, mock_config_service)
 
         assert result.success is False
         assert "not found" in result.error
@@ -349,9 +329,7 @@ class TestCRUDOperations:
         assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_delete_provider_not_found(
-        self, mock_config_service: MagicMock
-    ):
+    async def test_delete_provider_not_found(self, mock_config_service: MagicMock):
         """Test deleting a nonexistent provider."""
         mock_config_service.get_config.return_value = None
 
@@ -369,9 +347,7 @@ class TestCRUDOperations:
         """Test upsert creates new provider."""
         mock_config_service.get_config.return_value = None
 
-        result = await upsert_provider(
-            "new_provider", sample_provider_config, mock_config_service
-        )
+        result = await upsert_provider("new_provider", sample_provider_config, mock_config_service)
 
         assert result.success is True
 
@@ -388,9 +364,7 @@ class TestCRUDOperations:
         }
         mock_config_service.get_config.return_value = mock_config
 
-        result = await upsert_provider(
-            "existing", sample_provider_config, mock_config_service
-        )
+        result = await upsert_provider("existing", sample_provider_config, mock_config_service)
 
         assert result.success is True
 
@@ -462,9 +436,7 @@ class TestCirisServicesDisabledFlag:
             content = temp_env_file.read_text()
             assert f"{CIRIS_SERVICES_DISABLED_VAR}=false" in content
 
-    def test_set_ciris_services_disabled_overwrites_existing(
-        self, temp_env_file: Path
-    ) -> None:
+    def test_set_ciris_services_disabled_overwrites_existing(self, temp_env_file: Path) -> None:
         """Test that setting flag overwrites existing value.
 
         Expected:
@@ -586,6 +558,7 @@ class TestCirisServicesDisabledFlag:
         with patch.dict("os.environ", {}, clear=True):
             # Ensure the var is not in environment
             import os
+
             os.environ.pop(CIRIS_SERVICES_DISABLED_VAR, None)
 
             result = get_ciris_services_disabled()

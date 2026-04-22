@@ -235,6 +235,15 @@ step "Regenerating Xcode project (xcodegen)..."
 xcodegen generate 2>&1 | tail -3
 ok "Xcode project generated"
 
+# Step 4.1: Verify static framework handling in generated project
+# The Link KMP script in project.yml must detect static archives and NOT
+# embed them in Frameworks/. If this check fails, the app won't install.
+if ! grep -q "ar archive" "$IOS_APP_DIR/project.yml" 2>/dev/null; then
+    warn "project.yml missing static framework detection — iOS install will fail"
+    warn "The 'Link KMP Shared Framework' script must check for 'ar archive'"
+    warn "and skip copying to Frameworks/ for static builds"
+fi
+
 # Step 4.5: Bump build number
 step "Bumping CFBundleVersion..."
 CURRENT_BUILD=$(grep -A1 CFBundleVersion iosApp/Info.plist | tail -1 | sed 's/.*<string>\(.*\)<\/string>/\1/')
@@ -277,6 +286,16 @@ if [ -z "$APP_PATH" ]; then
     fail "Could not find built iosApp.app in DerivedData"
 fi
 ok "Built app: $APP_PATH"
+
+# Step 6.1: Verify shared.framework is NOT a static archive in Frameworks/
+if [ -f "$APP_PATH/Frameworks/shared.framework/shared" ]; then
+    if file "$APP_PATH/Frameworks/shared.framework/shared" | grep -q "ar archive"; then
+        warn "FATAL: Static shared.framework found in Frameworks/ — iOS will reject install"
+        warn "Removing it (linker already linked it via FRAMEWORK_SEARCH_PATHS)"
+        rm -rf "$APP_PATH/Frameworks/shared.framework"
+        ok "Removed static shared.framework from Frameworks/"
+    fi
+fi
 
 # Step 7: Terminate old app
 step "Terminating old app..."

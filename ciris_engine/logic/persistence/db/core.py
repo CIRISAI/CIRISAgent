@@ -641,49 +641,112 @@ def _create_postgres_connection(adapter: Any) -> Any:
     return PostgreSQLConnectionWrapper(conn)
 
 
+class _IOSCursorProxy:
+    """Proxy that prevents sqlite3_finalize() from running on the wrong thread.
+
+    When Python GCs a sqlite3.Cursor, it calls sqlite3_finalize() which triggers
+    Apple's libRPAC isBulkReadStatement assertion if the GC thread differs from
+    the thread that called sqlite3_prepare(). This proxy suppresses __del__() and
+    close() — the cursor's prepared statements get cleaned up when the connection
+    itself is finalized (which only happens on the owning thread via thread-local).
+    """
+
+    __slots__ = ('_cursor',)
+
+    def __init__(self, cursor: sqlite3.Cursor):
+        object.__setattr__(self, '_cursor', cursor)
+
+    def close(self) -> None:
+        pass  # Suppress — let connection cleanup handle it
+
+    def __del__(self) -> None:
+        pass  # Suppress — prevents cross-thread sqlite3_finalize
+
+    def __iter__(self) -> Any:
+        return iter(object.__getattribute__(self, '_cursor'))
+
+    def __next__(self) -> Any:
+        return next(object.__getattribute__(self, '_cursor'))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(object.__getattribute__(self, '_cursor'), name)
+
+    def execute(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
+        object.__getattribute__(self, '_cursor').execute(*args, **kwargs)
+        return self
+
+    def executemany(self, *args: Any, **kwargs: Any) -> "_IOSCursorProxy":
+        object.__getattribute__(self, '_cursor').executemany(*args, **kwargs)
+        return self
+
+    def fetchone(self) -> Any:
+        return object.__getattribute__(self, '_cursor').fetchone()
+
+    def fetchall(self) -> list:
+        return object.__getattribute__(self, '_cursor').fetchall()
+
+    def fetchmany(self, size: int = -1) -> list:
+        return object.__getattribute__(self, '_cursor').fetchmany(size)
+
+    @property
+    def description(self) -> Any:
+        return object.__getattribute__(self, '_cursor').description
+
+    @property
+    def rowcount(self) -> int:
+        return object.__getattribute__(self, '_cursor').rowcount
+
+    @property
+    def lastrowid(self) -> Any:
+        return object.__getattribute__(self, '_cursor').lastrowid
+
+
 class _IOSConnectionProxy:
-    """Proxy that prevents callers from closing/finalizing the real connection.
+    """Proxy that prevents callers from closing/finalizing connections AND cursors.
 
     Apple's libRPAC.dylib (SQLiteDatabaseTracking) asserts if sqlite3_finalize()
-    is called from a different thread than sqlite3_open(). Python's GC can call
-    Connection.__del__() from any thread. This proxy suppresses close() and
-    __del__() so the real connection stays alive in thread-local storage and is
-    only ever touched by the thread that created it.
+    is called from a different thread than sqlite3_open()/sqlite3_prepare().
+    Python's GC can finalize Connection and Cursor objects on any thread.
+
+    This proxy:
+    - Suppresses Connection.close() and __del__()
+    - Wraps all returned cursors in _IOSCursorProxy (suppresses Cursor.__del__())
+    - Real objects live in thread-local storage, finalized only on owning thread
     """
 
     def __init__(self, conn: sqlite3.Connection):
         object.__setattr__(self, '_conn', conn)
 
     def close(self) -> None:
-        pass  # Never close — connection lives in thread-local
+        pass
 
     def __del__(self) -> None:
-        pass  # Never finalize — prevents cross-thread sqlite3_finalize
+        pass
 
     def __enter__(self) -> "_IOSConnectionProxy":
         return self
 
     def __exit__(self, *args: Any) -> None:
-        pass  # Don't close on context manager exit
+        pass
 
     def __getattr__(self, name: str) -> Any:
         return getattr(object.__getattribute__(self, '_conn'), name)
 
-    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+    def execute(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
         conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
-        return conn.execute(*args, **kwargs)
+        return _IOSCursorProxy(conn.execute(*args, **kwargs))
 
-    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+    def executemany(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
         conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
-        return conn.executemany(*args, **kwargs)
+        return _IOSCursorProxy(conn.executemany(*args, **kwargs))
 
-    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+    def executescript(self, *args: Any, **kwargs: Any) -> _IOSCursorProxy:
         conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
-        return conn.executescript(*args, **kwargs)
+        return _IOSCursorProxy(conn.executescript(*args, **kwargs))
 
-    def cursor(self) -> sqlite3.Cursor:
+    def cursor(self) -> _IOSCursorProxy:
         conn = cast(sqlite3.Connection, object.__getattribute__(self, '_conn'))
-        return conn.cursor()
+        return _IOSCursorProxy(conn.cursor())
 
     def commit(self) -> None:
         object.__getattribute__(self, '_conn').commit()

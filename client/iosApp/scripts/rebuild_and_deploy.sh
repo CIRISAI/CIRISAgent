@@ -251,6 +251,21 @@ NEXT_BUILD=$((CURRENT_BUILD + 1))
 plutil -replace CFBundleVersion -string "$NEXT_BUILD" iosApp/Info.plist
 ok "Build $CURRENT_BUILD → $NEXT_BUILD"
 
+# Step 4.9: Always overlay latest source and rebuild Resources.zip
+# This ensures the zip matches the repo, not a stale committed version
+step "Syncing latest source into Resources..."
+rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
+    "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+rsync -a --delete --exclude='__pycache__' \
+    "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+cd "$RESOURCES_DIR"
+rm -f "$IOS_APP_DIR/Resources.zip"
+zip -q -r "$IOS_APP_DIR/Resources.zip" .
+cd "$IOS_APP_DIR"
+ZIP_SIZE=$(du -sh Resources.zip | cut -f1)
+ok "Resources.zip rebuilt ($ZIP_SIZE)"
+
 # Step 5: Build
 if $IS_DEVICE; then
     step "Building for device (this may take a minute)..."

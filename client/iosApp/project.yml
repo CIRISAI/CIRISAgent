@@ -86,6 +86,28 @@ targets:
       - sdk: Security.framework
       - sdk: DeviceCheck.framework
     preBuildScripts:
+      - name: Sync Python Source into Resources.zip
+        script: |
+          # Always rebuild Resources.zip from latest repo source before build.
+          # Without this, Xcode uses a stale committed zip missing recent fixes.
+          CIRIS_ROOT="${PROJECT_DIR}/../.."
+          RESOURCES_DIR="${PROJECT_DIR}/Resources"
+          if [ -d "$RESOURCES_DIR" ] && [ -d "$CIRIS_ROOT/ciris_engine" ]; then
+            echo "Syncing ciris_engine + ciris_adapters into Resources..."
+            rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
+                "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+            rsync -a --delete --exclude='__pycache__' \
+                "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+            find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            cd "$RESOURCES_DIR"
+            rm -f "$PROJECT_DIR/Resources.zip"
+            zip -q -r "$PROJECT_DIR/Resources.zip" .
+            cd "$PROJECT_DIR"
+            echo "Resources.zip rebuilt from latest source"
+          else
+            echo "WARNING: Could not sync source — using existing Resources.zip"
+          fi
+        basedOnDependencyAnalysis: false
       - name: Link KMP Shared Framework
         script: |
           # Link the correct shared.framework based on configuration and SDK

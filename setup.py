@@ -72,7 +72,11 @@ def _detect_host_wheel_tag():
 
 
 def _detect_jar_platform():
-    """Detect platform from the bundled JAR and/or jlinked JRE in ciris_engine/desktop_app/."""
+    """Detect platform from the bundled JAR in ciris_engine/desktop_app/.
+
+    NOTE: JRE bundling was removed to keep wheel size under PyPI's 100MB limit.
+    Platform detection is now based solely on the JAR filename.
+    """
     desktop_dir = Path(__file__).parent / "ciris_engine" / "desktop_app"
     if not desktop_dir.exists():
         return None
@@ -82,10 +86,6 @@ def _detect_jar_platform():
         for jar_suffix, wheel_tag in _JAR_PLATFORM_MAP.items():
             if jar_suffix in stem:
                 return wheel_tag
-    # A bundled JRE is inherently platform-specific even without a JAR: its
-    # native binaries only run on the host they were jlinked for.
-    if (desktop_dir / "jre" / "bin").exists():
-        return _detect_host_wheel_tag()
     return None
 
 
@@ -175,8 +175,8 @@ setup(
         "ciris_engine": [
             "ciris_templates/*.yaml",  # Bundled agent identity templates
             "desktop_app/*.jar",  # CIRIS Desktop app (Kotlin Compose)
-            "desktop_app/*.txt",  # Third-party license notices shipped with the JRE
-            "desktop_app/jre/**/*",  # Bundled jlinked JRE (fat wheel, standalone)
+            # NOTE: JRE no longer bundled to keep wheel under PyPI's 100MB limit.
+            # Users must have Java 17+ installed; CLI provides install instructions.
         ],
     },
     entry_points={

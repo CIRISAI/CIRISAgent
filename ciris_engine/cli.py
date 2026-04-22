@@ -49,7 +49,10 @@ def main() -> None:
 
 
 def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
-    """Wait for server to be healthy (responding to health checks).
+    """Wait for server to be healthy (responding to startup-status).
+
+    Uses /v1/system/startup-status which is available during boot before
+    authentication is ready, and is more lightweight than /health.
 
     Args:
         server_url: Base URL of the server
@@ -58,26 +61,43 @@ def _wait_for_server_health(server_url: str, timeout: float = 60.0) -> bool:
     Returns:
         True if server became healthy, False if timed out
     """
+    import json
     import time
-    import urllib.request
     import urllib.error
+    import urllib.request
 
-    health_url = f"{server_url}/v1/system/health"
+    # Use startup-status endpoint - available during boot, unauthenticated
+    status_url = f"{server_url}/v1/system/startup-status"
     start = time.time()
     attempt = 0
+    last_services = 0
 
     while time.time() - start < timeout:
         attempt += 1
         try:
-            with urllib.request.urlopen(health_url, timeout=2) as resp:
+            with urllib.request.urlopen(status_url, timeout=3) as resp:
                 if resp.status == 200:
-                    print(f"Server healthy after {attempt} attempts ({time.time() - start:.1f}s)")
-                    return True
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+                    body = resp.read().decode("utf-8")
+                    data = json.loads(body).get("data", {})
+                    services_online = data.get("services_online", 0)
+                    services_total = data.get("services_total", 22)
+                    phase = data.get("phase", "unknown")
+
+                    # Print progress when services change
+                    if services_online != last_services:
+                        print(f"Server starting: {services_online}/{services_total} services ({phase})")
+                        last_services = services_online
+
+                    # Consider ready when all services are online
+                    if services_online >= services_total:
+                        elapsed = time.time() - start
+                        print(f"Server ready: {services_online}/{services_total} services ({elapsed:.1f}s)")
+                        return True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, json.JSONDecodeError):
             pass
 
-        # Print progress every 5 attempts
-        if attempt % 5 == 0:
+        # Print progress every 10 attempts if no service updates
+        if attempt % 10 == 0:
             print(f"Waiting for server... (attempt {attempt})")
 
         time.sleep(0.5)

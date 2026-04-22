@@ -1,0 +1,11 @@
+CLAUDE.md:665:# 2. Complete setup wizard (first run) - creates admin user with your chosen password
+CLAUDE.md:794:2. **Default Auth**: Set via setup wizard (QA runner uses admin/qa_test_password_12345)
+README.md:219:# Or set during setup wizard (saved to .env)
+docs/QUICKSTART.md:39:# Complete setup wizard on first run to create admin credentials
+docs/AGENT_CONFIGURATION.md:90:Credentials are set during the setup wizard on first run.
+docs/AGENT_CONFIGURATION.md:95:3. Restart - setup wizard will prompt for new credentials
+docs/API_SPEC.md:24:1. **Basic Auth** - Development only (credentials set via setup wizard)
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:14:3. **Covenant Metrics Opt-In** - Adding telemetry consent to setup wizard
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:122:These fields are set via the setup wizard or adapter config, not environment variables:
+docs/releases/RELEASE_NOTES_BETA.md:120:# Complete setup wizard on first run to create credentials
+docs/STANDALONE_INSTALL.md:141:**Credentials:** Set during setup wizard on first run

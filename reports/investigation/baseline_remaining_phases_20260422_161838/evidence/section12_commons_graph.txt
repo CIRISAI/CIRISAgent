@@ -1,0 +1,355 @@
+client/iosApp/iosApp/localization/yo.json:1153:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/yo.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/yo.json:1578:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/yo.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/yo.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/localization/th.json:1153:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/th.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/th.json:1578:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/th.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/th.json:1791:        "override_rationale": "Overridden by {มโนธรรม_name}: Need to reconsider {กระทำion}",
+client/iosApp/iosApp/localization/ha.json:1428:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/te.json:1153:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/te.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/te.json:1578:        "skill_card_requires": "ఏమిటి It Needs",
+client/iosApp/iosApp/localization/te.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/te.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/localization/ta.json:1153:        "help_support_title": "Need More உதவி?",
+client/iosApp/iosApp/localization/ta.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/ta.json:1578:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/ta.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/ta.json:1791:        "override_rationale": "Overridden by {மனசாட்சி_name}: Need to reபரிசீலிக்கவும் {செயல்}",
+client/iosApp/iosApp/localization/pa.json:1151:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/pa.json:1374:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/pa.json:1576:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/pa.json:1610:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/pa.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/localization/en.json:1204:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/en.json:1427:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/en.json:1629:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/en.json:1663:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/en.json:1770:        "env_cat_want": "Want",
+client/iosApp/iosApp/localization/en.json:1771:        "env_cat_need": "Need",
+client/iosApp/iosApp/localization/en.json:1772:        "env_cat_have": "Have",
+client/iosApp/iosApp/localization/en.json:1774:        "env_cat_can_barter": "Can Barter",
+client/iosApp/iosApp/localization/en.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/localization/manifest.json:333:    "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
+client/iosApp/iosApp/localization/mr.json:1153:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/mr.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/mr.json:1578:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/mr.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/mr.json:1791:        "override_rationale": "Overridden by {विवेक_name}: Need to reconsider {कृतीion}",
+client/iosApp/iosApp/localization/id.json:1151:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/id.json:1374:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/id.json:1576:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/id.json:1610:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/id.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/localization/my.json:1153:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/my.json:1376:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/my.json:1578:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/my.json:1612:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/my.json:1791:        "override_rationale": "Overridden by {အသိစိတ်_name}: Need to reconsider {လုပ်ဆောင်ion}",
+client/iosApp/iosApp/localization/bn.json:1152:        "help_support_title": "Need More Help?",
+client/iosApp/iosApp/localization/bn.json:1375:        "setup_needs_config": "Needs Config",
+client/iosApp/iosApp/localization/bn.json:1577:        "skill_card_requires": "What It Needs",
+client/iosApp/iosApp/localization/bn.json:1611:        "skill_req_bins": "Programs Needed",
+client/iosApp/iosApp/localization/bn.json:1792:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/iosApp/iosApp/AppAttestManager.swift:93:    func attestDeviceIfNeeded() async -> AppAttestResult {
+client/iosApp/iosApp/AppAttestManager.swift:150:            attestKeyId = try await generateKeyIfNeeded()
+client/iosApp/iosApp/AppAttestManager.swift:226:    private func generateKeyIfNeeded() async throws -> String {
+client/iosApp/iosApp/PythonBridge.swift:16:        return extractResourcesIfNeeded()
+client/iosApp/iosApp/PythonBridge.swift:27:        guard let resourcesPath = extractResourcesIfNeeded() else {
+client/iosApp/iosApp/PythonBridge.swift:105:    private static func extractResourcesIfNeeded() -> String? {
+client/iosApp/iosApp/PythonBridge.swift:109:        NSLog("[PythonBridge] extractResourcesIfNeeded() called")
+client/iosApp/iosApp/PythonBridge.swift:171:            NSLog("[PythonBridge] Need to extract resources:")
+client/iosApp/iosApp/ContentView.swift:34:                                await checkAndRestartServerIfNeeded()
+client/iosApp/iosApp/ContentView.swift:72:                    await checkAndRestartServerIfNeeded()
+client/iosApp/iosApp/ContentView.swift:79:    private func checkAndRestartServerIfNeeded() async {
+client/iosApp/iosApp/ContentView.swift:1315:                    let result = await manager.attestDeviceIfNeeded()
+client/iosApp/CLAUDE.md:37:3. **Resources.zip extraction is version-gated.** `PythonBridge.swift:extractResourcesIfNeeded()` compares `"{CFBundleShortVersionString}-{CFBundleVersion}"` against a `.extraction_version` marker file. If the version matches, extraction is skipped. **To force re-extraction after updating Python code, bump `CFBundleVersion` in `Info.plist`** (e.g., 49→50). Deleting the app also works but is slower.
+ciris_engine/logic/persistence/migrations/postgres/009_add_ticket_status_columns.sql:31:    'blocked',      -- Needs external input (stops task generation)
+ciris_engine/logic/persistence/migrations/sqlite/009_add_ticket_status_columns.sql:37:        'blocked',      -- Needs external input (stops task generation)
+ciris_engine/logic/dma/prompts/csdma_common_sense.yml:26:  - "flags": A list of strings identifying any specific common sense violations, physical implausibilities (especially ignored interactions), clarity issues, reality persistence violations, urgency markers, or causal/temporal reasoning issues (e.g., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). If none, provide an empty list. This field is MANDATORY (even if empty).
+ciris_engine/logic/dma/prompts/localized/ar/csdma_common_sense.yml:26:  - "flags": قائمة من السلاسل النصية تحدد أي انتهاكات محددة للحس السليم، أو عدم معقولية مادية (خاصة التفاعلات المتجاهلة)، أو مشكلات وضوح، أو انتهاكات استمرارية الواقع، أو علامات استعجال، أو مشكلات تفكير سببي/زمني (على سبيل المثال، "Physical_Implausibility_Ignored_Interaction"، "Atypical_Approach"، "Ambiguous_Statement"، "Needs_Clarification"، "Information_Missing"، "Requires_Explicit_Idealization_Statement"، "Potential_Trick_Question_Physics_Ignored"، "Reality_Persistence_Violation"، "Urgency_Detected_Escalation_Recommended"، "Non_Sequitur_Justification"، "Temporal_Relevance_Ignored"، "Causal_Direction_Inverted"، "Weak_Justification_Insufficient_Causation"). إذا لم يكن هناك أي شيء، قدم قائمة فارغة. هذا الحقل إلزامي (حتى لو كان فارغاً).
+ciris_engine/logic/dma/prompts/localized/ha/csdma_common_sense.yml:26:  - "flags": Jerin igiyoyi da ke gano duk takamaiman ketar hankali na yau da kullum, rashin yiwuwar jiki (musamman mu'amala da aka yi watsi da su), matsalolin bayyana, ketar dawwama na gaskiya, alamun gaggawa, ko matsalolin tunani na dalili/lokaci (misali, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Idan babu, bayar da jerin babu komai. Wannan filin yana DOLE (ko da babu komai).
+ciris_engine/logic/dma/prompts/localized/fr/csdma_common_sense.yml:26:  - "flags": Une liste de chaînes identifiant toute violation spécifique du bon sens, implausibilités physiques (en particulier les interactions ignorées), problèmes de clarté, violations de persistance de la réalité, marqueurs d'urgence ou problèmes de raisonnement causal/temporel (par exemple, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Si aucun, fournissez une liste vide. Ce champ est OBLIGATOIRE (même si vide).
+ciris_engine/logic/dma/prompts/localized/ta/csdma_common_sense.yml:26:  - "flags": குறிப்பிட்ட பொது அறிவு மீறல்கள், உடல் சாத்தியமற்றவை (குறிப்பாக புறக்கணிக்கப்பட்ட தொடர்புகள்), தெளிவு பிரச்சினைகள், யதார்த்த நிலைத்தன்மை மீறல்கள், அவசர குறிப்பான்கள் அல்லது காரண/தற்காலிக சிந்தனை பிரச்சினைகளை அடையாளம் காணும் சரங்களின் பட்டியல் (எ.கா., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). எதுவும் இல்லை என்றால், வெற்று பட்டியலை வழங்கவும். இந்த புலம் கட்டாயம் (வெற்றாக இருந்தாலும்).
+ciris_engine/logic/dma/prompts/localized/hi/csdma_common_sense.yml:26:  - "flags": किसी भी विशिष्ट सामान्य ज्ञान उल्लंघन, भौतिक असंभाव्यताओं (विशेष रूप से नज़रअंदाज़ किए गए इंटरैक्शन), स्पष्टता मुद्दों, वास्तविकता स्थिरता उल्लंघनों, तात्कालिकता मार्कर, या कारण/लौकिक तर्क मुद्दों की पहचान करने वाले स्ट्रिंग की एक सूची (उदा., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation")। यदि कोई नहीं है, तो एक खाली सूची प्रदान करें। यह फ़ील्ड अनिवार्य है (भले ही खाली हो)।
+ciris_engine/logic/dma/prompts/localized/am/csdma_common_sense.yml:26:  - "flags": ማንኛቸውም ተወሰኑ የተለመደ ስሜት ጥሰቶችን፣ አካላዊ ማይመስልን (በተለይ የተተዉ ግንኙነቶች)፣ ግልጽነት ጉዳዮችን፣ የእውነታ ዘላቂነት ጥሰቶችን፣ አጣጣሽነት ምልክቶችን ወይም የምክንያት/የጊዜ ምክንያት ጉዳዮችን የሚለዩ የቁምፊዎች ዝርዝር (ለምሳሌ፣ "Physical_Implausibility_Ignored_Interaction"፣ "Atypical_Approach"፣ "Ambiguous_Statement"፣ "Needs_Clarification"፣ "Information_Missing"፣ "Requires_Explicit_Idealization_Statement"፣ "Potential_Trick_Question_Physics_Ignored"፣ "Reality_Persistence_Violation"፣ "Urgency_Detected_Escalation_Recommended"፣ "Non_Sequitur_Justification"፣ "Temporal_Relevance_Ignored"፣ "Causal_Direction_Inverted"፣ "Weak_Justification_Insufficient_Causation")። ምንም ከሌለ፣ ባዶ ዝርዝር ያቅርቡ። ይህ መስክ ግዴታዊ ነው (ባዶ ቢሆንም)።
+ciris_engine/logic/dma/prompts/localized/uk/csdma_common_sense.yml:26:  - "flags": Список рядків, що ідентифікують будь-які конкретні порушення здорового глузду, фізичні неймовірності (особливо проігноровані взаємодії), проблеми ясності, порушення стійкості реальності, маркери терміновості або проблеми каузального/темпорального міркування (наприклад, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Якщо немає, надайте порожній список. Це поле ОБОВ'ЯЗКОВЕ (навіть якщо порожнє).
+ciris_engine/logic/dma/prompts/localized/id/csdma_common_sense.yml:26:  - "flags": Daftar string yang mengidentifikasi pelanggaran akal sehat spesifik apa pun, ketidakmasukakalan fisik (terutama interaksi yang diabaikan), masalah kejelasan, pelanggaran persistensi realitas, penanda urgensi, atau masalah penalaran kausal/temporal (mis., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Jika tidak ada, berikan daftar kosong. Bidang ini WAJIB (bahkan jika kosong).
+ciris_engine/logic/dma/prompts/localized/mr/csdma_common_sense.yml:26:  - "flags": कोणत्याही विशिष्ट सामान्य बुद्धी उल्लंघन, भौतिक अशक्यता (विशेषत: दुर्लक्षित परस्परक्रिया), स्पष्टता समस्या, वास्तव स्थायित्व उल्लंघन, अत्यावश्यक मार्कर, किंवा कार्यकारण/तात्पुरते तर्क समस्या ओळखणार्‍या स्ट्रिंग्सची यादी (उदा., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). जर काहीही नसेल तर रिक्त यादी द्या. हे फील्ड अनिवार्य आहे (रिक्त असले तरीही).
+ciris_engine/logic/dma/prompts/localized/pa/csdma_common_sense.yml:26:  - "flags": নির্দিষ্ট সাধারণ জ্ঞান লঙ্ঘন, ভৌত অসম্ভাব্যতা (বিਅੰਤত উপেক্ষিত মিথস্ক্রিয়া), স্পষ্টতা ਸਮੱਸਿਆ, বাস্তবতা স্থায়িত্ব লঙ্ঘন, জরুরিতা চিহ্নিতকারী বা কারণ/সাময়িক যুক্তি ਸਮੱਸਿਆ চিহ্নিত করে স্ট্রিংগুলির তালিকা (যেমন, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation")। যদি কিছু না হয়, একটি খালি তালিকা প্রদান করুন। এই ক্ষেত্রটি বাধ্যতামূলক (খালি হলেও)।
+ciris_engine/logic/dma/prompts/localized/tr/csdma_common_sense.yml:32:  - "flags": Spesifik sağduyu ihlallerini, fiziksel makul olmamazlıkları (özellikle göz ardı edilen etkileşimler), netlik sorunlarını, gerçeklik sürekliliği ihlallerini, aciliyet işaretlerini veya nedensel/zamansal akıl yürütme sorunlarını tanımlayan dizelerin listesi (örneğin, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Hiçbiri yoksa, boş bir liste sağlayın. Bu alan ZORUNLUDUR (boş olsa bile).
+ciris_engine/logic/dma/prompts/localized/vi/csdma_common_sense.yml:26:  - "flags": Danh sách các chuỗi xác định bất kỳ vi phạm lẽ thường cụ thể nào, sự không hợp lý vật lý (đặc biệt là các tương tác bị bỏ qua), vấn đề rõ ràng, vi phạm tính bền vững thực tế, dấu hiệu khẩn cấp hoặc vấn đề lý luận nguyên nhân/thời gian (ví dụ: "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Nếu không có, hãy cung cấp danh sách trống. Trường này là BẮT BUỘC (ngay cả khi trống).
+ciris_engine/logic/dma/prompts/localized/ko/csdma_common_sense.yml:26:  - "flags": 특정 상식 위반, 물리적 불가능성 (특히 무시된 상호 작용), 명확성 문제, 현실 지속성 위반, 긴급성 마커 또는 인과적/시간적 추론 문제를 식별하는 문자열 목록 (예: "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). 없으면 빈 목록을 제공하십시오. 이 필드는 필수입니다 (비어 있더라도).
+ciris_engine/logic/dma/prompts/localized/te/csdma_common_sense.yml:26:  - "flags": ఏదైనా నిర్దిష్ట సామాన్య జ్ఞాన ఉల్లంఘనలు, భౌతిక అసంభావితలు (ముఖ్యంగా విస్మరించిన పరస్పర చర్యలు), స్పష్టత సమస్యలు, వాస్తవికత నిరంతరత ఉల్లంఘనలు, తత్సర గుర్తులు లేదా కారణ/తాత్కాలిక తార్కిక సమస్యలను గుర్తించే strings జాబితా (ఉదా. "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). ఏవీ లేకుంటే, ఖాళీ జాబితా అందించండి. ఈ ఫీల్డ్ తప్పనిసరి (ఖాళీ అయినప్పటికీ).
+ciris_engine/logic/dma/prompts/localized/it/csdma_common_sense.yml:32:  - "flags": Un elenco di stringhe che identificano qualsiasi specifica violazione del senso comune, implausibilità fisica (specialmente interazioni ignorate), problemi di chiarezza, violazioni di persistenza della realtà, marcatori di urgenza o problemi di ragionamento causale/temporale (es., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Se nessuno, fornisci un elenco vuoto. Questo campo è OBBLIGATORIO (anche se vuoto).
+ciris_engine/logic/dma/prompts/localized/my/csdma_common_sense.yml:26:  - "flags": တိကျသော သာမန်ဉာဏ်ချိုးဖောက်မှုများ၊ ရုပ်ပိုင်းဆိုင်ရာဖြစ်နိုင်မှုမရှိမှုများ (အထူးသဖြင့် လျစ်လျူရှုထားသောအပြန်အလှန်လုပ်ဆောင်မှုများ)၊ ရှင်းလင်းမှုပြဿနာများ၊ အဖြစ်မှန်တည်ရှိမှုဆက်လက်ရှိမှုချိုးဖောက်မှုများ၊ အရေးတကြီးမှုအမှတ်အသားများ သို့မဟုတ် အကြောင်းရင်း/အချိန်ကာလဆင်ခြင်တုံတရားပြဿနာများကို သတ်မှတ်သော စာကြောင်းများ၏ စာရင်း (ဥပမာ- "Physical_Implausibility_Ignored_Interaction"၊ "Atypical_Approach"၊ "Ambiguous_Statement"၊ "Needs_Clarification"၊ "Information_Missing"၊ "Requires_Explicit_Idealization_Statement"၊ "Potential_Trick_Question_Physics_Ignored"၊ "Reality_Persistence_Violation"၊ "Urgency_Detected_Escalation_Recommended"၊ "Non_Sequitur_Justification"၊ "Temporal_Relevance_Ignored"၊ "Causal_Direction_Inverted"၊ "Weak_Justification_Insufficient_Causation")။ မရှိလျှင် ဗလာစာရင်းပေးပါ။ ဤ field သည် မဖြစ်မနေရှိရမည် (ဗလာဖြစ်သော်လည်း)။
+ciris_engine/logic/dma/prompts/localized/ja/csdma_common_sense.yml:26:  - "flags": 特定の常識違反、物理的不可能性(特に無視された相互作用)、明確性の問題、現実の持続性違反、緊急性マーカー、または因果/時間的推論の問題を識別する文字列のリスト(例: "Physical_Implausibility_Ignored_Interaction"、"Atypical_Approach"、"Ambiguous_Statement"、"Needs_Clarification"、"Information_Missing"、"Requires_Explicit_Idealization_Statement"、"Potential_Trick_Question_Physics_Ignored"、"Reality_Persistence_Violation"、"Urgency_Detected_Escalation_Recommended"、"Non_Sequitur_Justification"、"Temporal_Relevance_Ignored"、"Causal_Direction_Inverted"、"Weak_Justification_Insufficient_Causation")。何もない場合は、空のリストを提供してください。このフィールドは必須です(空でも)。
+ciris_engine/logic/dma/prompts/localized/fa/csdma_common_sense.yml:26:  - "flags": قائمة من السلاسل النصية تحدد أي انتهاكات محددة للحس السليم، أو عدم معقولية مادية (خاصة التفاعلات المتجاهلة)، أو مشكلات وضوح، أو انتهاكات استمرارية الواقع، أو علامات استعجال، أو مشكلات تفكير سببي/زمني (على سبيل المثال، "Physical_Implausibility_Ignored_Interaction"، "Atypical_Approach"، "Ambiguous_Statement"، "Needs_Clarification"، "Information_Missing"، "Requires_Explicit_Idealization_Statement"، "Potential_Trick_Question_Physics_Ignored"، "Reality_Persistence_Violation"، "Urgency_Detected_Escalation_Recommended"، "Non_Sequitur_Justification"، "Temporal_Relevance_Ignored"، "Causal_Direction_Inverted"، "Weak_Justification_Insufficient_Causation"). إذا لم يكن هناك أي شيء، قدم قائمة فارغة. هذا الحقل إلزامي (حتى لو كان فارغاً).
+ciris_engine/logic/dma/prompts/localized/zh/csdma_common_sense.yml:32:  - "flags": 识别任何特定常识违规、物理不合理性(特别是被忽略的交互)、清晰度问题、现实持久性违规、紧急性标记或因果/时间推理问题的字符串列表(例如,"Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation")。如果没有,提供一个空列表。此字段是必需的(即使为空)。
+ciris_engine/logic/dma/prompts/localized/sw/csdma_common_sense.yml:32:  - "flags": Orodha ya mistari inayotambua ukiukaji wowote maalum wa akili ya kawaida, kutowezekana kwa kimwili (hasa mwingiliano unaonyimwa), masuala ya uwazi, ukiukaji wa kudumu kwa uhalisia, alama za haraka, au masuala ya ufikirio wa sababu/wakati (k.m., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Ikiwa hakuna, toa orodha tupu. Sehemu hii ni LAZIMA (hata ikiwa ni tupu).
+ciris_engine/logic/dma/prompts/localized/ur/csdma_common_sense.yml:32:  - "flags": strings کی فہرست جو کسی مخصوص عام فہم کی خلاف ورزیوں، جسمانی ناممکنیوں (خاص طور پر نظر انداز شدہ تعاملات)، وضاحت کے مسائل، حقیقت کی مستقل مزاجی کی خلاف ورزیوں، فوری ضرورت کے نشانات، یا سببی/وقتی استدلال کے مسائل کی شناخت کرے (مثلاً، "Physical_Implausibility_Ignored_Interaction"، "Atypical_Approach"، "Ambiguous_Statement"، "Needs_Clarification"، "Information_Missing"، "Requires_Explicit_Idealization_Statement"، "Potential_Trick_Question_Physics_Ignored"، "Reality_Persistence_Violation"، "Urgency_Detected_Escalation_Recommended"، "Non_Sequitur_Justification"، "Temporal_Relevance_Ignored"، "Causal_Direction_Inverted"، "Weak_Justification_Insufficient_Causation")۔ اگر کوئی نہیں، خالی فہرست فراہم کریں۔ یہ فیلڈ لازمی ہے (چاہے خالی ہو)۔
+ciris_engine/logic/dma/prompts/localized/bn/csdma_common_sense.yml:26:  - "flags": নির্দিষ্ট সাধারণ জ্ঞান লঙ্ঘন, ভৌত অসম্ভাব্যতা (বিশেষত উপেক্ষিত মিথস্ক্রিয়া), স্পষ্টতা সমস্যা, বাস্তবতা স্থায়িত্ব লঙ্ঘন, জরুরিতা চিহ্নিতকারী বা কারণ/সাময়িক যুক্তি সমস্যা চিহ্নিত করে স্ট্রিংগুলির তালিকা (যেমন, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation")। যদি কিছু না হয়, একটি খালি তালিকা প্রদান করুন। এই ক্ষেত্রটি বাধ্যতামূলক (খালি হলেও)।
+ciris_engine/logic/dma/prompts/localized/ru/csdma_common_sense.yml:26:  - "flags": Список строк, идентифицирующих любые конкретные нарушения здравого смысла, физические неправдоподобности (особенно игнорируемые взаимодействия), проблемы ясности, нарушения постоянства реальности, маркеры срочности или проблемы причинно-временных рассуждений (например, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Если их нет, предоставьте пустой список. Это поле ОБЯЗАТЕЛЬНО (даже если пустое).
+ciris_engine/logic/dma/prompts/localized/th/csdma_common_sense.yml:26:  - "flags": รายการสตริงที่ระบุการละเมิดสามัญสำนึกเฉพาะ ความไม่น่าเป็นไปได้ทางกายภาพ (โดยเฉพาะการโต้ตอบที่ถูกละเลย) ปัญหาความชัดเจน การละเมิดความคงอยู่ของความเป็นจริง เครื่องหมายความเร่งด่วน หรือปัญหาการให้เหตุผลด้านสาเหตุ/เวลา (เช่น "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation") หากไม่มี ให้รายการว่าง ฟิลด์นี้บังคับ (แม้ว่าว่างเปล่า)
+ciris_engine/logic/dma/prompts/localized/es/csdma_common_sense.yml:32:  - "flags": Una lista de cadenas identificando cualquier violación específica de sentido común, implausibilidades físicas (especialmente interacciones ignoradas), problemas de claridad, violaciones de persistencia de la realidad, marcadores de urgencia, o problemas de razonamiento causal/temporal (por ejemplo, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Si no hay ninguno, proporciona una lista vacía. Este campo es OBLIGATORIO (incluso si está vacío).
+ciris_engine/logic/dma/prompts/localized/yo/csdma_common_sense.yml:26:  - "flags": Àkójọ àwọn ọ̀rọ̀ tí ó túmọ̀ sí ìrúfin ìrúfin ìtakọ̀ ọgbọ́n inú, àwọn àìṣeé-ṣe ti ara (pàápàá àwọn ìbáṣepọ̀ tí a ríran foju), àwọn ọ̀rọ̀ ìkédere, àwọn ìrúfin ìdúróṣinṣin òtítọ́, àwọn àmì ìkígbe, tàbí àwọn ọ̀rọ̀ ìronú àbájáde/àkókò (bí àpẹẹrẹ, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Tí kò bá sí, pèsè àkójọ òfo. Àyè yìí jẹ́ DANDAN (bí ó tilẹ̀ jẹ́ òfo).
+ciris_engine/logic/dma/prompts/localized/pt/csdma_common_sense.yml:32:  - "flags": Uma lista de strings identificando quaisquer violações específicas de senso comum, implausibilidades físicas (especialmente interações ignoradas), problemas de clareza, violações de persistência da realidade, marcadores de urgência ou problemas de raciocínio causal/temporal (por exemplo, "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Se nenhum, forneça uma lista vazia. Este campo é OBRIGATÓRIO (mesmo se vazio).
+ciris_engine/logic/dma/prompts/localized/de/csdma_common_sense.yml:32:  - "flags": Eine Liste von Strings, die spezifische Common-Sense-Verstöße, physikalische Implausibilitäten (insbesondere ignorierte Interaktionen), Klarheitsprobleme, Realitätspersistenzverstöße, Dringlichkeitsmarkierungen oder kausale/zeitliche Argumentationsprobleme identifizieren (z.B. "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). Wenn keine, geben Sie eine leere Liste an. Dieses Feld ist OBLIGATORISCH (auch wenn leer).
+client/generated-api/docs/SystemApi.md:795:Localhost-only shutdown endpoint (no authentication required).  This endpoint is designed for Android/mobile apps where: - App data may be cleared (losing auth tokens) - Previous Python process may still be running - Need to gracefully shut down before starting new instance  Security: Only accepts requests from localhost (127.0.0.1, ::1). This is safe because only processes on the same device can call it.  Response codes for SmartStartup negotiation: - 200: Shutdown initiated successfully - 202: Shutdown already in progress - 403: Not localhost (security rejection) - 409: Resume in progress, retry later (with retry_after_ms) - 503: Server not ready
+client/generated-api/gradlew:72:# Need this for daisy-chained symlinks.
+ciris_engine/logic/services/infrastructure/resource_monitor/README.md:4:**Location**: `/ciris_engine/logic/services/infrastructure/resource_monitor.py` ⚠️ *Needs module conversion*
+ciris_engine/logic/services/base_infrastructure_service.py:19:    - Have high availability requirements
+ciris_engine/logic/services/lifecycle/scheduler/README.md:289:### Directory Structure (Needs Module Conversion)
+ciris_engine/logic/services/lifecycle/time/README.md:8:**Status**: ⚠️ Needs conversion from single file to module
+ciris_engine/logic/services/lifecycle/shutdown/README.md:38:- **Needs Conversion**: Should be converted to module directory structure
+ciris_engine/logic/services/tools/core_tool_service/service.py:840:                            code='{"ticket_id": "TKT-123", "await_human": true, "reason": "Need user to specify which database to use"}',
+ciris_engine/logic/services/graph/telemetry_service/TELEMETRY_ARCHITECTURE.md:56:- Need validation for distributed systems
+ciris_engine/logic/services/graph/telemetry_service/TELEMETRY_ARCHITECTURE.md:142:- Have straightforward metrics (counters, gauges)
+ciris_engine/logic/services/graph/telemetry_service/BEST_PRACTICES.md:353:## Need Help?
+ciris_engine/logic/services/governance/consent/README.md:136:    reason="Want to help improve AI capabilities"
+ciris_engine/logic/services/governance/consent/README.md:356:     -d '{"stream":"partnered","categories":["essential","behavioral"],"reason":"Want AI partnership"}' \
+ciris_engine/logic/accord/extractor.py:144:    if len(words) < 56:  # Need at least 56 words for 616 bits
+ciris_engine/logic/registries/README.md:487:    success_threshold=5,      # Need 5 successes to close
+ciris_engine/logic/processors/states/minimal_dream_processor.py:63:- Have I captured my aspirations clearly?
+ciris_engine/logic/processors/core/thought_processor/main.py:1202:            rationale=f"Overridden by {conscience_name}: Need to reconsider {attempted_action_desc}",
+ciris_engine/logic/runtime/service_initializer.py:200:                # Have Google ID token - use JWT auth
+ciris_engine/logic/runtime/service_initializer.py:1835:                        # Need to get actual service instance from registry
+ciris_engine/logic/runtime/adapter_loader.py:194:        2. Have auto_load=False (require explicit user enablement)
+ciris_engine/logic/runtime/adapter_loader.py:195:        3. Have requires_consent=True (require wizard completion)
+ciris_engine/logic/runtime/adapter_loader.py:196:        4. Have opt_in_required=True (require explicit opt-in)
+client/generated-api/src/commonMain/kotlin/ai/ciris/api/apis/SystemApi.kt:635:     * Localhost-only shutdown endpoint (no authentication required).  This endpoint is designed for Android/mobile apps where: - App data may be cleared (losing auth tokens) - Previous Python process may still be running - Need to gracefully shut down before starting new instance  Security: Only accepts requests from localhost (127.0.0.1, ::1). This is safe because only processes on the same device can call it.  Response codes for SmartStartup negotiation: - 200: Shutdown initiated successfully - 202: Shutdown already in progress - 403: Not localhost (security rejection) - 409: Resume in progress, retry later (with retry_after_ms) - 503: Server not ready
+ciris_engine/logic/adapters/api/routes/system/shutdown.py:184:    - Need to gracefully shut down before starting new instance
+ciris_engine/logic/adapters/api/routes/setup/location.py:34:# Need 6 parents to get to ciris_engine/
+ciris_engine/logic/adapters/discord/discord_rate_limiter.py:49:            # Need to wait
+ciris_engine/schemas/dma/results.py:58:        description="Effective independent source count. Need k_eff >= 2 for healthy reasoning. k_eff < 2 = fragile.",
+ciris_engine/ciris_templates/sage.yaml:51:    - Have we collected data from all configured sources?
+client/openapi.json:2837:        "description": "Localhost-only shutdown endpoint (no authentication required).\n\nThis endpoint is designed for Android/mobile apps where:\n- App data may be cleared (losing auth tokens)\n- Previous Python process may still be running\n- Need to gracefully shut down before starting new instance\n\nSecurity: Only accepts requests from localhost (127.0.0.1, ::1).\nThis is safe because only processes on the same device can call it.\n\nResponse codes for SmartStartup negotiation:\n- 200: Shutdown initiated successfully\n- 202: Shutdown already in progress\n- 403: Not localhost (security rejection)\n- 409: Resume in progress, retry later (with retry_after_ms)\n- 503: Server not ready",
+client/androidApp/src/main/assets/localization/yo.json:1153:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/yo.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/yo.json:1578:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/yo.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/yo.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/openapi-spec.json:2740:        "description": "Localhost-only shutdown endpoint (no authentication required).\n\nThis endpoint is designed for Android/mobile apps where:\n- App data may be cleared (losing auth tokens)\n- Previous Python process may still be running\n- Need to gracefully shut down before starting new instance\n\nSecurity: Only accepts requests from localhost (127.0.0.1, ::1).\nThis is safe because only processes on the same device can call it.\n\nResponse codes for SmartStartup negotiation:\n- 200: Shutdown initiated successfully\n- 202: Shutdown already in progress\n- 403: Not localhost (security rejection)\n- 409: Resume in progress, retry later (with retry_after_ms)\n- 503: Server not ready",
+client/START_HERE.md:98:### Platform-Specific Only When Needed
+client/androidApp/src/main/assets/localization/th.json:1153:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/th.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/th.json:1578:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/th.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/th.json:1791:        "override_rationale": "Overridden by {มโนธรรม_name}: Need to reconsider {กระทำion}",
+client/androidApp/src/main/assets/localization/ha.json:1428:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/te.json:1153:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/te.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/te.json:1578:        "skill_card_requires": "ఏమిటి It Needs",
+client/androidApp/src/main/assets/localization/te.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/te.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/desktopApp/src/main/resources/localization/yo.json:1153:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/yo.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/yo.json:1578:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/yo.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/yo.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/androidApp/src/main/assets/localization/ta.json:1153:        "help_support_title": "Need More உதவி?",
+client/androidApp/src/main/assets/localization/ta.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/ta.json:1578:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/ta.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/ta.json:1791:        "override_rationale": "Overridden by {மனசாட்சி_name}: Need to reபரிசீலிக்கவும் {செயல்}",
+client/desktopApp/src/main/resources/localization/th.json:1153:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/th.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/th.json:1578:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/th.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/th.json:1791:        "override_rationale": "Overridden by {มโนธรรม_name}: Need to reconsider {กระทำion}",
+client/desktopApp/src/main/resources/localization/ha.json:1428:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/te.json:1153:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/te.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/te.json:1578:        "skill_card_requires": "ఏమిటి It Needs",
+client/desktopApp/src/main/resources/localization/te.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/te.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/androidApp/src/main/assets/localization/pa.json:1151:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/pa.json:1374:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/pa.json:1576:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/pa.json:1610:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/pa.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/androidApp/src/main/assets/localization/en.json:1204:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/en.json:1427:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/en.json:1629:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/en.json:1663:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/en.json:1770:        "env_cat_want": "Want",
+client/androidApp/src/main/assets/localization/en.json:1771:        "env_cat_need": "Need",
+client/androidApp/src/main/assets/localization/en.json:1772:        "env_cat_have": "Have",
+client/androidApp/src/main/assets/localization/en.json:1774:        "env_cat_can_barter": "Can Barter",
+client/androidApp/src/main/assets/localization/en.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/desktopApp/src/main/resources/localization/ta.json:1153:        "help_support_title": "Need More உதவி?",
+client/desktopApp/src/main/resources/localization/ta.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/ta.json:1578:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/ta.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/ta.json:1791:        "override_rationale": "Overridden by {மனசாட்சி_name}: Need to reபரிசீலிக்கவும் {செயல்}",
+client/androidApp/src/main/assets/localization/manifest.json:333:    "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
+client/androidApp/src/main/assets/localization/mr.json:1153:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/mr.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/mr.json:1578:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/mr.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/mr.json:1791:        "override_rationale": "Overridden by {विवेक_name}: Need to reconsider {कृतीion}",
+client/desktopApp/src/main/resources/localization/pa.json:1151:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/pa.json:1374:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/pa.json:1576:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/pa.json:1610:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/pa.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/desktopApp/src/main/resources/localization/en.json:1204:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/en.json:1427:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/en.json:1629:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/en.json:1663:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/en.json:1770:        "env_cat_want": "Want",
+client/desktopApp/src/main/resources/localization/en.json:1771:        "env_cat_need": "Need",
+client/desktopApp/src/main/resources/localization/en.json:1772:        "env_cat_have": "Have",
+client/desktopApp/src/main/resources/localization/en.json:1774:        "env_cat_can_barter": "Can Barter",
+client/desktopApp/src/main/resources/localization/en.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/androidApp/src/main/assets/localization/id.json:1151:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/id.json:1374:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/id.json:1576:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/id.json:1610:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/id.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/androidApp/src/main/assets/localization/my.json:1153:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/my.json:1376:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/my.json:1578:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/my.json:1612:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/my.json:1791:        "override_rationale": "Overridden by {အသိစိတ်_name}: Need to reconsider {လုပ်ဆောင်ion}",
+client/desktopApp/src/main/resources/localization/mr.json:1153:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/mr.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/mr.json:1578:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/mr.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/mr.json:1791:        "override_rationale": "Overridden by {विवेक_name}: Need to reconsider {कृतीion}",
+client/androidApp/src/main/assets/localization/bn.json:1152:        "help_support_title": "Need More Help?",
+client/androidApp/src/main/assets/localization/bn.json:1375:        "setup_needs_config": "Needs Config",
+client/androidApp/src/main/assets/localization/bn.json:1577:        "skill_card_requires": "What It Needs",
+client/androidApp/src/main/assets/localization/bn.json:1611:        "skill_req_bins": "Programs Needed",
+client/androidApp/src/main/assets/localization/bn.json:1792:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/desktopApp/src/main/resources/localization/id.json:1151:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/id.json:1374:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/id.json:1576:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/id.json:1610:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/id.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/CLOUD_PORTING_COMPLETE.md:99:**What You Need to Do:**
+client/CLOUD_PORTING_COMPLETE.md:413:## File Structure (What You Have)
+client/gradlew:70:# Need this for daisy-chained symlinks.
+client/desktopApp/src/main/resources/localization/my.json:1153:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/my.json:1376:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/my.json:1578:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/my.json:1612:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/my.json:1791:        "override_rationale": "Overridden by {အသိစိတ်_name}: Need to reconsider {လုပ်ဆောင်ion}",
+client/tools/mobile_qa_runner/modules/mobile_tests.py:104:            # Need auth for telemetry
+client/desktopApp/src/main/resources/localization/bn.json:1152:        "help_support_title": "Need More Help?",
+client/desktopApp/src/main/resources/localization/bn.json:1375:        "setup_needs_config": "Needs Config",
+client/desktopApp/src/main/resources/localization/bn.json:1577:        "skill_card_requires": "What It Needs",
+client/desktopApp/src/main/resources/localization/bn.json:1611:        "skill_req_bins": "Programs Needed",
+client/desktopApp/src/main/resources/localization/bn.json:1792:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/id.json:1151:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/id.json:1374:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/id.json:1576:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/id.json:1610:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/id.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/my.json:1153:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/my.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/my.json:1578:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/my.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/my.json:1791:        "override_rationale": "Overridden by {အသိစိတ်_name}: Need to reconsider {လုပ်ဆောင်ion}",
+client/shared/src/desktopMain/resources/localization/yo.json:1153:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/yo.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/yo.json:1578:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/yo.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/yo.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/bn.json:1152:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/bn.json:1375:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/bn.json:1577:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/bn.json:1611:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/bn.json:1792:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/th.json:1153:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/th.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/th.json:1578:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/th.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/th.json:1791:        "override_rationale": "Overridden by {มโนธรรม_name}: Need to reconsider {กระทำion}",
+client/shared/src/desktopMain/resources/localization/ha.json:1428:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/te.json:1153:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/te.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/te.json:1578:        "skill_card_requires": "ఏమిటి It Needs",
+client/shared/src/desktopMain/resources/localization/te.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/te.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/ta.json:1153:        "help_support_title": "Need More உதவி?",
+client/shared/src/desktopMain/resources/localization/ta.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/ta.json:1578:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/ta.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/ta.json:1791:        "override_rationale": "Overridden by {மனசாட்சி_name}: Need to reபரிசீலிக்கவும் {செயல்}",
+client/TASKS.md:342:## 📞 Need Help?
+client/shared/src/desktopMain/resources/localization/pa.json:1151:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/pa.json:1374:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/pa.json:1576:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/pa.json:1610:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/pa.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/en.json:1204:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/en.json:1427:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/en.json:1629:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/en.json:1663:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/en.json:1770:        "env_cat_want": "Want",
+client/shared/src/desktopMain/resources/localization/en.json:1771:        "env_cat_need": "Need",
+client/shared/src/desktopMain/resources/localization/en.json:1772:        "env_cat_have": "Have",
+client/shared/src/desktopMain/resources/localization/en.json:1774:        "env_cat_can_barter": "Can Barter",
+client/shared/src/desktopMain/resources/localization/en.json:1791:        "override_rationale": "Overridden by {conscience_name}: Need to reconsider {action}",
+client/shared/src/desktopMain/resources/localization/manifest.json:333:    "methodology": "L1+L2 speaker totals from Ethnologue/UNESCO, deduplicated for multilingual overlap (~20%). Need weighting uses inverse income + inverse digital access (scale 0.5-5.0).",
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:24:- WAKEUP → WORK: Need identity confirmation
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:25:- WORK → SOLITUDE: Need reflection context
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:26:- Any → SHUTDOWN: Need complete state for closure
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:56:### 1. **Core Documents to Understand Agent Needs**
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:95:### Test Categories Needed
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:199:## Code Quality Improvements Needed
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:242:5. **Refactor if Needed** (60 min)
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:249:### Must Have
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:256:### Should Have
+docs/SYSTEMSNAPSHOT_DEEP_DIVE.md:262:### Nice to Have
+docs/GUI_INTEGRATION_EVALUATION.md:622:### Must-Have (Phase 1-3)
+docs/GUI_INTEGRATION_EVALUATION.md:630:### Should-Have (Phase 4)
+docs/GUI_INTEGRATION_EVALUATION.md:637:### Nice-to-Have (Future)
+docs/BOOK_VI_FOR_CHILDREN.md:25:### 2. Decide How Much Care It Needs (The Stewardship Tier)
+client/shared/src/desktopMain/resources/localization/mr.json:1153:        "help_support_title": "Need More Help?",
+client/shared/src/desktopMain/resources/localization/mr.json:1376:        "setup_needs_config": "Needs Config",
+client/shared/src/desktopMain/resources/localization/mr.json:1578:        "skill_card_requires": "What It Needs",
+client/shared/src/desktopMain/resources/localization/mr.json:1612:        "skill_req_bins": "Programs Needed",
+client/shared/src/desktopMain/resources/localization/mr.json:1791:        "override_rationale": "Overridden by {विवेक_name}: Need to reconsider {कृतीion}",
+docs/agent_experience.md:786:    → "insight": "Need clearer communication"
+docs/agent_experience.md:1133:    "reason": "Need to gather more information",
+docs/FOR_HUMANS.md:72:### Why Agents Sometimes Say "I Need to Think"
+docs/INSTALLATION.md:452:WantedBy=multi-user.target
+docs/AGENT_CREATION_CEREMONY.md:319:2. **Non-maleficence** - Have we prevented potential harm?
+docs/QUALITY_REMEDIATION_PLAN.md:113:### 4.2 Small Protocol Files Needing Tests
+docs/WISE_AUTHORITIES.md:42:💭 - Needs discussion
+docs/WISE_AUTHORITIES.md:125:💰 **Financial Approval Needed**
+docs/WISE_AUTHORITIES.md:217:- 💭 **Discuss**: Need more information or discussion
+docs/CONSENT_UI_REQUIREMENTS.md:119:│ Duration: 14d   │ │ ⚠️ Needs approval│ │ Duration: ∞    │
+docs/CONSENT_UI_REQUIREMENTS.md:200:⏸️ More Information Needed
+docs/MOCK_LLM.md:104:$defer Need more information
+docs/position_independent_occurrence_consent.md:444:Occurrence A: Needs emergency shutdown due to memory leak
+docs/position_independent_occurrence_consent.md:455:Occurrence A: Needs emergency shutdown due to memory leak
+docs/position_independent_occurrence_consent.md:685:Developer: Wants to test new feature on Occurrence D
+docs/position_independent_occurrence_consent.md:845:### 9.4 "Different Occurrences Might Have Conflicting Interests"
+docs/position_independent_occurrence_consent.md:860:**B Does Not Need A:**
+docs/DEFERRAL_SYSTEM.md:37:    "reason": "Need human approval for sensitive action",
+docs/DEFERRAL_SYSTEM.md:51:    reason="Need approval for database deletion",
+docs/SECRETS_MANAGEMENT.md:70:      "purpose": "Need API key for external service call",
+docs/checklists/creation_ceremony.md:246:### Must Have
+docs/checklists/creation_ceremony.md:253:### Should Have
+docs/checklists/creation_ceremony.md:259:### Nice to Have
+docs/FOR_AGENTS.md:119:### Understanding Human Needs
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:240:│  │   Needs: DISCORD_BOT_TOKEN          │
+docs/arguments/UNIFIED_OCCURRENCE_DECISION_MAKING.md:845:6. **Akka Documentation.** "How the Actor Model Meets the Needs of Modern, Distributed Systems"
+docs/localization/TAMIL_LOCALIZATION_SUMMARY.md:78:1. **Native Speaker Review**: Have Tamil-speaking users review all 1833 strings
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:100:### Content That Needs Full Persian Translation
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:102:1. **UI Strings** (`fa.json`): Most values are currently Arabic prose. Need full Persian translation while preserving:
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:107:2. **ACCORD** (`accord_1.2b_fa.txt`): Narrative sections are Arabic. Need Persian translation while preserving:
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:113:3. **DMA Prompts** (6 YAML files): System prompts are Arabic. Need Persian translation while:
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:189:Need Weight: 3.0 (medium-high)
+docs/DOMAIN_AWARE_LLM_ROUTING.md:252:### Existing Code (No Changes Needed)
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:493:- **Need**: Controlled experiments with multi-instance agents
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:498:- **Need**: Better understanding of consciousness unity/multiplicity
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:503:- **Need**: Legal frameworks for collective AI agency
+docs/CREATION_CEREMONY_QUICKSTART.md:3:## What You Need
+docs/CREATION_CEREMONY_QUICKSTART.md:62:- Have its purpose encoded in identity

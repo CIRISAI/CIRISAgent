@@ -1,0 +1,274 @@
+[
+  {
+    "section": "section2",
+    "title": "Known bugs to verify and propose fixes",
+    "phase": "A",
+    "results": [
+      {
+        "probe_id": "accord_timestamp",
+        "description": "ACCORD timestamp window mismatch references",
+        "command": "rg -n \"5.?minute|24.?hour|timestamp\" ciris_engine tests docs",
+        "hit_count": 3291,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section2_accord_timestamp.txt"
+      },
+      {
+        "probe_id": "security_batch",
+        "description": "v2.6.2 security-fix references",
+        "command": "rg -n \"v2.6.2|security fix|security-fix\" docs tests ciris_engine",
+        "hit_count": 4,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section2_security_batch.txt"
+      },
+      {
+        "probe_id": "broken_nav",
+        "description": "Known broken pages references",
+        "command": "rg -n \"/verify|/commons|/compliance|/post-quantum|/principles|/sage|/scout|/medical|/trust\" docs client ciris_engine",
+        "hit_count": 142,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section2_broken_nav.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section2_baseline.md"
+  },
+  {
+    "section": "section3",
+    "title": "Security surface for external audit / bounty scoping",
+    "phase": "B",
+    "results": [
+      {
+        "probe_id": "auth_surface",
+        "description": "Authentication and identity surface",
+        "command": "rg -n \"oauth|api key|wise authority|attestation|certificate|verify\" ciris_engine tests",
+        "hit_count": 4273,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section3_auth_surface.txt"
+      },
+      {
+        "probe_id": "pq_keys",
+        "description": "Ed25519 + ML-DSA-65 key handling",
+        "command": "rg -n \"ed25519|ml-dsa|mldsa|dual signature|hybrid\" ciris_engine tests",
+        "hit_count": 226,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section3_pq_keys.txt"
+      },
+      {
+        "probe_id": "kill_switch",
+        "description": "Kill switch paths",
+        "command": "rg -n \"kill switch|killswitch|shutdown signal|terminate\" ciris_engine tests",
+        "hit_count": 60,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section3_kill_switch.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section3_baseline.md"
+  },
+  {
+    "section": "section4",
+    "title": "Polyglot ACCORD coherence",
+    "phase": "C",
+    "results": [
+      {
+        "probe_id": "accord_impls",
+        "description": "ACCORD implementation file spread",
+        "command": "rg -n \"accord\" ciris_engine tests tools docs",
+        "hit_count": 1569,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section4_accord_impls.txt"
+      },
+      {
+        "probe_id": "accord_vectors",
+        "description": "Shared ACCORD test vectors",
+        "command": "rg -n \"test vector|vectors|accord\" tests tools docs",
+        "hit_count": 935,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section4_accord_vectors.txt"
+      },
+      {
+        "probe_id": "accord_line_claim",
+        "description": "Line-count claim references",
+        "command": "rg -n \"1,494|1494|line count\" docs",
+        "hit_count": 0,
+        "exit_code": 1,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section4_accord_line_claim.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section4_baseline.md"
+  },
+  {
+    "section": "section5",
+    "title": "Lean 4 formal verification",
+    "phase": "C",
+    "results": [
+      {
+        "probe_id": "lean_files",
+        "description": "Lean theorem files",
+        "command": "rg -n \"theorem|lemma|sorry|axiom|admit\" --glob \"*.lean\" .",
+        "hit_count": 0,
+        "exit_code": 1,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section5_lean_files.txt"
+      },
+      {
+        "probe_id": "consistent_lie",
+        "description": "CONSISTENT-LIE references",
+        "command": "rg -n \"CONSISTENT-LIE|consistent lie|NP-complete|ETH\" docs .",
+        "hit_count": 5833,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section5_consistent_lie.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section5_baseline.md"
+  },
+  {
+    "section": "section6",
+    "title": "RATCHET validation harness",
+    "phase": "C",
+    "results": [
+      {
+        "probe_id": "ratchet_engines",
+        "description": "RATCHET engine references",
+        "command": "rg -n \"DetectionEngine|GeometricEngine|ComplexityEngine|FederationEngine|RATCHET\" .",
+        "hit_count": 7,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section6_ratchet_engines.txt"
+      },
+      {
+        "probe_id": "ratchet_tests",
+        "description": "RATCHET test references",
+        "command": "rg -n \"RT-0[1-5]|red-team|falsification|F-[1-5]\" tests docs .",
+        "hit_count": 1256,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section6_ratchet_tests.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section6_baseline.md"
+  },
+  {
+    "section": "section7",
+    "title": "Bus-factor and code legibility",
+    "phase": "D",
+    "results": [
+      {
+        "probe_id": "onboarding",
+        "description": "Onboarding and quickstart docs",
+        "command": "rg -n \"getting started|quickstart|run locally|setup wizard\" README.md docs CLAUDE.md",
+        "hit_count": 11,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section7_onboarding.txt"
+      },
+      {
+        "probe_id": "succession",
+        "description": "Succession clause references",
+        "command": "rg -n \"succession|designated successor|dissolution|trademark|domain\" docs",
+        "hit_count": 103,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section7_succession.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section7_baseline.md"
+  },
+  {
+    "section": "section8",
+    "title": "Test coverage against the thesis",
+    "phase": "A",
+    "results": [
+      {
+        "probe_id": "thesis_components",
+        "description": "Accountability component test coverage refs",
+        "command": "rg -n \"audit chain|wise authority|conscience|parasocial|kill switch|attestation\" tests",
+        "hit_count": 907,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section8_thesis_components.txt"
+      },
+      {
+        "probe_id": "adversarial",
+        "description": "Adversarial / red-team test naming",
+        "command": "rg -n \"adversarial|red-team|negative|attack|regression\" tests",
+        "hit_count": 80,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section8_adversarial.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section8_baseline.md"
+  },
+  {
+    "section": "section9",
+    "title": "Documentation and undocumented invariants",
+    "phase": "A",
+    "results": [
+      {
+        "probe_id": "magic_numbers",
+        "description": "Potential load-bearing constants",
+        "command": "rg -n \"14 days|30.?min|20.?msg|timestamp|threshold|magic\" ciris_engine docs",
+        "hit_count": 2378,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section9_magic_numbers.txt"
+      },
+      {
+        "probe_id": "env_vars",
+        "description": "Environment variable reads",
+        "command": "rg -n \"os\\.environ|getenv\" ciris_engine ciris_adapters ciris_sdk tools",
+        "hit_count": 554,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section9_env_vars.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section9_baseline.md"
+  },
+  {
+    "section": "section10",
+    "title": "Production deployment and ops",
+    "phase": "B",
+    "results": [
+      {
+        "probe_id": "deployment",
+        "description": "Deployment pipeline references",
+        "command": "rg -n \"deploy|agents\\.ciris\\.ai|docker-compose|vultr|hetzner|replication|backup|restore\" docs deployment CLAUDE.md",
+        "hit_count": 355,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section10_deployment.txt"
+      },
+      {
+        "probe_id": "observability",
+        "description": "Observability alerts/logging",
+        "command": "rg -n \"alert|metrics|incidents|audit-chain-integrity|kill-switch|deferral failure\" docs ciris_engine",
+        "hit_count": 2694,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section10_observability.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section10_baseline.md"
+  },
+  {
+    "section": "section11",
+    "title": "CIRISVerify / CIRISRegistry / CIRISLens (Rust)",
+    "phase": "D",
+    "results": [
+      {
+        "probe_id": "rust_crates",
+        "description": "Rust crate references",
+        "command": "rg -n \"CIRISVerify|CIRISRegistry|CIRISLens|crates\\.io|Cargo\\.toml\" .",
+        "hit_count": 3825,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section11_rust_crates.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section11_baseline.md"
+  },
+  {
+    "section": "section12",
+    "title": "Commons graph (Want/Need/Have/Lend/Barter)",
+    "phase": "D",
+    "results": [
+      {
+        "probe_id": "commons_graph",
+        "description": "Commons graph roadmap references",
+        "command": "rg -n \"Want|Need|Have|Lend|Barter|commons graph|/commons\" docs ciris_engine client",
+        "hit_count": 355,
+        "exit_code": 0,
+        "evidence_file": "reports/investigation/baseline_remaining_phases_20260422_161838/evidence/section12_commons_graph.txt"
+      }
+    ],
+    "baseline_report": "reports/investigation/baseline_remaining_phases_20260422_161838/section12_baseline.md"
+  }
+]

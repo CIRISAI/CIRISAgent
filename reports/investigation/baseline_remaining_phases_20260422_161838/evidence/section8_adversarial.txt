@@ -1,0 +1,80 @@
+tests/test_request_metrics_mixin.py:206:    # Test validation - negative values should fail
+tests/logic/runtime/LOGGING_TEST_REQUIREMENTS.md:10:2. This caused the v1.4.3 regression where logging wasn't properly tested and broke in production.
+tests/logic/runtime/LOGGING_TEST_REQUIREMENTS.md:82:To prevent another v1.4.3-style regression:
+tests/test_metrics_runtime_objects.py:294:        # All values should be non-negative
+tests/test_metrics_runtime_objects.py:296:            assert value >= 0, f"Metric {key} should be non-negative: {value}"
+tests/test_metrics_runtime_objects.py:332:        # Metrics should be consistent (no negative values)
+tests/test_metrics_runtime_objects.py:362:        # All time values should be non-negative
+tests/test_metrics_runtime_objects.py:363:        negative_times = [t for t in all_metrics if t < 0]
+tests/test_metrics_runtime_objects.py:364:        assert not negative_times, f"Found negative time values: {negative_times}"
+tests/test_metrics_runtime_objects.py:368:            # Allow small variations due to timing precision, but no large negatives
+tests/test_metrics_runtime_objects.py:369:            assert all_metrics[i] >= -0.001, f"Significant negative time at index {i}: {all_metrics[i]}"
+tests/test_metrics_runtime_objects.py:413:        # All time_in_open_state values should be non-negative
+tests/test_metrics_runtime_objects.py:414:        negative_times = [r["time_in_open"] for r in results if r["time_in_open"] < 0]
+tests/test_metrics_runtime_objects.py:415:        assert not negative_times, f"Found negative time_in_open_state values: {negative_times}"
+tests/test_metrics_runtime_objects.py:487:        assert final_metrics["time_in_open_state"] >= 0, "Final time_in_open_state is negative"
+tests/test_metrics_runtime_objects.py:783:        # All values should be non-negative
+tests/test_metrics_runtime_objects.py:785:            assert value >= 0, f"Metric {key} should be non-negative: {value}"
+tests/test_metrics_runtime_services.py:292:        # Check non-negative metrics
+tests/test_metrics_runtime_services.py:295:                assert metrics[metric] >= 0, f"Metric {metric} should be non-negative: {metrics[metric]}"
+tests/test_metrics_runtime_services.py:402:        # Check non-negative metrics
+tests/test_metrics_runtime_services.py:405:                assert metrics[metric] >= 0, f"Metric {metric} should be non-negative: {metrics[metric]}"
+tests/test_metrics_runtime_services.py:440:        assert metrics["seconds_per_thought"] >= 0, "Seconds per thought should be non-negative"
+tests/test_metrics_runtime_services.py:523:        # Check non-negative metrics
+tests/test_metrics_runtime_services.py:526:                assert metrics[metric] >= 0, f"Metric {metric} should be non-negative: {metrics[metric]}"
+tests/test_authentication_service.py:530:        # Algorithm confusion attack - try to verify EdDSA token with HS256
+tests/test_authentication_service.py:1149:    async def test_timing_attack_resistance(self, auth_service):
+tests/test_authentication_service.py:1150:        """Test resistance to timing attacks on password verification."""
+tests/test_authentication_service.py:1187:        assert ratio < 1.3, f"Timing ratio {ratio:.4f} exceeds threshold - possible timing attack vulnerability"
+tests/test_authentication_service.py:1261:        """Test prevention of algorithm confusion attacks."""
+tests/test_discord_config_loading.py:2:Unit tests for Discord configuration loading to prevent regression of the monitored_channel_ids bug.
+tests/test_discord_config_loading.py:231:    """Tests specifically to prevent regression of the monitored channels bug."""
+tests/adapters/api/test_oauth_security.py:143:            "https://cdn.discordapp.com.attacker.com/fake",
+tests/adapters/api/test_auth_routes_coverage.py:2037:                    "sub": "attacker-user",
+tests/adapters/api/test_auth_routes_coverage.py:2038:                    "email": "attacker@example.com",
+tests/adapters/api/test_telemetry_bugs.py:192:    """Tests to prevent regression of fixed bugs."""
+tests/adapters/api/test_password_change_dependency_fix.py:129:    def test_regression_prevention_attributes(self):
+tests/adapters/api/test_transparency_endpoint.py:206:        # All should be non-negative
+tests/test_metrics_base.py:18:    # Metrics that should always be non-negative
+tests/test_metrics_base.py:107:            # Check non-negative metrics
+tests/test_metrics_base.py:109:                assert value >= 0, f"Metric {key} should be non-negative: {value}"
+tests/test_metrics_base.py:115:                    assert value >= 0, f"Rate metric {key} should be non-negative: {value}"
+tests/test_system_snapshot_helpers_refactor.py:5:behavioral compatibility and regression prevention.
+tests/ciris_engine/config/test_pricing_models.py:70:    def test_negative_costs_validation(self):
+tests/ciris_engine/config/test_pricing_models.py:71:        """Test that negative costs are rejected."""
+tests/ciris_engine/logic/dma/test_idma.py:480:    def test_idma_result_keff_non_negative(self):
+tests/ciris_engine/logic/dma/test_idma.py:481:        """Test k_eff must be non-negative."""
+tests/ciris_engine/logic/dma/test_idma.py:486:        # Invalid - negative
+tests/ciris_engine/logic/services/infrastructure/test_oauth_security.py:5:- XSS attacks via profile pictures
+tests/ciris_engine/logic/services/infrastructure/test_oauth_security.py:6:- HTTP downgrade attacks
+tests/ciris_engine/logic/services/infrastructure/test_oauth_security.py:8:- Path traversal attacks
+tests/ciris_engine/logic/services/infrastructure/test_oauth_security.py:43:            # HTTP downgrade attack
+tests/ciris_engine/logic/services/infrastructure/test_oauth_security.py:48:            ("https://lh3.googleusercontent.com.evil.com/bad.png", "Subdomain attack"),
+tests/ciris_engine/logic/services/skill_import/test_scanner.py:3:Based on real attack patterns from the ClawHub security crisis (Feb 2026).
+tests/ciris_engine/logic/services/graph/test_telemetry_service_collection.py:22:    """Test TelemetryAggregator.collect_service() method to prevent regression of the short-circuit bug."""
+tests/ciris_engine/logic/services/graph/tsdb_consolidation/test_cleanup_helpers.py:193:    def test_returns_false_when_actual_is_negative(self):
+tests/ciris_engine/logic/services/graph/tsdb_consolidation/test_cleanup_helpers.py:194:        """Should return False for negative counts."""
+tests/ciris_engine/logic/services/graph/tsdb_consolidation/test_date_calculation_helpers.py:164:    def test_raises_on_negative_retention_hours(self):
+tests/ciris_engine/logic/services/graph/tsdb_consolidation/test_date_calculation_helpers.py:165:        """Should raise ValueError for negative retention hours."""
+tests/ciris_engine/logic/services/graph/tsdb_consolidation/test_date_calculation_helpers.py:168:        with pytest.raises(ValueError, match="non-negative"):
+tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py:186:        # Check custom metrics are non-negative integers (as floats)
+tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py:305:        # All filter metrics should be non-negative integers
+tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py:480:        # All visibility metrics should be non-negative
+tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py:560:        # Identity variance should be present and non-negative
+tests/ciris_engine/logic/services/governance/test_governance_metrics_agg.py:594:        # All observation metrics should be non-negative
+tests/ciris_engine/logic/services/runtime/test_llm_service_comprehensive.py:447:        # Verify cost_cents is non-negative (actual value depends on pricing config)
+tests/ciris_engine/logic/services/runtime/test_llm_service_comprehensive.py:459:        We verify the values are sensible (non-negative, reasonable magnitude).
+tests/ciris_engine/logic/services/runtime/test_llm_service_comprehensive.py:466:        assert usage.energy_kwh >= 0, "Energy consumption should be non-negative"
+tests/ciris_engine/logic/services/runtime/test_llm_service_comprehensive.py:467:        assert usage.carbon_grams >= 0, "Carbon emissions should be non-negative"
+tests/ciris_engine/logic/adapters/api/dependencies/test_ingress_auth.py:559:        This prevents privilege escalation via restart attacks and race conditions.
+tests/ciris_engine/logic/utils/test_path_resolution.py:301:            validate_path_safety(Path("/tmp/safe\x00/attack"), "test")
+tests/ciris_engine/logic/utils/test_path_resolution.py:335:        # so this attack vector is already blocked at the system level
+tests/ciris_engine/logic/utils/test_path_resolution.py:486:        # Try to inject via value - attacker tries to close quotes, add newline, set new var
+tests/ciris_engine/logic/utils/test_path_resolution.py:505:            assert not line.startswith("INJECTED="), "Injection attack succeeded!"
+tests/ciris_engine/logic/adapters/api/routes/system/test_skill_import_path_resolution.py:139:        This is the regression test for the bug where relative paths
+tests/ciris_engine/logic/adapters/api/routes/system/test_skill_import_path_resolution.py:164:    def test_absolute_path_prefix_attack_blocked(self) -> None:
+tests/ciris_engine/logic/adapters/api/routes/system/test_skill_import_path_resolution.py:167:        This is the regression test for the string-prefix matching bug
+tests/ciris_engine/logic/adapters/api/routes/system/test_skill_import_validate.py:262:    async def test_security_report_counts_are_non_negative(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
+tests/ciris_engine/logic/adapters/api/routes/system/test_skill_import_validate.py:263:        """Security report counts should all be non-negative integers."""
+tests/ciris_engine/logic/adapters/api/routes/test_billing_lazy_init.py:269:        url = "https://evil-attacker.com/v1"
+tests/ciris_engine/logic/processors/support/test_thought_manager_enhanced.py:179:        """Test that regex patterns are safe from ReDoS attacks."""

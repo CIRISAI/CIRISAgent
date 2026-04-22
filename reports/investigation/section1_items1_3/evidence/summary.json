@@ -1,0 +1,16 @@
+{
+  "section": "section1_items1_3",
+  "date_utc": "2026-04-22",
+  "claims_checked": 3,
+  "verdicts": {
+    "item_1_services_22_three_strata": "partial",
+    "item_2_ten_verb_framework": "confirmed",
+    "item_3_h3ere_four_faculties": "confirmed"
+  },
+  "notable_gaps": [
+    "three-strata wording does not match six in-code service categories"
+  ],
+  "fixes_applied_in_branch": [
+    "Corrected service category comments/grouping in ciris_engine/logic/adapters/api/app.py"
+  ]
+}

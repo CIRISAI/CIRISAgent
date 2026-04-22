@@ -1,0 +1,7 @@
+./docs/nlnet_investigation_execution_plan.md:36:9. Section 6: RATCHET harness validation
+./localization/ta_accordion_vii_viii_ix_annexes.txt:222:## SECTION IX - THE MATHEMATICS OF COHERENCE - THE COHERENCE RATCHET
+./tools/investigation/bootstrap_remaining_phases_baseline.py:78:        title="RATCHET validation harness",
+./tools/investigation/bootstrap_remaining_phases_baseline.py:81:            Probe("ratchet_engines", "RATCHET engine references", "rg -n \"DetectionEngine|GeometricEngine|ComplexityEngine|FederationEngine|RATCHET\" ."),
+./tools/investigation/bootstrap_remaining_phases_baseline.py:82:            Probe("ratchet_tests", "RATCHET test references", "rg -n \"RT-0[1-5]|red-team|falsification|F-[1-5]\" tests docs ."),
+./ciris_engine/data/accord_1.2b_POLYGLOT_compressed_v1.txt:99:### X. THE COHERENCE RATCHET - آلية التماسك - 连贯棘轮 - Когерентностный Храповик
+./ciris_engine/data/localized/accord_1.2b_ta.txt:971:## SECTION IX - THE MATHEMATICS OF COHERENCE - THE COHERENCE RATCHET

@@ -1,0 +1,4 @@
+tests/adapters/api/test_auth_routes_coverage.py:1991:        """Test that API failure returns 401 with no fallback (security fix)."""
+docs/releases/1.0.6-RC1-patch6.md:36:   - Validates security fix across passive and priority observations
+docs/releases/1.0.6-RC1-patch6.md:204:- `22962c88` - fix: Critical security fix for Discord WA validation and DMA instructor mode
+docs/DEPLOYMENT.md:90:    "changelog": "Emergency security fix",

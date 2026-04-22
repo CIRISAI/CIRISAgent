@@ -1,0 +1,9 @@
+rg -n "ACCORD_TIMESTAMP_WINDOW_SECONDS|is_timestamp_valid|timestamp.*window" ciris_engine/schemas/accord.py
+nl -ba ciris_engine/schemas/accord.py | sed -n '1,240p'
+nl -ba tests/ciris_engine/logic/accord/test_accord_verifier.py | sed -n '70,110p'
+pytest -o addopts='' -q tests/ciris_engine/logic/accord/test_accord_verifier.py
+
+git log --oneline --decorate -n 200 | rg -n "2\.6\.2|security fix|v2\.6\.2|patch6"
+git show --name-only --stat --pretty=fuller aa38b09e
+rg -n "shell=False|validate_path_safety|service-token/revoke|is_service_token_revoked|PROHIBITED_CAPABILITIES|validate_url_for_ssrf" .githooks/smart-commit-hook.py main.py ciris_adapters/ciris_hosted_tools/services.py ciris_engine/logic/adapters/api/routes/auth.py ciris_engine/logic/adapters/api/services/auth_service.py ciris_engine/logic/buses/prohibitions.py ciris_engine/logic/adapters/api/api_document.py
+pytest -o addopts='' -q tests/ciris_engine/logic/adapters/api/test_service_token_revocation.py tests/ciris_engine/logic/adapters/test_api_document.py tests/ciris_engine/logic/utils/test_path_resolution.py

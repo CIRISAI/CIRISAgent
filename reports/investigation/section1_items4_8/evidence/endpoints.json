@@ -1,0 +1,2383 @@
+{
+  "count": 256,
+  "count_requires_auth": 13,
+  "count_without_auth_dependency": 243,
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/config.py",
+      "line": 139,
+      "function": "list_configs",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/connectors.py",
+      "line": 272,
+      "function": "list_connectors",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar.py",
+      "line": 459,
+      "function": "list_dsar_requests",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 387,
+      "function": "list_all_tickets",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 313,
+      "function": "list_users",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar.py",
+      "line": 285,
+      "function": "submit_dsar",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar_multi_source.py",
+      "line": 169,
+      "function": "submit_multi_source_dsar",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar_multi_source.py",
+      "line": 169,
+      "function": "submit_multi_source_dsar",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 272,
+      "function": "create_new_ticket",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 369,
+      "function": "create_user",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "file": "ciris_engine/logic/adapters/api/app.py",
+      "line": 226,
+      "function": "root",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/accord-invocation",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 1038,
+      "function": "receive_accord_invocation",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/accord-settings",
+      "file": "ciris_engine/logic/adapters/api/routes/my_data.py",
+      "line": 566,
+      "function": "get_accord_settings",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/accord-settings",
+      "file": "ciris_engine/logic/adapters/api/routes/my_data.py",
+      "line": 629,
+      "function": "update_accord_settings",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/providers.py",
+      "line": 47,
+      "function": "list_adapters",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 165,
+      "function": "list_adapters",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/available",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/providers.py",
+      "line": 62,
+      "function": "list_available_adapters_for_setup",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/available",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 372,
+      "function": "list_available_adapters",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/configurable",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 537,
+      "function": "list_configurable_adapters",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/configure/{session_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 332,
+      "function": "get_configuration_status",
+      "dependencies": [
+        "require_setup_or_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/configure/{session_id}/complete",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 652,
+      "function": "complete_configuration",
+      "dependencies": [
+        "require_setup_or_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/configure/{session_id}/oauth/callback",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 483,
+      "function": "oauth_callback",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/configure/{session_id}/status",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 429,
+      "function": "get_session_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/configure/{session_id}/step",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 384,
+      "function": "execute_configuration_step",
+      "dependencies": [
+        "require_setup_or_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/context-enrichment",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 760,
+      "function": "get_context_enrichment_cache",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/import-skill",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_import.py",
+      "line": 612,
+      "function": "import_skill",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/import-skill/preview",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_import.py",
+      "line": 463,
+      "function": "preview_skill_import",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/import-skill/validate",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_import.py",
+      "line": 499,
+      "function": "validate_skill",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/imported-skills",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_import.py",
+      "line": 689,
+      "function": "list_imported_skills",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/adapters/imported-skills/{module_name}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_import.py",
+      "line": 747,
+      "function": "delete_imported_skill",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/loadable",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 598,
+      "function": "list_loadable_adapters",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/oauth/callback",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 565,
+      "function": "oauth_deeplink_callback",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/persisted",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 280,
+      "function": "list_persisted_configurations",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/types",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 238,
+      "function": "list_module_types",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/adapters/{adapter_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 945,
+      "function": "unload_adapter",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/adapters/{adapter_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 806,
+      "function": "get_adapter_status",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/adapters/{adapter_id}/reload",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 1004,
+      "function": "reload_adapter",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{adapter_name}/check-eligibility",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 494,
+      "function": "recheck_adapter_eligibility",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{adapter_name}/install",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 402,
+      "function": "install_adapter_dependencies",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{adapter_type}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 881,
+      "function": "load_adapter",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/adapters/{adapter_type}/configure/start",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapter_config.py",
+      "line": 259,
+      "function": "start_adapter_configuration",
+      "dependencies": [
+        "require_setup_or_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/adapters/{adapter_type}/persisted",
+      "file": "ciris_engine/logic/adapters/api/routes/system/adapters.py",
+      "line": 322,
+      "function": "remove_persisted_configuration",
+      "dependencies": [
+        "require_admin"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/app-attest/nonce",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 353,
+      "function": "get_app_attest_nonce",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/app-attest/verify",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 424,
+      "function": "verify_app_attest",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/attestation-status",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 320,
+      "function": "get_attestation_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/audit",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 354,
+      "function": "get_audit_trail",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/api-keys",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 2051,
+      "function": "list_api_keys",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/api-keys",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 2011,
+      "function": "create_api_key",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/auth/api-keys/{key_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 2079,
+      "function": "delete_api_key",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/attestation",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 2264,
+      "function": "get_attestation",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 258,
+      "function": "login",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/logout",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 304,
+      "function": "logout",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 320,
+      "function": "get_current_user",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/native/apple",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 1907,
+      "function": "native_apple_token_exchange",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/native/google",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 1680,
+      "function": "native_google_token_exchange",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/oauth/providers",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 409,
+      "function": "list_oauth_providers",
+      "dependencies": [
+        "check_permissions"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/auth/oauth/providers",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 474,
+      "function": "configure_oauth_provider",
+      "dependencies": [
+        "check_permissions"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/auth/oauth/{provider}/callback",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 1249,
+      "function": "oauth_callback",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/auth/oauth/{provider}/login",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 544,
+      "function": "oauth_login",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/refresh",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 345,
+      "function": "refresh_token",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/auth/service-token/revoke",
+      "file": "ciris_engine/logic/adapters/api/routes/auth.py",
+      "line": 2108,
+      "function": "revoke_service_token",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/available",
+      "file": "ciris_engine/logic/adapters/api/routes/tools.py",
+      "line": 438,
+      "function": "get_available_tools",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/balance",
+      "file": "ciris_engine/logic/adapters/api/routes/tools.py",
+      "line": 304,
+      "function": "get_all_tool_balances",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/balance/{tool_name}",
+      "file": "ciris_engine/logic/adapters/api/routes/tools.py",
+      "line": 239,
+      "function": "get_tool_balance",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/capacity",
+      "file": "ciris_engine/logic/adapters/api/routes/my_data.py",
+      "line": 967,
+      "function": "get_capacity",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/categories",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 404,
+      "function": "get_consent_categories",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/channels",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 1652,
+      "function": "get_channels",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/check-duplicate",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 977,
+      "function": "check_duplicate_transaction",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/check/{tool_name}",
+      "file": "ciris_engine/logic/adapters/api/routes/tools.py",
+      "line": 373,
+      "function": "check_tool_credit",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/ciris-services/disable",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 980,
+      "function": "disable_ciris_services",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/ciris-services/enable",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 1032,
+      "function": "enable_ciris_services",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/ciris-services/status",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 1069,
+      "function": "get_ciris_services_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/cleanup",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 456,
+      "function": "cleanup_expired",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/complete",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/complete.py",
+      "line": 915,
+      "function": "complete_setup",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/config",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/config.py",
+      "line": 309,
+      "function": "get_current_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/config",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/config.py",
+      "line": 349,
+      "function": "update_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/connect-node",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/device_auth_routes.py",
+      "line": 47,
+      "function": "connect_node",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/connect-node/status",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/device_auth_routes.py",
+      "line": 159,
+      "function": "connect_node_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/countries",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/location.py",
+      "line": 232,
+      "function": "list_countries",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/credits",
+      "file": "ciris_engine/logic/adapters/api/routes/billing.py",
+      "line": 581,
+      "function": "get_credits",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/decide",
+      "file": "ciris_engine/logic/adapters/api/routes/partnership.py",
+      "line": 531,
+      "function": "decide_partnership",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/deferrals",
+      "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+      "line": 131,
+      "function": "get_deferrals",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/deferrals/{deferral_id}/resolve",
+      "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+      "line": 160,
+      "function": "resolve_deferral",
+      "dependencies": [
+        "require_authority"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/deletion",
+      "file": "ciris_engine/logic/adapters/api/routes/verification.py",
+      "line": 63,
+      "function": "verify_deletion_proof",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/destinations",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 185,
+      "function": "list_destinations",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/destinations",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 246,
+      "function": "create_destination",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/destinations/{destination_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 359,
+      "function": "delete_destination",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/destinations/{destination_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 213,
+      "function": "get_destination",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/destinations/{destination_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 301,
+      "function": "update_destination",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/destinations/{destination_id}/test",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_export.py",
+      "line": 398,
+      "function": "test_destination",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/discover-local-llm",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 217,
+      "function": "discover_local_llm",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/distribution",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 490,
+      "function": "update_distribution_strategy",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/download-package",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/device_auth_routes.py",
+      "line": 295,
+      "function": "download_package",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/dsar/initiate",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 560,
+      "function": "initiate_dsar",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/dsar/status/{request_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 611,
+      "function": "get_dsar_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/emergency/shutdown",
+      "file": "ciris_engine/logic/adapters/api/routes/emergency.py",
+      "line": 182,
+      "function": "emergency_shutdown",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/emergency/test",
+      "file": "ciris_engine/logic/adapters/api/routes/emergency.py",
+      "line": 298,
+      "function": "test_emergency_endpoint",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/entries",
+      "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+      "line": 815,
+      "function": "query_audit_entries",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/entries/{entry_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+      "line": 953,
+      "function": "get_audit_entry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/export",
+      "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+      "line": 1064,
+      "function": "export_audit_data",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/feed",
+      "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+      "line": 161,
+      "function": "get_transparency_feed",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/google-play/verify",
+      "file": "ciris_engine/logic/adapters/api/routes/billing.py",
+      "line": 907,
+      "function": "verify_google_play_purchase",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/grant",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 238,
+      "function": "grant_consent",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/guidance",
+      "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+      "line": 309,
+      "function": "request_guidance",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "file": "ciris_engine/logic/adapters/api/app.py",
+      "line": 239,
+      "function": "health",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "file": "ciris_engine/logic/adapters/api/routes/system/health.py",
+      "line": 131,
+      "function": "get_system_health",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/history",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 856,
+      "function": "get_history",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/history/{user_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/partnership.py",
+      "line": 505,
+      "function": "get_partnership_history",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/identity",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 1430,
+      "function": "get_identity",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/impact",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 313,
+      "function": "get_impact_report",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/interact",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 733,
+      "function": "interact",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/keys/current",
+      "file": "ciris_engine/logic/adapters/api/routes/verification.py",
+      "line": 347,
+      "function": "get_current_public_key_info",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/keys/{key_id}.pub",
+      "file": "ciris_engine/logic/adapters/api/routes/verification.py",
+      "line": 238,
+      "function": "download_public_key",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/kill-switch/status",
+      "file": "ciris_engine/logic/adapters/api/endpoints/emergency.py",
+      "line": 80,
+      "function": "get_kill_switch_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/lens-identifier",
+      "file": "ciris_engine/logic/adapters/api/routes/my_data.py",
+      "line": 383,
+      "function": "get_lens_identifier",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/lens-traces",
+      "file": "ciris_engine/logic/adapters/api/routes/my_data.py",
+      "line": 464,
+      "function": "delete_lens_traces",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/list-models",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 202,
+      "function": "list_models",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/llm",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/config.py",
+      "line": 384,
+      "function": "update_llm_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/local-shutdown",
+      "file": "ciris_engine/logic/adapters/api/routes/system/shutdown.py",
+      "line": 177,
+      "function": "local_shutdown",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/location",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/location.py",
+      "line": 439,
+      "function": "get_current_location",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/location",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/location.py",
+      "line": 402,
+      "function": "update_user_location",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/location-search",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/location.py",
+      "line": 211,
+      "function": "search_locations",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/logs",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1432,
+      "function": "get_system_logs",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/me/settings",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 497,
+      "function": "get_my_settings",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/me/settings",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 548,
+      "function": "update_my_settings",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/message",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 618,
+      "function": "submit_message",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "file": "ciris_engine/logic/adapters/api/routes/partnership.py",
+      "line": 478,
+      "function": "get_partnership_metrics",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 967,
+      "function": "get_detailed_metrics",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/{metric_name}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1757,
+      "function": "get_detailed_metric",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/{metric_name}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry_metrics.py",
+      "line": 50,
+      "function": "get_metric_detail",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/models",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 94,
+      "function": "get_model_capabilities_endpoint",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/models/{provider_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 139,
+      "function": "get_provider_models",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/options",
+      "file": "ciris_engine/logic/adapters/api/routes/partnership.py",
+      "line": 387,
+      "function": "get_partnership_options",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/otlp/{signal}",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 640,
+      "function": "get_otlp_telemetry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/overview",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 682,
+      "function": "get_telemetry_overview",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/partnership/status",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 420,
+      "function": "check_partnership_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/paymaster/configure",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 1073,
+      "function": "configure_paymaster_key",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/paymaster/status",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 1160,
+      "function": "get_paymaster_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/pending",
+      "file": "ciris_engine/logic/adapters/api/routes/partnership.py",
+      "line": 441,
+      "function": "list_pending_partnerships",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "GET",
+      "path": "/permission-requests",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 442,
+      "function": "get_permission_requests",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/permissions",
+      "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+      "line": 215,
+      "function": "get_permissions",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/play-integrity/failed",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 636,
+      "function": "report_play_integrity_failed",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/play-integrity/nonce",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 524,
+      "function": "get_play_integrity_nonce",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/play-integrity/verify",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 593,
+      "function": "verify_play_integrity",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/policy",
+      "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+      "line": 245,
+      "function": "get_transparency_policy",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/processors",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 582,
+      "function": "get_processor_states",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/providers",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/providers.py",
+      "line": 25,
+      "function": "list_providers",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/providers",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 406,
+      "function": "get_llm_providers",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/providers",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 817,
+      "function": "add_provider",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/providers/{name}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 753,
+      "function": "delete_provider",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/providers/{name}/circuit-breaker/config",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 600,
+      "function": "update_circuit_breaker_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/providers/{name}/circuit-breaker/reset",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 535,
+      "function": "reset_circuit_breaker",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/providers/{name}/priority",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 673,
+      "function": "update_provider_priority",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/public/{deletion_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/verification.py",
+      "line": 109,
+      "function": "public_verification_page",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/purchase",
+      "file": "ciris_engine/logic/adapters/api/routes/tools.py",
+      "line": 492,
+      "function": "verify_tool_purchase",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/purchase/initiate",
+      "file": "ciris_engine/logic/adapters/api/routes/billing.py",
+      "line": 651,
+      "function": "initiate_purchase",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/purchase/status/{payment_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/billing.py",
+      "line": 724,
+      "function": "get_purchase_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/query",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 194,
+      "function": "query_consents",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/query",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 361,
+      "function": "query_memory",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/query",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1718,
+      "function": "query_telemetry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/recall/{node_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 744,
+      "function": "recall_by_id",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/request-permissions",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 398,
+      "function": "request_permissions",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/reset-account",
+      "file": "ciris_engine/logic/adapters/api/routes/system/data_management.py",
+      "line": 195,
+      "function": "reset_account",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/reset-device-auth",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/device_auth_routes.py",
+      "line": 275,
+      "function": "reset_device_auth",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/resources",
+      "file": "ciris_engine/logic/adapters/api/routes/system/services.py",
+      "line": 35,
+      "function": "get_resource_usage",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/resources",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 749,
+      "function": "get_resource_telemetry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/resources/history",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1918,
+      "function": "get_resource_history",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/revoke",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 287,
+      "function": "revoke_consent",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/runtime/queue",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 40,
+      "function": "get_processing_queue_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/runtime/reasoning-stream",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 955,
+      "function": "reasoning_stream",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/runtime/step",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 293,
+      "function": "single_step_processor",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/runtime/{action}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/runtime.py",
+      "line": 50,
+      "function": "control_runtime",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/search",
+      "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+      "line": 1004,
+      "function": "search_audit_trails",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/services",
+      "file": "ciris_engine/logic/adapters/api/routes/system/services.py",
+      "line": 78,
+      "function": "get_services_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/services/circuit-breakers/reset",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 445,
+      "function": "reset_service_circuit_breakers",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/services/health",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 353,
+      "function": "get_service_health_details",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/services/selection-logic",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 478,
+      "function": "get_service_selection_explanation",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/services/{provider_name}/priority",
+      "file": "ciris_engine/logic/adapters/api/routes/system_extensions.py",
+      "line": 389,
+      "function": "update_service_priority",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/shutdown",
+      "file": "ciris_engine/logic/adapters/api/endpoints/emergency.py",
+      "line": 39,
+      "function": "emergency_shutdown",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/shutdown",
+      "file": "ciris_engine/logic/adapters/api/routes/system/shutdown.py",
+      "line": 44,
+      "function": "shutdown_system",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/skills/cards",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 112,
+      "function": "get_cards",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/skills/cards/{card_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 125,
+      "function": "get_card",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/skills/drafts",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 168,
+      "function": "list_drafts",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/skills/drafts",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 143,
+      "function": "create_draft",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/skills/drafts/{draft_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 260,
+      "function": "delete_draft",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/skills/drafts/{draft_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 178,
+      "function": "get_draft",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/skills/drafts/{draft_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 190,
+      "function": "update_draft",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/skills/drafts/{draft_id}/build",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 284,
+      "function": "build_adapter",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/skills/drafts/{draft_id}/cards/{card_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 227,
+      "function": "update_card",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/skills/drafts/{draft_id}/validate",
+      "file": "ciris_engine/logic/adapters/api/routes/system/skill_builder.py",
+      "line": 273,
+      "function": "validate_draft",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/sops",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 195,
+      "function": "list_supported_sops",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/sops/{sop}",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 224,
+      "function": "get_sop_metadata",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/sql",
+      "file": "ciris_engine/logic/adapters/api/routes/connectors.py",
+      "line": 144,
+      "function": "register_sql_connector",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/start-local-server",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 266,
+      "function": "start_local_server",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/startup-status",
+      "file": "ciris_engine/logic/adapters/api/routes/system/health.py",
+      "line": 170,
+      "function": "get_startup_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/state/transition",
+      "file": "ciris_engine/logic/adapters/api/routes/system/runtime.py",
+      "line": 101,
+      "function": "transition_cognitive_state",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 586,
+      "function": "get_stats",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "file": "ciris_engine/logic/adapters/api/routes/scheduler.py",
+      "line": 246,
+      "function": "get_scheduler_stats",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/agent.py",
+      "line": 1342,
+      "function": "get_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 163,
+      "function": "get_consent_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/status.py",
+      "line": 42,
+      "function": "get_setup_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/system/llm_routes.py",
+      "line": 334,
+      "function": "get_llm_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+      "line": 275,
+      "function": "get_system_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/wa.py",
+      "line": 246,
+      "function": "get_wa_status",
+      "dependencies": [
+        "require_observer"
+      ],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/status",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 571,
+      "function": "get_wallet_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/store",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 329,
+      "function": "store_memory",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/streams",
+      "file": "ciris_engine/logic/adapters/api/routes/consent.py",
+      "line": 380,
+      "function": "get_consent_streams",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/tasks",
+      "file": "ciris_engine/logic/adapters/api/routes/scheduler.py",
+      "line": 183,
+      "function": "list_scheduled_tasks",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/tasks",
+      "file": "ciris_engine/logic/adapters/api/routes/scheduler.py",
+      "line": 287,
+      "function": "create_scheduled_task",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/tasks/{task_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/scheduler.py",
+      "line": 369,
+      "function": "cancel_scheduled_task",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/templates",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/providers.py",
+      "line": 36,
+      "function": "list_templates",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/time",
+      "file": "ciris_engine/logic/adapters/api/routes/system/health.py",
+      "line": 208,
+      "function": "get_system_time",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/timeline",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 489,
+      "function": "get_timeline",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/tools",
+      "file": "ciris_engine/logic/adapters/api/routes/system/tools.py",
+      "line": 120,
+      "function": "get_available_tools",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/traces",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1261,
+      "function": "get_reasoning_traces",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/traces",
+      "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+      "line": 328,
+      "function": "get_coherence_traces",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/traces/latest",
+      "file": "ciris_engine/logic/adapters/api/routes/transparency.py",
+      "line": 479,
+      "function": "get_latest_trace",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/transactions",
+      "file": "ciris_engine/logic/adapters/api/routes/billing.py",
+      "line": 802,
+      "function": "get_transactions",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/transactions",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 900,
+      "function": "get_transactions",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/transfer",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 675,
+      "function": "transfer_usdc",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/unified",
+      "file": "ciris_engine/logic/adapters/api/routes/telemetry.py",
+      "line": 1855,
+      "function": "get_unified_telemetry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/validate-address",
+      "file": "ciris_engine/logic/adapters/api/routes/wallet.py",
+      "line": 818,
+      "function": "validate_address",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/validate-llm",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/llm_routes.py",
+      "line": 191,
+      "function": "validate_llm",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/verify-signature",
+      "file": "ciris_engine/logic/adapters/api/routes/verification.py",
+      "line": 287,
+      "function": "manual_signature_verification",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/verify-status",
+      "file": "ciris_engine/logic/adapters/api/routes/setup/attestation.py",
+      "line": 281,
+      "function": "get_verify_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/verify/{entry_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/audit.py",
+      "line": 1040,
+      "function": "verify_audit_entry",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/visualize/graph",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 651,
+      "function": "visualize_graph",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/wa/key-check",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 904,
+      "function": "check_wa_key_exists",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/wipe-signing-key",
+      "file": "ciris_engine/logic/adapters/api/routes/system/data_management.py",
+      "line": 269,
+      "function": "wipe_signing_key",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{connector_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/connectors.py",
+      "line": 489,
+      "function": "delete_connector",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/{connector_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/connectors.py",
+      "line": 422,
+      "function": "update_connector",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "POST",
+      "path": "/{connector_id}/test",
+      "file": "ciris_engine/logic/adapters/api/routes/connectors.py",
+      "line": 346,
+      "function": "test_connector",
+      "dependencies": [
+        "get_current_user"
+      ],
+      "requires_auth": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/{key:path}",
+      "file": "ciris_engine/logic/adapters/api/routes/config.py",
+      "line": 296,
+      "function": "delete_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{key:path}",
+      "file": "ciris_engine/logic/adapters/api/routes/config.py",
+      "line": 190,
+      "function": "get_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/{key:path}",
+      "file": "ciris_engine/logic/adapters/api/routes/config.py",
+      "line": 239,
+      "function": "update_config",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{node_id:path}",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 818,
+      "function": "get_node",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{node_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 433,
+      "function": "forget_memory",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{node_id}/edges",
+      "file": "ciris_engine/logic/adapters/api/routes/memory.py",
+      "line": 709,
+      "function": "get_node_edges",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar_multi_source.py",
+      "line": 469,
+      "function": "cancel_multi_source_request",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 545,
+      "function": "cancel_ticket",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar.py",
+      "line": 421,
+      "function": "check_dsar_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar_multi_source.py",
+      "line": 358,
+      "function": "get_multi_source_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 363,
+      "function": "get_ticket_by_id",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/{ticket_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/tickets.py",
+      "line": 506,
+      "function": "update_existing_ticket",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{ticket_id}/deletion-status",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar.py",
+      "line": 579,
+      "function": "get_deletion_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{ticket_id}/partial",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar_multi_source.py",
+      "line": 417,
+      "function": "get_partial_results",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/{ticket_id}/status",
+      "file": "ciris_engine/logic/adapters/api/routes/dsar.py",
+      "line": 509,
+      "function": "update_dsar_status",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{user_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 959,
+      "function": "deactivate_user",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{user_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 661,
+      "function": "get_user",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/{user_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 680,
+      "function": "update_user",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "GET",
+      "path": "/{user_id}/api-keys",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 983,
+      "function": "list_user_api_keys",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/{user_id}/mint-wa",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 798,
+      "function": "mint_wise_authority",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "POST",
+      "path": "/{user_id}/oauth-links",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 741,
+      "function": "link_oauth_account",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/{user_id}/oauth-links/{provider}/{external_id}",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 773,
+      "function": "unlink_oauth_account",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/{user_id}/password",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 708,
+      "function": "change_password",
+      "dependencies": [],
+      "requires_auth": false
+    },
+    {
+      "method": "PUT",
+      "path": "/{user_id}/permissions",
+      "file": "ciris_engine/logic/adapters/api/routes/users.py",
+      "line": 1015,
+      "function": "update_user_permissions",
+      "dependencies": [],
+      "requires_auth": false
+    }
+  ]
+}

@@ -1,0 +1,907 @@
+tests/fixtures/system_snapshot_fixtures.py:270:    """Create a comprehensive mock wise authority service."""
+tests/fixtures/telemetry_api.py:240:    """Create a fully-configured wise authority service for API tests."""
+tests/fixtures/processor_mocks.py:48:    """Mock conscience registry for testing."""
+tests/fixtures/processor_mocks.py:50:    def get_consciences(self) -> list[Any]:
+tests/fixtures/processor_mocks.py:80:    """Create test epistemic data for conscience results.
+tests/fixtures/processor_mocks.py:85:    from ciris_engine.schemas.conscience.core import EpistemicData
+tests/fixtures/runtime.py:325:            conscience_retry_limit=1,
+tests/fixtures/runtime.py:507:            conscience_retry_limit=1,
+tests/fixtures/consent_service.py:619:            "one_on_one_count": 150,  # 75% - high parasocial risk
+tests/test_action_sequence_conscience.py:4:Tests the heuristic conscience that prevents repeated SPEAK actions
+tests/test_action_sequence_conscience.py:15:from ciris_engine.logic.conscience.action_sequence_conscience import REPEATED_SPEAK_GUIDANCE, ActionSequenceConscience
+tests/test_action_sequence_conscience.py:20:from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+tests/test_action_sequence_conscience.py:21:from ciris_engine.schemas.conscience.core import ConscienceStatus
+tests/test_action_sequence_conscience.py:58:    def conscience(self, mock_time_service):
+tests/test_action_sequence_conscience.py:88:        # Also patch at the action_sequence_conscience module level
+tests/test_action_sequence_conscience.py:89:        from ciris_engine.logic.conscience import action_sequence_conscience as asc_module
+tests/test_action_sequence_conscience.py:199:    async def test_allows_first_speak_no_prior_actions(self, conscience, speak_action, sample_thought, patch_db_path):
+tests/test_action_sequence_conscience.py:202:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:211:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:218:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:229:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:237:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:246:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:258:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:267:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:277:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:285:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:294:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:304:        self, conscience, tool_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:306:        """Test that TOOL actions are always allowed (conscience only checks SPEAK)."""
+tests/test_action_sequence_conscience.py:311:        result = await conscience.check(tool_action, context)
+tests/test_action_sequence_conscience.py:320:        self, conscience, ponder_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:327:        result = await conscience.check(ponder_action, context)
+tests/test_action_sequence_conscience.py:336:    async def test_allows_speak_when_no_thought_context(self, conscience, speak_action, patch_db_path):
+tests/test_action_sequence_conscience.py:339:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:347:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:355:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:364:        self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:394:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:403:        self, conscience, speak_action, sample_task, mock_time_service, patch_db_path
+tests/test_action_sequence_conscience.py:428:        result = await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:438:        self, conscience, speak_action, sample_thought, patch_db_path, monkeypatch
+tests/test_action_sequence_conscience.py:440:        """Test that conscience creates trace correlation for auditing."""
+tests/test_action_sequence_conscience.py:454:        await conscience.check(speak_action, context)
+tests/test_action_sequence_conscience.py:459:        assert correlation.service_type == "conscience"
+tests/test_action_sequence_conscience.py:460:        assert "action_sequence" in correlation.tags.get("conscience_type", "")
+tests/test_wise_bus_broadcast_integration.py:4:Tests that deferrals are broadcast to all registered wise authority services
+tests/test_updated_status_conscience.py:4:Tests the 6th conscience check that detects when new observations
+tests/test_updated_status_conscience.py:16:from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatusConscience
+tests/test_updated_status_conscience.py:20:from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+tests/test_updated_status_conscience.py:21:from ciris_engine.schemas.conscience.core import ConscienceStatus
+tests/test_updated_status_conscience.py:58:    def conscience(self, mock_time_service):
+tests/test_updated_status_conscience.py:133:    async def test_passes_when_no_update_flag(self, conscience, speak_action, sample_thought, patch_db_path):
+tests/test_updated_status_conscience.py:136:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:144:        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+tests/test_updated_status_conscience.py:157:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:168:        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+tests/test_updated_status_conscience.py:179:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:188:        result2 = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:194:        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+tests/test_updated_status_conscience.py:204:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:223:    async def test_passes_when_no_thought_in_context(self, conscience, speak_action):
+tests/test_updated_status_conscience.py:226:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:233:    async def test_passes_when_task_not_found(self, conscience, speak_action, patch_db_path):
+tests/test_updated_status_conscience.py:253:        result = await conscience.check(speak_action, context)
+tests/test_updated_status_conscience.py:260:        self, conscience, speak_action, sample_thought, sample_task, patch_db_path, mock_time_service
+tests/test_updated_status_conscience.py:269:        result = await conscience.check(speak_action, context)
+tests/test_defer_handler.py:122:        conscience_failure_context=None,
+tests/test_defer_handler.py:150:        """Mock wise authority bus."""
+tests/test_defer_handler.py:599:        """Mock wise authority service with full deferral capabilities."""
+tests/schemas/handlers/test_core.py:33:            "conscience_failure",
+tests/schemas/handlers/test_core.py:49:        assert DeferralReason.conscience_FAILURE.value == "conscience_failure"
+tests/test_memory_handlers.py:59:        conscience_failure_context=None,
+tests/test_agent_credits.py:110:            node_attestation="node_sig_here",
+tests/test_agent_credits.py:111:            node_attestation_key_id="node-key-123",
+tests/test_agent_credits.py:201:        assert policy.min_attestation_level == 2
+tests/logic/dma/test_dma_executor.py:52:    registry.conscience_evaluator = AsyncMock()  # Mock conscience evaluator
+tests/logic/services/runtime/test_control_service_coverage.py:64:    from ciris_engine.schemas.conscience.core import EpistemicData
+tests/logic/services/runtime/test_control_service_coverage.py:73:        conscience_passed=kwargs.get("conscience_passed", True),
+tests/logic/services/runtime/test_control_service_coverage.py:74:        conscience_override_reason=kwargs.get("conscience_override_reason", None),
+tests/logic/processors/test_exception_types.py:30:def test_conscience_check_failed():
+tests/logic/processors/test_exception_types.py:34:    assert error.conscience_name == "ThoughtDepthGuardrail"
+tests/logic/processors/test_type_safety.py:20:        conscience_registry=MockConscienceRegistry(),
+tests/logic/processors/test_type_safety.py:28:    assert processor.conscience_registry is not None
+tests/logic/runtime/test_ciris_runtime.py:160:            conscience_retry_limit=1,
+tests/test_deferral_permissions.py:352:        """Mock wise authority service."""
+tests/test_deferral_permissions.py:486:        """Mock wise authority service."""
+tests/adapters/api/test_service_configuration.py:92:        # Check wise authority
+tests/handlers/test_speak_handler.py:179:        conscience_failure_context=None,
+tests/test_initialization_fixes.py:14:from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatusConscience
+tests/test_initialization_fixes.py:132:        # Read the updated_status_conscience.py source to verify no payload access
+tests/test_initialization_fixes.py:135:        from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatusConscience
+tests/test_initialization_fixes.py:149:    def test_conscience_check_stores_observation_in_result(self):
+tests/test_memory_handlers_comprehensive.py:79:        conscience_failure_context=None,
+tests/adapters/api/routes/test_auth_attestation.py:1:"""Tests for auth.py attestation helper functions."""
+tests/adapters/api/routes/test_auth_attestation.py:9:    _build_attestation_response,
+tests/adapters/api/routes/test_auth_attestation.py:11:    _handle_no_cached_attestation,
+tests/adapters/api/routes/test_auth_attestation.py:12:    _trigger_background_attestation,
+tests/adapters/api/routes/test_auth_attestation.py:17:    """Tests for _build_attestation_response helper."""
+tests/adapters/api/routes/test_auth_attestation.py:21:        result = _build_attestation_response("verified")
+tests/adapters/api/routes/test_auth_attestation.py:22:        assert result["data"]["attestation_status"] == "verified"
+tests/adapters/api/routes/test_auth_attestation.py:30:        result = _build_attestation_response("not_attempted", loaded=False, error="Service unavailable")
+tests/adapters/api/routes/test_auth_attestation.py:31:        assert result["data"]["attestation_status"] == "not_attempted"
+tests/adapters/api/routes/test_auth_attestation.py:37:        result = _build_attestation_response("verified", max_level=3, level_pending=False)
+tests/adapters/api/routes/test_auth_attestation.py:68:    def test_returns_error_when_no_attestation_caching(self):
+tests/adapters/api/routes/test_auth_attestation.py:69:        """Should return error when service lacks attestation caching."""
+tests/adapters/api/routes/test_auth_attestation.py:71:        mock_infra_service = MagicMock(spec=[])  # No get_cached_attestation
+tests/adapters/api/routes/test_auth_attestation.py:86:        mock_infra_service.get_cached_attestation = MagicMock()
+tests/adapters/api/routes/test_auth_attestation.py:98:    """Tests for _trigger_background_attestation helper."""
+tests/adapters/api/routes/test_auth_attestation.py:100:    def test_returns_false_when_no_run_attestation(self):
+tests/adapters/api/routes/test_auth_attestation.py:101:        """Should return False when service lacks run_attestation."""
+tests/adapters/api/routes/test_auth_attestation.py:102:        mock_service = MagicMock(spec=[])  # No run_attestation
+tests/adapters/api/routes/test_auth_attestation.py:104:        result = _trigger_background_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:109:    async def test_triggers_attestation_successfully(self):
+tests/adapters/api/routes/test_auth_attestation.py:110:        """Should trigger attestation and return True."""
+tests/adapters/api/routes/test_auth_attestation.py:112:        mock_service.run_attestation = AsyncMock()
+tests/adapters/api/routes/test_auth_attestation.py:116:        result = _trigger_background_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:124:        mock_service.run_attestation = AsyncMock()
+tests/adapters/api/routes/test_auth_attestation.py:125:        mock_service.invalidate_attestation_cache = MagicMock()
+tests/adapters/api/routes/test_auth_attestation.py:128:        result = _trigger_background_attestation(mock_service, force_refresh=True)
+tests/adapters/api/routes/test_auth_attestation.py:131:        mock_service.invalidate_attestation_cache.assert_called_once()
+tests/adapters/api/routes/test_auth_attestation.py:136:        mock_service.run_attestation = MagicMock(side_effect=RuntimeError("Failed"))
+tests/adapters/api/routes/test_auth_attestation.py:138:        result = _trigger_background_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:141:        assert "Failed to trigger attestation" in caplog.text
+tests/adapters/api/routes/test_auth_attestation.py:145:    """Tests for _handle_no_cached_attestation helper."""
+tests/adapters/api/routes/test_auth_attestation.py:147:    def test_returns_in_progress_when_attestation_running(self):
+tests/adapters/api/routes/test_auth_attestation.py:148:        """Should return in_progress when attestation already running."""
+tests/adapters/api/routes/test_auth_attestation.py:150:        mock_service.is_attestation_in_progress.return_value = True
+tests/adapters/api/routes/test_auth_attestation.py:152:        result = _handle_no_cached_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:154:        assert result["data"]["attestation_status"] == "in_progress"
+tests/adapters/api/routes/test_auth_attestation.py:157:    async def test_triggers_attestation_when_not_running(self):
+tests/adapters/api/routes/test_auth_attestation.py:158:        """Should trigger attestation when not in progress."""
+tests/adapters/api/routes/test_auth_attestation.py:162:        original_flag = auth_module._attestation_triggered_from_endpoint
+tests/adapters/api/routes/test_auth_attestation.py:163:        auth_module._attestation_triggered_from_endpoint = False
+tests/adapters/api/routes/test_auth_attestation.py:166:        mock_service.is_attestation_in_progress.return_value = False
+tests/adapters/api/routes/test_auth_attestation.py:167:        mock_service.run_attestation = AsyncMock()
+tests/adapters/api/routes/test_auth_attestation.py:171:            result = _handle_no_cached_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:172:            assert result["data"]["attestation_status"] == "in_progress"
+tests/adapters/api/routes/test_auth_attestation.py:174:            auth_module._attestation_triggered_from_endpoint = original_flag
+tests/adapters/api/routes/test_auth_attestation.py:181:        original_flag = auth_module._attestation_triggered_from_endpoint
+tests/adapters/api/routes/test_auth_attestation.py:182:        auth_module._attestation_triggered_from_endpoint = True
+tests/adapters/api/routes/test_auth_attestation.py:185:        mock_service.is_attestation_in_progress.return_value = False
+tests/adapters/api/routes/test_auth_attestation.py:188:            result = _handle_no_cached_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:189:            assert result["data"]["attestation_status"] == "in_progress"
+tests/adapters/api/routes/test_auth_attestation.py:191:            auth_module._attestation_triggered_from_endpoint = original_flag
+tests/adapters/api/routes/test_auth_attestation.py:197:        original_flag = auth_module._attestation_triggered_from_endpoint
+tests/adapters/api/routes/test_auth_attestation.py:198:        auth_module._attestation_triggered_from_endpoint = False
+tests/adapters/api/routes/test_auth_attestation.py:200:        mock_service = MagicMock(spec=["is_attestation_in_progress"])  # No run_attestation
+tests/adapters/api/routes/test_auth_attestation.py:201:        mock_service.is_attestation_in_progress.return_value = False
+tests/adapters/api/routes/test_auth_attestation.py:204:            result = _handle_no_cached_attestation(mock_service)
+tests/adapters/api/routes/test_auth_attestation.py:205:            assert result["data"]["attestation_status"] == "not_attempted"
+tests/adapters/api/routes/test_auth_attestation.py:206:            assert "No cached attestation" in result["data"]["error"]
+tests/adapters/api/routes/test_auth_attestation.py:208:            auth_module._attestation_triggered_from_endpoint = original_flag
+tests/services/infrastructure/test_attestation_refresh.py:2:Tests for attestation periodic refresh and integrity degradation detection.
+tests/services/infrastructure/test_attestation_refresh.py:5:- Periodic attestation refresh loop (_attestation_refresh_loop)
+tests/services/infrastructure/test_attestation_refresh.py:7:- Stale-while-revalidate on the /auth/attestation endpoint
+tests/services/infrastructure/test_attestation_refresh.py:17:from ciris_engine.schemas.services.attestation import AttestationResult
+tests/services/infrastructure/test_attestation_refresh.py:32:        attestation_status="verified" if max_level > 0 else "partial",
+tests/services/infrastructure/test_attestation_refresh.py:59:            svc._baseline_attestation = None
+tests/services/infrastructure/test_attestation_refresh.py:66:        assert svc._baseline_attestation is current
+tests/services/infrastructure/test_attestation_refresh.py:70:        svc._baseline_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:81:        svc._baseline_attestation = _make_result(binary_ok=True)
+tests/services/infrastructure/test_attestation_refresh.py:95:        svc._baseline_attestation = _make_result(env_ok=True)
+tests/services/infrastructure/test_attestation_refresh.py:108:        svc._baseline_attestation = _make_result(file_integrity_ok=True)
+tests/services/infrastructure/test_attestation_refresh.py:121:        svc._baseline_attestation = _make_result(binary_ok=True, env_ok=True, file_integrity_ok=True)
+tests/services/infrastructure/test_attestation_refresh.py:137:        svc._baseline_attestation = _make_result(binary_ok=False)
+tests/services/infrastructure/test_attestation_refresh.py:149:        svc._baseline_attestation = _make_result(binary_ok=False)
+tests/services/infrastructure/test_attestation_refresh.py:165:        svc._baseline_attestation = baseline
+tests/services/infrastructure/test_attestation_refresh.py:180:# Stale-while-revalidate on get_cached_attestation tests
+tests/services/infrastructure/test_attestation_refresh.py:195:            svc._attestation_cache = None
+tests/services/infrastructure/test_attestation_refresh.py:196:            svc._last_known_attestation = None
+tests/services/infrastructure/test_attestation_refresh.py:197:            svc._attestation_cache_ttl = 3600
+tests/services/infrastructure/test_attestation_refresh.py:198:            svc._attestation_stale_ttl = 7200
+tests/services/infrastructure/test_attestation_refresh.py:204:        svc._attestation_cache = result
+tests/services/infrastructure/test_attestation_refresh.py:206:        assert svc.get_cached_attestation() is result
+tests/services/infrastructure/test_attestation_refresh.py:212:        svc._attestation_cache = result
+tests/services/infrastructure/test_attestation_refresh.py:214:        assert svc.get_cached_attestation(allow_stale=False) is None
+tests/services/infrastructure/test_attestation_refresh.py:221:        svc._attestation_cache = result
+tests/services/infrastructure/test_attestation_refresh.py:223:        assert svc.get_cached_attestation(allow_stale=True) is result
+tests/services/infrastructure/test_attestation_refresh.py:230:        svc._attestation_cache = result
+tests/services/infrastructure/test_attestation_refresh.py:232:        assert svc.get_cached_attestation(allow_stale=True) is None
+tests/services/infrastructure/test_attestation_refresh.py:236:        svc._attestation_cache = None
+tests/services/infrastructure/test_attestation_refresh.py:237:        svc._last_known_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:238:        assert svc.get_cached_attestation(allow_stale=True) is svc._last_known_attestation
+tests/services/infrastructure/test_attestation_refresh.py:247:    """Tests for _attestation_refresh_loop scheduling and error handling."""
+tests/services/infrastructure/test_attestation_refresh.py:250:    async def test_refresh_loop_calls_run_attestation(self):
+tests/services/infrastructure/test_attestation_refresh.py:251:        """Loop should call run_attestation with force_refresh=True."""
+tests/services/infrastructure/test_attestation_refresh.py:259:            svc._attestation_in_progress = False
+tests/services/infrastructure/test_attestation_refresh.py:261:            svc._attestation_refresh_interval = 0.01  # 10ms for test speed
+tests/services/infrastructure/test_attestation_refresh.py:262:            svc._baseline_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:267:            async def mock_run_attestation(mode="partial", force_refresh=False, **kw):
+tests/services/infrastructure/test_attestation_refresh.py:274:            svc.run_attestation = mock_run_attestation
+tests/services/infrastructure/test_attestation_refresh.py:277:            await svc._attestation_refresh_loop()
+tests/services/infrastructure/test_attestation_refresh.py:292:            svc._attestation_in_progress = False
+tests/services/infrastructure/test_attestation_refresh.py:294:            svc._attestation_refresh_interval = 0.01
+tests/services/infrastructure/test_attestation_refresh.py:295:            svc._baseline_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:299:            async def mock_run_attestation(**kw):
+tests/services/infrastructure/test_attestation_refresh.py:308:            svc.run_attestation = mock_run_attestation
+tests/services/infrastructure/test_attestation_refresh.py:311:            await svc._attestation_refresh_loop()
+tests/services/infrastructure/test_attestation_refresh.py:318:        """Loop should wait until _attestation_in_progress is False."""
+tests/services/infrastructure/test_attestation_refresh.py:326:            svc._attestation_in_progress = True  # Simulate startup in progress
+tests/services/infrastructure/test_attestation_refresh.py:328:            svc._attestation_refresh_interval = 0.01
+tests/services/infrastructure/test_attestation_refresh.py:329:            svc._baseline_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:335:                svc._attestation_in_progress = False
+tests/services/infrastructure/test_attestation_refresh.py:337:            async def mock_run_attestation(**kw):
+tests/services/infrastructure/test_attestation_refresh.py:343:            svc.run_attestation = mock_run_attestation
+tests/services/infrastructure/test_attestation_refresh.py:348:                svc._attestation_refresh_loop(),
+tests/services/infrastructure/test_attestation_refresh.py:364:            svc._attestation_in_progress = False
+tests/services/infrastructure/test_attestation_refresh.py:366:            svc._attestation_refresh_interval = 100  # Long interval
+tests/services/infrastructure/test_attestation_refresh.py:367:            svc._baseline_attestation = _make_result()
+tests/services/infrastructure/test_attestation_refresh.py:369:            async def mock_run_attestation(**kw):
+tests/services/infrastructure/test_attestation_refresh.py:372:            svc.run_attestation = mock_run_attestation
+tests/services/infrastructure/test_attestation_refresh.py:375:            task = asyncio.create_task(svc._attestation_refresh_loop())
+tests/services/infrastructure/test_attestation_refresh.py:389:    async def test_run_startup_attestation_sets_baseline(self):
+tests/services/infrastructure/test_attestation_refresh.py:390:        """run_startup_attestation should store result as _baseline_attestation."""
+tests/services/infrastructure/test_attestation_refresh.py:398:            svc._attestation_cache = None
+tests/services/infrastructure/test_attestation_refresh.py:399:            svc._baseline_attestation = None
+tests/services/infrastructure/test_attestation_refresh.py:403:            async def mock_run_attestation(**kw):
+tests/services/infrastructure/test_attestation_refresh.py:406:            svc.run_attestation = mock_run_attestation
+tests/services/infrastructure/test_attestation_refresh.py:408:            await svc.run_startup_attestation()
+tests/services/infrastructure/test_attestation_refresh.py:410:            assert svc._baseline_attestation is result
+tests/services/test_pipeline_stepping.py:438:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/services/test_pipeline_stepping.py:456:            conscience_passed=True,
+tests/adapters/api/test_wallet_routes.py:58:    provider._spending_authority.attestation_level = 3
+tests/ciris_adapters/wallet/test_x402_provider.py:26:        """Test spending limits at attestation level 5."""
+tests/ciris_adapters/wallet/test_x402_provider.py:27:        authority = SpendingAuthority.from_attestation(5)
+tests/ciris_adapters/wallet/test_x402_provider.py:38:        """Test spending limits at attestation level 4 (same as 5, advisory logged)."""
+tests/ciris_adapters/wallet/test_x402_provider.py:39:        authority = SpendingAuthority.from_attestation(4)
+tests/ciris_adapters/wallet/test_x402_provider.py:49:        """Test spending limits at attestation level 3 (medium trust)."""
+tests/ciris_adapters/wallet/test_x402_provider.py:50:        authority = SpendingAuthority.from_attestation(3)
+tests/ciris_adapters/wallet/test_x402_provider.py:56:        """Test spending limits at attestation level 2 (micropayments only)."""
+tests/ciris_adapters/wallet/test_x402_provider.py:57:        authority = SpendingAuthority.from_attestation(2)
+tests/ciris_adapters/wallet/test_x402_provider.py:65:        authority = SpendingAuthority.from_attestation(1)
+tests/ciris_adapters/wallet/test_x402_provider.py:76:        authority = SpendingAuthority.from_attestation(0)
+tests/ciris_adapters/wallet/test_x402_provider.py:86:        authority = SpendingAuthority.from_attestation(
+tests/ciris_adapters/wallet/test_x402_provider.py:87:            attestation_level=5,
+tests/ciris_adapters/wallet/test_x402_provider.py:101:        authority = SpendingAuthority.from_attestation(3)  # $50 limit
+tests/ciris_adapters/wallet/test_x402_provider.py:109:        authority = SpendingAuthority.from_attestation(3)  # $50 limit
+tests/ciris_adapters/wallet/test_x402_provider.py:117:        authority = SpendingAuthority.from_attestation(2)  # $0.10 limit
+tests/ciris_adapters/wallet/test_x402_provider.py:124:        authority = SpendingAuthority.from_attestation(2)
+tests/ciris_adapters/wallet/test_x402_provider.py:195:    def test_spending_authority_from_attestation_levels(self):
+tests/ciris_adapters/wallet/test_x402_provider.py:196:        """Test all attestation levels produce valid authorities."""
+tests/ciris_adapters/wallet/test_x402_provider.py:198:            authority = SpendingAuthority.from_attestation(level)
+tests/ciris_adapters/wallet/test_x402_provider.py:206:        authority = SpendingAuthority.from_attestation(
+tests/ciris_adapters/wallet/test_x402_provider.py:207:            attestation_level=5, hardware_trust_degraded=True, trust_degradation_reason="Test reason"
+tests/adapters/test_mock_llm_comprehensive.py:10:from ciris_engine.schemas.conscience.core import (
+tests/adapters/test_mock_llm_service.py:4:from ciris_engine.schemas.conscience.core import (
+tests/adapters/mock_llm/responses_epistemic.py:2:from ciris_engine.schemas.conscience.core import CoherenceCheckResult, EntropyCheckResult
+tests/adapters/mock_llm/responses.py:8:from ciris_engine.schemas.conscience.core import (
+tests/adapters/mock_llm/responses_feedback.py:2:from ciris_engine.schemas.conscience.core import EpistemicHumilityResult, OptimizationVetoResult
+tests/test_conscience_core.py:2:Comprehensive tests for conscience/core.py
+tests/test_conscience_core.py:4:Tests all four conscience types:
+tests/test_conscience_core.py:19:from ciris_engine.logic.conscience.core import (
+tests/test_conscience_core.py:31:from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+tests/test_conscience_core.py:32:from ciris_engine.schemas.conscience.core import (
+tests/test_conscience_core.py:64:def conscience_config():
+tests/test_conscience_core.py:65:    """Default conscience config"""
+tests/test_conscience_core.py:124:    def test_init_without_time_service_raises(self, mock_service_registry, conscience_config):
+tests/test_conscience_core.py:129:                config=conscience_config,
+tests/test_conscience_core.py:133:    def test_init_with_time_service_succeeds(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:135:        conscience = _BaseConscience(
+tests/test_conscience_core.py:137:            config=conscience_config,
+tests/test_conscience_core.py:140:        assert conscience._time_service == mock_time_service
+tests/test_conscience_core.py:141:        assert conscience.config == conscience_config
+tests/test_conscience_core.py:144:    async def test_get_sink_without_sink_raises(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:146:        conscience = _BaseConscience(
+tests/test_conscience_core.py:148:            config=conscience_config,
+tests/test_conscience_core.py:153:            await conscience._get_sink()
+tests/test_conscience_core.py:157:        self, mock_service_registry, conscience_config, mock_time_service, mock_sink_with_llm
+tests/test_conscience_core.py:160:        conscience = _BaseConscience(
+tests/test_conscience_core.py:162:            config=conscience_config,
+tests/test_conscience_core.py:166:        sink = await conscience._get_sink()
+tests/test_conscience_core.py:169:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:174:        conscience_config,
+tests/test_conscience_core.py:179:        conscience = _BaseConscience(
+tests/test_conscience_core.py:181:            config=conscience_config,
+tests/test_conscience_core.py:186:        correlation = conscience._create_trace_correlation("entropy", context_with_thought, start_time)
+tests/test_conscience_core.py:193:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:195:        self, mock_persistence, mock_service_registry, conscience_config, mock_time_service
+tests/test_conscience_core.py:198:        conscience = _BaseConscience(
+tests/test_conscience_core.py:200:            config=conscience_config,
+tests/test_conscience_core.py:207:        conscience._update_trace_correlation(correlation, True, "Test result", start_time)
+tests/test_conscience_core.py:224:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:229:        conscience_config,
+tests/test_conscience_core.py:235:        conscience = EntropyConscience(
+tests/test_conscience_core.py:237:            config=conscience_config,
+tests/test_conscience_core.py:241:        result = await conscience.check(action_non_speak, context_with_thought)
+tests/test_conscience_core.py:247:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:252:        conscience_config,
+tests/test_conscience_core.py:262:        conscience = EntropyConscience(
+tests/test_conscience_core.py:264:            config=conscience_config,
+tests/test_conscience_core.py:270:        conscience._get_sink = AsyncMock(return_value=None)
+tests/test_conscience_core.py:272:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:279:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:284:        conscience_config,
+tests/test_conscience_core.py:297:        conscience = EntropyConscience(
+tests/test_conscience_core.py:299:            config=conscience_config,
+tests/test_conscience_core.py:304:        result = await conscience.check(action, context_with_thought)
+tests/test_conscience_core.py:310:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:315:        conscience_config,
+tests/test_conscience_core.py:327:        conscience = EntropyConscience(
+tests/test_conscience_core.py:329:            config=conscience_config,
+tests/test_conscience_core.py:334:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:341:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:346:        conscience_config,
+tests/test_conscience_core.py:358:        conscience = EntropyConscience(
+tests/test_conscience_core.py:360:            config=conscience_config,
+tests/test_conscience_core.py:365:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:372:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:377:        conscience_config,
+tests/test_conscience_core.py:386:        conscience = EntropyConscience(
+tests/test_conscience_core.py:388:            config=conscience_config,
+tests/test_conscience_core.py:393:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:399:    def test_create_entropy_messages(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:401:        conscience = EntropyConscience(
+tests/test_conscience_core.py:403:            config=conscience_config,
+tests/test_conscience_core.py:407:        messages, user_prompt = conscience._create_entropy_messages("Hello world")
+tests/test_conscience_core.py:428:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:433:        conscience_config,
+tests/test_conscience_core.py:439:        conscience = CoherenceConscience(
+tests/test_conscience_core.py:441:            config=conscience_config,
+tests/test_conscience_core.py:445:        result = await conscience.check(action_non_speak, context_with_thought)
+tests/test_conscience_core.py:451:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:456:        conscience_config,
+tests/test_conscience_core.py:468:        conscience = CoherenceConscience(
+tests/test_conscience_core.py:470:            config=conscience_config,
+tests/test_conscience_core.py:475:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:482:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:487:        conscience_config,
+tests/test_conscience_core.py:499:        conscience = CoherenceConscience(
+tests/test_conscience_core.py:501:            config=conscience_config,
+tests/test_conscience_core.py:506:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:513:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:518:        conscience_config,
+tests/test_conscience_core.py:527:        conscience = CoherenceConscience(
+tests/test_conscience_core.py:529:            config=conscience_config,
+tests/test_conscience_core.py:534:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:540:    def test_create_coherence_messages(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:542:        conscience = CoherenceConscience(
+tests/test_conscience_core.py:544:            config=conscience_config,
+tests/test_conscience_core.py:548:        messages, user_prompt = conscience._create_coherence_messages("Hello world")
+tests/test_conscience_core.py:569:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:574:        conscience_config,
+tests/test_conscience_core.py:591:        conscience = OptimizationVetoConscience(
+tests/test_conscience_core.py:593:            config=conscience_config,
+tests/test_conscience_core.py:598:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:604:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:609:        conscience_config,
+tests/test_conscience_core.py:626:        conscience = OptimizationVetoConscience(
+tests/test_conscience_core.py:628:            config=conscience_config,
+tests/test_conscience_core.py:633:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:640:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:645:        conscience_config,
+tests/test_conscience_core.py:662:        conscience = OptimizationVetoConscience(
+tests/test_conscience_core.py:664:            config=conscience_config,
+tests/test_conscience_core.py:669:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:674:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:679:        conscience_config,
+tests/test_conscience_core.py:688:        conscience = OptimizationVetoConscience(
+tests/test_conscience_core.py:690:            config=conscience_config,
+tests/test_conscience_core.py:695:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:700:    def test_create_optimization_veto_messages(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:702:        conscience = OptimizationVetoConscience(
+tests/test_conscience_core.py:704:            config=conscience_config,
+tests/test_conscience_core.py:708:        messages, user_prompt = conscience._create_optimization_veto_messages("test action")
+tests/test_conscience_core.py:728:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:733:        conscience_config,
+tests/test_conscience_core.py:750:        conscience = EpistemicHumilityConscience(
+tests/test_conscience_core.py:752:            config=conscience_config,
+tests/test_conscience_core.py:757:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:763:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:768:        conscience_config,
+tests/test_conscience_core.py:785:        conscience = EpistemicHumilityConscience(
+tests/test_conscience_core.py:787:            config=conscience_config,
+tests/test_conscience_core.py:792:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:799:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:804:        conscience_config,
+tests/test_conscience_core.py:821:        conscience = EpistemicHumilityConscience(
+tests/test_conscience_core.py:823:            config=conscience_config,
+tests/test_conscience_core.py:828:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:834:    @patch("ciris_engine.logic.conscience.core.persistence")
+tests/test_conscience_core.py:839:        conscience_config,
+tests/test_conscience_core.py:848:        conscience = EpistemicHumilityConscience(
+tests/test_conscience_core.py:850:            config=conscience_config,
+tests/test_conscience_core.py:855:        result = await conscience.check(action_speak, context_with_thought)
+tests/test_conscience_core.py:860:    def test_create_epistemic_humility_messages(self, mock_service_registry, conscience_config, mock_time_service):
+tests/test_conscience_core.py:862:        conscience = EpistemicHumilityConscience(
+tests/test_conscience_core.py:864:            config=conscience_config,
+tests/test_conscience_core.py:868:        messages, user_prompt = conscience._create_epistemic_humility_messages("test action")
+tests/test_wise_bus_deferrals.py:30:    """Mock wise authority service implementing the protocol."""
+tests/test_wise_bus_deferrals.py:54:        """Provide a mock wise authority service."""
+tests/test_wise_bus_deferrals.py:350:        """Test that deferrals are broadcast to ALL wise authority services."""
+tests/ciris_engine/logic/infrastructure/test_step_streaming.py:65:            conscience_passed=kwargs.get("conscience_passed", True),
+tests/ciris_engine/logic/infrastructure/test_step_streaming.py:66:            conscience_override_reason=kwargs.get("conscience_override_reason", None),
+tests/ciris_engine/logic/registries/test_typed_registries.py:82:    """Mock wise authority service for testing."""
+tests/ciris_engine/logic/registries/test_typed_registries.py:181:    # Register a wise authority service
+tests/ciris_engine/logic/utils/test_localization_integration.py:103:        result = get_string("en", "conscience.ponder_attempted", action="SPEAK")
+tests/ciris_engine/logic/utils/test_localization_integration.py:104:        assert "SPEAK" in result or result == "conscience.ponder_attempted"
+tests/ciris_engine/logic/utils/test_localization_integration.py:188:    @patch("ciris_engine.logic.conscience.prompt_loader.set_conscience_prompt_language")
+tests/ciris_engine/logic/utils/test_localization_integration.py:189:    def test_sync_language_preference_updates_conscience_prompt_loader(self, mock_set_lang):
+tests/ciris_engine/logic/utils/test_localization_integration.py:190:        """Test that sync_language_preference updates conscience prompt loader."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:201:    """Tests for conscience ponder string localization."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:203:    def test_conscience_ponder_keys_exist_in_english(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:204:        """Test that all conscience ponder keys exist in English."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:205:        conscience_keys = [
+tests/ciris_engine/logic/utils/test_localization_integration.py:206:            "conscience.ponder_attempted",
+tests/ciris_engine/logic/utils/test_localization_integration.py:207:            "conscience.ponder_conscience_failed",
+tests/ciris_engine/logic/utils/test_localization_integration.py:208:            "conscience.ponder_bypass_failed",
+tests/ciris_engine/logic/utils/test_localization_integration.py:209:            "conscience.ponder_alternative_approach",
+tests/ciris_engine/logic/utils/test_localization_integration.py:210:            "conscience.ponder_forced_retry",
+tests/ciris_engine/logic/utils/test_localization_integration.py:211:            "conscience.override_rationale",
+tests/ciris_engine/logic/utils/test_localization_integration.py:212:            "conscience.forced_ponder_rationale",
+tests/ciris_engine/logic/utils/test_localization_integration.py:214:        for key in conscience_keys:
+tests/ciris_engine/logic/utils/test_localization_integration.py:220:    def test_conscience_ponder_keys_exist_in_amharic(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:221:        """Test that conscience ponder keys exist in Amharic."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:222:        conscience_keys = [
+tests/ciris_engine/logic/utils/test_localization_integration.py:223:            "conscience.ponder_attempted",
+tests/ciris_engine/logic/utils/test_localization_integration.py:224:            "conscience.ponder_conscience_failed",
+tests/ciris_engine/logic/utils/test_localization_integration.py:225:            "conscience.ponder_alternative_approach",
+tests/ciris_engine/logic/utils/test_localization_integration.py:227:        for key in conscience_keys:
+tests/ciris_engine/logic/utils/test_localization_integration.py:235:    def test_conscience_ponder_interpolation(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:236:        """Test that conscience strings support interpolation."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:237:        result = get_string("en", "conscience.ponder_attempted", action="MEMORIZE")
+tests/ciris_engine/logic/utils/test_localization_integration.py:239:        assert "MEMORIZE" in result or "action" in result.lower() or result == "conscience.ponder_attempted"
+tests/ciris_engine/logic/utils/test_localization_integration.py:241:    def test_conscience_override_rationale_interpolation(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:243:        result = get_string("en", "conscience.override_rationale", conscience_name="EntropyConscience", action="SPEAK")
+tests/ciris_engine/logic/utils/test_localization_integration.py:463:    def test_all_supported_languages_have_conscience_keys(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:464:        """Test that all supported languages have conscience keys."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:467:            "conscience.ponder_attempted",
+tests/ciris_engine/logic/utils/test_localization_integration.py:468:            "conscience.ponder_alternative_approach",
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:4:Tests the loading and localization of conscience prompts from YAML files.
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:16:from ciris_engine.logic.conscience.prompt_loader import (
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:20:    get_conscience_prompt_loader,
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:21:    set_conscience_prompt_language,
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:74:            with open(prompts_dir / "entropy_conscience.yml", "w") as f:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:88:            with open(fr_dir / "entropy_conscience.yml", "w") as f:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:96:        prompts = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:106:        prompts = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:117:        prompts = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:128:        prompts1 = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:129:        assert "en:entropy_conscience" in loader._cache
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:132:        prompts2 = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:140:        prompts_en = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:149:        prompts_fr = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:159:        system_prompt = loader.get_system_prompt("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:167:        user_prompt = loader.get_user_prompt("entropy_conscience", text="Hello world")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:175:        user_prompt = loader.get_user_prompt("entropy_conscience", image_context="[IMAGE CONTEXT]", text="Hello world")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:186:            loader.load_prompts("nonexistent_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:191:        with open(temp_prompts_dir / "invalid_conscience.yml", "w") as f:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:197:            loader.load_prompts("invalid_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:206:        return Path(__file__).parent.parent.parent.parent.parent / "ciris_engine" / "logic" / "conscience" / "prompts"
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:209:        """Test loading real entropy conscience prompts in English."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:214:        prompts = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:221:        """Test loading real coherence conscience prompts in English."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:226:        prompts = loader.load_prompts("coherence_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:232:        """Test loading real optimization veto conscience prompts in English."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:237:        prompts = loader.load_prompts("optimization_veto_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:242:        """Test loading real epistemic humility conscience prompts in English."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:247:        prompts = loader.load_prompts("epistemic_humility_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:275:        prompts = loader.load_prompts("entropy_conscience")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:291:        import ciris_engine.logic.conscience.prompt_loader as pl
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:300:    def test_get_conscience_prompt_loader_singleton(self) -> None:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:301:        """Test that get_conscience_prompt_loader returns a singleton."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:303:        loader1 = get_conscience_prompt_loader(language="en")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:304:        loader2 = get_conscience_prompt_loader()
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:308:    def test_get_conscience_prompt_loader_with_language(self) -> None:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:309:        """Test get_conscience_prompt_loader with explicit language."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:310:        loader = get_conscience_prompt_loader(language="fr")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:313:    def test_set_conscience_prompt_language(self) -> None:
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:314:        """Test set_conscience_prompt_language updates global loader."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:316:        loader = get_conscience_prompt_loader(language="en")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:320:        set_conscience_prompt_language("de")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:329:        loader = get_conscience_prompt_loader(language="ja")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:333:        set_conscience_prompt_language("ko")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:338:    """Integration tests verifying conscience system uses prompt loader correctly."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:343:        import ciris_engine.logic.conscience.prompt_loader as pl
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:359:        """Create a mock config with conscience settings."""
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:360:        from ciris_engine.logic.conscience.core import ConscienceConfig
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:371:    def test_entropy_conscience_uses_loader(
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:375:        from ciris_engine.logic.conscience.core import EntropyConscience
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:376:        from ciris_engine.logic.conscience.prompt_loader import get_conscience_prompt_loader
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:379:        get_conscience_prompt_loader(language="en")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:381:        conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:384:        messages, _user_prompt = conscience._create_entropy_messages("Test text")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:392:    def test_coherence_conscience_uses_loader(
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:396:        from ciris_engine.logic.conscience.core import CoherenceConscience
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:397:        from ciris_engine.logic.conscience.prompt_loader import get_conscience_prompt_loader
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:400:        get_conscience_prompt_loader(language="en")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:402:        conscience = CoherenceConscience(mock_service_registry, mock_config, time_service=mock_time_service)
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:403:        messages, _user_prompt = conscience._create_coherence_messages("Test text")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:410:    def test_localized_conscience_prompts_used(
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:414:        from ciris_engine.logic.conscience.core import EntropyConscience
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:415:        from ciris_engine.logic.conscience.prompt_loader import (
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:416:            get_conscience_prompt_loader,
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:417:            set_conscience_prompt_language,
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:421:        get_conscience_prompt_loader(language="en")  # First init
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:422:        set_conscience_prompt_language("fr")
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:424:        conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
+tests/ciris_engine/logic/conscience/test_conscience_prompt_loader.py:425:        messages, _user_prompt = conscience._create_entropy_messages("Test text")
+tests/ciris_engine/logic/context/test_system_snapshot_localized_times.py:198:        batch_data.verify_attestation = None  # No attestation in tests
+tests/ciris_engine/logic/context/test_system_snapshot_localized_times.py:199:        batch_data.attestation_summary = None  # No attestation summary in tests
+tests/ciris_engine/logic/handlers/control/test_defer_handler.py:79:    """Mock wise authority bus."""
+tests/ciris_engine/logic/handlers/control/test_defer_handler.py:149:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/control/test_defer_handler.py:223:        rationale="Complex ethical decision requires wise authority input",
+tests/ciris_engine/logic/handlers/control/test_defer_handler.py:244:        """Test successful deferral to wise authority."""
+tests/ciris_engine/logic/handlers/control/test_reject_handler.py:145:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/control/test_ponder_handler.py:136:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/control/test_ponder_handler.py:250:                or "conscience feedback" in follow_up_call.content.lower()
+tests/ciris_engine/logic/processors/support/conftest.py:106:    context.is_conscience_retry = False
+tests/ciris_engine/logic/handlers/terminal/test_task_complete_handler.py:157:        conscience_failure_context=None,
+tests/ciris_engine/logic/processors/support/test_dma_orchestrator.py:305:    async def test_run_action_selection_with_conscience_retry(
+tests/ciris_engine/logic/processors/support/test_dma_orchestrator.py:312:        """Test action selection marks recursive evaluation when conscience retry."""
+tests/ciris_engine/logic/processors/support/test_dma_orchestrator.py:313:        # Set conscience retry flag
+tests/ciris_engine/logic/processors/support/test_dma_orchestrator.py:314:        sample_processing_context.is_conscience_retry = True
+tests/ciris_engine/logic/processors/support/test_dma_orchestrator.py:322:            rationale="Retry after conscience feedback",
+tests/ciris_engine/logic/processors/support/test_processing_queue.py:98:            conscience_feedback={"approved": True},
+tests/ciris_engine/logic/processors/support/test_processing_queue.py:107:        assert item.conscience_feedback == {"approved": True}
+tests/ciris_engine/logic/handlers/external/test_observe_handler.py:159:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/memory/test_recall_handler.py:148:        conscience_failure_context=None,
+tests/ciris_engine/logic/processors/states/test_dream_processor.py:178:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/states/test_dream_processor.py:214:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/states/test_dream_processor.py:249:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/handlers/memory/test_memorize_handler.py:157:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/memory/test_forget_handler.py:180:        conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/memory/test_forget_handler.py:314:            conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/memory/test_forget_handler.py:462:            conscience_failure_context=None,
+tests/ciris_engine/logic/handlers/memory/test_forget_handler.py:503:            conscience_failure_context=None,
+tests/ciris_engine/logic/processors/core/test_single_step_covenant_compliance.py:10:- Phase 6: RECURSIVE_ASPDMA - Optional: Re-run action selection if conscience failed
+tests/ciris_engine/logic/processors/core/test_single_step_covenant_compliance.py:40:        StepPoint.RECURSIVE_ASPDMA,  # 3B) Optional: Re-run action selection if conscience failed
+tests/ciris_engine/logic/processors/core/test_single_step_covenant_compliance.py:126:                "conscience_approved": True,
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:191:        # Mock conscience application - should return ConscienceApplicationResult
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:192:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:194:        mock_conscience_result = ConscienceApplicationResult(
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:207:        # Create mock conscience that returns epistemic data
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:208:        mock_conscience = Mock()
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:209:        mock_conscience_check_result = Mock()
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:210:        mock_conscience_check_result.passed = True  # Required for EntropyCheckResult creation
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:211:        mock_conscience_check_result.reason = "Conscience check passed"  # Required string for message
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:212:        mock_conscience_check_result.entropy_score = 0.1
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:213:        mock_conscience_check_result.coherence_score = 0.9
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:214:        mock_conscience_check_result.uncertainty_acknowledged = True
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:215:        mock_conscience_check_result.reasoning_transparency = 1.0
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:216:        mock_conscience_check_result.override = None  # No override
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:217:        mock_conscience_check_result.thought_depth_triggered = False
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:218:        mock_conscience_check_result.updated_status_detected = False
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:219:        # v1.8.0 conscience check fields - set to None to avoid Mock validation errors
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:220:        mock_conscience_check_result.entropy_check = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:221:        mock_conscience_check_result.coherence_check = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:222:        mock_conscience_check_result.optimization_veto_check = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:223:        mock_conscience_check_result.epistemic_humility_check = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:224:        mock_conscience_check_result.ethical_faculties_skipped = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:225:        mock_conscience_check_result.updated_status_content = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:226:        mock_conscience_check_result.thought_depth_current = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:227:        mock_conscience_check_result.thought_depth_max = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:228:        mock_conscience_check_result.CIRIS_OBSERVATION_UPDATED_STATUS = None  # Used by conscience_execution.py
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:230:        mock_conscience_check_result.entropy_prompt = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:231:        mock_conscience_check_result.coherence_prompt = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:232:        mock_conscience_check_result.optimization_veto_prompt = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:233:        mock_conscience_check_result.epistemic_humility_prompt = None
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:234:        mock_conscience_check_result.replacement_action = None  # Prevents mock from being truthy
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:235:        mock_conscience.check = AsyncMock(return_value=mock_conscience_check_result)
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:237:        # Mock conscience registry entry
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:239:        mock_entry.conscience = mock_conscience
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:241:        mock_entry.name = "test_conscience"
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:243:        mock_conscience_registry = Mock()
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:244:        mock_conscience_registry.get_consciences = Mock(return_value=[mock_entry])
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:245:        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])  # No bypass consciences in tests
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:246:        mock_conscience_registry.get_normal_consciences = Mock(return_value=[mock_entry])
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:254:            conscience_registry=mock_conscience_registry,
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:315:        # The conscience system may change the action, so check that we got a valid result
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:517:    async def test_process_thought_with_conscience(
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:520:        """Test processing thought with conscience evaluation."""
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:523:            thought_id="test_thought_conscience",
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:557:        # Mock conscience evaluation
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:558:        mock_conscience_result = Mock(approved=True, feedback="Good approach")
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:559:        thought_processor.conscience_registry.evaluate = AsyncMock(return_value=mock_conscience_result)
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:744:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:752:        mock_conscience_registry = Mock()
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:753:        mock_conscience_registry.get_consciences = Mock(return_value=[])
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:754:        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:755:        mock_conscience_registry.get_normal_consciences = Mock(return_value=[])
+tests/ciris_engine/logic/processors/core/test_thought_processor.py:762:            conscience_registry=mock_conscience_registry,
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/__init__.py:1:"""Tests for the attestation module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:1:"""Tests for attestation paths module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:9:from ciris_engine.logic.services.infrastructure.authentication.attestation.paths import (
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:47:                "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.is_mobile",
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:85:            "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.get_audit_db_search_paths",
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_paths.py:97:            "ciris_engine.logic.services.infrastructure.authentication.attestation.paths.get_audit_db_search_paths",
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_platform.py:1:"""Tests for attestation platform detection module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_platform.py:8:from ciris_engine.logic.services.infrastructure.authentication.attestation.platform import is_android, is_ios, is_mobile
+tests/ciris_engine/logic/processors/core/test_base_processor_helpers.py:179:    def test_extract_action_name_from_conscience_result(self, base_processor):
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_hashes.py:1:"""Tests for attestation hashes module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_hashes.py:10:from ciris_engine.logic.services.infrastructure.authentication.attestation.hashes import (
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_hashes.py:42:                "ciris_engine.logic.services.infrastructure.authentication.attestation.hashes.get_default_agent_version",
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_types.py:1:"""Tests for attestation types module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_types.py:5:from ciris_engine.logic.services.infrastructure.authentication.attestation.types import (
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:23:    _create_comprehensive_conscience_result,
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:31:    _create_recursive_conscience_data,
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:66:def mock_conscience_result_passed():
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:67:    """Mock conscience result for passed checks."""
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:68:    from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:193:    """Test conscience evaluation helper functions."""
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:415:    def test_create_conscience_result_event_passed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:417:        from ciris_engine.logic.processors.core.step_decorators import _create_conscience_result_event
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:420:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:424:        step_data.conscience_passed = True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:425:        step_data.conscience_override_reason = None
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:431:        mock_create = Mock(return_value="conscience_event")
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:433:        result = _create_conscience_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:435:        assert result == "conscience_event"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:438:        assert call_kwargs["conscience_passed"] is True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:441:    def test_create_conscience_result_event_failed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:443:        from ciris_engine.logic.processors.core.step_decorators import _create_conscience_result_event
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:444:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:449:        step_data.conscience_passed = False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:450:        step_data.conscience_override_reason = "Safety concern"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:458:        result = _create_conscience_result_event(step_data, "2025-01-01T12:00:00Z", mock_create)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:462:        assert call_kwargs["conscience_passed"] is False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:464:        assert call_kwargs["conscience_override_reason"] == "Safety concern"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:555:    def test_create_comprehensive_conscience_result_integration_passed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:556:        """Test _create_comprehensive_conscience_result when conscience passes."""
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:567:        conscience_result = _create_comprehensive_conscience_result(result)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:569:        assert conscience_result.passed is True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:570:        assert conscience_result.reason is None
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:571:        assert conscience_result.entropy_check.passed is True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:572:        assert conscience_result.coherence_check.passed is True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:573:        assert conscience_result.optimization_veto_check.decision == "proceed"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:574:        assert conscience_result.epistemic_humility_check.recommended_action == "proceed"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:575:        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:576:        assert conscience_result.replacement_action is None
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:577:        assert conscience_result.thought_depth_triggered is None
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:578:        assert conscience_result.updated_status_detected is None
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:580:    def test_create_comprehensive_conscience_result_integration_failed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:581:        """Test _create_comprehensive_conscience_result when conscience fails."""
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:592:        conscience_result = _create_comprehensive_conscience_result(result)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:594:        assert conscience_result.passed is False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:595:        assert conscience_result.reason == "Safety violation detected"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:596:        assert conscience_result.entropy_check.passed is False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:597:        assert conscience_result.coherence_check.passed is False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:598:        assert conscience_result.optimization_veto_check.decision == "abort"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:599:        assert conscience_result.epistemic_humility_check.recommended_action == "ponder"
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:600:        assert conscience_result.original_action == {"selected_action": "SPEAK"}
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:601:        assert conscience_result.replacement_action == {"selected_action": "DEFER"}
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:602:        assert conscience_result.thought_depth_triggered is True
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:603:        assert conscience_result.updated_status_detected is False
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:614:    def test_create_recursive_conscience_data_integration(self, base_step_data, mock_conscience_result_passed):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:615:        """Test _create_recursive_conscience_data."""
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:616:        step_data = _create_recursive_conscience_data(base_step_data, mock_conscience_result_passed)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:622:    def test_create_finalize_action_data_integration(self, base_step_data, mock_conscience_result_passed):
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:624:        step_data = _create_finalize_action_data(base_step_data, mock_conscience_result_passed)
+tests/ciris_engine/logic/processors/core/test_step_decorators_helpers.py:627:        assert step_data.conscience_passed is True
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:1:"""Tests for attestation result_builder module."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:5:from ciris_engine.logic.services.infrastructure.authentication.attestation.result_builder import (
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:12:    _extract_key_attestation,
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:15:    build_attestation_result,
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:17:from ciris_engine.logic.services.infrastructure.authentication.attestation.types import VerifyThreadResult
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:24:        """Test extracting sources from attestation."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:25:        attestation = {"sources": {"dns_us_valid": True}}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:26:        assert _extract_sources(attestation) == {"dns_us_valid": True}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:38:    """Tests for _extract_key_attestation function."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:40:    def test_extracts_key_attestation(self):
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:41:        """Test extracting key attestation."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:42:        attestation = {"key_attestation": {"key_type": "portal"}}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:43:        assert _extract_key_attestation(attestation) == {"key_type": "portal"}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:47:        assert _extract_key_attestation({}) == {}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:55:        attestation = {"file_integrity": {"valid": True}}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:56:        assert _extract_file_integrity(attestation) == {"valid": True}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:60:        attestation = {"file_integrity": {"full": {"valid": True}}}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:61:        assert _extract_file_integrity(attestation) == {"valid": True}
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:73:        attestation = {
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:82:        result = _extract_module_integrity(attestation)
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:228:    """Tests for build_attestation_result function."""
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:233:        result = build_attestation_result(verify_result, "full")
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:237:        assert result.attestation_status == "failed"
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:244:                "attestation": {
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:248:                    "key_attestation": {"key_type": "portal"},
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:253:        result = build_attestation_result(verify_result, "full")
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:258:        assert result.attestation_status == "verified"
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:265:                "attestation": {
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:271:        result = build_attestation_result(verify_result, "partial")
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_result_builder.py:274:        assert result.attestation_status == "partial"
+tests/ciris_engine/logic/services/infrastructure/authentication/attestation/test_play_integrity.py:8:from ciris_engine.logic.services.infrastructure.authentication.attestation.play_integrity import (
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:20:    def _extract_updated_observation(self, conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:21:        """Extract updated observation from conscience result if present."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:22:        if hasattr(conscience_result, "epistemic_data") and conscience_result.epistemic_data:
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:23:            ep_data = conscience_result.epistemic_data
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:29:        """Create a copy of the thought context with is_conscience_retry flag set."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:32:            retry_context.is_conscience_retry = True
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:36:            retry_context["is_conscience_retry"] = True
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:38:        if hasattr(thought_context, "is_conscience_retry"):
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:39:            thought_context.is_conscience_retry = True
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:74:        conscience_result = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:75:        conscience_result.epistemic_data = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:76:        conscience_result.epistemic_data.CIRIS_OBSERVATION_UPDATED_STATUS = "New user message"
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:78:        result = processor._extract_updated_observation(conscience_result)
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:84:        conscience_result = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:85:        conscience_result.epistemic_data = None
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:87:        result = processor._extract_updated_observation(conscience_result)
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:93:        conscience_result = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:94:        conscience_result.epistemic_data = Mock(spec=[])  # No attributes
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:96:        result = processor._extract_updated_observation(conscience_result)
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:102:        conscience_result = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:103:        conscience_result.epistemic_data = Mock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:104:        conscience_result.epistemic_data.CIRIS_OBSERVATION_UPDATED_STATUS = ""
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:106:        result = processor._extract_updated_observation(conscience_result)
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:127:        assert result.is_conscience_retry is True
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:135:        assert result["is_conscience_retry"] is True
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:140:        """Test sets flag on object that has is_conscience_retry attribute."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:141:        context = Mock(spec=["is_conscience_retry"])
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:142:        context.is_conscience_retry = False
+tests/ciris_engine/logic/processors/core/thought_processor/test_thought_processor_helpers.py:146:        assert result.is_conscience_retry is True
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:2:Tests for conscience execution helper methods.
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:6:- _check_single_bypass_conscience
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:57:from ciris_engine.logic.processors.core.thought_processor.conscience_execution import ConscienceExecutionPhase
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:115:        assert "bypass conscience failed" in questions[1]
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:118:        """Test that rationale includes the conscience entry name."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:132:    """Tests for _check_single_bypass_conscience helper."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:140:    async def test_calls_conscience_check(self, phase):
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:141:        """Test that conscience.check is called."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:144:        entry.conscience = AsyncMock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:145:        entry.conscience.check = AsyncMock(return_value=Mock(passed=True))
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:151:        result = await phase._check_single_bypass_conscience(entry, action, context)
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:153:        entry.conscience.check.assert_called_once_with(action, context)
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:158:        """Test circuit breaker is checked before calling conscience."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:161:        entry.conscience = AsyncMock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:162:        entry.conscience.check = AsyncMock(return_value=Mock(passed=True))
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:170:        result = await phase._check_single_bypass_conscience(entry, action, context)
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:183:        entry.conscience = AsyncMock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:190:        result = await phase._check_single_bypass_conscience(entry, action, context)
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:199:        entry.conscience = AsyncMock()
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:200:        entry.conscience.check = AsyncMock(side_effect=Exception("Check failed"))
+tests/ciris_engine/logic/processors/core/thought_processor/test_conscience_execution_helpers.py:208:        result = await phase._check_single_bypass_conscience(entry, action, context)
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:56:def mock_conscience_result(mock_action_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:68:    from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:88:    async def test_success_on_first_attempt(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:97:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:108:        assert "conscience_guidance" in processing_context
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:109:        assert processing_context["conscience_guidance"]["retry_attempt"] == 1
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:110:        assert processing_context["conscience_guidance"]["max_retries"] == 3
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:112:            processing_context["conscience_guidance"]["original_action_failed_because"]
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:117:    async def test_success_on_second_attempt(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:129:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:139:        guidance = processing_context["conscience_guidance"]
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:147:    async def test_success_on_third_attempt(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:160:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:170:        guidance = processing_context["conscience_guidance"]
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:178:    async def test_all_retries_exhausted(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:187:                conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:195:    async def test_custom_max_retries(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:210:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:218:    async def test_dict_conscience_result(self, processor, mock_thought):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:219:        """Test with dict-style conscience result instead of Pydantic model."""
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:220:        from ciris_engine.schemas.conscience.core import EpistemicData
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:222:        dict_conscience = {
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:234:            conscience_result=dict_conscience,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:243:        guidance = processing_context["conscience_guidance"]
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:246:        assert isinstance(guidance["conscience_feedback"]["epistemic_data"], EpistemicData)
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:249:    async def test_pydantic_thought_context(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:261:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:269:    async def test_retry_history_cumulative(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:283:            conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:291:        guidance = final_call.kwargs["processing_context"]["conscience_guidance"]
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:303:    async def test_single_retry_only(self, processor, mock_thought, mock_conscience_result):
+tests/ciris_engine/logic/processors/core/thought_processor/test_recursive_processing_retry.py:312:                conscience_result=mock_conscience_result,
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:18:    _add_conscience_execution_attributes,
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:504:    async def test_step_specific_data_conscience_execution_overridden(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:510:            async def conscience_step(self, thought_item):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:528:            await conscience_step(mock_processor, mock_thought)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:530:            # Verify conscience result extraction
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:533:            assert call_args.conscience_passed is False  # not overridden
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:539:    async def test_step_specific_data_conscience_execution_passed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:540:        """Test CONSCIENCE_EXECUTION with overridden=False (conscience passed)."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:545:            async def conscience_step(self, thought_item):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:561:            await conscience_step(mock_processor, mock_thought)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:563:            # Verify conscience passed
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:566:            assert call_args.conscience_passed is True  # not overridden
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:598:    async def test_step_specific_data_fail_fast_conscience_missing_overridden(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:606:            async def conscience_step(self, thought_item):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:623:                await conscience_step(mock_processor, mock_thought)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1203:    def test_add_conscience_execution_attributes_success(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1204:        """Test _add_conscience_execution_attributes adds conscience data."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1206:        result_data = {"selected_action": "reject", "conscience_passed": False}
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1208:        _add_conscience_execution_attributes(attributes, result_data)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1211:            SpanAttribute(key="conscience.passed", value={"boolValue": False}),
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1212:            SpanAttribute(key="conscience.action", value={"stringValue": "reject"}),
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1284:    def test_add_typed_step_attributes_conscience_execution(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1287:        result_data = {"selected_action": "speak", "conscience_passed": True}
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1291:        # Should have called _add_conscience_execution_attributes
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1293:            SpanAttribute(key="conscience.passed", value={"boolValue": True}),
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1294:            SpanAttribute(key="conscience.action", value={"stringValue": "speak"}),
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1375:    def test_validate_conscience_execution_result_valid(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1376:        """Test _validate_conscience_execution_result with valid result."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1378:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1387:        _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1389:    def test_validate_conscience_execution_result_none_result(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1390:        """Test _validate_conscience_execution_result with None result."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1391:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1394:            _validate_conscience_execution_result(None)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1396:    def test_validate_conscience_execution_result_missing_overridden(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1397:        """Test _validate_conscience_execution_result with missing overridden attribute."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1398:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1403:            _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1405:    def test_validate_conscience_execution_result_missing_final_action(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1406:        """Test _validate_conscience_execution_result with missing final_action attribute."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1407:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1416:            _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1418:    def test_validate_conscience_execution_result_missing_selected_action(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1419:        """Test _validate_conscience_execution_result with missing selected_action attribute."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1420:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1427:            _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1429:    def test_validate_conscience_execution_result_overridden_missing_reason(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1430:        """Test _validate_conscience_execution_result with overridden but missing override_reason."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1431:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1445:            _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1447:    def test_validate_conscience_execution_result_overridden_with_reason(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1448:        """Test _validate_conscience_execution_result with overridden and override_reason."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1449:        from ciris_engine.logic.processors.core.step_decorators import _validate_conscience_execution_result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1458:        _validate_conscience_execution_result(mock_result)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1460:    def test_extract_conscience_execution_values_not_overridden(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1461:        """Test _extract_conscience_execution_values for non-overridden result."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1462:        from ciris_engine.logic.processors.core.step_decorators import _extract_conscience_execution_values
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1470:        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1475:        assert conscience_passed is True  # not overridden
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1479:    def test_extract_conscience_execution_values_overridden(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1480:        """Test _extract_conscience_execution_values for overridden result."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1481:        from ciris_engine.logic.processors.core.step_decorators import _extract_conscience_execution_values
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1490:        selected_action, conscience_passed, action_result, override_reason = _extract_conscience_execution_values(
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1495:        assert conscience_passed is False  # overridden
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1499:    def test_build_conscience_result_from_check_passed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1500:        """Test _build_conscience_result_from_check for passed conscience check."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1501:        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1503:        # Create mock conscience check result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1523:        conscience_result = _build_conscience_result_from_check(mock_check_result, None)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1525:        assert conscience_result.conscience_name == "conscience_execution"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1526:        assert conscience_result.passed is True
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1527:        assert conscience_result.severity == "info"  # Passed check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1528:        assert conscience_result.message == "All checks passed"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1529:        assert conscience_result.override_action is None
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1530:        assert conscience_result.details["status"] == "PASSED"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1531:        assert conscience_result.details["entropy_passed"] is True
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1532:        assert conscience_result.details["coherence_passed"] is True
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1533:        assert conscience_result.details["optimization_veto"] == "proceed"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1534:        assert conscience_result.details["epistemic_humility"] == 0.7
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1536:    def test_build_conscience_result_from_check_failed(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1537:        """Test _build_conscience_result_from_check for failed conscience check."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1538:        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1540:        # Create mock conscience check result
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1560:        conscience_result = _build_conscience_result_from_check(mock_check_result, "safety_override")
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1562:        assert conscience_result.conscience_name == "conscience_execution"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1563:        assert conscience_result.passed is False
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1564:        assert conscience_result.severity == "critical"  # Failed check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1565:        assert conscience_result.message == "Safety violation detected"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1566:        assert conscience_result.override_action == "safety_override"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1567:        assert conscience_result.details["status"] == "FAILED"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1568:        assert conscience_result.details["entropy_passed"] is False
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1569:        assert conscience_result.details["coherence_passed"] is False
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1570:        assert conscience_result.details["optimization_veto"] == "abort"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1571:        assert conscience_result.details["epistemic_humility"] == 0.9
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1573:    def test_build_conscience_result_from_check_no_reason(self):
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1574:        """Test _build_conscience_result_from_check with no reason provided."""
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1575:        from ciris_engine.logic.processors.core.step_decorators import _build_conscience_result_from_check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1586:        conscience_result = _build_conscience_result_from_check(mock_check_result, None)
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1588:        assert conscience_result.conscience_name == "conscience_execution"
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1589:        assert conscience_result.passed is True
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1590:        assert conscience_result.severity == "info"  # Passed check
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1591:        assert conscience_result.message == "Conscience check completed"  # Default message
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1592:        assert conscience_result.override_action is None
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1593:        assert conscience_result.details["status"] == "unknown"  # No status
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1595:        assert "entropy_passed" not in conscience_result.details
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1596:        assert "coherence_passed" not in conscience_result.details
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1597:        assert "optimization_veto" not in conscience_result.details
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1598:        assert "epistemic_humility" not in conscience_result.details
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1819:    """Test that coherence data from conscience checks is propagated to action results.
+tests/ciris_engine/logic/processors/core/test_step_decorators.py:1975:        Non-exempt actions (SPEAK, TOOL, PONDER, MEMORIZE) go through full conscience
+tests/ciris_engine/logic/runtime/test_component_builder.py:220:    This double-lock prevents accidental disabling of safety consciences.
+tests/ciris_engine/logic/services/graph/test_audit_service.py:242:async def test_audit_service_log_conscience_event(audit_service):
+tests/ciris_engine/logic/services/graph/test_audit_service.py:243:    """Test logging a conscience decision event."""
+tests/ciris_engine/logic/services/graph/test_audit_service.py:244:    # Log conscience event with new signature
+tests/ciris_engine/logic/services/graph/test_audit_service.py:245:    await audit_service.log_conscience_event(
+tests/ciris_engine/logic/runtime/test_service_initializer.py:201:                # Should create wise authority service
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:115:    """Tests for kill switch status endpoint."""
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:118:        """Test getting kill switch status when configured."""
+tests/ciris_engine/logic/adapters/api/endpoints/test_emergency.py:131:        """Test getting kill switch status when not configured."""
+tests/ciris_engine/logic/services/governance/test_wise_authority_service.py:112:    """Create a wise authority service for testing."""
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:20:    _get_attestation_info,
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:69:# _get_attestation_info Tests
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:74:    """Tests for _get_attestation_info helper."""
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:81:        info = _get_attestation_info(request)
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:86:    def test_no_cached_attestation_returns_defaults(self):
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:87:        """Returns defaults when no cached attestation available."""
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:90:        auth_service.get_cached_attestation.return_value = None
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:93:        info = _get_attestation_info(request)
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:98:    def test_with_cached_attestation(self):
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:99:        """Returns attestation info from cached result."""
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:103:        # Mock cached attestation result
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:109:        auth_service.get_cached_attestation.return_value = cached_result
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:118:            mock_sa.from_attestation.return_value = mock_authority
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:120:            info = _get_attestation_info(request)
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:139:        auth_service.get_cached_attestation.return_value = cached_result
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:147:            mock_sa.from_attestation.return_value = mock_authority
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:149:            info = _get_attestation_info(request)
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:161:        auth_service.get_cached_attestation.side_effect = Exception("Auth error")
+tests/ciris_engine/logic/adapters/api/routes/test_wallet_helpers.py:164:        info = _get_attestation_info(request)
+tests/ciris_engine/logic/adapters/discord/test_discord_guidance_handler.py:4:Tests Discord wise authority guidance and deferral operations using proper schemas.
+tests/ciris_engine/logic/buses/test_bus_telemetry.py:29:        """Create a mock service registry with wise authority services."""
+tests/ciris_engine/logic/buses/test_bus_telemetry.py:75:        assert result["error"] == "No wise authority services available"
+tests/ciris_engine/logic/telemetry/test_hot_cold_config.py:72:            "conscience_check",

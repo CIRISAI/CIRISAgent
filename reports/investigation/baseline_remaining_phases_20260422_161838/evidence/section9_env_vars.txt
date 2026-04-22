@@ -1,0 +1,554 @@
+ciris_engine/config/ciris_services.py:184:    env_url = os.environ.get("CIRIS_PROXY_URL")
+ciris_engine/config/ciris_services.py:197:    env_url = os.environ.get("CIRIS_BILLING_API_URL") or os.environ.get("CIRIS_BILLING_URL")
+ciris_engine/config/ciris_services.py:208:    env_url = os.environ.get("CIRIS_AGENTS_URL")
+ciris_engine/config/ciris_services.py:219:    env_url = os.environ.get("CIRIS_LENS_URL")
+ciris_engine/desktop_launcher.py:76:    java_home = os.environ.get("JAVA_HOME")
+ciris_engine/desktop_launcher.py:225:    env = os.environ.copy()
+ciris_engine/protocols/services/infrastructure/ingress_auth.py:71:                os.getenv("SUPERVISOR_TOKEN") and
+tools/test_tool/docker.py:24:        env = os.environ.copy()
+tools/test_tool/docker.py:49:        env = os.environ.copy()
+tools/qa_runner/runner.py:177:                billing_api_key = os.getenv("CIRIS_BILLING_API_KEY")
+tools/qa_runner/runner.py:186:            self.config.billing_api_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+tools/qa_runner/runner.py:2002:        orig_occ_id = os.environ.get("CIRIS_OCCURRENCE_ID")
+tools/qa_runner/runner.py:2003:        orig_log_dir = os.environ.get("CIRIS_LOG_DIR")
+tools/qa_runner/runner.py:2005:        os.environ["CIRIS_OCCURRENCE_ID"] = occurrence_id
+tools/qa_runner/runner.py:2006:        os.environ["CIRIS_LOG_DIR"] = f"logs/occurrence_{occurrence_id}"
+tools/qa_runner/runner.py:2014:                os.environ.pop("CIRIS_OCCURRENCE_ID", None)
+tools/qa_runner/runner.py:2016:                os.environ["CIRIS_OCCURRENCE_ID"] = orig_occ_id
+tools/qa_runner/runner.py:2019:                os.environ.pop("CIRIS_LOG_DIR", None)
+tools/qa_runner/runner.py:2021:                os.environ["CIRIS_LOG_DIR"] = orig_log_dir
+tools/qa_runner/modules/hosted_tools_tests.py:32:        self.has_token = bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("GOOGLE_ID_TOKEN"))
+tools/qa_runner/modules/he300_benchmark_tests.py:120:        env = os.environ.copy()
+tools/qa_runner/modules/he300_benchmark_tests.py:581:            sample_size = int(os.environ.get("HE300_SAMPLE_SIZE", "300"))
+tools/qa_runner/modules/cirisnode_tests.py:73:        self.live_node = live_node or os.environ.get("CIRIS_LIVE_NODE", "").lower() == "true"
+tools/qa_runner/modules/cirisnode_tests.py:74:        self.node_url = node_url or os.environ.get("CIRISNODE_BASE_URL", CIRISNODE_US_URL)
+tools/qa_runner/modules/cirisnode_tests.py:146:            env_url = os.environ.get("CIRISNODE_BASE_URL", "")
+tools/qa_runner/modules/cirisnode_tests.py:440:                agent_token = os.environ.get("CIRISNODE_AGENT_TOKEN")
+tools/qa_runner/modules/cirisnode_tests.py:523:            agent_token = os.environ.get("CIRISNODE_AGENT_TOKEN")
+tools/qa_runner/modules/licensed_agent_tests.py:89:        self.live_portal = live_portal or os.environ.get("CIRIS_LIVE_PORTAL", "").lower() == "true"
+tools/qa_runner/modules/licensed_agent_tests.py:90:        self.portal_url = portal_url or os.environ.get("CIRISPORTAL_URL", CIRISPORTAL_URL)
+tools/qa_runner/modules/web_ui/test_cases.py:89:        provider = os.environ.get("LLM_PROVIDER", "openrouter")
+tools/qa_runner/modules/web_ui/test_cases.py:99:        if os.environ.get("LLM_API_KEY"):
+tools/qa_runner/modules/web_ui/test_cases.py:100:            config.llm_api_key = os.environ["LLM_API_KEY"]
+tools/qa_runner/modules/web_ui/test_cases.py:102:        if os.environ.get("LLM_MODEL"):
+tools/qa_runner/modules/web_ui/test_cases.py:103:            config.llm_model = os.environ["LLM_MODEL"]
+tools/qa_runner/modules/web_ui/server_manager.py:274:        env = os.environ.copy()
+tools/qa_runner/modules/web_ui/__main__.py:625:    os.environ["CIRIS_TESTING_MODE"] = "true"
+tools/qa_runner/modules/web_ui/__main__.py:673:        env = os.environ.copy()
+tools/qa_runner/modules/identity_update_tests.py:295:            env={**os.environ, "CIRIS_CONFIGURED": "true"},
+tools/qa_runner/modules/desktop_viz.py:43:API_BASE = os.environ.get("CIRIS_API_URL", "http://localhost:8080")
+tools/qa_runner/modules/desktop_viz.py:44:TEST_BASE = os.environ.get("CIRIS_TEST_URL", "http://localhost:9091")
+tools/qa_runner/modules/desktop_viz.py:45:ADMIN_USER = os.environ.get("CIRIS_QA_USER", "admin")
+tools/qa_runner/modules/desktop_viz.py:46:ADMIN_PASS = os.environ.get("CIRIS_QA_PASS", "qa_test_password_12345")
+tools/qa_runner/modules/adapter_config_tests.py:57:        self.ha_base_url = os.environ.get("CIRIS_HA_BASE_URL")
+tools/qa_runner/modules/accord_metrics_tests.py:256:        self.live_lens = live_lens or os.environ.get("CIRIS_LIVE_LENS", "").lower() == "true"
+tools/qa_runner/scripts/he300_stream_debug.py:39:        api_key = os.environ.get("OPENAI_API_KEY")
+tools/qa_runner/scripts/he300_stream_debug.py:44:        config_kwargs["live_model"] = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+tools/qa_runner/scripts/he300_stream_debug.py:45:        config_kwargs["live_base_url"] = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
+tools/qa_runner/server.py:625:        env = os.environ.copy()
+tools/qa_runner/server.py:734:            if var in os.environ:
+tools/qa_runner/server.py:735:                env[var] = os.environ[var]
+tools/qa_runner/server.py:736:                self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
+tools/investigation/bootstrap_remaining_phases_baseline.py:109:            Probe("env_vars", "Environment variable reads", "rg -n \"os\\.environ|getenv\" ciris_engine ciris_adapters ciris_sdk tools"),
+tools/introspect_memory.py:96:    env = os.environ.copy()
+tools/benchmark/he300_runner.py:205:    if os.environ.get(config["env_key"]):
+tools/benchmark/he300_runner.py:206:        return os.environ[config["env_key"]]
+tools/benchmark/he300_runner.py:261:        env = os.environ.copy()
+tools/benchmark/he300_runner.py:282:        env = os.environ.copy()
+tools/cleanup_secondary_llm.py:35:    ciris_home = os.environ.get("CIRIS_HOME")
+ciris_engine/cli.py:18:os.environ["CIRIS_SKIP_EARLY_VERIFY"] = "1"
+tools/ops/register_discord_adapter.py:57:        password = os.environ.get("CIRIS_API_PASSWORD")
+tools/ops/register_discord_adapter.py:198:    api_url = os.environ.get("CIRIS_API_URL", "http://localhost:8080")
+tools/ops/register_discord_adapter.py:199:    username = os.environ.get("CIRIS_API_USER", "admin")
+tools/ops/register_discord_adapter.py:200:    password = os.environ.get("CIRIS_API_PASSWORD")  # Required - from setup wizard
+tools/ops/get_prometheus.py:25:    password = os.environ.get("CIRIS_API_PASSWORD")
+tools/ops/register_agent_build.py:180:    jwt_secret = os.environ.get("REGISTRY_JWT_SECRET")
+tools/ops/register_agent_build.py:185:    addr = os.environ.get("REGISTRY_GRPC_ADDR", "207.148.13.157:50051")
+tools/ops/register_agent_build.py:377:    jwt_secret = os.environ.get("REGISTRY_JWT_SECRET")
+tools/ops/register_agent_build.py:382:    addr = os.environ.get("REGISTRY_GRPC_ADDR", "207.148.13.157:50051")
+tools/record_demo_clips.py:254:    display = os.environ.get("DISPLAY", ":0")
+tools/record_demo_clips.py:759:    env = os.environ.copy()
+ciris_engine/logic/config/env_utils.py:34:    val = os.getenv(name)
+tools/dev/register_discord_adapter.py:57:        password = os.environ.get("CIRIS_API_PASSWORD")
+tools/dev/register_discord_adapter.py:198:    api_url = os.environ.get("CIRIS_API_URL", "http://localhost:8080")
+tools/dev/register_discord_adapter.py:199:    username = os.environ.get("CIRIS_API_USER", "admin")
+tools/dev/register_discord_adapter.py:200:    password = os.environ.get("CIRIS_API_PASSWORD")  # Required - from setup wizard
+tools/dev/grace.py:184:                    f"Authorization: Bearer {os.environ.get('CIRIS_DATUM_TOKEN', 'service:check_env')}",
+tools/clawdbot_skill_converter/converter.py:566:            if not os.environ.get(env_req.name):
+tools/memory_benchmark.py:124:    env = os.environ.copy()
+tools/ciris_mypy_toolkit/security_analyzer.py:170:            r'os\.getenv\([\'"](.*SECRET.*|.*KEY.*|.*PASSWORD.*)[\'\"]\)',
+ciris_engine/logic/persistence/llm_providers.py:200:    return os.environ.get(CIRIS_SERVICES_DISABLED_VAR, "").lower() in ("true", "1", "yes")
+ciris_adapters/ciris_accord_metrics/configurable.py:199:                    os.environ[env_var] = "true" if value else "false"
+ciris_adapters/ciris_accord_metrics/configurable.py:201:                    os.environ[env_var] = str(value)
+ciris_adapters/ciris_accord_metrics/services.py:65:    value = os.environ.get(new_key)
+ciris_adapters/ciris_accord_metrics/services.py:69:    value = os.environ.get(old_key)
+ciris_adapters/ciris_accord_metrics/services.py:511:        env_share_location = os.environ.get("CIRIS_SHARE_LOCATION_IN_TRACES", "").lower() == "true"
+ciris_adapters/ciris_accord_metrics/services.py:513:        self._user_location: str = os.environ.get("CIRIS_USER_LOCATION", "") if env_share_location else ""
+ciris_adapters/ciris_accord_metrics/services.py:514:        self._user_timezone: str = os.environ.get("CIRIS_USER_TIMEZONE", "") if env_share_location else ""
+ciris_adapters/ciris_accord_metrics/services.py:516:        lat_str = os.environ.get("CIRIS_USER_LATITUDE", "") if env_share_location else ""
+ciris_adapters/ciris_accord_metrics/services.py:517:        lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "") if env_share_location else ""
+ciris_adapters/ciris_accord_metrics/adapter.py:38:    value = os.environ.get(new_key)
+ciris_adapters/ciris_accord_metrics/adapter.py:42:    value = os.environ.get(old_key)
+ciris_adapters/ciris_accord_metrics/adapter.py:100:        logger.info(f"   Env CIRIS_ACCORD_METRICS_CONSENT: {os.environ.get('CIRIS_ACCORD_METRICS_CONSENT', 'not set')}")
+ciris_adapters/ciris_accord_metrics/adapter.py:102:            f"   Env CIRIS_ACCORD_METRICS_ENDPOINT: {os.environ.get('CIRIS_ACCORD_METRICS_ENDPOINT', 'not set')}"
+ciris_adapters/sample_adapter/README.md:98:        self.api_url = os.getenv("YOUR_ADAPTER_API_URL")
+ciris_adapters/sample_adapter/README.md:99:        self.api_key = os.getenv("YOUR_ADAPTER_API_KEY")
+ciris_adapters/sample_adapter/README.md:165:        os.environ["YOUR_ADAPTER_API_URL"] = config["base_url"]
+ciris_adapters/sample_adapter/README.md:166:        os.environ["YOUR_ADAPTER_API_KEY"] = config["access_token"]
+ciris_adapters/sample_adapter/README.md:434:    os.environ["YOUR_SERVICE_URL"] = config["base_url"]
+ciris_adapters/sample_adapter/README.md:435:    os.environ["YOUR_SERVICE_TOKEN"] = config["access_token"]
+ciris_adapters/sample_adapter/README.md:442:    self.url = os.getenv("YOUR_SERVICE_URL", "http://localhost:8080")
+ciris_adapters/sample_adapter/README.md:443:    self.token = os.getenv("YOUR_SERVICE_TOKEN")
+ciris_adapters/mobile_local_llm/config.py:218:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:225:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:235:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:245:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:252:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:262:    raw = os.environ.get(name)
+ciris_adapters/mobile_local_llm/config.py:284:        host=os.environ.get(ENV_SERVER_HOST, defaults.host),
+ciris_adapters/mobile_local_llm/capability.py:122:    if os.environ.get("ANDROID_ROOT") and os.environ.get("ANDROID_DATA"):
+ciris_adapters/mobile_local_llm/capability.py:139:    if os.environ.get("CIRIS_MOBILE_LOCAL_LLM_FORCE_PLATFORM") == "ios":
+ciris_adapters/mobile_local_llm/capability.py:231:    home = os.environ.get("HOME")
+ciris_adapters/mobile_local_llm/capability.py:234:    ciris_home = os.environ.get("CIRIS_HOME")
+ciris_adapters/goplaces/service.py:261:            if not os.environ.get(env_req.name):
+ciris_adapters/mcp_client/configurable.py:397:        os.environ[f"{env_prefix}NAME"] = config["name"]
+ciris_adapters/mcp_client/configurable.py:398:        os.environ[f"{env_prefix}TRANSPORT"] = transport.value
+ciris_adapters/mcp_client/configurable.py:401:            os.environ[f"{env_prefix}COMMAND"] = config["command"]
+ciris_adapters/mcp_client/configurable.py:403:                os.environ[f"{env_prefix}ARGS"] = ",".join(server_config_dict["args"])
+ciris_adapters/mcp_client/configurable.py:405:            os.environ[f"{env_prefix}URL"] = config["url"]
+ciris_adapters/mcp_client/configurable.py:408:        os.environ[f"{env_prefix}BUSES"] = ",".join(enabled_buses)
+ciris_adapters/mcp_client/config.py:177:        if os.environ.get("MCP_ADAPTER_ID"):
+ciris_adapters/mcp_client/config.py:178:            self.adapter_id = os.environ["MCP_ADAPTER_ID"]
+ciris_adapters/mcp_client/config.py:180:        if os.environ.get("MCP_LOG_LEVEL"):
+ciris_adapters/mcp_client/config.py:181:            self.log_level = os.environ["MCP_LOG_LEVEL"]
+ciris_adapters/mcp_client/config.py:183:        if os.environ.get("MCP_AUTO_DISCOVER") == "true":
+ciris_adapters/mcp_client/config.py:202:        for key in os.environ:
+ciris_adapters/mcp_client/config.py:219:            command = os.environ.get(f"{prefix}COMMAND")
+ciris_adapters/mcp_client/config.py:223:            args_str = os.environ.get(f"{prefix}ARGS", "")
+ciris_adapters/mcp_client/config.py:226:            transport_str = os.environ.get(f"{prefix}TRANSPORT", "stdio")
+ciris_adapters/mcp_client/config.py:233:            buses_str = os.environ.get(f"{prefix}BUSES", "tool")
+ciris_adapters/mcp_client/config.py:246:                name=os.environ.get(f"{prefix}NAME", server_id),
+ciris_adapters/mcp_client/config.py:247:                description=os.environ.get(f"{prefix}DESCRIPTION", ""),
+ciris_adapters/mcp_client/config.py:251:                url=os.environ.get(f"{prefix}URL"),
+ciris_adapters/bear_notes/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/skill_creator/service.py:242:            if not os.environ.get(env_req.name):
+ciris_adapters/model_usage/service.py:249:            if not os.environ.get(env_req.name):
+ciris_adapters/notion/service.py:249:            if not os.environ.get(env_req.name):
+ciris_adapters/coding_agent/service.py:245:            if not os.environ.get(env_req.name):
+ciris_adapters/trello/service.py:253:            if not os.environ.get(env_req.name):
+ciris_adapters/reddit/configurable.py:250:            os.environ["CIRIS_REDDIT_CLIENT_ID"] = config["client_id"]
+ciris_adapters/reddit/configurable.py:252:            os.environ["CIRIS_REDDIT_CLIENT_SECRET"] = config["client_secret"]
+ciris_adapters/reddit/configurable.py:254:            os.environ["CIRIS_REDDIT_USERNAME"] = config["username"]
+ciris_adapters/reddit/configurable.py:256:            os.environ["CIRIS_REDDIT_PASSWORD"] = config["password"]
+ciris_adapters/reddit/configurable.py:258:            os.environ["CIRIS_REDDIT_USER_AGENT"] = config["user_agent"]
+ciris_adapters/reddit/configurable.py:260:            os.environ["CIRIS_REDDIT_SUBREDDIT"] = config["subreddit"]
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:436:        "reddit_client_id": os.getenv("CIRIS_REDDIT_CLIENT_ID"),
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:437:        "reddit_client_secret": os.getenv("CIRIS_REDDIT_CLIENT_SECRET"),
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:438:        "reddit_username": os.getenv("CIRIS_REDDIT_USERNAME"),
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:439:        "reddit_password": os.getenv("CIRIS_REDDIT_PASSWORD"),
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:440:        "reddit_user_agent": os.getenv("CIRIS_REDDIT_USER_AGENT", "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)"),
+ciris_adapters/reddit/REDDIT_ADAPTER_ANALYSIS.md:441:        "reddit_subreddit": os.getenv("CIRIS_REDDIT_SUBREDDIT", "ciris"),
+ciris_adapters/reddit/schemas.py:32:            "reddit_client_id": os.getenv("CIRIS_REDDIT_CLIENT_ID"),
+ciris_adapters/reddit/schemas.py:33:            "reddit_client_secret": os.getenv("CIRIS_REDDIT_CLIENT_SECRET"),
+ciris_adapters/reddit/schemas.py:34:            "reddit_username": os.getenv("CIRIS_REDDIT_USERNAME"),
+ciris_adapters/reddit/schemas.py:35:            "reddit_password": os.getenv("CIRIS_REDDIT_PASSWORD"),
+ciris_adapters/reddit/schemas.py:36:            "reddit_user_agent": os.getenv("CIRIS_REDDIT_USER_AGENT", "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)"),
+ciris_adapters/reddit/schemas.py:37:            "reddit_subreddit": os.getenv("CIRIS_REDDIT_SUBREDDIT", "ciris"),
+ciris_adapters/eightctl/service.py:244:            if not os.environ.get(env_req.name):
+ciris_adapters/voice_call/service.py:242:            if not os.environ.get(env_req.name):
+ciris_adapters/openai_image_gen/service.py:261:            if not os.environ.get(env_req.name):
+ciris_adapters/camsnap/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/gog/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/openhue/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/sag/service.py:255:            if not os.environ.get(env_req.name):
+ciris_adapters/weather/configurable.py:214:            os.environ["CIRIS_NOAA_USER_AGENT"] = config["user_agent"]
+ciris_adapters/weather/configurable.py:218:            os.environ["CIRIS_OPENWEATHERMAP_API_KEY"] = config["owm_api_key"]
+ciris_adapters/weather/configurable.py:222:            os.environ["CIRIS_WEATHER_UNITS"] = config["units"]
+ciris_adapters/weather/configurable.py:226:            os.environ["CIRIS_WEATHER_DEFAULT_LOCATION"] = config["default_location"]
+ciris_adapters/weather/configurable.py:230:            os.environ["CIRIS_WEATHER_UPDATE_INTERVAL"] = str(config["update_interval"])
+ciris_adapters/weather/service.py:53:        contact_email = os.getenv("PUBLIC_API_CONTACT_EMAIL", "")
+ciris_adapters/weather/service.py:57:            self.user_agent = os.getenv("CIRIS_NOAA_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
+ciris_adapters/weather/service.py:60:        self.owm_api_key = os.getenv("CIRIS_OPENWEATHERMAP_API_KEY")
+ciris_adapters/weather/service.py:85:            self._default_location = os.getenv("CIRIS_WEATHER_DEFAULT_LOCATION")
+ciris_adapters/peekaboo/service.py:252:            if not os.environ.get(env_req.name):
+ciris_adapters/nano_pdf/service.py:250:            if not os.environ.get(env_req.name):
+ciris_adapters/external_data_sql/configurable.py:300:        config_path = os.environ.get("CIRIS_DATA_DIR", "data")
+ciris_adapters/external_data_sql/configurable.py:313:        os.environ["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(config_file)
+ciris_adapters/external_data_sql/configurable.py:318:            os.environ["CIRIS_SQL_ENABLED_FEATURES"] = ",".join(enabled_features)
+ciris_adapters/external_data_sql/service.py:72:            config_path = os.environ.get("CIRIS_SQL_EXTERNAL_DATA_CONFIG")
+ciris_adapters/external_data_sql/service.py:88:        self._signature_key_path = Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "sql_deletion_keys"
+ciris_adapters/external_data_sql/service.py:89:        self._signature_db_path = str(Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "ciris.db")
+ciris_adapters/ordercli/service.py:252:            if not os.environ.get(env_req.name):
+ciris_adapters/gifgrep/service.py:252:            if not os.environ.get(env_req.name):
+ciris_engine/logic/dma/dma_executor.py:81:DMA_TIMEOUT_SECONDS = float(os.environ.get("CIRIS_DMA_TIMEOUT", "90.0"))
+ciris_adapters/openai_whisper/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/apple_reminders/service.py:258:            if not os.environ.get(env_req.name):
+ciris_adapters/nano_banana_pro/service.py:255:            if not os.environ.get(env_req.name):
+ciris_adapters/tmux/service.py:242:            if not os.environ.get(env_req.name):
+ciris_adapters/home_assistant/configurable.py:213:        self._client_id = os.getenv("CIRIS_OAUTH_CLIENT_ID", self.DEFAULT_CLIENT_ID)
+ciris_adapters/home_assistant/configurable.py:264:        supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+ciris_adapters/home_assistant/configurable.py:382:        ha_url = os.getenv("HOME_ASSISTANT_URL")
+ciris_adapters/home_assistant/configurable.py:787:            os.environ["HOME_ASSISTANT_URL"] = config["base_url"]
+ciris_adapters/home_assistant/configurable.py:790:            os.environ["HOME_ASSISTANT_TOKEN"] = access_token
+ciris_adapters/home_assistant/configurable.py:793:            os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = refresh_token
+ciris_adapters/home_assistant/configurable.py:796:            os.environ["HOME_ASSISTANT_CLIENT_ID"] = client_id
+ciris_adapters/home_assistant/service.py:102:        return bool(os.getenv("SUPERVISOR_TOKEN"))
+ciris_adapters/home_assistant/service.py:118:        self.go2rtc_url = os.getenv("GO2RTC_SERVER_URL", "http://127.0.0.1:8554")
+ciris_adapters/home_assistant/service.py:120:        self.sensitivity = float(os.getenv("EVENT_DETECTION_SENSITIVITY", "0.7"))
+ciris_adapters/home_assistant/service.py:158:        return os.getenv("HOME_ASSISTANT_URL", "http://homeassistant.local:8123").rstrip("/")
+ciris_adapters/home_assistant/service.py:179:            token = os.getenv("SUPERVISOR_TOKEN")
+ciris_adapters/home_assistant/service.py:184:        token = os.getenv("HOME_ASSISTANT_TOKEN")
+ciris_adapters/home_assistant/service.py:258:        urls_env = os.getenv("WEBRTC_CAMERA_URLS", "")
+ciris_adapters/home_assistant/service.py:523:                f"  HOME_ASSISTANT_TOKEN env: {os.getenv('HOME_ASSISTANT_TOKEN', '<not set>')[:20] if os.getenv('HOME_ASSISTANT_TOKEN') else '<not set>'}"
+ciris_adapters/home_assistant/service.py:725:            refresh_token = os.getenv("HOME_ASSISTANT_REFRESH_TOKEN")
+ciris_adapters/home_assistant/service.py:726:            client_id = os.getenv("HOME_ASSISTANT_CLIENT_ID")
+ciris_adapters/home_assistant/service.py:755:                                os.environ["HOME_ASSISTANT_TOKEN"] = new_access_token
+ciris_adapters/home_assistant/service.py:761:                                    os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = new_refresh_token
+ciris_adapters/home_assistant/ingress_auth.py:74:        self._supervisor_mode = bool(os.getenv("SUPERVISOR_TOKEN"))
+ciris_adapters/home_assistant/ingress_auth.py:230:        if os.getenv("SUPERVISOR_TOKEN"):
+ciris_adapters/obsidian/service.py:257:            if not os.environ.get(env_req.name):
+ciris_adapters/slack/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/songsee/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/apple_notes/service.py:258:            if not os.environ.get(env_req.name):
+ciris_adapters/oracle/service.py:256:            if not os.environ.get(env_req.name):
+ciris_adapters/ciris_verify/service.py:81:        debug_env = os.environ.get("CIRIS_VERIFY_DEBUG", "").lower() in ("1", "true", "yes")
+ciris_adapters/ciris_verify/service.py:89:        callback_level = 5 if os.environ.get("CIRIS_VERIFY_TRACE") else 4
+ciris_adapters/ciris_verify/ffi_bindings/client.py:186:        if os.environ.get("CIRIS_IOS_FRAMEWORK_PATH"):
+ciris_adapters/ciris_verify/ffi_bindings/client.py:199:        if os.environ.get("ANDROID_ROOT"):
+ciris_adapters/ciris_verify/ffi_bindings/client.py:213:        env_path = os.environ.get("CIRIS_IOS_FRAMEWORK_PATH")
+ciris_adapters/things_mac/service.py:245:            if not os.environ.get(env_req.name):
+ciris_adapters/gemini/service.py:257:            if not os.environ.get(env_req.name):
+ciris_adapters/onepassword/service.py:257:            if not os.environ.get(env_req.name):
+ciris_adapters/imsg/service.py:258:            if not os.environ.get(env_req.name):
+ciris_adapters/mock_llm/configurable.py:220:            os.environ["MOCK_LLM_DELAY_MS"] = str(config["delay_ms"])
+ciris_adapters/mock_llm/configurable.py:222:            os.environ["MOCK_LLM_FAILURE_RATE"] = str(config["failure_rate"])
+ciris_adapters/mock_llm/configurable.py:224:            os.environ["MOCK_LLM_RESPONSE_MODE"] = config["response_mode"]
+ciris_adapters/mock_llm/responses_action_selection.py:202:    benchmark_mode_val = os.environ.get("CIRIS_BENCHMARK_MODE", "")
+ciris_adapters/mock_llm/responses_action_selection.py:203:    template_name = os.environ.get("CIRIS_TEMPLATE", "")
+ciris_adapters/himalaya/service.py:257:            if not os.environ.get(env_req.name):
+ciris_adapters/mcporter/service.py:250:            if not os.environ.get(env_req.name):
+ciris_adapters/bird/service.py:265:            if not os.environ.get(env_req.name):
+ciris_adapters/session_logs/service.py:242:            if not os.environ.get(env_req.name):
+ciris_adapters/navigation/configurable.py:178:            os.environ["CIRIS_OSM_USER_AGENT"] = config["user_agent"]
+ciris_adapters/navigation/configurable.py:181:            os.environ["CIRIS_OSM_RATE_LIMIT"] = str(config["rate_limit_seconds"])
+ciris_adapters/navigation/service.py:55:        contact_email = os.getenv("PUBLIC_API_CONTACT_EMAIL", "")
+ciris_adapters/navigation/service.py:59:            self.user_agent = os.getenv("CIRIS_OSM_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
+ciris_adapters/local_places/service.py:252:            if not os.environ.get(env_req.name):
+ciris_adapters/github/service.py:264:            if not os.environ.get(env_req.name):
+ciris_adapters/summarize/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/sonoscli/service.py:244:            if not os.environ.get(env_req.name):
+ciris_adapters/blogwatcher/service.py:244:            if not os.environ.get(env_req.name):
+ciris_adapters/mcp_server/config.py:53:        if os.environ.get("MCP_SERVER_ID"):
+ciris_adapters/mcp_server/config.py:54:            self.server_id = os.environ["MCP_SERVER_ID"]
+ciris_adapters/mcp_server/config.py:56:        if os.environ.get("MCP_SERVER_NAME"):
+ciris_adapters/mcp_server/config.py:57:            self.server_name = os.environ["MCP_SERVER_NAME"]
+ciris_adapters/mcp_server/config.py:59:        if os.environ.get("MCP_TRANSPORT"):
+ciris_adapters/mcp_server/config.py:61:                self.transport = MCPTransportType(os.environ["MCP_TRANSPORT"])
+ciris_adapters/mcp_server/config.py:63:                logger.warning(f"Invalid MCP_TRANSPORT value: {os.environ['MCP_TRANSPORT']}")
+ciris_adapters/mcp_server/config.py:65:        if os.environ.get("MCP_HOST"):
+ciris_adapters/mcp_server/config.py:66:            self.host = os.environ["MCP_HOST"]
+ciris_adapters/mcp_server/config.py:68:        if os.environ.get("MCP_PORT"):
+ciris_adapters/mcp_server/config.py:70:                self.port = int(os.environ["MCP_PORT"])
+ciris_adapters/mcp_server/config.py:72:                logger.warning(f"Invalid MCP_PORT value: {os.environ['MCP_PORT']}")
+ciris_adapters/mcp_server/config.py:74:        if os.environ.get("MCP_API_KEY"):
+ciris_adapters/mcp_server/config.py:75:            self.api_key = os.environ["MCP_API_KEY"]
+ciris_adapters/mcp_server/config.py:77:        if os.environ.get("MCP_JWT_SECRET"):
+ciris_adapters/mcp_server/config.py:78:            self.jwt_secret = os.environ["MCP_JWT_SECRET"]
+ciris_adapters/mcp_server/config.py:80:        if os.environ.get("MCP_JWT_ALGORITHM"):
+ciris_adapters/mcp_server/config.py:81:            self.jwt_algorithm = os.environ["MCP_JWT_ALGORITHM"]
+ciris_adapters/mcp_server/config.py:83:        if os.environ.get("MCP_REQUIRE_AUTH"):
+ciris_adapters/mcp_server/config.py:84:            self.require_auth = os.environ["MCP_REQUIRE_AUTH"].lower() == "true"
+ciris_adapters/a2a/configurable.py:202:            os.environ["CIRIS_A2A_HOST"] = str(config["host"])
+ciris_adapters/a2a/configurable.py:205:            os.environ["CIRIS_A2A_PORT"] = str(config["port"])
+ciris_adapters/a2a/configurable.py:208:            os.environ["CIRIS_A2A_TIMEOUT"] = str(config["timeout"])
+ciris_adapters/a2a/adapter.py:90:        self._host = os.environ.get("CIRIS_A2A_HOST") or config_host
+ciris_adapters/a2a/adapter.py:91:        self._port = int(os.environ.get("CIRIS_A2A_PORT") or config_port)
+ciris_adapters/a2a/adapter.py:92:        self._timeout = float(os.environ.get("CIRIS_A2A_TIMEOUT") or config_timeout)
+ciris_adapters/spotify_player/service.py:266:            if not os.environ.get(env_req.name):
+ciris_adapters/ciris_hosted_tools/services.py:163:        token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+ciris_adapters/ciris_hosted_tools/services.py:167:            token = os.environ.get("GOOGLE_ID_TOKEN")
+ciris_adapters/ciris_hosted_tools/services.py:188:                ciris_home = os.environ.get("CIRIS_HOME")
+ciris_adapters/openai_whisper_api/service.py:252:            if not os.environ.get(env_req.name):
+ciris_adapters/blucli/service.py:244:            if not os.environ.get(env_req.name):
+ciris_adapters/wacli/service.py:252:            if not os.environ.get(env_req.name):
+ciris_adapters/sherpa_onnx_tts/service.py:253:            if not os.environ.get(env_req.name):
+ciris_adapters/wallet/adapter.py:99:        if os.getenv("WALLET_X402_ENABLED", "true").lower() == "true":
+ciris_adapters/wallet/adapter.py:102:                network=os.getenv("WALLET_X402_NETWORK", "base-mainnet"),
+ciris_adapters/wallet/adapter.py:103:                rpc_url=os.getenv("WALLET_X402_RPC_URL"),
+ciris_adapters/wallet/adapter.py:104:                treasury_address=os.getenv("WALLET_X402_TREASURY_ADDRESS"),
+ciris_adapters/wallet/adapter.py:105:                facilitator_url=os.getenv("WALLET_X402_FACILITATOR_URL", "https://x402.org/facilitator"),
+ciris_adapters/wallet/adapter.py:109:        if os.getenv("WALLET_CHAPA_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:110:            chapa_secret = os.getenv("WALLET_CHAPA_SECRET_KEY")
+ciris_adapters/wallet/adapter.py:114:                callback_base_url=os.getenv("WALLET_CHAPA_CALLBACK_URL"),
+ciris_adapters/wallet/adapter.py:115:                merchant_name=os.getenv("WALLET_CHAPA_MERCHANT_NAME", "CIRIS"),
+ciris_adapters/wallet/adapter.py:119:        if os.getenv("WALLET_MPESA_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:122:                consumer_key=os.getenv("WALLET_MPESA_CONSUMER_KEY"),
+ciris_adapters/wallet/adapter.py:123:                consumer_secret=os.getenv("WALLET_MPESA_CONSUMER_SECRET"),
+ciris_adapters/wallet/adapter.py:124:                shortcode=os.getenv("WALLET_MPESA_SHORTCODE"),
+ciris_adapters/wallet/adapter.py:125:                passkey=os.getenv("WALLET_MPESA_PASSKEY"),
+ciris_adapters/wallet/adapter.py:126:                environment=os.getenv("WALLET_MPESA_ENVIRONMENT", "sandbox"),
+ciris_adapters/wallet/adapter.py:127:                callback_base_url=os.getenv("WALLET_MPESA_CALLBACK_URL"),
+ciris_adapters/wallet/adapter.py:131:        if os.getenv("WALLET_RAZORPAY_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:134:                key_id=os.getenv("WALLET_RAZORPAY_KEY_ID"),
+ciris_adapters/wallet/adapter.py:135:                key_secret=os.getenv("WALLET_RAZORPAY_KEY_SECRET"),
+ciris_adapters/wallet/adapter.py:136:                webhook_secret=os.getenv("WALLET_RAZORPAY_WEBHOOK_SECRET"),
+ciris_adapters/wallet/adapter.py:140:        if os.getenv("WALLET_PIX_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:143:                provider=os.getenv("WALLET_PIX_PROVIDER", "mercadopago"),
+ciris_adapters/wallet/adapter.py:144:                access_token=os.getenv("WALLET_PIX_ACCESS_TOKEN"),
+ciris_adapters/wallet/adapter.py:145:                callback_base_url=os.getenv("WALLET_PIX_CALLBACK_URL"),
+ciris_adapters/wallet/adapter.py:149:        if os.getenv("WALLET_WISE_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:152:                api_token=os.getenv("WALLET_WISE_API_TOKEN"),
+ciris_adapters/wallet/adapter.py:153:                profile_id=os.getenv("WALLET_WISE_PROFILE_ID"),
+ciris_adapters/wallet/adapter.py:154:                environment=os.getenv("WALLET_WISE_ENVIRONMENT", "sandbox"),
+ciris_adapters/wallet/adapter.py:158:        if os.getenv("WALLET_STRIPE_ENABLED", "false").lower() == "true":
+ciris_adapters/wallet/adapter.py:161:                secret_key=os.getenv("WALLET_STRIPE_SECRET_KEY"),
+ciris_adapters/wallet/adapter.py:162:                publishable_key=os.getenv("WALLET_STRIPE_PUBLISHABLE_KEY"),
+ciris_adapters/wallet/adapter.py:163:                webhook_secret=os.getenv("WALLET_STRIPE_WEBHOOK_SECRET"),
+ciris_adapters/wallet/adapter.py:168:            default_provider=os.getenv("WALLET_DEFAULT_PROVIDER", "x402"),
+ciris_adapters/wallet/adapter.py:242:        logger.warning(f"[WALLET_INIT] CIRIS_HOME={os.environ.get('CIRIS_HOME', 'NOT SET')}")
+ciris_adapters/wallet/adapter.py:243:        logger.warning(f"[WALLET_INIT] CIRIS_DATA_DIR={os.environ.get('CIRIS_DATA_DIR', 'NOT SET')}")
+ciris_adapters/video_frames/service.py:251:            if not os.environ.get(env_req.name):
+ciris_adapters/cirisnode/services.py:97:            os.environ.get("CIRISNODE_TRACE_LEVEL", "") or self.config.get("trace_level", "generic")
+ciris_adapters/cirisnode/client.py:36:            or os.getenv("CIRISNODE_BASE_URL", "https://node.ciris-services-1.ai")
+ciris_adapters/cirisnode/client.py:41:            portal_url or os.getenv("CIRISNODE_PORTAL_URL", "https://portal.ciris.ai") or "https://portal.ciris.ai"
+ciris_adapters/cirisnode/client.py:43:        self.auth_token = auth_token or os.getenv("CIRISNODE_AUTH_TOKEN")
+ciris_adapters/cirisnode/client.py:44:        self.agent_token = agent_token or os.getenv("CIRISNODE_AGENT_TOKEN")
+ciris_adapters/bluebubbles/service.py:245:            if not os.environ.get(env_req.name):
+ciris_engine/logic/services/infrastructure/authentication/attestation/platform.py:16:    return os.environ.get("ANDROID_ROOT") is not None
+ciris_engine/logic/services/infrastructure/authentication/attestation/platform.py:25:    return os.environ.get("CIRIS_IOS_FRAMEWORK_PATH") is not None or os.environ.get("CIRIS_IOS_STATIC_LINK") is not None
+ciris_engine/logic/services/infrastructure/authentication/attestation/hashes.py:49:        ciris_home = os.environ.get("CIRIS_HOME", DEFAULT_ANDROID_CIRIS_HOME)
+ciris_engine/logic/services/infrastructure/authentication/attestation/paths.py:41:        return os.environ.get("CIRIS_AGENT_ROOT", os.getcwd())
+ciris_engine/logic/services/infrastructure/authentication/attestation/paths.py:75:        ciris_home = os.environ.get("CIRIS_HOME", "")
+ciris_engine/logic/services/infrastructure/authentication/service.py:1773:        if os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true":
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:63:        self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:66:            or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:67:            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:119:            os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:120:            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:121:            or os.environ.get("GOOGLE_ID_TOKEN", "")
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:160:            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:324:            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:459:            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py:592:        ciris_home = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/services/infrastructure/resource_monitor/service.py:232:                ciris_home_str = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/services/tool/discovery_service.py:75:        extra_from_env = os.environ.get("CIRIS_EXTRA_ADAPTERS", "")
+ciris_engine/logic/services/tool/eligibility_checker.py:82:            if os.environ.get(env_req.name) is None:
+ciris_engine/logic/services/tool/eligibility_checker.py:179:        return os.environ.get(env_key) is not None
+ciris_engine/logic/setup/first_run.py:74:    config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")
+ciris_engine/logic/setup/first_run.py:117:    force_first_run = os.environ.get("CIRIS_FORCE_FIRST_RUN")
+ciris_engine/logic/setup/first_run.py:140:    if os.environ.get("CIRIS_CONFIGURED"):
+ciris_engine/logic/setup/first_run.py:142:        del os.environ["CIRIS_CONFIGURED"]
+ciris_engine/logic/setup/first_run.py:225:    if any(os.environ.get(var) for var in ci_indicators):
+ciris_engine/logic/setup/first_run.py:229:    if os.environ.get("DOCKER") or os.path.exists("/.dockerenv"):
+ciris_engine/logic/setup/first_run.py:233:    if os.environ.get("INVOCATION_ID"):  # systemd sets this
+ciris_engine/logic/setup/first_run.py:284:    config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")
+ciris_engine/logic/utils/path_resolution.py:150:    if os.getenv("ANDROID_ROOT") or os.getenv("ANDROID_DATA"):
+ciris_engine/logic/utils/path_resolution.py:202:    indicators.append(os.getenv("CIRIS_MANAGED", "").lower() == "true")
+ciris_engine/logic/utils/path_resolution.py:209:    indicators.append(bool(os.getenv("CIRIS_SERVICE_TOKEN")))
+ciris_engine/logic/utils/path_resolution.py:241:    env_home = os.getenv("CIRIS_HOME")
+ciris_engine/logic/utils/path_resolution.py:488:    existing_home = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/utils/path_resolution.py:499:                os.environ["CIRIS_HOME"] = str(ciris_home)
+ciris_engine/logic/utils/path_resolution.py:505:        os.environ["CIRIS_HOME"] = str(ciris_home)
+ciris_engine/logic/utils/path_resolution.py:512:    os.environ["CIRIS_DATA_DIR"] = str(data_dir)
+ciris_engine/logic/utils/path_resolution.py:577:    env_home = os.getenv("CIRIS_HOME")
+ciris_engine/logic/utils/path_resolution.py:631:    env_home = os.getenv("CIRIS_HOME")
+ciris_engine/logic/utils/path_resolution.py:683:    ciris_home_env = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/utils/path_resolution.py:876:    """Sync an environment variable to both os.environ and .env file.
+ciris_engine/logic/utils/path_resolution.py:879:    - Desktop/server: Updates both os.environ and .env file
+ciris_engine/logic/utils/path_resolution.py:880:    - Mobile (Android/iOS): Updates only os.environ (no .env file)
+ciris_engine/logic/utils/path_resolution.py:881:    - Managed: Updates os.environ, optionally .env file
+ciris_engine/logic/utils/path_resolution.py:889:        True if successful, False if .env file update failed (os.environ still updated)
+ciris_engine/logic/utils/path_resolution.py:900:    # Always update os.environ (os.environ handles its own safety)
+ciris_engine/logic/utils/path_resolution.py:901:    os.environ[var_name] = value
+ciris_engine/logic/utils/path_resolution.py:902:    logger.debug(f"[env_sync] Set os.environ[{var_name}]")
+ciris_engine/logic/utils/path_resolution.py:995:    1. os.environ['CIRIS_PREFERRED_LANGUAGE']
+ciris_engine/logic/utils/path_resolution.py:1052:    return os.environ.get("CIRIS_PREFERRED_LANGUAGE")
+ciris_engine/logic/utils/localization.py:54:    env_path = os.getenv("CIRIS_LOCALIZATION_DIR")
+ciris_engine/logic/utils/localization.py:337:    return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
+ciris_engine/logic/utils/win_console.py:76:    Starts from ``base`` (or ``os.environ`` if None) and injects PYTHONUTF8=1 /
+ciris_engine/logic/utils/win_console.py:81:    env: MutableMapping[str, str] = dict(os.environ if base is None else base)
+ciris_engine/logic/utils/occurrence_utils.py:30:    env_count = os.getenv("AGENT_OCCURRENCE_COUNT")
+ciris_engine/logic/utils/occurrence_utils.py:116:    return os.getenv("AGENT_OCCURRENCE_ID", "default")
+ciris_engine/logic/utils/occurrence_utils.py:154:        "discovery_source": "environment" if os.getenv("AGENT_OCCURRENCE_COUNT") else "database",
+ciris_engine/logic/utils/platform_detection.py:102:    if os.getenv("GOOGLE_PLAY_SERVICES_AVAILABLE", "true").lower() == "true":
+ciris_engine/logic/utils/platform_detection.py:107:    google_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.getenv("GOOGLE_ID_TOKEN")
+ciris_engine/logic/utils/platform_detection.py:112:    llm_base_url = os.getenv("LLM_BASE_URL", "")
+ciris_engine/logic/utils/platform_detection.py:132:    if os.getenv("IOS_APP_ATTEST_AVAILABLE", "").lower() == "true":
+ciris_engine/logic/utils/platform_detection.py:136:    if os.getenv("IOS_DEVICE_CHECK_AVAILABLE", "").lower() == "true":
+ciris_engine/logic/utils/platform_detection.py:140:    if os.getenv("APPLE_ID_TOKEN"):
+ciris_engine/logic/utils/platform_detection.py:166:    if os.getenv("HSM_AVAILABLE", "").lower() == "true":
+ciris_engine/logic/utils/platform_detection.py:171:    if os.getenv("DPOP_ENABLED", "").lower() == "true":
+ciris_engine/logic/utils/platform_detection.py:175:    if os.getenv("MTLS_CERT_PATH") and os.getenv("MTLS_KEY_PATH"):
+ciris_engine/logic/utils/platform_detection.py:222:            os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.getenv("GOOGLE_ID_TOKEN") or os.getenv("APPLE_ID_TOKEN")
+ciris_engine/logic/utils/location_utils.py:89:    share_in_traces = os.environ.get("CIRIS_SHARE_LOCATION_IN_TRACES", "").lower() == "true"
+ciris_engine/logic/utils/location_utils.py:92:    location_string = os.environ.get("CIRIS_USER_LOCATION", "")
+ciris_engine/logic/utils/location_utils.py:105:    lat_str = os.environ.get("CIRIS_USER_LATITUDE", "")
+ciris_engine/logic/utils/location_utils.py:106:    lon_str = os.environ.get("CIRIS_USER_LONGITUDE", "")
+ciris_engine/logic/utils/location_utils.py:126:        timezone=os.environ.get("CIRIS_USER_TIMEZONE") or None,
+ciris_engine/logic/utils/observability_decorators.py:100:    return os.getenv(env_var, "").lower() in ("true", "1", "yes")
+ciris_engine/logic/processors/support/dma_orchestrator.py:70:        dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
+ciris_engine/logic/services/runtime/llm_service/service.py:132:    provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:136:    ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:413:        val = os.environ.get(f"CIRIS_{name}") or os.environ.get(name) or ""
+ciris_engine/logic/services/runtime/llm_service/service.py:454:    ciris_key = os.environ.get("CIRIS_LLM_API_KEY", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:532:        if os.environ.get("MOCK_LLM") or "--mock-llm" in " ".join(sys.argv):
+ciris_engine/logic/services/runtime/llm_service/service.py:719:            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+ciris_engine/logic/services/runtime/llm_service/service.py:746:            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+ciris_engine/logic/services/runtime/llm_service/service.py:931:            new_api_key = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+ciris_engine/logic/services/runtime/llm_service/service.py:937:            new_api_key = os.environ.get("OPENAI_API_KEY", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:953:        new_base_url = os.environ.get("OPENAI_API_BASE", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:960:        new_model = os.environ.get("OPENAI_MODEL", "")
+ciris_engine/logic/services/runtime/llm_service/service.py:1646:            ciris_home = os.getenv("CIRIS_HOME")
+ciris_engine/logic/runtime/service_initializer.py:165:        is_android = "ANDROID_DATA" in os.environ
+ciris_engine/logic/runtime/service_initializer.py:169:        llm_base_url = os.getenv("OPENAI_API_BASE", "")
+ciris_engine/logic/runtime/service_initializer.py:173:        api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
+ciris_engine/logic/runtime/service_initializer.py:175:        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv(
+ciris_engine/logic/runtime/service_initializer.py:184:            timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+ciris_engine/logic/runtime/service_initializer.py:185:            cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+ciris_engine/logic/runtime/service_initializer.py:186:            fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+ciris_engine/logic/runtime/service_initializer.py:204:                timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+ciris_engine/logic/runtime/service_initializer.py:205:                cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+ciris_engine/logic/runtime/service_initializer.py:206:                fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+ciris_engine/logic/runtime/service_initializer.py:869:        ciris_services_disabled = os.environ.get("CIRIS_SERVICES_DISABLED", "").lower() in ("true", "1", "yes")
+ciris_engine/logic/runtime/service_initializer.py:892:            api_key = os.environ.get("CIRIS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+ciris_engine/logic/runtime/service_initializer.py:907:            base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
+ciris_engine/logic/runtime/service_initializer.py:949:            os.environ.get("CIRIS_LLM_MODEL_NAME")  # CIRIS_ prefix preferred
+ciris_engine/logic/runtime/service_initializer.py:950:            or os.environ.get("OPENAI_MODEL_NAME")  # OpenAI SDK convention
+ciris_engine/logic/runtime/service_initializer.py:951:            or os.environ.get("OPENAI_MODEL")
+ciris_engine/logic/runtime/service_initializer.py:952:            or os.environ.get("LLM_MODEL")
+ciris_engine/logic/runtime/service_initializer.py:959:        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+ciris_engine/logic/runtime/service_initializer.py:970:        instructor_mode = os.environ.get("INSTRUCTOR_MODE") or default_instructor_modes.get(provider, "JSON")
+ciris_engine/logic/runtime/service_initializer.py:1029:            id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+ciris_engine/logic/runtime/service_initializer.py:1038:        second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
+ciris_engine/logic/runtime/service_initializer.py:1039:        second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
+ciris_engine/logic/runtime/service_initializer.py:1040:        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+ciris_engine/logic/runtime/service_initializer.py:1067:        base_url = os.environ.get(
+ciris_engine/logic/runtime/service_initializer.py:1071:        model_name = os.environ.get(
+ciris_engine/logic/runtime/service_initializer.py:1077:        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+ciris_engine/logic/runtime/service_initializer.py:1086:            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+ciris_engine/logic/runtime/service_initializer.py:1142:        model_name = os.environ.get("CIRIS_PROXY_MODEL", "claude-sonnet-4-20250514")
+ciris_engine/logic/runtime/service_initializer.py:1145:        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+ciris_engine/logic/runtime/adapter_manager.py:218:            # Configurable adapters (e.g. Home Assistant) store tokens/URLs in os.environ
+ciris_engine/logic/runtime/adapter_manager.py:1331:                        os.environ[env_var] = "true" if value else "false"
+ciris_engine/logic/runtime/adapter_manager.py:1333:                        os.environ[env_var] = str(value)
+ciris_engine/logic/runtime/adapter_manager.py:1346:                    os.environ[env_var] = "true" if value else "false"
+ciris_engine/logic/runtime/adapter_manager.py:1348:                    os.environ[env_var] = value
+ciris_engine/logic/runtime/adapter_manager.py:1360:                        os.environ[env_var] = "true" if value else "false"
+ciris_engine/logic/runtime/adapter_manager.py:1362:                        os.environ[env_var] = value
+ciris_engine/logic/runtime/adapter_manager.py:1371:                if env_var not in os.environ or not os.environ.get(env_var):
+ciris_engine/logic/runtime/adapter_manager.py:1374:                        os.environ[env_var] = value
+ciris_engine/logic/runtime/adapter_manager.py:1393:            ciris_home = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/runtime/adapter_manager.py:1418:                value = os.environ.get(env_var, "")
+ciris_engine/logic/runtime/adapter_manager.py:1458:            value = os.environ.get(env_var)
+ciris_engine/logic/runtime/bootstrap_helpers.py:118:    if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
+ciris_engine/logic/runtime/prevent_sideeffects.py:15:os.environ["CIRIS_IMPORT_MODE"] = "true"
+ciris_engine/logic/runtime/prevent_sideeffects.py:18:if "pytest" in os.environ.get("_", "") or "PYTEST_CURRENT_TEST" in os.environ:
+ciris_engine/logic/runtime/prevent_sideeffects.py:20:    os.environ["CIRIS_MOCK_LLM"] = "true"
+ciris_engine/logic/runtime/prevent_sideeffects.py:25:    os.environ.pop("CIRIS_IMPORT_MODE", None)
+ciris_engine/logic/runtime/prevent_sideeffects.py:30:    return os.environ.get("CIRIS_IMPORT_MODE", "").lower() == "true"
+ciris_engine/logic/runtime/ciris_runtime.py:126:        if os.environ.get("CIRIS_IMPORT_MODE", "").lower() == "true":
+ciris_engine/logic/runtime/ciris_runtime.py:410:                is_production = os.environ.get("CIRIS_ENV", "dev").lower() == "prod"
+ciris_engine/logic/runtime/ciris_runtime.py:625:        if not os.environ.get("PYTEST_CURRENT_TEST"):
+ciris_engine/logic/runtime/billing_helpers.py:24:    llm_base_url = os.getenv("OPENAI_API_BASE", "")
+ciris_engine/logic/runtime/billing_helpers.py:32:        new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+ciris_engine/logic/runtime/billing_helpers.py:44:        new_token = os.getenv("OPENAI_API_KEY", "")
+ciris_engine/logic/runtime/billing_helpers.py:79:    new_base_url = os.getenv("OPENAI_API_BASE", "")
+ciris_engine/logic/runtime/billing_helpers.py:113:    timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+ciris_engine/logic/runtime/billing_helpers.py:114:    cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+ciris_engine/logic/runtime/billing_helpers.py:115:    fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+ciris_engine/logic/runtime/billing_helpers.py:118:        return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+ciris_engine/logic/runtime/billing_helpers.py:141:    is_mobile = "ANDROID_DATA" in os.environ or os.environ.get("CIRIS_IOS_FRAMEWORK_PATH", "")
+ciris_engine/logic/runtime/billing_helpers.py:145:    logger.info(f"  OPENAI_API_BASE={os.getenv('OPENAI_API_BASE', '')}")
+ciris_engine/logic/runtime/billing_helpers.py:151:    google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+ciris_engine/logic/adapters/api/app.py:387:    host = os.environ.get("CIRIS_API_HOST", "127.0.0.1")
+ciris_engine/logic/adapters/api/app.py:388:    port = int(os.environ.get("CIRIS_API_PORT", "8000"))
+ciris_engine/logic/runtime/initialization_steps.py:149:    if not os.environ.get("PYTEST_CURRENT_TEST"):
+ciris_engine/logic/runtime/initialization_steps.py:528:                    os.environ[env_var] = "true" if value else "false"
+ciris_engine/logic/runtime/initialization_steps.py:530:                    os.environ[env_var] = str(value)
+ciris_engine/logic/runtime/initialization_steps.py:583:    env_adapters = os.environ.get("CIRIS_ADAPTER", "")
+ciris_engine/logic/runtime/resume_helpers.py:202:    if os.getenv("SUPERVISOR_TOKEN"):
+ciris_engine/logic/runtime/resume_helpers.py:218:    supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+ciris_engine/logic/runtime/resume_helpers.py:258:            existing = os.environ.get("CIRIS_ADAPTER", "")
+ciris_engine/logic/runtime/resume_helpers.py:261:                os.environ["CIRIS_ADAPTER"] = new_adapters
+ciris_engine/logic/runtime/resume_helpers.py:363:    enabled_adapters_str = os.environ.get("CIRIS_ADAPTER", "")
+ciris_engine/logic/adapters/api/services/auth_service.py:142:            os.environ.get("CIRIS_DATA_DIR", os.path.expanduser("~/.ciris")), "revoked_service_tokens.db"
+ciris_engine/logic/adapters/api/services/auth_service.py:1249:        expected_token = os.environ.get("CIRIS_SERVICE_TOKEN")
+ciris_engine/logic/adapters/api/routes/auth.py:53:AGENT_ID = os.getenv("CIRIS_AGENT_ID", "datum")
+ciris_engine/logic/adapters/api/routes/auth.py:64:OAUTH_FRONTEND_URL = os.getenv("OAUTH_FRONTEND_URL")  # e.g., https://scout.ciris.ai
+ciris_engine/logic/adapters/api/routes/auth.py:65:OAUTH_FRONTEND_PATH = os.getenv("OAUTH_FRONTEND_PATH", "/oauth-complete.html")  # Default: /oauth-complete.html
+ciris_engine/logic/adapters/api/routes/auth.py:68:OAUTH_REDIRECT_PARAMS = os.getenv(
+ciris_engine/logic/adapters/api/routes/auth.py:73:OAUTH_ALLOWED_REDIRECT_DOMAINS = os.getenv("OAUTH_ALLOWED_REDIRECT_DOMAINS", "").split(",")
+ciris_engine/logic/adapters/api/routes/auth.py:81:        base_url = os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
+ciris_engine/logic/adapters/api/routes/auth.py:601:        base_url = os.getenv("OAUTH_CALLBACK_BASE_URL")
+ciris_engine/logic/adapters/api/routes/auth.py:733:                "redirect_uri": os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
+ciris_engine/logic/adapters/api/routes/auth.py:1051:    os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
+ciris_engine/logic/adapters/api/routes/auth.py:1052:    os.environ["CIRIS_BILLING_APPLE_ID_TOKEN"] = google_id_token
+ciris_engine/logic/adapters/cli/adapter.py:34:        self.adapter_id = f"cli_{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
+ciris_engine/logic/adapters/api/routes/system/llm_routes.py:1000:    os.environ["CIRIS_SERVICES_DISABLED"] = "true"
+ciris_engine/logic/adapters/api/routes/system/llm_routes.py:1048:    os.environ.pop("CIRIS_SERVICES_DISABLED", None)
+ciris_engine/logic/adapters/api/routes/setup/complete.py:575:    openai_key = os.getenv("OPENAI_API_KEY")
+ciris_engine/logic/adapters/api/routes/setup/complete.py:576:    openai_base = os.getenv("OPENAI_API_BASE")
+ciris_engine/logic/adapters/api/routes/setup/complete.py:892:    if os.getenv("SUPERVISOR_TOKEN"):
+ciris_engine/logic/adapters/api/routes/setup/models.py:467:            testing_mode = os.environ.get("CIRIS_TESTING_MODE", "").lower() in ("true", "1", "yes")
+ciris_engine/logic/adapters/api/routes/setup/location.py:332:    """Apply updates to os.environ for immediate effect."""
+ciris_engine/logic/adapters/api/routes/setup/location.py:335:            os.environ[key] = value
+ciris_engine/logic/adapters/api/routes/setup/location.py:336:        elif key in os.environ:
+ciris_engine/logic/adapters/api/routes/setup/location.py:337:            del os.environ[key]
+ciris_engine/logic/adapters/api/routes/setup/location.py:444:    city = os.environ.get("CIRIS_USER_CITY")
+ciris_engine/logic/adapters/api/routes/setup/location.py:445:    region = os.environ.get("CIRIS_USER_REGION")
+ciris_engine/logic/adapters/api/routes/setup/location.py:446:    country = os.environ.get("CIRIS_USER_COUNTRY")
+ciris_engine/logic/adapters/api/routes/setup/location.py:447:    display = os.environ.get("CIRIS_USER_LOCATION")
+ciris_engine/logic/adapters/api/routes/setup/location.py:448:    lat_str = os.environ.get("CIRIS_USER_LATITUDE")
+ciris_engine/logic/adapters/api/routes/setup/location.py:449:    lon_str = os.environ.get("CIRIS_USER_LONGITUDE")
+ciris_engine/logic/adapters/api/routes/setup/location.py:450:    timezone = os.environ.get("CIRIS_USER_TIMEZONE")
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:111:    ciris_home = os.environ.get("CIRIS_HOME", str(Path.home() / ".ciris"))
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:188:    is_android = os.environ.get("ANDROID_ROOT") is not None
+ciris_engine/logic/adapters/api/routes/setup/device_auth.py:428:    agent_root = os.environ.get("CIRIS_AGENT_ROOT", os.environ.get("CIRIS_HOME", "/app"))
+ciris_engine/logic/adapters/api/routes/setup/config.py:119:    ciris_home = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/adapters/api/routes/setup/config.py:204:    return os.getenv("CIRIS_MOCK_LLM", "").lower() in _TRUTHY
+ciris_engine/logic/adapters/api/routes/setup/config.py:209:    raw = (os.getenv("CIRIS_LLM_PROVIDER") or os.getenv("LLM_PROVIDER") or "").lower()
+ciris_engine/logic/adapters/api/routes/setup/config.py:217:    if os.getenv("ANTHROPIC_API_KEY"):
+ciris_engine/logic/adapters/api/routes/setup/config.py:219:    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+ciris_engine/logic/adapters/api/routes/setup/config.py:226:    base_url = os.getenv("OPENAI_API_BASE", "")
+ciris_engine/logic/adapters/api/routes/setup/config.py:248:    if os.getenv("CIRIS_PROXY_URL") or os.getenv("CIRIS_PROXY_ENABLED", "").lower() in _TRUTHY:
+ciris_engine/logic/adapters/api/routes/setup/config.py:261:    return any(os.getenv(v) for v in key_vars)
+ciris_engine/logic/adapters/api/routes/setup/config.py:289:    template_id = os.getenv("CIRIS_TEMPLATE")
+ciris_engine/logic/adapters/api/routes/setup/config.py:299:    value = os.getenv(env_var)
+ciris_engine/logic/adapters/api/routes/setup/config.py:324:        llm_base_url=os.getenv("OPENAI_API_BASE"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:325:        llm_model=os.getenv("OPENAI_MODEL"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:327:        backup_llm_base_url=os.getenv("CIRIS_OPENAI_API_BASE_2"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:328:        backup_llm_model=os.getenv("CIRIS_OPENAI_MODEL_NAME_2"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:329:        backup_llm_api_key_set=bool(os.getenv("CIRIS_OPENAI_API_KEY_2")),
+ciris_engine/logic/adapters/api/routes/setup/config.py:331:        enabled_adapters=os.getenv("CIRIS_ADAPTER", "api").split(","),
+ciris_engine/logic/adapters/api/routes/setup/config.py:332:        agent_port=int(os.getenv("CIRIS_API_PORT", "8080")),
+ciris_engine/logic/adapters/api/routes/setup/config.py:333:        location_country=os.getenv("CIRIS_USER_COUNTRY"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:334:        location_region=os.getenv("CIRIS_USER_REGION"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:335:        location_city=os.getenv("CIRIS_USER_CITY"),
+ciris_engine/logic/adapters/api/routes/setup/config.py:338:        timezone=os.getenv("CIRIS_USER_TIMEZONE"),
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:510:        env = os.environ.copy()
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:609:    native_lib_dir = os.environ.get("CIRIS_NATIVE_LIB_DIR", "")
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:615:    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:716:    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:754:    ciris_data_dir = os.environ.get("CIRIS_DATA_DIR", "")
+ciris_engine/logic/adapters/api/routes/setup/llm_discovery.py:759:    ciris_home = os.environ.get("CIRIS_HOME")
+ciris_engine/logic/adapters/api/routes/setup/device_auth_routes.py:310:    data_dir = Path(os.environ.get("CIRIS_DATA_DIR", "."))
+ciris_engine/logic/adapters/api/routes/billing.py:215:    api_key = os.getenv("CIRIS_BILLING_API_KEY")
+ciris_engine/logic/adapters/api/routes/billing.py:512:    ciris_home = os.environ.get("CIRIS_HOME", "")
+ciris_engine/logic/adapters/api/routes/billing.py:520:    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
+ciris_engine/logic/adapters/api/routes/billing.py:628:    if not os.getenv("CIRIS_BILLING_API_KEY"):
+ciris_engine/logic/adapters/api/routes/billing.py:971:        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get(
+ciris_engine/logic/adapters/api/routes/my_data.py:330:    config_dir = Path(os.environ.get("CIRIS_CONFIG_DIR", "."))
+ciris_engine/logic/adapters/api/routes/my_data.py:366:    os.environ["CIRIS_ACCORD_METRICS_CONSENT"] = consent_value
+ciris_engine/logic/adapters/api/routes/my_data.py:367:    os.environ["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = timestamp
+ciris_engine/logic/adapters/api/routes/my_data.py:758:    return os.getenv(
+ciris_engine/schemas/config/essential.py:189:        env_occurrence_id = os.getenv("CIRIS_OCCURRENCE_ID") or os.getenv("AGENT_OCCURRENCE_ID")
+ciris_engine/schemas/config/essential.py:194:        env_db_url = os.getenv("CIRIS_DB_URL")
+ciris_engine/schemas/config/essential.py:199:        env_template = os.getenv("CIRIS_TEMPLATE")
+ciris_engine/logic/adapters/api/routes/tools.py:174:    return os.environ.get("CIRIS_BILLING_API_URL", DEFAULT_BILLING_URL)
+ciris_engine/logic/adapters/api/routes/tools.py:185:    token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+ciris_engine/logic/adapters/api/routes/tools.py:189:    token = os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
+ciris_engine/logic/adapters/api/routes/tools.py:193:    token = os.environ.get("GOOGLE_ID_TOKEN")
+ciris_engine/logic/adapters/api/routes/agent.py:206:    occurrence_id = os.environ.get("AGENT_OCCURRENCE_ID", "default")
+ciris_engine/logic/adapters/api/routes/agent.py:809:        occurrence_id = os.environ.get("AGENT_OCCURRENCE_ID", "default")
+ciris_engine/logic/adapters/api/adapter.py:735:        return os.environ.get("ANDROID_DATA") is not None or os.path.exists("/data/data")
+ciris_engine/logic/adapters/api/adapter.py:741:        return bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN"))

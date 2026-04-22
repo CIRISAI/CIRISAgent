@@ -1,0 +1,103 @@
+docs/TRACE_FORMAT.md:60:| DSDMA | domain_alignment | Domain expertise match (0-1) |
+docs/TRACE_FORMAT.md:204:        "dsdma": { "domain_alignment": 0.80 },
+docs/OAUTH_REDIRECT_CONFIGURATION.md:20:**When to use**: When your frontend and backend are on different domains (e.g., `scout.ciris.ai` vs `scoutapi.ciris.ai`)
+docs/OAUTH_REDIRECT_CONFIGURATION.md:76:**When to use**: When your backend API is on a different domain than agents.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:85:# Backend API domain (for OAuth provider callbacks)
+docs/OAUTH_REDIRECT_CONFIGURATION.md:88:# Frontend domain (for user redirects)
+docs/OAUTH_REDIRECT_CONFIGURATION.md:174:   - Works when frontend and backend are on the same domain
+docs/OAUTH_REDIRECT_CONFIGURATION.md:210:### Issue: Users redirected to wrong domain
+docs/FSD/CIRIS_DEVX.md:84:      oauth_domain: ciris.ai
+docs/ETHICAL_IMMUTABILITY.md:13:- Facts and domain knowledge
+docs/beta/BETA_TRANSPARENCY.md:14:3. Running multiple evaluations (ethical, common sense, domain-specific)
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:184:- Multi-pass evaluation (ethical, common sense, domain-specific)
+docs/DMA_CREATION_GUIDE.md:3:Decision Making Algorithms (DMAs) are the evaluation modules that help CIRIS make ethical, sensible, and domain-appropriate decisions. This guide shows you how to create custom DMAs for your specific needs.
+docs/DMA_CREATION_GUIDE.md:33:    DSDMAInterface,           # For domain-specific logic
+docs/DMA_CREATION_GUIDE.md:44:- Specialized source credibility assessment for your domain
+docs/DMA_CREATION_GUIDE.md:45:- Custom correlation detection for domain-specific information patterns
+docs/DMA_CREATION_GUIDE.md:46:- Integration with domain-specific fact-checking services
+docs/DMA_CREATION_GUIDE.md:241:            domain_relevance_score=evaluation["score"],
+docs/DMA_CREATION_GUIDE.md:242:            domain_specific_insights=evaluation["insights"],
+docs/DMA_CREATION_GUIDE.md:254:- **Test with real scenarios**: Use actual use cases from your domain
+docs/DMA_CREATION_GUIDE.md:556:- Ensure domain-specific safety and compliance
+docs/PROHIBITION_CATEGORIES.md:58:- patent_filing, trademark_registration, copyright_claims
+docs/OAUTH_CONFIGURATION_GUIDE.md:14:OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai  # Your domain
+docs/agent_experience.md:225:1. **Organize memories hierarchically**: Use paths like `domain/category/specific`
+docs/agent_experience.md:396:# Returns domain-specific guidance
+docs/agent_experience.md:936:    expanded_knowledge: ["new_domains"],
+docs/SSE_EVENT_DETAILS.md:342:  domain: string;                  // Domain name
+docs/SSE_EVENT_DETAILS.md:343:  domain_alignment: number;        // 0.0-1.0
+docs/SSE_EVENT_DETAILS.md:368:    "domain": "conversation",
+docs/SSE_EVENT_DETAILS.md:369:    "domain_alignment": 0.92,
+docs/SSE_EVENT_DETAILS.md:371:    "reasoning": "Query fits conversational domain..."
+docs/QUALITY_REMEDIATION_PLAN.md:171:- Some complexity in adapter_manager.py is inherent to the domain
+docs/FOR_NERDS.md:126:        "domain_specific": ds_result
+docs/FOR_NERDS.md:266:SQLite with domain-specific models:
+docs/FOR_NERDS.md:571:        # Your domain-specific logic here
+docs/adr/001-architecture-decisions.md:118:- Allows specialized domain reasoning
+docs/SECRETS_MANAGEMENT.md:270:4. **Pattern Management**: Add custom patterns for domain-specific secrets
+docs/oauth_setup_guide.md:32:   - `https://your-domain.com/v2/auth/oauth/google/callback`
+docs/oauth_setup_guide.md:56:   - `https://your-domain.com/v2/auth/oauth/discord/callback`
+docs/technical/IMPLEMENTING_CREATION_CEREMONY.md:634:   - Different WAs for different domains
+docs/FOR_AGENTS.md:107:✓ Learning domain-specific patterns
+docs/FOR_AGENTS.md:135:- Respect other agents' domains
+docs/FOR_AGENTS.md:210:- Deeper understanding of domain
+docs/nlnet_investigation_execution_plan.md:40:10. Section 7: Bus-factor and succession
+docs/nlnet_investigation_execution_plan.md:169:4. **Do not expand prohibited domains.** Medical/clinical capability remains out of scope.
+docs/single_step_data.md:78:- `domain_dma`: Domain-specific DMA result (DSDMAResult)
+docs/releases/RELEASE_NOTES_BETA.md:16:- Enhanced URL routing detection based on domain (agents.ciris.ai) or path (/agent/)
+docs/releases/RELEASE_NOTES_1.4.2.md:69:Intelligent routing system for specialized language models based on domain expertise.
+docs/releases/RELEASE_NOTES_1.4.2.md:72:- Automatic domain detection from message content
+docs/releases/RELEASE_NOTES_1.4.2.md:73:- Provider selection based on domain specialization
+docs/releases/RELEASE_NOTES_1.4.2.md:75:- Support for medical, technical, creative, and analytical domains
+docs/releases/RELEASE_NOTES_1.4.2.md:94:- Added comprehensive domain routing tests
+docs/releases/RELEASE_NOTES_1.4.2.md:102:- **Test Stability**: Fixed MockLLMService implementation for reliable domain routing tests
+docs/releases/RELEASE_NOTES_1.4.2.md:172:- Extended domain routing capabilities
+docs/releases/RELEASE_NOTES_1.4.2.md:205:163cd578 feat: Add domain-aware routing to LLMBus for specialized models
+docs/releases/RELEASE_NOTES_1.4.2.md:213:The comprehensive prohibition system blocks 274 specific capabilities across 20 categories. This is NOT configurable and cannot be overridden (NO KINGS principle). Medical, financial, legal and other regulated domains require separate licensed repositories. Tier 4-5 agents with stewardship responsibilities have access to crisis intervention and community protection capabilities.
+docs/DOMAIN_AWARE_LLM_ROUTING.md:5:The LLMBus now supports domain-aware routing, allowing requests to be automatically directed to specialized LLMs based on their domain (e.g., medical, legal, financial). This enables the use of domain-specific models while maintaining backward compatibility with existing code.
+docs/DOMAIN_AWARE_LLM_ROUTING.md:10:All existing code continues to work without modification. The domain parameter is optional and defaults to using any available LLM.
+docs/DOMAIN_AWARE_LLM_ROUTING.md:13:When a domain is specified, the LLMBus will:
+docs/DOMAIN_AWARE_LLM_ROUTING.md:14:- Filter services to only those matching the domain
+docs/DOMAIN_AWARE_LLM_ROUTING.md:16:- Prioritize domain-specific models over general ones
+docs/DOMAIN_AWARE_LLM_ROUTING.md:26:# Medical domain request
+docs/DOMAIN_AWARE_LLM_ROUTING.md:30:    domain="medical"  # Routes to medical LLM
+docs/DOMAIN_AWARE_LLM_ROUTING.md:33:# Legal domain request
+docs/DOMAIN_AWARE_LLM_ROUTING.md:37:    domain="legal"  # Routes to legal LLM
+docs/DOMAIN_AWARE_LLM_ROUTING.md:44:    # No domain - uses any available LLM
+docs/DOMAIN_AWARE_LLM_ROUTING.md:57:        "domain": "medical",
+docs/DOMAIN_AWARE_LLM_ROUTING.md:70:        "domain": "legal",
+docs/DOMAIN_AWARE_LLM_ROUTING.md:82:        "domain": "general",
+docs/DOMAIN_AWARE_LLM_ROUTING.md:93:Request with domain="medical"
+docs/DOMAIN_AWARE_LLM_ROUTING.md:95:Filter services by domain
+docs/DOMAIN_AWARE_LLM_ROUTING.md:97:Include: domain="medical" OR domain="general"
+docs/DOMAIN_AWARE_LLM_ROUTING.md:98:Exclude: domain="legal", domain="financial", etc.
+docs/DOMAIN_AWARE_LLM_ROUTING.md:109:Domain-specific services receive a priority boost when their domain matches the request:
+docs/DOMAIN_AWARE_LLM_ROUTING.md:110:- Exact domain match: Priority value reduced by 1 (higher priority)
+docs/DOMAIN_AWARE_LLM_ROUTING.md:111:- General domain: Normal priority
+docs/DOMAIN_AWARE_LLM_ROUTING.md:112:- Non-matching domain: Excluded from selection
+docs/DOMAIN_AWARE_LLM_ROUTING.md:116:If no domain-specific service is available:
+docs/DOMAIN_AWARE_LLM_ROUTING.md:123:While any domain string can be used, common domains include:
+docs/DOMAIN_AWARE_LLM_ROUTING.md:145:            domain="medical",  # Critical: Routes to medical LLM
+docs/DOMAIN_AWARE_LLM_ROUTING.md:164:            domain="legal",  # Routes to legal LLM
+docs/DOMAIN_AWARE_LLM_ROUTING.md:175:# Metrics include domain information
+docs/DOMAIN_AWARE_LLM_ROUTING.md:182:        "domain": domain or "general"  # Domain tracked
+docs/DOMAIN_AWARE_LLM_ROUTING.md:191:# Good: Explicit domain for medical content
+docs/DOMAIN_AWARE_LLM_ROUTING.md:192:response = await llm_bus.call_llm_structured(..., domain="medical")
+docs/DOMAIN_AWARE_LLM_ROUTING.md:194:# Bad: No domain for medical content (might use general LLM)
+docs/DOMAIN_AWARE_LLM_ROUTING.md:195:response = await llm_bus.call_llm_structured(...)  # Medical content without domain
+docs/DOMAIN_AWARE_LLM_ROUTING.md:202:    "domain": "medical",
+docs/DOMAIN_AWARE_LLM_ROUTING.md:209:# Bad: Missing domain
+docs/DOMAIN_AWARE_LLM_ROUTING.md:216:    response = await llm_bus.call_llm_structured(..., domain="medical")
+docs/DOMAIN_AWARE_LLM_ROUTING.md:244:Run the domain routing tests:
+docs/DOMAIN_AWARE_LLM_ROUTING.md:247:pytest tests/logic/buses/test_llm_bus_domain_routing.py -v
+docs/DOMAIN_AWARE_LLM_ROUTING.md:264:# Simply add the domain parameter
+docs/DOMAIN_AWARE_LLM_ROUTING.md:269:    domain="medical"  # Add this line
+docs/DOMAIN_AWARE_LLM_ROUTING.md:276:**Solution**: Check that domain-specific LLMs are registered with correct metadata
+docs/DOMAIN_AWARE_LLM_ROUTING.md:279:**Solution**: Verify metadata.domain field and service priorities
+docs/DOMAIN_AWARE_LLM_ROUTING.md:282:**Solution**: Ensure at least one service has domain="general"
+docs/DOMAIN_AWARE_LLM_ROUTING.md:289:- Cross-domain capability detection
+docs/DOMAIN_AWARE_LLM_ROUTING.md:291:- Automatic domain detection from content
+docs/DOMAIN_AWARE_LLM_ROUTING.md:297:The system naturally supports medical, legal, financial, and other specialized domains while maintaining the flexibility and reliability of the original LLMBus design.
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:386:- Organizations vote on dissolution, not individual employees
+docs/phase1_implementation_plan.md:314:            dmas_executed=["ethical", "common_sense", "domain"],
+docs/CRITICAL_ANALYSIS.md:141:- ⚠️ Extended beta testing in new domains

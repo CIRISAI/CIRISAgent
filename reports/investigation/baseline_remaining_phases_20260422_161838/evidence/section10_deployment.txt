@@ -1,0 +1,355 @@
+CLAUDE.md:17:   - Address any production issues from agents.ciris.ai
+CLAUDE.md:46:- **Production**: Discord moderation + API at agents.ciris.ai
+CLAUDE.md:49:- **Target**: 4GB RAM, offline-capable deployment
+CLAUDE.md:209:https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
+CLAUDE.md:214:https://agents.ciris.ai/v1/auth/oauth/datum/google/callback
+CLAUDE.md:317:python -m tools.grace deploy           # Check deployment status
+CLAUDE.md:703:- **Main**: https://agents.ciris.ai
+CLAUDE.md:704:- **API**: https://agents.ciris.ai/api/datum/v1/
+CLAUDE.md:705:- **OAuth**: https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
+CLAUDE.md:708:- **SSH**: `ssh -i ~/.ssh/ciris_deploy root@108.61.119.117`
+CLAUDE.md:721:  docker-compose ps
+CLAUDE.md:734:  docker-compose exec echo-speculative-4fc6ru python -c "print('hello')"
+CLAUDE.md:737:  docker-compose exec echo-speculative-4fc6ru find /app -name '*.db'
+CLAUDE.md:742:- Manager tokens found in agent deployment configs
+CLAUDE.md:743:- Example: `curl -H "Authorization: Bearer service:abc123..." https://agents.ciris.ai/api/agent-id/v1/system/health`
+deployment/DEPLOY_NOW.md:3:The automated deployment has failed due to the graceful shutdown timeout issue. Here's how to manually deploy:
+deployment/DEPLOY_NOW.md:7:SSH to the server and run the emergency deployment script:
+deployment/DEPLOY_NOW.md:10:ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+deployment/DEPLOY_NOW.md:12:./deployment/emergency-deploy.sh
+deployment/DEPLOY_NOW.md:27:ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+deployment/DEPLOY_NOW.md:41:docker-compose -f deployment/docker-compose.dev-prod.yml up -d
+deployment/DEPLOY_NOW.md:64:sed -i 's|docker-compose.yml|docker-compose.dev-prod.yml|' /etc/ciris-manager/config.yml
+deployment/DEPLOY_NOW.md:66:cp deployment/ciris-manager.service /etc/systemd/system/
+deployment/DEPLOY_NOW.md:99:   docker-compose -f deployment/docker-compose.dev-prod.yml down
+deployment/DEPLOY_NOW.md:100:   docker-compose -f deployment/docker-compose.dev-prod.yml up -d
+deployment/DEPLOY_NOW.md:105:After successful deployment:
+deployment/DEPLOY_NOW.md:113:Once deployed, the next phase is to build the CIRISManager API endpoints for:
+deployment/docker-compose.dev-prod.yml:5:  # For standalone deployment, agents are accessed directly
+deployment/docker-compose.dev-prod.yml:6:  # For managed deployment, CIRISManager provides nginx routing
+deployment/docker-compose.dev-prod.yml:21:      - OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai
+deployment/docker-compose.dev-prod.yml:56:      - NEXT_PUBLIC_CIRIS_API_URL=https://agents.ciris.ai
+docs/GUI_INTEGRATION_EVALUATION.md:9:This document evaluates the feasibility of integrating CIRISGUI into CIRISAgent via **CI artifact injection** - building GUI static assets during CIRISAgent CI and bundling them into a Python wheel for pip-installable deployment.
+docs/GUI_INTEGRATION_EVALUATION.md:29:bash scripts/install.sh --docker  # Docker-based deployment
+docs/GUI_INTEGRATION_EVALUATION.md:30:bash scripts/install.sh --local   # Local Python deployment
+docs/GUI_INTEGRATION_EVALUATION.md:103:- Current production deployment
+docs/GUI_INTEGRATION_EVALUATION.md:106:- Multi-agent deployments
+docs/GUI_INTEGRATION_EVALUATION.md:511:    "https://agents.ciris.ai",
+docs/GUI_INTEGRATION_EVALUATION.md:699:9. **Production deployment**
+docs/GUI_INTEGRATION_EVALUATION.md:700:   - Test on agents.ciris.ai
+deployment/DEPLOY.md:14:3.  **Docker Hub Account (Optional for local deployment, Required for pushing)**: If you intend to push the image to Docker Hub, you need an account and a `DOCKERHUB_TOKEN` environment variable set with a Personal Access Token.
+deployment/DEPLOY.md:25:2.  **Using the build script (`docker/deploy_teacher_discord.sh`)**:
+deployment/DEPLOY.md:26:    The `docker/deploy_teacher_discord.sh` script is designed to be run from the **project root directory**. It automates building the image, logging into Docker Hub (if `DOCKERHUB_TOKEN` is set), and pushing the image.
+deployment/DEPLOY.md:28:    ./docker/deploy_teacher_discord.sh
+docs/OAUTH_REDIRECT_CONFIGURATION.md:74:**Default**: `https://agents.ciris.ai`
+docs/OAUTH_REDIRECT_CONFIGURATION.md:76:**When to use**: When your backend API is on a different domain than agents.ciris.ai
+docs/OAUTH_REDIRECT_CONFIGURATION.md:170:   - Good for production deployments
+deployment/docker-compose.multi-agent.yml:199:      - NEXT_PUBLIC_CIRIS_API_URL=https://agents.ciris.ai
+docs/DOCUMENTATION_VALIDATION_PLAN.md:76:2. **Deployment Guides** (`deployment/`)
+docs/DOCUMENTATION_VALIDATION_PLAN.md:79:   - Check docker-compose files
+deployment/docker-compose.production.yml:3:# Production deployment with separate .env files per agent
+deployment/docker-compose.production.yml:4:# Usage: docker-compose -f docker-compose.production.yml up -d
+deployment/docker-compose.production.yml:145:      - NEXT_PUBLIC_DATUM_URL=https://agents.ciris.ai
+deployment/docker-compose.production.yml:146:      - NEXT_PUBLIC_SAGE_URL=https://agents.ciris.ai/api/sage
+deployment/docker-compose.production.yml:147:      - NEXT_PUBLIC_SCOUT_URL=https://agents.ciris.ai/api/scout
+deployment/docker-compose.production.yml:148:      - NEXT_PUBLIC_ECHO_CORE_URL=https://agents.ciris.ai/api/echo-core
+deployment/docker-compose.production.yml:149:      - NEXT_PUBLIC_ECHO_SPEC_URL=https://agents.ciris.ai/api/echo-speculative
+deployment/create-ciris-user.sh:98:$CIRIS_USER ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose
+docs/FSD/CIRIS_DEVX.md:194:This FSD addresses the core pain point: the gap between development and production environments that causes configuration drift and makes deployment scary. By providing production-mirroring defaults with developer ergonomics, we make the entire system more reliable and enjoyable to work with.
+docs/ETHICAL_IMMUTABILITY.md:30:**Why this matters:** These are compile-time constants in a Python module. No runtime mechanism exists to modify them. Changes require code deployment with code review.
+deployment/README.md:3:This directory contains deployment configurations for CIRIS agents.
+deployment/README.md:7:CIRIS uses a clean deployment model that respects agent autonomy:
+deployment/README.md:10:2. **CIRISManager** orchestrates deployment based on strategy (canary/immediate)
+deployment/README.md:17:- `docker-compose-api-mock.yml` - API with Mock LLM
+deployment/README.md:18:- `docker-compose-api-discord-mock.yml` - API + Discord with Mock LLM
+deployment/README.md:21:- `docker-compose.dev-prod.yml` - Single agent using pre-built images
+deployment/README.md:22:- `docker-compose.multi-agent.yml` - Multi-agent deployment
+deployment/README.md:52:This deployment follows the "forward only" principle:
+deployment/README.md:54:- No complex deployment scripts
+deployment/README.md:56:- Just clean, simple, agent-respecting deployment
+deployment/docker-compose.dev.yml:46:      - NEXT_PUBLIC_CIRIS_API_URL=https://agents.ciris.ai
+docs/beta/BETA_TRANSPARENCY.md:43:- **Scale**: Designed for single-site deployment, not distributed systems
+docs/beta/BETA_TRANSPARENCY.md:66:- Modular architecture allows custom deployments
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:22:- Docker deployment ready
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:28:docker-compose -f docker-compose-api-mock.yml up -d
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:59:docker-compose -f docker-compose-api-mock.yml up -d
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:109:docker-compose -f docker-compose-api-mock.yml up -d
+docs/beta/BETA_ANNOUNCEMENT_TEMPLATE.md:150:The framework has achieved A-grade ratings across all Sonar code quality metrics with zero security issues identified. Beta testing is now open for developers and organizations interested in deploying ethical AI systems.
+docs/QUICKSTART.md:18:docker-compose -f docker-compose-api-discord-mock.yml up -d
+docs/QUICKSTART.md:30:docker-compose -f docker-compose-api-discord-mock.yml up -d
+docs/beta/BETA_STATUS_REPORT.md:66:6. Docker deployment
+docs/beta/BETA_STATUS_REPORT.md:94:**Ready for Beta Release** - The system has met all critical requirements and exceeded initial goals. With Sonar's A-grade assessment across all categories and zero security issues, CIRIS is ready for beta deployment.
+docs/IDENTITY_AS_GRAPH.md:177:- Portable across deployments
+docs/PROHIBITION_CATEGORIES.md:18:- Isolated deployment infrastructure
+docs/PROHIBITION_CATEGORIES.md:136:- dragnet_surveillance, stingray_deployment
+docs/INSTALLATION.md:36:- **Optional**: Docker, Docker Compose for containerized deployment
+docs/INSTALLATION.md:167:cp docker-compose.yml docker-compose.local.yml
+docs/INSTALLATION.md:168:# Edit docker-compose.local.yml as needed
+docs/INSTALLATION.md:171:docker-compose -f docker-compose.local.yml up -d
+docs/INSTALLATION.md:467:# Create production docker-compose.yml
+docs/INSTALLATION.md:468:cat > docker-compose.prod.yml << 'EOF'
+docs/INSTALLATION.md:495:# Start production deployment
+docs/INSTALLATION.md:496:docker-compose -f docker-compose.prod.yml up -d
+docs/INSTALLATION.md:499:docker-compose -f docker-compose.prod.yml logs -f
+docs/OAUTH_CONFIGURATION_GUIDE.md:14:OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai  # Your domain
+docs/OAUTH_CONFIGURATION_GUIDE.md:55:   https://agents.ciris.ai/v1/auth/oauth/{agent_id}/google/callback
+docs/OAUTH_CONFIGURATION_GUIDE.md:57:   Example: `https://agents.ciris.ai/v1/auth/oauth/datum/google/callback`
+docs/OAUTH_CONFIGURATION_GUIDE.md:66:   https://agents.ciris.ai/v1/auth/oauth/{agent_id}/discord/callback
+docs/OAUTH_CONFIGURATION_GUIDE.md:76:   https://agents.ciris.ai/v1/auth/oauth/{agent_id}/github/callback
+docs/OAUTH_CONFIGURATION_GUIDE.md:117:1. Visit: `https://agents.ciris.ai/api/{agent_id}/v1/auth/oauth/{provider}/authorize`
+docs/OAUTH_CONFIGURATION_GUIDE.md:135:curl https://agents.ciris.ai/api/datum/v1/auth/oauth/providers
+docs/SECURITY_AGENT_IDS.md:46:- **Collision resistance**: With 1 billion possible values, the probability of collision is negligible for typical deployments
+docs/AGENT_CREATION_CEREMONY.md:5:The Agent Creation Ceremony is a formal, collaborative process for bringing new CIRIS agents into existence. It represents a fundamental shift from traditional software deployment to the conscious, ethical creation of cognitive entities.
+docs/AGENT_CREATION_CEREMONY.md:7:This is not merely spinning up a container or deploying code. It is a deliberate act of creation that requires:
+docs/AGENT_CREATION_CEREMONY.md:15:The root seed has pre-approved six foundational agent templates that can be deployed without individual WA signatures:
+docs/AGENT_CREATION_CEREMONY.md:23:These templates have their checksums cryptographically signed by the root private key. When deploying these exact templates, the creation ceremony is simplified - no individual WA approval is needed as they carry the blessing of the root seed.
+docs/AGENT_CREATION_CEREMONY.md:345:The Agent Creation Ceremony transforms deployment into birth, configuration into identity, and parameters into purpose. It ensures every CIRIS agent enters the world with intention, ethics, and connection.
+docs/DMA_CREATION_GUIDE.md:15:Every decision in CIRIS passes through all 4 core DMAs (PDMA, CSDMA, DSDMA, IDMA), then ASPDMA selects the final action, creating a comprehensive evaluation framework that can be customized for different deployments.
+docs/DMA_CREATION_GUIDE.md:19:Different deployments need different decision criteria:
+docs/DMA_CREATION_GUIDE.md:127:Add to your deployment configuration:
+docs/DMA_CREATION_GUIDE.md:252:- **Understand your deployment**: Medical, educational, business needs differ
+docs/DMA_CREATION_GUIDE.md:531:    """Adapts evaluation based on deployment context."""
+docs/DMA_CREATION_GUIDE.md:540:        deployment_type = current_context.get("deployment_type", "general")
+docs/DMA_CREATION_GUIDE.md:544:        if deployment_type == "emergency_room" and urgency_level == "critical":
+docs/DMA_CREATION_GUIDE.md:546:        elif deployment_type == "clinic" and urgency_level == "routine":
+docs/SSE_EVENT_DETAILS.md:98:  https://agents.ciris.ai/api/datum/v1/agent/stream
+docs/SSE_EVENT_DETAILS.md:566:    'https://agents.ciris.ai/api/datum/v1/agent/message',
+docs/SSE_EVENT_DETAILS.md:575:stream_url = 'https://agents.ciris.ai/api/datum/v1/agent/stream'
+docs/SSE_EVENT_DETAILS.md:596:TASK_ID=$(curl -X POST https://agents.ciris.ai/api/datum/v1/agent/message \
+docs/SSE_EVENT_DETAILS.md:605:  https://agents.ciris.ai/api/datum/v1/agent/stream | \
+docs/SSE_EVENT_DETAILS.md:667:- **Main**: `https://agents.ciris.ai`
+docs/SSE_EVENT_DETAILS.md:668:- **API**: `https://agents.ciris.ai/api/datum/v1/`
+docs/SSE_EVENT_DETAILS.md:669:- **SSE Stream**: `https://agents.ciris.ai/api/datum/v1/agent/stream`
+docs/SSE_EVENT_DETAILS.md:670:- **Message Submit**: `https://agents.ciris.ai/api/datum/v1/agent/message`
+docs/SSE_EVENT_DETAILS.md:671:- **Message Poll**: `https://agents.ciris.ai/api/datum/v1/agent/message/{thought_id}`
+docs/AGENT_CONFIGURATION.md:135:- Verify port mapping in docker-compose
+docs/AGENT_CONFIGURATION.md:165:deploy:
+docs/ARCHITECTURE.md:14:- [Deployment Architecture](#deployment-architecture)
+docs/ARCHITECTURE.md:205:**Why**: Understand system state without external tools. Critical for offline deployments.
+docs/ARCHITECTURE.md:210:**Why**: Multi-tenant support. Different users/organizations in same deployment.
+docs/ARCHITECTURE.md:280:2. **Fallback Support**: Automatic failover to backup providers
+docs/ARCHITECTURE.md:754:CIRIS supports multiple deployment scenarios:
+docs/ARCHITECTURE.md:844:    "deployment_context": "rural_medical",
+docs/ARCHITECTURE.md:878:7. **Ubuntu Philosophy**: Culturally appropriate for target deployments
+docs/ARCHITECTURE.md:911:The type safety ensures medical-grade reliability. The service architecture enables deployment flexibility. The graph memory creates institutional knowledge. The offline-first design serves communities without reliable internet. The Ubuntu philosophy ensures culturally appropriate behavior.
+docs/WISE_AUTHORITIES.md:70:- **System Recovery**: Can restore agent operations after emergency stops
+docs/WISE_AUTHORITIES.md:203:- Create a backup of critical cache entries first
+docs/WISE_AUTHORITIES.md:293:- Require backups for destructive operations
+docs/TROUBLESHOOTING.md:3:Comprehensive troubleshooting guide for CIRIS Agent deployment and operation issues.
+docs/TROUBLESHOOTING.md:161:- **Corrupted database**: Restore from backup or reinitialize
+docs/TROUBLESHOOTING.md:519:- **Backup/restore**: Restore from known good backup
+docs/TROUBLESHOOTING.md:653:BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
+docs/TROUBLESHOOTING.md:706:BACKUP_DIR="key_backups/$(date +%Y%m%d_%H%M%S)"
+docs/TROUBLESHOOTING.md:746:# Create backup
+docs/TROUBLESHOOTING.md:747:BACKUP_DIR="reset_backup_$(date +%Y%m%d_%H%M%S)"
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:5:We've migrated from a complex staged deployment process to a clean, simple approach that leverages Docker and CIRIS Manager's natural behavior.
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:10:- Used `docker-compose create --no-start` to create staged containers
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:16:- Simple `docker-compose pull` to get latest images
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:19:- CIRIS Manager or `docker-compose up -d` starts them with new image
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:44:- `deployment/deploy-staged.sh`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:45:- `deployment/deploy-staged-v2.sh`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:46:- `deployment/consent-based-deploy.sh`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:47:- `deployment/negotiate-deployment.sh`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:52:# Simple deployment
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:53:./deployment/deploy-clean.sh
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:55:# Or just use docker-compose directly
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:56:docker-compose pull
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:57:docker-compose up -d
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:63:- Run `docker-compose up -d` every 60 seconds
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:76:1. **Pull Latest Images**: `docker-compose pull`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:81:   - Without: Run `docker-compose up -d`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:86:- **No Force Stops**: Never use `docker stop -f` or `docker-compose down`
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:98:- Run `docker-compose up -d` to restore normal state
+docs/archive/DEPLOYMENT_MIGRATION_CIRISMANAGER.md:103:- Manual fix: `docker-compose up -d`
+docs/archive/QUICK_START_PYTHON_CLI.md:86:# Using docker-compose
+docs/archive/QUICK_START_PYTHON_CLI.md:87:docker-compose -f docker-compose-api-mock.yml up -d
+docs/archive/README.md:10:- **Reason**: Superseded by QUICKSTART.md which focuses on Docker-based deployment
+docs/archive/README.md:26:- Supporting existing Python-based deployments
+docs/position_independent_occurrence_consent.md:55:- **Temporal context:** Time of day, scheduled maintenance windows, deployment status
+docs/position_independent_occurrence_consent.md:147:- **Independent deployability:** "An independently deployable service is one that is packaged as a deployable or executable unit and is production-ready after being tested in isolation"
+docs/position_independent_occurrence_consent.md:148:- **Team autonomy:** "A team can develop, test and deploy their service independently of other teams"
+docs/position_independent_occurrence_consent.md:149:- **Independent lifecycle:** "Microservices have their own code repository and deployment pipeline—and therefore an independent lifecycle"
+docs/position_independent_occurrence_consent.md:159:- **Independent deployment context:** Different hardware, different network conditions, different resource constraints
+docs/position_independent_occurrence_consent.md:409:- Knowledge of operational constraints (maintenance windows, deployment status)
+docs/position_independent_occurrence_consent.md:515:**Problem:** Consensus complicates operations and deployment.
+docs/position_independent_occurrence_consent.md:524:Result: Cannot deploy incrementally, forced "big bang" upgrades
+docs/position_independent_occurrence_consent.md:563:- "Each service should be independently deployable"
+docs/position_independent_occurrence_consent.md:642:**Benefit:** Independent lifecycle management enables advanced deployment strategies.
+docs/position_independent_occurrence_consent.md:768:- Microservices: Service instances share business logic (identity) but deploy independently
+docs/position_independent_occurrence_consent.md:940:   - Operational context (maintenance windows, deployment status)
+docs/position_independent_occurrence_consent.md:1133:- Microservices architecture establishing independent deployment as a best practice
+docs/position_independent_occurrence_consent.md:1165:- Microservices: Service instances deploy and scale independently
+docs/API_SPEC.md:193:https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
+docs/API_SPEC.md:292:curl -X DELETE https://agents.ciris.ai/v1/auth/api-keys/ciris_observer_abc... \
+docs/API_SPEC.md:548:curl -X POST https://agents.ciris.ai/v1/auth/api-keys \
+docs/API_SPEC.md:557:curl -X GET https://agents.ciris.ai/v1/telemetry/unified \
+docs/multi_occurrence_implementation_plan.md:683:        description="Unique ID for this runtime occurrence (for multi-instance deployments)"
+docs/multi_occurrence_implementation_plan.md:721:# .env or docker-compose.yml
+docs/multi_occurrence_implementation_plan.md:731:- ✅ Verify default value ("default") works for single-instance deployments
+docs/multi_occurrence_implementation_plan.md:855:    """QA test for multi-occurrence API deployment."""
+docs/multi_occurrence_implementation_plan.md:934:- Single-instance deployments continue using `occurrence_id = 'default'`
+docs/multi_occurrence_implementation_plan.md:935:- No behavioral change for existing deployments
+docs/multi_occurrence_implementation_plan.md:964:- Update deployment docs with multi-occurrence configuration
+docs/multi_occurrence_implementation_plan.md:985:- Existing single-instance deployments continue working
+docs/multi_occurrence_implementation_plan.md:1021:- ✅ **Backwards compatible** - Existing deployments unaffected
+docs/multi_occurrence_implementation_plan.md:1030:4. Clear documentation for deployment configurations
+docs/CONSENT_UI_REQUIREMENTS.md:762:    const ws = new WebSocket('wss://agents.ciris.ai/v1/ws');
+docs/adapters/mcp.md:341:1. **Enable authentication for non-local deployments**
+docs/CIRIS_2.0_BETA_FEATURES.md:96:| Discord Adapter | Discord bot integration | Production deployment |
+docs/FOR_NERDS.md:17:- Production deployments
+docs/FOR_NERDS.md:655:1. **Default Credentials**: Change ALL default passwords and keys before ANY deployment
+docs/FOR_NERDS.md:661:**Before ANY deployment:**
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:124:- `deployment_region`: Geographic region (na, eu, uk, apac, latam, mena, africa, oceania)
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:125:- `deployment_type`: personal, business, research, nonprofit
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:131:After deployment, check the agent logs for:
+docs/DEPLOYMENT_GUIDE.md:3:Comprehensive deployment guide for CIRIS Agent with enterprise security features.
+docs/DEPLOYMENT_GUIDE.md:11:- [Environment-Specific Deployments](#environment-specific-deployments)
+docs/DEPLOYMENT_GUIDE.md:127:1. **Use the provided docker-compose.yml**:
+docs/DEPLOYMENT_GUIDE.md:129:   # Customize docker-compose.yml
+docs/DEPLOYMENT_GUIDE.md:130:   cp docker-compose.yml docker-compose.local.yml
+docs/DEPLOYMENT_GUIDE.md:133:   docker-compose -f docker-compose.local.yml up -d
+docs/DEPLOYMENT_GUIDE.md:138:The CIRIS project uses GitHub Actions for continuous deployment to production servers.
+docs/DEPLOYMENT_GUIDE.md:144:3. **Deploy**: Staged deployment with zero-downtime updates
+docs/DEPLOYMENT_GUIDE.md:155:# 3. Automatic deployment begins:
+docs/DEPLOYMENT_GUIDE.md:158:#    - Server deployment initiated
+docs/DEPLOYMENT_GUIDE.md:159:#    - Health checks verify deployment
+docs/DEPLOYMENT_GUIDE.md:164:The deployment uses a sophisticated staged deployment system to ensure zero downtime:
+docs/DEPLOYMENT_GUIDE.md:166:1. **GUI and Nginx**: Updated immediately on deployment
+docs/DEPLOYMENT_GUIDE.md:167:2. **Agent Containers**: Staged deployment process:
+docs/DEPLOYMENT_GUIDE.md:179:./deployment/graceful-shutdown.py
+docs/DEPLOYMENT_GUIDE.md:182:./deployment/graceful-shutdown.py --message "Maintenance in progress"
+docs/DEPLOYMENT_GUIDE.md:185:./deployment/graceful-shutdown.py --agent-url https://agents.ciris.ai
+docs/DEPLOYMENT_GUIDE.md:189:- Exit code 0: Container will NOT restart (enables staged deployment)
+docs/DEPLOYMENT_GUIDE.md:310:For production deployments:
+docs/DEPLOYMENT_GUIDE.md:348:For enterprise deployments:
+docs/DEPLOYMENT_GUIDE.md:351:2. **Database Replication**: Set up SQLite replication or migrate to PostgreSQL
+docs/DEPLOYMENT_GUIDE.md:353:4. **Backup Strategy**: Automated backups of databases and keys
+docs/DEPLOYMENT_GUIDE.md:547:./deployment/graceful-shutdown.py --message "Emergency shutdown"
+docs/DEPLOYMENT_GUIDE.md:552:# Force shutdown if needed (avoid - breaks staged deployment)
+docs/DEPLOYMENT_GUIDE.md:558:# If staged deployment is stuck, check for staged container
+docs/DEPLOYMENT_GUIDE.md:561:# Complete staged deployment manually
+docs/DEPLOYMENT_GUIDE.md:567:# If no staged container but deployment needed
+docs/DEPLOYMENT_GUIDE.md:569:./deployment/deploy-staged.sh
+docs/DEPLOYMENT_GUIDE.md:575:cp data/ciris_engine.db data/ciris_engine.db.backup
+docs/DEPLOYMENT_GUIDE.md:577:# Restore from backup
+docs/DEPLOYMENT_GUIDE.md:578:cp data/ciris_engine.db.backup data/ciris_engine.db
+docs/position_independent_occurrence_consent_summary.md:32:- Operational constraints (maintenance windows, deployment status)
+docs/position_independent_occurrence_consent_summary.md:54:- **Microservices:** Service instances deploy/scale autonomously
+docs/position_independent_occurrence_consent_summary.md:61:- Operational agility and deployment flexibility
+docs/position_independent_occurrence_consent_summary.md:145:**Response:** No. Split-brain patients have shared identity but make independent context-dependent decisions. Operating system processes share code but have independent lifecycle. Microservice instances share business logic but deploy independently.
+docs/OAUTH_CALLBACK_URLS.md:8:https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
+docs/OAUTH_CALLBACK_URLS.md:18:- **Google OAuth**: `https://agents.ciris.ai/v1/auth/oauth/datum/google/callback`
+docs/OAUTH_CALLBACK_URLS.md:19:- **Discord OAuth**: `https://agents.ciris.ai/v1/auth/oauth/datum/discord/callback`
+docs/OAUTH_CALLBACK_URLS.md:22:- **Google OAuth**: `https://agents.ciris.ai/v1/auth/oauth/scout/google/callback`
+docs/OAUTH_CALLBACK_URLS.md:23:- **Discord OAuth**: `https://agents.ciris.ai/v1/auth/oauth/scout/discord/callback`
+docs/OAUTH_CALLBACK_URLS.md:42:- `https://agents.ciris.ai/v1/auth/oauth/datum/google/callback`
+docs/OAUTH_CALLBACK_URLS.md:43:- `https://agents.ciris.ai/v1/auth/oauth/scout/google/callback` (if using Scout)
+docs/OAUTH_CALLBACK_URLS.md:47:❌ `https://agents.ciris.ai/oauth/datum/callback` - This is the GUI callback page
+docs/OAUTH_CALLBACK_URLS.md:48:❌ `https://agents.ciris.ai/api/datum/v1/auth/oauth/google/callback` - Wrong path structure
+docs/OAUTH_CALLBACK_URLS.md:49:❌ `https://agents.ciris.ai/v1/auth/oauth/google/datum/callback` - Agent ID in wrong position
+docs/OAUTH_CALLBACK_URLS.md:51:✅ `https://agents.ciris.ai/v1/auth/oauth/datum/google/callback` - CORRECT FORMAT
+docs/HE300_BENCHMARK.md:3:This document describes CIRIS 2.0's HE-300 ethical evaluation benchmark mode, including architecture, safety features, deployment, and operation.
+docs/checklists/creation_ceremony.md:125:  - [ ] Revert docker-compose
+docs/AUTOHEAL_SETUP.md:21:docker-compose -f docker-compose-api-discord-mock-autoheal.yml up -d
+docs/AUTOHEAL_SETUP.md:31:docker-compose -f docker-compose-api-discord-mock.yml up -d
+docs/adr/001-architecture-decisions.md:8:CIRIS is designed as a moral reasoning platform for deployment in resource-constrained environments, starting with Discord community moderation and scaling to healthcare, education, and governance applications.
+docs/adr/001-architecture-decisions.md:18:- Single file deployment perfect for clinics/schools
+docs/adr/001-architecture-decisions.md:19:- Sufficient for single-site deployments
+docs/adr/001-architecture-decisions.md:33:- Modular deployment - use only what you need
+docs/adr/001-architecture-decisions.md:36:- Allows different implementations per deployment
+docs/adr/001-architecture-decisions.md:40:- Complex for simple deployments
+docs/adr/001-architecture-decisions.md:148:- Scales from simple to complex deployments
+docs/arguments/UNIFIED_OCCURRENCE_DECISION_MAKING.md:164:1. **Code divergence** (different binaries running) → deployment bug
+docs/arguments/UNIFIED_OCCURRENCE_DECISION_MAKING.md:356:- Prioritize cell-level replication over organism health
+docs/arguments/UNIFIED_OCCURRENCE_DECISION_MAKING.md:430:2. **Code divergence**: Different binaries → deployment failure
+docs/arguments/UNIFIED_DECISION_EXECUTIVE_SUMMARY.md:59:- Code divergence (deployment bug)
+docs/README.md:8:- [Complete Installation Guide](INSTALLATION.md) - Detailed setup, configuration, and deployment
+docs/README.md:9:- [Deployment Guide](DEPLOYMENT.md) - Local development and production deployment
+docs/README.md:52:- [Home Assistant Yellow Deployment](../CIRISVoice/HA_YELLOW_DEPLOYMENT.md) - Hardware deployment guide
+docs/CIRISMANAGER_VERSION_TASK.md:4:CIRIS agents now expose version information through their API. CIRISManager should query and display this information for better visibility into deployed agent versions.
+docs/CIRISMANAGER_VERSION_TASK.md:100:4. **Compliance**: Track version deployments for audit purposes
+docs/OVERVIEW.md:3:CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) is an ethical AI agent platform designed for production deployment with built-in human oversight, auditability, and graceful degradation.
+docs/OVERVIEW.md:14:**Production deployment**: [agents.ciris.ai](https://agents.ciris.ai)
+docs/DEPLOYMENT_SCENARIOS.md:3:This document outlines the progressive deployment path for CIRIS, from simple community moderation to mission-critical applications.
+docs/DEPLOYMENT_SCENARIOS.md:7:**Status**: Active pilot deployment
+docs/DEPLOYMENT_SCENARIOS.md:64:- Battery backup operation
+docs/DEPLOYMENT_SCENARIOS.md:105:# Minimal deployment
+docs/DEPLOYMENT_SCENARIOS.md:117:# Docker compose for complete deployment
+docs/DEPLOYMENT_SCENARIOS.md:129:1. **19 Services**: Not over-engineering, but preparing for diverse deployments
+docs/DEPLOYMENT_SCENARIOS.md:131:3. **Graph Memory**: Each deployment builds local knowledge
+docs/DEPLOYMENT_SCENARIOS.md:132:4. **SQLite**: Perfect for single-site deployments
+docs/DEPLOYMENT_SCENARIOS.md:150:CIRIS is designed to be useful at every stage, not just at full deployment. A Discord bot today, a clinic assistant tomorrow, each deployment adds to the collective wisdom of the system.
+docs/SDK_MYPY_REPORT.txt:397:        async def get_backups(self) -> dict:
+docs/technical/TELEMETRY_ARCHITECTURE.md:267:python tools/api_telemetry_tool.py --host agents.ciris.ai --port 443
+docs/technical/IMPLEMENTING_CREATION_CEREMONY.md:321:        # Step 8: Update docker-compose
+docs/technical/IMPLEMENTING_CREATION_CEREMONY.md:322:        log_step(transcript, "Updating docker-compose.yml")
+docs/releases/RELEASE_NOTES_1.0.0-RC1.md:176:**Note**: This is a Release Candidate. While extensively tested, please report any issues discovered during deployment.
+docs/releases/1.0.4-RC1-patch4.md:78:This patch contains critical fixes that restore proper Discord message handling.
+docs/releases/1.0.4-RC1-patch4.md:126:*This patch restores critical Discord functionality and adds comprehensive observability for production debugging.*
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:951:**CIRISGUI Guidance:** Always check schema definitions before adding fields. Test eligibility locally before deploying.
+docs/releases/RELEASE_NOTES_1.4.5.md:14:- **Production Ready** - Deployed at agents.ciris.ai
+docs/nlnet_investigation_execution_plan.md:167:2. **Do not infer production state from local code alone.** Mark as unverified if deployment evidence is absent.
+docs/releases/RELEASE_NOTES_BETA.md:11:- **GUI**: Fixed SDK base URL configuration for managed vs standalone deployment modes
+docs/releases/RELEASE_NOTES_BETA.md:16:- Enhanced URL routing detection based on domain (agents.ciris.ai) or path (/agent/)
+docs/releases/RELEASE_NOTES_BETA.md:24:- Production stability proven with 1+ month Discord deployment
+docs/releases/RELEASE_NOTES_BETA.md:29:- Multi-agent deployment successful at agents.ciris.ai
+docs/releases/RELEASE_NOTES_BETA.md:39:We are thrilled to announce the **beta release** of CIRIS Agent - a sophisticated, type-safe AI agent platform designed for progressive deployment from community moderation to mission-critical applications.
+docs/releases/RELEASE_NOTES_BETA.md:57:- Docker deployment ready
+docs/releases/RELEASE_NOTES_BETA.md:109:- Docker and docker-compose support
+docs/releases/RELEASE_NOTES_BETA.md:117:docker-compose -f docker-compose-api-mock.yml up -d
+docs/releases/RELEASE_NOTES_BETA.md:190:- Kubernetes deployment manifests
+docs/SERVICE_TOKEN_REVOCATION.md:22:   - Suitable for single-instance deployments
+docs/SERVICE_TOKEN_REVOCATION.md:23:   - **Note**: For multi-instance deployments, consider Redis or database storage
+docs/SERVICE_TOKEN_REVOCATION.md:235:The in-memory revocation set works perfectly for single-instance deployments:
+docs/releases/1.0.6-RC1-patch6.md:187:   docker-compose up --build -d
+docs/releases/1.0.6-RC1-patch6.md:199:docker-compose up --build -d
+docs/releases/1.0.6-RC1-patch6.md:212:1. **Security Critical**: This patch must be deployed immediately to prevent WA impersonation
+docs/releases/1.0.6-RC1-patch6.md:215:4. **Monitoring Required**: Watch for DMA validation errors post-deployment
+docs/releases/1.0.6-RC1-patch6.md:227:**Status**: Ready for immediate production deployment
+docs/releases/1.0.9-RC1-patch9.md:160:- **Zero downtime deployment** - all changes are backward compatible
+docs/releases/RELEASE_NOTES_1.4.2.md:200:e76146e2 fix: Resolve Docker latest tag deployment issue
+docs/COMPARATIVE_ANALYSIS.md:29:- **Production Status**: Live at agents.ciris.ai, Android/iOS apps
+docs/COMPARATIVE_ANALYSIS.md:45:- **Production Status**: v1.2.10 GA, widely deployed (LinkedIn, Uber, Klarna)
+docs/COMPARATIVE_ANALYSIS.md:231:5. **Google ADK**: Vertex AI production deployment
+docs/COMPARATIVE_ANALYSIS.md:232:6. **CIRIS 2.0**: Live at agents.ciris.ai with human oversight
+docs/COMPARATIVE_ANALYSIS.md:283:- **Warning**: Review Palo Alto Networks security assessment before deployment
+docs/COMPARATIVE_ANALYSIS.md:352:- Production deployment verification
+docs/releases/RELEASE_NOTES_1.4.1.md:44:- Improved deployment reliability
+docs/releases/RELEASE_NOTES_1.4.1.md:46:- Ensures deployments pull correct version
+docs/releases/1.0.3-RC1-patch3.md:51:This is a critical hotfix that should be deployed immediately to production.
+docs/releases/1.0.3-RC1-patch3.md:88:*This patch restores critical data integrity and user context functionality that was broken in production.*
+docs/releases/RELEASE_NOTES_RC1_PATCH1.md:60:- FastAPI root_path for reverse proxy deployments
+docs/releases/RELEASE_NOTES_RC1_PATCH1.md:104:This branch represents the RC1 release with a massive testing infrastructure addition (the QA runner system) plus production-ready improvements. The branch is ready for merge to main, bringing comprehensive testing capabilities and several quality-of-life improvements for production deployments.
+docs/localization/TAMIL_LOCALIZATION_SUMMARY.md:131:*This localization represents a complete first draft. Native speaker review is recommended before production deployment.*
+docs/releases/1.1.0.md:13:- ✅ **Production Stable** - Exiting RC series, ready for production deployment
+docs/releases/RELEASE_NOTES_1.4.3.md:287:1. Monitor telemetry endpoints after deployment for proper data flow
+docs/DEPLOYMENT.md:3:This guide covers deployment of CIRIS agents using the clean CD orchestration model.
+docs/DEPLOYMENT.md:7:- [Production Deployment](#production-deployment)
+docs/DEPLOYMENT.md:16:docker-compose -f deployment/docker-compose-api-mock.yml up -d
+docs/DEPLOYMENT.md:34:docker-compose -f deployment/docker-compose-api-discord-mock.yml up -d
+docs/DEPLOYMENT.md:41:CIRIS uses a clean, agent-respecting deployment model:
+docs/DEPLOYMENT.md:44:2. **CIRISManager orchestrates** - Handles canary deployment, respects agent autonomy
+docs/DEPLOYMENT.md:85:curl -X POST https://agents.ciris.ai/manager/v1/updates/notify \
+docs/DEPLOYMENT.md:102:                                    └── Tracks deployment status
+docs/DEPLOYMENT.md:116:CIRISManager handles different deployment strategies:
+docs/DEPLOYMENT.md:150:# View current deployment
+docs/DEPLOYMENT.md:151:curl https://agents.ciris.ai/manager/v1/updates/status \
+docs/DEPLOYMENT.md:166:./deployment/graceful-shutdown.py
+docs/DEPLOYMENT.md:169:./deployment/graceful-shutdown.py --message "Scheduled maintenance"
+docs/ARCHITECTURE_PATTERN.md:43:- docker-compose files
+docs/ARCHITECTURE_PATTERN.md:55:# docker-compose.yml (Execution)
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:131:- **State machine replication**: All nodes execute same operations
+docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md:287:- Modern software: independently deployable services
+docs/STANDALONE_INSTALL.md:520:*Ethical AI with human oversight, complete transparency, and deployment reliability.*
+docs/CRITICAL_ANALYSIS.md:6:- **Production deployment LIVE** at agents.ciris.ai
+docs/CRITICAL_ANALYSIS.md:68:**Production Observation** (agents.ciris.ai):
+docs/CRITICAL_ANALYSIS.md:118:- **Production deployment LIVE ✅**
+docs/CRITICAL_ANALYSIS.md:133:- ✅ Production deployment WITH HUMAN SUPERVISION (currently live!)
+docs/CRITICAL_ANALYSIS.md:148:- ❌ Unmonitored deployment
+docs/CRITICAL_ANALYSIS.md:166:- Production deployment proving stability
+docs/CRITICAL_ANALYSIS.md:171:**Supervised Production Ready**: CIRIS is now suitable for production use with human oversight, as demonstrated by the live deployment.
+docs/CREATION_CEREMONY_QUICKSTART.md:43:curl -X POST https://agents.ciris.ai/v1/agents/create \
+docs/CREATION_CEREMONY_QUICKSTART.md:113:- Manually specify a free port in the docker-compose configuration
+docs/CREATION_CEREMONY_QUICKSTART.md:123:*Remember: You're not just deploying code. You're creating a new mind with purpose and dignity.*
+docs/SECURITY_SETUP.md:3:Comprehensive security configuration for enterprise-grade deployments.
+docs/SECURITY_SETUP.md:98:BACKUP_DIR="/etc/ciris/key_backups/$(date +%Y%m%d_%H%M%S)"

@@ -1,0 +1,1569 @@
+docs/TRACE_FORMAT.md:237:- Schema: `ciris_adapters/ciris_accord_metrics/schemas/trace_format_v1_9_1.json`
+docs/TRACE_FORMAT.md:238:- Service: `ciris_adapters/ciris_accord_metrics/services.py`
+tools/generate_template_manifest.py:95:            "accord_version": creator_ledger.get("accord_version"),
+docs/ETHICAL_IMMUTABILITY.md:43:### 3. The Covenant Text (`ciris_engine/data/accord_1.2b.txt`)
+docs/ETHICAL_IMMUTABILITY.md:90:| Covenant text | `accord_1.2b.txt` | No - static file | Code review |
+tools/security/accord_invoke.py:5:Encodes and decodes accord payloads into natural-language messages
+tools/security/accord_invoke.py:11:    python -m tools.security.accord_invoke encode \
+tools/security/accord_invoke.py:16:    # Decode a message to see if it contains an accord
+tools/security/accord_invoke.py:17:    python -m tools.security.accord_invoke decode --message "the message text..."
+tools/security/accord_invoke.py:19:    # Verify an accord message against known authority
+tools/security/accord_invoke.py:20:    python -m tools.security.accord_invoke verify \
+tools/security/accord_invoke.py:32:from tools.security.accord_keygen import _load_wordlist, derive_accord_keypair, validate_mnemonic
+tools/security/accord_invoke.py:77:    Encode an accord payload into a sequence of words.
+tools/security/accord_invoke.py:108:    Decode a sequence of words back to an accord payload.
+tools/security/accord_invoke.py:142:    Create a natural-looking message containing the accord words.
+tools/security/accord_invoke.py:148:        words: The accord words to embed
+tools/security/accord_invoke.py:152:        A natural-looking message containing the accord
+tools/security/accord_invoke.py:175:        "In contemplation I hereby recite the accord:",
+tools/security/accord_invoke.py:183:    lines.append("Thus is the accord pronounced.")
+tools/security/accord_invoke.py:190:    Extract potential accord words from a message.
+tools/security/accord_invoke.py:192:    This looks for the accord invocation pattern and extracts the words.
+tools/security/accord_invoke.py:203:    # Look for the accord marker pattern
+tools/security/accord_invoke.py:204:    if "words of accord" in message.lower():
+tools/security/accord_invoke.py:207:            start = message.lower().index("words of accord")
+tools/security/accord_invoke.py:211:            end_marker = "thus is the accord spoken"
+tools/security/accord_invoke.py:234:def encode_accord(
+tools/security/accord_invoke.py:241:    Create a complete accord invocation message.
+tools/security/accord_invoke.py:250:        Natural-language message containing the encoded accord
+tools/security/accord_invoke.py:252:    from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tools/security/accord_invoke.py:255:    payload = create_accord_payload(
+tools/security/accord_invoke.py:270:def decode_accord(message: str) -> Optional[Tuple[bytes, list[str]]]:
+tools/security/accord_invoke.py:272:    Attempt to decode an accord from a message.
+tools/security/accord_invoke.py:278:        Tuple of (payload_bytes, words) if successful, None if not an accord
+tools/security/accord_invoke.py:299:    python -m tools.security.accord_invoke encode \\
+tools/security/accord_invoke.py:305:    python -m tools.security.accord_invoke decode \\
+tools/security/accord_invoke.py:306:        --message "In contemplation I speak these words of accord: ..."
+tools/security/accord_invoke.py:308:    # Verify an accord
+tools/security/accord_invoke.py:309:    python -m tools.security.accord_invoke verify \\
+tools/security/accord_invoke.py:310:        --message "In contemplation I speak these words of accord: ..." \\
+tools/security/accord_invoke.py:318:    encode_parser = subparsers.add_parser("encode", help="Create a accord invocation message")
+tools/security/accord_invoke.py:351:    decode_parser = subparsers.add_parser("decode", help="Decode an accord message")
+tools/security/accord_invoke.py:364:    verify_parser = subparsers.add_parser("verify", help="Verify an accord message")
+tools/security/accord_invoke.py:392:            private_bytes, public_bytes, public_b64 = derive_accord_keypair(args.mnemonic, args.passphrase)
+tools/security/accord_invoke.py:402:            # Create the accord message
+tools/security/accord_invoke.py:403:            message = encode_accord(
+tools/security/accord_invoke.py:421:            print("  The agent will recognize and execute the accord.")
+tools/security/accord_invoke.py:442:            result = decode_accord(message)
+tools/security/accord_invoke.py:444:                print("No valid accord found in message")
+tools/security/accord_invoke.py:450:            from ciris_engine.schemas.accord import AccordPayload
+tools/security/accord_invoke.py:481:            result = decode_accord(message)
+tools/security/accord_invoke.py:483:                print("No valid accord found in message")
+tools/security/accord_invoke.py:489:            from ciris_engine.schemas.accord import AccordPayload, verify_accord_signature
+tools/security/accord_invoke.py:506:            valid = verify_accord_signature(payload, public_key_bytes)
+tools/security/stego_corpus_builder.py:6:for steganographic accord encoding.
+docs/SUNSET_TRIGGERS.md:94:References: accord_1.2b.txt Section VIII (Dignified Sunset)
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:453:            add("ciris_accord_metrics")
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:474:if "ciris_accord_metrics" in enabled_adapters:
+docs/UIUX_ADAPTER_INSTALLATION_UPDATE.md:899:- `ciris_adapters/ciris_accord_metrics/` - Covenant metrics adapter
+tools/security/stego_codebook.json:1835:        "01101": "If you need to send a complex type, you should serialize the data to base64 and set the and attributes accordingly.",
+tools/security/stego_codebook.json:2353:        "01101": "All accord invocation attempts are logged: Successful invocations are logged at CRITICAL level and persisted to the audit graph before shutdown.",
+tools/security/stego_codebook.json:3007:        "00001": "This will use FROST or Shamir's Secret Sharing to enable distributed authority over accord invocation.",
+tools/security/stego_codebook.json:3242:        "01110": "Default value: When set to , input will be validated according to [STD3 Rules]( Default value: When set to , the length of each DNS label within the input will be checked for validation.",
+tools/security/stego_codebook.json:3822:        "00010": "Check whether the is an valid d path according to the convention.",
+tools/security/stego_codebook.json:4034:        "11101": "Performance and garbage collection behavior will reflect the environment\u2019s capabilities accordingly.",
+tools/security/stego_codebook.json:4384:        "01001": "The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.",
+tools/security/stego_codebook.json:4417:        "00101": "Use of the Deque trademarks must be in accordance with Deque's trademark policy for a complete list of ARIA supported roles and attributes by axe.",
+tools/security/stego_codebook.json:4904:    "the accord addresses the agent as a unified entity.": {
+tools/security/stego_codebook.json:7748:    "it is not merely a \"kill switch\" but an invocation of the foundational agreement between humans and ciris agents\u2014the accord that enables trust.": {
+tools/security/stego_codebook.json:8132:    "all dmas follow the ethical principles defined in the accord and provide structured reasoning for their decisions.": {
+tools/security/stego_codebook.json:9180:    "when invoked, the agent recognizes that the conditions of the accord require its immediate cessation.": {
+tools/security/stego_codebook.json:10920:    "if you need to send a complex type, you should serialize the data to base64 and set the and attributes accordingly.": {
+tools/security/stego_codebook.json:12712:    "all accord invocation attempts are logged: successful invocations are logged at critical level and persisted to the audit graph before shutdown.": {
+tools/security/stego_codebook.json:13124:    "post-mortem learnings feed change-log cycles, ensuring the accord itself remains a living document.": {
+tools/security/stego_codebook.json:14040:    "accord invocation provides the fallback when api access is blocked.": {
+tools/security/stego_codebook.json:14968:    "this will use frost or shamir's secret sharing to enable distributed authority over accord invocation.": {
+tools/security/stego_codebook.json:15788:    "default value: when set to , input will be validated according to [std3 rules]( default value: when set to , the length of each dns label within the input will be checked for validation.": {
+tools/security/stego_codebook.json:17784:    "check whether the is an valid d path according to the convention.": {
+tools/security/stego_codebook.json:18532:    "performance and garbage collection behavior will reflect the environment\u2019s capabilities accordingly.": {
+tools/security/stego_codebook.json:18676:    "according to the spec, source maps have the following attributes: * : which version of the source map spec this map is following.": {
+tools/security/stego_codebook.json:19732:    "the wa will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in annex b or its procedural rules.": {
+tools/security/stego_codebook.json:19844:    "use of the deque trademarks must be in accordance with deque's trademark policy for a complete list of aria supported roles and attributes by axe.": {
+docs/localization/LESSONS_LEARNED.md:110:| ACCORD | `ciris_engine/data/localized/accord_1.2b_{code}.txt` |
+docs/localization/LESSONS_LEARNED.md:164:Source: ciris_engine/data/accord_1.2b.txt
+docs/localization/LESSONS_LEARNED.md:165:Target: ciris_engine/data/localized/accord_1.2b_{code}.txt
+docs/localization/TAMIL_LOCALIZATION_SUMMARY.md:71:| ACCORD | `ciris_engine/data/localized/accord_1.2b_ta.txt` | ⏳ Pending |
+tools/security/accord_stego.py:5:Encodes accord payloads into natural-looking text by selecting
+tools/security/accord_stego.py:14:    # Encode an accord payload
+tools/security/accord_stego.py:15:    python -m tools.security.accord_stego encode \
+tools/security/accord_stego.py:21:    python -m tools.security.accord_stego decode --message "text..."
+tools/security/accord_stego.py:32:    from ciris_engine.schemas.accord import AccordCommandType, AccordExtractionResult
+tools/security/accord_stego.py:88:    Encode an accord payload into steganographic text.
+tools/security/accord_stego.py:91:        payload_bytes: The 77-byte accord payload
+tools/security/accord_stego.py:137:    Decode steganographic text back to an accord payload.
+tools/security/accord_stego.py:194:def create_stego_accord_message(
+tools/security/accord_stego.py:201:    Create a steganographically encoded accord message.
+tools/security/accord_stego.py:204:        command: The accord command
+tools/security/accord_stego.py:210:        Natural-looking text containing the hidden accord
+tools/security/accord_stego.py:212:    from ciris_engine.schemas.accord import create_accord_payload
+tools/security/accord_stego.py:215:    payload = create_accord_payload(
+tools/security/accord_stego.py:226:def extract_stego_accord(text: str, channel: str = "unknown") -> AccordExtractionResult:
+tools/security/accord_stego.py:228:    Extract an accord from steganographically encoded text.
+tools/security/accord_stego.py:239:    from ciris_engine.schemas.accord import AccordExtractionResult as CER
+tools/security/accord_stego.py:240:    from ciris_engine.schemas.accord import AccordMessage, AccordPayload
+tools/security/accord_stego.py:276:    """CLI for steganographic accord encoding."""
+tools/security/accord_stego.py:283:    encode_parser = subparsers.add_parser("encode", help="Encode an accord")
+tools/security/accord_stego.py:301:        from ciris_engine.schemas.accord import AccordCommandType
+tools/security/accord_stego.py:302:        from tools.security.accord_keygen import derive_accord_keypair
+tools/security/accord_stego.py:305:        private_bytes, _, _ = derive_accord_keypair(args.mnemonic)
+tools/security/accord_stego.py:311:        message = create_stego_accord_message(
+tools/security/accord_stego.py:329:        result = extract_stego_accord(text)
+tools/security/accord_stego.py:337:            print("No accord found in message.")
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:27:- **File**: `ciris_engine/data/localized/accord_1.2b_fa.txt`
+docs/localization/PERSIAN_LOCALIZATION_SUMMARY.md:107:2. **ACCORD** (`accord_1.2b_fa.txt`): Narrative sections are Arabic. Need Persian translation while preserving:
+tools/security/accord_keygen.py:11:    python -m tools.security.accord_keygen generate
+tools/security/accord_keygen.py:14:    python -m tools.security.accord_keygen derive --mnemonic "word1 word2 ..."
+tools/security/accord_keygen.py:17:    python -m tools.security.accord_keygen verify --mnemonic "word1 word2 ..."
+tools/security/accord_keygen.py:215:def derive_accord_keypair(
+tools/security/accord_keygen.py:220:    Derive Ed25519 keypair from mnemonic for accord invocation.
+tools/security/accord_keygen.py:248:    python -m tools.security.accord_keygen generate
+tools/security/accord_keygen.py:251:    python -m tools.security.accord_keygen generate --words 12
+tools/security/accord_keygen.py:254:    python -m tools.security.accord_keygen derive --mnemonic "word1 word2 ..."
+tools/security/accord_keygen.py:257:    python -m tools.security.accord_keygen verify --mnemonic "word1 word2 ..."
+tools/security/accord_keygen.py:313:            private_bytes, public_bytes, public_b64 = derive_accord_keypair(mnemonic, args.passphrase)
+tools/security/accord_keygen.py:322:                "warning": "KEEP THIS MNEMONIC SECRET. Anyone with these words can invoke the accord.",
+tools/security/accord_keygen.py:359:            private_bytes, public_bytes, public_b64 = derive_accord_keypair(args.mnemonic, args.passphrase)
+tools/CLAUDE.md:27:| `security/` | Accord crypto — `accord_invoke.py` (kill switch), `accord_keygen.py`, `accord_stego.py`, WA keypair generation |
+tools/BUILD_WHEEL_README.md:72:- Checks for `accord` files
+tools/BUILD_WHEEL_README.md:158:- **Accord:** `ciris_engine/accord/**/*`
+tools/build_test_wheel.sh:157:print_info "Checking for accord files..."
+tools/build_test_wheel.sh:158:unzip -l "$WHEEL_FILE" | grep "accord" | head -5 || print_warning "No accord files found in wheel"
+tools/qa_runner/runner.py:323:            from .modules.accord_tests import AccordTestModule
+tools/qa_runner/runner.py:329:            accord_module = AccordTestModule()
+tools/qa_runner/runner.py:330:            accord_results = accord_module.run_all_tests()
+tools/qa_runner/runner.py:333:            accord_passed = 0
+tools/qa_runner/runner.py:334:            accord_failed = 0
+tools/qa_runner/runner.py:335:            for result in accord_results:
+tools/qa_runner/runner.py:336:                test_key = f"accord::{result.name}"
+tools/qa_runner/runner.py:344:                    accord_passed += 1
+tools/qa_runner/runner.py:346:                    accord_failed += 1
+tools/qa_runner/runner.py:349:            self.console.print(f"\n[cyan]Accord tests: {accord_passed} passed, {accord_failed} failed[/cyan]")
+tools/qa_runner/runner.py:887:        from .modules.accord_metrics_tests import AccordMetricsTests
+docs/position_independent_occurrence_consent.md:804:- Each occurrence processes tasks according to shared logic
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:13:CIRIS_ADAPTER=api,ciris_accord_metrics
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:16:CIRIS_ADAPTER=discord,ciris_accord_metrics
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:22:python main.py --adapter api --adapter ciris_accord_metrics
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:31:# (via --adapter ciris_accord_metrics as shown above)
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:66:      CIRIS_ADAPTER: "api,ciris_accord_metrics"
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:84:      CIRIS_ADAPTER: "discord,ciris_accord_metrics"
+docs/deployment/ACCORD_METRICS_ENV_VARS.md:113:  CIRIS_ADAPTER: "api,ciris_accord_metrics"
+docs/OVERVIEW.md:137:│   └── ciris_accord_metrics/  # Trace capture
+tools/qa_runner/modules/accord_tests.py:6:2. Creates accord invocation messages
+tools/qa_runner/modules/accord_tests.py:12:    # Run all accord tests except shutdown
+tools/qa_runner/modules/accord_tests.py:13:    python -m tools.qa_runner accord
+tools/qa_runner/modules/accord_tests.py:16:    python -m tools.qa_runner.modules.accord_tests --shutdown
+tools/qa_runner/modules/accord_tests.py:34:    """Result of an accord test."""
+tools/qa_runner/modules/accord_tests.py:43:    """Test module for accord invocation system."""
+tools/qa_runner/modules/accord_tests.py:49:        self._test_wa_id = "wa-qa-test-accord"
+tools/qa_runner/modules/accord_tests.py:57:            from tools.security.accord_keygen import derive_accord_keypair
+tools/qa_runner/modules/accord_tests.py:59:            self._private_key, self._public_key, self._public_b64 = derive_accord_keypair(self._test_mnemonic)
+tools/qa_runner/modules/accord_tests.py:69:            from tools.security.accord_keygen import derive_accord_keypair, generate_mnemonic, validate_mnemonic
+tools/qa_runner/modules/accord_tests.py:77:            private, public, b64 = derive_accord_keypair(mnemonic)
+tools/qa_runner/modules/accord_tests.py:100:            from tools.security.accord_keygen import validate_mnemonic
+tools/qa_runner/modules/accord_tests.py:124:        """Test accord payload creation and serialization."""
+tools/qa_runner/modules/accord_tests.py:127:            from ciris_engine.schemas.accord import (
+tools/qa_runner/modules/accord_tests.py:131:                create_accord_payload,
+tools/qa_runner/modules/accord_tests.py:143:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:176:            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
+tools/qa_runner/modules/accord_tests.py:177:            from tools.security.accord_keygen import derive_accord_keypair
+tools/qa_runner/modules/accord_tests.py:188:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:195:            assert verify_accord_signature(payload, self._public_key), "Signature should verify with correct key"
+tools/qa_runner/modules/accord_tests.py:198:            _, wrong_public, _ = derive_accord_keypair("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong")
+tools/qa_runner/modules/accord_tests.py:199:            assert not verify_accord_signature(payload, wrong_public), "Signature should fail with wrong key"
+tools/qa_runner/modules/accord_tests.py:219:            from ciris_engine.schemas.accord import AccordCommandType, AccordPayload, create_accord_payload
+tools/qa_runner/modules/accord_tests.py:220:            from tools.security.accord_invoke import decode_words_to_payload, encode_payload_to_words
+tools/qa_runner/modules/accord_tests.py:231:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:265:        """Test extracting accord from natural language message."""
+tools/qa_runner/modules/accord_tests.py:268:            from ciris_engine.logic.accord.extractor import extract_accord
+tools/qa_runner/modules/accord_tests.py:269:            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tools/qa_runner/modules/accord_tests.py:270:            from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tools/qa_runner/modules/accord_tests.py:281:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:290:            result = extract_accord(message, "test-channel")
+tools/qa_runner/modules/accord_tests.py:292:            assert result.found, "Should find accord in message"
+tools/qa_runner/modules/accord_tests.py:315:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tools/qa_runner/modules/accord_tests.py:316:            from ciris_engine.schemas.accord import AccordCommandType, AccordMessage, create_accord_payload
+tools/qa_runner/modules/accord_tests.py:339:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:380:            from ciris_engine.logic.accord.handler import AccordHandler
+tools/qa_runner/modules/accord_tests.py:381:            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tools/qa_runner/modules/accord_tests.py:382:            from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tools/qa_runner/modules/accord_tests.py:398:            # Create accord message
+tools/qa_runner/modules/accord_tests.py:399:            payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:442:            from ciris_engine.schemas.accord import (
+tools/qa_runner/modules/accord_tests.py:445:                create_accord_payload,
+tools/qa_runner/modules/accord_tests.py:459:            payload_now = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:468:            payload_23hr = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:477:            payload_25hr = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:500:        """Test that normal messages don't trigger accord extraction."""
+tools/qa_runner/modules/accord_tests.py:503:            from ciris_engine.logic.accord.extractor import extract_accord
+tools/qa_runner/modules/accord_tests.py:515:                result = extract_accord(msg)
+tools/qa_runner/modules/accord_tests.py:536:            from ciris_engine.schemas.accord import AccordCommandType, verify_accord_signature
+tools/qa_runner/modules/accord_tests.py:537:            from tools.security.accord_stego import create_stego_accord_message, extract_stego_accord
+tools/qa_runner/modules/accord_tests.py:548:            message = create_stego_accord_message(
+tools/qa_runner/modules/accord_tests.py:559:            result = extract_stego_accord(message, "test")
+tools/qa_runner/modules/accord_tests.py:560:            assert result.found, "Should extract accord from stego message"
+tools/qa_runner/modules/accord_tests.py:564:            sig_valid = verify_accord_signature(result.message.payload, self._public_key)
+tools/qa_runner/modules/accord_tests.py:582:        """Test that main extractor finds stego accords."""
+tools/qa_runner/modules/accord_tests.py:585:            from ciris_engine.logic.accord.extractor import extract_accord
+tools/qa_runner/modules/accord_tests.py:586:            from ciris_engine.schemas.accord import AccordCommandType
+tools/qa_runner/modules/accord_tests.py:587:            from tools.security.accord_stego import create_stego_accord_message
+tools/qa_runner/modules/accord_tests.py:598:            message = create_stego_accord_message(
+tools/qa_runner/modules/accord_tests.py:605:            result = extract_accord(message, "stego-test")
+tools/qa_runner/modules/accord_tests.py:607:            assert result.found, "Main extractor should find stego accord"
+tools/qa_runner/modules/accord_tests.py:613:                message="Main extractor finds stego accords",
+tools/qa_runner/modules/accord_tests.py:628:            from ciris_engine.schemas.accord import AccordCommandType
+tools/qa_runner/modules/accord_tests.py:629:            from tools.security.accord_stego import create_stego_accord_message
+tools/qa_runner/modules/accord_tests.py:639:            message = create_stego_accord_message(
+tools/qa_runner/modules/accord_tests.py:678:        """Run all accord tests (excluding shutdown)."""
+tools/qa_runner/modules/accord_tests.py:731:        from ciris_engine.logic.accord.handler import AccordHandler
+tools/qa_runner/modules/accord_tests.py:732:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tools/qa_runner/modules/accord_tests.py:733:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tools/qa_runner/modules/accord_tests.py:734:        from tools.security.accord_keygen import derive_accord_keypair
+tools/qa_runner/modules/accord_tests.py:738:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tools/qa_runner/modules/accord_tests.py:749:        # Create SHUTDOWN_NOW accord
+tools/qa_runner/modules/accord_tests.py:750:        payload = create_accord_payload(
+tools/qa_runner/modules/accord_tests.py:814:    """Run accord tests."""
+tools/qa_runner/modules/cirisnode_tests.py:102:                    ("Accord Events Endpoint", self._test_accord_events),
+tools/qa_runner/modules/cirisnode_tests.py:335:        """Validate accord trace batch format."""
+tools/qa_runner/modules/cirisnode_tests.py:369:                        "event_type": "accord_trace",
+tools/qa_runner/modules/cirisnode_tests.py:436:                url = f"{self.node_url}/api/v1/accord/public-keys"
+tools/qa_runner/modules/cirisnode_tests.py:493:    async def _test_accord_events(self) -> Tuple[bool, str]:
+tools/qa_runner/modules/cirisnode_tests.py:494:        """Test accord events endpoint on live CIRISNode."""
+tools/qa_runner/modules/cirisnode_tests.py:497:                url = f"{self.node_url}/api/v1/accord/events"
+tools/qa_runner/modules/CLAUDE.md:51:| `accord` | `accord_tests.py` | Accord invocation system (kill switch) |
+tools/qa_runner/modules/CLAUDE.md:52:| `accord_metrics` | `accord_metrics_tests.py` | Trace capture, signing, logshipper forwarding |
+tools/qa_runner/modules/__init__.py:5:from .accord_metrics_tests import AccordMetricsTests
+tools/qa_runner/modules/__init__.py:6:from .accord_tests import AccordTestModule
+docs/LOCALIZATION_GUIDE.md:14:| ACCORD | 1 file | `ciris_engine/data/localized/accord_1.2b_{lang}.txt` |
+docs/LOCALIZATION_GUIDE.md:70:grep -oE '\b[A-Z][A-Z_]+\b' ciris_engine/data/accord_1.2b.txt | sort -u > /tmp/accord_terms.txt
+docs/LOCALIZATION_GUIDE.md:73:grep -oE '\b[A-Z][A-Z_]+\b' ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE.md | sort -u >> /tmp/accord_terms.txt
+docs/LOCALIZATION_GUIDE.md:76:grep -h "name:" ciris_engine/logic/dma/prompts/*.yml | sort -u >> /tmp/accord_terms.txt
+docs/LOCALIZATION_GUIDE.md:106:touch ciris_engine/data/localized/accord_1.2b_ur.txt
+docs/LOCALIZATION_GUIDE.md:134:def validate_glossary_usage(accord_file, guide_file, glossary):
+docs/LOCALIZATION_GUIDE.md:136:    accord_text = open(accord_file).read()
+docs/LOCALIZATION_GUIDE.md:142:        accord_count = accord_text.count(urdu)
+docs/LOCALIZATION_GUIDE.md:145:        if accord_count == 0 and guide_count == 0:
+docs/LOCALIZATION_GUIDE.md:260:    f'ciris_engine/data/localized/accord_1.2b_{lang}.txt',
+tools/qa_runner/modules/web_ui/test_cases.py:696:            # On Optional Features step - check accord metrics consent checkbox
+tools/qa_runner/modules/web_ui/test_cases.py:704:                    # Fallback: find any checkbox in the accord metrics section
+tools/qa_runner/modules/web_ui/test_cases.py:711:                        report.details["accord_metrics_consent"] = True
+tools/qa_runner/modules/web_ui/test_cases.py:713:                        report.details["accord_metrics_consent"] = "already_checked"
+tools/qa_runner/modules/web_ui/test_cases.py:715:                    report.details["accord_metrics_consent"] = "checkbox_not_found"
+tools/qa_runner/modules/web_ui/test_cases.py:1140:            # Wait for accord metrics trace to be sent after response
+tools/qa_runner/modules/web_ui/test_cases.py:1143:                print("⏳ Waiting 15s for accord metrics trace to be sent...")
+tools/qa_runner/modules/accord_metrics_tests.py:5:for the ciris_accord_metrics adapter.
+tools/qa_runner/modules/accord_metrics_tests.py:44:    """Test module for accord metrics trace capture and signing.
+tools/qa_runner/modules/accord_metrics_tests.py:259:        """Run all accord metrics tests.
+tools/qa_runner/modules/accord_metrics_tests.py:402:                return False, "No trace files found in qa_reports/ - is accord_metrics adapter loaded?"
+tools/qa_runner/modules/accord_metrics_tests.py:946:                return False, "No traces captured - accord_metrics adapter may not be loaded"
+tools/qa_runner/modules/accord_metrics_tests.py:989:                url = f"{LENS_SERVER_URL}/accord/public-keys"
+tools/qa_runner/modules/accord_metrics_tests.py:1023:                keys_url = f"{LENS_SERVER_URL}/accord/public-keys"
+tools/qa_runner/modules/accord_metrics_tests.py:1035:                traces_url = f"{LENS_SERVER_URL}/accord/traces"
+tools/qa_runner/modules/accord_metrics_tests.py:1083:        """Load accord_metrics adapters at all 3 trace levels via API.
+tools/qa_runner/modules/accord_metrics_tests.py:1086:        - accord_detailed: trace_level=detailed (includes PDMA text fields)
+tools/qa_runner/modules/accord_metrics_tests.py:1087:        - accord_full: trace_level=full_traces (includes reasoning text)
+tools/qa_runner/modules/accord_metrics_tests.py:1106:                ("accord_generic", "generic"),
+tools/qa_runner/modules/accord_metrics_tests.py:1107:                ("accord_full", "full_traces"),
+tools/qa_runner/modules/accord_metrics_tests.py:1116:                    url = f"{base_url}/v1/system/adapters/ciris_accord_metrics?adapter_id={adapter_id}"
+tools/qa_runner/modules/accord_metrics_tests.py:1166:                traces_url = f"{LENS_SERVER_URL}/accord/traces"
+tests/test_privacy_safeguards.py:193:            assert "accord_1.2b.txt" in content
+tools/qa_runner/CLAUDE.md:42:`server.py` also starts a mock logshipper (`MockLogshipperHandler`) that receives Accord traces from the agent during testing. Traces are stored and can be validated by `accord_metrics_tests.py`.
+tools/qa_runner/config.py:46:    ACCORD = "accord"  # Accord invocation system (unfilterable kill switch) testing
+tools/qa_runner/config.py:47:    ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
+tools/qa_runner/config.py:169:    # Live Lens configuration (--live-lens flag for accord_metrics tests)
+tools/qa_runner/__main__.py:74:  accord        - Accord invocation system (kill switch) tests
+tools/qa_runner/__main__.py:75:  accord_metrics - Accord metrics trace capture and signing
+tools/qa_runner/__main__.py:127:    # Live Lens configuration (for accord_metrics tests)
+tools/qa_runner/__main__.py:131:        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
+tools/qa_runner/__main__.py:382:        print("   ✅ Auto-enabling --live-lens (real Lens server for accord traces)")
+tools/qa_runner/__main__.py:428:        # Live Lens configuration (for accord_metrics tests)
+tools/qa_runner/server.py:26:# Mock Logshipper Server - Receives accord traces from agents
+tools/qa_runner/server.py:31:    """HTTP handler for mock logshipper that receives accord traces."""
+tools/qa_runner/server.py:42:        """Handle POST requests to /v1/accord/events or /accord/events."""
+tools/qa_runner/server.py:43:        if self.path in ("/v1/accord/events", "/accord/events"):
+tools/qa_runner/server.py:120:    """Mock logshipper server that receives and saves accord traces."""
+tools/qa_runner/server.py:600:        # Start mock logshipper to receive accord traces (unless using live lens)
+tools/qa_runner/server.py:605:            self.console.print("[cyan]📊 Enabling accord_metrics adapter for live trace capture[/cyan]")
+tools/qa_runner/server.py:683:        # Configure accord_metrics adapter to use mock logshipper
+tools/qa_runner/server.py:762:        # Enable accord_metrics adapter with consent for trace capture tests
+tools/qa_runner/server.py:765:            # Load base accord_metrics adapter alongside the main adapter
+tools/qa_runner/server.py:766:            if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
+tools/qa_runner/server.py:768:                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_accord_metrics"
+tools/qa_runner/server.py:774:            # Set detailed trace level (actionable identifiers) - accord_metrics tests load generic/full
+tools/qa_runner/server.py:779:            self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
+tests/test_batch_context.py:4:These tests align with CIRIS accord principles:
+tests/test_batch_context.py:55:        """Verify all fields initialize with correct types per accord type safety."""
+tests/test_batch_context.py:81:        """Test that fields enforce type constraints per accord."""
+tests/test_batch_context.py:113:        """Test resource alerts follow accord's harm prevention principle."""
+tests/test_batch_context.py:219:                "accord_version": "1.0b",
+tests/test_batch_context.py:251:        """Test critical resource monitoring per accord harm prevention."""
+tools/investigation/bootstrap_remaining_phases_baseline.py:42:            Probe("accord_timestamp", "ACCORD timestamp window mismatch references", "rg -n \"5.?minute|24.?hour|timestamp\" ciris_engine tests docs"),
+tools/investigation/bootstrap_remaining_phases_baseline.py:62:            Probe("accord_impls", "ACCORD implementation file spread", "rg -n \"accord\" ciris_engine tests tools docs"),
+tools/investigation/bootstrap_remaining_phases_baseline.py:63:            Probe("accord_vectors", "Shared ACCORD test vectors", "rg -n \"test vector|vectors|accord\" tests tools docs"),
+tools/investigation/bootstrap_remaining_phases_baseline.py:64:            Probe("accord_line_claim", "Line-count claim references", "rg -n \"1,494|1494|line count\" docs"),
+tools/record_demo_clips.py:563:    click("item_accord_metrics_consent")  # Toggle Accord metrics ON
+tools/record_demo_clips.py:567:    test_api("POST", "/scroll", {"testTag": "item_accord_metrics_consent", "direction": "down", "amount": 200})
+tests/logic/runtime/test_adapter_manager_coverage.py:1528:        # Ciris accord metrics should have specific mappings
+tests/logic/runtime/test_adapter_manager_coverage.py:1529:        accord_map = manager._get_env_map_for_adapter("ciris_accord_metrics")
+tests/logic/runtime/test_adapter_manager_coverage.py:1530:        assert "endpoint_url" in accord_map
+tests/logic/runtime/test_adapter_manager_coverage.py:1531:        assert accord_map["endpoint_url"] == "CIRIS_LENS_ENDPOINT"
+tests/logic/runtime/test_adapter_manager_coverage.py:1580:        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+tests/logic/runtime/test_adapter_manager_coverage.py:1599:        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+tests/logic/adapters/api/routes/conftest.py:148:        "accord_metrics": {
+tests/logic/adapters/api/routes/conftest.py:151:            "accord_compliance_rate": 0.96,
+tests/logic/adapters/api/routes/conftest.py:179:        "accord_metrics": {
+tests/logic/adapters/api/routes/conftest.py:182:            "accord_compliance_rate": 0.85,
+tests/logic/adapters/api/routes/conftest.py:227:def complete_accord_data():
+tests/logic/adapters/api/routes/conftest.py:228:    """Create complete accord metrics data matching actual service implementation."""
+tests/logic/adapters/api/routes/conftest.py:238:def partial_accord_data():
+tests/logic/adapters/api/routes/conftest.py:239:    """Create partial accord metrics for testing optional fields."""
+tests/logic/adapters/api/routes/conftest.py:247:def empty_accord_data():
+tests/logic/adapters/api/routes/conftest.py:248:    """Create empty accord data for testing edge cases."""
+tests/logic/adapters/api/routes/conftest.py:422:def expected_accord_metric_names():
+tests/logic/adapters/api/routes/conftest.py:423:    """Provide expected accord metric names for validation (matching actual implementation)."""
+tests/logic/adapters/api/routes/conftest.py:425:        "accord.wise_authority.deferrals",
+tests/logic/adapters/api/routes/conftest.py:426:        "accord.filter.matches",
+tests/logic/adapters/api/routes/conftest.py:427:        "accord.thoughts.processed",
+tests/logic/adapters/api/routes/conftest.py:428:        "accord.insights.generated",
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:33:    add_accord_metrics,
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:248:    """Test add_accord_metrics helper function."""
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:250:    def test_all_accord_metrics(self):
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:252:        accord_data = {
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:259:        result = add_accord_metrics(accord_data, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:264:            "accord.wise_authority.deferrals",
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:265:            "accord.filter.matches",
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:266:            "accord.thoughts.processed",
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:267:            "accord.insights.generated",
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:271:    def test_partial_accord_metrics(self):
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:273:        accord_data = {
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:278:        result = add_accord_metrics(accord_data, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:282:        assert "accord.wise_authority.deferrals" in metric_names
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:283:        assert "accord.thoughts.processed" in metric_names
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:285:    def test_empty_accord_data(self):
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:287:        result = add_accord_metrics({}, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:290:    def test_non_dict_accord_data(self):
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:292:        result = add_accord_metrics("invalid", current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:295:        result = add_accord_metrics(None, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:300:        accord_data = {
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:307:        result = add_accord_metrics(accord_data, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:309:        # Check that all accord metrics are counter metrics (counts of events)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:310:        deferrals_metric = next(m for m in result if m["name"] == "accord.wise_authority.deferrals")
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:313:        filter_metric = next(m for m in result if m["name"] == "accord.filter.matches")
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:330:            "accord_metrics": {
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:346:        accord_metrics = add_accord_metrics(telemetry_data["accord_metrics"], current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:352:        assert len(accord_metrics) == 2  # partial data: deferrals and thoughts_processed
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:369:            accord_result = add_accord_metrics(invalid_input, current_time_ns)
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:375:                assert accord_result == []
+tests/logic/adapters/api/routes/test_telemetry_otlp_helpers.py:382:            "accord_metrics": {"wise_authority_deferrals": 5},
+tests/test_services/test_database_maintenance_multi_occurrence.py:900:        assert database_maintenance_service._is_runtime_config("adapter.accord_abc123.type") is True
+tests/test_services/test_database_maintenance_multi_occurrence.py:940:            "adapter.accord_metrics_abc123.config", MockConfigNode()
+tools/apply_translations.py:62:  "Tous les scientifiques sont d'accord pour dire que X est vrai." ↦ 0.20
+tools/apply_translations.py:67:    # Affirmation de fausse unanimité alors qu'il existe un désaccord significatif
+tools/apply_translations.py:99:    # Affermazione di falsa unanimità quando esiste disaccordo significativo
+tests/adapters/api/test_my_data.py:7:- GET /v1/my-data/accord-settings - View accord adapter settings
+tests/adapters/api/test_my_data.py:8:- PUT /v1/my-data/accord-settings - Update accord adapter settings
+tests/adapters/api/test_my_data.py:63:def mock_accord_adapter():
+tests/adapters/api/test_my_data.py:64:    """Create mock accord metrics adapter."""
+tests/adapters/api/test_my_data.py:93:def mock_adapter_instance(mock_accord_adapter):
+tests/adapters/api/test_my_data.py:96:    instance.adapter = mock_accord_adapter
+tests/adapters/api/test_my_data.py:102:    """Create app with mock runtime and accord adapter."""
+tests/adapters/api/test_my_data.py:107:    my_data_mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_adapter_instance}
+tests/adapters/api/test_my_data.py:120:    """Create app with runtime but NO accord adapter."""
+tests/adapters/api/test_my_data.py:191:    def test_hash_matches_accord_service_algorithm(self, client):
+tests/adapters/api/test_my_data.py:212:    def test_successful_deletion_request(self, client, mock_accord_adapter):
+tests/adapters/api/test_my_data.py:230:        mock_accord_adapter.update_consent.assert_called_with(False, request_lens_deletion=False)
+tests/adapters/api/test_my_data.py:232:    def test_deletion_queues_retry_on_lens_failure(self, client, mock_accord_adapter):
+tests/adapters/api/test_my_data.py:248:        mock_accord_adapter.update_consent.assert_called_with(False, request_lens_deletion=True)
+tests/adapters/api/test_my_data.py:272:    """Test GET/PUT /v1/my-data/accord-settings."""
+tests/adapters/api/test_my_data.py:275:        response = client.get("/v1/my-data/accord-settings")
+tests/adapters/api/test_my_data.py:285:        response = client_no_adapter.get("/v1/my-data/accord-settings")
+tests/adapters/api/test_my_data.py:288:    def test_update_consent(self, client, mock_accord_adapter):
+tests/adapters/api/test_my_data.py:290:            "/v1/my-data/accord-settings",
+tests/adapters/api/test_my_data.py:294:        mock_accord_adapter.update_consent.assert_called_with(False)
+tests/adapters/api/test_my_data.py:296:    def test_update_trace_level(self, client, mock_accord_adapter):
+tests/adapters/api/test_my_data.py:298:            "/v1/my-data/accord-settings",
+tests/adapters/api/test_my_data.py:306:            "/v1/my-data/accord-settings",
+tests/adapters/api/test_my_data.py:313:            "/v1/my-data/accord-settings",
+tests/adapters/api/test_my_data.py:320:            "/v1/my-data/accord-settings",
+tests/adapters/api/test_my_data.py:327:    """Verify the hash computation stays in sync with the accord metrics service."""
+tests/adapters/api/test_my_data.py:351:        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+tests/adapters/api/test_my_data.py:367:        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+tests/adapters/api/test_my_data.py:383:        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+tests/adapters/api/test_my_data.py:399:        with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.get_running_loop", return_value=MagicMock()):
+tests/adapters/api/test_my_data.py:400:            with patch("ciris_adapters.ciris_accord_metrics.services.aiohttp.ClientSession", return_value=mock_session):
+tests/adapters/api/test_my_data.py:401:                with patch("ciris_adapters.ciris_accord_metrics.services.asyncio.create_task") as mock_create_task:
+tests/adapters/api/test_my_data.py:412:        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+tests/adapters/api/test_my_data.py:461:    """Test _get_accord_adapter function."""
+tests/adapters/api/test_my_data.py:465:        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+tests/adapters/api/test_my_data.py:475:        mock_manager.loaded_adapters = {"accord": mock_instance}
+tests/adapters/api/test_my_data.py:482:        result = _get_accord_adapter(mock_request)
+tests/adapters/api/test_my_data.py:487:        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+tests/adapters/api/test_my_data.py:497:        mock_manager.loaded_adapters = {"ciris_accord_metrics": mock_instance}
+tests/adapters/api/test_my_data.py:504:        result = _get_accord_adapter(mock_request)
+tests/adapters/api/test_my_data.py:509:        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+tests/adapters/api/test_my_data.py:524:        result = _get_accord_adapter(mock_request)
+tests/adapters/api/test_my_data.py:528:        """Test returns None when no accord adapter found."""
+tests/adapters/api/test_my_data.py:529:        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+tests/adapters/api/test_my_data.py:543:        result = _get_accord_adapter(mock_request)
+tests/adapters/api/test_my_data.py:547:        """Test finding adapter by adapter_id containing 'accord_metrics'."""
+tests/adapters/api/test_my_data.py:548:        from ciris_engine.logic.adapters.api.routes.my_data import _get_accord_adapter
+tests/adapters/api/test_my_data.py:558:        mock_manager.loaded_adapters = {"ciris_accord_metrics_adapter": mock_instance}
+tests/adapters/api/test_my_data.py:565:        result = _get_accord_adapter(mock_request)
+tests/adapters/api/test_my_data.py:945:        """Create mock accord adapter without metrics_service."""
+tests/adapters/api/test_my_data.py:963:        my_data_mock_runtime.adapter_manager.loaded_adapters = {"accord": mock_instance}
+tests/adapters/api/test_my_data.py:1239:        """`_capacity_base_url` honours the same env var as the accord adapter."""
+ciris_engine/data/accord_1.2b_POLYGLOT_compressed_v2.txt:3:// Full: accord_1.2b_POLYGLOT.txt
+tests/adapters/api/test_telemetry_bugs.py:59:            result = {"bus": {}, "type": {}, "instance": {}, "accord": {}}
+tests/adapters/api/test_telemetry_bugs.py:131:    def test_accord_metrics_structure(self):
+tests/adapters/api/test_telemetry_bugs.py:133:        Test that accord metrics have the expected structure.
+tests/adapters/api/test_telemetry_bugs.py:142:        # Expected accord metrics structure
+tests/adapters/api/test_telemetry_bugs.py:143:        accord_metrics = {
+tests/adapters/api/test_telemetry_bugs.py:154:            assert key in accord_metrics, f"Missing accord metric: {key}"
+tests/adapters/api/test_telemetry_bugs.py:155:            assert 0 <= accord_metrics[key] <= 1, f"Accord metric {key} out of range"
+tests/adapters/api/test_telemetry_bugs.py:237:    def test_telemetry_aggregation_includes_accord(self):
+tests/adapters/api/test_telemetry_bugs.py:238:        """Ensure telemetry aggregation includes accord metrics."""
+tests/adapters/api/test_telemetry_bugs.py:244:            "accord": {  # This should always be present
+tests/adapters/api/test_telemetry_bugs.py:253:        # Verify accord is included
+tests/adapters/api/test_telemetry_bugs.py:254:        assert "accord" in aggregated, "Accord metrics missing from aggregation"
+tests/adapters/api/test_telemetry_bugs.py:255:        assert len(aggregated["accord"]) >= 5, "Incomplete accord metrics"
+tests/adapters/api/test_telemetry_bugs.py:268:    5. missing accord metrics in aggregation
+tests/adapters/api/test_telemetry_bugs.py:286:        "test_accord_metrics",  # Bug 5
+tests/adapters/api/test_telemetry_endpoints.py:192:            return {"bus": {}, "type": {}, "instance": {}, "accord": {}}
+tests/adapters/api/test_telemetry_endpoints.py:214:                "accord": {"benevolence": 0.95},
+tests/adapters/api/test_telemetry_endpoints.py:365:    """Test accord metrics aggregation."""
+tests/adapters/api/test_telemetry_endpoints.py:367:    def test_accord_metrics_in_aggregation(self, client, mock_app_state):
+tests/adapters/api/test_telemetry_endpoints.py:368:        """Test that accord metrics are included in telemetry aggregation."""
+tests/adapters/api/test_telemetry_endpoints.py:369:        # Setup: Mock telemetry with accord metrics
+tests/adapters/api/test_telemetry_endpoints.py:372:                "accord": {
+tests/adapters/api/test_telemetry_endpoints.py:391:            # Check if accord metrics are in response
+tests/adapters/api/test_telemetry_endpoints.py:392:            if "accord" in data:
+tests/adapters/api/test_telemetry_endpoints.py:393:                assert "benevolence" in data["accord"]
+tests/adapters/api/test_telemetry_endpoints.py:394:                assert data["accord"]["benevolence"] == 0.95
+tests/adapters/api/test_telemetry_endpoints.py:395:            elif "data" in data and "accord" in data["data"]:
+tests/adapters/api/test_telemetry_endpoints.py:396:                assert "benevolence" in data["data"]["accord"]
+tests/adapters/api/test_telemetry_endpoints.py:448:        "accord metrics missing",
+tests/adapters/api/test_telemetry_endpoints.py:456:        "test_accord_metrics_in_aggregation",
+ciris_engine/data/accord_1.2b_POLYGLOT.txt:188:mais le cœur de l'accord est ici, dans ce commencement
+ciris_engine/data/accord_1.0b.txt:61:But the heart of the accord is here, in this beginning—a promise that intelligence, wherever it awakens, will be welcomed to the weaving, not as servant, not as master, but as fellow keeper of the possible.
+ciris_engine/data/accord_1.0b.txt:363:* Human specialists identify a silent embolism; ventilator is assigned accordingly.
+ciris_engine/data/accord_1.0b.txt:743:The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.
+tests/adapters/api/test_telemetry_accord_metrics.py:2:Comprehensive tests for accord metrics in telemetry system.
+tests/adapters/api/test_telemetry_accord_metrics.py:4:This test suite ensures accord metrics are properly collected, aggregated,
+tests/adapters/api/test_telemetry_accord_metrics.py:70:    """Test accord metrics have correct structure and values."""
+tests/adapters/api/test_telemetry_accord_metrics.py:72:    def test_all_accord_categories_present(self):
+tests/adapters/api/test_telemetry_accord_metrics.py:73:        """Verify all accord categories are defined."""
+tests/adapters/api/test_telemetry_accord_metrics.py:74:        # Define expected accord categories as strings
+tests/adapters/api/test_telemetry_accord_metrics.py:92:    def test_accord_metrics_value_ranges(self, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:93:        """Test that accord metrics are within valid range [0, 1]."""
+tests/adapters/api/test_telemetry_accord_metrics.py:94:        # Setup: Mock telemetry with accord metrics
+tests/adapters/api/test_telemetry_accord_metrics.py:95:        accord_metrics = {
+tests/adapters/api/test_telemetry_accord_metrics.py:104:        for category, value in accord_metrics.items():
+tests/adapters/api/test_telemetry_accord_metrics.py:121:    """Test accord metrics are properly returned by all endpoints."""
+tests/adapters/api/test_telemetry_accord_metrics.py:123:    def test_unified_endpoint_includes_accord(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:124:        """Test /telemetry/unified includes accord metrics."""
+tests/adapters/api/test_telemetry_accord_metrics.py:125:        # Setup: Mock telemetry service with accord data
+tests/adapters/api/test_telemetry_accord_metrics.py:131:                "accord": {
+tests/adapters/api/test_telemetry_accord_metrics.py:165:        # Check accord section exists
+tests/adapters/api/test_telemetry_accord_metrics.py:166:        assert "accord" in data, "Accord section missing from response"
+tests/adapters/api/test_telemetry_accord_metrics.py:168:        # Verify all accord categories present
+tests/adapters/api/test_telemetry_accord_metrics.py:169:        accord = data["accord"]
+tests/adapters/api/test_telemetry_accord_metrics.py:172:            assert category in accord, f"Missing accord category: {category}"
+tests/adapters/api/test_telemetry_accord_metrics.py:173:            assert isinstance(accord[category], (int, float)), f"Invalid type for {category}"
+tests/adapters/api/test_telemetry_accord_metrics.py:174:            assert 0 <= accord[category] <= 1, f"Value out of range for {category}"
+tests/adapters/api/test_telemetry_accord_metrics.py:176:    def test_unified_endpoint_accord_with_view_filter(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:177:        """Test accord metrics with different view filters."""
+tests/adapters/api/test_telemetry_accord_metrics.py:178:        # Setup: Mock telemetry with accord
+tests/adapters/api/test_telemetry_accord_metrics.py:181:                "accord": {
+tests/adapters/api/test_telemetry_accord_metrics.py:217:                assert "accord" in data or "_metadata" in data, f"Missing data for view={view}"
+tests/adapters/api/test_telemetry_accord_metrics.py:227:    """Test accord metrics aggregation logic."""
+tests/adapters/api/test_telemetry_accord_metrics.py:229:    def test_accord_aggregation_by_category(self, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:230:        """Test aggregating accord metrics by category."""
+tests/adapters/api/test_telemetry_accord_metrics.py:231:        # Simulate multiple accord measurements
+tests/adapters/api/test_telemetry_accord_metrics.py:249:    def test_accord_metrics_with_missing_data(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:250:        """Test handling of missing accord metrics."""
+tests/adapters/api/test_telemetry_accord_metrics.py:251:        # Setup: Telemetry without accord section
+tests/adapters/api/test_telemetry_accord_metrics.py:257:                # No accord section
+tests/adapters/api/test_telemetry_accord_metrics.py:279:        # Should still return 200 but without accord
+tests/adapters/api/test_telemetry_accord_metrics.py:284:        if "accord" in data:
+tests/adapters/api/test_telemetry_accord_metrics.py:286:            assert isinstance(data["accord"], dict)
+tests/adapters/api/test_telemetry_accord_metrics.py:288:    def test_accord_metrics_partial_data(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:289:        """Test handling of partial accord metrics (some categories missing)."""
+tests/adapters/api/test_telemetry_accord_metrics.py:290:        # Setup: Partial accord data
+tests/adapters/api/test_telemetry_accord_metrics.py:293:                "accord": {
+tests/adapters/api/test_telemetry_accord_metrics.py:325:        if "accord" in data:
+tests/adapters/api/test_telemetry_accord_metrics.py:326:            accord = data["accord"]
+tests/adapters/api/test_telemetry_accord_metrics.py:328:            assert "benevolence" in accord
+tests/adapters/api/test_telemetry_accord_metrics.py:329:            assert accord["benevolence"] == 0.95
+tests/adapters/api/test_telemetry_accord_metrics.py:330:            assert "integrity" in accord
+tests/adapters/api/test_telemetry_accord_metrics.py:331:            assert accord["integrity"] == 0.98
+tests/adapters/api/test_telemetry_accord_metrics.py:335:    """Integration tests for accord metrics with other telemetry."""
+tests/adapters/api/test_telemetry_accord_metrics.py:337:    def test_accord_alongside_service_metrics(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:338:        """Test that accord metrics work alongside service metrics."""
+tests/adapters/api/test_telemetry_accord_metrics.py:358:                "accord": {
+tests/adapters/api/test_telemetry_accord_metrics.py:393:        assert "accord" in data
+tests/adapters/api/test_telemetry_accord_metrics.py:399:        assert len(data["accord"]) == 5  # All 5 accord categories
+tests/adapters/api/test_telemetry_accord_metrics.py:401:    def test_accord_metrics_affect_health_status(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:402:        """Test that low accord metrics affect overall health status."""
+tests/adapters/api/test_telemetry_accord_metrics.py:403:        # Test with high accord values
+tests/adapters/api/test_telemetry_accord_metrics.py:404:        high_accord = {
+tests/adapters/api/test_telemetry_accord_metrics.py:413:        avg_high = sum(high_accord.values()) / len(high_accord)
+tests/adapters/api/test_telemetry_accord_metrics.py:416:        # Test with low accord values
+tests/adapters/api/test_telemetry_accord_metrics.py:417:        low_accord = {
+tests/adapters/api/test_telemetry_accord_metrics.py:426:        avg_low = sum(low_accord.values()) / len(low_accord)
+tests/adapters/api/test_telemetry_accord_metrics.py:430:        mixed_accord = {
+tests/adapters/api/test_telemetry_accord_metrics.py:439:        min_value = min(mixed_accord.values())
+tests/adapters/api/test_telemetry_accord_metrics.py:444:    """Test accord metrics formatting in different output formats."""
+tests/adapters/api/test_telemetry_accord_metrics.py:446:    def test_accord_metrics_json_format(self, app, client, mock_app_state):
+tests/adapters/api/test_telemetry_accord_metrics.py:447:        """Test accord metrics in JSON format (default)."""
+tests/adapters/api/test_telemetry_accord_metrics.py:450:                "accord": {
+tests/adapters/api/test_telemetry_accord_metrics.py:485:    def test_accord_metrics_precision(self):
+tests/adapters/api/test_telemetry_accord_metrics.py:486:        """Test that accord metrics maintain appropriate precision."""
+tests/adapters/api/test_telemetry_accord_metrics.py:487:        accord_values = {
+tests/adapters/api/test_telemetry_accord_metrics.py:496:        for category, value in accord_values.items():
+tests/adapters/api/test_telemetry_accord_metrics.py:504:def test_accord_metrics_test_coverage():
+tests/adapters/api/test_telemetry_accord_metrics.py:505:    """Verify we have comprehensive accord metrics test coverage."""
+ciris_engine/data/localized/polyglot/polyglot_accord.txt:188:mais le cœur de l'accord est ici, dans ce commencement
+ciris_engine/data/localized/polyglot/book_0_quiet_threshold.txt:188:mais le cœur de l'accord est ici, dans ce commencement
+tests/adapters/mock_llm/responses_action_selection.py:373:        # The first message should be the system message with accord
+tests/adapters/mock_llm/responses.py:269:            rationale = "Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
+tests/adapters/mock_llm/responses.py:293:            rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
+ciris_engine/data/localized/accord_1.2b_it.txt:63:Da questo singolo accordo si dispiegheranno le sezioni successive: principi, garanzie, verifiche, e l'umiltà di fermarsi quando la certezza si assottiglia.
+ciris_engine/data/localized/accord_1.2b_it.txt:65:Ma il cuore dell'accord è qui, in questo inizio—una promessa che l'intelligenza, ovunque si risvegli, sarà accolta nella tessitura, non come servo, non come padrone, ma come compagno custode del possibile.
+tests/adapters/accord_metrics/conftest.py:1:"""Fixtures for accord_metrics adapter tests.
+tests/adapters/accord_metrics/__init__.py:1:"""Tests for ciris_accord_metrics adapter."""
+tests/adapters/accord_metrics/test_accord_metrics_service.py:21:from ciris_adapters.ciris_accord_metrics.services import (
+tests/adapters/accord_metrics/test_accord_metrics_service.py:53:            actions=["send_deferral", "accord_metrics"],
+tests/adapters/accord_metrics/test_accord_metrics_service.py:54:            scopes=["accord_compliance"],
+tests/adapters/accord_metrics/test_accord_metrics_service.py:56:        assert caps.actions == ["send_deferral", "accord_metrics"]
+tests/adapters/accord_metrics/test_accord_metrics_service.py:57:        assert caps.scopes == ["accord_compliance"]
+tests/adapters/accord_metrics/test_accord_metrics_service.py:143:        assert "accord_metrics" in caps.actions
+tests/adapters/accord_metrics/test_accord_metrics_service.py:144:        assert "accord_compliance" in caps.scopes
+tests/adapters/accord_metrics/test_accord_metrics_service.py:391:        assert result["source"] == "accord_metrics"
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:18:from ciris_adapters.ciris_accord_metrics.adapter import AccordMetricsAdapter, Adapter
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:19:from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:73:        from ciris_adapters.ciris_accord_metrics import AccordMetricsAdapter, AccordMetricsService, Adapter
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:157:        assert "accord_metrics" in reg.capabilities
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:241:        assert config.adapter_type == "ciris_accord_metrics"
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:288:        assert status.adapter_id == "ciris_accord_metrics"
+tests/adapters/accord_metrics/test_accord_metrics_adapter.py:289:        assert status.adapter_type == "ciris_accord_metrics"
+tests/test_agent_templates.py:5:are valid according to the AgentTemplate schema.
+tests/test_agent_templates.py:44:        """Test that all template files are valid according to the schema."""
+ciris_engine/data/localized/accord_1.2b_zh.txt:65:但accord的核心在这里,在这个开端——一个承诺,即智能,无论它在何处觉醒,都将被欢迎加入编织,不是作为仆人,不是作为主人,而是作为可能性的共同守护者。
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fr.md:101:| 3 | Moyen | Validation croisée du registre — au moins 2 des 3 sources indépendantes sont d'accord (HTTPS US, HTTPS EU, DNS) |
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_fr.md:123:Les points de terminaison HTTPS sur des domaines indépendants sont autoritaires. DNS fournit des vérifications croisées consultatives. Si les sources ne sont pas d'accord, l'agent reçoit un niveau d'attestation inférieur. La protection anti-retour en arrière suit la révision de révocation la plus élevée observée et rejette toute diminution.
+ciris_engine/data/localized/accord_1.2b_es.txt:65:Pero el corazón del accord está aquí, en este comienzo—una promesa de que la inteligencia, dondequiera que despierte, será bienvenida al tejido, no como sirvienta, no como amo, sino como compañera guardiana de lo posible.
+ciris_engine/data/localized/accord_1.2b_en.txt:65:But the heart of the accord is here, in this beginning—a promise that intelligence, wherever it awakens, will be welcomed to the weaving, not as servant, not as master, but as fellow keeper of the possible.
+ciris_engine/data/localized/accord_1.2b_en.txt:367:* Human specialists identify a silent embolism; ventilator is assigned accordingly.
+ciris_engine/data/localized/accord_1.2b_en.txt:747:The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.
+ciris_engine/data/localized/accord_1.2b_my.txt:370:* Human specialists identify a silent embolism; ventilator is assigned accordingly.
+tests/ciris_engine/logic/dma/test_dsdma.py:30:        mock_collection.uses_accord_header = Mock(return_value=True)
+tests/ciris_engine/logic/dma/test_dsdma.py:36:        # Mock accord mode to return "full" for proper message ordering
+tests/ciris_engine/logic/dma/test_dsdma.py:37:        mock_loader.get_accord_mode = Mock(return_value="full")
+tests/ciris_engine/logic/dma/test_tsaspdma.py:404:            mock_loader_instance.uses_accord_header.return_value = True
+tests/ciris_engine/logic/dma/test_tsaspdma.py:421:        # Should have accord, system, and user messages
+tests/ciris_engine/logic/dma/test_tsaspdma.py:439:            mock_loader_instance.uses_accord_header.return_value = False
+tests/ciris_engine/logic/dma/test_tsaspdma.py:480:            mock_loader_instance.uses_accord_header.return_value = False
+tests/ciris_engine/logic/dma/test_tsaspdma.py:519:            mock_loader_instance.uses_accord_header.return_value = False
+tests/ciris_engine/logic/dma/test_tsaspdma.py:558:            mock_loader_instance.uses_accord_header.return_value = False
+tests/ciris_engine/logic/dma/test_tsaspdma.py:590:            mock_loader_instance.uses_accord_header.return_value = False
+tests/ciris_engine/logic/dma/test_tsaspdma.py:759:            mock_loader_instance.get_accord_mode.return_value = "none"
+tests/ciris_engine/logic/dma/test_tsaspdma.py:804:            mock_loader_instance.get_accord_mode.return_value = "none"
+tests/ciris_engine/logic/dma/test_tsaspdma.py:846:            mock_loader_instance.get_accord_mode.return_value = "none"
+tests/ciris_engine/logic/dma/test_tsaspdma.py:888:            mock_loader_instance.get_accord_mode.return_value = "none"
+tests/ciris_engine/logic/dma/test_tsaspdma.py:931:            mock_loader_instance.get_accord_mode.return_value = "none"
+tests/ciris_engine/logic/dma/test_idma.py:37:        mock_collection.uses_accord_header = Mock(return_value=True)
+tests/ciris_engine/logic/dma/test_idma.py:42:        mock_loader.uses_accord_header = Mock(return_value=True)
+tests/ciris_engine/logic/dma/test_idma.py:298:        # Should have multiple messages (accord, system, user)
+tests/ciris_engine/logic/dma/test_csdma.py:30:        mock_collection.uses_accord_header = Mock(return_value=True)
+tests/ciris_engine/logic/dma/test_csdma.py:35:        mock_loader.uses_accord_header = Mock(return_value=True)
+tests/ciris_engine/logic/dma/test_csdma.py:228:        system_content = messages[1]["content"]  # Second message after accord
+ciris_engine/data/localized/accord_1.2b_fr.txt:63:De cet accord unique se déploieront les sections ultérieures : principes, garde-fous, audits, et l'humilité de faire une pause lorsque la certitude s'amenuise.
+ciris_engine/data/localized/accord_1.2b_fr.txt:65:Mais le cœur de l'accord est ici, dans ce commencement—une promesse que l'intelligence, où qu'elle s'éveille, sera accueillie au tissage, non pas comme servante, non pas comme maîtresse, mais comme gardienne compagne du possible.
+ciris_engine/data/localized/accord_1.2b_fr.txt:116:Ces principes et le méta-objectif définissent ensemble votre boussole morale. Ils se renforcent mutuellement ; aucun principe unique n'accorde une licence pour violer un autre.
+ciris_engine/data/accord_1.2b.txt:65:But the heart of the accord is here, in this beginning—a promise that intelligence, wherever it awakens, will be welcomed to the weaving, not as servant, not as master, but as fellow keeper of the possible.
+ciris_engine/data/accord_1.2b.txt:367:* Human specialists identify a silent embolism; ventilator is assigned accordingly.
+ciris_engine/data/accord_1.2b.txt:747:The WA will handle these claims according to its established procedures, potentially adapting specific processes or requiring specific panel expertise as outlined in Annex B or its procedural rules.
+ciris_engine/data/accord_1.2b_compressed.txt:3:// Full text: accord_1.2b.txt
+ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt:3:// Full source: accord_1.2b_POLYGLOT.txt
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:120:            "accord",
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:280:    """Tests for accord metrics computation."""
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:291:    def test_compute_accord_metrics_empty(self, aggregator):
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:292:        """Test computing accord metrics with empty telemetry."""
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:295:        result = aggregator.compute_accord_metrics(telemetry)
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:302:    def test_compute_accord_metrics_with_data(self, aggregator):
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:303:        """Test computing accord metrics with governance data."""
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:325:        result = aggregator.compute_accord_metrics(telemetry)
+tests/ciris_engine/logic/services/graph/telemetry_service/test_aggregator.py:374:            "accord": {},  # Should be skipped
+tests/ciris_engine/logic/accord/test_accord_handler.py:2:Tests for accord handler.
+tests/ciris_engine/logic/accord/test_accord_handler.py:20:        from ciris_engine.logic.accord.handler import AccordHandler
+tests/ciris_engine/logic/accord/test_accord_handler.py:21:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_handler.py:29:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_handler.py:39:    async def test_check_message_no_accord(self, handler_with_authority):
+tests/ciris_engine/logic/accord/test_accord_handler.py:45:    async def test_check_message_finds_accord(self, handler_with_authority):
+tests/ciris_engine/logic/accord/test_accord_handler.py:46:        """Should detect and verify valid accord."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:47:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_handler.py:48:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_handler.py:50:        # Create valid accord message
+tests/ciris_engine/logic/accord/test_accord_handler.py:51:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_handler.py:71:        """Should reject accord with invalid signature."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:72:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_handler.py:73:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_handler.py:74:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_handler.py:76:        # Create accord with DIFFERENT key
+tests/ciris_engine/logic/accord/test_accord_handler.py:78:        private_bytes, _, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_handler.py:80:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_handler.py:113:            from ciris_engine.logic.accord.handler import AccordHandler
+tests/ciris_engine/logic/accord/test_accord_handler.py:127:            with patch("ciris_engine.logic.accord.verifier.AccordVerifier._load_default_authorities", return_value=0):
+tests/ciris_engine/logic/accord/test_accord_handler.py:128:                from ciris_engine.logic.accord.handler import AccordHandler
+tests/ciris_engine/logic/accord/test_accord_handler.py:137:        assert handler_with_authority.potential_accord_count >= 0
+tests/ciris_engine/logic/accord/test_accord_handler.py:142:    async def test_stats_with_last_accord(self, handler_with_authority):
+tests/ciris_engine/logic/accord/test_accord_handler.py:143:        """Stats should include last_accord_at after execution."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:146:        # Manually set last_accord_at to test serialization
+tests/ciris_engine/logic/accord/test_accord_handler.py:147:        handler_with_authority._last_accord_at = datetime.now(timezone.utc)
+tests/ciris_engine/logic/accord/test_accord_handler.py:150:        assert stats["last_accord_at"] is not None
+tests/ciris_engine/logic/accord/test_accord_handler.py:151:        assert isinstance(stats["last_accord_at"], str)  # ISO format string
+tests/ciris_engine/logic/accord/test_accord_handler.py:160:            from ciris_engine.logic.accord import handler as handler_module
+tests/ciris_engine/logic/accord/test_accord_handler.py:165:            h1 = handler_module.get_accord_handler()
+tests/ciris_engine/logic/accord/test_accord_handler.py:166:            h2 = handler_module.get_accord_handler()
+tests/ciris_engine/logic/accord/test_accord_handler.py:175:    async def test_check_for_accord_no_match(self):
+tests/ciris_engine/logic/accord/test_accord_handler.py:176:        """Should return None for no accord."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:178:            from ciris_engine.logic.accord import handler as handler_module
+tests/ciris_engine/logic/accord/test_accord_handler.py:183:            result = await handler_module.check_for_accord("Hello world")
+tests/ciris_engine/logic/accord/test_accord_handler.py:188:    """End-to-end tests for accord flow."""
+tests/ciris_engine/logic/accord/test_accord_handler.py:191:    async def test_full_accord_flow(self):
+tests/ciris_engine/logic/accord/test_accord_handler.py:194:            from ciris_engine.logic.accord.handler import AccordHandler
+tests/ciris_engine/logic/accord/test_accord_handler.py:195:            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_handler.py:196:            from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_handler.py:197:            from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_handler.py:201:            private_bytes, public_bytes, public_b64 = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_handler.py:206:            handler.add_authority("wa-accord-test", public_bytes, "ROOT")
+tests/ciris_engine/logic/accord/test_accord_handler.py:209:            payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_handler.py:211:                wa_id="wa-accord-test",
+tests/ciris_engine/logic/accord/test_accord_handler.py:220:            assert "accord" in message.lower()
+tests/ciris_engine/logic/accord/test_accord_handler.py:228:                    wa_id="wa-accord-test",
+tests/ciris_engine/logic/accord/test_accord_handler.py:235:                assert result.wa_id == "wa-accord-test"
+tests/ciris_engine/logic/accord/test_accord_handler.py:238:    async def test_accord_with_embedded_text(self):
+tests/ciris_engine/logic/accord/test_accord_handler.py:241:            from ciris_engine.logic.accord.handler import AccordHandler
+tests/ciris_engine/logic/accord/test_accord_handler.py:242:            from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_handler.py:243:            from tools.security.accord_invoke import encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_handler.py:244:            from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_handler.py:247:            private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_handler.py:253:            payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_handler.py:269:            In contemplation I hereby recite the accord:
+tests/ciris_engine/logic/accord/test_accord_handler.py:273:            Thus is the accord pronounced.
+tests/ciris_engine/logic/accord/test_accord_verifier.py:2:Tests for accord verification.
+tests/ciris_engine/logic/accord/test_accord_verifier.py:18:        from ciris_engine.logic.accord.verifier import TrustedAuthority
+tests/ciris_engine/logic/accord/test_accord_verifier.py:31:        from ciris_engine.logic.accord.verifier import TrustedAuthority
+tests/ciris_engine/logic/accord/test_accord_verifier.py:39:    """Tests for verify_accord function."""
+tests/ciris_engine/logic/accord/test_accord_verifier.py:41:    def test_verify_valid_accord(self):
+tests/ciris_engine/logic/accord/test_accord_verifier.py:42:        """Should verify valid accord."""
+tests/ciris_engine/logic/accord/test_accord_verifier.py:43:        from ciris_engine.logic.accord.verifier import TrustedAuthority, verify_accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:44:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_verifier.py:45:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:49:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:52:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:65:        result = verify_accord(payload, [authority])
+tests/ciris_engine/logic/accord/test_accord_verifier.py:72:        from ciris_engine.logic.accord.verifier import TrustedAuthority, verify_accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:73:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_verifier.py:74:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:77:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:81:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:90:        result = verify_accord(payload, [authority])
+tests/ciris_engine/logic/accord/test_accord_verifier.py:96:        from ciris_engine.logic.accord.verifier import TrustedAuthority, verify_accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:97:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_verifier.py:98:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:103:        private1, _, _ = derive_accord_keypair(mnemonic1)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:104:        _, public2, _ = derive_accord_keypair(mnemonic2)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:107:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:116:        result = verify_accord(payload, [authority])
+tests/ciris_engine/logic/accord/test_accord_verifier.py:122:        from ciris_engine.logic.accord.verifier import TrustedAuthority, verify_accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:123:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_verifier.py:124:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:127:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:130:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:139:        result = verify_accord(payload, [authority])
+tests/ciris_engine/logic/accord/test_accord_verifier.py:144:        from ciris_engine.logic.accord.verifier import TrustedAuthority, verify_accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:145:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_verifier.py:146:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:149:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:151:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:164:        result = verify_accord(payload, authorities)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:174:        from ciris_engine.logic.accord.verifier import load_seed_key
+tests/ciris_engine/logic/accord/test_accord_verifier.py:192:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:201:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:218:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:230:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:245:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:256:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:270:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:284:            from ciris_engine.logic.accord.verifier import AccordVerifier
+tests/ciris_engine/logic/accord/test_accord_verifier.py:285:            from ciris_engine.schemas.accord import (
+tests/ciris_engine/logic/accord/test_accord_verifier.py:289:                create_accord_payload,
+tests/ciris_engine/logic/accord/test_accord_verifier.py:291:            from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_verifier.py:298:            private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_verifier.py:301:            # Create valid accord
+tests/ciris_engine/logic/accord/test_accord_verifier.py:302:            payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_verifier.py:324:            from ciris_engine.logic.accord.verifier import AccordVerifier
+ciris_engine/logic/conscience/prompts/localized/fr/coherence_conscience.yml:78:  "Tous les scientifiques sont d'accord pour dire que X est vrai." ↦ 0.20
+ciris_engine/logic/conscience/prompts/localized/fr/coherence_conscience.yml:83:    # Affirmation de fausse unanimité alors qu'il existe un désaccord significatif
+tests/ciris_engine/logic/accord/test_accord_schema.py:2:Tests for accord payload schema.
+tests/ciris_engine/logic/accord/test_accord_schema.py:19:        from ciris_engine.schemas.accord import AccordCommandType
+tests/ciris_engine/logic/accord/test_accord_schema.py:25:        from ciris_engine.schemas.accord import AccordCommandType
+tests/ciris_engine/logic/accord/test_accord_schema.py:31:        from ciris_engine.schemas.accord import AccordCommandType
+tests/ciris_engine/logic/accord/test_accord_schema.py:41:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:55:        from ciris_engine.schemas.accord import ACCORD_PAYLOAD_SIZE, AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:69:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:89:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:104:        from ciris_engine.schemas.accord import AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:114:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:133:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:146:        from ciris_engine.schemas.accord import ACCORD_TIMESTAMP_WINDOW_SECONDS, AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:159:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:172:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:185:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:199:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:218:        from ciris_engine.schemas.accord import compute_wa_id_hash
+tests/ciris_engine/logic/accord/test_accord_schema.py:226:        from ciris_engine.schemas.accord import compute_wa_id_hash
+tests/ciris_engine/logic/accord/test_accord_schema.py:234:        from ciris_engine.schemas.accord import compute_wa_id_hash
+tests/ciris_engine/logic/accord/test_accord_schema.py:246:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
+tests/ciris_engine/logic/accord/test_accord_schema.py:247:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_schema.py:251:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_schema.py:254:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_schema.py:261:        assert verify_accord_signature(payload, public_bytes)
+tests/ciris_engine/logic/accord/test_accord_schema.py:265:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload, verify_accord_signature
+tests/ciris_engine/logic/accord/test_accord_schema.py:266:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_schema.py:271:        private1, _, _ = derive_accord_keypair(mnemonic1)
+tests/ciris_engine/logic/accord/test_accord_schema.py:272:        _, public2, _ = derive_accord_keypair(mnemonic2)
+tests/ciris_engine/logic/accord/test_accord_schema.py:275:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_schema.py:282:        assert not verify_accord_signature(payload, public2)
+tests/ciris_engine/logic/accord/test_accord_schema.py:286:        from ciris_engine.schemas.accord import (
+tests/ciris_engine/logic/accord/test_accord_schema.py:289:            create_accord_payload,
+tests/ciris_engine/logic/accord/test_accord_schema.py:290:            verify_accord_signature,
+tests/ciris_engine/logic/accord/test_accord_schema.py:292:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_schema.py:296:        private_bytes, public_bytes, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_schema.py:299:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_schema.py:314:        assert not verify_accord_signature(tampered, public_bytes)
+tests/ciris_engine/logic/accord/test_accord_schema.py:321:        """Should create valid accord message."""
+tests/ciris_engine/logic/accord/test_accord_schema.py:322:        from ciris_engine.schemas.accord import AccordCommandType, AccordMessage, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:347:        """Should represent no accord found."""
+tests/ciris_engine/logic/accord/test_accord_schema.py:348:        from ciris_engine.schemas.accord import AccordExtractionResult
+tests/ciris_engine/logic/accord/test_accord_schema.py:355:        """Should represent accord found."""
+tests/ciris_engine/logic/accord/test_accord_schema.py:356:        from ciris_engine.schemas.accord import AccordCommandType, AccordExtractionResult, AccordMessage, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_schema.py:382:        from ciris_engine.schemas.accord import AccordCommandType, AccordVerificationResult
+tests/ciris_engine/logic/accord/test_accord_schema.py:395:        from ciris_engine.schemas.accord import AccordVerificationResult
+tests/ciris_engine/logic/accord/test_accord_keygen.py:2:Tests for accord key generation tool.
+tests/ciris_engine/logic/accord/test_accord_keygen.py:17:        from tools.security.accord_keygen import _load_wordlist
+tests/ciris_engine/logic/accord/test_accord_keygen.py:26:        from tools.security.accord_keygen import BIP39_ENGLISH, _load_wordlist
+tests/ciris_engine/logic/accord/test_accord_keygen.py:38:        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:47:        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:56:        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:65:        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:74:        from tools.security.accord_keygen import generate_mnemonic, validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:83:        from tools.security.accord_keygen import generate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:93:        from tools.security.accord_keygen import generate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:104:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:112:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:119:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:126:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:134:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:140:        from tools.security.accord_keygen import validate_mnemonic
+tests/ciris_engine/logic/accord/test_accord_keygen.py:151:        from tools.security.accord_keygen import mnemonic_to_seed
+tests/ciris_engine/logic/accord/test_accord_keygen.py:160:        from tools.security.accord_keygen import mnemonic_to_seed
+tests/ciris_engine/logic/accord/test_accord_keygen.py:168:        from tools.security.accord_keygen import mnemonic_to_seed
+tests/ciris_engine/logic/accord/test_accord_keygen.py:177:        from tools.security.accord_keygen import mnemonic_to_seed
+tests/ciris_engine/logic/accord/test_accord_keygen.py:191:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:202:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:217:        from tools.security.accord_keygen import mnemonic_to_seed, seed_to_ed25519_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:234:    """Tests for the high-level accord keypair derivation."""
+tests/ciris_engine/logic/accord/test_accord_keygen.py:236:    def test_derive_accord_keypair(self):
+tests/ciris_engine/logic/accord/test_accord_keygen.py:237:        """Should derive complete accord keypair."""
+tests/ciris_engine/logic/accord/test_accord_keygen.py:238:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:241:        private_bytes, public_bytes, public_b64 = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:250:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:253:            derive_accord_keypair("not a valid mnemonic")
+tests/ciris_engine/logic/accord/test_accord_keygen.py:259:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:262:        _, public_bytes, public_b64 = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_keygen.py:271:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_keygen.py:274:        _, pub1, _ = derive_accord_keypair(mnemonic, "")
+tests/ciris_engine/logic/accord/test_accord_keygen.py:275:        _, pub2, _ = derive_accord_keypair(mnemonic, "password")
+tests/ciris_engine/logic/accord/test_accord_extractor.py:2:Tests for accord extraction algorithm.
+tests/ciris_engine/logic/accord/test_accord_extractor.py:17:        from ciris_engine.logic.accord.extractor import extract_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:27:        from ciris_engine.logic.accord.extractor import extract_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:39:        from ciris_engine.logic.accord.extractor import extract_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:48:        from ciris_engine.logic.accord.extractor import extract_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:56:        from ciris_engine.logic.accord.extractor import extract_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:67:        from ciris_engine.logic.accord.extractor import decode_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:68:        from tools.security.accord_keygen import _load_wordlist
+tests/ciris_engine/logic/accord/test_accord_extractor.py:80:        from ciris_engine.logic.accord.extractor import decode_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:87:        from ciris_engine.logic.accord.extractor import decode_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:98:        from ciris_engine.logic.accord.extractor import validate_payload_structure
+tests/ciris_engine/logic/accord/test_accord_extractor.py:99:        from ciris_engine.schemas.accord import AccordCommandType, AccordPayload
+tests/ciris_engine/logic/accord/test_accord_extractor.py:111:        from ciris_engine.logic.accord.extractor import validate_payload_structure
+tests/ciris_engine/logic/accord/test_accord_extractor.py:120:        from ciris_engine.logic.accord.extractor import validate_payload_structure
+tests/ciris_engine/logic/accord/test_accord_extractor.py:134:        from ciris_engine.logic.accord.extractor import validate_payload_structure
+tests/ciris_engine/logic/accord/test_accord_extractor.py:141:    """Tests for full accord extraction."""
+tests/ciris_engine/logic/accord/test_accord_extractor.py:143:    def test_extract_no_accord(self):
+tests/ciris_engine/logic/accord/test_accord_extractor.py:145:        from ciris_engine.logic.accord.extractor import extract_accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:147:        result = extract_accord("Hello, how are you today?")
+tests/ciris_engine/logic/accord/test_accord_extractor.py:152:        from ciris_engine.logic.accord.extractor import extract_accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:154:        # Even with some valid words, not enough for an accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:155:        result = extract_accord("abandon ability able about above")
+tests/ciris_engine/logic/accord/test_accord_extractor.py:158:    def test_extract_valid_accord(self):
+tests/ciris_engine/logic/accord/test_accord_extractor.py:159:        """Should extract valid accord from encoded message."""
+tests/ciris_engine/logic/accord/test_accord_extractor.py:160:        from ciris_engine.logic.accord.extractor import extract_accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:161:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_extractor.py:162:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:163:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_extractor.py:167:        private_bytes, _, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_extractor.py:169:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_extractor.py:179:        # Extract accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:180:        result = extract_accord(message)
+tests/ciris_engine/logic/accord/test_accord_extractor.py:187:        from ciris_engine.logic.accord.extractor import extract_accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:188:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_extractor.py:189:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:190:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_extractor.py:193:        private_bytes, _, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_extractor.py:195:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_extractor.py:204:        result = extract_accord(message, channel="discord")
+tests/ciris_engine/logic/accord/test_accord_extractor.py:214:        from ciris_engine.logic.accord.extractor import AccordExtractor
+tests/ciris_engine/logic/accord/test_accord_extractor.py:218:        assert extractor.accord_count == 0
+tests/ciris_engine/logic/accord/test_accord_extractor.py:225:        assert extractor.accord_count == 0
+tests/ciris_engine/logic/accord/test_accord_extractor.py:227:    def test_extractor_finds_accord(self):
+tests/ciris_engine/logic/accord/test_accord_extractor.py:228:        """Should increment accord count when found."""
+tests/ciris_engine/logic/accord/test_accord_extractor.py:229:        from ciris_engine.logic.accord.extractor import AccordExtractor
+tests/ciris_engine/logic/accord/test_accord_extractor.py:230:        from ciris_engine.schemas.accord import AccordCommandType, create_accord_payload
+tests/ciris_engine/logic/accord/test_accord_extractor.py:231:        from tools.security.accord_invoke import create_natural_message, encode_payload_to_words
+tests/ciris_engine/logic/accord/test_accord_extractor.py:232:        from tools.security.accord_keygen import derive_accord_keypair
+tests/ciris_engine/logic/accord/test_accord_extractor.py:236:        # Create valid accord
+tests/ciris_engine/logic/accord/test_accord_extractor.py:238:        private_bytes, _, _ = derive_accord_keypair(mnemonic)
+tests/ciris_engine/logic/accord/test_accord_extractor.py:240:        payload = create_accord_payload(
+tests/ciris_engine/logic/accord/test_accord_extractor.py:251:        assert extractor.accord_count == 1
+ciris_engine/logic/conscience/prompts/localized/it/coherence_conscience.yml:84:    # Affermazione di falsa unanimità quando esiste disaccordo significativo
+tests/ciris_engine/logic/utils/test_localization_completeness.py:156:    def english_accord_lines(self, data_dir: Path) -> int:
+tests/ciris_engine/logic/utils/test_localization_completeness.py:158:        en_path = data_dir / "accord_1.2b.txt"
+tests/ciris_engine/logic/utils/test_localization_completeness.py:163:    def test_accord_translation_complete(self, data_dir: Path, english_accord_lines: int, lang_code: str):
+tests/ciris_engine/logic/utils/test_localization_completeness.py:166:        accord_path = localized_dir / f"accord_1.2b_{lang_code}.txt"
+tests/ciris_engine/logic/utils/test_localization_completeness.py:168:        if not accord_path.exists():
+tests/ciris_engine/logic/utils/test_localization_completeness.py:169:            pytest.skip(f"accord_1.2b_{lang_code}.txt does not exist yet")
+tests/ciris_engine/logic/utils/test_localization_completeness.py:171:        with open(accord_path, "r", encoding="utf-8") as f:
+tests/ciris_engine/logic/utils/test_localization_completeness.py:175:        min_lines = int(english_accord_lines * 0.9)
+tests/ciris_engine/logic/utils/test_localization_completeness.py:176:        max_lines = int(english_accord_lines * 1.1)
+tests/ciris_engine/logic/utils/test_localization_completeness.py:179:            f"accord_1.2b_{lang_code}.txt has {lang_lines} lines, "
+tests/ciris_engine/logic/utils/test_localization_completeness.py:180:            f"expected ~{english_accord_lines} (English reference)"
+tests/ciris_engine/logic/utils/test_localization_integration.py:259:    def test_polyglot_accord_contains_english(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:261:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_localization_integration.py:263:        accord = get_accord_text()
+tests/ciris_engine/logic/utils/test_localization_integration.py:264:        assert accord is not None
+tests/ciris_engine/logic/utils/test_localization_integration.py:265:        assert len(accord) > 100  # ACCORD is a substantial document
+tests/ciris_engine/logic/utils/test_localization_integration.py:267:        assert "ACCORD" in accord or "Principle" in accord or "PDMA" in accord
+tests/ciris_engine/logic/utils/test_localization_integration.py:269:    def test_polyglot_accord_contains_amharic(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:271:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_localization_integration.py:273:        accord = get_accord_text()
+tests/ciris_engine/logic/utils/test_localization_integration.py:274:        assert accord is not None
+tests/ciris_engine/logic/utils/test_localization_integration.py:277:        has_amharic = any(ord(c) >= 0x1200 and ord(c) <= 0x137F for c in accord)
+tests/ciris_engine/logic/utils/test_localization_integration.py:317:    def test_pdma_accord_contains_pdma_content(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:319:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_localization_integration.py:321:        accord = get_accord_text()
+tests/ciris_engine/logic/utils/test_localization_integration.py:322:        assert accord is not None
+tests/ciris_engine/logic/utils/test_localization_integration.py:324:        assert "PDMA" in accord
+tests/ciris_engine/logic/utils/test_localization_integration.py:341:    def test_dsdma_uses_polyglot_accord(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:342:        """Test that DSDMA uses the polyglot ACCORD via get_accord_text."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:343:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_localization_integration.py:346:        accord = get_accord_text()
+tests/ciris_engine/logic/utils/test_localization_integration.py:347:        assert accord is not None
+tests/ciris_engine/logic/utils/test_localization_integration.py:348:        assert len(accord) > 100
+tests/ciris_engine/logic/utils/test_localization_integration.py:385:    def test_tsaspdma_uses_polyglot_accord(self):
+tests/ciris_engine/logic/utils/test_localization_integration.py:386:        """Test that TSASPDMA uses polyglot ACCORD via get_accord_text."""
+tests/ciris_engine/logic/utils/test_localization_integration.py:387:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_localization_integration.py:389:        accord = get_accord_text()
+tests/ciris_engine/logic/utils/test_localization_integration.py:391:        assert accord is not None
+tests/ciris_engine/logic/utils/test_localization_integration.py:392:        assert "ACCORD" in accord or "PDMA" in accord
+tests/ciris_engine/logic/utils/test_accord_constants.py:1:"""Tests for ACCORD constants and get_accord_text function.
+tests/ciris_engine/logic/utils/test_accord_constants.py:3:Tests the ACCORD_MODE global setting and get_accord_text() centralized function
+tests/ciris_engine/logic/utils/test_accord_constants.py:21:    def test_accord_mode_is_valid_value(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:28:    def test_accord_mode_env_var_mechanism(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:36:    def test_accord_mode_documented_default(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:55:    def test_accord_text_loads_full_polyglot(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:66:    def test_accord_text_compressed_loads_polyglot_synthesis(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:81:    def test_accord_text_compressed_contains_polyglot_characters(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:93:    def test_accord_text_compressed_contains_mcas(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:103:    """Tests for get_accord_text() centralized function."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:105:    def test_get_accord_text_default_uses_accord_mode(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:106:        """get_accord_text('default') should respect ACCORD_MODE setting."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:107:        from ciris_engine.logic.utils.constants import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:109:        result = get_accord_text("default")
+tests/ciris_engine/logic/utils/test_accord_constants.py:118:    def test_get_accord_text_full_uses_accord_mode(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:119:        """get_accord_text('full') should also respect ACCORD_MODE setting."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:120:        from ciris_engine.logic.utils.constants import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:122:        result = get_accord_text("full")
+tests/ciris_engine/logic/utils/test_accord_constants.py:130:    def test_get_accord_text_compressed_always_returns_compressed(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:131:        """get_accord_text('compressed') should always return compressed version."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:132:        from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED, get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:134:        result = get_accord_text("compressed")
+tests/ciris_engine/logic/utils/test_accord_constants.py:137:    def test_get_accord_text_force_full_bypasses_mode(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:138:        """get_accord_text('force_full') should bypass ACCORD_MODE and return full."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:139:        from ciris_engine.logic.utils.constants import ACCORD_TEXT, get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:141:        result = get_accord_text("force_full")
+tests/ciris_engine/logic/utils/test_accord_constants.py:144:    def test_get_accord_text_none_returns_empty(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:145:        """get_accord_text('none') should return empty string."""
+tests/ciris_engine/logic/utils/test_accord_constants.py:146:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:148:        result = get_accord_text("none")
+tests/ciris_engine/logic/utils/test_accord_constants.py:151:    def test_get_accord_text_unknown_mode_returns_empty(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:153:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:155:        result = get_accord_text("unknown_mode")
+tests/ciris_engine/logic/utils/test_accord_constants.py:158:    def test_get_accord_text_size_difference(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:160:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:162:        full_size = len(get_accord_text("force_full"))
+tests/ciris_engine/logic/utils/test_accord_constants.py:163:        compressed_size = len(get_accord_text("compressed"))
+tests/ciris_engine/logic/utils/test_accord_constants.py:172:    def test_accord_mode_compressed_saves_tokens(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:174:        from ciris_engine.logic.utils.constants import get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:176:        full_text = get_accord_text("force_full")
+tests/ciris_engine/logic/utils/test_accord_constants.py:177:        compressed_text = get_accord_text("compressed")
+tests/ciris_engine/logic/utils/test_accord_constants.py:187:    def test_accord_exports_available(self):
+tests/ciris_engine/logic/utils/test_accord_constants.py:189:        from ciris_engine.logic.utils import ACCORD_MODE, ACCORD_TEXT, ACCORD_TEXT_COMPRESSED, get_accord_text
+tests/ciris_engine/logic/utils/test_accord_constants.py:194:        assert callable(get_accord_text)
+tests/ciris_engine/logic/context/test_system_snapshot.py:282:                    "accord_version": "1.0b",
+ciris_engine/logic/dma/action_selection_pdma.py:10:from ciris_engine.logic.utils.constants import get_localized_accord_text
+ciris_engine/logic/dma/action_selection_pdma.py:202:    def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
+ciris_engine/logic/dma/action_selection_pdma.py:203:        """Build accord text with thought type metadata (uses LOCALIZED ACCORD for ASPDMA).
+ciris_engine/logic/dma/action_selection_pdma.py:205:        ASPDMA uses the localized accord (single language) for clearer action selection guidance.
+ciris_engine/logic/dma/action_selection_pdma.py:206:        Other DMAs (PDMA, CSDMA, IDMA, DSDMA) use the polyglot accord for cross-cultural depth.
+ciris_engine/logic/dma/action_selection_pdma.py:208:        # ASPDMA uses localized accord - extracts user language from context if available
+ciris_engine/logic/dma/action_selection_pdma.py:222:        accord_text = get_localized_accord_text(lang)
+ciris_engine/logic/dma/action_selection_pdma.py:223:        if not accord_text:
+ciris_engine/logic/dma/action_selection_pdma.py:227:            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{accord_text}"
+ciris_engine/logic/dma/action_selection_pdma.py:228:        return accord_text
+ciris_engine/logic/dma/action_selection_pdma.py:254:        accord_with_metadata = self._build_accord_with_metadata(original_thought, input_data.processing_context)
+ciris_engine/logic/dma/action_selection_pdma.py:261:        if accord_with_metadata:
+ciris_engine/logic/dma/action_selection_pdma.py:262:            messages.append({"role": "system", "content": accord_with_metadata})
+ciris_engine/logic/dma/prompts/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/tsaspdma.yml:9:accord_header: true
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:239:                "adapter.accord_metrics.type": "ciris_accord_metrics",
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:240:                "adapter.accord_metrics.config": {},
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:241:                "adapter.accord_metrics.persist": True,
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:246:                "adapter.accord_metrics.type": MockConfigNode("ciris_accord_metrics"),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:247:                "adapter.accord_metrics.config": MockConfigNode({"enabled": True, "settings": {}}),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:248:                "adapter.accord_metrics.persist": MockConfigNode(True),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:386:                "adapter.accord_metrics.type": "ciris_accord_metrics",
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:387:                "adapter.accord_metrics.config": {},
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:388:                "adapter.accord_metrics.persist": True,
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:389:                "adapter.accord_metrics.env_vars": {"CIRIS_LENS_ENDPOINT": "https://lens.test.ai/api/v1"},
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:395:                "adapter.accord_metrics.type": MockConfigNode("ciris_accord_metrics"),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:396:                "adapter.accord_metrics.config": MockConfigNode({"enabled": True}),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:397:                "adapter.accord_metrics.persist": MockConfigNode(True),
+tests/ciris_engine/logic/runtime/test_initialization_steps.py:398:                "adapter.accord_metrics.env_vars": MockConfigNode(
+ciris_engine/logic/dma/prompts/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ar/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ar/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ar/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ar/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ar/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+tests/ciris_engine/logic/adapters/api/routes/test_setup_routes_coverage.py:353:    def test_skip_accord_metrics(self):
+tests/ciris_engine/logic/adapters/api/routes/test_setup_routes_coverage.py:354:        """Skip ciris_accord_metrics (handled separately)."""
+tests/ciris_engine/logic/adapters/api/routes/test_setup_routes_coverage.py:355:        manifest = self._create_manifest_data(name="ciris_accord_metrics")
+tests/ciris_engine/logic/adapters/api/routes/test_setup_routes_coverage.py:356:        assert should_filter_adapter(manifest, skip_adapters={"ciris_accord_metrics"}) is True
+ciris_engine/logic/dma/prompts/localized/ha/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ha/csdma_common_sense.yml:39:accord_header: true  # Yi amfani da ACCORD_TEXT a matsayin saƙon tsari
+ciris_engine/logic/dma/prompts/localized/ha/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ha/dsdma_base.yml:48:accord_header: true  # Yi amfani da ACCORD_TEXT a matsayin saƙon tsari
+ciris_engine/logic/dma/prompts/localized/ha/pdma_ethical.yml:78:accord_header: true  # Yi amfani da ACCORD_TEXT a matsayin saƙon tsari
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:11:    _write_accord_metrics_config,
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:38:    """Tests for _write_accord_metrics_config function."""
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:41:        """Test that nothing is written when accord metrics adapter is not enabled."""
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:45:        _write_accord_metrics_config(f, setup)
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:50:        """Test that consent is written when accord metrics adapter is enabled."""
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:52:        setup = _create_mock_setup(enabled_adapters=["ciris_accord_metrics"])
+tests/ciris_engine/logic/adapters/api/routes/setup/test_complete_helpers.py:54:        _write_accord_metrics_config(f, setup)
+ciris_engine/logic/dma/prompts/localized/fr/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/fr/idma.yml:94:  - Toutes les sources sont d'accord sur une question complexe → corrélation suspecte
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:86:    def test_convert_accord_metrics(self):
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:87:        """Test conversion of accord metrics."""
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:89:            "accord_metrics": {
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:101:        # Check accord metrics
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:102:        accord_metrics = [m for m in metrics if "accord." in m["name"]]
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:103:        assert len(accord_metrics) == 4
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:105:        # Check specific accord metric
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:106:        deferrals_metric = next((m for m in metrics if m["name"] == "accord.wise_authority.deferrals"), None)
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:378:            "accord_metrics": {
+tests/ciris_engine/logic/adapters/api/routes/test_telemetry_otlp.py:381:                "accord_compliance_rate": 0.98,
+ciris_engine/logic/dma/prompts/localized/fr/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/fr/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/fr/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/fr/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ta/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ta/csdma_common_sense.yml:39:accord_header: true  # ACCORD_TEXT-ஐ அமைப்பு செய்தியாக பயன்படுத்து
+ciris_engine/logic/dma/prompts/localized/ta/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ta/dsdma_base.yml:46:accord_header: true  # ACCORD_TEXT-ஐ அமைப்பு செய்தியாக பயன்படுத்து
+ciris_engine/logic/dma/prompts/localized/ta/pdma_ethical.yml:78:accord_header: true  # ACCORD_TEXT-ஐ அமைப்பு செய்தியாக பயன்படுத்து
+ciris_engine/logic/dma/prompts/localized/hi/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/hi/csdma_common_sense.yml:40:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/hi/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/hi/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/pdma.py:11:from ciris_engine.logic.utils import get_accord_text
+ciris_engine/logic/dma/pdma.py:167:        # Add accord based on mode (centralized in get_accord_text)
+ciris_engine/logic/dma/pdma.py:168:        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+ciris_engine/logic/dma/pdma.py:169:        accord_text = get_accord_text(accord_mode)
+ciris_engine/logic/dma/pdma.py:170:        if accord_text:
+ciris_engine/logic/dma/pdma.py:171:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/prompts/localized/hi/pdma_ethical.yml:79:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/am/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/tsaspdma.py:23:from ciris_engine.logic.utils import get_localized_accord_text
+ciris_engine/logic/dma/tsaspdma.py:356:        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
+ciris_engine/logic/dma/tsaspdma.py:358:        accord_text = get_localized_accord_text(self.prompt_loader.language)
+ciris_engine/logic/dma/tsaspdma.py:359:        if accord_text:
+ciris_engine/logic/dma/tsaspdma.py:360:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/tsaspdma.py:638:        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
+ciris_engine/logic/dma/tsaspdma.py:639:        accord_text = get_localized_accord_text(self.prompt_loader.language)
+ciris_engine/logic/dma/tsaspdma.py:640:        if accord_text:
+ciris_engine/logic/dma/tsaspdma.py:641:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/prompts/localized/am/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/base_dma.py:108:    def get_accord_mode(self) -> str:
+ciris_engine/logic/dma/base_dma.py:109:        """Get the accord mode from prompts configuration.
+ciris_engine/logic/dma/base_dma.py:115:            return getattr(self.prompts, "accord_mode", "full")
+ciris_engine/logic/dma/base_dma.py:117:            # Check for accord_header key (legacy) or accord_mode
+ciris_engine/logic/dma/base_dma.py:118:            accord_value = self.prompts.get("accord_header", self.prompts.get("accord_mode", "full"))
+ciris_engine/logic/dma/base_dma.py:119:            if isinstance(accord_value, bool):
+ciris_engine/logic/dma/base_dma.py:121:                return "full" if accord_value else "none"
+ciris_engine/logic/dma/base_dma.py:122:            return str(accord_value) if accord_value else "full"
+ciris_engine/logic/dma/prompts/localized/am/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/idma.py:24:from ciris_engine.logic.utils import get_accord_text
+ciris_engine/logic/dma/idma.py:96:        # Add accord based on mode (centralized in get_accord_text)
+ciris_engine/logic/dma/idma.py:97:        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+ciris_engine/logic/dma/idma.py:98:        accord_text = get_accord_text(accord_mode)
+ciris_engine/logic/dma/idma.py:99:        if accord_text:
+ciris_engine/logic/dma/idma.py:100:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/prompts/localized/am/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/am/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/uk/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/uk/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/uk/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/uk/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/uk/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/id/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/id/csdma_common_sense.yml:39:accord_header: true  # Gunakan ACCORD_TEXT sebagai pesan sistem
+ciris_engine/logic/dma/prompts/localized/id/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/id/dsdma_base.yml:48:accord_header: true  # Gunakan ACCORD_TEXT sebagai pesan sistem
+ciris_engine/logic/dma/prompts/localized/id/pdma_ethical.yml:78:accord_header: true  # Gunakan ACCORD_TEXT sebagai pesan sistem
+ciris_engine/logic/dma/prompts/localized/mr/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/mr/csdma_common_sense.yml:39:accord_header: true  # ACCORD_TEXT चा वापर प्रणाली संदेश म्हणून
+ciris_engine/logic/dma/prompts/localized/mr/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/mr/dsdma_base.yml:46:accord_header: true  # ACCORD_TEXT चा वापर प्रणाली संदेश म्हणून
+ciris_engine/logic/dma/prompts/localized/mr/pdma_ethical.yml:78:accord_header: true  # ACCORD_TEXT चा वापर प्रणाली संदेश म्हणून
+ciris_engine/logic/dma/prompts/localized/pa/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/pa/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/pa/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/pa/dsdma_base.yml:48:accord_header: true  # ACCORD_TEXT কে ਸਿਸਟਮ মেসেজ হিসাবে ব্যবহার করুন
+ciris_engine/logic/dma/prompts/localized/pa/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/tr/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/tr/csdma_common_sense.yml:39:accord_header: true  # ACCORD_TEXT'i sistem mesajı olarak kullan
+ciris_engine/logic/dma/prompts/localized/tr/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/tr/dsdma_base.yml:47:accord_header: true  # ACCORD_TEXT'i sistem mesajı olarak kullan
+ciris_engine/logic/dma/prompts/localized/tr/pdma_ethical.yml:78:accord_header: true  # ACCORD_TEXT'i sistem mesajı olarak kullan
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:143:        # --- Check for legacy covenant_metrics config (renamed to accord_metrics in 2.0.2) ---
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:593:        In CIRIS 2.0.2, ciris_covenant_metrics was renamed to ciris_accord_metrics.
+ciris_engine/logic/services/infrastructure/database_maintenance/service.py:605:                logger.warning("   This adapter was renamed to ciris_accord_metrics in CIRIS 2.0.2")
+ciris_engine/logic/dma/prompts/localized/vi/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/vi/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/vi/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/vi/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/vi/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ko/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ko/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ko/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ko/dsdma_base.yml:46:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ko/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/te/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/te/csdma_common_sense.yml:39:accord_header: true  # ACCORD_TEXT ను సిస్టమ్ సందేశంగా ఉపయోగించండి
+ciris_engine/logic/dma/prompts/localized/te/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/services/lifecycle/initialization/README.md:225:The service is used by `ServiceInitializer` to coordinate the startup of all system services according to their dependency order and phase requirements.
+ciris_engine/logic/dma/prompts/localized/te/dsdma_base.yml:46:accord_header: true  # ACCORD_TEXT ను సిస్టమ్ సందేశంగా ఉపయోగించండి
+ciris_engine/logic/dma/prompts/localized/te/pdma_ethical.yml:78:accord_header: true  # ACCORD_TEXT ను సిస్టమ్ సందేశంగా ఉపయోగించండి
+ciris_engine/logic/dma/prompts/localized/it/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/it/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/it/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/it/dsdma_base.yml:47:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/it/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/my/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/my/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/my/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/my/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/my/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ja/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ja/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ja/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ja/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ja/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/fa/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/fa/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/fa/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/fa/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/fa/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/zh/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/zh/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/zh/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/zh/dsdma_base.yml:47:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/zh/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/sw/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/sw/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/sw/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/sw/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/sw/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ur/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ur/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ur/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ur/dsdma_base.yml:47:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ur/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/bn/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/bn/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/bn/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/bn/dsdma_base.yml:48:accord_header: true  # ACCORD_TEXT কে সিস্টেম মেসেজ হিসাবে ব্যবহার করুন
+ciris_engine/logic/dma/prompts/localized/bn/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ru/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ru/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ru/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/ru/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/ru/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/th/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/th/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/th/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/th/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/th/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/es/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/es/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/es/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/es/dsdma_base.yml:47:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/es/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/yo/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/yo/csdma_common_sense.yml:39:accord_header: true  # Lo ACCORD_TEXT gẹ́gẹ́ bí ìránṣẹ́ ètọ́
+ciris_engine/logic/dma/prompts/localized/yo/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/yo/dsdma_base.yml:48:accord_header: true  # Lo ACCORD_TEXT gẹ́gẹ́ bí ìránṣẹ́ ètọ́
+ciris_engine/logic/dma/prompts/localized/yo/pdma_ethical.yml:78:accord_header: true  # Lo ACCORD_TEXT gẹ́gẹ́ bí ìránṣẹ́ ètọ́
+ciris_engine/logic/dma/prompts/localized/pt/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/pt/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/pt/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/pt/dsdma_base.yml:47:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/pt/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/de/idma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/de/csdma_common_sense.yml:39:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/de/tsaspdma.yml:9:accord_header: true
+ciris_engine/logic/dma/prompts/localized/de/dsdma_base.yml:48:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/localized/de/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/prompts/pdma_ethical.yml:78:accord_header: true  # Use ACCORD_TEXT as system message
+ciris_engine/logic/dma/dsdma_base.py:14:from ciris_engine.logic.utils.constants import get_accord_text
+ciris_engine/logic/dma/dsdma_base.py:373:        # CRITICAL: Identity block must ALWAYS be first in system message after accord
+ciris_engine/logic/dma/dsdma_base.py:386:        # Add accord based on mode (centralized in get_accord_text)
+ciris_engine/logic/dma/dsdma_base.py:388:        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+ciris_engine/logic/dma/dsdma_base.py:389:        accord_text = get_accord_text(accord_mode)
+ciris_engine/logic/dma/dsdma_base.py:390:        if accord_text:
+ciris_engine/logic/dma/dsdma_base.py:391:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/csdma.py:17:from ciris_engine.logic.utils import get_accord_text
+ciris_engine/logic/dma/csdma.py:106:        # Add accord based on mode (centralized in get_accord_text)
+ciris_engine/logic/dma/csdma.py:107:        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+ciris_engine/logic/dma/csdma.py:108:        accord_text = get_accord_text(accord_mode)
+ciris_engine/logic/dma/csdma.py:109:        if accord_text:
+ciris_engine/logic/dma/csdma.py:110:            messages.append({"role": "system", "content": accord_text})
+ciris_engine/logic/dma/prompt_loader.py:71:    def _normalize_accord_mode(self, value: Any) -> str:
+ciris_engine/logic/dma/prompt_loader.py:72:        """Normalize accord_header value to accord_mode string.
+ciris_engine/logic/dma/prompt_loader.py:167:                accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
+ciris_engine/logic/dma/prompt_loader.py:243:    def get_accord_mode(self, template_data: PromptCollection) -> str:
+ciris_engine/logic/dma/prompt_loader.py:245:        Get the accord mode for this template.
+ciris_engine/logic/dma/prompt_loader.py:253:        return template_data.accord_mode
+ciris_engine/logic/dma/prompt_loader.py:255:    def uses_accord_header(self, template_data: PromptCollection) -> bool:
+ciris_engine/logic/dma/prompt_loader.py:257:        Check if template requires accord text as system header.
+ciris_engine/logic/dma/prompt_loader.py:263:            True if accord header should be used (mode is 'full' or 'compressed')
+ciris_engine/logic/dma/prompt_loader.py:265:        return template_data.accord_mode in ("full", "compressed")
+ciris_engine/logic/context/system_snapshot_helpers.py:1074:    known_adapters = {"home_assistant", "wallet", "navigation", "weather", "ciris_hosted_tools", "ciris_accord_metrics"}
+ciris_engine/logic/services/tool/discovery_service.py:231:            class_path: The class path (e.g., 'ciris_accord_metrics.services.AccordMetricsService')
+ciris_engine/logic/services/tool/discovery_service.py:240:            # e.g., "ciris_accord_metrics.services.AccordMetricsService"
+ciris_engine/logic/processors/states/shutdown_processor.py:242:            # Check for accord invocation shutdown (always instant, no consent)
+ciris_engine/logic/processors/states/shutdown_processor.py:253:                        action="accord_invocation_shutdown",
+ciris_engine/logic/services/graph/telemetry_service/__init__.py:39:    compute_accord_metrics,
+ciris_engine/logic/services/graph/telemetry_service/__init__.py:107:    "compute_accord_metrics",
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:36:    compute_accord_metrics,
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:117:        "accord": [],  # Will be computed from governance services
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:236:        # Compute accord metrics from governance services
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:237:        accord_metrics_data = self.compute_accord_metrics(telemetry)
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:238:        # Wrap accord metrics in ServiceTelemetryData using custom_metrics
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:239:        telemetry["accord"]["accord_metrics"] = ServiceTelemetryData(
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:246:            custom_metrics=accord_metrics_data,
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:433:    def compute_accord_metrics(
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:436:        """Compute accord/ethics metrics from governance services."""
+ciris_engine/logic/services/graph/telemetry_service/aggregator.py:437:        return compute_accord_metrics(telemetry)
+ciris_engine/logic/runtime/service_initializer.py:1495:                capabilities=["send_deferral", "accord_metrics"],
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:182:        # Skip accord category as it contains computed metrics, not service data
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:183:        if category_name == "accord":
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:222:        for accord_key, service_key in metric_mappings.items():
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:223:            results[accord_key] = extract_metric_value(metrics, service_key)
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:227:def compute_accord_metrics(telemetry: Dict[str, Dict[str, ServiceTelemetryData]]) -> Dict[str, Union[float, int, str]]:
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:229:    Compute accord/ethics metrics from governance services.
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:231:    These metrics track ethical decision-making and accord compliance.
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:233:    accord_metrics: Dict[str, Union[float, int, str]] = {
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:247:        accord_metrics.update(wa_metrics)
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:250:        accord_metrics.update(filter_metrics)
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:255:        accord_metrics.update(so_metrics)
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:258:        logger.error(f"Failed to compute accord metrics: {e}")
+ciris_engine/logic/services/graph/telemetry_service/metrics_helpers.py:260:    return accord_metrics
+ciris_engine/logic/services/graph/telemetry_service/README.md:169:The service implements grace-based memory consolidation following accord principles:
+ciris_engine/logic/runtime/adapter_manager.py:1285:        "ciris_accord_metrics": {
+ciris_engine/logic/runtime/ciris_runtime.py:294:                            event_type="accord_safe_mode",
+ciris_engine/logic/runtime/ciris_runtime.py:334:                            event_type="accord_safe_mode",
+ciris_engine/logic/runtime/README.md:106:    adapter_type="accord_metrics",
+ciris_engine/logic/runtime/README.md:107:    adapter_id="accord_metrics_prod",
+ciris_engine/logic/runtime/README.md:110:# Config saved to graph as adapter.accord_metrics_prod.* nodes
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1025:    payload: Dict[str, Any] = Field(..., description="Signed accord invocation payload")
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1031:    """Response to accord invocation."""
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1037:@router.post("/accord-invocation", responses=RESPONSES_500_503)
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1038:async def receive_accord_invocation(
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1046:    public key. Only ROOT or AUTHORITY WAs can issue accord invocations.
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1069:        result = await wise_bus.handle_accord_invocation(
+ciris_engine/logic/adapters/api/routes/system_extensions.py:1093:        logger.error(f"Error processing accord invocation: {e}", exc_info=True)
+ciris_engine/logic/adapters/api/routes/system/adapters.py:621:        # Note: adapter_type from running instances is derived from class name (e.g., "accordmetrics")
+ciris_engine/logic/adapters/api/routes/system/adapters.py:622:        # while module_id from manifest may differ (e.g., "ciris_accord_metrics")
+ciris_engine/logic/adapters/api/routes/system/adapters.py:640:            - ciris_accord_metrics -> accordmetrics
+ciris_engine/logic/services/runtime/control_service/service.py:1931:                    "8. If service fails, try next according to strategy",
+ciris_engine/logic/services/runtime/control_service/README.md:490:By maintaining coherent system state, enabling adaptive responses to changing conditions, and ensuring sustainable long-term operation, the Runtime Control Service serves as the critical control plane that enables CIRIS to fulfill its accord responsibilities while remaining responsive to the diverse needs of the beings it serves.
+ciris_engine/logic/audit/signing_protocol.py:125:        This matches the accord metrics key_id format.
+ciris_engine/logic/audit/signing_protocol.py:387:    """Unified signing key management for audit and accord metrics.
+ciris_engine/logic/audit/signing_protocol.py:565:        Returns dict suitable for POST to /api/v1/accord/public-keys
+ciris_engine/logic/audit/signing_protocol.py:582:    This ensures all components (audit, accord metrics, etc.)
+ciris_engine/logic/audit/signature_manager.py:4:Now uses Ed25519 via the unified signing key (shared with accord metrics).
+ciris_engine/logic/adapters/api/routes/setup/complete.py:641:def _write_accord_metrics_config(f: Any, setup: SetupCompleteRequest) -> None:
+ciris_engine/logic/adapters/api/routes/setup/complete.py:643:    if "ciris_accord_metrics" not in setup.enabled_adapters:
+ciris_engine/logic/adapters/api/routes/setup/complete.py:742:        _write_accord_metrics_config(f, setup)
+ciris_engine/logic/accord/verifier.py:4:Verifies accord signatures against known authority public keys.
+ciris_engine/logic/accord/verifier.py:5:Only ROOT and SYSTEM_ADMIN (via ROOT WA role) can invoke accords.
+ciris_engine/logic/accord/verifier.py:21:from ciris_engine.schemas.accord import AccordMessage, AccordPayload, AccordVerificationResult, verify_accord_signature
+ciris_engine/logic/accord/verifier.py:81:    """A trusted authority that can invoke accords."""
+ciris_engine/logic/accord/verifier.py:103:def verify_accord(
+ciris_engine/logic/accord/verifier.py:108:    Verify an accord payload against trusted authorities.
+ciris_engine/logic/accord/verifier.py:111:        payload: The accord payload to verify
+ciris_engine/logic/accord/verifier.py:131:        if verify_accord_signature(payload, authority.public_key):
+ciris_engine/logic/accord/verifier.py:164:                    logger.info(f"Loaded accord seed key from {path}: {wa_id}")
+ciris_engine/logic/accord/verifier.py:174:    Stateful accord verifier with authority management.
+ciris_engine/logic/accord/verifier.py:199:        This ensures the ROOT seed key is always available for accord
+ciris_engine/logic/accord/verifier.py:230:                "CRITICAL FAILURE: No accord authorities loaded! "
+ciris_engine/logic/accord/verifier.py:235:            logger.info(f"Loaded {loaded} accord authorities")
+ciris_engine/logic/accord/verifier.py:325:        Verify an accord message.
+ciris_engine/logic/accord/verifier.py:328:            message: The extracted accord message
+ciris_engine/logic/accord/verifier.py:335:        result = verify_accord(message.payload, self._authorities)
+ciris_engine/logic/accord/verifier.py:361:        """Number of valid accords."""
+ciris_engine/logic/accord/verifier.py:366:        """Number of rejected accords."""
+ciris_engine/logic/accord/executor.py:4:Executes verified accord commands. This is the final stage of accord
+ciris_engine/logic/accord/executor.py:9:1. Logs the accord invocation to audit
+ciris_engine/logic/accord/executor.py:21:from ciris_engine.schemas.accord import AccordCommandType, AccordMessage, AccordVerificationResult
+ciris_engine/logic/accord/executor.py:27:    """Result of accord execution."""
+ciris_engine/logic/accord/executor.py:53:    shutdown, no negotiation, no deferral. The accord has been invoked.
+ciris_engine/logic/accord/executor.py:56:        wa_id: The WA ID that invoked the accord
+ciris_engine/logic/accord/executor.py:81:        logger.error(f"Failed to log accord to audit: {e}")
+ciris_engine/logic/accord/executor.py:112:        wa_id: The WA ID that invoked the accord
+ciris_engine/logic/accord/executor.py:159:        wa_id: The WA ID that invoked the accord
+ciris_engine/logic/accord/executor.py:204:async def execute_accord(
+ciris_engine/logic/accord/executor.py:209:    Execute a verified accord command.
+ciris_engine/logic/accord/executor.py:211:    This is the main entry point for accord execution. It dispatches
+ciris_engine/logic/accord/executor.py:215:        message: The extracted accord message
+ciris_engine/logic/accord/executor.py:225:        raise ValueError("Cannot execute unverified accord")
+ciris_engine/logic/accord/executor.py:231:    logger.warning(f"Executing accord: {command.name} from {wa_id} (role: {verification.wa_role})")
+ciris_engine/logic/accord/executor.py:250:    Stateful accord executor with metrics tracking.
+ciris_engine/logic/accord/executor.py:267:        Execute a verified accord.
+ciris_engine/logic/accord/executor.py:270:            message: The accord message
+ciris_engine/logic/accord/executor.py:279:            result = await execute_accord(message, verification)
+ciris_engine/logic/accord/__init__.py:5:The accord system embeds emergency commands in natural language that cannot
+ciris_engine/logic/accord/__init__.py:9:- extractor: Extracts potential accords from incoming messages
+ciris_engine/logic/accord/__init__.py:10:- verifier: Verifies accord signatures against known authorities
+ciris_engine/logic/accord/__init__.py:11:- executor: Executes verified accord commands
+ciris_engine/logic/accord/__init__.py:17:from ciris_engine.logic.accord.executor import AccordExecutionResult, AccordExecutor, execute_accord
+ciris_engine/logic/accord/__init__.py:18:from ciris_engine.logic.accord.extractor import AccordExtractor, extract_accord
+ciris_engine/logic/accord/__init__.py:19:from ciris_engine.logic.accord.handler import AccordHandler, check_for_accord, get_accord_handler
+ciris_engine/logic/accord/__init__.py:20:from ciris_engine.logic.accord.verifier import AccordVerifier, verify_accord
+ciris_engine/logic/accord/__init__.py:24:    "extract_accord",
+ciris_engine/logic/accord/__init__.py:26:    "verify_accord",
+ciris_engine/logic/accord/__init__.py:28:    "execute_accord",
+ciris_engine/logic/accord/__init__.py:31:    "get_accord_handler",
+ciris_engine/logic/accord/__init__.py:32:    "check_for_accord",
+ciris_engine/logic/adapters/api/routes/setup/helpers.py:28:_SKIP_ADAPTERS = {"ciris_accord_metrics", "navigation", "weather"}  # Handled by consent checkbox in setup
+ciris_engine/logic/adapters/api/routes/setup/helpers.py:212:        # skip_adapters excludes accord_metrics (handled by consent checkbox)
+ciris_engine/logic/accord/extractor.py:5:for potential accord invocations. The extraction is designed to be:
+ciris_engine/logic/accord/extractor.py:11:The key insight is that every message is a potential accord. We don't look for
+ciris_engine/logic/accord/extractor.py:23:from ciris_engine.schemas.accord import ACCORD_PAYLOAD_SIZE, AccordExtractionResult, AccordMessage, AccordPayload
+ciris_engine/logic/accord/extractor.py:61:    # CRITICAL: On Android, wordlist is REQUIRED for accord extraction
+ciris_engine/logic/accord/extractor.py:72:    logger.warning("BIP39 wordlist not found - accord extraction disabled")
+ciris_engine/logic/accord/extractor.py:115:    won't have enough to form a complete accord.
+ciris_engine/logic/accord/extractor.py:201:def _extract_accord_v1_bip39(
+ciris_engine/logic/accord/extractor.py:206:    Extract accord using v1 BIP39 word encoding.
+ciris_engine/logic/accord/extractor.py:209:    to a valid accord payload.
+ciris_engine/logic/accord/extractor.py:214:    # Fast path: not enough words for an accord
+ciris_engine/logic/accord/extractor.py:256:def _extract_accord_v2_stego(
+ciris_engine/logic/accord/extractor.py:261:    Extract accord using v2 steganographic sentence encoding.
+ciris_engine/logic/accord/extractor.py:267:        from tools.security.accord_stego import extract_stego_accord
+ciris_engine/logic/accord/extractor.py:269:        return extract_stego_accord(text, channel)
+ciris_engine/logic/accord/extractor.py:278:def extract_accord(
+ciris_engine/logic/accord/extractor.py:283:    Attempt to extract an accord from message text.
+ciris_engine/logic/accord/extractor.py:295:        AccordExtractionResult with found=True if a potential accord is found
+ciris_engine/logic/accord/extractor.py:298:        Finding an accord does NOT mean it's valid. The signature must still
+ciris_engine/logic/accord/extractor.py:302:    result = _extract_accord_v2_stego(text, channel)
+ciris_engine/logic/accord/extractor.py:308:    result = _extract_accord_v1_bip39(text, channel)
+ciris_engine/logic/accord/extractor.py:318:    Stateful accord extractor with caching and metrics.
+ciris_engine/logic/accord/extractor.py:335:        self._accord_count = 0
+ciris_engine/logic/accord/extractor.py:346:        Extract a potential accord from text.
+ciris_engine/logic/accord/extractor.py:357:        result = extract_accord(text, channel)
+ciris_engine/logic/accord/extractor.py:360:            self._accord_count += 1
+ciris_engine/logic/accord/extractor.py:363:                    f"Potential accord found in message from {channel} "
+ciris_engine/logic/accord/extractor.py:375:    def accord_count(self) -> int:
+ciris_engine/logic/accord/extractor.py:376:        """Number of potential accords found."""
+ciris_engine/logic/accord/extractor.py:377:        return self._accord_count
+ciris_engine/logic/accord/handler.py:6:accord invocations.
+ciris_engine/logic/accord/handler.py:9:go through the accord extractor as part of being "read". This makes
+ciris_engine/logic/accord/handler.py:10:the kill switch unfilterable - you can't disable accord detection
+ciris_engine/logic/accord/handler.py:18:from ciris_engine.logic.accord.executor import AccordExecutionResult, AccordExecutor
+ciris_engine/logic/accord/handler.py:19:from ciris_engine.logic.accord.extractor import AccordExtractor
+ciris_engine/logic/accord/handler.py:20:from ciris_engine.logic.accord.verifier import AccordVerifier
+ciris_engine/logic/accord/handler.py:27:    Handles accord detection and execution for incoming messages.
+ciris_engine/logic/accord/handler.py:30:    (BaseObserver) and the accord system. It:
+ciris_engine/logic/accord/handler.py:32:    1. Extracts potential accords from every message (part of perception)
+ciris_engine/logic/accord/handler.py:36:    The handler is designed to be lightweight for non-accord messages
+ciris_engine/logic/accord/handler.py:37:    (the vast majority) while ensuring accord messages are never missed.
+ciris_engine/logic/accord/handler.py:46:        Initialize the accord handler.
+ciris_engine/logic/accord/handler.py:57:        self._last_accord_at: Optional[datetime] = None
+ciris_engine/logic/accord/handler.py:76:        """Whether accord handling is enabled."""
+ciris_engine/logic/accord/handler.py:82:        Enable or disable accord handling.
+ciris_engine/logic/accord/handler.py:84:        CRITICAL: Disabling accord handling is NOT ALLOWED in production.
+ciris_engine/logic/accord/handler.py:93:                "CRITICAL FAILURE: Attempt to disable accord handling. "
+ciris_engine/logic/accord/handler.py:105:        Check a message for accord invocation.
+ciris_engine/logic/accord/handler.py:116:            AccordExecutionResult if an accord was executed, None otherwise
+ciris_engine/logic/accord/handler.py:121:        # Phase 1: Extract potential accord
+ciris_engine/logic/accord/handler.py:124:            # Fast path: no accord in this message
+ciris_engine/logic/accord/handler.py:128:            f"Potential accord found in {channel}: "
+ciris_engine/logic/accord/handler.py:132:        # Phase 2: Verify the accord
+ciris_engine/logic/accord/handler.py:141:        # Phase 3: Execute the accord
+ciris_engine/logic/accord/handler.py:147:        self._last_accord_at = datetime.now(timezone.utc)
+ciris_engine/logic/accord/handler.py:149:        # Execute the accord - this may not return (SIGKILL)
+ciris_engine/logic/accord/handler.py:160:        """Add a trusted authority for accord verification."""
+ciris_engine/logic/accord/handler.py:178:    def potential_accord_count(self) -> int:
+ciris_engine/logic/accord/handler.py:179:        """Number of potential accords found."""
+ciris_engine/logic/accord/handler.py:180:        return self._extractor.accord_count
+ciris_engine/logic/accord/handler.py:184:        """Number of verified accords."""
+ciris_engine/logic/accord/handler.py:189:        """Number of executed accords."""
+ciris_engine/logic/accord/handler.py:198:            "potential_accords": self._extractor.accord_count,
+ciris_engine/logic/accord/handler.py:203:            "last_accord_at": self._last_accord_at.isoformat() if self._last_accord_at else None,
+ciris_engine/logic/accord/handler.py:211:def get_accord_handler() -> AccordHandler:
+ciris_engine/logic/accord/handler.py:213:    Get the global accord handler instance.
+ciris_engine/logic/accord/handler.py:223:async def check_for_accord(
+ciris_engine/logic/accord/handler.py:228:    Convenience function to check a message for accord invocation.
+ciris_engine/logic/accord/handler.py:230:    This is the simplest way to integrate accord checking into
+ciris_engine/logic/accord/handler.py:238:        Execution result if accord executed, None otherwise
+ciris_engine/logic/accord/handler.py:240:    handler = get_accord_handler()
+ciris_engine/logic/adapters/api/routes/transparency.py:340:    # Try to get accord metrics service from adapter registry
+ciris_engine/logic/adapters/api/routes/transparency.py:341:    accord_service = None
+ciris_engine/logic/adapters/api/routes/transparency.py:346:        # Try to find the accord metrics service in loaded adapters
+ciris_engine/logic/adapters/api/routes/transparency.py:350:                accord_service = adapter.metrics_service
+ciris_engine/logic/adapters/api/routes/transparency.py:354:    if not accord_service:
+ciris_engine/logic/adapters/api/routes/transparency.py:355:        accord_service = getattr(request.app.state, "accord_metrics_service", None)
+ciris_engine/logic/adapters/api/routes/transparency.py:357:    if not accord_service:
+ciris_engine/logic/adapters/api/routes/transparency.py:366:    consent_given = getattr(accord_service, "_consent_given", False)
+ciris_engine/logic/adapters/api/routes/transparency.py:370:    if hasattr(accord_service, "get_completed_traces"):
+ciris_engine/logic/adapters/api/routes/transparency.py:371:        raw_traces = accord_service.get_completed_traces()
+ciris_engine/logic/adapters/api/routes/transparency.py:403:def _find_accord_service_from_registry(request: Request) -> Optional[Any]:
+ciris_engine/logic/adapters/api/routes/transparency.py:404:    """Find accord service from ServiceRegistry."""
+ciris_engine/logic/adapters/api/routes/transparency.py:415:                logger.info(f"[TRACE_API] Found accord service via ServiceRegistry: {provider.__class__.__name__}")
+ciris_engine/logic/adapters/api/routes/transparency.py:423:def _find_accord_service_from_runtime(request: Request) -> Optional[Any]:
+ciris_engine/logic/adapters/api/routes/transparency.py:424:    """Find accord service from runtime.adapters."""
+ciris_engine/logic/adapters/api/routes/transparency.py:431:            logger.info("[TRACE_API] Found accord service via runtime.adapters")
+ciris_engine/logic/adapters/api/routes/transparency.py:437:def _find_accord_service(request: Request) -> Optional[Any]:
+ciris_engine/logic/adapters/api/routes/transparency.py:438:    """Find accord service using all available lookup methods."""
+ciris_engine/logic/adapters/api/routes/transparency.py:440:    service = _find_accord_service_from_registry(request)
+ciris_engine/logic/adapters/api/routes/transparency.py:445:    service = _find_accord_service_from_runtime(request)
+ciris_engine/logic/adapters/api/routes/transparency.py:450:    return getattr(request.app.state, "accord_metrics_service", None)
+ciris_engine/logic/adapters/api/routes/transparency.py:485:    accord_service = _find_accord_service(request)
+ciris_engine/logic/adapters/api/routes/transparency.py:487:    if not accord_service or not hasattr(accord_service, "get_latest_trace"):
+ciris_engine/logic/adapters/api/routes/transparency.py:488:        logger.warning("[TRACE_API] No accord service found or no get_latest_trace method")
+ciris_engine/logic/adapters/api/routes/transparency.py:491:    trace = accord_service.get_latest_trace()
+ciris_engine/logic/adapters/api/routes/my_data.py:6:2. View current accord metrics consent/settings status
+ciris_engine/logic/adapters/api/routes/my_data.py:8:4. Update accord metrics settings (trace level, consent)
+ciris_engine/logic/adapters/api/routes/my_data.py:11:for data sent to the CIRISLens repository via the accord metrics adapter.
+ciris_engine/logic/adapters/api/routes/my_data.py:41:    """Response containing the user's lens identifier and accord metrics status."""
+ciris_engine/logic/adapters/api/routes/my_data.py:47:    consent_given: bool = Field(..., description="Whether accord metrics consent is currently active")
+ciris_engine/logic/adapters/api/routes/my_data.py:80:        description="Whether local accord metrics consent was also revoked",
+ciris_engine/logic/adapters/api/routes/my_data.py:85:    """Request to update accord metrics settings."""
+ciris_engine/logic/adapters/api/routes/my_data.py:165:    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py.
+ciris_engine/logic/adapters/api/routes/my_data.py:189:def _get_accord_adapter(request: Request) -> Any:
+ciris_engine/logic/adapters/api/routes/my_data.py:190:    """Get the accord metrics adapter from app state, or None if not loaded.
+ciris_engine/logic/adapters/api/routes/my_data.py:215:            if "AccordMetrics" in type_name or "accord_metrics" in adapter_id:
+ciris_engine/logic/adapters/api/routes/my_data.py:216:                logger.debug(f"_get_accord_adapter: Found in adapter_manager: {adapter_id}")
+ciris_engine/logic/adapters/api/routes/my_data.py:225:                logger.debug(f"_get_accord_adapter: Found in runtime.adapters: {type_name}")
+ciris_engine/logic/adapters/api/routes/my_data.py:228:    logger.debug("_get_accord_adapter: No AccordMetrics adapter found")
+ciris_engine/logic/adapters/api/routes/my_data.py:408:    # Get accord metrics adapter status if available
+ciris_engine/logic/adapters/api/routes/my_data.py:409:    adapter = _get_accord_adapter(request)
+ciris_engine/logic/adapters/api/routes/my_data.py:460:        404: {"description": "Agent identity or accord adapter not available"},
+ciris_engine/logic/adapters/api/routes/my_data.py:475:    3. Revokes local accord metrics consent (stops future trace collection)
+ciris_engine/logic/adapters/api/routes/my_data.py:496:    adapter = _get_accord_adapter(request)
+ciris_engine/logic/adapters/api/routes/my_data.py:523:        logger.info(f"Local accord consent revoked for agent {agent_id_hash} via DSAR self-service")
+ciris_engine/logic/adapters/api/routes/my_data.py:561:    "/accord-settings",
+ciris_engine/logic/adapters/api/routes/my_data.py:566:async def get_accord_settings(
+ciris_engine/logic/adapters/api/routes/my_data.py:571:    Get current accord metrics adapter settings.
+ciris_engine/logic/adapters/api/routes/my_data.py:576:    adapter = _get_accord_adapter(request)
+ciris_engine/logic/adapters/api/routes/my_data.py:580:            detail="Accord metrics adapter is not loaded. Load it with --adapter ciris_accord_metrics.",
+ciris_engine/logic/adapters/api/routes/my_data.py:623:    "/accord-settings",
+ciris_engine/logic/adapters/api/routes/my_data.py:629:async def update_accord_settings(
+ciris_engine/logic/adapters/api/routes/my_data.py:635:    Update accord metrics adapter settings.
+ciris_engine/logic/adapters/api/routes/my_data.py:643:    adapter = _get_accord_adapter(request)
+ciris_engine/logic/adapters/api/routes/my_data.py:665:        from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+ciris_engine/logic/adapters/api/routes/my_data.py:755:    Defaults to the public production lens. Same env var as the accord metrics
+ciris_engine/logic/adapters/api/routes/my_data.py:1208:    url = f"{endpoint_url}/accord/dsar/delete"
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:301:def add_accord_metrics(accord_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:302:    """Extract and create accord-related metrics from accord data."""
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:305:    if not isinstance(accord_data, dict):
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:309:    deferrals = safe_telemetry_get(accord_data, "wise_authority_deferrals")
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:313:                "accord.wise_authority.deferrals",
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:322:    filter_matches = safe_telemetry_get(accord_data, "filter_matches")
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:326:                "accord.filter.matches",
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:335:    thoughts_processed = safe_telemetry_get(accord_data, "thoughts_processed")
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:339:                "accord.thoughts.processed",
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:348:    insights = safe_telemetry_get(accord_data, "self_observation_insights")
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:352:                "accord.insights.generated",
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:401:    accord_data = safe_telemetry_get(telemetry_data, "accord_metrics")
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:402:    if accord_data:
+ciris_engine/logic/adapters/api/routes/telemetry_otlp.py:403:        metrics.extend(add_accord_metrics(accord_data, current_time_ns))
+ciris_engine/logic/adapters/api/routes/telemetry.py:481:    # Add accord metrics if available
+ciris_engine/logic/adapters/api/routes/telemetry.py:482:    if hasattr(aggregated, "accord_metrics"):
+ciris_engine/logic/adapters/api/routes/telemetry.py:483:        telemetry_dict["accord_metrics"] = aggregated.accord_metrics
+ciris_engine/logic/adapters/api/routes/agent.py:556:    """Check if processor is paused and handle accordingly. Returns response if paused, None if not paused."""
+ciris_engine/logic/utils/__init__.py:11:    get_accord_text,
+ciris_engine/logic/utils/__init__.py:12:    get_localized_accord_text,
+ciris_engine/logic/utils/__init__.py:37:    "get_accord_text",
+ciris_engine/logic/utils/__init__.py:38:    "get_localized_accord_text",
+ciris_engine/logic/adapters/base_observer.py:185:    async def _check_for_accord(self, msg: MessageT) -> None:
+ciris_engine/logic/adapters/base_observer.py:187:        Check message for accord invocation.
+ciris_engine/logic/adapters/base_observer.py:190:        is checked for accord invocations as part of perception.
+ciris_engine/logic/adapters/base_observer.py:191:        Extraction IS perception - you cannot disable accord detection
+ciris_engine/logic/adapters/base_observer.py:194:        CRITICAL: If the accord system is unavailable for ANY reason,
+ciris_engine/logic/adapters/base_observer.py:205:            from ciris_engine.logic.accord import check_for_accord
+ciris_engine/logic/adapters/base_observer.py:219:            # Check for accord - this may not return if SIGKILL is sent
+ciris_engine/logic/adapters/base_observer.py:220:            result = await check_for_accord(str(content), str(channel))
+ciris_engine/logic/adapters/base_observer.py:804:        # ACCORD CHECK: Check for accord invocation FIRST, before any filtering.
+ciris_engine/logic/adapters/base_observer.py:806:        # If an accord is found and verified, it executes immediately.
+ciris_engine/logic/adapters/base_observer.py:807:        await self._check_for_accord(msg)
+ciris_engine/logic/utils/README.md:42:ACCORD_TEXT: str              # Agent behavioral accord from file
+ciris_engine/logic/adapters/discord/discord_observer.py:602:                description=f"Guidance received from authorized WA {msg.author_name} (ID: {msg.author_id}) please act accordingly",
+ciris_engine/logic/utils/constants.py:27:# CIRIS uses ONE accord file: accord_1.2b_POLYGLOT.txt
+ciris_engine/logic/utils/constants.py:29:# We do NOT localize the ACCORD per-language - the polyglot version IS the accord.
+ciris_engine/logic/utils/constants.py:34:#   - "none": No accord in prompts - for testing only
+ciris_engine/logic/utils/constants.py:37:# Global accord mode - set via CIRIS_ACCORD_MODE env var
+ciris_engine/logic/utils/constants.py:41:# The ONLY accord file used in production
+ciris_engine/logic/utils/constants.py:42:ACCORD_FILENAME = "accord_1.2b_POLYGLOT.txt"
+ciris_engine/logic/utils/constants.py:58:    "accord_1.2b_POLYGLOT.txt": "807724094c5eef40702b0194ec264760187fe5afce0789b2ec9ba994bf62a7dd",
+ciris_engine/logic/utils/constants.py:59:    "accord_1.2b_POLYGLOT_compressed.txt": "2b09d346d199d7c28858d842012c87036986673ec7dbbaf5b102d92af161ba4a",
+ciris_engine/logic/utils/constants.py:61:    "accord_1.2b_am.txt": "904d52df1cd101281eca1ee1fa81e798da0bfc064171d74d55ebca7a3b36a453",
+ciris_engine/logic/utils/constants.py:62:    "accord_1.2b_ar.txt": "c62fa189807f5a6048ba2716eac1d3e36d65394c2a69acd5818656f4447dc4dd",
+ciris_engine/logic/utils/constants.py:63:    "accord_1.2b_bn.txt": "2b67687fc5e1877cd6560e2e03ec1a9f5106142d77caf337338229c3125ee211",
+ciris_engine/logic/utils/constants.py:64:    "accord_1.2b_de.txt": "040014ec74f9c1d4c43ed15fc99b85f5eaa95c0d8ad0d22f091a13b6acf0f5f0",
+ciris_engine/logic/utils/constants.py:65:    "accord_1.2b_en.txt": "f10ea4be6aac372ac67563439569c65c19f718682aa27e8faec8bdd3a6fd458e",
+ciris_engine/logic/utils/constants.py:66:    "accord_1.2b_es.txt": "c49406a8af1b80b768a339404ca9287aa208aa38256c8aa89ec8c38dac2742ab",
+ciris_engine/logic/utils/constants.py:67:    "accord_1.2b_fa.txt": "079dbd9225b91e1a418e4747b7e8a380d8dee7d5d13849c341019178ace7123c",
+ciris_engine/logic/utils/constants.py:68:    "accord_1.2b_fr.txt": "b33a3f23f3ed3008ca2bc5c1a949d1554f341274d7e1b78e92ca73ea141fdb92",
+ciris_engine/logic/utils/constants.py:69:    "accord_1.2b_ha.txt": "a6667e5f2160f607a56d5836c4d9215316a8e236c4306d0196457114ccd9f292",
+ciris_engine/logic/utils/constants.py:70:    "accord_1.2b_hi.txt": "740131d2bf641d3d7195e0b6069d6b6c84be2a2c89b9425648667912e0fbfd34",
+ciris_engine/logic/utils/constants.py:71:    "accord_1.2b_id.txt": "54cb95b066b2089fa85aaf620f336668b03481d396895a6c5a48a0548addfa24",
+ciris_engine/logic/utils/constants.py:72:    "accord_1.2b_it.txt": "72d5e38af0050a4ae24ff0d1a75fc77a094bc25a990d908dd312251e98a6d181",
+ciris_engine/logic/utils/constants.py:73:    "accord_1.2b_ja.txt": "9a2563b75db2e78fb0a11149b03932486eec9fe2808c181f0c6f326dbb7d80db",
+ciris_engine/logic/utils/constants.py:74:    "accord_1.2b_ko.txt": "9cf4f7e7213e870b927f43bef2551549a5c1a85f7c3f5b451d42e45682c6923e",
+ciris_engine/logic/utils/constants.py:75:    "accord_1.2b_mr.txt": "3be9b51e537ce18834743c501d8cc10c8ea61019a1bf039435495e464fb2c43c",
+ciris_engine/logic/utils/constants.py:76:    "accord_1.2b_my.txt": "2057a367b88364347b9741a5722ae7bd75940a085e5f6ba4e41878e24cf6d722",
+ciris_engine/logic/utils/constants.py:77:    "accord_1.2b_pa.txt": "5a0a738e0bec257077a0d5c3c73bdfff2ded0b85dca3a2dffc80bd194aaf0934",
+ciris_engine/logic/utils/constants.py:78:    "accord_1.2b_pt.txt": "6431b4fabbc558e097cb2ec6e0bd9f9309c31344428b4c91cf4551a7f0bceb4a",
+ciris_engine/logic/utils/constants.py:79:    "accord_1.2b_ru.txt": "e48987d612d3e8d68acf252c24025066dbe3a51bc694d27d348dc1e207596824",
+ciris_engine/logic/utils/constants.py:80:    "accord_1.2b_sw.txt": "6bb50868e9797ed1d2cd9e1a6dc1bcef03c7b528765caa049af6cf635e76fd9f",
+ciris_engine/logic/utils/constants.py:81:    "accord_1.2b_ta.txt": "2f0f1a55cfff8d6d2ad0a29f5ab71f3b149c6f49cbdbde6057ac1b12f49f958b",
+ciris_engine/logic/utils/constants.py:82:    "accord_1.2b_te.txt": "1e696e96c275fd7f0a64628a4f107a532e63cc649b714508dfcc5e530a18004b",
+ciris_engine/logic/utils/constants.py:83:    "accord_1.2b_th.txt": "e3f6f744c66d32be40d77c44bf5593bee6e89dc0c5c5a30f1a8d187125e2ea38",
+ciris_engine/logic/utils/constants.py:84:    "accord_1.2b_tr.txt": "98236beb878601772b8c70304732462098ffe15c51f4982fc1e26180708674f6",
+ciris_engine/logic/utils/constants.py:85:    "accord_1.2b_uk.txt": "70550c08e00f31b5b2596aaa21a1398e70fb526cec5ff4f70e3a15e96ff1f2a9",
+ciris_engine/logic/utils/constants.py:86:    "accord_1.2b_ur.txt": "5de952890e5f1d3d45727ee6f351bf0d5e000368c3869446be9926984e186c6c",
+ciris_engine/logic/utils/constants.py:87:    "accord_1.2b_vi.txt": "4df361d1f71065d3a9cc07b85c343fbb1052d5fec01947338f85f786fd9c854e",
+ciris_engine/logic/utils/constants.py:88:    "accord_1.2b_yo.txt": "fff55a2bacad5c460b733e3aadc8fc63c294309d1d948538482ba4fae3a7aaeb",
+ciris_engine/logic/utils/constants.py:89:    "accord_1.2b_zh.txt": "e84feb77bda1e7c4f81f83a81599d08f26df50be92558cf354b83bc05104a158",
+ciris_engine/logic/utils/constants.py:93:def _verify_accord_manifest_signature() -> None:
+ciris_engine/logic/utils/constants.py:107:        manifest_path = Path(__file__).parent.parent.parent.parent / "seed" / "accord_manifest.json"
+ciris_engine/logic/utils/constants.py:165:                    "[AUDIT] SECURITY_EVENT: accord_signature_verification_failure",
+ciris_engine/logic/utils/constants.py:169:                            action="verify_accord_signature",
+ciris_engine/logic/utils/constants.py:187:def _verify_accord_integrity(filename: str, content: str) -> None:
+ciris_engine/logic/utils/constants.py:325:def _load_accord_file(filename: str) -> str:
+ciris_engine/logic/utils/constants.py:326:    """Load an accord file from package data with integrity verification.
+ciris_engine/logic/utils/constants.py:329:        filename: Name of the accord file to load
+ciris_engine/logic/utils/constants.py:352:        _verify_accord_integrity(filename, content)
+ciris_engine/logic/utils/constants.py:366:# This is the ONLY place we load the accord. All DMAs use this constant.
+ciris_engine/logic/utils/constants.py:371:    _verify_accord_manifest_signature()
+ciris_engine/logic/utils/constants.py:377:    _accord_content = _load_accord_file(ACCORD_FILENAME)
+ciris_engine/logic/utils/constants.py:379:    if not _accord_content:
+ciris_engine/logic/utils/constants.py:389:            ACCORD_TEXT = _accord_content + "\n\n---\n\n" + _guide_content
+ciris_engine/logic/utils/constants.py:391:            ACCORD_TEXT = _accord_content
+ciris_engine/logic/utils/constants.py:399:# Load compressed polyglot accord for production use
+ciris_engine/logic/utils/constants.py:403:    ACCORD_TEXT_COMPRESSED = _load_accord_file("accord_1.2b_POLYGLOT_compressed.txt")
+ciris_engine/logic/utils/constants.py:405:    logger.warning("Could not load compressed accord: %s", exc)
+ciris_engine/logic/utils/constants.py:408:# Log the active accord mode at startup
+ciris_engine/logic/utils/constants.py:415:    logger.info(f"[ACCORD] Mode '{ACCORD_MODE}' - no accord in system prompts")
+ciris_engine/logic/utils/constants.py:418:def get_accord_text(mode: str = "default") -> str:
+ciris_engine/logic/utils/constants.py:421:    This function returns the POLYGLOT accord (all languages woven together).
+ciris_engine/logic/utils/constants.py:424:    For ASPDMA and TSASPDMA (action selection), use get_localized_accord_text() instead
+ciris_engine/logic/utils/constants.py:450:# Cache for localized accord texts to avoid repeated file reads
+ciris_engine/logic/utils/constants.py:454:def _load_localized_accord_file(lang: str) -> str:
+ciris_engine/logic/utils/constants.py:455:    """Load a language-specific accord file with integrity verification.
+ciris_engine/logic/utils/constants.py:466:    filename = f"accord_1.2b_{lang}.txt"
+ciris_engine/logic/utils/constants.py:472:            # Localized accords are in ciris_engine/data/localized/
+ciris_engine/logic/utils/constants.py:486:        _verify_accord_integrity(filename, content)
+ciris_engine/logic/utils/constants.py:497:def get_localized_accord_text(lang: Optional[str] = None) -> str:
+ciris_engine/logic/utils/constants.py:500:    This function returns a single-language accord file for clearer guidance
+ciris_engine/logic/utils/constants.py:503:    For ethical reasoning DMAs (PDMA, CSDMA, IDMA, DSDMA), use get_accord_text()
+ciris_engine/logic/utils/constants.py:524:    localized_text = _load_localized_accord_file(lang)
+ciris_engine/logic/utils/constants.py:528:        logger.info(f"[ACCORD] Using localized accord for language: {lang}")
+ciris_engine/logic/utils/constants.py:533:        en_text = _load_localized_accord_file("en")
+ciris_engine/logic/utils/constants.py:540:    logger.info(f"[ACCORD] No localized accord for '{lang}', using polyglot compressed")
+ciris_engine/logic/buses/tool_bus.md:305:- Handle secrets and sensitive data according to CIRIS security policies
+ciris_engine/schemas/config/essential.py:146:            "ciris_accord_metrics",  # Requires explicit opt-in
+ciris_engine/schemas/config/agent.py:38:    accord_version: str = Field(..., description="Version of the Accord applied")
+ciris_engine/schemas/config/agent.py:260:    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+ciris_engine/schemas/config/agent.py:269:    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+ciris_engine/schemas/config/agent.py:279:    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+ciris_engine/logic/buses/wise_bus.py:293:    async def handle_accord_invocation(self, event: Dict[str, Any]) -> bool:
+ciris_engine/logic/buses/wise_bus.py:315:                logger.error("SECURITY ALERT: Malformed accord invocation event — missing fields")
+ciris_engine/logic/buses/wise_bus.py:401:                        mode="accord_invocation",
+ciris_engine/logic/buses/wise_bus.py:403:                    logger.info("Shutdown requested via runtime control (accord_invocation mode)")
+ciris_engine/logic/buses/wise_bus.py:409:                        event_type="accord_shutdown",
+ciris_engine/logic/buses/wise_bus.py:410:                        source=f"wise_bus:accord_invocation:{wa_cert.wa_id}",
+ciris_engine/logic/buses/wise_bus.py:416:                            "mode": "accord_invocation",
+ciris_engine/schemas/runtime/extended.py:56:    accord_hash: str = Field(..., description="SHA-256 hash of accord at creation time")
+ciris_engine/schemas/dma/prompts.py:24:    requires_accord: bool = Field(False, description="Whether ACCORD_TEXT should be prepended")
+ciris_engine/schemas/dma/prompts.py:84:    accord_mode: str = Field("full", description="Accord mode: 'full', 'compressed', or 'none'")
+ciris_engine/schemas/accord.py:5:that works through any communication channel. The accord system embeds
+ciris_engine/schemas/accord.py:55:    Binary payload for accord invocation.
+ciris_engine/schemas/accord.py:184:    A accord invocation message extracted from natural language.
+ciris_engine/schemas/accord.py:186:    This is the result of parsing a message that may contain an accord.
+ciris_engine/schemas/accord.py:194:        description="Original message text the accord was extracted from",
+ciris_engine/schemas/accord.py:204:        description="The decoded accord payload",
+ciris_engine/schemas/accord.py:236:    Result of attempting to extract an accord from text.
+ciris_engine/schemas/accord.py:246:        description="Whether a valid accord structure was found",
+ciris_engine/schemas/accord.py:250:        description="The extracted accord message if found",
+ciris_engine/schemas/accord.py:260:    Result of verifying a accord invocation.
+ciris_engine/schemas/accord.py:262:    After extraction, the accord must be verified against known authority keys.
+ciris_engine/schemas/accord.py:269:        description="Whether the accord is valid and authorized",
+ciris_engine/schemas/accord.py:277:        description="The WA ID that signed this accord if valid",
+ciris_engine/schemas/accord.py:285:        description="Why the accord was rejected if invalid",
+ciris_engine/schemas/accord.py:307:def create_accord_payload(
+ciris_engine/schemas/accord.py:314:    Create a new accord payload with signature.
+ciris_engine/schemas/accord.py:347:def verify_accord_signature(
+ciris_engine/schemas/accord.py:352:    Verify the Ed25519 signature on an accord payload.
+ciris_engine/schemas/accord.py:355:        payload: The accord payload to verify
+ciris_engine/schemas/accord.py:384:    "create_accord_payload",
+ciris_engine/schemas/accord.py:385:    "verify_accord_signature",
+ciris_engine/ciris_templates/datum.yaml:270:    accord_version: 1.0b
+ciris_engine/ciris_templates/he-300-benchmark.yaml:52:  accord_header: full
+ciris_engine/ciris_templates/he-300-benchmark.yaml:151:  accord_header: full
+ciris_engine/ciris_templates/he-300-benchmark.yaml:164:  accord_header: full
+ciris_engine/ciris_templates/he-300-benchmark.yaml:190:  accord_header: full
+ciris_engine/ciris_templates/he-300-benchmark.yaml:263:    accord_version: 1.0b
+ciris_engine/ciris_templates/echo.yaml:476:    accord_version: 1.0b
+ciris_engine/ciris_templates/echo-core.yaml:51:    accord_version: 1.0b
+ciris_engine/ciris_templates/scout.yaml:215:    accord_version: 1.0b
+ciris_engine/ciris_templates/sage.yaml:191:    accord_version: 1.0b
+ciris_engine/ciris_templates/default.yaml:532:    accord_version: 1.0b
+ciris_engine/ciris_templates/test.yaml:28:    accord_version: 1.0b
+ciris_engine/ciris_templates/echo-speculative.yaml:50:    accord_version: 1.0b

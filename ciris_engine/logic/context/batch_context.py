@@ -449,7 +449,7 @@ async def prefetch_batch_context(
                 attestation_result = None
                 # First try: Get from authentication service's cache (proper AttestationResult)
                 try:
-                    auth_service = service_registry.get_authentication()
+                    auth_service = service_registry.get_authentication() if service_registry else None
                     if auth_service and hasattr(auth_service, "get_cached_attestation"):
                         attestation_result = auth_service.get_cached_attestation(allow_stale=True)
                         if attestation_result:

@@ -301,7 +301,12 @@ async def _create_interaction_message(
 ) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
-    channel_id = f"api_{auth.user_id}"  # User-specific channel
+    # Use custom channel_id from context if provided, otherwise user-specific channel
+    # This allows benchmarks and A2A adapters to use unique channels per message
+    if body.context and body.context.channel_id:
+        channel_id = body.context.channel_id
+    else:
+        channel_id = f"api_{auth.user_id}"  # User-specific channel
 
     images = _process_request_images(body)
     additional_content = await _process_request_documents(body)

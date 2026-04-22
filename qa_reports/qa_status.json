@@ -116,13 +116,22 @@
       "status": "passing",
       "duration_seconds": 0.67,
       "context": null
+    },
+    "memory_benchmark": {
+      "last_run": "2026-04-21T21:16:04.915049+00:00",
+      "passed": 2,
+      "failed": 1,
+      "total": 3,
+      "status": "failing",
+      "duration_seconds": 176.71,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 13,
+    "total_modules": 14,
     "passing": 13,
-    "failing": 0,
+    "failing": 1,
     "not_run": 0
   },
-  "last_updated": "2026-04-21T16:10:27.751526+00:00"
+  "last_updated": "2026-04-21T21:16:04.915092+00:00"
 }

@@ -305,8 +305,7 @@ class TestThoughtProcessor:
         logger.info("TEST: About to call thought_processor.process_thought")
         try:
             result = await asyncio.wait_for(
-                thought_processor.process_thought(item),
-                timeout=10.0  # 10 second timeout for async operation
+                thought_processor.process_thought(item), timeout=10.0  # 10 second timeout for async operation
             )
         except asyncio.TimeoutError:
             pytest.fail("process_thought timed out after 10 seconds - possible async hang")
@@ -455,8 +454,7 @@ class TestThoughtProcessor:
         # Use asyncio.wait_for for graceful async timeout (not thread-based pytest-timeout)
         try:
             result = await asyncio.wait_for(
-                thought_processor.process_thought(item),
-                timeout=10.0  # 10 second timeout for async operation
+                thought_processor.process_thought(item), timeout=10.0  # 10 second timeout for async operation
             )
         except asyncio.TimeoutError:
             pytest.fail("process_thought timed out after 10 seconds - possible async hang")
@@ -466,16 +464,16 @@ class TestThoughtProcessor:
 
         # Should return DEFER result on DMA error (wrapped in ConscienceApplicationResult)
         assert result is not None, "process_thought returned None instead of DEFER result"
-        assert result.final_action.selected_action == HandlerActionType.DEFER, (
-            f"Expected DEFER action on DMA error, got {result.final_action.selected_action}"
-        )
+        assert (
+            result.final_action.selected_action == HandlerActionType.DEFER
+        ), f"Expected DEFER action on DMA error, got {result.final_action.selected_action}"
         # Check that it's a DeferParams with the expected reason
-        assert isinstance(result.final_action.action_parameters, DeferParams), (
-            f"Expected DeferParams, got {type(result.final_action.action_parameters)}"
-        )
-        assert "DMA timeout" in result.final_action.action_parameters.reason, (
-            f"Expected 'DMA timeout' in reason, got: {result.final_action.action_parameters.reason}"
-        )
+        assert isinstance(
+            result.final_action.action_parameters, DeferParams
+        ), f"Expected DeferParams, got {type(result.final_action.action_parameters)}"
+        assert (
+            "DMA timeout" in result.final_action.action_parameters.reason
+        ), f"Expected 'DMA timeout' in reason, got: {result.final_action.action_parameters.reason}"
 
     @pytest.mark.asyncio
     async def test_process_thought_with_circuit_breaker(

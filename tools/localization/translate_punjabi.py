@@ -21,7 +21,6 @@ GLOSSARY = {
     "recall": "ਯਾਦ ਕਰਾਓ",
     "forget": "ਭੁੱਲ ਜਾਓ",
     "task_complete": "ਮੁਕੰਮਲ",
-
     # Core concepts
     "ACCORD": "ਇਕਰਾਰਨਾਮਾ",
     "Wise Authority": "ਸਿਆਣੀ ਅਥਾਰਟੀ",
@@ -33,7 +32,6 @@ GLOSSARY = {
     "Resilience": "ਲਚਕੀਲਾਪਨ",
     "Signalling Gratitude": "ਧੰਨਵਾਦ ਪ੍ਰਗਟ ਕਰਨਾ",
     "Flourishing": "ਖੁਸ਼ਹਾਲੀ",
-
     # Technical terms (keep in English mostly)
     "Agent": "ਏਜੰਟ",
     "Token": "ਟੋਕਨ",
@@ -42,7 +40,6 @@ GLOSSARY = {
     "Pipeline": "ਪਾਈਪਲਾਈਨ",
     "Memory": "ਮੈਮੋਰੀ",
     "Graph": "ਗ੍ਰਾਫ",
-
     # Cognitive states
     "WAKEUP": "ਜਾਗੋ",
     "WORK": "ਕੰਮ",
@@ -50,7 +47,6 @@ GLOSSARY = {
     "SOLITUDE": "ਇਕੱਲਤਾ",
     "DREAM": "ਸੁਪਨਾ",
     "SHUTDOWN": "ਬੰਦ",
-
     # UI labels
     "Login": "ਲੌਗਇਨ",
     "Logout": "ਲੌਗਆਊਟ",
@@ -79,11 +75,13 @@ PHRASES = {
     "I understand your request": "ਮੈਂ ਤੁਹਾਡੀ ਬੇਨਤੀ ਸਮਝਦਾ ਹਾਂ",
 }
 
+
 def main():
     print("This is a placeholder script for Punjabi translation.")
     print("The actual translation will be done manually using the glossary.")
     print(f"Glossary has {len(GLOSSARY)} core terms")
     print(f"Phrases has {len(PHRASES)} common phrases")
+
 
 if __name__ == "__main__":
     main()

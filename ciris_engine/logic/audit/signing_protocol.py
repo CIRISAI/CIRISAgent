@@ -177,6 +177,29 @@ class CIRISVerifySigner(BaseSigner):
 
             return signature
         except Exception as e:
+            error_msg = str(e).lower()
+
+            # Handle hardware key deleted/corrupted (v1.6.3+ self-healing)
+            if "deleted or corrupted" in error_msg:
+                logger.warning(
+                    "[signing] Hardware key was deleted or corrupted during signing. " "Attempting key regeneration..."
+                )
+                if hasattr(self._client, "generate_key_sync"):
+                    if self._try_generate_key_with_retry(self._client):
+                        # Key regenerated - retry signing once
+                        logger.info("[signing] Key regenerated, retrying sign operation")
+                        try:
+                            signature = cast(bytes, self._client.sign_ed25519_sync(data))
+                            # Update cached public key
+                            self._public_key_cache = self._client.get_ed25519_public_key_sync()
+                            self._key_id = self._compute_key_id(self._public_key_cache)
+                            logger.info(f"[signing] Sign succeeded with new key (key_id={self._key_id})")
+                            return signature
+                        except Exception as retry_error:
+                            raise RuntimeError(
+                                f"CIRISVerify signing failed after key regeneration: {retry_error}"
+                            ) from retry_error
+
             raise RuntimeError(f"CIRISVerify signing failed: {e}") from e
 
     def verify(self, data: bytes, signature: bytes) -> bool:
@@ -317,10 +340,30 @@ class CIRISVerifySigner(BaseSigner):
                 return True
 
             except Exception as e:
+                error_msg = str(e).lower()
+
+                # Check if hardware key was deleted/corrupted (v1.6.3+ self-healing)
+                # The stale marker is auto-cleared, so we just need to regenerate
+                if "deleted or corrupted" in error_msg:
+                    logger.warning(
+                        "[signing] Hardware key was deleted or corrupted. " "Attempting to regenerate signing key..."
+                    )
+                    if hasattr(client, "generate_key_sync"):
+                        if self._try_generate_key_with_retry(client):
+                            logger.info("[signing] Key regenerated successfully after hardware key loss")
+                            # Continue loop to retry with new key
+                            continue
+                        else:
+                            logger.error("[signing] Failed to regenerate key after hardware key loss")
+                            return False
+                    else:
+                        logger.error("[signing] Cannot regenerate - generate_key_sync not available")
+                        return False
+
                 # Check if it's the specific attestation-in-progress error
                 is_attestation_busy = (
                     AttestationInProgressError is not None and isinstance(e, AttestationInProgressError)
-                ) or "attestation" in str(e).lower()
+                ) or "attestation" in error_msg
 
                 if is_attestation_busy and attempt < max_retries - 1:
                     delay = base_delay * (2 ** min(attempt, 4))  # Cap at 8s

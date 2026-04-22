@@ -13,10 +13,7 @@ from unittest import mock
 import pytest
 from fastapi import HTTPException
 
-from ciris_engine.logic.adapters.api.routes.setup.llm_routes import (
-    _require_setup_or_admin,
-    _require_setup_or_auth,
-)
+from ciris_engine.logic.adapters.api.routes.setup.llm_routes import _require_setup_or_admin, _require_setup_or_auth
 from ciris_engine.schemas.api.auth import AuthContext, UserRole
 
 

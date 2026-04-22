@@ -3608,7 +3608,7 @@
         "01010": "Returns if the item is removed or if the item doesn't exist.",
         "01011": "There is no fixed size of the WG.",
         "01100": "That document contains detailed instructions and examples for everything you can do.",
-        "01101": "The v1 API provides 99 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.",
+        "01101": "The v1 API provides 181 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.",
         "01110": "Put the following line at the top of the compiled file.",
         "01111": "The default export of is a plugin object.",
         "10000": "Arguments: - : the function - : the new length.",
@@ -17061,10 +17061,6 @@
       "slot": 97,
       "bits": "01100"
     },
-    "the v1 api provides 99 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.": {
-      "slot": 97,
-      "bits": "01101"
-    },
     "put the following line at the top of the compiled file.": {
       "slot": 97,
       "bits": "01110"
@@ -20464,6 +20460,10 @@
     "they define the initial personality, capabilities, and configuration that a new agent will have when first created.": {
       "slot": 123,
       "bits": "11111"
+    },
+    "the v1 api provides 181 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.": {
+      "slot": 97,
+      "bits": "01101"
     }
   }
 }

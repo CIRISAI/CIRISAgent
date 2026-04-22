@@ -197,10 +197,7 @@ class AuditHashChain:
 
                     actual_prev = entry["previous_hash"]
                     # Accept REANCHOR markers as valid anchor points (from retention cleanup)
-                    is_valid_anchor = (
-                        actual_prev == expected_prev or
-                        (i == 0 and actual_prev.startswith("REANCHOR_"))
-                    )
+                    is_valid_anchor = actual_prev == expected_prev or (i == 0 and actual_prev.startswith("REANCHOR_"))
                     if not is_valid_anchor:
                         errors.append(f"Hash chain break at sequence {entry['sequence_number']}")
 

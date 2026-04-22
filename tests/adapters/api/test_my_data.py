@@ -1198,8 +1198,7 @@ class TestCapacityEndpoint:
         #   from ciris_engine.logic.context.system_snapshot_helpers import ...
         #   import ciris_engine.logic.context.system_snapshot_helpers
         assert not re.search(
-            r"^\s*(from\s+[\w.]*context\.system_snapshot_helpers|"
-            r"import\s+[\w.]*context\.system_snapshot_helpers)",
+            r"^\s*(from\s+[\w.]*context\.system_snapshot_helpers|" r"import\s+[\w.]*context\.system_snapshot_helpers)",
             code_only,
             re.MULTILINE,
         ), "my_data.py must not import from context.system_snapshot_helpers"

@@ -27,12 +27,8 @@ from ciris_engine.logic.adapters.api.dependencies.auth import (
     should_skip_setup_wizard_user_step,
     unregister_ingress_auth_provider,
 )
-from ciris_engine.protocols.services.infrastructure.ingress_auth import (
-    IngressAuthProviderProtocol,
-    IngressUser,
-)
+from ciris_engine.protocols.services.infrastructure.ingress_auth import IngressAuthProviderProtocol, IngressUser
 from ciris_engine.schemas.api.auth import UserRole
-
 
 # =============================================================================
 # Test Fixtures - Mock Providers

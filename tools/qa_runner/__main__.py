@@ -349,7 +349,11 @@ def main():
                     live_provider = "anthropic"
                     # For native Anthropic, we don't use a base URL (SDK handles it)
                     live_base_url = None
-                elif "google" in key_file_name or "gemini" in key_file_name or "generativelanguage.googleapis" in base_url_lower:
+                elif (
+                    "google" in key_file_name
+                    or "gemini" in key_file_name
+                    or "generativelanguage.googleapis" in base_url_lower
+                ):
                     live_provider = "google"
                 elif "openrouter" in key_file_name or "openrouter.ai" in base_url_lower:
                     live_provider = "openrouter"

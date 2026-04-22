@@ -231,6 +231,7 @@ def watchdog_thread_func():
                             _watchdog_log.info("Event loop stopped")
 
                     import asyncio
+
                     asyncio.run_coroutine_threadsafe(_graceful_shutdown(), _event_loop)
                     _watchdog_log.info("Graceful shutdown scheduled on event loop")
                 except Exception as e:

@@ -1636,9 +1636,7 @@ class TestStartupCachePopulation:
         assert "[ENRICHMENT_CACHE] Cache already populated, skipping" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_populate_cache_stores_results(
-        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
-    ):
+    async def test_populate_cache_stores_results(self, mock_runtime_with_enrichment, mock_enrichment_tool_info):
         """Test that startup cache population stores tool results."""
         from ciris_engine.logic.context.system_snapshot_helpers import (
             get_enrichment_cache,
@@ -1775,10 +1773,7 @@ class TestRefreshEnrichmentCache:
     @pytest.mark.asyncio
     async def test_refresh_enrichment_cache_with_no_tools(self, mock_runtime, caplog):
         """Test refresh returns empty when no tools are available."""
-        from ciris_engine.logic.context.system_snapshot_helpers import (
-            get_enrichment_cache,
-            refresh_enrichment_cache,
-        )
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
 
         result = await refresh_enrichment_cache(mock_runtime)
 
@@ -1800,10 +1795,7 @@ class TestRefreshEnrichmentCache:
         self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
     ):
         """Test refresh executes enrichment tools and returns results."""
-        from ciris_engine.logic.context.system_snapshot_helpers import (
-            get_enrichment_cache,
-            refresh_enrichment_cache,
-        )
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
 
         # Mock _collect_available_tools to return our enrichment tool
         with patch(
@@ -1823,10 +1815,7 @@ class TestRefreshEnrichmentCache:
         self, mock_runtime_with_enrichment, mock_enrichment_tool_info
     ):
         """Test refresh updates the cache with new tool results."""
-        from ciris_engine.logic.context.system_snapshot_helpers import (
-            get_enrichment_cache,
-            refresh_enrichment_cache,
-        )
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
 
         cache = get_enrichment_cache()
         assert cache.get("test:test_list_items") is None
@@ -1849,10 +1838,7 @@ class TestRefreshEnrichmentCache:
         self, mock_runtime_with_enrichment, mock_enrichment_tool_info
     ):
         """Test refresh populates an empty cache with fresh data."""
-        from ciris_engine.logic.context.system_snapshot_helpers import (
-            get_enrichment_cache,
-            refresh_enrichment_cache,
-        )
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
         from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
 
         cache = get_enrichment_cache()

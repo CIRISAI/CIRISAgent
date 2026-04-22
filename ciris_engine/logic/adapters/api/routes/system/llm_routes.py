@@ -17,17 +17,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ciris_engine.logic.buses.llm_bus import DistributionStrategy as InternalDistributionStrategy
 from ciris_engine.logic.buses.llm_bus import LLMBus
+from ciris_engine.logic.persistence.llm_providers import LLMProviderConfig
+from ciris_engine.logic.persistence.llm_providers import create_provider as persist_create_provider
+from ciris_engine.logic.persistence.llm_providers import delete_provider as persist_delete_provider
+from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled, set_ciris_services_disabled
+from ciris_engine.logic.registries.base import Priority as InternalPriority
+from ciris_engine.logic.registries.base import get_global_registry
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitState
 from ciris_engine.schemas.api.responses import SuccessResponse
-
-from ciris_engine.logic.registries.base import Priority as InternalPriority, get_global_registry
-from ciris_engine.logic.persistence.llm_providers import (
-    LLMProviderConfig,
-    create_provider as persist_create_provider,
-    delete_provider as persist_delete_provider,
-    set_ciris_services_disabled,
-    get_ciris_services_disabled,
-)
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .llm_schemas import (
@@ -45,8 +42,8 @@ from .llm_schemas import (
     DistributionStrategyUpdateRequest,
     DistributionStrategyUpdateResponse,
     LLMBusStatusResponse,
-    LLMProviderStatus,
     LLMProvidersResponse,
+    LLMProviderStatus,
     ProviderDeleteResponse,
     ProviderMetrics,
     ProviderPriority,
@@ -129,8 +126,9 @@ def _sanitize_for_log(value: str, max_length: int = 64) -> str:
     Removes control characters, newlines, and truncates to prevent log injection.
     """
     import re
+
     # Remove control characters (includes \r\n which are \x0d\x0a)
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
     # Truncate to reasonable length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length] + "..."
@@ -167,8 +165,6 @@ def get_internal_strategy(strategy: DistributionStrategy) -> InternalDistributio
         DistributionStrategy.LEAST_LOADED: InternalDistributionStrategy.LEAST_LOADED,
     }
     return mapping.get(strategy, InternalDistributionStrategy.LATENCY_BASED)
-
-
 
 
 def map_priority_to_api(priority: InternalPriority) -> ProviderPriority:
@@ -550,7 +546,7 @@ async def reset_circuit_breaker(
     llm_bus = get_llm_bus(request)
 
     # Sanitize name for logging (prevent log injection)
-    safe_name = name.replace('\n', '').replace('\r', '')[:100]
+    safe_name = name.replace("\n", "").replace("\r", "")[:100]
 
     if name not in llm_bus.circuit_breakers:
         raise HTTPException(status_code=404, detail=f"Provider '{safe_name}' not found")
@@ -615,7 +611,7 @@ async def update_circuit_breaker_config(
     llm_bus = get_llm_bus(request)
 
     # Sanitize name for logging (prevent log injection)
-    safe_name = name.replace('\n', '').replace('\r', '')[:100]
+    safe_name = name.replace("\n", "").replace("\r", "")[:100]
 
     if name not in llm_bus.circuit_breakers:
         raise HTTPException(status_code=404, detail=f"Provider '{safe_name}' not found")
@@ -689,11 +685,7 @@ async def update_provider_priority(
     - low: Use when others unavailable
     - fallback: Last resort
     """
-    from ciris_engine.logic.persistence.llm_providers import (
-        list_providers,
-        update_provider,
-        LLMProviderConfig,
-    )
+    from ciris_engine.logic.persistence.llm_providers import LLMProviderConfig, list_providers, update_provider
 
     registry = get_global_registry()
 
@@ -712,7 +704,7 @@ async def update_provider_priority(
 
     # Persist the priority change to survive restarts
     try:
-        config_service = request.app.state.runtime.config_service if hasattr(request.app.state, 'runtime') else None
+        config_service = request.app.state.runtime.config_service if hasattr(request.app.state, "runtime") else None
         providers = await list_providers(config_service)
         if name in providers:
             # Update the priority in the persisted config
@@ -851,10 +843,7 @@ async def add_provider(
     time_service = getattr(request.app.state, "time_service", None)
 
     if not telemetry_service or not time_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Required services (telemetry, time) not available"
-        )
+        raise HTTPException(status_code=503, detail="Required services (telemetry, time) not available")
 
     # Generate provider name if not provided
     provider_name = body.name
@@ -867,10 +856,7 @@ async def add_provider(
     # Check if provider already exists
     existing = registry.get_provider_by_name(provider_name, ServiceType.LLM)
     if existing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Provider '{provider_name}' already exists"
-        )
+        raise HTTPException(status_code=400, detail=f"Provider '{provider_name}' already exists")
 
     # Map API priority to internal priority
     priority_mapping = {
@@ -976,10 +962,7 @@ async def add_provider(
 
     except Exception as e:
         logger.error(f"Failed to add provider '{provider_name}': {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to add provider: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to add provider: {str(e)}")
 
 
 # ============================================================================
@@ -1009,13 +992,11 @@ async def disable_ciris_services(
 
     # Set the flag in .env
     if not set_ciris_services_disabled(True):
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
-        )
+        raise HTTPException(status_code=500, detail="Failed to persist CIRIS_SERVICES_DISABLED to .env")
 
     # Also set in current process environment for immediate effect
     import os
+
     os.environ["CIRIS_SERVICES_DISABLED"] = "true"
 
     # Unregister existing CIRIS providers for immediate effect
@@ -1059,13 +1040,11 @@ async def enable_ciris_services(
     """
     # Set the flag in .env
     if not set_ciris_services_disabled(False):
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to persist CIRIS_SERVICES_DISABLED to .env"
-        )
+        raise HTTPException(status_code=500, detail="Failed to persist CIRIS_SERVICES_DISABLED to .env")
 
     # Clear in current process environment
     import os
+
     os.environ.pop("CIRIS_SERVICES_DISABLED", None)
 
     logger.info("CIRIS services re-enabled (will take effect on next restart)")

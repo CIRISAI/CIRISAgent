@@ -23,6 +23,7 @@ from .base_test_module import BaseTestModule
 @dataclass
 class MemorySnapshot:
     """Memory snapshot at a point in time."""
+
     timestamp: float
     rss_bytes: int
     messages_sent: int
@@ -31,6 +32,7 @@ class MemorySnapshot:
 @dataclass
 class ChannelStats:
     """Statistics for a single benchmark channel."""
+
     channel_id: str
     messages_sent: int = 0
     messages_succeeded: int = 0
@@ -63,6 +65,7 @@ def get_process_memory(pid: int) -> int:
     """Get RSS memory for a process in bytes."""
     try:
         import psutil
+
         process = psutil.Process(pid)
         return process.memory_info().rss
     except ImportError:
@@ -80,6 +83,7 @@ def get_children_memory(pid: int) -> int:
     """Get total RSS memory for a process and all its children."""
     try:
         import psutil
+
         parent = psutil.Process(pid)
         total = parent.memory_info().rss
         for child in parent.children(recursive=True):
@@ -98,6 +102,7 @@ def find_server_pid(port: int = 8080) -> Optional[int]:
     """Find the PID of the server listening on the given port."""
     try:
         import psutil
+
         for conn in psutil.net_connections():
             if conn.laddr.port == port and conn.status == "LISTEN":
                 return conn.pid
@@ -266,9 +271,7 @@ class MemoryBenchmarkTests(BaseTestModule):
         for i, (channel_id, stats) in enumerate(self.channel_stats.items()):
             # Add remainder messages to first channels
             count = messages_per_channel + (1 if i < remainder else 0)
-            task = asyncio.create_task(
-                self._send_channel_messages(channel_id, count, stats)
-            )
+            task = asyncio.create_task(self._send_channel_messages(channel_id, count, stats))
             tasks.append(task)
 
         # Run all channels concurrently
@@ -287,8 +290,7 @@ class MemoryBenchmarkTests(BaseTestModule):
         self.console.print("\n  [bold]Channel Performance:[/bold]")
         for channel_id, stats in self.channel_stats.items():
             self.console.print(
-                f"    {channel_id}: {stats.messages_succeeded}/{stats.messages_sent} "
-                f"({stats.throughput:.1f} msg/s)"
+                f"    {channel_id}: {stats.messages_succeeded}/{stats.messages_sent} " f"({stats.throughput:.1f} msg/s)"
             )
 
         # Record test result
@@ -303,8 +305,7 @@ class MemoryBenchmarkTests(BaseTestModule):
 
         throughput = total_success / elapsed if elapsed > 0 else 0
         self.console.print(
-            f"\n  Completed: {total_success}/{self.message_count} in {elapsed:.1f}s "
-            f"({throughput:.1f} msg/s total)"
+            f"\n  Completed: {total_success}/{self.message_count} in {elapsed:.1f}s " f"({throughput:.1f} msg/s total)"
         )
 
     async def _send_channel_messages(
@@ -315,9 +316,9 @@ class MemoryBenchmarkTests(BaseTestModule):
     ) -> None:
         """Send messages to a specific channel.
 
-        Uses fire-and-forget pattern with small delay for true concurrency.
-        We don't wait for task completion since we're stress-testing memory,
-        not validating responses.
+        Uses unique channel_id per message (like A2A benchmark) to avoid
+        updated_info_available triggering. Each message gets its own channel
+        so there's no cross-talk or conscience retries.
         """
         stats.start_time = time.time()
         snapshot_interval = max(5, message_count // 5)
@@ -325,18 +326,19 @@ class MemoryBenchmarkTests(BaseTestModule):
         for i in range(message_count):
             stats.messages_sent += 1
             try:
-                # Submit message to specific channel using context
-                context = {"channel_id": channel_id}
+                # Each message gets a UNIQUE channel_id (like A2A adapter does)
+                # This prevents updated_info_available from triggering
+                unique_channel = f"{channel_id}_msg_{i}"
+                context = {"channel_id": unique_channel}
                 submission = await self.client.agent.submit_message(
-                    f"Benchmark message {i + 1}/{message_count} on {channel_id}",
+                    f"Benchmark message {i + 1}/{message_count}",
                     context=context,
                 )
 
                 if submission.accepted:
                     stats.messages_succeeded += 1
-                    # Small async delay to allow other channels to run
-                    # Don't wait for completion - fire and forget for max throughput
-                    await asyncio.sleep(0.1)
+                    # Minimal delay - just yield to event loop
+                    await asyncio.sleep(0.01)
                 else:
                     stats.messages_failed += 1
 

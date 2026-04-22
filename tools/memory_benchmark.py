@@ -34,6 +34,7 @@ def get_process_memory(pid: int) -> int:
     """Get RSS memory for a process in bytes."""
     try:
         import psutil
+
         process = psutil.Process(pid)
         return process.memory_info().rss
     except ImportError:
@@ -51,6 +52,7 @@ def get_children_memory(pid: int) -> int:
     """Get total RSS memory for a process and all its children."""
     try:
         import psutil
+
         parent = psutil.Process(pid)
         total = parent.memory_info().rss
         for child in parent.children(recursive=True):
@@ -125,9 +127,11 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     cmd = [
         sys.executable,
         str(main_py),
-        "--adapter", adapter,
+        "--adapter",
+        adapter,
         "--mock-llm",
-        "--port", str(port),
+        "--port",
+        str(port),
     ]
 
     process = subprocess.Popen(
@@ -144,6 +148,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080) -> int:
     # Wait for server to be ready
     print(f"\n[2/4] Waiting for server...")
     import httpx
+
     for _ in range(30):
         try:
             r = httpx.get(f"{base_url}/health", timeout=2.0)

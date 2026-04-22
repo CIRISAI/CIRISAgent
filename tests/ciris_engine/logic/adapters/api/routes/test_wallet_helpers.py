@@ -5,25 +5,25 @@ Tests the extracted helper functions that reduce cognitive complexity
 in get_wallet_status() endpoint.
 """
 
-import pytest
 from decimal import Decimal
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 from ciris_engine.logic.adapters.api.routes.wallet import (
     AttestationInfo,
+    GasEstimate,
+    SecurityAdvisory,
+    SpendingProgress,
+    TransactionSummary,
     _get_attestation_info,
     _get_balance_info,
-    _get_spending_progress,
     _get_gas_estimate,
-    _get_recent_transactions,
     _get_paymaster_status,
-    SpendingProgress,
-    GasEstimate,
-    TransactionSummary,
-    SecurityAdvisory,
+    _get_recent_transactions,
+    _get_spending_progress,
 )
-
 
 # =============================================================================
 # AttestationInfo Tests
@@ -46,9 +46,7 @@ class TestAttestationInfo:
 
     def test_custom_values(self):
         """AttestationInfo accepts custom values."""
-        advisories = [
-            SecurityAdvisory(cve="CVE-2024-1234", title="Test", impact="High", remediation="Patch")
-        ]
+        advisories = [SecurityAdvisory(cve="CVE-2024-1234", title="Test", impact="High", remediation="Patch")]
         info = AttestationInfo(
             level=3,
             max_tx="100.00",
@@ -113,9 +111,7 @@ class TestGetAttestationInfo:
         request.app.state.authentication_service = auth_service
 
         # Mock SpendingAuthority
-        with patch(
-            "ciris_adapters.wallet.providers.x402_provider.SpendingAuthority"
-        ) as mock_sa:
+        with patch("ciris_adapters.wallet.providers.x402_provider.SpendingAuthority") as mock_sa:
             mock_authority = Mock()
             mock_authority.max_transaction = Decimal("100")
             mock_authority.max_daily = Decimal("500")
@@ -144,9 +140,7 @@ class TestGetAttestationInfo:
 
         request.app.state.authentication_service = auth_service
 
-        with patch(
-            "ciris_adapters.wallet.providers.x402_provider.SpendingAuthority"
-        ) as mock_sa:
+        with patch("ciris_adapters.wallet.providers.x402_provider.SpendingAuthority") as mock_sa:
             mock_authority = Mock()
             mock_authority.max_transaction = Decimal("50")
             mock_authority.max_daily = Decimal("200")

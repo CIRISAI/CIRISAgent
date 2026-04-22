@@ -278,6 +278,7 @@ def pytest_configure(config):
 def pytest_runtest_logstart(nodeid, location):
     """Print marker when test starts - helps identify hanging tests in CI logs."""
     import sys
+
     # Flush to ensure marker appears immediately in CI logs
     print(f"\n[TEST_START] {nodeid}", file=sys.stderr, flush=True)
 
@@ -285,6 +286,7 @@ def pytest_runtest_logstart(nodeid, location):
 def pytest_runtest_logfinish(nodeid, location):
     """Print marker when test finishes - pair with TEST_START to find hangs."""
     import sys
+
     print(f"[TEST_END] {nodeid}", file=sys.stderr, flush=True)
 
 

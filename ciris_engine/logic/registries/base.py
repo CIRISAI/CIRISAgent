@@ -489,13 +489,12 @@ class ServiceRegistry(_Base):
                     self._services[st].sort(key=lambda x: x.priority.value)
 
                     logger.info(
-                        f"Updated {st} provider '{provider_name}' priority: "
-                        f"{old_priority.name} -> {priority.name}"
+                        f"Updated {st} provider '{provider_name}' priority: " f"{old_priority.name} -> {priority.name}"
                     )
                     return True
 
         # Sanitize provider_name for logging (prevent log injection)
-        safe_name = provider_name.replace('\n', '').replace('\r', '')[:100]
+        safe_name = provider_name.replace("\n", "").replace("\r", "")[:100]
         logger.warning(f"Provider '{safe_name}' not found for priority update")
         return False
 

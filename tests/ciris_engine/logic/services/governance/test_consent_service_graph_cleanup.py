@@ -48,11 +48,7 @@ class TestConsentServiceGraphCleanup:
     @pytest.fixture
     def consent_service(self, mock_time_service, mock_memory_bus):
         """Create consent service with mocked dependencies."""
-        service = ConsentService(
-            time_service=mock_time_service,
-            memory_bus=mock_memory_bus,
-            db_path=None
-        )
+        service = ConsentService(time_service=mock_time_service, memory_bus=mock_memory_bus, db_path=None)
         service._consent_cache = {}
         return service
 
@@ -131,8 +127,13 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_find_expired_nodes_returns_expired_only(
-        self, consent_service, mock_memory_bus, mock_time_service,
-        expired_consent_node_15_days, expired_consent_node_1_day, valid_consent_node
+        self,
+        consent_service,
+        mock_memory_bus,
+        mock_time_service,
+        expired_consent_node_15_days,
+        expired_consent_node_1_day,
+        valid_consent_node,
     ):
         """Test _find_expired_nodes returns only expired nodes."""
         mock_memory_bus.search.return_value = [
@@ -152,8 +153,7 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_find_expired_nodes_excludes_partnered(
-        self, consent_service, mock_memory_bus, mock_time_service,
-        expired_consent_node_1_day, partnered_consent_node
+        self, consent_service, mock_memory_bus, mock_time_service, expired_consent_node_1_day, partnered_consent_node
     ):
         """Test _find_expired_nodes excludes partnered consents."""
         mock_memory_bus.search.return_value = [
@@ -169,9 +169,7 @@ class TestConsentServiceGraphCleanup:
         assert "user_partnered" not in user_ids
 
     @pytest.mark.asyncio
-    async def test_find_expired_nodes_empty_graph(
-        self, consent_service, mock_memory_bus, mock_time_service
-    ):
+    async def test_find_expired_nodes_empty_graph(self, consent_service, mock_memory_bus, mock_time_service):
         """Test _find_expired_nodes with empty graph returns empty."""
         mock_memory_bus.search.return_value = []
         current_time = mock_time_service.now()
@@ -182,9 +180,7 @@ class TestConsentServiceGraphCleanup:
         assert user_ids == []
 
     @pytest.mark.asyncio
-    async def test_find_expired_nodes_includes_cache(
-        self, consent_service, mock_memory_bus, mock_time_service
-    ):
+    async def test_find_expired_nodes_includes_cache(self, consent_service, mock_memory_bus, mock_time_service):
         """Test _find_expired_nodes also checks cache."""
         mock_memory_bus.search.return_value = []
         current_time = mock_time_service.now()
@@ -225,24 +221,24 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_delete_expired_from_graph_multiple(
-        self, consent_service, mock_memory_bus,
-        expired_consent_node_15_days, expired_consent_node_1_day
+        self, consent_service, mock_memory_bus, expired_consent_node_15_days, expired_consent_node_1_day
     ):
         """Test deletion of multiple expired nodes."""
         mock_memory_bus.forget.return_value = _ok_result()
 
-        deleted = await consent_service._delete_expired_from_graph([
-            expired_consent_node_15_days,
-            expired_consent_node_1_day,
-        ])
+        deleted = await consent_service._delete_expired_from_graph(
+            [
+                expired_consent_node_15_days,
+                expired_consent_node_1_day,
+            ]
+        )
 
         assert deleted == 2
         assert mock_memory_bus.forget.call_count == 2
 
     @pytest.mark.asyncio
     async def test_delete_expired_from_graph_partial_failure(
-        self, consent_service, mock_memory_bus,
-        expired_consent_node_15_days, expired_consent_node_1_day
+        self, consent_service, mock_memory_bus, expired_consent_node_15_days, expired_consent_node_1_day
     ):
         """Test partial failure in deletion returns correct count."""
         # First call succeeds, second fails
@@ -251,17 +247,17 @@ class TestConsentServiceGraphCleanup:
             _error_result(),
         ]
 
-        deleted = await consent_service._delete_expired_from_graph([
-            expired_consent_node_15_days,
-            expired_consent_node_1_day,
-        ])
+        deleted = await consent_service._delete_expired_from_graph(
+            [
+                expired_consent_node_15_days,
+                expired_consent_node_1_day,
+            ]
+        )
 
         assert deleted == 1  # Only first deletion counted
 
     @pytest.mark.asyncio
-    async def test_delete_expired_from_graph_empty_list(
-        self, consent_service, mock_memory_bus
-    ):
+    async def test_delete_expired_from_graph_empty_list(self, consent_service, mock_memory_bus):
         """Test deletion with empty list returns 0."""
         deleted = await consent_service._delete_expired_from_graph([])
 
@@ -269,9 +265,7 @@ class TestConsentServiceGraphCleanup:
         mock_memory_bus.forget.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_delete_expired_from_graph_no_memory_bus(
-        self, mock_time_service, expired_consent_node_15_days
-    ):
+    async def test_delete_expired_from_graph_no_memory_bus(self, mock_time_service, expired_consent_node_15_days):
         """Test deletion without memory bus returns 0."""
         service = ConsentService(time_service=mock_time_service, memory_bus=None)
 
@@ -281,8 +275,7 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_delete_expired_from_graph_exception_handling(
-        self, consent_service, mock_memory_bus,
-        expired_consent_node_15_days, expired_consent_node_1_day
+        self, consent_service, mock_memory_bus, expired_consent_node_15_days, expired_consent_node_1_day
     ):
         """Test exception handling during deletion."""
         mock_memory_bus.forget.side_effect = [
@@ -291,10 +284,12 @@ class TestConsentServiceGraphCleanup:
         ]
 
         with patch("ciris_engine.logic.services.governance.consent.service.logger") as mock_logger:
-            deleted = await consent_service._delete_expired_from_graph([
-                expired_consent_node_15_days,
-                expired_consent_node_1_day,
-            ])
+            deleted = await consent_service._delete_expired_from_graph(
+                [
+                    expired_consent_node_15_days,
+                    expired_consent_node_1_day,
+                ]
+            )
 
             # Exception on first, success on second
             assert deleted == 1
@@ -304,8 +299,7 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_full_flow(
-        self, consent_service, mock_memory_bus, mock_time_service,
-        expired_consent_node_15_days, valid_consent_node
+        self, consent_service, mock_memory_bus, mock_time_service, expired_consent_node_15_days, valid_consent_node
     ):
         """Integration test: full cleanup deletes from graph and cache."""
         mock_memory_bus.search.return_value = [
@@ -336,8 +330,7 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_graph_only(
-        self, consent_service, mock_memory_bus, mock_time_service,
-        expired_consent_node_15_days
+        self, consent_service, mock_memory_bus, mock_time_service, expired_consent_node_15_days
     ):
         """Test cleanup when expired consent is only in graph."""
         mock_memory_bus.search.return_value = [expired_consent_node_15_days]
@@ -351,9 +344,7 @@ class TestConsentServiceGraphCleanup:
         mock_memory_bus.forget.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cleanup_expired_cache_only(
-        self, consent_service, mock_memory_bus, mock_time_service
-    ):
+    async def test_cleanup_expired_cache_only(self, consent_service, mock_memory_bus, mock_time_service):
         """Test cleanup when expired consent is only in cache."""
         mock_memory_bus.search.return_value = []  # Nothing in graph
         now = mock_time_service.now()
@@ -377,8 +368,7 @@ class TestConsentServiceGraphCleanup:
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_preserves_valid(
-        self, consent_service, mock_memory_bus, mock_time_service,
-        expired_consent_node_15_days, valid_consent_node
+        self, consent_service, mock_memory_bus, mock_time_service, expired_consent_node_15_days, valid_consent_node
     ):
         """Test cleanup preserves valid consents."""
         mock_memory_bus.search.return_value = [
@@ -418,9 +408,7 @@ class TestConsentServiceGraphCleanup:
         assert "user_expired_15d" not in consent_service._consent_cache
 
     @pytest.mark.asyncio
-    async def test_cleanup_expired_increments_counter(
-        self, consent_service, mock_memory_bus
-    ):
+    async def test_cleanup_expired_increments_counter(self, consent_service, mock_memory_bus):
         """Test cleanup increments the cleanup counter."""
         mock_memory_bus.search.return_value = []
         initial_count = consent_service._expired_cleanups
@@ -430,9 +418,7 @@ class TestConsentServiceGraphCleanup:
         assert consent_service._expired_cleanups == initial_count + 1
 
     @pytest.mark.asyncio
-    async def test_cleanup_expired_14_day_boundary(
-        self, consent_service, mock_memory_bus, mock_time_service
-    ):
+    async def test_cleanup_expired_14_day_boundary(self, consent_service, mock_memory_bus, mock_time_service):
         """Test cleanup at exact 14-day boundary."""
         now = mock_time_service.now()
 

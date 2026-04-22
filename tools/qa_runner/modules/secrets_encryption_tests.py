@@ -66,6 +66,7 @@ class SecretsEncryptionTests:
         base_url, token = self._get_transport_info()
 
         import httpx
+
         async with httpx.AsyncClient() as http_client:
             response = await http_client.get(
                 f"{base_url}/v1/setup/verify-status",
@@ -159,6 +160,7 @@ class SecretsEncryptionTests:
         base_url, token = self._get_transport_info()
 
         import httpx
+
         async with httpx.AsyncClient() as http_client:
             response = await http_client.get(
                 f"{base_url}/v1/telemetry/unified",
@@ -187,6 +189,7 @@ class SecretsEncryptionTests:
         base_url, token = self._get_transport_info()
 
         import httpx
+
         async with httpx.AsyncClient() as http_client:
             response = await http_client.get(
                 f"{base_url}/v1/telemetry/unified",

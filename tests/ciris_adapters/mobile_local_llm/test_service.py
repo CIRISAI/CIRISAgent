@@ -8,16 +8,8 @@ import pytest
 from pydantic import BaseModel
 
 from ciris_adapters.mobile_local_llm.capability import DeviceCapabilityReport
-from ciris_adapters.mobile_local_llm.config import (
-    DeviceTier,
-    MobileLocalLLMConfig,
-    ModelVariant,
-    Platform,
-)
-from ciris_adapters.mobile_local_llm.service import (
-    MobileLocalLLMService,
-    _estimate_input_tokens,
-)
+from ciris_adapters.mobile_local_llm.config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform
+from ciris_adapters.mobile_local_llm.service import MobileLocalLLMService, _estimate_input_tokens
 
 
 class _SampleResponse(BaseModel):
@@ -62,10 +54,14 @@ def _incapable_report() -> DeviceCapabilityReport:
 
 def _fake_server_manager(*, available=True, health=True):
     mgr = mock.MagicMock()
-    mgr.start = mock.AsyncMock(return_value=None) if available else mock.AsyncMock(
-        side_effect=__import__(
-            "ciris_adapters.mobile_local_llm.inference_server", fromlist=["InferenceServerError"]
-        ).InferenceServerError("boom")
+    mgr.start = (
+        mock.AsyncMock(return_value=None)
+        if available
+        else mock.AsyncMock(
+            side_effect=__import__(
+                "ciris_adapters.mobile_local_llm.inference_server", fromlist=["InferenceServerError"]
+            ).InferenceServerError("boom")
+        )
     )
     mgr.stop = mock.AsyncMock(return_value=None)
     mgr.health_check = mock.AsyncMock(return_value=health)

@@ -1165,6 +1165,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     temp_param = {"temperature": temp}
 
                 import time as _time
+
                 _call_start = _time.monotonic()
                 logger.debug("[LLM_REQUEST] Starting instructor call...")
 
@@ -1289,9 +1290,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # `reasoning_content` instead of `content` when thinking is enabled.
             # See docs/GEMMA_4_COMPATIBILITY.md for details.
             # Use extra_body which OpenAI client merges into request JSON root.
-            extra_kwargs["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False}
-            }
+            extra_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
             logger.debug(
                 f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "
                 f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
@@ -1341,9 +1340,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "172.16.",
             ".local",
             ":11434",  # Ollama default port
-            ":8080",   # llama.cpp default port
-            ":1234",   # LM Studio default port
-            ":8000",   # vLLM default port
+            ":8080",  # llama.cpp default port
+            ":1234",  # LM Studio default port
+            ":8000",  # vLLM default port
         ]
 
         return any(indicator in base_url_lower for indicator in local_indicators)

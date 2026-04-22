@@ -548,3 +548,154 @@ class TestKeyRegistrationCallback:
             # FSD-002: Portal no longer issues private keys
             with pytest.raises(NotImplementedError, match="DEPRECATED"):
                 key.load_provisioned_key(test_key_b64)
+
+
+class TestHardwareKeyRecovery:
+    """Test recovery from deleted/corrupted hardware keys (CIRISVerify v1.6.3+).
+
+    When hardware keys are deleted or corrupted, CIRISVerify v1.6.3+ returns
+    a clear error message and auto-clears the stale hardware marker.
+    The signing protocol should detect this and regenerate the key.
+
+    Note: Tests that involve key regeneration failures must also patch
+    reset_verifier and the local get_verifier call in _try_generate_key_with_retry,
+    otherwise the real CIRISVerify library will be invoked.
+    """
+
+    # Paths for patching - must patch at the source module since imports happen inside function
+    RESET_VERIFIER_PATH = "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.reset_verifier"
+
+    def test_initialize_recovers_from_deleted_corrupted_key(self):
+        """Test initialize regenerates key when 'deleted or corrupted' error occurs."""
+        mock_client = MagicMock()
+
+        # First has_key call raises the new v1.6.3 error
+        call_count = [0]
+
+        def has_key_side_effect():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("Hardware key was deleted or corrupted. Please create a new signing key.")
+            return True  # After regeneration, key exists
+
+        mock_client.has_key_sync.side_effect = has_key_side_effect
+        mock_client.generate_key_sync.return_value = None  # Generation succeeds
+        mock_client.get_ed25519_public_key_sync.return_value = b"recovered" + b"\x00" * 24
+
+        with patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            # Should have recovered and initialized successfully
+            assert result is True
+            assert signer._public_key_cache is not None
+            mock_client.generate_key_sync.assert_called()
+
+    def test_initialize_fails_if_regeneration_fails(self):
+        """Test initialize returns False if key regeneration fails after 'deleted or corrupted'."""
+        mock_client = MagicMock()
+
+        # has_key raises the error
+        mock_client.has_key_sync.side_effect = RuntimeError(
+            "Hardware key was deleted or corrupted. Please create a new signing key."
+        )
+        # generate_key also fails
+        mock_client.generate_key_sync.side_effect = RuntimeError("Keystore unavailable")
+
+        # Must also patch reset_verifier to prevent real lib init during retry
+        with (
+            patch(VERIFIER_PATCH_PATH, return_value=mock_client),
+            patch(self.RESET_VERIFIER_PATH),
+        ):
+            signer = CIRISVerifySigner()
+            result = signer.initialize()
+
+            # Should fail gracefully
+            assert result is False
+
+    def test_sign_recovers_from_deleted_corrupted_key(self):
+        """Test sign regenerates key and retries when 'deleted or corrupted' error occurs."""
+        mock_client = MagicMock()
+
+        # First sign call fails with v1.6.3 error, second succeeds
+        call_count = [0]
+
+        def sign_side_effect(data):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("Hardware key was deleted or corrupted. Please create a new signing key.")
+            return b"recovered_signature" + b"\x00" * 45  # ~64 bytes
+
+        mock_client.sign_ed25519_sync.side_effect = sign_side_effect
+        mock_client.generate_key_sync.return_value = None  # Generation succeeds
+        mock_client.get_ed25519_public_key_sync.return_value = b"newkey" + b"\x00" * 26
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+        signer._public_key_cache = b"oldkey" + b"\x00" * 26  # Pre-existing cached key
+
+        # Sign should recover and return signature
+        signature = signer.sign(b"test data")
+
+        assert signature == b"recovered_signature" + b"\x00" * 45
+        mock_client.generate_key_sync.assert_called()
+        # Public key should be updated
+        assert signer._public_key_cache == b"newkey" + b"\x00" * 26
+
+    def test_sign_raises_if_recovery_fails(self):
+        """Test sign raises RuntimeError if recovery fails after 'deleted or corrupted'."""
+        mock_client = MagicMock()
+
+        # Sign always fails
+        mock_client.sign_ed25519_sync.side_effect = RuntimeError(
+            "Hardware key was deleted or corrupted. Please create a new signing key."
+        )
+        # generate_key fails too
+        mock_client.generate_key_sync.side_effect = RuntimeError("TPM unavailable")
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+
+        # Must patch reset_verifier to prevent real lib init during retry
+        with patch(self.RESET_VERIFIER_PATH), patch(VERIFIER_PATCH_PATH, return_value=mock_client):
+            with pytest.raises(RuntimeError) as exc_info:
+                signer.sign(b"test data")
+
+            assert "CIRISVerify signing failed" in str(exc_info.value)
+
+    def test_sign_raises_if_retry_after_regeneration_fails(self):
+        """Test sign raises if signing fails even after successful key regeneration."""
+        mock_client = MagicMock()
+
+        # Both sign attempts fail
+        mock_client.sign_ed25519_sync.side_effect = RuntimeError(
+            "Hardware key was deleted or corrupted. Please create a new signing key."
+        )
+        # But key generation succeeds
+        mock_client.generate_key_sync.return_value = None
+        mock_client.get_ed25519_public_key_sync.return_value = b"x" * 32
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+
+        with pytest.raises(RuntimeError) as exc_info:
+            signer.sign(b"test data")
+
+        assert "after key regeneration" in str(exc_info.value)
+
+    def test_other_errors_not_treated_as_deleted_corrupted(self):
+        """Test that other signing errors don't trigger recovery flow."""
+        mock_client = MagicMock()
+
+        # Different error message - not related to deleted/corrupted
+        mock_client.sign_ed25519_sync.side_effect = RuntimeError("TPM communication timeout")
+
+        signer = CIRISVerifySigner()
+        signer._client = mock_client
+
+        with pytest.raises(RuntimeError) as exc_info:
+            signer.sign(b"test data")
+
+        # Should fail without attempting regeneration
+        assert "CIRISVerify signing failed" in str(exc_info.value)
+        mock_client.generate_key_sync.assert_not_called()

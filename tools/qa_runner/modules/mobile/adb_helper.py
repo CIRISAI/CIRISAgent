@@ -370,6 +370,7 @@ class ADBHelper:
                 f.write(tar_data)
 
             import tarfile
+
             with tarfile.open(tar_path, "r") as tar:
                 # Find and extract log files
                 logs_path = output_path / "logs"
@@ -395,7 +396,9 @@ class ADBHelper:
                         if f:
                             content = f.read().decode("utf-8", errors="replace")
                             # Redact sensitive tokens
-                            content = re.sub(r'(CIRIS_BILLING_GOOGLE_ID_TOKEN=")[^"]{20,}(")', r"\1[REDACTED]\2", content)
+                            content = re.sub(
+                                r'(CIRIS_BILLING_GOOGLE_ID_TOKEN=")[^"]{20,}(")', r"\1[REDACTED]\2", content
+                            )
                             content = re.sub(r'(OPENAI_API_KEY=")[^"]{20,}(")', r"\1[REDACTED]\2", content)
                             env_path = output_path / "env_file.txt"
                             with open(env_path, "w") as out:

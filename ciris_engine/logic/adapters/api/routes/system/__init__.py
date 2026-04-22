@@ -18,7 +18,19 @@ that imports `from ...routes.system import router`.
 
 from fastapi import APIRouter
 
-from . import adapter_config, adapters, data_management, health, llm_routes, runtime, services, shutdown, skill_builder, skill_import, tools
+from . import (
+    adapter_config,
+    adapters,
+    data_management,
+    health,
+    llm_routes,
+    runtime,
+    services,
+    shutdown,
+    skill_builder,
+    skill_import,
+    tools,
+)
 
 # Create the main router with the system prefix and tags
 router = APIRouter(prefix="/system", tags=["system"])

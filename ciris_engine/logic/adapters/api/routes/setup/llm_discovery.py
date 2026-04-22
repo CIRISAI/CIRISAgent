@@ -22,11 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import aiohttp
 
-from ciris_engine.logic.utils.mdns_resolver import (
-    DiscoveredService,
-    discover_services,
-    resolve_local_hostname,
-)
+from ciris_engine.logic.utils.mdns_resolver import DiscoveredService, discover_services, resolve_local_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +111,7 @@ def _generate_probe_targets(include_localhost: bool) -> List[Tuple[str, int]]:
     return targets
 
 
-async def _probe_and_build_entry(
-    hostname: str, port: int, seen_urls: set[str]
-) -> Optional[Dict[str, Any]]:
+async def _probe_and_build_entry(hostname: str, port: int, seen_urls: set[str]) -> Optional[Dict[str, Any]]:
     """Probe a single endpoint and return server entry if valid.
 
     First resolves hostname via mDNS for reliable .local resolution,
@@ -165,6 +159,7 @@ async def discover_local_llm_servers(
         Tuple of (discovered_servers, discovery_methods_used)
     """
     import time
+
     start_time = time.monotonic()
 
     seen_urls: set[str] = set()
@@ -175,7 +170,9 @@ async def discover_local_llm_servers(
     targets = _generate_probe_targets(include_localhost)
     unique_hostnames = list({h for h, _ in targets if h != "localhost"})
 
-    logger.info(f"[LLM_DISCOVERY] Starting parallel discovery: {len(unique_hostnames)} hostnames, {len(targets)} endpoints")
+    logger.info(
+        f"[LLM_DISCOVERY] Starting parallel discovery: {len(unique_hostnames)} hostnames, {len(targets)} endpoints"
+    )
 
     # PHASE 1: Run mDNS service browse AND hostname resolution in parallel
     # Use asyncio.wait to get partial results even on timeout
@@ -231,9 +228,7 @@ async def discover_local_llm_servers(
         url = f"http://{ip}:{port}"  # NOSONAR - local LLM servers use HTTP
         if url not in seen_urls:
             seen_urls.add(url)
-            probe_tasks.append(asyncio.create_task(
-                _probe_endpoint_fast(hostname, port, ip)
-            ))
+            probe_tasks.append(asyncio.create_task(_probe_endpoint_fast(hostname, port, ip)))
 
     logger.info(f"[LLM_DISCOVERY] Probing {len(probe_tasks)} unique endpoints...")
 
@@ -271,14 +266,13 @@ async def discover_local_llm_servers(
     return all_discovered, methods_used
 
 
-async def _batch_resolve_hostnames(
-    hostnames: List[str], timeout: float = 3.0
-) -> Dict[str, str]:
+async def _batch_resolve_hostnames(hostnames: List[str], timeout: float = 3.0) -> Dict[str, str]:
     """Resolve multiple hostnames in parallel via mDNS.
 
     Returns dict mapping hostname -> resolved IP (or hostname if failed).
     Uses asyncio.wait to return partial results if some hostnames timeout.
     """
+
     async def resolve_one(hostname: str) -> Tuple[str, str]:
         try:
             ip = await resolve_local_hostname(hostname, timeout=2.0)
@@ -314,9 +308,7 @@ async def _batch_resolve_hostnames(
     return hostname_map
 
 
-async def _probe_endpoint_fast(
-    hostname: str, port: int, ip: str
-) -> Optional[Dict[str, Any]]:
+async def _probe_endpoint_fast(hostname: str, port: int, ip: str) -> Optional[Dict[str, Any]]:
     """Probe a single endpoint (IP already resolved)."""
     url = f"http://{ip}:{port}"  # NOSONAR - local LLM servers use HTTP
 
@@ -329,17 +321,13 @@ async def _probe_endpoint_fast(
     return _build_server_entry(hostname, port, ip, server_type, model_count, models)
 
 
-async def _discover_via_mdns_services_parallel(
-    timeout: float, seen_urls: set[str]
-) -> List[Dict[str, Any]]:
+async def _discover_via_mdns_services_parallel(timeout: float, seen_urls: set[str]) -> List[Dict[str, Any]]:
     """Discover LLM servers via mDNS - ALL service types in parallel."""
 
     async def browse_one(service_type: str, server_type: str) -> List[Dict[str, Any]]:
         discovered: List[Dict[str, Any]] = []
         try:
-            services: List[DiscoveredService] = await discover_services(
-                service_type, timeout=timeout
-            )
+            services: List[DiscoveredService] = await discover_services(service_type, timeout=timeout)
             for svc in services:
                 url = svc.url
                 if url in seen_urls:
@@ -350,8 +338,12 @@ async def _discover_via_mdns_services_parallel(
                 if result:
                     actual_type, model_count, models = result
                     entry = _build_server_entry(
-                        svc.hostname, svc.port, svc.ip_address,
-                        actual_type or server_type, model_count, models,
+                        svc.hostname,
+                        svc.port,
+                        svc.ip_address,
+                        actual_type or server_type,
+                        model_count,
+                        models,
                     )
                     entry["metadata"]["source"] = "mdns_service"
                     entry["metadata"]["service_type"] = service_type
@@ -519,7 +511,8 @@ async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
         env["OLLAMA_HOST"] = f"127.0.0.1:{port}"
 
         process = await asyncio.create_subprocess_exec(
-            binary, "serve",
+            binary,
+            "serve",
             env=env,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
@@ -527,7 +520,8 @@ async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
         )
 
         return _success_result(
-            port, process.pid or 0,
+            port,
+            process.pid or 0,
             f"Ollama server started on port {port}. Pull model with: ollama pull {model}",
             ready_seconds=30,
         )
@@ -536,9 +530,7 @@ async def _start_ollama_server(port: int, model: str) -> Dict[str, Any]:
         return _error_result(f"Failed to start Ollama: {str(e)}")
 
 
-async def _start_llama_cpp_server(
-    port: int, model: str, confirm_download: bool = False
-) -> Dict[str, Any]:
+async def _start_llama_cpp_server(port: int, model: str, confirm_download: bool = False) -> Dict[str, Any]:
     """Start llama.cpp server on the specified port.
 
     If the model file is not found and confirm_download is False, returns a
@@ -547,9 +539,7 @@ async def _start_llama_cpp_server(
     """
     binary = _find_llama_cpp_binary()
     if not binary:
-        return _error_result(
-            "llama.cpp server not found. Build from https://github.com/ggerganov/llama.cpp"
-        )
+        return _error_result("llama.cpp server not found. Build from https://github.com/ggerganov/llama.cpp")
 
     model_file = _find_model_file(model)
     if not model_file:
@@ -572,27 +562,31 @@ async def _start_llama_cpp_server(
         logger.info(f"[START_LOCAL_SERVER] Model '{model}' not found, downloading...")
         download_result = await download_model(model)
         if not download_result["success"]:
-            return _error_result(
-                f"Model '{model}' download failed: {download_result['message']}"
-            )
+            return _error_result(f"Model '{model}' download failed: {download_result['message']}")
         model_file = download_result["model_path"]
         logger.info(f"[START_LOCAL_SERVER] Downloaded model to {model_file}")
 
     try:
         process = await asyncio.create_subprocess_exec(
             binary,
-            "--model", model_file,
-            "--host", "127.0.0.1",
-            "--port", str(port),
-            "--ctx-size", "8192",
-            "--n-gpu-layers", "99",
+            "--model",
+            model_file,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--ctx-size",
+            "8192",
+            "--n-gpu-layers",
+            "99",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
             start_new_session=True,
         )
 
         return _success_result(
-            port, process.pid or 0,
+            port,
+            process.pid or 0,
             f"llama.cpp server started with {model}. Loading model...",
             ready_seconds=60,
         )
@@ -627,10 +621,12 @@ def _get_android_llama_paths() -> list[str]:
 
     # LAST RESORT: Common Android app data paths
     for pkg in ["ai.ciris.mobile.debug", "ai.ciris.mobile"]:
-        paths.extend([
-            f"/data/data/{pkg}/files/bin/llama-server",
-            f"/data/data/{pkg}/files/ciris/bin/llama-server",
-        ])
+        paths.extend(
+            [
+                f"/data/data/{pkg}/files/bin/llama-server",
+                f"/data/data/{pkg}/files/ciris/bin/llama-server",
+            ]
+        )
 
     return paths
 
@@ -786,8 +782,9 @@ async def download_model(model: str, progress_callback: Optional[Callable[[float
     Returns:
         Dict with success, model_path, message
     """
-    import aiohttp
     from pathlib import Path
+
+    import aiohttp
 
     url = MODEL_DOWNLOAD_URLS.get(model)
     if not url:
@@ -826,6 +823,7 @@ async def download_model(model: str, progress_callback: Optional[Callable[[float
                 downloaded = 0
 
                 import aiofiles
+
                 async with aiofiles.open(model_path, "wb") as f:
                     async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
                         await f.write(chunk)

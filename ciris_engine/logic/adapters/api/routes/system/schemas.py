@@ -351,8 +351,13 @@ class StartupStatusResponse(BaseModel):
     services_online: int = Field(..., description="Number of services started")
     services_total: int = Field(..., description="Total services expected")
     service_names: List[str] = Field(default_factory=list, description="Names of started services in order")
-    api_status: str = Field(default="", description="API server startup status (creating_api, configuring_middleware, registering_routes, server_ready, etc.)")
-    api_status_history: List[str] = Field(default_factory=list, description="Full history of API status phases for catch-up")
+    api_status: str = Field(
+        default="",
+        description="API server startup status (creating_api, configuring_middleware, registering_routes, server_ready, etc.)",
+    )
+    api_status_history: List[str] = Field(
+        default_factory=list, description="Full history of API status phases for catch-up"
+    )
 
 
 # Tool Models

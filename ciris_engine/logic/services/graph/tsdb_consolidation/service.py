@@ -307,9 +307,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
                 # Try to acquire lock for this period to prevent duplicate consolidation
                 # Run in thread to avoid blocking event loop
-                lock_acquired = await asyncio.to_thread(
-                    self._query_manager.acquire_period_lock, current_start
-                )
+                lock_acquired = await asyncio.to_thread(self._query_manager.acquire_period_lock, current_start)
 
                 if not lock_acquired:
                     logger.info(f"Period {current_start.isoformat()} is locked by another instance, skipping")
@@ -347,9 +345,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
                 finally:
                     # Always release the lock (run in thread)
-                    await asyncio.to_thread(
-                        self._query_manager.release_period_lock, current_start
-                    )
+                    await asyncio.to_thread(self._query_manager.release_period_lock, current_start)
 
                 current_start = current_end
 
@@ -607,9 +603,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
         # 1. Query ALL data for the period (run in thread to avoid blocking event loop)
         logger.info(f"Querying all data for period {period_label}")
-        nodes_by_type, correlations, tasks = await asyncio.to_thread(
-            self._query_period_data, period_start, period_end
-        )
+        nodes_by_type, correlations, tasks = await asyncio.to_thread(self._query_period_data, period_start, period_end)
 
         # 1.5. Handle consent expiry - anonymize expired TEMPORARY nodes
         await self._handle_consent_expiry(nodes_by_type, period_end)

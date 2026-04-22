@@ -1155,9 +1155,7 @@ def _log_no_enrichment_tools(available_tools: Dict[str, List[ToolInfo]]) -> None
         logger.info(f"[CONTEXT_ENRICHMENT] {adapter_type} has {len(tools)} tools: {[t.name for t in tools]}")
 
 
-async def _find_tool_service(
-    tool_providers: List[tuple[Any, str]], adapter_type: str, tool_name: str
-) -> Optional[Any]:
+async def _find_tool_service(tool_providers: List[tuple[Any, str]], adapter_type: str, tool_name: str) -> Optional[Any]:
     """Find the tool service that provides the specified tool.
 
     Args:
@@ -1506,9 +1504,7 @@ def _create_preferences_memory_query(user_id: str) -> MemoryQuery:
     )
 
 
-async def _query_user_preferences(
-    user_id: str, memory_service: LocalGraphMemoryService
-) -> JSONDict:
+async def _query_user_preferences(user_id: str, memory_service: LocalGraphMemoryService) -> JSONDict:
     """Query the preferences/{user_id} node for user settings.
 
     The setup wizard and settings page store user preferences in a separate
@@ -1529,9 +1525,7 @@ async def _query_user_preferences(
         if prefs_results:
             prefs_node = prefs_results[0]
             attrs = _extract_node_attributes(prefs_node)
-            logger.debug(
-                f"[USER PREFS] Found preferences for {user_id}: {list(attrs.keys())}"
-            )
+            logger.debug(f"[USER PREFS] Found preferences for {user_id}: {list(attrs.keys())}")
             return attrs
 
         logger.debug(f"[USER PREFS] No preferences node found for {user_id}")

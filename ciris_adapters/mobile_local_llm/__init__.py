@@ -17,13 +17,7 @@ Key modules:
 
 from .adapter import Adapter, MobileLocalLLMAdapter
 from .capability import DeviceCapabilityReport, probe_device_capability
-from .config import (
-    DeviceTier,
-    MobileLocalLLMConfig,
-    ModelVariant,
-    Platform,
-    load_config_from_env,
-)
+from .config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform, load_config_from_env
 from .inference_server import InferenceServerError, InferenceServerManager
 from .service import MobileLocalLLMService
 

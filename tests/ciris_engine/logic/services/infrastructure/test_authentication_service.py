@@ -688,8 +688,8 @@ class MockCIRISVerify:
 
     def get_named_key_public(self, key_id: str) -> bytes:
         """Get public key for a named key."""
-        from cryptography.hazmat.primitives.asymmetric import ed25519
         from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
 
         if key_id not in self._keys:
             raise ValueError(f"Key {key_id} not found")
@@ -750,6 +750,7 @@ async def test_create_wa_stores_key_in_verifier(temp_db, time_service, mock_veri
 async def test_sign_as_wa_uses_verifier(temp_db, time_service, mock_verifier, monkeypatch):
     """Test that sign_as_wa() uses CIRISVerify named keys."""
     import base64
+
     from ciris_engine.logic.services.infrastructure.authentication import service as auth_module
 
     # Mock the verifier singleton functions
@@ -917,5 +918,3 @@ async def test_migrate_skips_was_with_existing_keys(temp_db, time_service, mock_
 
     finally:
         await service.stop()
-
-

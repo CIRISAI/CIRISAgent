@@ -15,12 +15,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ciris_engine.logic.registries.circuit_breaker import (
-    CircuitBreaker,
-    CircuitBreakerConfig,
-    CircuitState,
-)
-
+from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
 # ============================================================================
 # Fixtures
@@ -154,8 +149,8 @@ def app_with_llm_routes(mock_runtime: MagicMock) -> FastAPI:
 @pytest.fixture
 def mock_registry() -> MagicMock:
     """Create a mock registry with test providers."""
-    from ciris_engine.schemas.runtime.enums import ServiceType
     from ciris_engine.logic.registries.base import Priority
+    from ciris_engine.schemas.runtime.enums import ServiceType
 
     registry = MagicMock()
 
@@ -180,8 +175,11 @@ def client(app_with_llm_routes: FastAPI, mock_registry: MagicMock) -> TestClient
     """Create test client with first_run mocked to bypass auth."""
     # Patch is_first_run to return True (setup mode - no auth required)
     # Also patch the global registry to return our mock
-    with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True), \
-         patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_registry):
+    with patch(
+        "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+    ), patch(
+        "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_registry
+    ):
         yield TestClient(app_with_llm_routes)
 
 
@@ -231,7 +229,9 @@ class TestGetLLMStatus:
     def test_returns_503_when_runtime_unavailable(self, app_with_llm_routes: FastAPI) -> None:
         """Test that 503 is returned when runtime is unavailable."""
         app_with_llm_routes.state.runtime = None
-        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True):
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+        ):
             client = TestClient(app_with_llm_routes)
             response = client.get("/system/llm/status")
 
@@ -242,7 +242,9 @@ class TestGetLLMStatus:
     ) -> None:
         """Test that 503 is returned when bus_manager is unavailable."""
         mock_runtime.bus_manager = None
-        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True):
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+        ):
             client = TestClient(app_with_llm_routes)
             response = client.get("/system/llm/status")
 
@@ -356,9 +358,7 @@ class TestUpdateDistributionStrategy:
 class TestResetCircuitBreaker:
     """Tests for POST /system/llm/providers/{name}/circuit-breaker/reset endpoint."""
 
-    def test_resets_open_circuit_breaker(
-        self, client: TestClient, mock_circuit_breaker_open: CircuitBreaker
-    ) -> None:
+    def test_resets_open_circuit_breaker(self, client: TestClient, mock_circuit_breaker_open: CircuitBreaker) -> None:
         """Test that OPEN circuit breaker is reset."""
         response = client.post("/system/llm/providers/failing_provider/circuit-breaker/reset")
 
@@ -374,9 +374,7 @@ class TestResetCircuitBreaker:
         self, client: TestClient, mock_circuit_breaker: CircuitBreaker
     ) -> None:
         """Test that CLOSED circuit breaker is reset with force flag."""
-        response = client.post(
-            "/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": True}
-        )
+        response = client.post("/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": True})
 
         assert response.status_code == 200
         data = response.json()["data"]
@@ -394,9 +392,7 @@ class TestResetCircuitBreaker:
         self, client: TestClient, mock_circuit_breaker: CircuitBreaker
     ) -> None:
         """Test that CLOSED CB is not reset without force flag."""
-        response = client.post(
-            "/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": False}
-        )
+        response = client.post("/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": False})
 
         assert response.status_code == 200
         data = response.json()["data"]
@@ -414,9 +410,7 @@ class TestResetCircuitBreaker:
 class TestUpdateCircuitBreakerConfig:
     """Tests for PUT /system/llm/providers/{name}/circuit-breaker/config endpoint."""
 
-    def test_updates_failure_threshold(
-        self, client: TestClient, mock_circuit_breaker: CircuitBreaker
-    ) -> None:
+    def test_updates_failure_threshold(self, client: TestClient, mock_circuit_breaker: CircuitBreaker) -> None:
         """Test that failure_threshold is updated."""
         response = client.put(
             "/system/llm/providers/test_provider/circuit-breaker/config",
@@ -430,9 +424,7 @@ class TestUpdateCircuitBreakerConfig:
         assert data["new_config"]["failure_threshold"] == 10
         assert mock_circuit_breaker.config.failure_threshold == 10
 
-    def test_updates_multiple_config_values(
-        self, client: TestClient, mock_circuit_breaker: CircuitBreaker
-    ) -> None:
+    def test_updates_multiple_config_values(self, client: TestClient, mock_circuit_breaker: CircuitBreaker) -> None:
         """Test that multiple config values are updated."""
         response = client.put(
             "/system/llm/providers/test_provider/circuit-breaker/config",
@@ -460,9 +452,7 @@ class TestUpdateCircuitBreakerConfig:
 
         assert response.status_code == 404
 
-    def test_ignores_null_values(
-        self, client: TestClient, mock_circuit_breaker: CircuitBreaker
-    ) -> None:
+    def test_ignores_null_values(self, client: TestClient, mock_circuit_breaker: CircuitBreaker) -> None:
         """Test that null values are ignored."""
         original_recovery_timeout = mock_circuit_breaker.config.recovery_timeout
 
@@ -489,20 +479,18 @@ class TestRuntimeAccessPatterns:
         self, app_with_llm_routes: FastAPI, mock_runtime: MagicMock, mock_llm_bus: MagicMock
     ) -> None:
         """Test that LLMBus is accessed via runtime.bus_manager.llm."""
-        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True):
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+        ):
             client = TestClient(app_with_llm_routes)
             response = client.get("/system/llm/status")
 
         assert response.status_code == 200
 
-    def test_circuit_breaker_accessed_directly(
-        self, client: TestClient, mock_circuit_breaker: CircuitBreaker
-    ) -> None:
+    def test_circuit_breaker_accessed_directly(self, client: TestClient, mock_circuit_breaker: CircuitBreaker) -> None:
         """Test that circuit breakers are accessed directly from bus.circuit_breakers."""
         # Reset the CB
-        response = client.post(
-            "/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": True}
-        )
+        response = client.post("/system/llm/providers/test_provider/circuit-breaker/reset", json={"force": True})
 
         assert response.status_code == 200
         # The mock CB should have been accessed directly
@@ -572,9 +560,7 @@ class TestProviderPriorityEndpoint:
         mock_provider.name = "test_provider"
         mock_provider.priority = Priority.NORMAL
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-        ) as mock_registry:
+        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
             mock_reg = MagicMock()
             mock_reg.get_provider_by_name.return_value = mock_provider
             mock_reg.set_provider_priority.return_value = True
@@ -593,9 +579,7 @@ class TestProviderPriorityEndpoint:
 
     def test_update_priority_provider_not_found(self, client: TestClient) -> None:
         """Test priority update returns 404 for unknown provider."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-        ) as mock_registry:
+        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
             mock_reg = MagicMock()
             mock_reg.get_provider_by_name.return_value = None
             mock_registry.return_value = mock_reg
@@ -629,9 +613,7 @@ class TestProviderDeleteEndpoint:
         mock_provider.name = "test_provider"
         mock_provider.priority = Priority.NORMAL
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-        ) as mock_registry:
+        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
             mock_reg = MagicMock()
             mock_reg.get_provider_by_name.return_value = mock_provider
             mock_reg.unregister.return_value = True
@@ -646,9 +628,7 @@ class TestProviderDeleteEndpoint:
 
     def test_delete_provider_not_found(self, client: TestClient) -> None:
         """Test delete returns 404 for unknown provider."""
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-        ) as mock_registry:
+        with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
             mock_reg = MagicMock()
             mock_reg.get_provider_by_name.return_value = None
             mock_registry.return_value = mock_reg
@@ -698,9 +678,7 @@ class TestServiceRegistryPriorityMethods:
 
         registry = ServiceRegistry()
 
-        success = registry.set_provider_priority(
-            "nonexistent", Priority.HIGH, ServiceType.LLM
-        )
+        success = registry.set_provider_priority("nonexistent", Priority.HIGH, ServiceType.LLM)
         assert success is False
 
     def test_get_provider_by_name_success(self) -> None:
@@ -782,12 +760,9 @@ class TestAddProviderEndpoint:
         app_with_llm_routes.state.time_service = MagicMock()
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ):
-            with patch(
-                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-            ) as mock_registry:
+            with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
                 mock_reg = MagicMock()
                 mock_reg.get_provider_by_name.return_value = None  # Not existing
                 mock_reg.register_service.return_value = "test_local"
@@ -826,12 +801,9 @@ class TestAddProviderEndpoint:
         app_with_llm_routes.state.time_service = MagicMock()
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ):
-            with patch(
-                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-            ) as mock_registry:
+            with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
                 mock_reg = MagicMock()
                 mock_reg.get_provider_by_name.return_value = None
                 mock_reg.register_service.return_value = "local_192.168.1.100_11434_v1"
@@ -873,12 +845,9 @@ class TestAddProviderEndpoint:
         mock_existing.priority = Priority.NORMAL
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ):
-            with patch(
-                "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
-            ) as mock_registry:
+            with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
                 mock_reg = MagicMock()
                 mock_reg.get_provider_by_name.return_value = mock_existing  # Already exists
                 mock_registry.return_value = mock_reg
@@ -903,8 +872,7 @@ class TestAddProviderEndpoint:
         app_with_llm_routes.state.time_service = None
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ):
             client = TestClient(app_with_llm_routes)
             response = client.post(
@@ -925,8 +893,7 @@ class TestAddProviderEndpoint:
         app_with_llm_routes.state.time_service = MagicMock()
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ):
             client = TestClient(app_with_llm_routes)
             # Missing required field: base_url
@@ -950,7 +917,7 @@ class TestAddProviderEndpoint:
         for priority in priority_levels:
             with patch(
                 "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-                return_value=True
+                return_value=True,
             ):
                 with patch(
                     "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry"
@@ -1027,20 +994,15 @@ class TestCirisServicesEndpoints:
         local_provider.name = "local_llm"
         local_provider.priority = Priority.FALLBACK
 
-        mock_reg._services = {
-            ServiceType.LLM: [ciris_primary, ciris_secondary, local_provider]
-        }
+        mock_reg._services = {ServiceType.LLM: [ciris_primary, ciris_secondary, local_provider]}
         mock_reg.unregister.return_value = True
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
-            return_value=mock_reg
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_reg
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled", return_value=True
         ) as mock_set_disabled:
             client = TestClient(app_with_llm_routes)
             response = client.post("/system/llm/ciris-services/disable")
@@ -1076,14 +1038,11 @@ class TestCirisServicesEndpoints:
         mock_reg._services = {ServiceType.LLM: [local_provider]}
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
-            return_value=mock_reg
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_reg
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled", return_value=True
         ):
             client = TestClient(app_with_llm_routes)
             response = client.post("/system/llm/ciris-services/disable")
@@ -1106,14 +1065,12 @@ class TestCirisServicesEndpoints:
         mock_reg._services = {ServiceType.LLM: []}
 
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry",
-            return_value=mock_reg
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry", return_value=mock_reg
         ), patch(
             "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
-            return_value=False  # Persistence fails
+            return_value=False,  # Persistence fails
         ):
             client = TestClient(app_with_llm_routes)
             response = client.post("/system/llm/ciris-services/disable")
@@ -1130,11 +1087,9 @@ class TestCirisServicesEndpoints:
         - set_ciris_services_disabled(False) is called
         """
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled", return_value=True
         ) as mock_set_disabled:
             client = TestClient(app_with_llm_routes)
             response = client.post("/system/llm/ciris-services/enable")
@@ -1154,11 +1109,9 @@ class TestCirisServicesEndpoints:
         - Returns 500 error
         """
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled",
-            return_value=False
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.set_ciris_services_disabled", return_value=False
         ):
             client = TestClient(app_with_llm_routes)
             response = client.post("/system/llm/ciris-services/enable")
@@ -1173,11 +1126,9 @@ class TestCirisServicesEndpoints:
         - Message indicates disabled state
         """
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled", return_value=True
         ):
             client = TestClient(app_with_llm_routes)
             response = client.get("/system/llm/ciris-services/status")
@@ -1195,11 +1146,9 @@ class TestCirisServicesEndpoints:
         - Message indicates enabled state
         """
         with patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=True
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
         ), patch(
-            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled",
-            return_value=False
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes.get_ciris_services_disabled", return_value=False
         ):
             client = TestClient(app_with_llm_routes)
             response = client.get("/system/llm/ciris-services/status")
@@ -1218,7 +1167,7 @@ class TestCirisServicesEndpoints:
         """
         with patch(
             "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth",
-            return_value=False  # Not in setup mode
+            return_value=False,  # Not in setup mode
         ):
             client = TestClient(app_with_llm_routes)
 

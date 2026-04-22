@@ -7,16 +7,16 @@ Tests the validation logic used by Skill Studio for real-time feedback:
 4. Security scanning integration
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from ciris_engine.logic.adapters.api.routes.system.skill_import import (
+    SecurityReportResponse,
     SkillValidateRequest,
     SkillValidateResponse,
-    SecurityReportResponse,
     validate_skill,
 )
-
 
 # Sample valid SKILL.md content for testing
 VALID_SKILL_MD = """---
@@ -73,9 +73,7 @@ class TestValidateSkillParsing:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_valid_skill_returns_valid_true(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_valid_skill_returns_valid_true(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """A valid skill should return valid=True with preview."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -88,9 +86,7 @@ class TestValidateSkillParsing:
         assert result.preview.module_name == "imported_test_skill"
 
     @pytest.mark.asyncio
-    async def test_malformed_yaml_returns_valid_false(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_malformed_yaml_returns_valid_false(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Malformed YAML should return valid=False with parsing error."""
         body = SkillValidateRequest(skill_md_content=MALFORMED_YAML_MD)
 
@@ -101,9 +97,7 @@ class TestValidateSkillParsing:
         assert result.preview is None
 
     @pytest.mark.asyncio
-    async def test_empty_content_returns_valid_false(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_empty_content_returns_valid_false(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Empty content should return valid=False."""
         body = SkillValidateRequest(skill_md_content="")
 
@@ -125,9 +119,7 @@ class TestValidateSkillNameValidation:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_missing_name_returns_error(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_missing_name_returns_error(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Missing name should return validation error."""
         body = SkillValidateRequest(skill_md_content=MISSING_NAME_SKILL_MD)
 
@@ -137,9 +129,7 @@ class TestValidateSkillNameValidation:
         assert result.valid is False or any("name" in e.lower() for e in result.errors)
 
     @pytest.mark.asyncio
-    async def test_invalid_name_format_returns_error(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_invalid_name_format_returns_error(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Names with spaces/uppercase should return format error."""
         body = SkillValidateRequest(skill_md_content=INVALID_NAME_SKILL_MD)
 
@@ -162,9 +152,7 @@ class TestValidateSkillWarnings:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_missing_description_warns(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_missing_description_warns(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Missing description should produce a warning, not error."""
         body = SkillValidateRequest(skill_md_content=MINIMAL_SKILL_MD)
 
@@ -186,9 +174,7 @@ class TestValidateSkillSecurityReport:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_valid_skill_has_security_report(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_valid_skill_has_security_report(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Valid skill should include security report in response."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -241,9 +227,7 @@ class TestValidateSkillResponseStructure:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_response_has_all_required_fields(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_response_has_all_required_fields(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Response should have all required SkillValidateResponse fields."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -258,9 +242,7 @@ class TestValidateSkillResponseStructure:
         assert isinstance(result.warnings, list)
 
     @pytest.mark.asyncio
-    async def test_preview_has_all_fields_when_valid(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_preview_has_all_fields_when_valid(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Preview should have all required fields when skill is valid."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -277,9 +259,7 @@ class TestValidateSkillResponseStructure:
         assert hasattr(result.preview, "instructions_preview")
 
     @pytest.mark.asyncio
-    async def test_security_report_counts_are_non_negative(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_security_report_counts_are_non_negative(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Security report counts should all be non-negative integers."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -304,9 +284,7 @@ class TestValidateSkillModuleName:
         return MagicMock()
 
     @pytest.mark.asyncio
-    async def test_module_name_has_imported_prefix(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_module_name_has_imported_prefix(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Generated module name should have 'imported_' prefix."""
         body = SkillValidateRequest(skill_md_content=VALID_SKILL_MD)
 
@@ -316,9 +294,7 @@ class TestValidateSkillModuleName:
         assert result.preview.module_name.startswith("imported_")
 
     @pytest.mark.asyncio
-    async def test_module_name_sanitizes_special_chars(
-        self, mock_request: MagicMock, mock_auth: MagicMock
-    ) -> None:
+    async def test_module_name_sanitizes_special_chars(self, mock_request: MagicMock, mock_auth: MagicMock) -> None:
         """Module name should sanitize special characters to underscores."""
         skill_with_hyphen = """---
 name: my-special-skill

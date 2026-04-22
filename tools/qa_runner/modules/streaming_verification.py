@@ -1530,13 +1530,9 @@ class StreamingVerificationModule:
                 )
             else:
                 if english_detected:
-                    errors.append(
-                        f"English markers found in DMA prompts when language should be {target_language}"
-                    )
+                    errors.append(f"English markers found in DMA prompts when language should be {target_language}")
                 if not dma_localized:
-                    errors.append(
-                        f"No {target_language} markers found in DMA prompts - localization may have failed"
-                    )
+                    errors.append(f"No {target_language} markers found in DMA prompts - localization may have failed")
 
             # Also check conscience prompts if available
             conscience_localization_passed = True  # Default to pass if no prompts captured

@@ -892,10 +892,9 @@ class QARunner:
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
-        from .modules.degraded_mode_tests import DegradedModeTests
-        from .modules.model_eval_tests import ModelEvalTests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
         from .modules.deferral_tests import DeferralTestModule
+        from .modules.degraded_mode_tests import DegradedModeTests
         from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -905,8 +904,11 @@ class QARunner:
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
+        from .modules.memory_benchmark_tests import MemoryBenchmarkTests
+        from .modules.model_eval_tests import ModelEvalTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
+        from .modules.secrets_encryption_tests import SecretsEncryptionTests
         from .modules.solitude_live_tests import SolitudeLiveTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
@@ -914,8 +916,6 @@ class QARunner:
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
         from .modules.wallet_tests import WalletTests
-        from .modules.secrets_encryption_tests import SecretsEncryptionTests
-        from .modules.memory_benchmark_tests import MemoryBenchmarkTests
 
         all_passed = True
 

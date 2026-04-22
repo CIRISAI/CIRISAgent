@@ -39,11 +39,7 @@ class SecretsEncryption:
       - Signing derivation (v1.5.0+): Ed25519 signature-based derivation
     """
 
-    def __init__(
-        self,
-        master_key: Optional[bytes] = None,
-        key_storage_mode: KeyStorageMode = "auto"
-    ) -> None:
+    def __init__(self, master_key: Optional[bytes] = None, key_storage_mode: KeyStorageMode = "auto") -> None:
         """
         Initialize with a master key. If not provided, generates a new one.
 
@@ -102,7 +98,7 @@ class SecretsEncryption:
         """
         try:
             # Import may not exist in CI or may be untyped - ignore all import errors
-            from ciris_adapters.ciris_verify.verifier_singleton import has_verifier, get_verifier  # type: ignore
+            from ciris_adapters.ciris_verify.verifier_singleton import get_verifier, has_verifier  # type: ignore
 
             if not has_verifier():
                 return False
@@ -140,7 +136,8 @@ class SecretsEncryption:
         has_native_encryption = False
         has_symmetric_derivation = False
         try:
-            has_native_encryption = self._verifier.has_encryption_support()
+            # Native encryption methods are dynamically available in native library
+            has_native_encryption = self._verifier.has_encryption_support()  # type: ignore[attr-defined]
             # If native encryption is available, symmetric derivation is also available
             has_symmetric_derivation = has_native_encryption
         except Exception:
@@ -165,7 +162,7 @@ class SecretsEncryption:
         if self.key_storage_mode == "hardware" and self._hardware_available:
             if self._verifier is not None:
                 try:
-                    if self._verifier.has_encryption_support():
+                    if self._verifier.has_encryption_support():  # type: ignore[attr-defined]
                         return "hardware_v1"
                 except (AttributeError, NotImplementedError):
                     pass
@@ -191,10 +188,9 @@ class SecretsEncryption:
             # Try native symmetric key derivation first (v1.6.0+)
             # This is the cleanest approach using HKDF
             try:
-                derived_key: bytes = self._verifier.derive_symmetric_key(
-                    self._hardware_key_id,
-                    context=b"ciris-secrets-v1:" + salt,
-                    key_length=32
+                # Native encryption methods are dynamically available
+                derived_key: bytes = self._verifier.derive_symmetric_key(  # type: ignore[attr-defined]
+                    self._hardware_key_id, context=b"ciris-secrets-v1:" + salt, key_length=32
                 )
                 return derived_key
             except (AttributeError, NotImplementedError):
@@ -293,13 +289,13 @@ class SecretsEncryption:
         # Try native hardware encryption first (v1.6.0+)
         if self.key_storage_mode == "hardware" and self._hardware_available and self._verifier is not None:
             try:
-                # Check if native encryption is available
-                if self._verifier.has_encryption_support():
+                # Check if native encryption is available (dynamically defined)
+                if self._verifier.has_encryption_support():  # type: ignore[attr-defined]
                     # encrypt_with_named_key returns: nonce (12 bytes) || ciphertext || tag (16 bytes)
-                    ciphertext_with_nonce: bytes = self._verifier.encrypt_with_named_key(
+                    ciphertext_with_nonce: bytes = self._verifier.encrypt_with_named_key(  # type: ignore[attr-defined]
                         self._hardware_key_id,
                         value.encode("utf-8"),
-                        aad=salt  # Use salt as AAD for additional security
+                        aad=salt,  # Use salt as AAD for additional security
                     )
                     # Extract the nonce (first 12 bytes)
                     nonce = ciphertext_with_nonce[:12]
@@ -354,7 +350,8 @@ class SecretsEncryption:
         has_native_encryption = False
         if self._hardware_available and self._verifier is not None:
             try:
-                has_native_encryption = self._verifier.has_encryption_support()
+                # Native encryption methods are dynamically defined
+                has_native_encryption = self._verifier.has_encryption_support()  # type: ignore[attr-defined]
             except (AttributeError, NotImplementedError):
                 has_native_encryption = False
 
@@ -373,10 +370,11 @@ class SecretsEncryption:
                 if has_native_encryption:
                     # Reconstruct the ciphertext format: nonce || ciphertext || tag
                     ciphertext_with_nonce = nonce + encrypted_value
-                    decrypted_bytes: bytes = self._verifier.decrypt_with_named_key(
+                    # Native encryption methods are dynamically defined
+                    decrypted_bytes: bytes = self._verifier.decrypt_with_named_key(  # type: ignore[attr-defined]
                         self._hardware_key_id,
                         ciphertext_with_nonce,
-                        aad=salt  # Must match the AAD used during encryption
+                        aad=salt,  # Must match the AAD used during encryption
                     )
                     logger.debug("Successfully decrypted secret using native hardware decryption")
                     return decrypted_bytes.decode("utf-8")

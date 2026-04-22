@@ -12,6 +12,7 @@ from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
 from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
 from ciris_engine.schemas.types import JSONDict
@@ -24,8 +25,6 @@ from .prohibitions import (
     get_capability_category,
     get_prohibition_severity,
 )
-
-from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -437,9 +436,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"SECURITY ALERT: Accord invocation handler error: {e}", exc_info=True)
             return False
 
-    def _validate_capability(
-        self, capability: Optional[str], agent_tier: int = 1
-    ) -> Optional[DomainDeferralRequired]:
+    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> Optional[DomainDeferralRequired]:
         """
         Validate capability against prohibited domains with tier-based access.
 

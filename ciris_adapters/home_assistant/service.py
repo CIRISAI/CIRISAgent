@@ -1122,11 +1122,7 @@ class HAIntegrationService:
 
                             # Handle HA 2025.7.0 bug: state stays "idle" but media_title changes
                             # If media_title changed and we have a title, consider it a success
-                            if (
-                                current_state == "idle"
-                                and media_title
-                                and media_title != initial_media_title
-                            ):
+                            if current_state == "idle" and media_title and media_title != initial_media_title:
                                 logger.info(
                                     f"[MA] Detected HA 2025.7.0 idle bug: state=idle but media changed. "
                                     f"title='{media_title}', artist='{media_artist}' (was '{initial_media_title}')"

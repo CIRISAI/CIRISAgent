@@ -173,11 +173,7 @@ def set_ciris_services_disabled(disabled: bool) -> bool:
         lines = content.splitlines()
 
         # Remove existing CIRIS_SERVICES_DISABLED line
-        new_lines = [
-            line
-            for line in lines
-            if not line.strip().startswith(f"{CIRIS_SERVICES_DISABLED_VAR}=")
-        ]
+        new_lines = [line for line in lines if not line.strip().startswith(f"{CIRIS_SERVICES_DISABLED_VAR}=")]
 
         # Add new line
         value = "true" if disabled else "false"
@@ -200,6 +196,7 @@ def get_ciris_services_disabled() -> bool:
         True if CIRIS services are disabled
     """
     import os
+
     return os.environ.get(CIRIS_SERVICES_DISABLED_VAR, "").lower() in ("true", "1", "yes")
 
 
@@ -224,10 +221,7 @@ async def read_providers_from_graph(config_service: Any) -> dict[str, LLMProvide
         existing_config = await config_service.get_config(RUNTIME_PROVIDERS_CONFIG_KEY)
         if existing_config and existing_config.value.dict_value:
             data = dict(existing_config.value.dict_value)
-            return {
-                name: LLMProviderConfig.from_dict(config)
-                for name, config in data.items()
-            }
+            return {name: LLMProviderConfig.from_dict(config) for name, config in data.items()}
         return {}
     except Exception as e:
         logger.warning(f"Failed to read runtime providers from graph: {e}")
@@ -286,9 +280,7 @@ async def list_providers(config_service: Optional[Any] = None) -> dict[str, LLMP
     return {}
 
 
-async def get_provider(
-    name: str, config_service: Optional[Any] = None
-) -> Optional[LLMProviderConfig]:
+async def get_provider(name: str, config_service: Optional[Any] = None) -> Optional[LLMProviderConfig]:
     """Get a specific provider by name.
 
     Args:
@@ -322,9 +314,7 @@ async def create_provider(
 
     # Check if already exists
     if name in providers:
-        return PersistenceResult(
-            success=False, error=f"Provider '{name}' already exists"
-        )
+        return PersistenceResult(success=False, error=f"Provider '{name}' already exists")
 
     # Check limit
     if len(providers) >= MAX_PROVIDERS:
@@ -365,9 +355,7 @@ async def update_provider(
 
     # Check if exists
     if name not in providers:
-        return PersistenceResult(
-            success=False, error=f"Provider '{name}' not found"
-        )
+        return PersistenceResult(success=False, error=f"Provider '{name}' not found")
 
     # Update provider
     providers[name] = config
@@ -556,11 +544,9 @@ def read_enabled_adapters_from_env() -> list[str]:
         for line in content.splitlines():
             line = line.strip()
             if line.startswith(f"{CIRIS_ADAPTER_VAR}="):
-                value = line[len(f"{CIRIS_ADAPTER_VAR}="):]
+                value = line[len(f"{CIRIS_ADAPTER_VAR}=") :]
                 # Remove surrounding quotes
-                if (value.startswith("'") and value.endswith("'")) or (
-                    value.startswith('"') and value.endswith('"')
-                ):
+                if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
                     value = value[1:-1]
                 if value:
                     return [a.strip() for a in value.split(",") if a.strip()]
@@ -592,10 +578,7 @@ def write_enabled_adapters_to_env(adapters: list[str]) -> bool:
             lines = []
 
         # Remove existing CIRIS_ADAPTER line
-        new_lines = [
-            line for line in lines
-            if not line.strip().startswith(f"{CIRIS_ADAPTER_VAR}=")
-        ]
+        new_lines = [line for line in lines if not line.strip().startswith(f"{CIRIS_ADAPTER_VAR}=")]
 
         # Add new line
         adapters_str = ",".join(adapters)

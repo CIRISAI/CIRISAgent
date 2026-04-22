@@ -26,13 +26,13 @@ DEFAULT_DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordpro
 
 # SSRF protection: blocked hosts and networks
 BLOCKED_HOSTS = {
-    'localhost',
-    '127.0.0.1',
-    '::1',
-    '169.254.169.254',  # AWS/Azure/GCP metadata endpoint
-    'metadata.google.internal',  # GCP metadata hostname
-    'metadata',
-    '100.100.100.200',  # Alibaba Cloud metadata
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "169.254.169.254",  # AWS/Azure/GCP metadata endpoint
+    "metadata.google.internal",  # GCP metadata hostname
+    "metadata",
+    "100.100.100.200",  # Alibaba Cloud metadata
 }
 
 
@@ -50,7 +50,7 @@ def validate_url_for_ssrf(url: str) -> Tuple[bool, Optional[str]]:
         parsed = urlparse(url)
 
         # Block non-http(s) schemes
-        if parsed.scheme not in ('http', 'https'):
+        if parsed.scheme not in ("http", "https"):
             logger.warning(f"Blocked non-HTTP(S) URL scheme: {parsed.scheme}")
             return False, None
 
@@ -86,7 +86,7 @@ def validate_url_for_ssrf(url: str) -> Tuple[bool, Optional[str]]:
                         return False, None
                     # Specifically block cloud metadata ranges
                     if isinstance(ip, ipaddress.IPv4Address):
-                        if ip in ipaddress.ip_network('169.254.0.0/16'):
+                        if ip in ipaddress.ip_network("169.254.0.0/16"):
                             logger.warning(f"Blocked cloud metadata IP: {ip_str}")
                             return False, None
                 except ValueError:
@@ -306,7 +306,7 @@ class APIDocumentHelper:
 
             # Parse URL to construct connection with pinned IP (DNS rebinding protection)
             parsed = urlparse(url)
-            port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
             original_host = parsed.hostname
 
             # Construct URL with resolved IP to prevent DNS rebinding attacks
@@ -317,7 +317,7 @@ class APIDocumentHelper:
                 ip_url += f"?{parsed.query}"
 
             # Create connector - SSL verification uses SNI with original hostname
-            ssl_context: bool | None = False if parsed.scheme == 'http' else None
+            ssl_context: bool | None = False if parsed.scheme == "http" else None
             connector = aiohttp.TCPConnector(ssl=ssl_context)  # type: ignore[arg-type]
 
             # Headers must include original Host for virtual hosting and SSL SNI
@@ -329,7 +329,7 @@ class APIDocumentHelper:
                     ip_url,  # Use IP-based URL instead of hostname
                     headers=headers,  # Include original Host header
                     allow_redirects=False,
-                    timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)
+                    timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT),
                 ) as response:
                     # Handle redirects manually with re-validation
                     if response.status in (301, 302, 303, 307, 308):
@@ -339,7 +339,7 @@ class APIDocumentHelper:
                             return None
 
                         # Handle relative URLs
-                        if not redirect_url.startswith(('http://', 'https://')):
+                        if not redirect_url.startswith(("http://", "https://")):
                             redirect_url = urljoin(url, redirect_url)
 
                         # Re-validate redirect target before following

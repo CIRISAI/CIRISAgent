@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
+from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.utils.mobile_exclusions import (
     compute_files_missing_list,
@@ -32,7 +33,6 @@ from ciris_engine.logic.utils.mobile_exclusions import (
     compute_mobile_excluded_list,
 )
 from ciris_engine.logic.utils.path_resolution import get_secrets_home
-from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
 from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -2173,14 +2173,17 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             )
             # Print to stdout for mobile UI to parse (Kotlin StartupViewModel)
             # Must contain "VERIFY" for Kotlin's line filter at StartupViewModel.kt:213
-            checks_passed = sum([
-                result.binary_ok,
-                result.function_integrity == "verified",
-                result.python_integrity_ok,
-                result.registry_ok,
-                result.audit_ok,
-            ])
+            checks_passed = sum(
+                [
+                    result.binary_ok,
+                    result.function_integrity == "verified",
+                    result.python_integrity_ok,
+                    result.registry_ok,
+                    result.audit_ok,
+                ]
+            )
             import sys
+
             is_valid = result.attestation_status == "verified"
             msg = (
                 f"VERIFY Unified attestation complete, valid={str(is_valid).lower()}, "

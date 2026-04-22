@@ -399,14 +399,14 @@ async def _create_setup_users(
     # 2. We have an ingress user completing setup (use their identity)
     # In both cases, AUTO-MINT a WA for the ingress user with ROOT authority
     if setup.skip_user_creation or use_ingress_user:
-        reason = "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected ({ingress_provider})"
+        reason = (
+            "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected ({ingress_provider})"
+        )
         logger.info(f"CIRIS_USER_CREATE: Skipping regular user creation ({reason}) - auto-minting WA for ingress user")
         # Still need to ensure system WA exists for agent operations
         time_service = TimeService()
         await time_service.start()
-        auth_service = AuthenticationService(
-            db_path=auth_db_path, time_service=time_service, key_dir=None
-        )
+        auth_service = AuthenticationService(db_path=auth_db_path, time_service=time_service, key_dir=None)
         await auth_service.start()
         try:
             await _ensure_system_wa(auth_service)
@@ -443,15 +443,21 @@ async def _create_setup_users(
                             metadata={"ingress_setup": "true"},
                             primary=True,
                         )
-                        logger.info(f"CIRIS_USER_CREATE: ✅ Linked ingress identity ({ingress_provider}) to WA {wa_cert.wa_id}")
+                        logger.info(
+                            f"CIRIS_USER_CREATE: ✅ Linked ingress identity ({ingress_provider}) to WA {wa_cert.wa_id}"
+                        )
                     except Exception as link_err:
                         # Non-fatal - log but continue (founding partnership is more important)
                         logger.warning(f"CIRIS_USER_CREATE: ⚠️ Failed to link ingress identity: {link_err}")
 
                 # Create founding partnership for the ingress user
-                logger.info(f"CIRIS_USER_CREATE: Creating founding partnership for ingress provider: {ingress_provider}")
+                logger.info(
+                    f"CIRIS_USER_CREATE: Creating founding partnership for ingress provider: {ingress_provider}"
+                )
                 _create_founding_partnership(wa_cert.wa_id, ingress_user_id)
-                logger.info(f"CIRIS_USER_CREATE: ✅ Founding partnership created for ingress provider: {ingress_provider}")
+                logger.info(
+                    f"CIRIS_USER_CREATE: ✅ Founding partnership created for ingress provider: {ingress_provider}"
+                )
 
                 # Store preferences if provided
                 _store_user_preferences(wa_cert.wa_id, setup)
@@ -895,7 +901,9 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
                 logger.warning(f"[SETUP] Rejecting HA ingress headers from untrusted source")
                 return None, None, None
 
-            display_name = request.headers.get("X-Remote-User-Display-Name") or request.headers.get("X-Remote-User-Name")
+            display_name = request.headers.get("X-Remote-User-Display-Name") or request.headers.get(
+                "X-Remote-User-Name"
+            )
             # HA doesn't provide email in ingress headers
             logger.info(f"[SETUP] Detected HA ingress user (direct): home_assistant:{ha_user_id} ({display_name})")
             return f"home_assistant:{ha_user_id}", display_name, None
@@ -974,9 +982,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
             runtime = getattr(request.app.state, "runtime", None)
             if runtime is not None:
                 try:
-                    runtime.request_shutdown(
-                        "Unsupported Platform for CIRISVerify: signing key initialization failed"
-                    )
+                    runtime.request_shutdown("Unsupported Platform for CIRISVerify: signing key initialization failed")
                 except Exception as shutdown_err:
                     logger.error(
                         "[Setup Complete] request_shutdown raised while reporting signing failure: %s",

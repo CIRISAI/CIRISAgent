@@ -7,21 +7,23 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent.parent
 
+
 def load_glossary(lang_code: str) -> dict[str, str]:
     """Load glossary and extract English -> Target mappings."""
     glossary_path = BASE_DIR / f"docs/localization/glossaries/{lang_code}_glossary.md"
     mappings = {}
 
-    with open(glossary_path, 'r', encoding='utf-8') as f:
+    with open(glossary_path, "r", encoding="utf-8") as f:
         for line in f:
-            if '|' in line and '---' not in line:
-                parts = [p.strip() for p in line.split('|')]
+            if "|" in line and "---" not in line:
+                parts = [p.strip() for p in line.split("|")]
                 if len(parts) >= 3 and parts[1] and parts[2]:
                     eng = parts[1].strip()
                     target = parts[2].strip()
-                    if eng and target and eng != 'English' and target != 'Burmese' and target != 'Thai':
+                    if eng and target and eng != "English" and target != "Burmese" and target != "Thai":
                         mappings[eng] = target
     return mappings
+
 
 def translate_value(value: str, mappings: dict[str, str]) -> str:
     """Apply glossary mappings to a string."""
@@ -33,6 +35,7 @@ def translate_value(value: str, mappings: dict[str, str]) -> str:
         result = pattern.sub(target, result)
     return result
 
+
 def translate_recursive(obj, mappings: dict[str, str]):
     """Recursively translate all string values."""
     if isinstance(obj, dict):
@@ -43,11 +46,12 @@ def translate_recursive(obj, mappings: dict[str, str]):
         return translate_value(obj, mappings)
     return obj
 
+
 def generate_localization(lang_code: str, lang_name: str):
     """Generate a complete localization JSON file."""
     # Load English source
     en_path = BASE_DIR / "localization/en.json"
-    with open(en_path, 'r', encoding='utf-8') as f:
+    with open(en_path, "r", encoding="utf-8") as f:
         en = json.load(f)
 
     # Load glossary mappings
@@ -58,18 +62,15 @@ def generate_localization(lang_code: str, lang_name: str):
     translated = translate_recursive(en, mappings)
 
     # Set metadata
-    translated['_meta'] = {
-        "language": lang_code,
-        "language_name": lang_name,
-        "direction": "ltr"
-    }
+    translated["_meta"] = {"language": lang_code, "language_name": lang_name, "direction": "ltr"}
 
     # Write output
     out_path = BASE_DIR / f"localization/{lang_code}.json"
-    with open(out_path, 'w', encoding='utf-8') as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(translated, f, ensure_ascii=False, indent=2)
 
     print(f"Written {out_path} ({out_path.stat().st_size} bytes)")
+
 
 if __name__ == "__main__":
     # Generate Burmese

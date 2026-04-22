@@ -631,11 +631,15 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                             f"[ADAPTER_MGR_LIST] {adapter_id} get_status: needs_reauth={needs_reauth}, reason={reauth_reason}"
                         )
                 except Exception as status_err:
-                    logger.warning(f"[ADAPTER_MGR_LIST] Failed to get status for {adapter_id}: {status_err}", exc_info=True)
+                    logger.warning(
+                        f"[ADAPTER_MGR_LIST] Failed to get status for {adapter_id}: {status_err}", exc_info=True
+                    )
 
                 # Get auth step info from manifest
                 has_auth_step, auth_step_id = self._get_auth_step_info(instance.adapter_type)
-                logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: has_auth_step={has_auth_step}, auth_step_id={auth_step_id}")
+                logger.info(
+                    f"[ADAPTER_MGR_LIST] {adapter_id}: has_auth_step={has_auth_step}, auth_step_id={auth_step_id}"
+                )
 
                 adapters.append(
                     RuntimeAdapterStatus(
@@ -1084,10 +1088,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         try:
             from ciris_engine.logic.context.system_snapshot_helpers import (
                 _collect_available_tools,
-                get_enrichment_cache,
                 _collect_enrichment_tools,
-                _get_tool_providers,
                 _execute_enrichment_tool,
+                _get_tool_providers,
+                get_enrichment_cache,
             )
 
             # Give the adapter a moment to fully initialize
@@ -1128,8 +1132,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     logger.warning(f"[ENRICHMENT_CACHE] Failed to cache {tool_key}: {e}")
 
             logger.info(
-                f"[ENRICHMENT_CACHE] Refreshed cache after loading {instance.adapter_id}, "
-                f"stats: {cache.stats}"
+                f"[ENRICHMENT_CACHE] Refreshed cache after loading {instance.adapter_id}, " f"stats: {cache.stats}"
             )
 
         except Exception as e:

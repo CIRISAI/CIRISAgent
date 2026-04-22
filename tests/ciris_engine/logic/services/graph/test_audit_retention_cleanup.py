@@ -99,9 +99,7 @@ class TestAuditRetentionCleanup:
                 except Exception:
                     pass
 
-    def _insert_test_entries(
-        self, db_path: str, entries: list[dict], time_service
-    ) -> None:
+    def _insert_test_entries(self, db_path: str, entries: list[dict], time_service) -> None:
         """Insert test entries directly into audit_log table."""
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -146,9 +144,7 @@ class TestAuditRetentionCleanup:
     # ========== Test cleanup_old_entries ==========
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_deletes_old(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_deletes_old(self, audit_service_with_db, mock_time_service):
         """Test cleanup deletes entries older than retention period."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -210,9 +206,7 @@ class TestAuditRetentionCleanup:
         assert remaining[1]["event_id"] == "recent_2"
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_reanchors_chain(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_reanchors_chain(self, audit_service_with_db, mock_time_service):
         """Test cleanup re-anchors hash chain with REANCHOR marker."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -252,9 +246,7 @@ class TestAuditRetentionCleanup:
         assert new_anchor["previous_hash"].startswith("REANCHOR_")
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_preserves_recent(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_preserves_recent(self, audit_service_with_db, mock_time_service):
         """Test cleanup preserves all entries within retention period."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -288,9 +280,7 @@ class TestAuditRetentionCleanup:
         assert deleted == 0
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_all_deleted(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_all_deleted(self, audit_service_with_db, mock_time_service):
         """Test cleanup when all entries are deleted."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -318,9 +308,7 @@ class TestAuditRetentionCleanup:
         assert len(remaining) == 0
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_custom_retention(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_custom_retention(self, audit_service_with_db, mock_time_service):
         """Test cleanup with custom retention days."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -358,9 +346,7 @@ class TestAuditRetentionCleanup:
         assert remaining[0]["event_id"] == "entry_10d"
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_invalid_retention(
-        self, audit_service_with_db
-    ):
+    async def test_cleanup_old_entries_invalid_retention(self, audit_service_with_db):
         """Test cleanup with invalid retention days returns 0."""
         deleted = await audit_service_with_db.cleanup_old_entries(retention_days=0)
         assert deleted == 0
@@ -369,9 +355,7 @@ class TestAuditRetentionCleanup:
         assert deleted == 0
 
     @pytest.mark.asyncio
-    async def test_cleanup_old_entries_clears_cache(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_old_entries_clears_cache(self, audit_service_with_db, mock_time_service):
         """Test cleanup also clears expired entries from cache."""
         now = mock_time_service.now()
 
@@ -406,9 +390,7 @@ class TestAuditRetentionCleanup:
     # ========== Test graph node cleanup ==========
 
     @pytest.mark.asyncio
-    async def test_cleanup_audit_graph_nodes(
-        self, audit_service_with_db, mock_memory_bus, mock_time_service
-    ):
+    async def test_cleanup_audit_graph_nodes(self, audit_service_with_db, mock_memory_bus, mock_time_service):
         """Test cleanup of audit graph nodes."""
         now = mock_time_service.now()
         cutoff = now - timedelta(days=90)
@@ -442,15 +424,14 @@ class TestAuditRetentionCleanup:
         assert call_kwargs["node"] == old_node
 
     @pytest.mark.asyncio
-    async def test_cleanup_audit_graph_nodes_no_memory_bus(
-        self, mock_time_service
-    ):
+    async def test_cleanup_audit_graph_nodes_no_memory_bus(self, mock_time_service):
         """Test graph cleanup returns 0 without memory bus."""
         from cryptography.hazmat.primitives.asymmetric import ed25519
 
         private_key = ed25519.Ed25519PrivateKey.generate()
         public_key = private_key.public_key()
         from cryptography.hazmat.primitives import serialization
+
         pub_bytes = public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
@@ -482,9 +463,7 @@ class TestAuditRetentionCleanup:
     # ========== Test 90-day boundary ==========
 
     @pytest.mark.asyncio
-    async def test_cleanup_90_day_boundary(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_90_day_boundary(self, audit_service_with_db, mock_time_service):
         """Test cleanup at exact 90-day boundary."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)
@@ -539,9 +518,7 @@ class TestAuditRetentionCleanup:
         assert "exactly_89d" in event_ids
 
     @pytest.mark.asyncio
-    async def test_cleanup_uses_default_retention(
-        self, audit_service_with_db, mock_time_service
-    ):
+    async def test_cleanup_uses_default_retention(self, audit_service_with_db, mock_time_service):
         """Test cleanup uses default retention_days from service config."""
         now = mock_time_service.now()
         db_path = str(audit_service_with_db.db_path)

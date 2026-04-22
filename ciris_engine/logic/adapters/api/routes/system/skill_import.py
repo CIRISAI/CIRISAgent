@@ -157,11 +157,13 @@ class ImportedSkillsListResponse(BaseModel):
 _SENSITIVE_PATTERNS = frozenset([".ssh", ".gnupg", ".aws", ".config/gcloud", "credentials"])
 
 # Dangerous path components that indicate traversal or escape attempts
-_DANGEROUS_PATH_COMPONENTS = frozenset([
-    "..",      # Parent directory traversal
-    "...",     # Triple dot (some systems)
-    "....",    # Quad dot variations
-])
+_DANGEROUS_PATH_COMPONENTS = frozenset(
+    [
+        "..",  # Parent directory traversal
+        "...",  # Triple dot (some systems)
+        "....",  # Quad dot variations
+    ]
+)
 
 
 # Allowed base directories (lazy-evaluated to handle test environments)
@@ -268,7 +270,7 @@ def _path_matches_base_prefix(path_components: list[str], base_parts: list[str])
             return False, []
 
     # Return relative suffix components (after base prefix)
-    return True, path_components[len(base_relative_parts):]
+    return True, path_components[len(base_relative_parts) :]
 
 
 def _resolve_absolute_path(local_path: str, allowed_bases: list[Path]) -> Path | None:
@@ -287,9 +289,7 @@ def _resolve_absolute_path(local_path: str, allowed_bases: list[Path]) -> Path |
 
     for base in allowed_bases:
         base_resolved = base.resolve()
-        matches, relative_components = _path_matches_base_prefix(
-            path_components, list(base_resolved.parts)
-        )
+        matches, relative_components = _path_matches_base_prefix(path_components, list(base_resolved.parts))
         if not matches:
             continue
 

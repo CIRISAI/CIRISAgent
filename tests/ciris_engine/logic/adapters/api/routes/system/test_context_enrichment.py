@@ -7,11 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ciris_engine.logic.adapters.api.routes.system.adapters import (
-    get_context_enrichment_cache,
-    router,
-)
-
+from ciris_engine.logic.adapters.api.routes.system.adapters import get_context_enrichment_cache, router
 
 # Patch path for functions imported inside the endpoint
 PATCH_MODULE = "ciris_engine.logic.context.system_snapshot_helpers"
@@ -32,9 +28,7 @@ def app():
 @pytest.fixture
 def mock_auth():
     """Mock auth dependency."""
-    with patch(
-        "ciris_engine.logic.adapters.api.routes.system.adapters.require_observer"
-    ) as mock:
+    with patch("ciris_engine.logic.adapters.api.routes.system.adapters.require_observer") as mock:
         mock.return_value = Mock()
         yield mock
 

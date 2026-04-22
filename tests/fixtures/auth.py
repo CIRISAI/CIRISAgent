@@ -167,10 +167,7 @@ def make_login_request(client, username: str = None, password: str = None) -> Di
     if password is None:
         password = get_test_admin_password()
 
-    response = client.post(
-        "/v1/auth/login",
-        json={"username": username, "password": password}
-    )
+    response = client.post("/v1/auth/login", json={"username": username, "password": password})
     assert response.status_code == 200, f"Login failed: {response.json()}"
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

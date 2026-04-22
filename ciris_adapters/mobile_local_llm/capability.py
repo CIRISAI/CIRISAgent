@@ -31,7 +31,6 @@ from typing import Callable, List, Optional
 
 from .config import DeviceTier, MobileLocalLLMConfig, ModelVariant, Platform
 
-
 # Android app data directories follow /data/data/<pkg>/ — this is the most
 # reliable way to detect we are inside a Chaquopy-hosted Python runtime.
 _ANDROID_DATA_PREFIX = "/data/data/"
@@ -296,55 +295,70 @@ def probe_device_capability(
     if current_platform == Platform.UNKNOWN:
         reasons.append("unknown platform; refusing to run local inference")
         return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.INCAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     # Gate 2: arm64 on mobile. Desktop dev can be x86_64.
     if current_platform in {Platform.ANDROID, Platform.IOS} and architecture != "arm64-v8a":
-        reasons.append(
-            f"architecture {architecture} is not arm64; Gemma 4 mobile builds require arm64"
-        )
+        reasons.append(f"architecture {architecture} is not arm64; Gemma 4 mobile builds require arm64")
         return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.INCAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     # Gate 3: free disk.
     if free_disk_gb > 0.0 and free_disk_gb < config.min_free_disk_gb:
-        reasons.append(
-            f"free disk {free_disk_gb:.2f}GB is below required {config.min_free_disk_gb:.2f}GB"
-        )
+        reasons.append(f"free disk {free_disk_gb:.2f}GB is below required {config.min_free_disk_gb:.2f}GB")
         return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.INCAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     # Gate 4: RAM thresholds.
     if total_ram_gb <= 0.0:
         reasons.append("could not determine total RAM; skipping local inference for safety")
         return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.INCAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     if total_ram_gb >= config.min_total_ram_gb_e4b:
-        reasons.append(
-            f"total RAM {total_ram_gb:.1f}GB >= E4B threshold {config.min_total_ram_gb_e4b:.1f}GB"
-        )
+        reasons.append(f"total RAM {total_ram_gb:.1f}GB >= E4B threshold {config.min_total_ram_gb_e4b:.1f}GB")
         tentative_tier = DeviceTier.CAPABLE_E4B
     elif total_ram_gb >= config.min_total_ram_gb_e2b:
-        reasons.append(
-            f"total RAM {total_ram_gb:.1f}GB >= E2B threshold {config.min_total_ram_gb_e2b:.1f}GB"
-        )
+        reasons.append(f"total RAM {total_ram_gb:.1f}GB >= E2B threshold {config.min_total_ram_gb_e2b:.1f}GB")
         tentative_tier = DeviceTier.CAPABLE_E2B
     else:
-        reasons.append(
-            f"total RAM {total_ram_gb:.1f}GB is below E2B threshold {config.min_total_ram_gb_e2b:.1f}GB"
-        )
+        reasons.append(f"total RAM {total_ram_gb:.1f}GB is below E2B threshold {config.min_total_ram_gb_e2b:.1f}GB")
         return _result(
-            DeviceTier.INCAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.INCAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     # Gate 5: iOS stub — hardware looks fine but we may not have a model to
@@ -358,24 +372,37 @@ def probe_device_capability(
                 "bundle was found; marking as stub so the wizard shows 'coming soon'"
             )
             return _result(
-                DeviceTier.IOS_STUB, current_platform, architecture,
-                total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+                DeviceTier.IOS_STUB,
+                current_platform,
+                architecture,
+                total_ram_gb,
+                available_ram_gb,
+                free_disk_gb,
+                reasons,
             )
 
     # Gate 6: Desktop — return DESKTOP_CAPABLE so the wizard can offer to
     # start a local llama.cpp server. User must explicitly opt in.
     if current_platform == Platform.DESKTOP:
-        reasons.append(
-            f"desktop system with {total_ram_gb:.1f}GB RAM can run local llama.cpp inference"
-        )
+        reasons.append(f"desktop system with {total_ram_gb:.1f}GB RAM can run local llama.cpp inference")
         return _result(
-            DeviceTier.DESKTOP_CAPABLE, current_platform, architecture,
-            total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+            DeviceTier.DESKTOP_CAPABLE,
+            current_platform,
+            architecture,
+            total_ram_gb,
+            available_ram_gb,
+            free_disk_gb,
+            reasons,
         )
 
     return _result(
-        tentative_tier, current_platform, architecture,
-        total_ram_gb, available_ram_gb, free_disk_gb, reasons,
+        tentative_tier,
+        current_platform,
+        architecture,
+        total_ram_gb,
+        available_ram_gb,
+        free_disk_gb,
+        reasons,
     )
 
 

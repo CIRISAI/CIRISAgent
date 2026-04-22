@@ -27,7 +27,8 @@ class TestHashChainReanchor:
         # Create the audit_log table
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS audit_log (
                 entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_id TEXT NOT NULL UNIQUE,
@@ -45,7 +46,8 @@ class TestHashChainReanchor:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(sequence_number)
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -53,6 +55,7 @@ class TestHashChainReanchor:
 
         # Cleanup
         import os
+
         try:
             os.unlink(db_path)
         except Exception:
@@ -95,7 +98,8 @@ class TestHashChainReanchor:
         conn.close()
 
     def _create_entry_with_proper_hash(
-        self, hash_chain: AuditHashChain,
+        self,
+        hash_chain: AuditHashChain,
         event_id: str,
         override_previous_hash: str | None = None,
         override_sequence: int | None = None,
@@ -129,9 +133,7 @@ class TestHashChainReanchor:
 
     # ========== Test REANCHOR marker acceptance ==========
 
-    def test_verify_chain_accepts_reanchor_marker(
-        self, hash_chain, temp_db_path
-    ):
+    def test_verify_chain_accepts_reanchor_marker(self, hash_chain, temp_db_path):
         """Test that verifier accepts REANCHOR marker as valid anchor."""
         # Create entry with REANCHOR as previous_hash
         entry1 = self._create_entry_with_proper_hash(
@@ -159,9 +161,7 @@ class TestHashChainReanchor:
         assert result.entries_checked == 2
         assert len(result.errors) == 0
 
-    def test_verify_chain_rejects_invalid_previous_hash(
-        self, hash_chain, temp_db_path
-    ):
+    def test_verify_chain_rejects_invalid_previous_hash(self, hash_chain, temp_db_path):
         """Test that verifier rejects invalid previous hash (not REANCHOR, not genesis, wrong hash)."""
         # Create first entry normally
         entry1 = self._create_entry_with_proper_hash(hash_chain, "entry_1")
@@ -182,9 +182,7 @@ class TestHashChainReanchor:
         assert result.valid is False
         assert "Hash chain break" in result.errors[0]
 
-    def test_verify_chain_multiple_reanchors(
-        self, hash_chain, temp_db_path
-    ):
+    def test_verify_chain_multiple_reanchors(self, hash_chain, temp_db_path):
         """Test chain with REANCHOR point works correctly."""
         # Simulate chain that has been cleaned up - start at seq 100
         entry1 = self._create_entry_with_proper_hash(
@@ -205,9 +203,7 @@ class TestHashChainReanchor:
         assert result.valid is True
         assert result.entries_checked == 2
 
-    def test_verify_chain_various_reanchor_formats(
-        self, hash_chain, temp_db_path
-    ):
+    def test_verify_chain_various_reanchor_formats(self, hash_chain, temp_db_path):
         """Test REANCHOR marker with various timestamp formats."""
         test_cases = [
             "REANCHOR_2024-01-01T00:00:00+00:00",
@@ -238,9 +234,7 @@ class TestHashChainReanchor:
 
             assert result.valid is True, f"Failed for marker: {reanchor_marker}"
 
-    def test_chain_continuity_after_reanchor(
-        self, hash_chain, temp_db_path
-    ):
+    def test_chain_continuity_after_reanchor(self, hash_chain, temp_db_path):
         """Test that chain continues correctly after REANCHOR point."""
         # Create first entry with REANCHOR
         entry1 = self._create_entry_with_proper_hash(
@@ -264,9 +258,7 @@ class TestHashChainReanchor:
         assert result.entries_checked == 3
         assert len(result.errors) == 0
 
-    def test_chain_break_detected_after_reanchor(
-        self, hash_chain, temp_db_path
-    ):
+    def test_chain_break_detected_after_reanchor(self, hash_chain, temp_db_path):
         """Test that chain breaks are still detected after REANCHOR."""
         # Create anchor entry
         entry1 = self._create_entry_with_proper_hash(
@@ -306,9 +298,7 @@ class TestHashChainReanchor:
         assert result.valid is True
         assert result.entries_checked == 0
 
-    def test_verify_single_reanchored_entry(
-        self, hash_chain, temp_db_path
-    ):
+    def test_verify_single_reanchored_entry(self, hash_chain, temp_db_path):
         """Test verification of single entry with REANCHOR."""
         entry = self._create_entry_with_proper_hash(
             hash_chain,
@@ -323,9 +313,7 @@ class TestHashChainReanchor:
         assert result.valid is True
         assert result.entries_checked == 1
 
-    def test_genesis_valid_for_first_entry(
-        self, hash_chain, temp_db_path
-    ):
+    def test_genesis_valid_for_first_entry(self, hash_chain, temp_db_path):
         """Test that genesis is valid for first entry (sequence 1)."""
         entry = self._create_entry_with_proper_hash(hash_chain, "first_entry")
         # First entry should naturally get genesis as previous_hash
@@ -336,9 +324,7 @@ class TestHashChainReanchor:
         assert result.valid is True
         assert entry["previous_hash"] == "genesis"
 
-    def test_prepare_entry_continues_from_reanchor(
-        self, hash_chain, temp_db_path
-    ):
+    def test_prepare_entry_continues_from_reanchor(self, hash_chain, temp_db_path):
         """Test that prepare_entry continues chain correctly after REANCHOR."""
         # Insert reanchored entry first
         entry = self._create_entry_with_proper_hash(

@@ -857,7 +857,9 @@ class SecretsStore:
 
                 # Get all secrets that need re-encryption
                 with get_db_connection(str(self.db_path)) as conn:
-                    cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets")
+                    cursor = conn.execute(
+                        "SELECT secret_uuid, encrypted_value, salt, nonce, encryption_key_ref FROM secrets"
+                    )
                     secrets_rows = cursor.fetchall()
 
                 if not secrets_rows:
@@ -869,6 +871,7 @@ class SecretsStore:
 
                 # C1 FIX: Create backup table before migration
                 import time
+
                 backup_table = f"secrets_backup_{int(time.time())}"
                 with get_db_connection(str(self.db_path)) as conn:
                     # CREATE TABLE ... AS SELECT works for both SQLite and PostgreSQL
@@ -934,7 +937,9 @@ class SecretsStore:
                             )
                             # Only commit if ALL updates succeeded
                             conn.commit()
-                            logger.info(f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction")
+                            logger.info(
+                                f"Successfully committed {len(updated_secrets)} re-encrypted secrets in atomic transaction"
+                            )
                         except Exception as update_error:
                             conn.rollback()
                             logger.error(f"Re-encryption transaction failed, rolled back: {update_error}")

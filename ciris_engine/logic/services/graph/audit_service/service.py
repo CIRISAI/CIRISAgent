@@ -778,8 +778,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             logger.warning("Invalid retention_days, skipping cleanup")
             return 0
 
-        cutoff_time = (self._time_service.now() if self._time_service else datetime.now()) - \
-            __import__('datetime').timedelta(days=days)
+        cutoff_time = (self._time_service.now() if self._time_service else datetime.now()) - __import__(
+            "datetime"
+        ).timedelta(days=days)
         cutoff_iso = cutoff_time.isoformat()
 
         deleted_count = 0
@@ -800,15 +801,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 logger.error(f"Failed to cleanup audit graph nodes: {e}", exc_info=True)
 
         # Step 3: Clear expired entries from cache
-        self._recent_entries = [
-            e for e in self._recent_entries
-            if e.timestamp >= cutoff_time
-        ]
+        self._recent_entries = [e for e in self._recent_entries if e.timestamp >= cutoff_time]
 
         if deleted_count > 0:
-            logger.info(
-                f"Audit retention cleanup complete: deleted {deleted_count} entries older than {days} days"
-            )
+            logger.info(f"Audit retention cleanup complete: deleted {deleted_count} entries older than {days} days")
 
         return deleted_count
 
@@ -832,7 +828,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 ORDER BY sequence_number ASC
                 LIMIT 1
                 """,
-                (cutoff_iso,)
+                (cutoff_iso,),
             )
             anchor_row = cursor.fetchone()
 
@@ -847,10 +843,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             anchor_entry_id, anchor_seq, _anchor_hash = anchor_row
 
             # Count entries to be deleted
-            cursor.execute(
-                "SELECT COUNT(*) FROM audit_log WHERE event_timestamp < ?",
-                (cutoff_iso,)
-            )
+            cursor.execute("SELECT COUNT(*) FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
             count_to_delete = cursor.fetchone()[0]
 
             if count_to_delete == 0:
@@ -865,21 +858,17 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 SET previous_hash = ?
                 WHERE entry_id = ?
                 """,
-                (reanchor_marker, anchor_entry_id)
+                (reanchor_marker, anchor_entry_id),
             )
 
             # Delete old entries
-            cursor.execute(
-                "DELETE FROM audit_log WHERE event_timestamp < ?",
-                (cutoff_iso,)
-            )
+            cursor.execute("DELETE FROM audit_log WHERE event_timestamp < ?", (cutoff_iso,))
             deleted = cursor.rowcount
 
             self._db_connection.commit()
 
             logger.info(
-                f"Audit chain re-anchored at sequence {anchor_seq}, "
-                f"deleted {deleted} entries before {cutoff_iso}"
+                f"Audit chain re-anchored at sequence {anchor_seq}, " f"deleted {deleted} entries before {cutoff_iso}"
             )
             return deleted
 
@@ -897,9 +886,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         search_query = f"type:{NodeType.AUDIT_ENTRY.value} scope:{GraphScope.LOCAL.value}"
         try:
-            nodes = await self._memory_bus.search(
-                search_query, filters=None, handler_name="audit_service"
-            )
+            nodes = await self._memory_bus.search(search_query, filters=None, handler_name="audit_service")
 
             for node in nodes:
                 # Extract timestamp from node (updated_at at node level, or created_at in attributes)

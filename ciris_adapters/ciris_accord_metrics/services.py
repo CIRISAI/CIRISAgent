@@ -1366,6 +1366,21 @@ class AccordMetricsService:
                 data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
                     "circuit_breaker_status"
                 )
+                # Memory count: count of relevant memories/context sources used
+                # Try to extract from system_counts or context_sources
+                system_counts = snapshot.get("system_counts", {})
+                if isinstance(system_counts, dict):
+                    # Use total_thoughts as a proxy for memory entries being processed
+                    data["memory_count"] = system_counts.get("total_thoughts", 0)
+                else:
+                    data["memory_count"] = 0
+                # Context tokens: estimate based on context enrichment results
+                # This counts entries in context_enrichment_results as a proxy
+                context_enrichment = snapshot.get("context_enrichment_results", {})
+                if isinstance(context_enrichment, dict):
+                    data["context_tokens"] = len(context_enrichment)  # Count of context sources
+                else:
+                    data["context_tokens"] = 0
                 # Add key signature details
                 if verify_attestation:
                     data["key_status"] = verify_attestation.get("key_status")

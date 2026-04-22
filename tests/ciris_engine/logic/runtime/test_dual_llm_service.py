@@ -77,6 +77,9 @@ class TestDualLLMService:
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.delenv("NEXT_PUBLIC_API_BASE_URL", raising=False)
         monkeypatch.delenv("CIRIS_MOBILE_LOCAL_LLM_ENABLED", raising=False)
+        # Clear billing tokens to prevent CIRIS proxy JWT auth path
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
 
@@ -111,6 +114,9 @@ class TestDualLLMService:
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.delenv("NEXT_PUBLIC_API_BASE_URL", raising=False)
         monkeypatch.delenv("CIRIS_MOBILE_LOCAL_LLM_ENABLED", raising=False)
+        # Clear billing tokens to prevent CIRIS proxy JWT auth path
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
         monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://api.lambda.ai/v1")
@@ -155,6 +161,9 @@ class TestDualLLMService:
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.delenv("NEXT_PUBLIC_API_BASE_URL", raising=False)
         monkeypatch.delenv("CIRIS_MOBILE_LOCAL_LLM_ENABLED", raising=False)
+        # Clear billing tokens to prevent CIRIS proxy JWT auth path
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
         monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://custom.api.com/v1")
@@ -190,6 +199,9 @@ class TestDualLLMService:
         monkeypatch.delenv("OPENAI_API_BASE", raising=False)
         monkeypatch.delenv("NEXT_PUBLIC_API_BASE_URL", raising=False)
         monkeypatch.delenv("CIRIS_MOBILE_LOCAL_LLM_ENABLED", raising=False)
+        # Clear billing tokens to prevent CIRIS proxy JWT auth path
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
         monkeypatch.setenv("OPENAI_API_KEY", "test-api-key-1")
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
 

@@ -175,9 +175,11 @@ class MobileLocalLLMAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("MobileLocalLLMAdapter lifecycle cancelled")
-            await self.stop()
-            raise  # Re-raise to propagate cancellation
-        else:
+            raise
+        except Exception:
+            logger.exception("MobileLocalLLMAdapter lifecycle failed")
+            raise
+        finally:
             await self.stop()
 
     # ------------------------------------------------------------------

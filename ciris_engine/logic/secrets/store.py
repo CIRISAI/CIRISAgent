@@ -66,7 +66,7 @@ class SecretsStore:
             validated_mode: KeyStorageMode = "auto"
         else:
             # key_storage_mode is in valid_modes, so it's a valid KeyStorageMode
-            validated_mode = key_storage_mode  # type: ignore[assignment]
+            validated_mode = cast(KeyStorageMode, key_storage_mode)
 
         self.encryption = SecretsEncryption(master_key, key_storage_mode=validated_mode)
         self.max_accesses_per_minute = max_accesses_per_minute

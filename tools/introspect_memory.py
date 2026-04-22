@@ -96,9 +96,12 @@ def main(adapters: str = "cli", duration: int = 30) -> int:
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
+    server_log_path = project_root / f"memory_introspection_{adapters}.server.log"
+    server_log = server_log_path.open("w", encoding="utf-8")
+
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=server_log,
         stderr=subprocess.STDOUT,
         cwd=str(project_root),
         env=env,
@@ -151,12 +154,15 @@ def main(adapters: str = "cli", duration: int = 30) -> int:
         print("\n" + "=" * 70)
         print("INTROSPECTION COMPLETE")
         print("=" * 70)
+        print(f"Server log: {server_log_path}")
+        server_log.close()
         return 0
 
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         process.terminate()
         process.wait(timeout=5)
+        server_log.close()
         return 1
 
 

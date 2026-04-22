@@ -221,21 +221,23 @@ class TestConsentServiceCleanup:
 
     # Test main cleanup_expired function (should have low cognitive complexity now)
     @pytest.mark.asyncio
-    async def test_cleanup_expired_success(self, consent_service, expired_consent_status):
+    async def test_cleanup_expired_success(self, consent_service, expired_consent_status, expired_consent_node):
         """Test successful cleanup of expired consents."""
         # Setup cache with expired consent
         consent_service._consent_cache["expired_user"] = expired_consent_status
 
-        # Mock the helper methods
-        consent_service._find_expired_user_ids = AsyncMock(return_value=["expired_user"])
-        consent_service._perform_cleanup = Mock(return_value=1)
+        # Mock the helper methods to match actual implementation
+        consent_service._find_expired_nodes = AsyncMock(return_value=([expired_consent_node], ["expired_user"]))
+        consent_service._delete_expired_from_graph = AsyncMock(return_value=1)
+        consent_service._delete_expired_from_cache = Mock(return_value=1)
 
         result = await consent_service.cleanup_expired()
 
-        assert result == 1
+        assert result == 2  # 1 from graph + 1 from cache
         assert consent_service._expired_cleanups == 1
-        consent_service._find_expired_user_ids.assert_called_once()
-        consent_service._perform_cleanup.assert_called_once_with(["expired_user"])
+        consent_service._find_expired_nodes.assert_called_once()
+        consent_service._delete_expired_from_graph.assert_called_once_with([expired_consent_node])
+        consent_service._delete_expired_from_cache.assert_called_once_with(["expired_user"])
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_no_expired_consents(self, consent_service, valid_consent_status):
@@ -243,37 +245,44 @@ class TestConsentServiceCleanup:
         # Setup cache with valid consent
         consent_service._consent_cache["valid_user"] = valid_consent_status
 
-        # Mock the helper methods
-        consent_service._find_expired_user_ids = AsyncMock(return_value=[])
-        consent_service._perform_cleanup = Mock(return_value=0)
+        # Mock the helper methods to match actual implementation
+        consent_service._find_expired_nodes = AsyncMock(return_value=([], []))
+        consent_service._delete_expired_from_graph = AsyncMock(return_value=0)
+        consent_service._delete_expired_from_cache = Mock(return_value=0)
 
         result = await consent_service.cleanup_expired()
 
         assert result == 0
         assert consent_service._expired_cleanups == 1
 
-    # Test _find_expired_user_ids (routing function)
+    # Test _find_expired_nodes (routing function)
     @pytest.mark.asyncio
-    async def test_find_expired_user_ids_with_memory_bus(self, consent_service, mock_time_service):
-        """Test _find_expired_user_ids routes to graph method when memory bus available."""
+    async def test_find_expired_nodes_with_memory_bus(
+        self, consent_service, mock_time_service, expired_consent_node
+    ):
+        """Test _find_expired_nodes routes to graph method when memory bus available."""
         current_time = mock_time_service.now()
-        consent_service._find_expired_from_graph = AsyncMock(return_value=["user1", "user2"])
+        consent_service._find_expired_from_graph = AsyncMock(
+            return_value=([expired_consent_node], ["user1", "user2"])
+        )
+        consent_service._find_expired_from_cache = Mock(return_value=[])
 
-        result = await consent_service._find_expired_user_ids(current_time)
+        result = await consent_service._find_expired_nodes(current_time)
 
-        assert result == ["user1", "user2"]
+        assert result == ([expired_consent_node], ["user1", "user2"])
         consent_service._find_expired_from_graph.assert_called_once_with(current_time)
 
     @pytest.mark.asyncio
-    async def test_find_expired_user_ids_without_memory_bus(self, mock_time_service):
-        """Test _find_expired_user_ids routes to cache method when no memory bus."""
+    async def test_find_expired_nodes_without_memory_bus(self, mock_time_service):
+        """Test _find_expired_nodes uses cache method when no memory bus."""
         service = ConsentService(time_service=mock_time_service, memory_bus=None)
         service._find_expired_from_cache = Mock(return_value=["cached_user"])
         current_time = mock_time_service.now()
 
-        result = await service._find_expired_user_ids(current_time)
+        result = await service._find_expired_nodes(current_time)
 
-        assert result == ["cached_user"]
+        # Returns empty nodes list, but user IDs from cache
+        assert result == ([], ["cached_user"])
         service._find_expired_from_cache.assert_called_once_with(current_time)
 
     # Test _find_expired_from_graph
@@ -289,23 +298,25 @@ class TestConsentServiceCleanup:
         consent_service._extract_expired_user_from_node = Mock()
         consent_service._extract_expired_user_from_node.side_effect = ["expired_user", None]
 
-        result = await consent_service._find_expired_from_graph(current_time)
+        expired_nodes, expired_user_ids = await consent_service._find_expired_from_graph(current_time)
 
-        assert result == ["expired_user"]
+        # Returns tuple of (nodes, user_ids) - only expired node returned
+        assert expired_nodes == [expired_consent_node]
+        assert expired_user_ids == ["expired_user"]
         # Verify search was called with correct filters
         consent_service._memory_bus.search.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_find_expired_from_graph_query_exception(self, consent_service, mock_time_service):
-        """Test graph query exception handling with cache fallback."""
+        """Test graph query exception handling - returns empty results, logs warning."""
         current_time = mock_time_service.now()
         consent_service._memory_bus.search.side_effect = Exception("Graph query failed")
-        consent_service._find_expired_from_cache = Mock(return_value=["cache_fallback_user"])
 
-        result = await consent_service._find_expired_from_graph(current_time)
+        expired_nodes, expired_user_ids = await consent_service._find_expired_from_graph(current_time)
 
-        assert result == ["cache_fallback_user"]
-        consent_service._find_expired_from_cache.assert_called_once_with(current_time)
+        # Exception is caught, returns empty results (no fallback in this method)
+        assert expired_nodes == []
+        assert expired_user_ids == []
 
     # Test _extract_expired_user_from_node
     def test_extract_expired_user_from_node_expired(self, consent_service, expired_consent_node, mock_time_service):
@@ -443,33 +454,33 @@ class TestConsentServiceCleanup:
 
         assert result is False
 
-    # Test _perform_cleanup
-    def test_perform_cleanup_success(self, consent_service, expired_consent_status):
+    # Test _delete_expired_from_cache
+    def test_delete_expired_from_cache_success(self, consent_service, expired_consent_status):
         """Test successful cleanup of expired consents from cache."""
         consent_service._consent_cache = {"expired_user": expired_consent_status, "other_user": Mock()}
 
         with patch("ciris_engine.logic.services.governance.consent.service.logger") as mock_logger:
-            result = consent_service._perform_cleanup(["expired_user"])
+            result = consent_service._delete_expired_from_cache(["expired_user"])
 
             assert result == 1
             assert "expired_user" not in consent_service._consent_cache
             assert "other_user" in consent_service._consent_cache  # Unchanged
-            mock_logger.info.assert_called_once()
+            mock_logger.debug.assert_called_once()
 
-    def test_perform_cleanup_user_not_in_cache(self, consent_service):
+    def test_delete_expired_from_cache_user_not_in_cache(self, consent_service):
         """Test cleanup when user is not in cache."""
         consent_service._consent_cache = {}
 
-        result = consent_service._perform_cleanup(["nonexistent_user"])
+        result = consent_service._delete_expired_from_cache(["nonexistent_user"])
 
         assert result == 0
         assert consent_service._consent_cache == {}
 
-    def test_perform_cleanup_empty_list(self, consent_service, expired_consent_status):
+    def test_delete_expired_from_cache_empty_list(self, consent_service, expired_consent_status):
         """Test cleanup with empty expired user list."""
         consent_service._consent_cache = {"user": expired_consent_status}
 
-        result = consent_service._perform_cleanup([])
+        result = consent_service._delete_expired_from_cache([])
 
         assert result == 0
         assert "user" in consent_service._consent_cache  # Unchanged

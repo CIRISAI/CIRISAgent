@@ -1,1 +1,0 @@
-"""Terminal handlers module."""

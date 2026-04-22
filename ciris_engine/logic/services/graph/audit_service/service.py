@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.logic.persistence.db.types import ConflictResolution
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
@@ -1188,7 +1189,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         """Initialize the audit database."""
 
         def _create_tables() -> None:
-            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            conn = get_safe_sqlite_connection(str(self.db_path))
             cursor = conn.cursor()
 
             # Set PRAGMA statements for stability and corruption prevention
@@ -1213,7 +1214,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                     except OSError:
                         pass
                 logger.warning("Corrupted audit database removed, recreating...")
-                conn = sqlite3.connect(db_path_str, check_same_thread=False)
+                conn = get_safe_sqlite_connection(db_path_str)
                 cursor = conn.cursor()
                 cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
                 cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
@@ -1275,8 +1276,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             conn.close()
 
         await asyncio.to_thread(_create_tables)
-        self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        # iOS returns proxy, desktop returns Connection - both are API-compatible
+        self._db_connection = get_safe_sqlite_connection(str(self.db_path))  # type: ignore[assignment]
         # Apply PRAGMA settings to persistent connection
+        assert self._db_connection is not None
         self._db_connection.execute(PRAGMA_JOURNAL_MODE_WAL)
         self._db_connection.execute(PRAGMA_BUSY_TIMEOUT_5000)
         self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)
@@ -1437,7 +1440,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         """Export entries to SQLite format."""
 
         def _write_sqlite() -> None:
-            conn = sqlite3.connect(str(path), check_same_thread=False)
+            conn = get_safe_sqlite_connection(str(path))
             cursor = conn.cursor()
 
             # Create table if needed

@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, HTTPException
 from fastapi import Path as FastAPIPath
@@ -19,6 +19,7 @@ from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
@@ -256,8 +257,7 @@ def _sync_query_sqlite_audit(
         return []
 
     try:
-        with sqlite3.connect(db_path) as conn:
-            conn.row_factory = sqlite3.Row
+        with get_safe_sqlite_connection(db_path, row_factory=sqlite3.Row) as conn:
             cursor = conn.cursor()
 
             # Build query with time filters
@@ -280,7 +280,8 @@ def _sync_query_sqlite_audit(
 
             # Verify chain integrity during routine reads
             if entries:
-                integrity_warnings = _verify_entries_chain_integrity(entries, conn)
+                # conn may be iOS proxy, but is API-compatible with Connection
+                integrity_warnings = _verify_entries_chain_integrity(entries, conn)  # type: ignore[arg-type]
                 # Attach warnings to entries for API response visibility
                 if integrity_warnings:
                     for entry in entries:

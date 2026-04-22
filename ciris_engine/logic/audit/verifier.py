@@ -9,6 +9,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.protocols.services.lifecycle import TimeServiceProtocol
 from ciris_engine.schemas.audit.verification import (
@@ -119,8 +120,7 @@ class AuditVerifier:
             self.initialize()
 
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             cursor.execute("SELECT * FROM audit_log WHERE entry_id = ?", (entry_id,))
@@ -237,8 +237,7 @@ class AuditVerifier:
     def _verify_all_signatures(self) -> SignatureVerificationResult:
         """Verify signatures for all entries in the audit log"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             cursor.execute(
@@ -280,8 +279,7 @@ class AuditVerifier:
     def _verify_signatures_in_range(self, start_seq: int, end_seq: int) -> SignatureVerificationResult:
         """Verify signatures for entries in a specific sequence range"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             cursor.execute(
@@ -368,8 +366,7 @@ class AuditVerifier:
     def verify_root_anchors(self) -> RootAnchorVerificationResult:
         """Verify the integrity of root hash anchors"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
+            conn = get_safe_sqlite_connection(self.db_path, row_factory=sqlite3.Row)
             cursor = conn.cursor()
 
             cursor.execute(

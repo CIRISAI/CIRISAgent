@@ -18,6 +18,7 @@ import bcrypt
 
 logger = logging.getLogger(__name__)
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
@@ -1162,12 +1163,10 @@ class APIAuthService:
         # Fallback: synchronous DB check if async load hasn't completed yet
         # This prevents revoked tokens from being accepted after restart
         # before the async load has run
-        import sqlite3
-
         try:
             if not os.path.exists(self._revocations_db_path):
                 return False  # No revocations DB yet
-            with sqlite3.connect(self._revocations_db_path) as conn:
+            with get_safe_sqlite_connection(str(self._revocations_db_path)) as conn:
                 cursor = conn.execute("SELECT 1 FROM revoked_service_tokens WHERE token_hash = ?", (token_hash,))
                 return cursor.fetchone() is not None
         except Exception as e:

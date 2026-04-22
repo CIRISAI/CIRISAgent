@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.types import JSONDict
 
@@ -78,7 +79,7 @@ class AuditSignatureManager:
         self._key_id = key_id
 
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_safe_sqlite_connection(self.db_path)
             cursor = conn.cursor()
 
             # Check if key already exists
@@ -228,7 +229,7 @@ class AuditSignatureManager:
     def _load_key_info(self, key_id: str) -> Optional[JSONDict]:
         """Load key info from the database by key ID."""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_safe_sqlite_connection(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute(
@@ -260,7 +261,7 @@ class AuditSignatureManager:
     def _revoke_key(self, key_id: str) -> None:
         """Mark a key as revoked in the database."""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_safe_sqlite_connection(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute(
@@ -290,7 +291,7 @@ class AuditSignatureManager:
             return {"error": "Not initialized"}
 
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_safe_sqlite_connection(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute(

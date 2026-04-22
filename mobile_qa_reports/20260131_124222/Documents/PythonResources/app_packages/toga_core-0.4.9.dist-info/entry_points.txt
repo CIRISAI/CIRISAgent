@@ -1,2 +1,0 @@
-[toga.image_formats]
-pil = toga.plugins.image_formats.PILConverter

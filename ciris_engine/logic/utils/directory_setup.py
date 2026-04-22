@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
+
 if TYPE_CHECKING:
     from ciris_engine.schemas.config.essential import EssentialConfig
 
@@ -108,7 +110,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     try:
         # Quick connectivity test with minimal timeout
         # Using timeout=0.1 to fail fast if database is locked
-        conn = sqlite3.connect(db_path, timeout=0.1)
+        conn = get_safe_sqlite_connection(db_path, timeout=0.1)
 
         # Enable WAL mode for better concurrency detection
         conn.execute("PRAGMA journal_mode=WAL")

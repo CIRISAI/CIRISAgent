@@ -15,6 +15,7 @@ from typing import Annotated, Any, Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.persistence.db.core import get_safe_sqlite_connection
 from ciris_engine.logic.utils.path_resolution import get_env_file_path
 
 logger = logging.getLogger(__name__)
@@ -75,9 +76,9 @@ class CountriesResponse(BaseModel):
 
 def _get_db_connection() -> sqlite3.Connection:
     """Get a connection to the cities database."""
-    conn = sqlite3.connect(str(GEO_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    conn = get_safe_sqlite_connection(str(GEO_DB_PATH), row_factory=sqlite3.Row)
+    # iOS returns proxy, desktop returns Connection - both work identically
+    return conn  # type: ignore[return-value]
 
 
 def _search_locations_impl(

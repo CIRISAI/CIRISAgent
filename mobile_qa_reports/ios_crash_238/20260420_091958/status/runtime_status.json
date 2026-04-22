@@ -1,7 +1,0 @@
-{
-  "phase": "ERROR",
-  "status": "exception",
-  "error": "signal only works in main thread of the main interpreter",
-  "timestamp": "2026-04-20T09:19:20.806498",
-  "timestamp_unix": 1776694760.8065002
-}

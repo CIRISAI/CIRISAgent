@@ -5,6 +5,59 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.7] - 2026-04-22
+
+### Fixed
+
+- **iOS SQLite Freeze (Root Cause)** - CIRISVerify v1.6.4 uses system SQLite on iOS
+  - Bundled rusqlite was duplicating sqlite3 symbols, causing Apple's libRPAC assertions
+  - Python-side: `_IOSConnectionProxy` + `_IOSCursorProxy` prevent cross-thread `sqlite3_finalize()`
+  - Rust-side: link against iOS SDK SQLite instead of compiling from source
+
+- **Mobile LLM Adapter Lifecycle** - `run_lifecycle()` now uses `finally` for cleanup
+  - Previously leaked background tasks on non-CancelledError exceptions
+
+## [2.6.6] - 2026-04-22
+
+### Fixed
+
+- **iOS SQLite Cursor Proxy** - Wrap cursors in addition to connections
+  - `sqlite3_finalize()` on GC'd cursors was triggering the same libRPAC assertion
+
+## [2.6.5] - 2026-04-22
+
+### Fixed
+
+- **iOS SQLite Connection Proxy** - `_IOSConnectionProxy` suppresses `close()`/`__del__()`
+  - Prevents Python GC from calling `sqlite3_finalize()` on wrong thread
+  - Thread-local connection cache ensures thread ownership for Apple's tracking
+
+- **iOS App Crash on Launch** - Missing `CADisableMinimumFrameDurationOnPhone` in Info.plist
+  - Compose Multiplatform throws `IllegalStateException` on ProMotion iPhones without it
+  - Added `NSSetUncaughtExceptionHandler` to catch Kotlin/Native exceptions on dispatch queues
+
+- **iOS Install Failure** - Static KMP framework embedded in Frameworks/
+  - `project.yml` pre/postCompile scripts detect static archives and strip them
+  - Pre-build script syncs Resources.zip from repo source (prevents stale zip)
+
+### Changed
+
+- **Icons** - Removed `compose.materialIconsExtended` (113MB → 93KB inline vectors)
+  - `CIRISMaterialIcons.kt`: 50 inline ImageVector definitions from Material Design SVGs
+  - iOS framework: 392MB → 279MB (debug), release 161MB
+  - Resources.zip: 144MB → 36MB (removed bundled desktop JAR + gui_static)
+  - Gradle JVM heap: 4GB → 8GB (release LTO needs more without tree-shaking)
+
+- **iOS Keyboard** - Enabled `imePadding()` (was no-op), added to SetupScreen root
+
+## [2.6.4] - 2026-04-22
+
+### Changed
+
+- Bump build numbers (iOS 250, Android 95)
+- `rebuild_and_deploy.sh`: `--device` flag, preflight checks, `desktop_app` exclusion
+- `bump_version.py`: fix `mobile/` → `client/` paths
+
 ## [2.6.3] - 2026-04-21
 
 ### Added

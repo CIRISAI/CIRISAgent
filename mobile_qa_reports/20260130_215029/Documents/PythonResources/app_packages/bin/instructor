@@ -1,0 +1,9 @@
+#!/bin/sh
+'''exec' /opt/homebrew/Cellar/python@3.10/3.10.19_1/bin/python3.10 "$0" "$@"
+' '''
+import sys
+from instructor.cli.cli import app
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(app())

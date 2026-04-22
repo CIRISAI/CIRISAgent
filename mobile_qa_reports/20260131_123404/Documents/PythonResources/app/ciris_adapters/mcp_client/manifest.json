@@ -1,0 +1,185 @@
+{
+  "module": {
+    "name": "mcp_client",
+    "version": "1.0.0",
+    "description": "MCP client adapter that connects CIRIS to external MCP servers, providing tool, communication, and wise authority services",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "LOW",
+      "class": "mcp_client.adapter.Adapter",
+      "capabilities": [
+        "tool:mcp",
+        "execute_tool",
+        "get_available_tools",
+        "get_tool_result",
+        "validate_parameters",
+        "get_tool_info",
+        "get_all_tool_info"
+      ]
+    },
+    {
+      "type": "WISE_AUTHORITY",
+      "priority": "LOW",
+      "class": "mcp_client.adapter.Adapter",
+      "capabilities": [
+        "fetch_guidance",
+        "send_deferral",
+        "get_guidance"
+      ]
+    },
+    {
+      "type": "COMMUNICATION",
+      "priority": "LOW",
+      "class": "mcp_client.adapter.Adapter",
+      "capabilities": [
+        "communication:send_message",
+        "communication:fetch_messages"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:mcp",
+    "execute_tool",
+    "get_available_tools",
+    "get_tool_result",
+    "validate_parameters",
+    "get_tool_info",
+    "get_all_tool_info",
+    "fetch_guidance",
+    "send_deferral",
+    "get_guidance",
+    "communication:send_message",
+    "communication:fetch_messages"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService",
+      "ciris_engine.protocols.services.WiseAuthorityService",
+      "ciris_engine.protocols.services.CommunicationService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.runtime.enums",
+      "ciris_engine.schemas.runtime.messages"
+    ],
+    "external": {
+      "mcp": ">=1.0.0"
+    }
+  },
+  "exports": {
+    "adapter": "mcp_client.adapter.Adapter",
+    "configurable": "mcp_client.configurable.MCPClientConfigurableAdapter",
+    "tool_service": "mcp_client.mcp_tool_service.MCPToolService",
+    "wise_service": "mcp_client.mcp_wise_service.MCPWiseService",
+    "communication_service": "mcp_client.mcp_communication_service.MCPCommunicationService",
+    "security": "mcp_client.security.MCPSecurityManager",
+    "config": "mcp_client.config.MCPAdapterConfig",
+    "schemas": "mcp_client.schemas"
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_transport",
+        "step_type": "select",
+        "title": "Select Transport Type",
+        "description": "Choose how to connect to the MCP server",
+        "options_method": "get_config_options",
+        "field_name": "transport",
+        "required": true
+      },
+      {
+        "step_id": "server_config",
+        "step_type": "input",
+        "title": "Configure Server Connection",
+        "description": "Enter connection details for the MCP server (fields vary by transport)",
+        "options_method": "get_config_options",
+        "depends_on": ["select_transport"],
+        "dynamic_fields": true
+      },
+      {
+        "step_id": "security_config",
+        "step_type": "input",
+        "title": "Security Settings",
+        "description": "Configure rate limiting and security options (optional)",
+        "optional": true,
+        "fields": [
+          {
+            "name": "max_calls_per_minute",
+            "type": "integer",
+            "label": "Max Calls Per Minute",
+            "description": "Rate limit for MCP operations",
+            "default": 60,
+            "required": false
+          },
+          {
+            "name": "max_concurrent_calls",
+            "type": "integer",
+            "label": "Max Concurrent Calls",
+            "description": "Maximum concurrent operations",
+            "default": 5,
+            "required": false
+          }
+        ]
+      },
+      {
+        "step_id": "bus_bindings",
+        "step_type": "select",
+        "title": "Select Bus Bindings",
+        "description": "Choose which CIRIS buses to bind this server to",
+        "options_method": "get_config_options",
+        "field_name": "enabled_buses",
+        "multiple": true,
+        "required": true
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your MCP server configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "configuration": {
+    "mcp_servers": {
+      "type": "array",
+      "description": "List of MCP server configurations to connect to"
+    },
+    "config_key_prefix": {
+      "type": "string",
+      "default": "mcp.servers",
+      "description": "Prefix for graph-based MCP server configurations"
+    },
+    "global_rate_limit": {
+      "type": "integer",
+      "default": 100,
+      "description": "Global rate limit for MCP operations per minute"
+    },
+    "global_concurrent_limit": {
+      "type": "integer",
+      "default": 10,
+      "description": "Maximum concurrent MCP operations"
+    }
+  },
+  "metadata": {
+    "api": "Model Context Protocol (MCP)",
+    "requires_api_key": false,
+    "safe_domain": "external_tools",
+    "prohibited": ["medical"],
+    "transport_types": ["stdio", "sse", "streamable_http", "websocket"],
+    "security_features": [
+      "tool_poisoning_detection",
+      "input_output_validation",
+      "version_pinning",
+      "permission_sandboxing",
+      "rate_limiting",
+      "blocklist_allowlist"
+    ]
+  }
+}

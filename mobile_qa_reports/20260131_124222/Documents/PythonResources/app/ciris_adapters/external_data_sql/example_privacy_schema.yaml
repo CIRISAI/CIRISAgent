@@ -1,0 +1,127 @@
+# Privacy Schema Configuration (Compact YAML Format)
+# Defines which tables and columns contain user data for DSAR automation
+
+connector_id: production_db
+global_identifier_column: email
+
+tables:
+  # Users table - primary user data
+  users:
+    identifier_columns: [email, user_id]
+    pii_columns:
+      email:
+        type: email
+        strategy: hash
+      full_name:
+        type: name
+        strategy: pseudonymize
+      phone:
+        type: phone
+        strategy: null
+      address:
+        type: address
+        strategy: truncate
+      date_of_birth:
+        type: date
+        strategy: null
+      ssn:
+        type: ssn
+        strategy: hash
+    cascade_deletes:
+      - user_sessions
+      - user_preferences
+      - user_notifications
+      - user_api_keys
+
+  # Orders table - transaction history
+  orders:
+    identifier_columns: [customer_email]
+    pii_columns:
+      customer_email:
+        type: email
+        strategy: hash
+      customer_name:
+        type: name
+        strategy: pseudonymize
+      shipping_address:
+        type: address
+        strategy: truncate
+      billing_address:
+        type: address
+        strategy: truncate
+      payment_method_last4:
+        type: payment
+        strategy: null
+    cascade_deletes:
+      - order_items
+      - order_shipments
+
+  # Support tickets - customer service data
+  support_tickets:
+    identifier_columns: [user_email]
+    pii_columns:
+      user_email:
+        type: email
+        strategy: hash
+      user_name:
+        type: name
+        strategy: pseudonymize
+      message_text:
+        type: text
+        strategy: null
+      phone_number:
+        type: phone
+        strategy: null
+    cascade_deletes:
+      - ticket_comments
+      - ticket_attachments
+
+  # Session logs - activity tracking
+  user_sessions:
+    identifier_columns: [user_id]
+    pii_columns:
+      user_id:
+        type: id
+        strategy: hash
+      ip_address:
+        type: ip
+        strategy: hash
+      user_agent:
+        type: text
+        strategy: null
+    cascade_deletes: []
+
+  # Payment methods - financial data
+  payment_methods:
+    identifier_columns: [user_id]
+    pii_columns:
+      user_id:
+        type: id
+        strategy: hash
+      card_last4:
+        type: payment
+        strategy: null
+      billing_zip:
+        type: postal_code
+        strategy: null
+    cascade_deletes: []
+
+# Anonymization strategies:
+# - delete: Delete the entire row (for GDPR erasure)
+# - null: Set column to NULL
+# - hash: Hash the value (MD5/SHA256 depending on dialect)
+# - pseudonymize: Replace with deterministic pseudonym
+# - truncate: Keep first 3 characters + '***'
+
+# Data types (for documentation):
+# - email: Email address
+# - name: Full name or username
+# - phone: Phone number
+# - address: Physical address
+# - ssn: Social Security Number
+# - date: Date of birth or other date
+# - payment: Payment method details
+# - ip: IP address
+# - id: User/entity identifier
+# - text: Free-form text
+# - postal_code: ZIP/postal code

@@ -1,0 +1,98 @@
+{
+  "module": {
+    "name": "cirisnode",
+    "version": "2.0.0",
+    "description": "CIRISNode oversight adapter — deferral routing and trace forwarding (requires CIRISPortal registration)",
+    "author": "CIRIS Team",
+    "auto_load": false
+  },
+  "services": [
+    {
+      "type": "WISE_AUTHORITY",
+      "priority": "NORMAL",
+      "class": "ciris_adapters.cirisnode.adapter.CIRISNodeAdapter",
+      "capabilities": [
+        "send_deferral",
+        "cirisnode_traces"
+      ]
+    }
+  ],
+  "capabilities": [
+    "send_deferral",
+    "cirisnode_traces"
+  ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "internal": ["ciris_verify"]
+  },
+  "configuration": {
+    "base_url": {
+      "type": "string",
+      "env": "CIRISNODE_BASE_URL",
+      "default": "https://node.ciris-services-1.ai",
+      "description": "CIRISNode API base URL"
+    },
+    "agent_token": {
+      "type": "string",
+      "env": "CIRISNODE_AGENT_TOKEN",
+      "default": "",
+      "description": "Agent token for bootstrap key registration (optional — auth is signature-based)"
+    },
+    "poll_interval": {
+      "type": "integer",
+      "default": 30,
+      "description": "Seconds between WBD resolution polling checks"
+    },
+    "batch_size": {
+      "type": "integer",
+      "default": 10,
+      "description": "Trace events per batch"
+    },
+    "flush_interval": {
+      "type": "integer",
+      "default": 60,
+      "description": "Seconds between batch flushes"
+    },
+    "trace_level": {
+      "type": "string",
+      "env": "CIRISNODE_TRACE_LEVEL",
+      "default": "generic",
+      "description": "Trace detail level: generic, detailed, or full_traces"
+    }
+  },
+  "interactive_config": {
+    "required": true,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_region",
+        "step_type": "discovery",
+        "title": "Select CIRISNode Region",
+        "description": "Choose a CIRISNode region to connect to, or enter a custom Portal URL.",
+        "discovery_method": "regions"
+      },
+      {
+        "step_id": "device_auth",
+        "step_type": "device_auth",
+        "title": "Authorize with CIRISPortal",
+        "description": "Complete device authorization to connect your agent to CIRISNode.",
+        "device_auth_config": {
+          "provider_name": "CIRISPortal",
+          "device_authorize_path": "/api/device/authorize",
+          "device_token_path": "/api/device/token",
+          "poll_interval": 5,
+          "expires_in": 900
+        }
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Review Configuration",
+        "description": "Review the provisioned configuration before applying.",
+        "action": "test_connection"
+      }
+    ],
+    "completion_method": "apply_config"
+  }
+}

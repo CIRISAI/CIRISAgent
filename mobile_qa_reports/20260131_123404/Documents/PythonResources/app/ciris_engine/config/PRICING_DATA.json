@@ -1,0 +1,179 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-01-15T10:30:00Z",
+  "metadata": {
+    "update_frequency": "weekly",
+    "currency": "USD",
+    "units": "per_million_tokens",
+    "sources": [
+      "OpenAI API Pricing",
+      "Anthropic API Pricing",
+      "Together AI Pricing",
+      "Lambda Labs Pricing"
+    ],
+    "schema_version": "1.0.0"
+  },
+  "providers": {
+    "openai": {
+      "display_name": "OpenAI",
+      "models": {
+        "gpt-4o-mini": {
+          "input_cost": 15.0,
+          "output_cost": 60.0,
+          "context_window": 128000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-07-18",
+          "description": "GPT-4o mini - fast and affordable model"
+        },
+        "gpt-4o": {
+          "input_cost": 250.0,
+          "output_cost": 1000.0,
+          "context_window": 128000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-05-13",
+          "description": "GPT-4o - high-intelligence flagship model"
+        },
+        "gpt-4-turbo": {
+          "input_cost": 1000.0,
+          "output_cost": 3000.0,
+          "context_window": 128000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-04-09",
+          "description": "GPT-4 Turbo - previous generation high-performance model"
+        },
+        "gpt-3.5-turbo": {
+          "input_cost": 50.0,
+          "output_cost": 150.0,
+          "context_window": 16385,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2023-03-01",
+          "description": "GPT-3.5 Turbo - fast and efficient model"
+        }
+      },
+      "rate_limits": {
+        "tier_1": {"rpm": 500, "tpm": 30000},
+        "tier_2": {"rpm": 5000, "tpm": 450000}
+      },
+      "base_url": "https://api.openai.com/v1"
+    },
+    "anthropic": {
+      "display_name": "Anthropic",
+      "models": {
+        "claude-3-opus": {
+          "input_cost": 1500.0,
+          "output_cost": 7500.0,
+          "context_window": 200000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-02-29",
+          "description": "Claude 3 Opus - most powerful model for complex tasks"
+        },
+        "claude-3-sonnet": {
+          "input_cost": 300.0,
+          "output_cost": 1500.0,
+          "context_window": 200000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-02-29",
+          "description": "Claude 3 Sonnet - balanced intelligence and speed"
+        },
+        "claude-3-haiku": {
+          "input_cost": 25.0,
+          "output_cost": 125.0,
+          "context_window": 200000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-03-07",
+          "description": "Claude 3 Haiku - fastest and most compact model"
+        }
+      },
+      "base_url": "https://api.anthropic.com/v1"
+    },
+    "together": {
+      "display_name": "Together AI",
+      "models": {
+        "llama-3.1-405b-instruct": {
+          "input_cost": 500.0,
+          "output_cost": 500.0,
+          "context_window": 32768,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-07-23",
+          "description": "Llama 3.1 405B - largest open-source model",
+          "provider_specific": {
+            "hosting": "cloud",
+            "gpu_type": "H100",
+            "quantization": "fp16"
+          }
+        },
+        "llama-3.1-70b-instruct": {
+          "input_cost": 90.0,
+          "output_cost": 90.0,
+          "context_window": 32768,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-07-23",
+          "description": "Llama 3.1 70B - high-performance open model"
+        }
+      },
+      "base_url": "https://api.together.xyz/v1"
+    },
+    "lambda_labs": {
+      "display_name": "Lambda Labs",
+      "models": {
+        "llama-4-maverick-17b-128e-instruct-fp8": {
+          "input_cost": 10.0,
+          "output_cost": 10.0,
+          "context_window": 128000,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2024-09-01",
+          "description": "Llama 4 Maverick 17B - optimized for inference",
+          "provider_specific": {
+            "precision": "fp8",
+            "optimization": "inference",
+            "hosting": "cloud"
+          }
+        }
+      },
+      "base_url": "https://api.lambda.ai/v1"
+    }
+  },
+  "environmental_factors": {
+    "energy_estimates": {
+      "model_patterns": {
+        "gpt-4": {"kwh_per_1k_tokens": 0.0005},
+        "gpt-3.5": {"kwh_per_1k_tokens": 0.0003},
+        "claude-3": {"kwh_per_1k_tokens": 0.0004},
+        "llama-405b": {"kwh_per_1k_tokens": 0.0006},
+        "llama-70b": {"kwh_per_1k_tokens": 0.0003},
+        "llama-17b": {"kwh_per_1k_tokens": 0.0002},
+        "default": {"kwh_per_1k_tokens": 0.0003}
+      }
+    },
+    "carbon_intensity": {
+      "global_average_g_co2_per_kwh": 500.0,
+      "regions": {
+        "us_west": 350.0,
+        "us_east": 400.0,
+        "eu_central": 300.0,
+        "asia_pacific": 600.0
+      }
+    }
+  },
+  "fallback_pricing": {
+    "unknown_model": {
+      "input_cost": 20.0,
+      "output_cost": 20.0,
+      "context_window": 4096,
+      "active": true,
+      "deprecated": false,
+      "effective_date": "2024-01-01",
+      "description": "Default pricing for unknown models"
+    }
+  }
+}

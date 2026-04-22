@@ -1,0 +1,40 @@
+{
+  "module": {
+    "name": "gemini",
+    "version": "1.0.0",
+    "description": "Gemini CLI for one-shot Q&A, summaries, and generation.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://ai.google.dev/"
+  },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "gemini.service.GeminiToolService",
+      "capabilities": [
+        "tool:gemini",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:gemini",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "gemini.service.GeminiToolService"
+  },
+  "configuration": {}
+}

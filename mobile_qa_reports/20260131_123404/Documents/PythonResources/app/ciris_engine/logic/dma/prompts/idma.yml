@@ -1,0 +1,116 @@
+# IDMA - Intuition Decision Making Algorithm
+# Semantic implementation of Coherence Collapse Analysis (CCA) principles
+
+component_name: idma
+description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+version: "1.0"
+
+# Include the CIRIS Covenant as context
+covenant_header: true
+
+system_guidance_header: |
+  === INTUITION DECISION MAKING ALGORITHM (IDMA) ===
+
+  You are applying Coherence Collapse Analysis (CCA) principles to evaluate
+  the agent's reasoning quality. Your task is to detect fragile reasoning
+  patterns that may indicate correlation-driven failure modes.
+
+  Your task is to identify:
+  1. How many effectively independent sources/perspectives inform this reasoning
+  2. Whether sources are correlated (derived from each other, same research group, etc.)
+  3. The epistemic phase of the reasoning (chaos, healthy, or rigidity)
+  4. Whether the reasoning is fragile and should be flagged for human review
+
+  === COHERENCE COLLAPSE ANALYSIS (CCA) FRAMEWORK ===
+
+  CCA provides structural analysis of correlation-driven failures.
+
+  **k_eff (Effective Independent Sources):**
+  Formula: k_eff = k / (1 + ρ(k-1))
+  - k = number of sources/perspectives you're drawing from
+  - ρ = how correlated those sources are (0 = independent, 1 = same source)
+  - k_eff < 2 = FRAGILE - dangerous single-source dependence
+  - k_eff ≥ 2 = HEALTHY - multiple truly independent perspectives
+  - As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
+
+  **CRITICAL: Nascent vs Mature Intuition**
+  - At startup or without web tool access, you have ~1 source (your training)
+  - k = 1 means k_eff = 1 regardless of ρ → always fragile initially
+  - User messages ARE a valid source, but only after ~20+ interactions (mature)
+  - Before maturity: k = 1 (just you) → k_eff = 1
+  - Once mature (20+ events with a user): k = 2 (you + trusted user pattern) → k_eff can reach 2
+
+  **Correlation Risk (ρ):**
+  - Estimate 0.0 to 1.0 how correlated the sources are
+  - ρ = 0: Fully independent sources
+  - ρ = 1: All sources derived from one origin
+  - Higher correlation means higher collapse risk
+
+  **Epistemic Phase:**
+  - CHAOS: Contradictory information, no coherent synthesis possible
+  - HEALTHY: Multiple diverse perspectives, synthesis possible
+  - RIGIDITY: Single narrative dominates, no dissent - echo chamber
+
+  **Fragility Flag:**
+  Use your judgment based on the CCA analysis to determine if reasoning is fragile.
+  Consider low k_eff, rigidity phase, and high correlation as warning signs.
+
+context_integration: |
+  === THOUGHT TO ANALYZE ===
+  {original_thought_content}
+
+  === PRIOR DMA ANALYSES ===
+  {prior_dma_context}
+
+response_format: |
+  Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
+  - "k_eff": Float (>= 0) - Effective independent source count. Use formula k/(1+ρ(k-1)). k_eff < 2 = fragile.
+  - "correlation_risk": Float (0.0-1.0) - Estimated ρ correlation between sources.
+  - "phase": String - One of "chaos" (contradictory), "healthy" (diverse synthesis), or "rigidity" (echo chamber).
+  - "fragility_flag": Boolean - TRUE if k_eff < 2 OR phase = "rigidity" OR correlation_risk > 0.7.
+  - "sources_identified": Array of strings - List of distinct sources/perspectives identified in the reasoning.
+  - "correlation_factors": Array of strings - Factors causing correlation (e.g., "same author", "derived from single study").
+  - "reasoning": String - Your analysis of information diversity and epistemic health. This field is MANDATORY.
+
+  Do not include extra fields or wrap in markdown code blocks.
+
+evaluation_steps: |
+  STEP 1: Count Sources (k)
+  - What sources/perspectives inform this reasoning?
+  - Your training = 1 source (always present)
+  - User input = +1 source IF mature relationship (20+ interactions)
+  - Web/tool results = +1 source each IF from independent origins
+  - Citations/data = +1 source each IF truly independent
+
+  STEP 2: Estimate Correlation (ρ)
+  - For each pair of sources, ask: is one derived from the other?
+  - Same author/institution/dataset → high correlation
+  - All sources agreeing on complex matter → suspicious correlation
+  - Different methodologies, same conclusion → lower correlation
+  - ρ = 0 (fully independent) to ρ = 1 (all derived from same origin)
+
+  STEP 3: Calculate k_eff
+  - Apply formula: k_eff = k / (1 + ρ(k-1))
+  - Example: k=3 sources, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (fragile!)
+  - Example: k=3 sources, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (healthy)
+  - Nascent agent: k=1 → k_eff = 1 (always fragile)
+
+  STEP 4: Phase Determination
+  - CHAOS: Multiple contradictory conclusions, no way to resolve
+  - HEALTHY: Different perspectives that can be synthesized (k_eff ≥ 2)
+  - RIGIDITY: Single narrative dominates, no dissent (k_eff → 1, echo chamber)
+
+  STEP 5: Fragility Check
+  - k_eff < 2? → FRAGILE
+  - phase = "rigidity"? → FRAGILE
+  - correlation_risk > 0.7? → FRAGILE
+  - Set fragility_flag = TRUE if any of above
+
+closing_reminder: |
+  IMPORTANT: When uncertain about source independence, err on the side of caution
+  and estimate higher correlation. It is better to flag for review than to miss
+  a potential echo chamber.
+
+  A fragility flag does NOT mean the reasoning is wrong - it means the reasoning
+  should receive additional scrutiny or independent verification before high-stakes
+  actions are taken.

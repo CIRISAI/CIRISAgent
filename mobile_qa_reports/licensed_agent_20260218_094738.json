@@ -1,0 +1,85 @@
+{
+  "test_suite": "first_time_licensed_agent",
+  "timestamp": "20260218_094738",
+  "results": [
+    {
+      "name": "health",
+      "status": "passed",
+      "duration": 0.03363990783691406,
+      "message": "API healthy v2.0.0-stable",
+      "details": {}
+    },
+    {
+      "name": "first_run",
+      "status": "passed",
+      "duration": 0.00841069221496582,
+      "message": "First-run mode confirmed",
+      "details": {
+        "is_first_run": true,
+        "config_exists": false,
+        "config_path": null,
+        "setup_required": true
+      }
+    },
+    {
+      "name": "enumerate",
+      "status": "passed",
+      "duration": 0.2647402286529541,
+      "message": "providers=8, templates=8, adapters=59",
+      "details": {
+        "providers": 8,
+        "templates": 8,
+        "adapters": 59
+      }
+    },
+    {
+      "name": "connect_node",
+      "status": "passed",
+      "duration": 0.15981388092041016,
+      "message": "Code: FVPJ-4622, expires: 900s",
+      "details": {
+        "device_code": "6b8c0ed7f82e02732c81f68ab62ec887f08c0e710bd9c179cb7b602dadad89bd",
+        "user_code": "FVPJ-4622",
+        "verification_uri_complete": "https://portal.ciris.ai/device?code=FVPJ-4622",
+        "portal_url": "https://portal.ciris.ai",
+        "expires_in": 900,
+        "interval": 5
+      }
+    },
+    {
+      "name": "poll_auth",
+      "status": "passed",
+      "duration": 71.61445188522339,
+      "message": "Authorized! template=echo, adapters=['ciris_covenant_metrics', 'session_logs'], key=yes, tier=4",
+      "details": {
+        "polls": 15,
+        "status": "complete",
+        "template": "echo",
+        "adapters": [
+          "ciris_covenant_metrics",
+          "session_logs"
+        ],
+        "org_id": "29504618-fed5-45c4-8d77-9809ea614c0b",
+        "signing_key_b64": "bg0ZKxE7793EfIQkSIWJ2wp02XxzfLHFMALy2kD6kh4=",
+        "key_id": "f30c4c27-6e87-4d1e-bcbf-c081a55a98e1",
+        "stewardship_tier": 4,
+        "package_download_url": null,
+        "package_template_id": null
+      }
+    },
+    {
+      "name": "complete_setup",
+      "status": "error",
+      "duration": 0.02426290512084961,
+      "message": "Setup request failed: Server disconnected without sending a response.",
+      "details": {}
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 5,
+    "failed": 0,
+    "errors": 1,
+    "skipped": 0
+  }
+}

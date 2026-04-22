@@ -1,0 +1,23 @@
+{
+  "platform": "ios_physical",
+  "device": {
+    "name": "Mac Mini\u2019s iPhone",
+    "identifier": "A53DA92F-972A-5A28-86E3-E6E86E02EE79",
+    "os_version": "26.2.1",
+    "model": "iPhone 14"
+  },
+  "reports": [
+    {
+      "name": "test_physical_full_check",
+      "result": "failed",
+      "duration": 12.570424795150757,
+      "message": "2/4 checks passed"
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "errors": 0
+  }
+}

@@ -1,0 +1,2 @@
+[toga.backends]
+iOS = toga_iOS

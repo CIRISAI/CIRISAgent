@@ -1,0 +1,17 @@
+{
+  "platform": "ios",
+  "reports": [
+    {
+      "name": "test_ios_app_launch",
+      "result": "failed",
+      "duration": 106.2575581073761,
+      "message": "Login screen not found. Visible: ['9:48', 'C', 'CIRIS Agent', 'Ethical Al Assistant', 'Apple Account Verification', 'Enter the password for \"eric @ciris.ai\"', 'in Settings.', 'Not Now', 'Settings', 'CIRIS hosted LLM services require Apple', 'login.', 'Bring your own API key works with either', 'option.', 'Send me product updates and', 'announcements', 'View Privacy Policy', 'Powered by CIRIS AI']"
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "errors": 0
+  }
+}

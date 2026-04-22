@@ -3,18 +3,22 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		008EBAB705831128110F1E6D /* CIRISVerify.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 960264F5759B4678704E09D5 /* CIRISVerify.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		1E6CD2B3A8E39AFBE5EFEEEF /* bn.json in Resources */ = {isa = PBXBuildFile; fileRef = 64C3DFDC115CC5D2F4DAC74F /* bn.json */; };
 		22EA1CB33A17DCC6FC82406D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F543015C899423D4B01CEB2E /* Assets.xcassets */; };
+		271022327DEC565EEEF45F02 /* ha.json in Resources */ = {isa = PBXBuildFile; fileRef = 770DBA3B41B83ED9AB2FF4C9 /* ha.json */; };
 		2F10842CAAD45BCFEC7DCBF8 /* es.json in Resources */ = {isa = PBXBuildFile; fileRef = 48E41FF38495880A27B036FA /* es.json */; };
 		40ED78CC391B58FEED543A87 /* PythonInit.m in Sources */ = {isa = PBXBuildFile; fileRef = FE5DE9AED4DF76F07B0E1091 /* PythonInit.m */; };
 		414E873AF0F5AB3035E6FFBE /* ko.json in Resources */ = {isa = PBXBuildFile; fileRef = B01B283DC417F03B7803D5E3 /* ko.json */; };
 		49E475AB2B339B9760DED60C /* PythonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9BDE339934CB14814355D /* PythonBridge.swift */; };
 		4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */; };
 		56B0305B5D3847FC6B326502 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */; };
+		5EB4F07CB01E340B9059815E /* my.json in Resources */ = {isa = PBXBuildFile; fileRef = 35795EA018A7C41AB463A1C0 /* my.json */; };
+		61B6679E0583A44A51A4E2F2 /* pa.json in Resources */ = {isa = PBXBuildFile; fileRef = D9EC29C90D90D8EE53102764 /* pa.json */; };
 		66A2AEEC40DC3948EEC2CEBA /* Python.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7D11C469FC9483C9EDE19ACB /* ar.json in Resources */ = {isa = PBXBuildFile; fileRef = 6C6722442EC053DE062BB5B9 /* ar.json */; };
 		855680CCB023F343A6FD87C1 /* fr.json in Resources */ = {isa = PBXBuildFile; fileRef = DEC7B34FCF90CCCC26E8B1DF /* fr.json */; };
@@ -22,23 +26,33 @@
 		8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = D64F1C20423DB4551C0FEBDD /* ja.json */; };
 		8F18BC76CCF0E61689FB9546 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = 187CA1BC456EC956C8DE7C3C /* it.json */; };
 		967D118D4C5509A7828AD513 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = 37019FD67F9DE2D57A74BA03 /* de.json */; };
-		9A3285D02F7B85FC005235E1 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A3285CF2F7B85FC005235E1 /* StoreKit.framework */; };
+		9ACA1EFD1891DFA4F00AA866 /* vi.json in Resources */ = {isa = PBXBuildFile; fileRef = A8DF0B7821860AC538BB705A /* vi.json */; };
 		A5082A49E9C0871D19D9AE2D /* tr.json in Resources */ = {isa = PBXBuildFile; fileRef = F5AD539185FEAC35E1C4C4E4 /* tr.json */; };
+		A5B1F86E4B5F894AFD13616B /* th.json in Resources */ = {isa = PBXBuildFile; fileRef = C42EB6B05681EED15FB24274 /* th.json */; };
 		AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B29C709AD6D0538972B327 /* DeviceCheck.framework */; };
 		AA864D37B687356222AD9D24 /* zh.json in Resources */ = {isa = PBXBuildFile; fileRef = 8620DD490569E31850E66411 /* zh.json */; };
 		AC2B0A9A845B3FED54D32D59 /* sw.json in Resources */ = {isa = PBXBuildFile; fileRef = 586074AFD59511DC8365521A /* sw.json */; };
+		AF747B8D681BC3B661B440BF /* ta.json in Resources */ = {isa = PBXBuildFile; fileRef = D877192FC1CED4F20293AC75 /* ta.json */; };
+		B15949FD20CA7EB520DA7066 /* te.json in Resources */ = {isa = PBXBuildFile; fileRef = 96F852ADB91AA4C228962FA7 /* te.json */; };
 		B60CB4CB11974283B79D66D0 /* AppAttestManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD4253E3B2F5576887094CC /* AppAttestManager.swift */; };
+		C12ECC56E868FF511EB09571 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CDF49AA4D6D8A17787F119B1 /* manifest.json */; };
 		CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 428EEA85690BE39004316694 /* Security.framework */; };
 		D4EF14070E1BB23B1DAAFBCB /* StoreKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC688A47713DC269281F526D /* StoreKitManager.swift */; };
 		DBF2178339A7B6A37F096AF1 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404608725152C3067E7030FA /* iosAppApp.swift */; };
 		DD92D88FBF10113F9EE98AE0 /* am.json in Resources */ = {isa = PBXBuildFile; fileRef = B57162E8FCBD1C507FA4F444 /* am.json */; };
 		DFCB069889964A2480FD8104 /* pt.json in Resources */ = {isa = PBXBuildFile; fileRef = CDF043D9A84971421E6228BE /* pt.json */; };
 		E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F57CDEE4615E80E9C189DA6 /* Python.xcframework */; };
+		E0DCB28659C5ED6FA429DF58 /* uk.json in Resources */ = {isa = PBXBuildFile; fileRef = 9AAEED26AAA5DC3AE6A7199B /* uk.json */; };
+		E33985EE3BDCCE680649BF63 /* yo.json in Resources */ = {isa = PBXBuildFile; fileRef = 3F6B124892DF8CBB165C938D /* yo.json */; };
 		E3702892E761DFE128D48B0D /* AppleSignInHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */; };
+		E3BEF80BD4A9B3AFD78D50CA /* mr.json in Resources */ = {isa = PBXBuildFile; fileRef = 5817E8844F9ED34CDEC5840D /* mr.json */; };
+		E8EAF51EF5C1181D5FC0BAA2 /* id.json in Resources */ = {isa = PBXBuildFile; fileRef = 3AEE0B78E600062428354340 /* id.json */; };
 		EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */ = {isa = PBXBuildFile; fileRef = 93BB47C3CC3B5531EA4EB340 /* Resources.zip */; };
+		F1E095456F665F5A572637AE /* ur.json in Resources */ = {isa = PBXBuildFile; fileRef = 94182C296E70C51415275DCD /* ur.json */; };
 		F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 960264F5759B4678704E09D5 /* CIRISVerify.xcframework */; };
 		F481F043FDB03ABB9806556F /* ru.json in Resources */ = {isa = PBXBuildFile; fileRef = 3D9384BF6CBF1F877EFEE41C /* ru.json */; };
 		F5ECB98162A11BE42DD3E512 /* hi.json in Resources */ = {isa = PBXBuildFile; fileRef = 0C9B4C8D2EE1662BF922EA9A /* hi.json */; };
+		F724FD8131208246E29BF308 /* fa.json in Resources */ = {isa = PBXBuildFile; fileRef = 891065703F9E9C43B1B77146 /* fa.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -60,29 +74,43 @@
 		0C9B4C8D2EE1662BF922EA9A /* hi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = hi.json; sourceTree = "<group>"; };
 		178F78A09CA3F5809B867F74 /* en.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = en.json; sourceTree = "<group>"; };
 		187CA1BC456EC956C8DE7C3C /* it.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = it.json; sourceTree = "<group>"; };
+		35795EA018A7C41AB463A1C0 /* my.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = my.json; sourceTree = "<group>"; };
 		37019FD67F9DE2D57A74BA03 /* de.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = de.json; sourceTree = "<group>"; };
+		3AEE0B78E600062428354340 /* id.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = id.json; sourceTree = "<group>"; };
 		3D9384BF6CBF1F877EFEE41C /* ru.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ru.json; sourceTree = "<group>"; };
+		3F6B124892DF8CBB165C938D /* yo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = yo.json; sourceTree = "<group>"; };
 		404608725152C3067E7030FA /* iosAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosAppApp.swift; sourceTree = "<group>"; };
 		428EEA85690BE39004316694 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		48E41FF38495880A27B036FA /* es.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = es.json; sourceTree = "<group>"; };
+		5817E8844F9ED34CDEC5840D /* mr.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = mr.json; sourceTree = "<group>"; };
 		586074AFD59511DC8365521A /* sw.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sw.json; sourceTree = "<group>"; };
 		586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		5FD4253E3B2F5576887094CC /* AppAttestManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestManager.swift; sourceTree = "<group>"; };
+		64C3DFDC115CC5D2F4DAC74F /* bn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = bn.json; sourceTree = "<group>"; };
 		6C6722442EC053DE062BB5B9 /* ar.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ar.json; sourceTree = "<group>"; };
+		770DBA3B41B83ED9AB2FF4C9 /* ha.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ha.json; sourceTree = "<group>"; };
 		7F57CDEE4615E80E9C189DA6 /* Python.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Python.xcframework; path = Frameworks/Python.xcframework; sourceTree = "<group>"; };
-		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		86038AE1032E284E79B32AD6 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8620DD490569E31850E66411 /* zh.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = zh.json; sourceTree = "<group>"; };
+		891065703F9E9C43B1B77146 /* fa.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fa.json; sourceTree = "<group>"; };
 		93BB47C3CC3B5531EA4EB340 /* Resources.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = Resources.zip; sourceTree = "<group>"; };
+		94182C296E70C51415275DCD /* ur.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ur.json; sourceTree = "<group>"; };
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
-		9A3285CF2F7B85FC005235E1 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		96F852ADB91AA4C228962FA7 /* te.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = te.json; sourceTree = "<group>"; };
+		9AAEED26AAA5DC3AE6A7199B /* uk.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = uk.json; sourceTree = "<group>"; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
+		A8DF0B7821860AC538BB705A /* vi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vi.json; sourceTree = "<group>"; };
 		B01B283DC417F03B7803D5E3 /* ko.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ko.json; sourceTree = "<group>"; };
 		B57162E8FCBD1C507FA4F444 /* am.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = am.json; sourceTree = "<group>"; };
 		C117AD187833E2513BD2F553 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C42EB6B05681EED15FB24274 /* th.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = th.json; sourceTree = "<group>"; };
 		C49B0B02429FBBC9F867DDE1 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
 		CDF043D9A84971421E6228BE /* pt.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = pt.json; sourceTree = "<group>"; };
+		CDF49AA4D6D8A17787F119B1 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		CE8509E5A49E4A5CAAEB3ADB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D64F1C20423DB4551C0FEBDD /* ja.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ja.json; sourceTree = "<group>"; };
+		D877192FC1CED4F20293AC75 /* ta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ta.json; sourceTree = "<group>"; };
+		D9EC29C90D90D8EE53102764 /* pa.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = pa.json; sourceTree = "<group>"; };
 		DAA9BDE339934CB14814355D /* PythonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonBridge.swift; sourceTree = "<group>"; };
 		DEC7B34FCF90CCCC26E8B1DF /* fr.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fr.json; sourceTree = "<group>"; };
 		E805AC5C75138F5ACE082017 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -102,7 +130,6 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
-				9A3285D02F7B85FC005235E1 /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -134,7 +161,6 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9A3285CF2F7B85FC005235E1 /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -159,18 +185,33 @@
 			children = (
 				B57162E8FCBD1C507FA4F444 /* am.json */,
 				6C6722442EC053DE062BB5B9 /* ar.json */,
+				64C3DFDC115CC5D2F4DAC74F /* bn.json */,
 				37019FD67F9DE2D57A74BA03 /* de.json */,
 				178F78A09CA3F5809B867F74 /* en.json */,
 				48E41FF38495880A27B036FA /* es.json */,
+				891065703F9E9C43B1B77146 /* fa.json */,
 				DEC7B34FCF90CCCC26E8B1DF /* fr.json */,
+				770DBA3B41B83ED9AB2FF4C9 /* ha.json */,
 				0C9B4C8D2EE1662BF922EA9A /* hi.json */,
+				3AEE0B78E600062428354340 /* id.json */,
 				187CA1BC456EC956C8DE7C3C /* it.json */,
 				D64F1C20423DB4551C0FEBDD /* ja.json */,
 				B01B283DC417F03B7803D5E3 /* ko.json */,
+				CDF49AA4D6D8A17787F119B1 /* manifest.json */,
+				5817E8844F9ED34CDEC5840D /* mr.json */,
+				35795EA018A7C41AB463A1C0 /* my.json */,
+				D9EC29C90D90D8EE53102764 /* pa.json */,
 				CDF043D9A84971421E6228BE /* pt.json */,
 				3D9384BF6CBF1F877EFEE41C /* ru.json */,
 				586074AFD59511DC8365521A /* sw.json */,
+				D877192FC1CED4F20293AC75 /* ta.json */,
+				96F852ADB91AA4C228962FA7 /* te.json */,
+				C42EB6B05681EED15FB24274 /* th.json */,
 				F5AD539185FEAC35E1C4C4E4 /* tr.json */,
+				9AAEED26AAA5DC3AE6A7199B /* uk.json */,
+				94182C296E70C51415275DCD /* ur.json */,
+				A8DF0B7821860AC538BB705A /* vi.json */,
+				3F6B124892DF8CBB165C938D /* yo.json */,
 				8620DD490569E31850E66411 /* zh.json */,
 			);
 			path = localization;
@@ -194,6 +235,7 @@
 				FF5E9869DAEE8D326CA9527D /* Link KMP Shared Framework */,
 				297B59D9CE634556D6007C40 /* Sources */,
 				3D4F1A18C954E39A6135F5F2 /* Embed Python Native Modules */,
+				4E704BE952FCDC0FA32FE65D /* Remove Static shared.framework from Frameworks */,
 				1623B02D10928C8101C1F806 /* Resources */,
 				EF8A6E9BFD470986D9D5C9B5 /* Frameworks */,
 				DB76241340C08196BD9C492C /* Embed Frameworks */,
@@ -219,6 +261,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
+						DevelopmentTeam = MHX9MGJ62V;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -233,6 +276,7 @@
 			);
 			mainGroup = 38B69C3F79CD97858CF7B609;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -250,18 +294,33 @@
 				EE9564216B1ADCF041A3BB54 /* Resources.zip in Resources */,
 				DD92D88FBF10113F9EE98AE0 /* am.json in Resources */,
 				7D11C469FC9483C9EDE19ACB /* ar.json in Resources */,
+				1E6CD2B3A8E39AFBE5EFEEEF /* bn.json in Resources */,
 				967D118D4C5509A7828AD513 /* de.json in Resources */,
 				8643B865899388F7DFCED66B /* en.json in Resources */,
 				2F10842CAAD45BCFEC7DCBF8 /* es.json in Resources */,
+				F724FD8131208246E29BF308 /* fa.json in Resources */,
 				855680CCB023F343A6FD87C1 /* fr.json in Resources */,
+				271022327DEC565EEEF45F02 /* ha.json in Resources */,
 				F5ECB98162A11BE42DD3E512 /* hi.json in Resources */,
+				E8EAF51EF5C1181D5FC0BAA2 /* id.json in Resources */,
 				8F18BC76CCF0E61689FB9546 /* it.json in Resources */,
 				8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */,
 				414E873AF0F5AB3035E6FFBE /* ko.json in Resources */,
+				C12ECC56E868FF511EB09571 /* manifest.json in Resources */,
+				E3BEF80BD4A9B3AFD78D50CA /* mr.json in Resources */,
+				5EB4F07CB01E340B9059815E /* my.json in Resources */,
+				61B6679E0583A44A51A4E2F2 /* pa.json in Resources */,
 				DFCB069889964A2480FD8104 /* pt.json in Resources */,
 				F481F043FDB03ABB9806556F /* ru.json in Resources */,
 				AC2B0A9A845B3FED54D32D59 /* sw.json in Resources */,
+				AF747B8D681BC3B661B440BF /* ta.json in Resources */,
+				B15949FD20CA7EB520DA7066 /* te.json in Resources */,
+				A5B1F86E4B5F894AFD13616B /* th.json in Resources */,
 				A5082A49E9C0871D19D9AE2D /* tr.json in Resources */,
+				E0DCB28659C5ED6FA429DF58 /* uk.json in Resources */,
+				F1E095456F665F5A572637AE /* ur.json in Resources */,
+				9ACA1EFD1891DFA4F00AA866 /* vi.json in Resources */,
+				E33985EE3BDCCE680649BF63 /* yo.json in Resources */,
 				AA864D37B687356222AD9D24 /* zh.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -288,6 +347,25 @@
 			shellPath = /bin/sh;
 			shellScript = "${PROJECT_DIR}/scripts/embed_native_frameworks.sh";
 		};
+		4E704BE952FCDC0FA32FE65D /* Remove Static shared.framework from Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Remove Static shared.framework from Frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Xcode's Embed Frameworks phase copies shared.framework into\n# Frameworks/ even though it's a static archive (.a). iOS rejects\n# static archives in Frameworks/ at install time. Remove it.\nSHARED_FW=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework/shared\"\nif [ -f \"$SHARED_FW\" ] && file \"$SHARED_FW\" | grep -q \"ar archive\"; then\n  echo \"Removing static shared.framework from Frameworks/ (iOS rejects static archives here)\"\n  rm -rf \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework\"\nfi\n";
+		};
 		FF5E9869DAEE8D326CA9527D /* Link KMP Shared Framework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -305,7 +383,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Link the correct shared.framework based on configuration and SDK\nSHARED_FRAMEWORK_DIR=\"${PROJECT_DIR}/../shared/build/bin\"\n\necho \"DEBUG: SDKROOT=$SDKROOT\"\necho \"DEBUG: PLATFORM_NAME=$PLATFORM_NAME\"\necho \"DEBUG: EFFECTIVE_PLATFORM_NAME=$EFFECTIVE_PLATFORM_NAME\"\necho \"DEBUG: CONFIGURATION=$CONFIGURATION\"\n\n# Determine architecture (device vs simulator)\n# Use PLATFORM_NAME which is more reliable for archive builds\nif [ \"$PLATFORM_NAME\" = \"iphoneos\" ] || [[ \"$SDKROOT\" == *\"iphoneos\"* ]]; then\n  ARCH=\"iosArm64\"\nelse\n  ARCH=\"iosSimulatorArm64\"\nfi\n\n# Determine build type\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  BUILD_TYPE=\"releaseFramework\"\nelse\n  BUILD_TYPE=\"debugFramework\"\nfi\n\necho \"DEBUG: Selected ARCH=$ARCH BUILD_TYPE=$BUILD_TYPE\"\n\nFRAMEWORK_PATH=\"${SHARED_FRAMEWORK_DIR}/${ARCH}/${BUILD_TYPE}/shared.framework\"\n\nif [ ! -d \"$FRAMEWORK_PATH\" ]; then\n  echo \"error: shared.framework not found at $FRAMEWORK_PATH\"\n  echo \"Run: cd mobile && ./gradlew :shared:linkReleaseFrameworkIosArm64\"\n  exit 1\nfi\n\n# Copy framework to build directory for embedding\nDEST_PATH=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework\"\nrm -rf \"$DEST_PATH\"\ncp -R \"$FRAMEWORK_PATH\" \"$DEST_PATH\"\n\n# Fix shared.framework Info.plist for App Store compliance\nPLIST=\"${DEST_PATH}/Info.plist\"\nif [ -f \"$PLIST\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :MinimumOSVersion 15.0\" \"$PLIST\" 2>/dev/null || true\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleIdentifier ai.ciris.mobile.shared\" \"$PLIST\" 2>/dev/null || true\n  echo \"Fixed shared.framework Info.plist\"\nfi\n\necho \"Embedded shared.framework from: $FRAMEWORK_PATH\"\n";
+			shellScript = "# Link the correct shared.framework based on configuration and SDK\nSHARED_FRAMEWORK_DIR=\"${PROJECT_DIR}/../shared/build/bin\"\n\necho \"DEBUG: SDKROOT=$SDKROOT\"\necho \"DEBUG: PLATFORM_NAME=$PLATFORM_NAME\"\necho \"DEBUG: EFFECTIVE_PLATFORM_NAME=$EFFECTIVE_PLATFORM_NAME\"\necho \"DEBUG: CONFIGURATION=$CONFIGURATION\"\n\n# Determine architecture (device vs simulator)\n# Use PLATFORM_NAME which is more reliable for archive builds\nif [ \"$PLATFORM_NAME\" = \"iphoneos\" ] || [[ \"$SDKROOT\" == *\"iphoneos\"* ]]; then\n  ARCH=\"iosArm64\"\nelse\n  ARCH=\"iosSimulatorArm64\"\nfi\n\n# Determine build type\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  BUILD_TYPE=\"releaseFramework\"\nelse\n  BUILD_TYPE=\"debugFramework\"\nfi\n\necho \"DEBUG: Selected ARCH=$ARCH BUILD_TYPE=$BUILD_TYPE\"\n\nFRAMEWORK_PATH=\"${SHARED_FRAMEWORK_DIR}/${ARCH}/${BUILD_TYPE}/shared.framework\"\n\nif [ ! -d \"$FRAMEWORK_PATH\" ]; then\n  echo \"error: shared.framework not found at $FRAMEWORK_PATH\"\n  echo \"Run: cd mobile && ./gradlew :shared:linkReleaseFrameworkIosArm64\"\n  exit 1\nfi\n\n# Check if static (.a) or dynamic (.dylib) framework\nif file \"${FRAMEWORK_PATH}/shared\" | grep -q \"ar archive\"; then\n  # STATIC: do NOT copy anywhere xcode will auto-embed.\n  # The linker finds it via FRAMEWORK_SEARCH_PATHS in project.yml\n  # pointing directly to the gradle build output directory.\n  # Remove any stale copy from Frameworks/ in case a previous\n  # dynamic build left one there.\n  rm -rf \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework\"\n  rm -rf \"${BUILT_PRODUCTS_DIR}/shared.framework\"\n  echo \"STATIC shared.framework — linked via FRAMEWORK_SEARCH_PATHS (not embedded)\"\nelse\n  # Dynamic: embed in Frameworks/ for runtime loading\n  DEST_PATH=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework\"\n  rm -rf \"$DEST_PATH\"\n  cp -R \"$FRAMEWORK_PATH\" \"$DEST_PATH\"\n  PLIST=\"${DEST_PATH}/Info.plist\"\n  if [ -f \"$PLIST\" ]; then\n    /usr/libexec/PlistBuddy -c \"Set :MinimumOSVersion 15.0\" \"$PLIST\" 2>/dev/null || true\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleIdentifier ai.ciris.mobile.shared\" \"$PLIST\" 2>/dev/null || true\n  fi\n  echo \"Embedded DYNAMIC shared.framework in Frameworks/\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -363,7 +441,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -421,7 +499,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
+				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -457,7 +535,6 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -502,7 +579,6 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",

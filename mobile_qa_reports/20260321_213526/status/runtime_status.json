@@ -1,0 +1,7 @@
+{
+  "phase": "ERROR",
+  "status": "exception",
+  "error": "Initialization sequence failed - check logs for details",
+  "timestamp": "2026-03-21T21:32:49.620645",
+  "timestamp_unix": 1774146769.620654
+}

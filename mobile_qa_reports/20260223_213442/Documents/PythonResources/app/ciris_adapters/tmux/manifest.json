@@ -1,0 +1,40 @@
+{
+  "module": {
+    "name": "tmux",
+    "version": "1.0.0",
+    "description": "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "tmux.service.TmuxToolService",
+      "capabilities": [
+        "tool:tmux",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:tmux",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "tmux.service.TmuxToolService"
+  },
+  "configuration": {}
+}

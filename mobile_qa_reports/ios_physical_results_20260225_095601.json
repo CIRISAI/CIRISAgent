@@ -1,0 +1,53 @@
+{
+  "platform": "ios_physical",
+  "device": {
+    "name": "Mac Mini\u2019s iPhone",
+    "identifier": "A53DA92F-972A-5A28-86E3-E6E86E02EE79",
+    "os_version": "26.2.1",
+    "model": "iPhone 14"
+  },
+  "reports": [
+    {
+      "name": "test_physical_screenshot",
+      "result": "passed",
+      "duration": 1.9080309867858887,
+      "message": "Screenshot OK, OCR found 15 text regions. Sample: ['9:55', 'SOS', 'C', 'CIRIS Agent', 'Ethical Al Assistant']"
+    },
+    {
+      "name": "test_physical_app_state",
+      "result": "passed",
+      "duration": 7.295119047164917,
+      "message": "App state: chat (running). Indicators: {'login': True, 'setup': False, 'chat': True, 'ciris': True}. Texts: ['9:55', 'SOS', 'C', 'CIRIS Agent', 'Ethical Al Assistant', 'Sign in with Apple', 'Local Login', 'CIRIS hosted LLM services require Apple', 'login.', 'Bring your own API key works with either']"
+    },
+    {
+      "name": "test_physical_api_health",
+      "result": "passed",
+      "duration": 1.5781240463256836,
+      "message": "Health check: status=200, body={'data': {'status': 'healthy', 'version': '2.0.0-stable', 'uptime_seconds': 800.568119, 'services': {'communication': {'available': 1, 'healthy': 1}, 'tool': {'available': 6, 'healthy': 6}, 'wise_authority': {'available': 2, 'healthy': 2}, 'memory': {'available': 1, 'healthy': 1}, 'llm': {'available': 2, 'healthy': 2}, 'runtime_control': {'available': 1, 'healthy': 1}, 'config': {'available': 1, 'healthy': 1}, 'time': {'available': 1, 'healthy': 1}, 'tsdb_consolidation': {'available': 1, 'healthy': 1}}, 'initialization_complete': True, 'cognitive_state': 'work', 'timestamp': '2026-02-25T15:55:56.608090+00:00'}, 'metadata': {'timestamp': '2026-02-25T15:55:56.650586+00:00', 'request_id': None, 'duration_ms': None}}"
+    },
+    {
+      "name": "test_physical_api_telemetry",
+      "result": "skipped",
+      "duration": 1.6173338890075684,
+      "message": "Login failed \u2014 app may be in first-run state (setup not completed). Health OK."
+    },
+    {
+      "name": "test_physical_api_verify_status",
+      "result": "skipped",
+      "duration": 1.5351901054382324,
+      "message": "Login failed \u2014 app may be in first-run state (setup not completed)"
+    },
+    {
+      "name": "test_physical_api_adapters",
+      "result": "skipped",
+      "duration": 1.5374138355255127,
+      "message": "Login failed \u2014 app may be in first-run state (setup not completed)"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 3,
+    "failed": 0,
+    "errors": 0
+  }
+}

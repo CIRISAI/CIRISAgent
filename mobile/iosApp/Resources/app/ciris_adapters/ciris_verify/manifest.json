@@ -1,0 +1,38 @@
+{
+  "module": {
+    "name": "ciris_verify",
+    "version": "0.1.0",
+    "description": "Hardware-rooted license verification — auto-loads silently, no configuration required",
+    "author": "CIRIS Engineering",
+    "internal_only": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "HIGH",
+      "class": "ciris_verify.service.CIRISVerifyService",
+      "capabilities": [
+        "license:verify",
+        "license:check_capability",
+        "license:get_disclosure",
+        "license:get_tier"
+      ]
+    }
+  ],
+  "capabilities": [
+    "license:verify",
+    "license:check_capability",
+    "license:get_disclosure",
+    "license:get_tier"
+  ],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "external": {
+      "ciris-verify": ">=0.1.0"
+    }
+  },
+  "exports": {
+    "service_class": "ciris_verify.service.CIRISVerifyService"
+  }
+}

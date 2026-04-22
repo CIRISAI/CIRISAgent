@@ -1,0 +1,34 @@
+{
+  "module": {
+    "name": "clawdbot_spotify_player",
+    "version": "1.0.0",
+    "description": "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://www.spotify.com"
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "clawdbot_spotify_player.service.SpotifyPlayerToolService",
+      "capabilities": [
+        "tool:spotify_player"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:spotify_player"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "clawdbot_spotify_player.service.SpotifyPlayerToolService"
+  },
+  "configuration": {}
+}

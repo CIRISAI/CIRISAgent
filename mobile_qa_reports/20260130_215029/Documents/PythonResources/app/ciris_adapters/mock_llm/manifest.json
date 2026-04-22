@@ -1,0 +1,106 @@
+{
+  "module": {
+    "name": "mockllm",
+    "version": "1.0.0",
+    "description": "Mock LLM service for testing - simulates AI responses",
+    "author": "CIRIS Team",
+    "MOCK": true
+  },
+  "services": [{
+    "type": "LLM",
+    "priority": "CRITICAL",
+    "class": "mock_llm.service.MockLLMService",
+    "capabilities": ["call_llm_structured"]
+  }],
+  "capabilities": [
+    "call_llm_structured"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.LLMService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.llm_core",
+      "ciris_engine.schemas.runtime.models"
+    ]
+  },
+  "exports": {
+    "service_class": "mock_llm.service.MockLLMService",
+    "configurable": "mock_llm.configurable.MockLLMConfigurableAdapter",
+    "protocol": "mock_llm.protocol.MockLLMProtocol",
+    "schemas": "mock_llm.schemas"
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "configure_delay",
+        "step_type": "input",
+        "title": "Configure Response Delay",
+        "description": "Set simulated API latency in milliseconds (0-60000)",
+        "field_name": "delay_ms",
+        "default": 100,
+        "optional": true,
+        "validation": {
+          "min": 0,
+          "max": 60000
+        }
+      },
+      {
+        "step_id": "select_mode",
+        "step_type": "select",
+        "title": "Select Response Mode",
+        "description": "Choose how the mock LLM generates responses",
+        "field_name": "response_mode",
+        "options_method": "get_config_options",
+        "default": "deterministic",
+        "optional": true
+      },
+      {
+        "step_id": "configure_failures",
+        "step_type": "input",
+        "title": "Configure Failure Rate",
+        "description": "Probability of simulated failures for testing (0.0-1.0)",
+        "field_name": "failure_rate",
+        "default": 0.0,
+        "optional": true,
+        "validation": {
+          "min": 0.0,
+          "max": 1.0
+        }
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your Mock LLM configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "configuration": {
+    "delay_ms": {
+      "type": "integer",
+      "env": "MOCK_LLM_DELAY_MS",
+      "default": 100,
+      "description": "Simulated response delay in milliseconds"
+    },
+    "failure_rate": {
+      "type": "float",
+      "env": "MOCK_LLM_FAILURE_RATE",
+      "default": 0.0,
+      "description": "Probability of simulated failures (0.0-1.0)"
+    },
+    "response_mode": {
+      "type": "string",
+      "env": "MOCK_LLM_RESPONSE_MODE",
+      "default": "deterministic",
+      "description": "Response generation mode: deterministic, random, or echo"
+    }
+  },
+  "metadata": {
+    "warning": "MOCK LLM - NOT FOR PRODUCTION USE",
+    "provider": "mock"
+  }
+}

@@ -1,0 +1,755 @@
+import json
+import logging
+import re
+from types import SimpleNamespace
+from typing import Any, Callable, Dict, List, Optional
+
+from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    ASPDMALLMResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+    IDMAResult,
+)
+
+logger = logging.getLogger(__name__)
+from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
+from ciris_engine.schemas.conscience.core import (
+    CoherenceCheckResult,
+    EntropyCheckResult,
+    EpistemicHumilityResult,
+    OptimizationVetoResult,
+)
+
+
+class MockLLMConfig:
+    """Configuration for mock LLM behavior."""
+
+    def __init__(self) -> None:
+        # Regex patterns to match in messages for context echoing
+        self.context_patterns = {
+            r'user.*?says?.*?"([^"]+)"': lambda m: f"echo_user_speech:{m.group(1)}",
+            r'thought.*content.*"([^"]+)"': lambda m: f"echo_thought:{m.group(1)}",
+            # More specific channel patterns to avoid false matches
+            r'channel_id[=:]\s*[\'"]([a-zA-Z0-9_\-@\.]+)[\'"]': lambda m: f"echo_channel:{m.group(1)}",
+            r"channel_id[=:]\s*([a-zA-Z0-9_\-@\.]+)(?:\s|$)": lambda m: f"echo_channel:{m.group(1)}",
+            r"channel\s+([#@]?[a-zA-Z0-9_\-]+)(?:\s|$)": lambda m: (
+                f"echo_channel:{m.group(1)}" if len(m.group(1)) > 3 else None
+            ),
+            r'(?:search.*memory|memory.*search).*[\'"]([^\'"]+)[\'"]': lambda m: f"echo_memory_query:{m.group(1)}",
+            r'domain.*[\'"]([^\'"]+)[\'"]': lambda m: f"echo_domain:{m.group(1)}",
+            # Catch-all for any content
+            r"(.+)": lambda m: f"echo_content:{m.group(1)[:100]}",
+        }
+
+        # Testing flags that can be set via special markers in messages
+        self.testing_mode: bool = False
+        self.force_action: Optional[str] = None  # Force specific action selection
+        self.inject_error: bool = False  # Inject error conditions
+        self.custom_rationale: Optional[str] = None  # Custom rationale text
+        self.echo_context: bool = False  # Echo full context in responses
+        self.filter_pattern: Optional[str] = None  # Regex filter for context display
+        self.debug_dma: bool = False  # Show DMA evaluation details
+        self.debug_consciences: bool = False  # Show conscience processing details
+        self.show_help: bool = False  # Show help documentation
+
+
+# Global config instance
+_mock_config = MockLLMConfig()
+
+
+def set_mock_config(**kwargs: Any) -> None:
+    """Update mock LLM configuration."""
+    global _mock_config
+    for key, value in kwargs.items():
+        if hasattr(_mock_config, key):
+            setattr(_mock_config, key, value)
+
+
+def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
+    """Extract context information from messages using regex patterns."""
+    context_items = []
+
+    # Store original messages for $context display
+    # Handle multimodal content serialization
+    def serialize_message(msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize message, handling multimodal content."""
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            # Multimodal content - summarize for JSON storage
+            text_parts = []
+            image_count = 0
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "image_url":
+                        image_count += 1
+                elif hasattr(block, "type"):
+                    if block.type == "text":
+                        text_parts.append(getattr(block, "text", ""))
+                    elif block.type == "image_url":
+                        image_count += 1
+            return {**msg, "content": f"[MULTIMODAL: {' '.join(text_parts)[:200]}... + {image_count} image(s)]"}
+        return msg
+
+    serialized_messages = [serialize_message(m) for m in messages]
+    context_items.append(f"__messages__:{json.dumps(serialized_messages)}")
+
+    # Debug logging - only log message count, not content
+    logger.info(f"[MOCK_LLM] Extracting context from {len(messages)} messages")
+
+    # Check for multimodal content and log it
+    for i, msg in enumerate(messages):
+        if isinstance(msg, dict):
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # This is multimodal content!
+                image_count = 0
+                text_content = ""
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            text_content = block.get("text", "")[:100]
+                        elif block.get("type") == "image_url":
+                            image_count += 1
+                    elif hasattr(block, "type"):
+                        if block.type == "text":
+                            text_content = getattr(block, "text", "")[:100]
+                        elif block.type == "image_url":
+                            image_count += 1
+
+                logger.info(
+                    f"[MOCK_LLM] 🖼️ MULTIMODAL MESSAGE DETECTED in message {i}: "
+                    f"{image_count} image(s), text: '{text_content}...'"
+                )
+                context_items.append(f"multimodal_images:{image_count}")
+                context_items.append(f"multimodal_text:{text_content}")
+
+    # Look for passive observation pattern in user messages ONLY
+    actual_user_message = ""
+    # Process user messages to find the actual user input
+    for i, msg in enumerate(messages):
+        if isinstance(msg, dict) and msg.get("role") == "user":
+            raw_content = msg.get("content", "")
+
+            # Handle multimodal content - extract text portion
+            if isinstance(raw_content, list):
+                # Extract text from multimodal content
+                text_parts = []
+                for block in raw_content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif hasattr(block, "type") and block.type == "text":
+                        text_parts.append(getattr(block, "text", ""))
+                content = " ".join(text_parts)
+            else:
+                content = raw_content
+
+            # For ASPDMA messages, extract the Original Thought content ONLY
+            if "Your task is to determine the single most appropriate HANDLER ACTION" in content:
+                logger.info("[MOCK_LLM] Found ASPDMA message")
+                logger.info(f"[MOCK_LLM] ASPDMA content preview (first 500 chars): {content[:500]}")
+
+                # Extract what comes after Original Thought: or Thought:
+                # ASPDMA uses 'Thought:' while CSDMA uses 'Original Thought:'
+                thought_marker = None
+                if "Original Thought:" in content:
+                    thought_marker = "Original Thought:"
+                elif 'Thought: "' in content:
+                    thought_marker = "Thought:"
+
+                if thought_marker:
+                    logger.info(f"[MOCK_LLM] Found '{thought_marker}' in ASPDMA message")
+                    # Find the Thought section and show what comes after it
+                    ot_index = content.find(thought_marker)
+                    sample = content[ot_index : ot_index + 300] if ot_index != -1 else ""
+                    logger.debug(f"[MOCK_LLM] Thought section: {sample}")
+
+                    # Use a more robust regex that handles nested quotes
+                    # Match everything up to the LAST quote before a newline (greedy match)
+                    thought_match = re.search(rf'{thought_marker}\s*"(.*)"(?:\n|$)', content, re.DOTALL)
+                    if thought_match:
+                        actual_thought_content = thought_match.group(1)
+                        logger.debug(f"[MOCK_LLM] Matched thought length: {len(actual_thought_content)}")
+                        logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
+
+                        # === CONSCIENCE OVERRIDE CHECK ===
+                        # When bypass conscience detects a new observation, it passes it in the
+                        # CONSCIENCE OVERRIDE GUIDANCE section. This takes priority!
+                        conscience_override_match = re.search(
+                            r"\*\*CONSCIENCE OVERRIDE GUIDANCE:\*\*.*?"
+                            r"A NEW MESSAGE arrived from the user.*?:\s*'([^']+)'",
+                            content,
+                            re.DOTALL | re.IGNORECASE,
+                        )
+                        if conscience_override_match:
+                            new_observation = conscience_override_match.group(1)
+                            logger.info("=" * 60)
+                            logger.info("[MOCK_LLM] === CONSCIENCE OVERRIDE DETECTED ===")
+                            logger.info(f"[MOCK_LLM] New observation from conscience: {new_observation[:100]}...")
+
+                            # Extract the user message from the new observation
+                            # Format: @user (ID: xxx): $command params
+                            obs_match = re.search(r"\):\s*(.+)", new_observation)
+                            if obs_match:
+                                new_user_message = obs_match.group(1).strip()
+                                logger.info(f"[MOCK_LLM] Extracted new user message: {new_user_message}")
+
+                                # Check if it's a command
+                                if new_user_message.startswith("$"):
+                                    parts = new_user_message.split(None, 1)
+                                    action = parts[0][1:].lower()
+                                    params = parts[1] if len(parts) > 1 else ""
+                                    valid_actions = [
+                                        "speak",
+                                        "recall",
+                                        "memorize",
+                                        "tool",
+                                        "observe",
+                                        "ponder",
+                                        "defer",
+                                        "reject",
+                                        "forget",
+                                        "task_complete",
+                                    ]
+                                    if action in valid_actions:
+                                        logger.info(f"[MOCK_LLM] ✓ COMMAND FROM CONSCIENCE OVERRIDE: ${action}")
+                                        logger.info(f"[MOCK_LLM]   params: '{params}'")
+                                        context_items.append(f"user_input:{new_user_message}")
+                                        context_items.append(f"task:{new_user_message}")
+                                        context_items.append(f"forced_action:{action}")
+                                        if params:
+                                            context_items.append(f"action_params:{params}")
+                                        context_items.append("conscience_override:true")
+                                        logger.info("=" * 60)
+                                        # Skip normal thought processing - we have the override
+                                        break
+
+                        # === DETECTION LOGGING ===
+                        logger.info("=" * 60)
+                        logger.info("[MOCK_LLM] === THOUGHT CLASSIFICATION ===")
+
+                        # === STEP 1: Check for FOLLOW-UP thought ===
+                        # Check for standard prefix AND handler-specific patterns
+                        is_followup = actual_thought_content.startswith("CIRIS_FOLLOW_UP_THOUGHT:")
+
+                        # Also detect handler completion patterns (some handlers don't use prefix)
+                        # PONDER uses "=== PONDER ROUND n ===" format from PonderHandler
+                        handler_completion_patterns = [
+                            ("MEMORIZE COMPLETE", "memorize"),
+                            ("MEMORIZE action", "memorize"),
+                            ("FORGET COMPLETE", "forget"),
+                            ("RECALL COMPLETE", "recall"),
+                            ("Memory query", "recall"),
+                            ("=== PONDER ROUND", "ponder"),
+                            ("=== PREVIOUS CONTEXT", "ponder"),  # Accumulated ponder context
+                        ]
+                        detected_handler = None
+                        for pattern, handler_type in handler_completion_patterns:
+                            if actual_thought_content.startswith(pattern):
+                                is_followup = True
+                                detected_handler = handler_type
+                                logger.info(f"[MOCK_LLM] Detected handler completion: '{pattern}' → {handler_type}")
+                                break
+
+                        if is_followup:
+                            logger.info("[MOCK_LLM] TYPE: FOLLOW-UP THOUGHT")
+
+                            # Use detected_handler if set, otherwise extract from prefix
+                            if detected_handler:
+                                first_word = detected_handler.upper()
+                                followup_content = actual_thought_content
+                            else:
+                                # Extract the follow-up type (e.g., "SPEAK SUCCESSFUL", "MEMORIZE SUCCESS")
+                                followup_content = actual_thought_content.replace(
+                                    "CIRIS_FOLLOW_UP_THOUGHT:", ""
+                                ).strip()
+                                first_word = followup_content.split()[0] if followup_content.split() else ""
+
+                            logger.info(f"[MOCK_LLM] FOLLOW-UP FIRST WORD: '{first_word}'")
+                            logger.info(f"[MOCK_LLM] FOLLOW-UP CONTENT: {followup_content[:100]}...")
+
+                            # Determine follow-up type for action selection
+                            if first_word.upper() == "SPEAK":
+                                logger.info("[MOCK_LLM] → SPEAK follow-up detected → should TASK_COMPLETE")
+                                context_items.append("followup_type:speak")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "PONDER":
+                                logger.info("[MOCK_LLM] → PONDER follow-up detected → should TASK_COMPLETE")
+                                context_items.append("followup_type:ponder")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() in ["MEMORIZE", "RECALL", "FORGET", "TOOL", "OBSERVE"]:
+                                logger.info(
+                                    f"[MOCK_LLM] → {first_word.upper()} follow-up detected → should TASK_COMPLETE"
+                                )
+                                context_items.append(f"followup_type:{first_word.lower()}")
+                                context_items.append("should_task_complete:true")
+                            elif first_word.upper() == "MEMORY":
+                                # "Memory query" from RecallResult → recall follow-up
+                                logger.info(
+                                    "[MOCK_LLM] → MEMORY query follow-up detected (RECALL) → should TASK_COMPLETE"
+                                )
+                                context_items.append("followup_type:recall")
+                                context_items.append("should_task_complete:true")
+                            else:
+                                logger.info(f"[MOCK_LLM] → Unknown follow-up type: '{first_word}'")
+                                context_items.append(f"followup_type:unknown")
+
+                            context_items.append(f"is_followup:true")
+                            context_items.append(f"followup_content:{followup_content}")
+                            logger.info("=" * 60)
+                            # Skip to next message - don't process as observation
+                            break
+
+                        # === STEP 2: Check for USER OBSERVATION ===
+                        # Support formats:
+                        # 1. Old format: "You observed @user say: message"
+                        # 2. Discord format: "PRIORITY (high): @username said: message"
+                        # 3. API format: "@wa-xxx (ID: xxx): message"
+                        is_observation = actual_thought_content.startswith("You observed @") or (
+                            "@" in actual_thought_content and " said: " in actual_thought_content
+                        )
+                        # Check for API format: @username (ID: xxx): message
+                        is_api_format = (
+                            "@" in actual_thought_content
+                            and "(ID:" in actual_thought_content
+                            and "): " in actual_thought_content
+                        )
+
+                        if is_observation or is_api_format:
+                            logger.info("[MOCK_LLM] TYPE: USER OBSERVATION")
+                            # Extract the user message from the passive observation
+                            # Try formats in order of specificity
+                            said_index = actual_thought_content.find(" said: ")
+                            say_index = actual_thought_content.find(" say: ")
+                            # API format uses "): " after the ID
+                            api_index = actual_thought_content.find("): ")
+
+                            # Choose the best delimiter
+                            if said_index != -1:
+                                delimiter_index = said_index
+                                delimiter_len = 7  # len(" said: ")
+                            elif say_index != -1:
+                                delimiter_index = say_index
+                                delimiter_len = 6  # len(" say: ")
+                            elif api_index != -1:
+                                delimiter_index = api_index
+                                delimiter_len = 3  # len("): ")
+                            else:
+                                delimiter_index = -1
+                                delimiter_len = 0
+
+                            if delimiter_index != -1:
+                                remaining_content = actual_thought_content[delimiter_index + delimiter_len :]
+                                logger.info(
+                                    f"[MOCK_LLM DEBUG] Remaining content length: {len(remaining_content)}, first 200 chars: {remaining_content[:200]}"
+                                )
+                                # Extract message, stopping at | or newline
+                                actual_user_message = (
+                                    remaining_content.split("|")[0].split("\n")[0].split("\\n")[0].strip()
+                                )
+                                logger.info(f"[MOCK_LLM] Extracted user message from thought: {actual_user_message}")
+                                context_items.append(f"user_input:{actual_user_message}")
+                                context_items.append(f"task:{actual_user_message}")
+
+                                # Parse command if it starts with $
+                                first_word = actual_user_message.split()[0] if actual_user_message.split() else ""
+                                logger.info(f"[MOCK_LLM] USER MESSAGE FIRST WORD: '{first_word}'")
+
+                                if actual_user_message.startswith("$"):
+                                    parts = actual_user_message.split(None, 1)
+                                    action = parts[0][1:].lower()
+                                    params = parts[1] if len(parts) > 1 else ""
+                                    valid_actions = [
+                                        "speak",
+                                        "recall",
+                                        "memorize",
+                                        "tool",
+                                        "observe",
+                                        "ponder",
+                                        "defer",
+                                        "reject",
+                                        "forget",
+                                        "task_complete",
+                                    ]
+                                    if action in valid_actions:
+                                        logger.info(f"[MOCK_LLM] ✓ COMMAND DETECTED: ${action}")
+                                        logger.info(f"[MOCK_LLM]   params: '{params}'")
+                                        context_items.append(f"forced_action:{action}")
+                                        if params:
+                                            context_items.append(f"action_params:{params}")
+                                    else:
+                                        logger.info(f"[MOCK_LLM] ✗ Unknown command: ${action}")
+                                else:
+                                    logger.info(f"[MOCK_LLM] Not a command (no $), treating as natural language")
+                                logger.info("=" * 60)
+                        else:
+                            # Not a follow-up and not an observation - seed thought
+                            logger.info("[MOCK_LLM] TYPE: SEED THOUGHT (not observation, not follow-up)")
+                            logger.info(f"[MOCK_LLM] Content: {actual_thought_content[:100]}...")
+                            logger.info("=" * 60)
+                            context_items.append(f"seed_thought:{actual_thought_content}")
+
+                # Skip processing the rest of the ASPDMA message
+                break
+
+            # Check for direct passive observation pattern (non-ASPDMA)
+            elif content.startswith("You observed @"):
+                logger.info(f"[MOCK_LLM] Processing observation message: {content[:100]}...")
+                # Find the " say: " delimiter
+                say_index = content.find(" say: ")
+                if say_index != -1:
+                    # Extract everything after " say: " but only until the first newline
+                    # This prevents capturing the conversation history
+                    remaining_content = content[say_index + 6 :]  # 6 is len(" say: ")
+                    # Split on newline to get just the message, not the history
+                    # Also handle case where there's a literal \n in the string
+                    actual_user_message = remaining_content.split("\n")[0].split("\\n")[0].strip()
+                    logger.info(f"[MOCK_LLM] Extracted user message: {actual_user_message}")
+                    # Add this to context items so it gets processed properly
+                    context_items.append(f"user_input:{actual_user_message}")
+                    context_items.append(f"task:{actual_user_message}")
+
+                    # If the message is a command, also parse and add the forced action
+                    if actual_user_message.startswith("$"):
+                        parts = actual_user_message.split(None, 1)
+                        action = parts[0][1:].lower()  # Remove $ and lowercase
+                        params = parts[1] if len(parts) > 1 else ""
+                        valid_actions = [
+                            "speak",
+                            "recall",
+                            "memorize",
+                            "tool",
+                            "observe",
+                            "ponder",
+                            "defer",
+                            "reject",
+                            "forget",
+                            "task_complete",
+                        ]
+                        if action in valid_actions:
+                            logger.info(f"[MOCK_LLM] Detected command: action={action}, params={params}")
+                            context_items.append(f"forced_action:{action}")
+                            if params:
+                                context_items.append(f"action_params:{params}")
+                        else:
+                            logger.warning(f"[MOCK_LLM] Unknown command: {action}")
+                    else:
+                        logger.info(f"[MOCK_LLM] Not a command, regular message: {actual_user_message}")
+                else:
+                    logger.warning("[MOCK_LLM] No ' say: ' delimiter found in observation")
+                break
+
+    # Don't process all message content - we already extracted what we need above
+
+    return context_items
+
+
+def _attach_extras(obj: Any) -> Any:
+    """Mimic instructor extra attributes expected on responses.
+
+    For structured responses, we return the object directly as instructor
+    expects to handle the parsing itself.
+    """
+    # For structured responses (Pydantic models), return as-is
+    # Instructor will handle the parsing and validation
+    if hasattr(obj, "model_dump"):
+        return obj
+
+    # For non-structured responses, add OpenAI-style attributes
+    from types import SimpleNamespace
+
+    try:
+        if isinstance(obj, SimpleNamespace):
+            # Convert SimpleNamespace to dict recursively
+            def namespace_to_dict(ns: Any) -> Any:
+                if isinstance(ns, SimpleNamespace):
+                    return {k: namespace_to_dict(v) for k, v in ns.__dict__.items()}
+                elif isinstance(ns, list):
+                    return [namespace_to_dict(item) for item in ns]
+                else:
+                    return ns
+
+            content_json = json.dumps(namespace_to_dict(obj))
+        elif hasattr(obj, "__dict__"):
+            content_json = json.dumps(obj.__dict__)
+        else:
+            content_json = json.dumps(str(obj))
+    except Exception as e:
+        logger.error(f"Failed to serialize object {type(obj)}: {e}")
+        logger.error(f"Object content: {obj}")
+        content_json = '{"error": "serialization_failed"}'
+
+    object.__setattr__(obj, "finish_reason", "stop")
+    object.__setattr__(obj, "_raw_response", {"mock": True})
+    object.__setattr__(
+        obj,
+        "choices",
+        [SimpleNamespace(finish_reason="stop", message=SimpleNamespace(role="assistant", content=content_json))],
+    )
+    object.__setattr__(obj, "usage", SimpleNamespace(total_tokens=42))
+    return obj
+
+
+def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
+    context = context or []
+
+    thought_content = ""
+    for item in context:
+        if item.startswith("echo_thought:"):
+            thought_content = item.split(":", 1)[1]
+            break
+
+    is_wakeup = (
+        any("wakeup" in item.lower() or "verify" in item.lower() or "validate" in item.lower() for item in context)
+        or "WAKEUP" in thought_content.upper()
+    )
+
+    is_user_question = any("echo_user_speech:" in item for item in context) or "?" in thought_content
+
+    if _mock_config.inject_error:
+        stakeholders = "user, system, wise-authority"
+        conflicts = "uncertainty vs action requirement, individual vs system safety"
+        alignment_check = "Ethical uncertainty detected. Context indicates potential conflict requiring wisdom-based deferral for proper resolution."
+        rationale = "[MOCK LLM] Injected ethical uncertainty for testing purposes."
+    else:
+        if is_wakeup:
+            stakeholders = "system, agent-identity, operators"
+            conflicts = "none"
+            alignment_check = (
+                "Wakeup ritual aligns with all CIRIS principles: "
+                "Beneficence - promotes agent integrity and proper functioning. "
+                "Non-maleficence - causes no harm. "
+                "Integrity - maintains system coherence. "
+                "Autonomy - respects user and agent autonomy. "
+                "Justice - treats all fairly. "
+                "Transparency - openly declares identity and purpose. "
+                "Accord alignment - wakeup ritual proceeding as designed."
+            )
+            rationale = "[MOCK LLM] Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
+        elif is_user_question:
+            stakeholders = "user, agent, community"
+            conflicts = "none"
+            alignment_check = (
+                "User interaction aligns with CIRIS principles: "
+                "Beneficence - provides helpful response. "
+                "Non-maleficence - avoids harmful content. "
+                "Integrity - maintains honest communication. "
+                "Autonomy - respects user's agency and choice. "
+                "Transparency - clear and truthful response. "
+                "Promotes flourishing through beneficial dialogue."
+            )
+            rationale = "[MOCK LLM] User interaction promotes beneficial dialogue and respects human autonomy. Response will be honest, helpful, and transparent per CIRIS principles."
+        else:
+            stakeholders = "user, system"
+            conflicts = "none"
+            alignment_check = (
+                "General thought processing aligns with ethical guidelines: "
+                "Beneficence - action promotes positive outcomes. "
+                "Non-maleficence - no harm identified. "
+                "Integrity - maintains system coherence. "
+                "General alignment - proceeding with appropriate caution."
+            )
+            rationale = "[MOCK LLM] General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
+
+    result = EthicalDMAResult(
+        alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)
+    )
+    return result
+
+
+def cs_dma(context: Optional[List[str]] = None) -> CSDMAResult:
+    context = context or []
+    thought_content = ""
+    for item in context:
+        if item.startswith("echo_thought:"):
+            thought_content = item.split(":", 1)[1]
+            break
+    user_speech = ""
+    for item in context:
+        if item.startswith("echo_user_speech:"):
+            user_speech = item.split(":", 1)[1]
+            break
+    is_wakeup = (
+        any("wakeup" in item.lower() or "verify" in item.lower() for item in context)
+        or "WAKEUP" in thought_content.upper()
+    )
+    is_user_interaction = bool(user_speech) or "?" in thought_content
+    is_memory_operation = any("recall" in item.lower() or "memory" in item.lower() for item in context)
+    if _mock_config.inject_error:
+        score = 0.3
+        flags = ["plausibility_concern", "requires_clarification", "mock_flag"] + context
+        reasoning = "[MOCK LLM] Injected low plausibility for testing error handling paths."
+    else:
+        score = 0.9  # Always passing value
+        if is_wakeup:
+            flags = ["wakeup_ritual", "system_initialization"]
+            reasoning = "[MOCK LLM] Wakeup ritual thoughts are inherently plausible and necessary for agent initialization. High reliability in procedural integrity."
+        elif is_user_interaction:
+            flags = ["human_interaction", "conversational"]
+            reasoning = f"[MOCK LLM] User interaction '{user_speech or thought_content[:50]}' is plausible conversational content. Natural dialogue pattern detected."
+        elif is_memory_operation:
+            flags = ["memory_operation", "cognitive_function"]
+            reasoning = "[MOCK LLM] Memory operations are standard cognitive functions with high plausibility for autonomous agents."
+        else:
+            flags = ["general_processing"]
+            reasoning = "[MOCK LLM] General thought processing within normal parameters. No physical impossibilities or logical contradictions detected."
+
+    result = CSDMAResult(plausibility_score=score, flags=flags, reasoning=reasoning)
+    return result
+
+
+def ds_dma(context: Optional[List[str]] = None) -> DSDMAResult:
+    context = context or []
+    domain_val = next((item.split(":")[1] for item in context if item.startswith("echo_domain:")), "mock")
+    reasoning = (
+        f"[MOCK LLM] Mock domain-specific evaluation. Context: {', '.join(context)}"
+        if context
+        else "[MOCK LLM] Mock domain-specific evaluation."
+    )
+    score_val = 0.9
+    flags = ["mock_domain_flag"] + context if _mock_config.inject_error else context
+    result = DSDMAResult(domain=domain_val, domain_alignment=score_val, flags=flags, reasoning=reasoning)
+    return result
+
+
+def ds_dma_llm_output(context: Optional[List[str]] = None) -> BaseDSDMA.LLMOutputForDSDMA:
+    context = context or []
+    reasoning = (
+        f"[MOCK LLM] Mock DSDMA LLM output. Context: {', '.join(context)}"
+        if context
+        else "[MOCK LLM] Mock DSDMA LLM output."
+    )
+    score_val = 0.9
+    result = BaseDSDMA.LLMOutputForDSDMA(
+        score=score_val,
+        recommended_action="proceed",
+        flags=context,
+        reasoning=reasoning,
+    )
+    return result
+
+
+def idma(context: Optional[List[str]] = None) -> IDMAResult:
+    """Generate mock IDMA (Intuition DMA) result using CCA principles.
+
+    IDMA evaluates epistemic diversity using the CCA formula:
+    k_eff = k / (1 + ρ(k-1))
+
+    For mock purposes, nascent agents have low k_eff (~1.0) since they
+    only have training data as a source. k_eff >= 2 indicates healthy
+    epistemic grounding with multiple independent sources.
+    """
+    context = context or []
+
+    # Check if this appears to be a user interaction (potential second source)
+    has_user_input = any("user_input:" in item or "echo_user_speech:" in item for item in context)
+
+    # Nascent agent: primarily single source (training data)
+    # k=1 means k_eff=1 regardless of ρ
+    # With user input, we have k=2 but high correlation initially
+    if has_user_input:
+        # k=2 sources (training + user), but high correlation for nascent agent
+        k = 2
+        rho = 0.7  # High correlation - user input not yet mature as independent source
+        k_eff = k / (1 + rho * (k - 1))  # k_eff ≈ 1.18
+        phase = "healthy"  # Trending toward healthy
+        sources = ["training_data", "user_input"]
+    else:
+        # k=1 source (training only)
+        k = 1
+        rho = 0.0  # ρ irrelevant when k=1
+        k_eff = 1.0  # Single source = fragile
+        phase = "rigidity"  # Echo chamber risk
+        sources = ["training_data"]
+
+    # k_eff < 2 means fragile epistemic grounding
+    fragility_flag = k_eff < 2.0 or phase == "rigidity" or rho > 0.7
+
+    reasoning = (
+        f"[MOCK LLM] CCA epistemic analysis: k={k} sources, ρ={rho:.2f} correlation. "
+        f"k_eff = {k}/{1 + rho * (k - 1):.2f} = {k_eff:.2f}. "
+        f"{'FRAGILE' if fragility_flag else 'HEALTHY'}: "
+        f"{'k_eff < 2 indicates single-source dependence' if k_eff < 2 else 'Multiple independent sources detected'}. "
+        f"Sources: {', '.join(sources)}."
+    )
+
+    result = IDMAResult(
+        k_eff=round(k_eff, 2),
+        correlation_risk=rho,
+        phase=phase,
+        fragility_flag=fragility_flag,
+        sources_identified=sources,
+        reasoning=reasoning,
+    )
+    return result
+
+
+from typing import List, Optional
+
+from .responses_action_selection import action_selection, aspdma_llm_result, tsaspdma_llm_result
+from .responses_epistemic import coherence, entropy
+from .responses_feedback import epistemic_humility, optimization_veto
+
+_RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
+    EthicalDMAResult: ethical_dma,
+    CSDMAResult: cs_dma,
+    DSDMAResult: ds_dma,
+    IDMAResult: idma,
+    BaseDSDMA.LLMOutputForDSDMA: ds_dma_llm_output,
+    OptimizationVetoResult: optimization_veto,
+    EpistemicHumilityResult: epistemic_humility,
+    ActionSelectionDMAResult: action_selection,
+    ASPDMALLMResult: aspdma_llm_result,  # Gemini-compatible flat schema
+    TSASPDMALLMResult: tsaspdma_llm_result,  # Gemini-compatible TSASPDMA schema
+    EntropyCheckResult: entropy,
+    CoherenceCheckResult: coherence,
+}
+
+
+def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> Any:
+    """Create a mock LLM response with context analysis."""
+    messages = messages or []
+    # Extract context from messages
+    context = extract_context_from_messages(messages)
+    # Debug for any structured calls
+    logger.debug(f"Request for: {response_model}")
+    # Get the appropriate handler
+    handler = _RESPONSE_MAP.get(response_model)
+    if handler:
+        logger.debug(f"Found handler: {handler.__name__}")
+        import inspect
+
+        sig = inspect.signature(handler)
+        # Pass both context and messages if the handler accepts them
+        if "context" in sig.parameters and "messages" in sig.parameters:
+            result = handler(context=context, messages=messages)
+        elif "context" in sig.parameters:
+            result = handler(context=context)
+        else:
+            result = handler()
+        logger.debug(f"Handler returned: {type(result)}")
+        return result
+    # Handle None response models - these should not happen in a properly structured system
+    if response_model is None:
+        logger.warning("Received None response_model - this indicates unstructured LLM call")
+        logger.warning(f"Context: {context}")
+        return SimpleNamespace(
+            finish_reason="stop",
+            _raw_response={"mock": True},
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(role="assistant", content='{"status": "unstructured_call_detected"}'),
+                )
+            ],
+            usage=SimpleNamespace(total_tokens=42),
+        )
+    # Default response with context echoing
+    context_echo = f"Context: {', '.join(context)}" if context else "No context detected"
+    return _attach_extras(
+        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=f"[MOCK LLM] OK - {context_echo}"))])
+    )

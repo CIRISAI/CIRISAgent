@@ -1,0 +1,4 @@
+-- Initial schema for CIRIS Engine (PostgreSQL)
+-- NOTE: Base tables are created by initialize_database() using tables_postgresql.py
+-- This migration is intentionally empty as the schema is already applied.
+-- Kept for migration tracking consistency with SQLite.

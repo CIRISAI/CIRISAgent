@@ -1,0 +1,88 @@
+{
+  "connector_id": "production_db",
+  "connection_string": "postgresql+psycopg2://user:password@localhost:5432/myapp",
+  "dialect": "postgresql",
+  "privacy_schema": {
+    "tables": [
+      {
+        "table_name": "users",
+        "identifier_column": "email",
+        "columns": [
+          {
+            "column_name": "email",
+            "data_type": "email",
+            "is_identifier": true,
+            "anonymization_strategy": "hash"
+          },
+          {
+            "column_name": "full_name",
+            "data_type": "name",
+            "is_identifier": false,
+            "anonymization_strategy": "pseudonymize"
+          },
+          {
+            "column_name": "phone",
+            "data_type": "phone",
+            "is_identifier": false,
+            "anonymization_strategy": "null"
+          },
+          {
+            "column_name": "address",
+            "data_type": "address",
+            "is_identifier": false,
+            "anonymization_strategy": "truncate"
+          }
+        ],
+        "cascade_deletes": ["user_sessions", "user_preferences", "user_notifications"]
+      },
+      {
+        "table_name": "orders",
+        "identifier_column": "customer_email",
+        "columns": [
+          {
+            "column_name": "customer_email",
+            "data_type": "email",
+            "is_identifier": true,
+            "anonymization_strategy": "hash"
+          },
+          {
+            "column_name": "shipping_address",
+            "data_type": "address",
+            "is_identifier": false,
+            "anonymization_strategy": "truncate"
+          },
+          {
+            "column_name": "billing_address",
+            "data_type": "address",
+            "is_identifier": false,
+            "anonymization_strategy": "truncate"
+          }
+        ],
+        "cascade_deletes": ["order_items"]
+      },
+      {
+        "table_name": "support_tickets",
+        "identifier_column": "user_email",
+        "columns": [
+          {
+            "column_name": "user_email",
+            "data_type": "email",
+            "is_identifier": true,
+            "anonymization_strategy": "hash"
+          },
+          {
+            "column_name": "message_text",
+            "data_type": "text",
+            "is_identifier": false,
+            "anonymization_strategy": "null"
+          }
+        ],
+        "cascade_deletes": ["ticket_comments", "ticket_attachments"]
+      }
+    ],
+    "global_identifier_column": "email"
+  },
+  "connection_timeout": 30,
+  "query_timeout": 60,
+  "max_retries": 3
+}

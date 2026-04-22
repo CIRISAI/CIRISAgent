@@ -1,0 +1,40 @@
+{
+  "module": {
+    "name": "oracle",
+    "version": "1.0.0",
+    "description": "Best practices for using the oracle CLI (prompt + file bundling, engines, sessions, and file attachment patterns).",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": "https://askoracle.dev"
+  },
+  "platform_requirements": [
+    "desktop_cli"
+  ],
+  "platform_requirements_rationale": "Requires CLI tools only available on desktop",
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "oracle.service.OracleToolService",
+      "capabilities": [
+        "tool:oracle",
+        "requires:binaries"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:oracle",
+    "requires:binaries"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "oracle.service.OracleToolService"
+  },
+  "configuration": {}
+}

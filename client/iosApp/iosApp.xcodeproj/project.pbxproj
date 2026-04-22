@@ -232,6 +232,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 29DCA9F0B3A40325067EB163 /* Build configuration list for PBXNativeTarget "iosApp" */;
 			buildPhases = (
+				49D0FE2182C399B078FFBC95 /* Sync Python Source into Resources.zip */,
 				FF5E9869DAEE8D326CA9527D /* Link KMP Shared Framework */,
 				297B59D9CE634556D6007C40 /* Sources */,
 				3D4F1A18C954E39A6135F5F2 /* Embed Python Native Modules */,
@@ -346,6 +347,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "${PROJECT_DIR}/scripts/embed_native_frameworks.sh";
+		};
+		49D0FE2182C399B078FFBC95 /* Sync Python Source into Resources.zip */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Sync Python Source into Resources.zip";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Always rebuild Resources.zip from latest repo source before build.\n# Without this, Xcode uses a stale committed zip missing recent fixes.\nCIRIS_ROOT=\"${PROJECT_DIR}/../..\"\nRESOURCES_DIR=\"${PROJECT_DIR}/Resources\"\nif [ -d \"$RESOURCES_DIR\" ] && [ -d \"$CIRIS_ROOT/ciris_engine\" ]; then\n  echo \"Syncing ciris_engine + ciris_adapters into Resources...\"\n  rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \\\n      \"$CIRIS_ROOT/ciris_engine/\" \"$RESOURCES_DIR/app/ciris_engine/\"\n  rsync -a --delete --exclude='__pycache__' \\\n      \"$CIRIS_ROOT/ciris_adapters/\" \"$RESOURCES_DIR/app/ciris_adapters/\"\n  find \"$RESOURCES_DIR\" -type d -name \"__pycache__\" -exec rm -rf {} + 2>/dev/null || true\n  cd \"$RESOURCES_DIR\"\n  rm -f \"$PROJECT_DIR/Resources.zip\"\n  zip -q -r \"$PROJECT_DIR/Resources.zip\" .\n  cd \"$PROJECT_DIR\"\n  echo \"Resources.zip rebuilt from latest source\"\nelse\n  echo \"WARNING: Could not sync source — using existing Resources.zip\"\nfi\n";
 		};
 		4E704BE952FCDC0FA32FE65D /* Remove Static shared.framework from Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;

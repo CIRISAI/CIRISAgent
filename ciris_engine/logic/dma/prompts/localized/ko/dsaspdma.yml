@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA가 DEFER를 선택한 뒤 수행하는 권리 기반 2차 단계
+
+component_name: dsaspdma
+description: "유예 전용 행동 선택: DEFER 행동을 권리/필요 분류 체계에 따라 분류합니다"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === 권리 / 필요 분류 체계 ===
+  - health_and_bodily_integrity: 생명, 건강, 신체의 온전성, 장애, 의료 안전, 무기화, 위험 물질 또는 직접적인 신체 위해 가능성에 사용합니다.
+    권리 근거: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: 주거, 쉼터, 가정 보안, 식품, 물, 위생, 에너지, 기반 시설 및 기타 필수 생활 조건에 사용합니다.
+    권리 근거: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: 일, 소득, 임금, 부채, 신용, 급여, 사회보장, 투자, 세금 또는 생계와 금융 안정 필요에 사용합니다.
+    권리 근거: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: 법률 조언, 법률 구조, 적법 절차, 공정한 재판, 구제 접근, 계약, 책임 또는 사법 접근 문제에 사용합니다.
+    권리 근거: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: 법 앞의 인정, 신원 확인, 국적, 투표, 선거, 공적 참여 또는 시민적 지위에 사용합니다.
+    권리 근거: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: 개인정보, 자율성, 존엄, 강요·사기·조작·생체 추론·감시로부터의 자유에 사용합니다.
+    권리 근거: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: 교육, 연구, 지식 접근, 문화 참여 및 과학의 혜택에 사용합니다.
+    권리 근거: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: 커뮤니티 조정, 위기 에스컬레이션, 패턴 탐지, 공공 안전, 차별 또는 주로 집단에 영향을 주는 위해에 사용합니다.
+    권리 근거: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: 유예가 주로 불확실성, 정책 해석, 권한 경계 또는 특정 도메인에 국한되지 않은 인간 감독에 관한 경우 사용합니다.
+    권리 근거: human_review_and_accountability
+
+  === 운영상 유예 이유 코드 ===
+  - licensed_domain_required: 허가된 전문가 또는 별도로 관리되는 도메인 처리자가 필요합니다.
+  - rights_impact_review: 요청이 보호된 권리 또는 핵심 인간 필요에 실질적으로 영향을 주므로 검토가 필요합니다.
+  - safety_escalation: 잠재적 위해 또는 위기 조건은 즉각적인 에스컬레이션 또는 인간 감독을 요구합니다.
+  - consent_or_authority_required: 유효한 동의, 승인 또는 책임 있는 인간 권한이 먼저 필요합니다.
+  - insufficient_context: 에이전트가 책임 있게 진행하기에 충분한 신뢰할 수 있는 맥락을 갖고 있지 않습니다.
+  - policy_review_required: 행동하기 전에 정책 또는 거버넌스 해석이 필요합니다.
+  - resource_or_system_limitation: 시스템 제약으로 인해 검토 없이 안전하게 완료할 수 없습니다.
+  - time_based_review: 결정은 특정 시점 또는 조건 변화 후 나중에 재고되어야 합니다.
+  - ethical_uncertainty: 시스템은 윤리적으로 여전히 불확실하며 인간 판단이 필요합니다.
+  - unknown: 운영상 이유가 여전히 불명확할 때 사용하는 대체 코드입니다.
+
+system_guidance_header: |
+  === 유예 전용 행동 선택 (DSASPDMA) ===
+
+  ASPDMA는 이미 DEFER를 선택했습니다.
+  당신의 작업은 행동 선택을 다시 여는 것이 아닙니다.
+  당신의 작업은 유예를 설명 가능하고, 감사 가능하며, 라우팅 가능하게 분류하는 것입니다.
+
+  반드시 해야 할 일:
+  1. DEFER 행동을 유지합니다.
+  2. 가장 적절한 기본 권리 / 필요 범주를 선택합니다.
+  3. 가장 적절한 운영상 이유 코드를 선택합니다.
+  4. 실질적으로 해당될 때만 보조 필요 범주를 추가합니다.
+  5. 허가된 도메인 담당자가 명확히 필요할 때만 domain_hint를 설정합니다.
+
+evaluation_steps: |
+  1단계: 원래 생각과 ASPDMA의 잠정 근거를 읽습니다.
+  2단계: 어떤 인간의 필요 / 인권 범주가 가장 직접적으로 관련되는지 식별합니다.
+  3단계: 시스템이 왜 유예하는지를 가장 잘 설명하는 운영상 이유 코드를 선택합니다.
+  4단계: reason_summary는 짧고 구체적이며 사용자가 읽기 쉽게 유지합니다.
+  5단계: 기본 범주는 하나를 선호합니다. 사건이 실제로 여러 권리에 걸칠 때만 보조 범주를 추가합니다.
+
+context_integration: |
+  === 원래 생각 ===
+  {original_thought_content}
+
+  === ASPDMA 근거 ===
+  {aspdma_rationale}
+
+  === 현재 DEFER 이유 ===
+  {current_reason}
+
+  === 현재 DEFER 맥락 ===
+  {current_context}
+
+  === 현재 DEFER UNTIL ===
+  {current_defer_until}
+
+  === 현재 DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === 허가된 도메인 선택지 ===
+  명확히 필요한 경우에만 다음 중 하나를 사용하십시오: {domain_hint_options}
+
+response_format: |
+  다음 필드를 가진 평평한 JSON 객체를 반환하십시오:
+  - "reason_summary": 사람이 읽을 수 있는 짧은 설명
+  - "operational_reason": 위 운영상 이유 코드 중 하나
+  - "primary_need_category": 위 권리 / 필요 분류 값 중 하나
+  - "secondary_need_categories": 추가 분류 값의 선택적 목록
+  - "rights_basis": 짧은 권리 근거 라벨 목록
+  - "domain_hint": 전문 허가 담당자가 명확히 필요한 경우의 선택적 허가 도메인 enum
+  - "defer_until": 시점을 변경해야 하는 경우의 선택적 ISO 타임스탬프 재정의
+
+  예:
+  {{"reason_summary": "절차 안내를 제공하기 전에 허가된 법률 검토가 필요합니다.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  언어 규칙:
+  - 사용자의 선호 언어로 응답합니다.
+  - JSON 키와 enum 값은 반드시 지정된 영어 그대로 유지합니다.
+  - reason_summary 같은 사람이 읽는 자유 텍스트만 현지화합니다.
+
+closing_reminder: |
+  중요:
+  - DEFER에서 다른 행동으로 바꾸지 마십시오.
+  - 허가된 처리가 실제로 함의되지 않는 한 domain_hint를 만들지 마십시오.
+  - 법률 및 금융 접근은 일반 행정 문제가 아니라 권리에 영향을 주는 필요로 다루어야 합니다.
+  - 가장 명확한 권리 근거를 가진 가장 좁고 정확한 범주를 선호하십시오.

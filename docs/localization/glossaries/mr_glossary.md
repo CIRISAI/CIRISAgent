@@ -111,3 +111,18 @@ This glossary defines the canonical translations for key CIRIS terms in Marathi.
 3. Technical terms (API, DMA, LLM) remain in Latin script
 4. Action verbs should use imperative mood (आज्ञार्थी)
 5. Preserve placeholders exactly: {action}, {threshold}, {confidence}
+
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | डिफरल-विशिष्ट कृती निवड | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | हक्क / गरजा वर्गीकरण | Taxonomy section heading |
+| Rights basis | हक्कांचा आधार | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | कार्यकारी डिफरल कारण कोड | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |

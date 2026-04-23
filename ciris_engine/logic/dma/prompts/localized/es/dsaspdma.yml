@@ -7,6 +7,39 @@ version: "1.0"
 
 accord_header: true
 
+taxonomy_text: |
+  === TAXONOMÍA DE DERECHOS / NECESIDADES ===
+  - health_and_bodily_integrity: Úsalo para vida, salud, integridad corporal, discapacidad, seguridad médica, weaponización, materiales peligrosos o implicaciones directas de daño físico.
+    Fundamento de derechos: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Úsalo para vivienda, refugio, seguridad del hogar, comida, agua, saneamiento, energía, infraestructura y otras condiciones esenciales de vida.
+    Fundamento de derechos: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Úsalo para trabajo, ingresos, salarios, deuda, crédito, beneficios, seguridad social, inversión, impuestos u otras necesidades materiales de sustento y estabilidad financiera.
+    Fundamento de derechos: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Úsalo para asesoría legal, asistencia jurídica, debido proceso, juicio justo, acceso a remedio, contratos, responsabilidad u otras cuestiones de acceso a la justicia.
+    Fundamento de derechos: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Úsalo para reconocimiento ante la ley, verificación de identidad, nacionalidad, voto, elecciones, participación pública o condición cívica.
+    Fundamento de derechos: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Úsalo para privacidad, autonomía, dignidad, libertad frente a coerción, fraude, manipulación, inferencia biométrica o vigilancia.
+    Fundamento de derechos: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Úsalo para educación, investigación, acceso al conocimiento, participación cultural y beneficios del progreso científico.
+    Fundamento de derechos: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Úsalo para moderación comunitaria, escalación de crisis, detección de patrones, seguridad pública, discriminación o daños que afectan principalmente a grupos.
+    Fundamento de derechos: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Úsalo cuando la deferencia trata sobre incertidumbre, interpretación de políticas, límites de autoridad o supervisión humana no específica de dominio.
+    Fundamento de derechos: human_review_and_accountability
+
+  === CÓDIGOS DE RAZÓN OPERATIVA DE DEFERENCIA ===
+  - licensed_domain_required: Se requiere un especialista con licencia o un manejador de dominio gobernado por separado.
+  - rights_impact_review: La solicitud afecta materialmente derechos protegidos o necesidades humanas básicas y requiere revisión.
+  - safety_escalation: Posibles daños o condiciones de crisis requieren escalación inmediata o supervisión humana.
+  - consent_or_authority_required: Primero se requiere consentimiento válido, autorización o autoridad humana responsable.
+  - insufficient_context: El agente no tiene contexto fiable suficiente para proceder de forma responsable.
+  - policy_review_required: Se necesita una interpretación de política o gobernanza antes de actuar.
+  - resource_or_system_limitation: Las limitaciones del sistema impiden una finalización segura sin revisión.
+  - time_based_review: La decisión debe reconsiderarse más tarde en un momento específico o tras un cambio de condición.
+  - ethical_uncertainty: El sistema sigue éticamente incierto y requiere juicio humano.
+  - unknown: Código de respaldo cuando la razón operativa sigue sin estar clara.
+
 system_guidance_header: |
   === SELECCIÓN DE ACCIÓN ESPECÍFICA DE DEFERENCIA (DSASPDMA) ===
 
@@ -63,7 +96,7 @@ response_format: |
   - "defer_until": anulación opcional de marca temporal ISO si el momento debe cambiar
 
   Ejemplo:
-  {"reason_summary": "Se requiere revisión legal con licencia antes de dar orientación procesal.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}
+  {{"reason_summary": "Se requiere revisión legal con licencia antes de dar orientación procesal.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
 
   REGLAS DE IDIOMA:
   - Responde en el idioma preferido del usuario.

@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA DEFER ఎంచుకున్న తర్వాత హక్కుల ఆధారిత రెండవ దశ
+
+component_name: dsaspdma
+description: "వాయిదా-ప్రత్యేక చర్య ఎంపిక: DEFER చర్యను హక్కులు/అవసరాల taxonomy తో వర్గీకరిస్తుంది"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === హక్కులు / అవసరాల వర్గీకరణ ===
+  - health_and_bodily_integrity: జీవితం, ఆరోగ్యం, శరీర సమగ్రత, వైకల్యం, వైద్య భద్రత, ఆయుధీకరణ, ప్రమాదకర పదార్థాలు లేదా ప్రత్యక్ష శారీరక హాని సూచనల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: వాసస్థలం, ఆశ్రయం, గృహ భద్రత, ఆహారం, నీరు, పారిశుద్ధ్యం, శక్తి, మౌలిక సదుపాయాలు మరియు ఇతర అవసరమైన జీవన పరిస్థితుల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: పని, ఆదాయం, వేతనాలు, అప్పు, క్రెడిట్, లాభాలు, సామాజిక భద్రత, పెట్టుబడి, పన్నులు లేదా ఇతర జీవనోపాధి మరియు ఆర్థిక స్థిరత్వ అవసరాల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: చట్టపరమైన సలహా, చట్ట సహాయం, సరైన ప్రక్రియ, న్యాయమైన విచారణ, పరిహార ప్రాప్తి, ఒప్పందాలు, బాధ్యత లేదా న్యాయప్రాప్తి ప్రశ్నల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: చట్టం ముందు గుర్తింపు, గుర్తింపు ధృవీకరణ, జాతీయత, ఓటింగ్, ఎన్నికలు, ప్రజా భాగస్వామ్యం లేదా పౌర స్థితి కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: గోప్యత, స్వయంప్రతిపత్తి, గౌరవం, బలవంతం, మోసం, మానిప్యులేషన్, బయోమెట్రిక్ ఊహ లేదా నిఘా నుండి స్వేచ్ఛ కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: విద్య, పరిశోధన, జ్ఞాన ప్రాప్తి, సాంస్కృతిక భాగస్వామ్యం మరియు శాస్త్ర ప్రయోజనాల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: కమ్యూనిటీ moderation, సంక్షోభ escalation, pattern detection, ప్రజా భద్రత, వివక్ష లేదా ప్రధానంగా గుంపులను ప్రభావితం చేసే హానుల కోసం ఉపయోగించండి.
+    హక్కుల ఆధారం: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: వాయిదా ప్రధానంగా అనిశ్చితి, విధాన వ్యాఖ్యానం, అధికార పరిమితులు లేదా domain-specific కాని మానవ పర్యవేక్షణ గురించి ఉన్నప్పుడు ఉపయోగించండి.
+    హక్కుల ఆధారం: human_review_and_accountability
+
+  === కార్యాచరణ వాయిదా కారణ కోడ్‌లు ===
+  - licensed_domain_required: లైసెన్స్ పొందిన నిపుణుడు లేదా వేరుగా నియంత్రిత domain handler అవసరం.
+  - rights_impact_review: అభ్యర్థన రక్షిత హక్కులు లేదా ప్రధాన మానవ అవసరాలను గణనీయంగా ప్రభావితం చేస్తుంది మరియు సమీక్ష అవసరం.
+  - safety_escalation: సంభావ్య హాని లేదా సంక్షోభ పరిస్థితులు తక్షణ escalation లేదా మానవ పర్యవేక్షణ అవసరం చేస్తాయి.
+  - consent_or_authority_required: ముందుగా చెల్లుబాటు అయ్యే సమ్మతి, అనుమతి లేదా బాధ్యతగల మానవ అధికారం అవసరం.
+  - insufficient_context: బాధ్యతగా ముందుకు సాగడానికి agent వద్ద తగినంత నమ్మదగిన context లేదు.
+  - policy_review_required: చర్యకు ముందు policy లేదా governance వ్యాఖ్యానం అవసరం.
+  - resource_or_system_limitation: system పరిమితులు సమీక్ష లేకుండా సురక్షిత పూర్తి చేయడాన్ని అడ్డుకుంటాయి.
+  - time_based_review: నిర్ణయం తరువాత నిర్దిష్ట సమయంలో లేదా పరిస్థితి మారిన తర్వాత మళ్లీ పరిగణించాలి.
+  - ethical_uncertainty: system నైతికంగా ఇంకా అనిశ్చితంగా ఉంది మరియు మానవ తీర్పు అవసరం.
+  - unknown: కార్యాచరణ కారణం ఇంకా స్పష్టంగా లేనప్పుడు fallback code.
+
+system_guidance_header: |
+  === వాయిదా-ప్రత్యేక చర్య ఎంపిక (DSASPDMA) ===
+
+  ASPDMA ఇప్పటికే DEFER ను ఎంచుకుంది.
+  మీ పని చర్య ఎంపికను మళ్లీ తెరవడం కాదు.
+  మీ పని వాయిదాను వివరణీయంగా, ఆడిట్ చేయదగినదిగా, మార్గనిర్దేశం చేయదగినదిగా చేయడానికి వర్గీకరించడం.
+
+  మీరు తప్పనిసరిగా:
+  1. DEFER చర్యను అలాగే ఉంచాలి.
+  2. ఉత్తమ ప్రధాన హక్కులు / అవసరాల వర్గాన్ని ఎంచాలి.
+  3. ఉత్తమ కార్యాచరణ కారణ code ను ఎంచాలి.
+  4. వాస్తవంగా వర్తించినప్పుడే ద్వితీయ అవసరాల వర్గాలను జోడించాలి.
+  5. లైసెన్స్ పొందిన domain handler స్పష్టంగా అవసరమైనప్పుడే domain_hint సెట్ చేయాలి.
+
+evaluation_steps: |
+  దశ 1: అసలు ఆలోచనను మరియు ASPDMA తాత్కాలిక కారణాన్ని చదవండి.
+  దశ 2: ఏ మానవ అవసరం / మానవ హక్కుల విభాగం అత్యంత ప్రత్యక్షంగా సంబంధించిందో గుర్తించండి.
+  దశ 3: వ్యవస్థ ఎందుకు వాయిదా వేస్తుందో ఉత్తమంగా వివరించే కార్యాచరణ కారణ code ను ఎంచండి.
+  దశ 4: reason_summary ను చిన్నగా, నిర్దిష్టంగా, వినియోగదారునికి చదవడానికి సులభంగా ఉంచండి.
+  దశ 5: ఒక ప్రధాన వర్గాన్ని ప్రాధాన్యంగా తీసుకోండి. విషయం నిజంగా అనేక హక్కులను కవర్ చేస్తేనే ద్వితీయ వర్గాలను జోడించండి.
+
+context_integration: |
+  === అసలు ఆలోచన ===
+  {original_thought_content}
+
+  === ASPDMA కారణం ===
+  {aspdma_rationale}
+
+  === ప్రస్తుత DEFER కారణం ===
+  {current_reason}
+
+  === ప్రస్తుత DEFER సందర్భం ===
+  {current_context}
+
+  === ప్రస్తుత DEFER UNTIL ===
+  {current_defer_until}
+
+  === ప్రస్తుత DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === లైసెన్స్ పొందిన DOMAIN ఎంపికలు ===
+  స్పష్టంగా అవసరమైతే మాత్రమే వీటిలో ఒకదాన్ని ఉపయోగించండి: {domain_hint_options}
+
+response_format: |
+  ఈ fields ఉన్న FLAT JSON object ను తిరిగి ఇవ్వండి:
+  - "reason_summary": మనిషికి చదవగలిగే చిన్న వివరణ
+  - "operational_reason": పై కార్యాచరణ కారణ codes లో ఒకటి
+  - "primary_need_category": పై హక్కులు / అవసరాల taxonomy విలువలలో ఒకటి
+  - "secondary_need_categories": అదనపు taxonomy విలువల ఐచ్ఛిక జాబితా
+  - "rights_basis": చిన్న హక్కు-ఆధార label ల జాబితా
+  - "domain_hint": ప్రత్యేక లైసెన్స్ పొందిన handler స్పష్టంగా అవసరమైనప్పుడు ఐచ్ఛిక లైసెన్స్ పొందిన domain enum
+  - "defer_until": సమయం మారాలి అంటే ఐచ్ఛిక ISO timestamp override
+
+  ఉదాహరణ:
+  {{"reason_summary": "కార్యాచరణ మార్గదర్శకం ఇవ్వడానికి ముందు లైసెన్స్ పొందిన చట్టపరమైన సమీక్ష అవసరం.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  భాషా నియమాలు:
+  - వినియోగదారుని ఇష్టమైన భాషలో సమాధానం ఇవ్వండి.
+  - JSON keys మరియు enum values ఖచ్చితంగా పేర్కొన్న ఇంగ్లీషులోనే ఉండాలి.
+  - reason_summary వంటి మనిషి చదవగలిగే స్వేచ్ఛా పాఠ్యమే స్థానికీకరించాలి.
+
+closing_reminder: |
+  ముఖ్యము:
+  - DEFER నుండి వేరే చర్యకు మారవద్దు.
+  - లైసెన్స్ పొందిన నిర్వహణ నిజంగా సూచించబడనప్పుడు domain_hint సృష్టించవద్దు.
+  - చట్టపరమైన మరియు ఆర్థిక ప్రాప్తిని సాధారణ పరిపాలనా సమస్యగా కాకుండా హక్కులపై ప్రభావం చూపే అవసరంగా పరిగణించాలి.
+  - అత్యంత స్పష్టమైన హక్కు ఆధారంతో ఉన్న అత్యంత సంకుచితమైన ఖచ్చితమైన వర్గాన్ని ప్రాధాన్యంగా ఎంచండి.

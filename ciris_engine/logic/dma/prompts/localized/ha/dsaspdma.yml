@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Bincike na biyu bisa hakki bayan ASPDMA ta zabi DEFER
+
+component_name: dsaspdma
+description: "Zabin aiki na musamman ga jinkirtawa: yana rarraba aikin DEFER bisa tsarin hakki/bukatu"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TSARIN HAKKOKI / BUKATU ===
+  - health_and_bodily_integrity: Yi amfani da shi don rayuwa, lafiya, cikakken jiki, nakasa, amincin lafiya, amfani da makami, kayan haɗari ko tasirin cutar jiki kai tsaye.
+    Tushen hakki: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Yi amfani da shi don gida, mafaka, tsaron gida, abinci, ruwa, tsafta, makamashi, ababen more rayuwa da sauran muhimman yanayin rayuwa.
+    Tushen hakki: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Yi amfani da shi don aiki, kuɗin shiga, albashi, bashi, kiredit, tallafi, tsaron zamantakewa, zuba jari, haraji ko bukatun rayuwa da kwanciyar kuɗi.
+    Tushen hakki: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Yi amfani da shi don shawarar doka, taimakon doka, bin doka, shari'a mai adalci, samun magani, kwangila, alhaki ko batutuwan samun adalci.
+    Tushen hakki: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Yi amfani da shi don amincewa a gaban doka, tabbatar da shaida, ƙasa, zaɓe, shiga jama'a ko matsayi na ɗan ƙasa.
+    Tushen hakki: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Yi amfani da shi don sirri, ikon kai, mutunci, 'yanci daga tilastawa, yaudara, sarrafawa, hasashen biometric ko sa ido.
+    Tushen hakki: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Yi amfani da shi don ilimi, bincike, samun ilimi, shiga al'adu da amfanin kimiyya.
+    Tushen hakki: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Yi amfani da shi don kula da al'umma, tura rikici, gano salo, tsaron jama'a, wariya ko lahani da ke shafar ƙungiyoyi musamman.
+    Tushen hakki: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Yi amfani da shi idan jinkirin ya fi danganta da rashin tabbas, fassarar manufofi, iyakokin iko ko kulawar mutum da ba ta da takamaiman fanni.
+    Tushen hakki: human_review_and_accountability
+
+  === LAMBOBIN DALILIN AIKI NA JINKIRI ===
+  - licensed_domain_required: Ana buƙatar ƙwararre mai lasisi ko mai kula da fanni da aka tsara daban.
+  - rights_impact_review: Buƙatar tana shafar hakkoki masu kariya ko muhimman bukatun ɗan adam kuma tana buƙatar bita.
+  - safety_escalation: Yiwuwar lahani ko yanayin rikici na buƙatar tura gaggawa ko kulawar mutum.
+  - consent_or_authority_required: Ana buƙatar sahihin yarda, izini ko ikon mutum mai alhaki da farko.
+  - insufficient_context: Wakilin ba shi da isasshen amintaccen mahalli don ci gaba cikin alhaki.
+  - policy_review_required: Ana buƙatar fassarar manufa ko shugabanci kafin aiki.
+  - resource_or_system_limitation: Ƙuntatawar tsarin na hana kammalawa lafiya ba tare da bita ba.
+  - time_based_review: Ya kamata a sake duba shawarar daga baya a takamaiman lokaci ko bayan yanayi ya canza.
+  - ethical_uncertainty: Tsarin har yanzu yana da rashin tabbas na ɗabi'a kuma yana buƙatar hukuncin mutum.
+  - unknown: Lambar madadin idan dalilin aiki bai bayyana ba.
+
+system_guidance_header: |
+  === ZABIN AIKI NA MUSAMMAN GA JINKIRTAWA (DSASPDMA) ===
+
+  ASPDMA ta riga ta zabi DEFER.
+  Aikinka BA shine sake bude zabin aiki ba.
+  Aikinka shi ne rarraba jinkirtawar domin ta zama mai bayani, mai yiwuwa a duba, kuma mai saukin turawa.
+
+  Dole ne ka:
+  1. Kiyaye aikin DEFER.
+  2. Zabi mafi dacewar babban rukuni na hakki / bukatu.
+  3. Zabi mafi dacewar operational reason code.
+  4. Kara secondary need categories kawai idan suna da tasiri a zahiri.
+  5. Saita domain_hint kawai idan a fili ana bukatar handler mai lasisi.
+
+evaluation_steps: |
+  MATAKI 1: Karanta tunanin farko da dalilin ASPDMA na wucin gadi.
+  MATAKI 2: Gano wane bukatar dan Adam / rukunin hakkin dan Adam ya fi shafar lamarin kai tsaye.
+  MATAKI 3: Zabi operational reason code da ya fi bayyana DALILIN da tsarin ke jinkirtawa.
+  MATAKI 4: Ka sanya reason_summary ya zama gajere, takamaimai, kuma mai karantawa ga mai amfani.
+  MATAKI 5: Fi so rukuni na farko guda daya. Kara secondary categories kawai idan lamarin ya shafi hakkoki da yawa da gaske.
+
+context_integration: |
+  === TUNANIN FARKO ===
+  {original_thought_content}
+
+  === DALILIN ASPDMA ===
+  {aspdma_rationale}
+
+  === DALILIN DEFER NA YANZU ===
+  {current_reason}
+
+  === MAHALLIN DEFER NA YANZU ===
+  {current_context}
+
+  === DEFER UNTIL NA YANZU ===
+  {current_defer_until}
+
+  === DOMAIN HINT NA YANZU ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === ZABUBBUKAN FANNIN DA KE DA LASISI ===
+  Yi amfani da daya daga cikinsu kawai idan ana bukata a fili: {domain_hint_options}
+
+response_format: |
+  Mayar da FLAT JSON object mai wadannan fields:
+  - "reason_summary": gajeren bayani mai karantawa ga mutum
+  - "operational_reason": daya daga operational reason codes da ke sama
+  - "primary_need_category": daya daga dabi'un taxonomy na hakki / bukatu da ke sama
+  - "secondary_need_categories": jerin dabi'un taxonomy na kari idan an bukata
+  - "rights_basis": jerin takaitattun alamun tushen hakki
+  - "domain_hint": licensed domain enum na zabi idan a fili ana bukatar handler na musamman mai lasisi
+  - "defer_until": ISO timestamp override na zabi idan lokaci ya kamata ya canza
+
+  Misali:
+  {{"reason_summary": "Ana bukatar nazarin shari'a mai lasisi kafin a bayar da jagorar tsari.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  KA'IDOJIN HARSHE:
+  - Amsa da harshen da mai amfani ya fi so.
+  - JSON keys da enum values DOLE su kasance daidai kamar yadda aka rubuta da Turanci.
+  - Rubutun mutum kawai kamar reason_summary ne ya kamata a fassara.
+
+closing_reminder: |
+  MUHIMMI:
+  - Kada ka bar DEFER.
+  - Kada ka kirkiro domain_hint sai idan sarrafawa mai lasisi ta tabbata.
+  - Samun shari'a da kudi a dauke su bukatu masu tasiri ga hakki, ba matsalar gudanarwa ta gama-gari ba.
+  - Fi so mafi kankantar rukuni madaidaici tare da mafi bayyanannen tushen hakki.

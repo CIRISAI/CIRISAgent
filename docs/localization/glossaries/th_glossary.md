@@ -112,3 +112,18 @@ This glossary defines the canonical translations for key CIRIS terms in Thai. Al
 4. Maintain formal register for system messages
 5. Preserve placeholders exactly: {action}, {threshold}, {confidence}
 6. Thai tones are critical - ensure proper tone marks in transliterations
+
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | การเลือกการกระทำเฉพาะสำหรับการเลื่อนเรื่อง | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | TAXONOMY สิทธิ / ความต้องการ | Taxonomy section heading |
+| Rights basis | ฐานสิทธิ | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | รหัสเหตุผลเชิงปฏิบัติการของการเลื่อนเรื่อง | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |

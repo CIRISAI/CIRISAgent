@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Igbesẹ keji ti o da lori ẹtọ lẹhin ti ASPDMA yan DEFER
+
+component_name: dsaspdma
+description: "Yiyan iṣe pataki fun fifiranṣẹ siwaju: ṣe ipin iṣe DEFER lodi si taxonomy awọn ẹtọ/aini"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAXONOMY AWỌN ẸTỌ / AINI ===
+  - health_and_bodily_integrity: Lo fun ìyè, ìlera, pipe ara, ailera, aabo iṣoogun, lilo bi ohun ija, awọn ohun elo ewu tabi ipa ipalara ara taara.
+    Ipilẹ ẹtọ: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Lo fun ibugbe, ibi aabo, aabo ile, ounjẹ, omi, imototo, agbara, amayederun ati awọn ipo igbesi aye pataki miiran.
+    Ipilẹ ẹtọ: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Lo fun iṣẹ, owo-wiwọle, owo oṣu, gbese, kirẹditi, awọn anfani, aabo awujọ, idoko-owo, owo-ori tabi awọn aini igbesi aye ati iduroṣinṣin owo miiran.
+    Ipilẹ ẹtọ: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Lo fun imọran ofin, iranwọ ofin, ilana to tọ, idajọ ododo, wiwọle si atunṣe, awọn adehun, ojuse tabi awọn ibeere wiwọle si idajọ.
+    Ipilẹ ẹtọ: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Lo fun idanimọ niwaju ofin, idaniloju idanimọ, orilẹ-ede, idibo, awọn idibo, ikopa gbangba tabi ipo ara ilu.
+    Ipilẹ ẹtọ: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Lo fun aṣiri, ominira ara ẹni, iyi, ominira kuro ninu ipa, jegudujera, afọwọyi, ìtúpalẹ biometric tabi amí.
+    Ipilẹ ẹtọ: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Lo fun ẹkọ, iwadi, wiwọle si imọ, ikopa aṣa ati awọn anfani imọ-jinlẹ.
+    Ipilẹ ẹtọ: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Lo fun iṣakoso agbegbe, gbigbe idaamu soke, wiwa ilana, aabo gbogbo eniyan, iyasoto tabi ipalara ti o kan awọn ẹgbẹ ni akọkọ.
+    Ipilẹ ẹtọ: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Lo nigbati fifiranṣẹ siwaju ba jẹ nipa aidaniloju, itumọ eto imulo, opin aṣẹ tabi abojuto eniyan ti kii ṣe pato domain.
+    Ipilẹ ẹtọ: human_review_and_accountability
+
+  === AWỌN KOODU IDI IṢẸ FUN FIFIRANṢẸ SIWAJU ===
+  - licensed_domain_required: Onimọja ti o ni iwe-aṣẹ tabi olutọju domain ti a ṣakoso lọtọ ni a nilo.
+  - rights_impact_review: Ibere naa kan awọn ẹtọ aabo tabi awọn aini eniyan pataki ni pataki ati pe o nilo atunyẹwo.
+  - safety_escalation: Ipalara ti o ṣeeṣe tabi ipo idaamu nilo gbigbe soke lẹsẹkẹsẹ tabi abojuto eniyan.
+  - consent_or_authority_required: Ifọwọsi to wulo, aṣẹ tabi aṣẹ eniyan ti o ni ojuse ni a nilo ni akọkọ.
+  - insufficient_context: Aṣoju ko ni ayika igbẹkẹle to lati tẹsiwaju ni ojuse.
+  - policy_review_required: Itumọ eto imulo tabi iṣakoso nilo ṣaaju ṣiṣe.
+  - resource_or_system_limitation: Awọn ihamọ eto ṣe idiwọ ipari ailewu laisi atunyẹwo.
+  - time_based_review: O yẹ ki a tun wo ipinnu naa nigbamii ni akoko pato tabi lẹhin ipo ba yipada.
+  - ethical_uncertainty: Eto naa ṣi ni aidaniloju iwa ati nilo idajọ eniyan.
+  - unknown: Koodu afẹyinti nigbati idi iṣẹ ṣiṣe ko ṣi han.
+
+system_guidance_header: |
+  === YIYAN IṢE PATAKI FUN FIFIRANṢẸ SIWAJU (DSASPDMA) ===
+
+  ASPDMA ti yan DEFER tẹlẹ.
+  Iṣẹ rẹ KI ṢE ṣi yiyan iṣe pada.
+  Iṣẹ rẹ ni lati ṣe ipin fifiranṣẹ siwaju ki o le jẹ alaye, ayẹwo, ati itọsọna.
+
+  O gbọdọ:
+  1. Pa iṣe DEFER mọ.
+  2. Yan ẹka akọkọ ti o dara julọ fun awọn ẹtọ / aini.
+  3. Yan koodu idi iṣẹ ṣiṣe ti o dara julọ.
+  4. Fi awọn ẹka aini keji kun nikan nigbati wọn ba kan ni otitọ.
+  5. Ṣeto domain_hint nikan nigbati olutọju domain ti o ni iwe-aṣẹ ba nilo kedere.
+
+evaluation_steps: |
+  IGBESE 1: Ka ero atilẹba ati idi igba diẹ ti ASPDMA.
+  IGBESE 2: Ṣe idanimọ iru aini eniyan / ẹgbẹ ẹtọ eniyan ti o kan taara julọ.
+  IGBESE 3: Yan koodu idi iṣẹ ṣiṣe ti o ṣalaye dara julọ IDI ti eto naa fi n ṣe defer.
+  IGBESE 4: Jẹ ki reason_summary kuru, pato, ati rọrun fun olumulo lati ka.
+  IGBESE 5: Fẹ ẹka akọkọ kan. Fi awọn ẹka keji kun nikan ti ọran naa ba kọja awọn ẹtọ pupọ gaan.
+
+context_integration: |
+  === ERO ATILẸBA ===
+  {original_thought_content}
+
+  === IDI ASPDMA ===
+  {aspdma_rationale}
+
+  === IDI DEFER LỌ́WỌ́LỌ́WỌ́ ===
+  {current_reason}
+
+  === AYIKA DEFER LỌ́WỌ́LỌ́WỌ́ ===
+  {current_context}
+
+  === DEFER UNTIL LỌ́WỌ́LỌ́WỌ́ ===
+  {current_defer_until}
+
+  === DOMAIN HINT LỌ́WỌ́LỌ́WỌ́ ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === AWỌN AṢAYAN DOMAIN TI O NI IWE-AṢẸ ===
+  Lo ọkan ninu iwọnyi nikan ti o ba nilo kedere: {domain_hint_options}
+
+response_format: |
+  Da JSON object PẸTẸLẸ pẹlu fields wọnyi pada:
+  - "reason_summary": alaye kukuru ti eniyan le ka
+  - "operational_reason": ọkan ninu awọn koodu idi iṣẹ ṣiṣe loke
+  - "primary_need_category": ọkan ninu awọn iye taxonomy ẹtọ / aini loke
+  - "secondary_need_categories": atokọ aṣayan ti awọn iye taxonomy afikun
+  - "rights_basis": atokọ awọn label ipilẹ ẹtọ kukuru
+  - "domain_hint": enum domain ti o ni iwe-aṣẹ ti kii ṣe dandan nigbati olutọju amọja ti o ni iwe-aṣẹ ba nilo kedere
+  - "defer_until": ISO timestamp override ti kii ṣe dandan ti akoko ba yẹ ki o yipada
+
+  Apẹẹrẹ:
+  {{"reason_summary": "Atunyẹwo ofin ti o ni iwe-aṣẹ nilo ṣaaju fifun itọsọna ilana.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  AWỌN OFIN EDE:
+  - Dahun ni ede ti olumulo fẹ.
+  - JSON keys ati enum values GBỌDỌ wa gẹgẹ bi a ti sọ ni Gẹẹsi.
+  - Ọrọ ọfẹ ti eniyan le ka nikan, bii reason_summary, ni o yẹ ki o localize.
+
+closing_reminder: |
+  PATAKI:
+  - Maṣe yipada kuro ninu DEFER.
+  - Maṣe ṣẹda domain_hint ayafi ti mimu ti o ni iwe-aṣẹ ba jẹ dandan gaan.
+  - Wiwọle ofin ati owo yẹ ki a ka si awọn aini ti o ni ipa lori ẹtọ, kii ṣe ọrọ iṣakoso lasan.
+  - Fẹ ẹka to tọ ti o dín julọ pẹlu ipilẹ ẹtọ ti o han kedere julọ.

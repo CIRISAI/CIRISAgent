@@ -136,6 +136,21 @@ This glossary defines the canonical translations for key CIRIS terms in Tamil. A
 - Pure Tamil (தனித்தமிழ்) movement prefers native Tamil words
 - Balance between purity and comprehension - use established tech vocabulary
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | ஒத்திவைப்புக்கான செயல் தேர்வு | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | உரிமைகள் / தேவைகள் வகைப்பாடு | Taxonomy section heading |
+| Rights basis | உரிமை அடிப்படை | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | செயல்பாட்டு ஒத்திவைப்பு காரணக் குறியீடுகள் | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

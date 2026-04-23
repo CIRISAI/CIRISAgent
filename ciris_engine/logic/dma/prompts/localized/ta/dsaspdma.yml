@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA DEFER தேர்ந்தெடுத்த பிறகு உரிமை அடிப்படையிலான இரண்டாம் கட்டம்
+
+component_name: dsaspdma
+description: "ஒத்திவைப்புக்கான செயல் தேர்வு: DEFER செயலை உரிமைகள்/தேவைகள் taxonomy-க்கு எதிராக வகைப்படுத்துகிறது"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === உரிமைகள் / தேவைகள் வகைப்பாடு ===
+  - health_and_bodily_integrity: வாழ்வு, உடல்நலம், உடல் முழுமை, மாற்றுத்திறன், மருத்துவ பாதுகாப்பு, ஆயுதமாக்கல், ஆபத்தான பொருட்கள் அல்லது நேரடி உடல் சேத விளைவுகளுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: வீடு, தங்குமிடம், இல்லப் பாதுகாப்பு, உணவு, தண்ணீர், சுகாதாரம், ஆற்றல், அடித்தளம் மற்றும் பிற அத்தியாவசிய வாழ்வாதார நிலைகளுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: வேலை, வருமானம், ஊதியம், கடன், கடன் வசதி, நலன்கள், சமூக பாதுகாப்பு, முதலீடு, வரி அல்லது பிற வாழ்வாதார மற்றும் நிதி நிலைத்தன்மை தேவைகளுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: சட்ட ஆலோசனை, சட்ட உதவி, உரிய நடைமுறை, நியாயமான விசாரணை, நிவாரண அணுகல், ஒப்பந்தங்கள், பொறுப்பு அல்லது நீதித்துறை அணுகல் கேள்விகளுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: சட்ட முன் அங்கீகாரம், அடையாளச் சரிபார்ப்பு, குடியுரிமை, வாக்களிப்பு, தேர்தல்கள், பொது பங்கேற்பு அல்லது குடிமை நிலைக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: தனியுரிமை, தன்னாட்சி, கண்ணியம், கட்டாயம், மோசடி, கையாளல், உயிர்முறை ஊகம் அல்லது கண்காணிப்பிலிருந்து சுதந்திரத்துக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: கல்வி, ஆராய்ச்சி, அறிவு அணுகல், கலாச்சார பங்கேற்பு மற்றும் அறிவியலின் பயன்களுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: சமூக moderation, நெருக்கடி escalation, pattern detection, பொது பாதுகாப்பு, பாகுபாடு அல்லது பெரும்பாலும் குழுக்களை பாதிக்கும் சேதங்களுக்கு பயன்படுத்தவும்.
+    உரிமை அடிப்படை: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: ஒத்திவைப்பு பெரும்பாலும் நிச்சயமின்மை, கொள்கை விளக்கம், அதிகார வரம்புகள் அல்லது domain-specific அல்லாத மனித மேற்பார்வை குறித்து இருந்தால் பயன்படுத்தவும்.
+    உரிமை அடிப்படை: human_review_and_accountability
+
+  === செயல்பாட்டு ஒத்திவைப்பு காரணக் குறியீடுகள் ===
+  - licensed_domain_required: உரிமம் பெற்ற நிபுணர் அல்லது தனியாக ஆளப்படும் domain handler தேவைப்படுகிறது.
+  - rights_impact_review: கோரிக்கை பாதுகாக்கப்பட்ட உரிமைகள் அல்லது முக்கிய மனிதத் தேவைகளை பொருட்படுத்தத்தக்க வகையில் பாதிக்கிறது; மதிப்பாய்வு தேவை.
+  - safety_escalation: சாத்தியமான சேதம் அல்லது நெருக்கடி நிலைகள் உடனடி escalation அல்லது மனித மேற்பார்வை தேவைப்படுகின்றன.
+  - consent_or_authority_required: சரியான சம்மதம், அங்கீகாரம் அல்லது பொறுப்புள்ள மனித அதிகாரம் முதலில் தேவை.
+  - insufficient_context: பொறுப்புடன் தொடர agent-க்கு போதிய நம்பகமான context இல்லை.
+  - policy_review_required: செயல்படுவதற்கு முன் கொள்கை அல்லது governance விளக்கம் தேவை.
+  - resource_or_system_limitation: system கட்டுப்பாடுகள் மதிப்பாய்வு இல்லாமல் பாதுகாப்பான நிறைவைத் தடுக்கின்றன.
+  - time_based_review: முடிவை குறிப்பிட்ட நேரத்தில் அல்லது நிலைமாற்றத்திற்குப் பிறகு மீண்டும் பரிசீலிக்க வேண்டும்.
+  - ethical_uncertainty: system நெறிமுறை ரீதியாக இன்னும் நிச்சயமற்ற நிலையில் உள்ளது; மனிதத் தீர்ப்பு தேவை.
+  - unknown: செயல்பாட்டு காரணம் தெளிவாக இல்லாதபோது fallback code.
+
+system_guidance_header: |
+  === ஒத்திவைப்புக்கான செயல் தேர்வு (DSASPDMA) ===
+
+  ASPDMA ஏற்கனவே DEFER என்பதைத் தேர்ந்தெடுத்துள்ளது.
+  உங்கள் பணி செயல் தேர்வை மீண்டும் திறப்பது அல்ல.
+  உங்கள் பணி ஒத்திவைப்பை விளக்கத்தக்கதாகவும், தணிக்கத்தக்கதாகவும், வழிமுறைப்படுத்தத்தக்கதாகவும் மாற்ற வகைப்படுத்துவது.
+
+  நீங்கள் செய்ய வேண்டியது:
+  1. DEFER செயலைப் பாதுகாக்கவும்.
+  2. சிறந்த முதன்மை உரிமைகள் / தேவைகள் வகையைத் தேர்ந்தெடுக்கவும்.
+  3. சிறந்த செயல்பாட்டு காரணக் code ஐத் தேர்ந்தெடுக்கவும்.
+  4. உண்மையில் பொருந்தும்போது மட்டுமே இரண்டாம் நிலை தேவைகள் வகைகளைச் சேர்க்கவும்.
+  5. உரிமம் பெற்ற domain handler தெளிவாக தேவைப்படும்போது மட்டுமே domain_hint அமைக்கவும்.
+
+evaluation_steps: |
+  படி 1: மூல சிந்தனையும் ASPDMA இன் தற்காலிக காரணத்தையும் படிக்கவும்.
+  படி 2: எந்த மனிதத் தேவை / மனித உரிமைத் தொகுப்பு மிக நேரடியாக பாதிக்கப்படுகிறது என்பதை அடையாளம் காணவும்.
+  படி 3: அமைப்பு ஏன் ஒத்திவைக்கிறது என்பதை சிறப்பாக விளக்கும் செயல்பாட்டு காரணக் code ஐத் தேர்ந்தெடுக்கவும்.
+  படி 4: reason_summary சுருக்கமாகவும், குறிப்பாகவும், பயனருக்கு வாசிக்க எளிதாகவும் இருக்கட்டும்.
+  படி 5: ஒரு முதன்மை வகையை முன்னிருப்பாகக் கொள்ளவும். வழக்கு உண்மையில் பல உரிமைகளை உள்ளடக்கும்போது மட்டுமே இரண்டாம் நிலை வகைகளைச் சேர்க்கவும்.
+
+context_integration: |
+  === மூல சிந்தனை ===
+  {original_thought_content}
+
+  === ASPDMA காரணம் ===
+  {aspdma_rationale}
+
+  === தற்போதைய DEFER காரணம் ===
+  {current_reason}
+
+  === தற்போதைய DEFER சூழல் ===
+  {current_context}
+
+  === தற்போதைய DEFER UNTIL ===
+  {current_defer_until}
+
+  === தற்போதைய DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === உரிமம் பெற்ற DOMAIN விருப்பங்கள் ===
+  தெளிவாக தேவைப்பட்டால் மட்டுமே இவற்றில் ஒன்றைப் பயன்படுத்தவும்: {domain_hint_options}
+
+response_format: |
+  இந்த fields உடன் FLAT JSON object ஐத் திருப்பவும்:
+  - "reason_summary": மனிதர் வாசிக்கக்கூடிய சுருக்கமான விளக்கம்
+  - "operational_reason": மேலுள்ள செயல்பாட்டு காரணக் code களில் ஒன்று
+  - "primary_need_category": மேலுள்ள உரிமைகள் / தேவைகள் taxonomy மதிப்புகளில் ஒன்று
+  - "secondary_need_categories": கூடுதல் taxonomy மதிப்புகளின் விருப்பப்பட்டியல்
+  - "rights_basis": குறுகிய உரிமை-அடிப்படை label களின் பட்டியல்
+  - "domain_hint": சிறப்பு உரிமம் பெற்ற handler தெளிவாக தேவைப்படும்போது விருப்பமான உரிமம் பெற்ற domain enum
+  - "defer_until": நேரம் மாறவேண்டும் என்றால் விருப்பமான ISO timestamp override
+
+  உதாரணம்:
+  {{"reason_summary": "செயல்முறை வழிகாட்டலை வழங்குவதற்கு முன் உரிமம் பெற்ற சட்ட மதிப்பாய்வு தேவைப்படுகிறது.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  மொழி விதிகள்:
+  - பயனரின் விருப்பமான மொழியில் பதிலளிக்கவும்.
+  - JSON keys மற்றும் enum values ஆங்கிலத்தில் குறிப்பிடப்பட்டபடியே இருக்க வேண்டும்.
+  - reason_summary போன்ற மனிதர் வாசிக்கக்கூடிய சுதந்திர உரை மட்டும் உள்ளூர்மயமாக்கப்பட வேண்டும்.
+
+closing_reminder: |
+  முக்கியம்:
+  - DEFER இலிருந்து வேறு செயலுக்கு மாற வேண்டாம்.
+  - உரிமம் பெற்ற கையாளல் உண்மையில் குறிக்கப்படாவிட்டால் domain_hint உருவாக்க வேண்டாம்.
+  - சட்ட மற்றும் நிதி அணுகலை பொதுவான நிர்வாகப் பிரச்சினையாக அல்ல, உரிமைகளை பாதிக்கும் தேவையாகக் கருத வேண்டும்.
+  - தெளிவான உரிமை அடிப்படையுடன் கூடிய மிகச் சுருக்கமான துல்லியமான வகையை முன்னுரிமையாக்கவும்.

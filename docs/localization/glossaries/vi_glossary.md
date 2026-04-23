@@ -129,6 +129,21 @@ This glossary defines the canonical translations for key CIRIS terms in Vietname
 - Some terms have established Vietnamese equivalents - prefer those
 - Maintain consistency with common Vietnamese tech vocabulary
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | CHỌN HÀNH ĐỘNG CHUYÊN BIỆT CHO TRÌ HOÃN | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | TAXONOMY QUYỀN / NHU CẦU | Taxonomy section heading |
+| Rights basis | Cơ sở quyền | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | MÃ LÝ DO VẬN HÀNH CHO TRÌ HOÃN | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

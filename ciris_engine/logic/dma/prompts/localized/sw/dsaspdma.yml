@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Hatua ya pili inayotegemea haki baada ya ASPDMA kuchagua DEFER
+
+component_name: dsaspdma
+description: "Uchaguzi wa hatua maalum kwa uahirishaji: huainisha hatua ya DEFER kulingana na taksonomia ya haki/mahitaji"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAKSONOMIA YA HAKI / MAHITAJI ===
+  - health_and_bodily_integrity: Tumia kwa maisha, afya, ukamilifu wa mwili, ulemavu, usalama wa matibabu, matumizi ya silaha, vifaa hatari au madhara ya moja kwa moja ya kimwili.
+    Msingi wa haki: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Tumia kwa makazi, hifadhi, usalama wa nyumbani, chakula, maji, usafi, nishati, miundombinu na hali nyingine muhimu za maisha.
+    Msingi wa haki: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Tumia kwa kazi, mapato, mishahara, deni, mkopo, manufaa, hifadhi ya jamii, uwekezaji, kodi au mahitaji mengine ya riziki na uthabiti wa kifedha.
+    Msingi wa haki: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Tumia kwa ushauri wa kisheria, msaada wa kisheria, mchakato unaofaa, kesi ya haki, kupata suluhu, mikataba, dhima au masuala ya kupata haki.
+    Msingi wa haki: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Tumia kwa kutambuliwa mbele ya sheria, uthibitishaji wa utambulisho, utaifa, upigaji kura, uchaguzi, ushiriki wa umma au hadhi ya kiraia.
+    Msingi wa haki: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Tumia kwa faragha, uhuru wa binafsi, hadhi, uhuru dhidi ya kulazimishwa, ulaghai, udanganyifu, makisio ya biometriki au ufuatiliaji.
+    Msingi wa haki: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Tumia kwa elimu, utafiti, kupata maarifa, ushiriki wa kitamaduni na manufaa ya sayansi.
+    Msingi wa haki: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Tumia kwa usimamizi wa jamii, kuongeza suala la dharura, kugundua mifumo, usalama wa umma, ubaguzi au madhara yanayoathiri hasa vikundi.
+    Msingi wa haki: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Tumia wakati uahirishaji unahusu zaidi kutokuwa na uhakika, tafsiri ya sera, mipaka ya mamlaka au usimamizi wa kibinadamu usio maalum kwa domain.
+    Msingi wa haki: human_review_and_accountability
+
+  === MISIMBO YA SABABU ZA KIUTENDAJI ZA UAHIRISHAJI ===
+  - licensed_domain_required: Mtaalamu aliyeidhinishwa au mshughulikiaji wa domain unaotawaliwa tofauti anahitajika.
+  - rights_impact_review: Ombi linaathiri kwa uzito haki zilizolindwa au mahitaji ya msingi ya binadamu na linahitaji mapitio.
+  - safety_escalation: Madhara yanayowezekana au hali ya dharura inahitaji kuongeza mara moja au usimamizi wa binadamu.
+  - consent_or_authority_required: Ridhaa halali, idhini au mamlaka ya binadamu yenye uwajibikaji inahitajika kwanza.
+  - insufficient_context: Wakala hana muktadha wa kuaminika wa kutosha kuendelea kwa uwajibikaji.
+  - policy_review_required: Tafsiri ya sera au utawala inahitajika kabla ya kutenda.
+  - resource_or_system_limitation: Vikwazo vya mfumo vinazuia ukamilishaji salama bila mapitio.
+  - time_based_review: Uamuzi unapaswa kufikiriwa tena baadaye kwa wakati maalum au baada ya hali kubadilika.
+  - ethical_uncertainty: Mfumo bado hauna uhakika kimaadili na unahitaji hukumu ya binadamu.
+  - unknown: Msimbo wa akiba wakati sababu ya kiutendaji bado haiko wazi.
+
+system_guidance_header: |
+  === UCHAGUZI WA HATUA MAALUM KWA UAHIRISHAJI (DSASPDMA) ===
+
+  ASPDMA tayari imechagua DEFER.
+  Kazi yako SI kufungua tena uchaguzi wa hatua.
+  Kazi yako ni kuainisha uahirishaji ili uweze kuelezeka, kukaguliwa, na kuelekezwa.
+
+  Lazima:
+  1. Uhifadhi hatua ya DEFER.
+  2. Uchague aina bora ya msingi ya haki / mahitaji.
+  3. Uchague msimbo bora wa sababu ya kiutendaji.
+  4. Uongeze aina za pili za mahitaji tu pale zinapotumika kwa uzito.
+  5. Uweke domain_hint tu pale mshughulikiaji wa domain aliyeidhinishwa anahitajika waziwazi.
+
+evaluation_steps: |
+  HATUA YA 1: Soma fikra ya awali na hoja ya muda ya ASPDMA.
+  HATUA YA 2: Tambua hitaji la binadamu / kundi la haki za binadamu linalohusika moja kwa moja zaidi.
+  HATUA YA 3: Chagua msimbo wa sababu ya kiutendaji unaoeleza vyema KWA NINI mfumo unaahirisha.
+  HATUA YA 4: Weka reason_summary iwe fupi, mahususi, na rahisi kwa mtumiaji kusoma.
+  HATUA YA 5: Pendelea aina moja ya msingi. Ongeza aina za pili tu kama jambo kweli linahusisha haki nyingi.
+
+context_integration: |
+  === FIKRA YA AWALI ===
+  {original_thought_content}
+
+  === HOJA YA ASPDMA ===
+  {aspdma_rationale}
+
+  === SABABU YA SASA YA DEFER ===
+  {current_reason}
+
+  === MUKTADHA WA SASA WA DEFER ===
+  {current_context}
+
+  === DEFER UNTIL YA SASA ===
+  {current_defer_until}
+
+  === DOMAIN HINT YA SASA ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === CHAGUO ZA DOMAIN ILIYOIDHINISHWA ===
+  Tumia mojawapo tu ikiwa inahitajika waziwazi: {domain_hint_options}
+
+response_format: |
+  Rudisha kitu cha JSON BAPA chenye sehemu hizi:
+  - "reason_summary": maelezo mafupi yanayosomwa na binadamu
+  - "operational_reason": mojawapo ya misimbo ya sababu za kiutendaji hapo juu
+  - "primary_need_category": mojawapo ya thamani za taksonomia ya haki / mahitaji hapo juu
+  - "secondary_need_categories": orodha ya hiari ya thamani za ziada za taksonomia
+  - "rights_basis": orodha ya lebo fupi za msingi wa haki
+  - "domain_hint": enum ya hiari ya domain iliyoidhinishwa pale mshughulikiaji maalum aliyeidhinishwa anapohitajika waziwazi
+  - "defer_until": ubatilishaji wa hiari wa timestamp ya ISO ikiwa muda unapaswa kubadilika
+
+  Mfano:
+  {{"reason_summary": "Mapitio ya kisheria yaliyoidhinishwa yanahitajika kabla ya kutoa mwongozo wa kiutaratibu.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  KANUNI ZA LUGHA:
+  - Jibu kwa lugha anayopendelea mtumiaji.
+  - JSON keys na enum values LAZIMA zibaki hasa kama zilivyo kwa Kiingereza.
+  - Maandishi huru yanayosomwa na binadamu kama reason_summary pekee ndiyo yalocalize.
+
+closing_reminder: |
+  MUHIMU:
+  - Usibadilishe kutoka DEFER.
+  - Usitunge domain_hint isipokuwa ushughulikiaji ulioidhinishwa unaashiriwa kweli.
+  - Ufikiaji wa kisheria na kifedha utazamwe kama mahitaji yanayoathiri haki, si masuala ya jumla ya kiutawala.
+  - Pendelea aina nyembamba sahihi yenye msingi wa haki ulio wazi zaidi.

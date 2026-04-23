@@ -130,6 +130,21 @@ This glossary defines the canonical translations for key CIRIS terms in Telugu. 
 - Sanskrit-derived words add formality
 - Prefer Telugu equivalents where natural, English loans where established
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | వాయిదా-ప్రత్యేక చర్య ఎంపిక | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | హక్కులు / అవసరాల వర్గీకరణ | Taxonomy section heading |
+| Rights basis | హక్కుల ఆధారం | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | కార్యాచరణ వాయిదా కారణ కోడ్‌లు | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

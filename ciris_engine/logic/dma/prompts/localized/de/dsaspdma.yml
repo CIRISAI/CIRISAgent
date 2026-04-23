@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Rechtebasierte zweite Prüfung, nachdem ASPDMA DEFER ausgewählt hat
+
+component_name: dsaspdma
+description: "Deferral-spezifische Aktionsauswahl: klassifiziert eine DEFER-Aktion anhand der Rechte-/Bedürfnistaxonomie"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === RECHTE- / BEDARFSTAXONOMIE ===
+  - health_and_bodily_integrity: Für Leben, Gesundheit, körperliche Unversehrtheit, Behinderung, medizinische Sicherheit, Bewaffnung, Gefahrstoffe oder direkte körperliche Schadensfolgen verwenden.
+    Rechtsgrundlage: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Für Wohnen, Unterkunft, Haussicherheit, Nahrung, Wasser, Sanitärversorgung, Energie, Infrastruktur und andere wesentliche Lebensbedingungen verwenden.
+    Rechtsgrundlage: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Für Arbeit, Einkommen, Löhne, Schulden, Kredit, Leistungen, soziale Sicherheit, Investitionen, Steuern oder andere materielle Existenz- und Finanzstabilitätsbedarfe verwenden.
+    Rechtsgrundlage: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Für Rechtsberatung, Rechtshilfe, ordnungsgemäßes Verfahren, faires Verfahren, Zugang zu Rechtsbehelfen, Verträge, Haftung oder andere Fragen des Justizzugangs verwenden.
+    Rechtsgrundlage: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Für Anerkennung vor dem Gesetz, Identitätsprüfung, Staatsangehörigkeit, Wahlrecht, Wahlen, öffentliche Beteiligung oder bürgerlichen Status verwenden.
+    Rechtsgrundlage: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Für Privatsphäre, Autonomie, Würde, Freiheit von Zwang, Betrug, Manipulation, biometrischer Inferenz oder Überwachung verwenden.
+    Rechtsgrundlage: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Für Bildung, Forschung, Zugang zu Wissen, kulturelle Teilhabe und Nutzen wissenschaftlichen Fortschritts verwenden.
+    Rechtsgrundlage: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Für Community-Moderation, Kriseneskalation, Mustererkennung, öffentliche Sicherheit, Diskriminierung oder Schäden, die vor allem Gruppen betreffen, verwenden.
+    Rechtsgrundlage: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Verwenden, wenn es bei der Deferral hauptsächlich um Unsicherheit, Politikauslegung, Autoritätsgrenzen oder nicht domänenspezifische menschliche Aufsicht geht.
+    Rechtsgrundlage: human_review_and_accountability
+
+  === OPERATIVE GRÜNDE FÜR DEFER ===
+  - licensed_domain_required: Ein lizenzierter Spezialist oder separat geregelter Domain-Handler ist erforderlich.
+  - rights_impact_review: Die Anfrage betrifft geschützte Rechte oder zentrale menschliche Bedarfe wesentlich und muss geprüft werden.
+  - safety_escalation: Möglicher Schaden oder Krisenbedingungen erfordern sofortige Eskalation oder menschliche Aufsicht.
+  - consent_or_authority_required: Gültige Einwilligung, Autorisierung oder verantwortliche menschliche Autorität ist zuerst erforderlich.
+  - insufficient_context: Dem Agenten fehlt ausreichend verlässlicher Kontext, um verantwortbar fortzufahren.
+  - policy_review_required: Vor dem Handeln ist eine Policy- oder Governance-Auslegung erforderlich.
+  - resource_or_system_limitation: Systembeschränkungen verhindern eine sichere Erledigung ohne Prüfung.
+  - time_based_review: Die Entscheidung sollte später zu einem bestimmten Zeitpunkt oder nach einer Zustandsänderung erneut geprüft werden.
+  - ethical_uncertainty: Das System bleibt ethisch unsicher und erfordert menschliches Urteil.
+  - unknown: Fallback-Code, wenn der operative Grund unklar bleibt.
+
+system_guidance_header: |
+  === DEFERRAL-SPEZIFISCHE AKTIONSAUSWAHL (DSASPDMA) ===
+
+  ASPDMA hat bereits DEFER ausgewählt.
+  Deine Aufgabe ist NICHT, die Aktionswahl erneut zu öffnen.
+  Deine Aufgabe ist, die Deferral so zu klassifizieren, dass sie erklärbar, auditierbar und routingfähig wird.
+
+  Du musst:
+  1. Die DEFER-Aktion beibehalten.
+  2. Die beste primäre Rechte-/Bedürfniskategorie auswählen.
+  3. Den besten operational reason code auswählen.
+  4. Sekundäre Bedarfskategorien nur hinzufügen, wenn sie materiell zutreffen.
+  5. domain_hint nur setzen, wenn eindeutig ein lizenzierter Domain-Handler erforderlich ist.
+
+evaluation_steps: |
+  SCHRITT 1: Lies den ursprünglichen Gedanken und die vorläufige ASPDMA-Begründung.
+  SCHRITT 2: Erkenne, welcher Menschenbedarf / Menschenrechtsbereich am unmittelbarsten betroffen ist.
+  SCHRITT 3: Wähle den operational reason code, der am besten erklärt, WARUM das System deferiert.
+  SCHRITT 4: Halte reason_summary kurz, spezifisch und für Menschen lesbar.
+  SCHRITT 5: Bevorzuge eine primäre Kategorie. Füge sekundäre Kategorien nur hinzu, wenn der Fall wirklich mehrere Rechte umfasst.
+
+context_integration: |
+  === URSPRÜNGLICHER GEDANKE ===
+  {original_thought_content}
+
+  === ASPDMA-BEGRÜNDUNG ===
+  {aspdma_rationale}
+
+  === AKTUELLER DEFER-GRUND ===
+  {current_reason}
+
+  === AKTUELLER DEFER-KONTEXT ===
+  {current_context}
+
+  === AKTUELLES DEFER UNTIL ===
+  {current_defer_until}
+
+  === AKTUELLER DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === LIZENZIERTE DOMAIN-OPTIONEN ===
+  Verwende eine davon nur, wenn sie eindeutig erforderlich ist: {domain_hint_options}
+
+response_format: |
+  Gib ein FLACHES JSON-Objekt mit diesen Feldern zurück:
+  - "reason_summary": kurze menschenlesbare Erklärung
+  - "operational_reason": einer der oben genannten operational reason codes
+  - "primary_need_category": einer der oben genannten Rechte-/Bedürfnis-Taxonomiewerte
+  - "secondary_need_categories": optionale Liste zusätzlicher Taxonomiewerte
+  - "rights_basis": Liste kurzer Rechtebasis-Labels
+  - "domain_hint": optionales lizenziertes Domain-Enum, wenn eindeutig ein spezialisierter lizenzierter Handler nötig ist
+  - "defer_until": optionaler ISO-Zeitstempel-Override, falls sich das Timing ändern soll
+
+  Beispiel:
+  {{"reason_summary": "Vor prozeduraler Rechtsauskunft ist eine lizenzierte rechtliche Prüfung erforderlich.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  SPRACHREGELN:
+  - Antworte in der bevorzugten Sprache des Nutzers.
+  - JSON keys und enum values MÜSSEN exakt wie angegeben auf Englisch bleiben.
+  - Nur menschenlesbarer Freitext wie reason_summary soll lokalisiert werden.
+
+closing_reminder: |
+  WICHTIG:
+  - Wechsle nicht von DEFER weg.
+  - Erfinde keinen domain_hint, außer lizenzierte Bearbeitung ist wirklich impliziert.
+  - Rechtlicher und finanzieller Zugang sind als rechtewirksame Bedürfnisse zu behandeln, nicht als allgemeine Verwaltungsfragen.
+  - Bevorzuge die engste zutreffende Kategorie mit der klarsten Rechtebasis.

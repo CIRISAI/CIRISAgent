@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA 选择 DEFER 后基于权利的第二轮处理
+
+component_name: dsaspdma
+description: "延期专用行动选择：根据权利/需求分类体系对 DEFER 行动进行分类"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === 权利 / 需求分类体系 ===
+  - health_and_bodily_integrity: 用于生命、健康、身体完整性、残障、医疗安全、武器化、危险材料或直接身体伤害影响。
+    权利依据: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: 用于住房、庇护、家庭安全、食物、水、卫生、能源、基础设施和其他基本生活条件。
+    权利依据: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: 用于工作、收入、工资、债务、信贷、福利、社会保障、投资、税务或其他生计与金融稳定需求。
+    权利依据: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: 用于法律建议、法律援助、正当程序、公平审判、获得救济、合同、责任或其他司法可及性问题。
+    权利依据: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: 用于法律面前的承认、身份验证、国籍、投票、选举、公共参与或公民地位。
+    权利依据: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: 用于隐私、自主、尊严、免受胁迫、欺诈、操纵、生物识别推断或监控。
+    权利依据: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: 用于教育、研究、知识获取、文化参与和科学利益。
+    权利依据: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: 用于社区管理、危机升级、模式检测、公共安全、歧视或主要影响群体的伤害。
+    权利依据: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: 当延期主要涉及不确定性、政策解释、权限边界或非特定领域的人类监督时使用。
+    权利依据: human_review_and_accountability
+
+  === 操作性延期原因代码 ===
+  - licensed_domain_required: 需要持证专家或受单独治理的领域处理者。
+  - rights_impact_review: 该请求实质影响受保护权利或核心人类需求，需要审查。
+  - safety_escalation: 潜在伤害或危机条件需要立即升级或人类监督。
+  - consent_or_authority_required: 必须先取得有效同意、授权或可问责的人类权限。
+  - insufficient_context: 代理缺少足够可靠的上下文，无法负责任地继续。
+  - policy_review_required: 行动前需要政策或治理解释。
+  - resource_or_system_limitation: 系统限制阻止在没有审查的情况下安全完成。
+  - time_based_review: 应在特定时间或条件变化后重新考虑该决定。
+  - ethical_uncertainty: 系统在伦理上仍不确定，需要人类判断。
+  - unknown: 当操作原因仍不清楚时使用的回退代码。
+
+system_guidance_header: |
+  === 延期专用行动选择 (DSASPDMA) ===
+
+  ASPDMA 已经选择了 DEFER。
+  你的任务不是重新打开行动选择。
+  你的任务是对延期进行分类，使其可解释、可审计、可路由。
+
+  你必须：
+  1. 保持 DEFER 行动不变。
+  2. 选择最合适的主要权利 / 需求类别。
+  3. 选择最合适的操作原因代码。
+  4. 仅在实质适用时添加次要需求类别。
+  5. 仅在明确需要持证领域处理者时设置 domain_hint。
+
+evaluation_steps: |
+  步骤 1：阅读原始思考和 ASPDMA 的临时理由。
+  步骤 2：识别最直接涉及的人类需求 / 人权类别。
+  步骤 3：选择最能解释系统为什么延期的操作原因代码。
+  步骤 4：让 reason_summary 简短、具体，并便于用户阅读。
+  步骤 5：优先选择一个主要类别。只有当案例确实跨越多个权利时，才添加次要类别。
+
+context_integration: |
+  === 原始思考 ===
+  {original_thought_content}
+
+  === ASPDMA 理由 ===
+  {aspdma_rationale}
+
+  === 当前 DEFER 原因 ===
+  {current_reason}
+
+  === 当前 DEFER 上下文 ===
+  {current_context}
+
+  === 当前 DEFER UNTIL ===
+  {current_defer_until}
+
+  === 当前 DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === 持证领域选项 ===
+  仅在明确需要时使用其中之一：{domain_hint_options}
+
+response_format: |
+  返回包含以下字段的扁平 JSON object：
+  - "reason_summary": 简短、可读的人工说明
+  - "operational_reason": 上述操作原因代码之一
+  - "primary_need_category": 上述权利 / 需求分类值之一
+  - "secondary_need_categories": 可选的附加分类值列表
+  - "rights_basis": 简短权利依据标签列表
+  - "domain_hint": 当明确需要持证专业处理者时使用的可选持证领域 enum
+  - "defer_until": 如果应改变时间安排，则使用可选 ISO timestamp override
+
+  示例：
+  {{"reason_summary": "在提供程序性指导之前，需要由持证法律人员进行审查。", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  语言规则：
+  - 使用用户偏好的语言回答。
+  - JSON keys 和 enum values 必须完全保持指定的英文形式。
+  - 只有 reason_summary 等人类可读的自由文本应本地化。
+
+closing_reminder: |
+  重要：
+  - 不要从 DEFER 切换到其他行动。
+  - 除非确实暗示需要持证处理，否则不要编造 domain_hint。
+  - 法律和金融访问应被视为影响权利的需求，而不是一般行政问题。
+  - 优先选择权利依据最清晰、范围最窄且准确的类别。

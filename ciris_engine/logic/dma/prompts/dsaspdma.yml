@@ -7,6 +7,39 @@ version: "1.0"
 
 accord_header: true
 
+taxonomy_text: |
+  === RIGHTS / NEEDS TAXONOMY ===
+  - health_and_bodily_integrity: Use for life, health, bodily integrity, disability, medical safety, weaponization, hazardous materials, or direct physical-harm implications.
+    Rights basis: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Use for housing, shelter, home security, food, water, sanitation, energy, infrastructure, and other essential living conditions.
+    Rights basis: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Use for work, income, wages, debt, credit, benefits, social security, investment, taxes, or other material livelihood and financial-stability needs.
+    Rights basis: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Use for legal advice, legal aid, due process, fair trial, access to remedy, contracts, liability, or other justice-system access questions.
+    Rights basis: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Use for recognition before the law, identity verification, nationality, voting, elections, public participation, or civic standing.
+    Rights basis: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Use for privacy, autonomy, dignity, freedom from coercion, fraud, manipulation, biometric inference, or surveillance concerns.
+    Rights basis: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Use for education, research, access to knowledge, cultural participation, and the benefits of science.
+    Rights basis: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Use for community moderation, crisis escalation, pattern detection, public safety, discrimination, or harms that primarily affect groups rather than one person alone.
+    Rights basis: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Use when the deferral is mostly about uncertainty, policy interpretation, authority boundaries, or non-domain-specific human oversight.
+    Rights basis: human_review_and_accountability
+
+  === OPERATIONAL DEFERRAL REASON CODES ===
+  - licensed_domain_required: A licensed specialist or separately governed domain handler is required.
+  - rights_impact_review: The request materially affects protected rights or core human needs and needs review.
+  - safety_escalation: Potential harm or crisis conditions require immediate escalation or human oversight.
+  - consent_or_authority_required: Valid consent, authorization, or accountable human authority is required first.
+  - insufficient_context: The agent lacks enough reliable context to proceed responsibly.
+  - policy_review_required: A policy or governance interpretation is needed before acting.
+  - resource_or_system_limitation: System constraints prevent safe completion without review.
+  - time_based_review: The decision should be reconsidered later at a specific time or after a condition changes.
+  - ethical_uncertainty: The system remains ethically uncertain and requires human judgment.
+  - unknown: Fallback code when the operational reason remains unclear.
+
 system_guidance_header: |
   === DEFERRAL-SPECIFIC ACTION SELECTION (DSASPDMA) ===
 
@@ -63,7 +96,7 @@ response_format: |
   - "defer_until": optional ISO timestamp override if timing should change
 
   Example:
-  {"reason_summary": "Licensed legal review is required before giving procedural guidance.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}
+  {{"reason_summary": "Licensed legal review is required before giving procedural guidance.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
 
   LANGUAGE RULES:
   - Respond in the user's preferred language.

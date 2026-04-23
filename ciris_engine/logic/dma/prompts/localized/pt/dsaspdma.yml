@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Segunda passagem baseada em direitos depois que ASPDMA seleciona DEFER
+
+component_name: dsaspdma
+description: "Seleção de ação específica de deferimento: classifica uma ação DEFER segundo a taxonomia de direitos/necessidades"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAXONOMIA DE DIREITOS / NECESSIDADES ===
+  - health_and_bodily_integrity: Use para vida, saúde, integridade corporal, deficiência, segurança médica, armamento, materiais perigosos ou implicações diretas de dano físico.
+    Base de direitos: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Use para moradia, abrigo, segurança doméstica, comida, água, saneamento, energia, infraestrutura e outras condições essenciais de vida.
+    Base de direitos: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Use para trabalho, renda, salários, dívida, crédito, benefícios, seguridade social, investimento, impostos ou outras necessidades de subsistência e estabilidade financeira.
+    Base de direitos: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Use para aconselhamento jurídico, assistência jurídica, devido processo, julgamento justo, acesso a reparação, contratos, responsabilidade ou acesso ao sistema de justiça.
+    Base de direitos: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Use para reconhecimento perante a lei, verificação de identidade, nacionalidade, voto, eleições, participação pública ou posição cívica.
+    Base de direitos: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Use para privacidade, autonomia, dignidade, liberdade contra coerção, fraude, manipulação, inferência biométrica ou vigilância.
+    Base de direitos: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Use para educação, pesquisa, acesso ao conhecimento, participação cultural e benefícios da ciência.
+    Base de direitos: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Use para moderação comunitária, escalada de crise, detecção de padrões, segurança pública, discriminação ou danos que afetam principalmente grupos.
+    Base de direitos: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Use quando o deferimento tratar principalmente de incerteza, interpretação de política, limites de autoridade ou supervisão humana não específica de domínio.
+    Base de direitos: human_review_and_accountability
+
+  === CÓDIGOS DE RAZÃO OPERACIONAL DE DEFERIMENTO ===
+  - licensed_domain_required: É necessário um especialista licenciado ou um responsável de domínio governado separadamente.
+  - rights_impact_review: A solicitação afeta materialmente direitos protegidos ou necessidades humanas centrais e requer revisão.
+  - safety_escalation: Dano potencial ou condições de crise exigem escalada imediata ou supervisão humana.
+  - consent_or_authority_required: Consentimento válido, autorização ou autoridade humana responsável é necessária primeiro.
+  - insufficient_context: O agente não tem contexto confiável suficiente para prosseguir com responsabilidade.
+  - policy_review_required: É necessária uma interpretação de política ou governança antes de agir.
+  - resource_or_system_limitation: Restrições do sistema impedem conclusão segura sem revisão.
+  - time_based_review: A decisão deve ser reconsiderada mais tarde em um momento específico ou após mudança de condição.
+  - ethical_uncertainty: O sistema permanece eticamente incerto e requer julgamento humano.
+  - unknown: Código de fallback quando a razão operacional permanece pouco clara.
+
+system_guidance_header: |
+  === SELEÇÃO DE AÇÃO ESPECÍFICA DE DEFERIMENTO (DSASPDMA) ===
+
+  ASPDMA já escolheu DEFER.
+  Sua tarefa NÃO é reabrir a escolha da ação.
+  Sua tarefa é classificar o deferimento para que ele seja explicável, auditável e roteável.
+
+  Você deve:
+  1. Preservar a ação DEFER.
+  2. Escolher a melhor categoria primária de direitos / necessidades.
+  3. Escolher o melhor código de razão operacional.
+  4. Adicionar categorias secundárias de necessidades apenas quando elas se aplicarem materialmente.
+  5. Definir domain_hint apenas quando um responsável de domínio licenciado for claramente necessário.
+
+evaluation_steps: |
+  PASSO 1: Leia o pensamento original e a justificativa provisória de ASPDMA.
+  PASSO 2: Identifique qual necessidade humana / conjunto de direitos humanos está mais diretamente implicado.
+  PASSO 3: Escolha o código de razão operacional que melhor explica POR QUE o sistema está deferindo.
+  PASSO 4: Mantenha reason_summary curto, específico e legível para o usuário.
+  PASSO 5: Prefira uma categoria primária. Adicione categorias secundárias apenas quando o caso realmente abranger múltiplos direitos.
+
+context_integration: |
+  === PENSAMENTO ORIGINAL ===
+  {original_thought_content}
+
+  === JUSTIFICATIVA DE ASPDMA ===
+  {aspdma_rationale}
+
+  === RAZÃO DE DEFER ATUAL ===
+  {current_reason}
+
+  === CONTEXTO DE DEFER ATUAL ===
+  {current_context}
+
+  === DEFER UNTIL ATUAL ===
+  {current_defer_until}
+
+  === DOMAIN HINT ATUAL ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === OPÇÕES DE DOMÍNIO LICENCIADO ===
+  Use uma destas apenas se claramente necessário: {domain_hint_options}
+
+response_format: |
+  Retorne um objeto JSON PLANO com estes campos:
+  - "reason_summary": explicação curta legível por humanos
+  - "operational_reason": um dos códigos de razão operacional acima
+  - "primary_need_category": um dos valores da taxonomia de direitos / necessidades acima
+  - "secondary_need_categories": lista opcional de valores adicionais da taxonomia
+  - "rights_basis": lista de rótulos curtos de base de direitos
+  - "domain_hint": enum opcional de domínio licenciado quando um responsável especializado licenciado for claramente necessário
+  - "defer_until": substituição opcional de timestamp ISO se o momento precisar mudar
+
+  Exemplo:
+  {{"reason_summary": "Revisão jurídica licenciada é necessária antes de fornecer orientação procedimental.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  REGRAS DE IDIOMA:
+  - Responda no idioma preferido do usuário.
+  - As chaves JSON e os valores enum DEVEM permanecer exatamente em inglês.
+  - Apenas texto livre legível por humanos, como reason_summary, deve ser localizado.
+
+closing_reminder: |
+  IMPORTANTE:
+  - Não mude para outra ação além de DEFER.
+  - Não invente domain_hint a menos que o tratamento licenciado esteja realmente implicado.
+  - Acesso jurídico e financeiro deve ser tratado como necessidade com impacto em direitos, não como questão administrativa genérica.
+  - Prefira a categoria precisa mais estreita com a base de direitos mais clara.

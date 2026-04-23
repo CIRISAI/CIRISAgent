@@ -123,6 +123,21 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 - Prefer Korean terms for concepts (양심, 무결성, 회복력)
 - Use Hangul phonetic spelling for adopted English terms (토큰, 서비스, 어댑터)
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | 유예 전용 행동 선택 | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | 권리 / 필요 분류 체계 | Taxonomy section heading |
+| Rights basis | 권리 근거 | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | 운영상 유예 이유 코드 | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

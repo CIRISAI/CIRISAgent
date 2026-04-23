@@ -134,6 +134,21 @@ This glossary defines the canonical translations for key CIRIS terms in Persian 
 - "انسجام" (coherence) has deep roots in Persian aesthetics and thought
 - Avoid direct transliteration where meaningful Persian equivalents exist
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | انتخاب اقدام ویژه ارجاع | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | رده‌بندی حقوق / نیازها | Taxonomy section heading |
+| Rights basis | مبنای حقوقی | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | کدهای دلیل عملیاتی ارجاع | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

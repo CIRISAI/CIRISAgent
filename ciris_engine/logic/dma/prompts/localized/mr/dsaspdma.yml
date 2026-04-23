@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA ने DEFER निवडल्यानंतरचा हक्कांवर आधारित दुसरा टप्पा
+
+component_name: dsaspdma
+description: "डिफरल-विशिष्ट कृती निवड: DEFER कृतीचे हक्क/गरजा वर्गीकरणाशी वर्गीकरण करते"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === हक्क / गरजा वर्गीकरण ===
+  - health_and_bodily_integrity: जीवन, आरोग्य, शारीरिक अखंडता, अपंगत्व, वैद्यकीय सुरक्षितता, शस्त्रीकरण, धोकादायक पदार्थ किंवा थेट शारीरिक हानीच्या परिणामांसाठी वापरा.
+    हक्कांचा आधार: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: निवास, आसरा, घराची सुरक्षा, अन्न, पाणी, स्वच्छता, ऊर्जा, पायाभूत सुविधा आणि इतर आवश्यक जीवनस्थितींसाठी वापरा.
+    हक्कांचा आधार: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: काम, उत्पन्न, वेतन, कर्ज, क्रेडिट, लाभ, सामाजिक सुरक्षा, गुंतवणूक, कर किंवा इतर उपजीविका व आर्थिक स्थैर्य गरजांसाठी वापरा.
+    हक्कांचा आधार: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: कायदेशीर सल्ला, कायदेशीर मदत, योग्य प्रक्रिया, न्याय्य खटला, उपायांपर्यंत प्रवेश, करार, जबाबदारी किंवा न्यायप्रवेश प्रश्नांसाठी वापरा.
+    हक्कांचा आधार: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: कायद्यासमोर मान्यता, ओळख पडताळणी, नागरिकत्व, मतदान, निवडणुका, सार्वजनिक सहभाग किंवा नागरी स्थितीसाठी वापरा.
+    हक्कांचा आधार: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: गोपनीयता, स्वायत्तता, प्रतिष्ठा, जबरदस्ती, फसवणूक, हाताळणी, बायोमेट्रिक अनुमान किंवा देखरेखीपासून स्वातंत्र्यासाठी वापरा.
+    हक्कांचा आधार: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: शिक्षण, संशोधन, ज्ञानप्रवेश, सांस्कृतिक सहभाग आणि विज्ञानाचे लाभ यासाठी वापरा.
+    हक्कांचा आधार: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: समुदाय व्यवस्थापन, संकट वाढवणे, नमुना शोध, सार्वजनिक सुरक्षा, भेदभाव किंवा मुख्यतः समूहांवर परिणाम करणाऱ्या हानीसाठी वापरा.
+    हक्कांचा आधार: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: डिफरल मुख्यतः अनिश्चितता, धोरण अर्थ लावणे, अधिकार मर्यादा किंवा डोमेन-विशिष्ट नसलेल्या मानवी देखरेखीबद्दल असल्यास वापरा.
+    हक्कांचा आधार: human_review_and_accountability
+
+  === कार्यकारी डिफरल कारण कोड ===
+  - licensed_domain_required: परवानाधारक तज्ज्ञ किंवा स्वतंत्रपणे नियंत्रित domain handler आवश्यक आहे.
+  - rights_impact_review: विनंती संरक्षित हक्क किंवा मूलभूत मानवी गरजांवर प्रत्यक्ष परिणाम करते आणि पुनरावलोकन आवश्यक आहे.
+  - safety_escalation: संभाव्य हानी किंवा संकटस्थिती तात्काळ escalation किंवा मानवी देखरेख मागते.
+  - consent_or_authority_required: प्रथम वैध संमती, अधिकृतता किंवा जबाबदार मानवी अधिकार आवश्यक आहे.
+  - insufficient_context: एजंटकडे जबाबदारीने पुढे जाण्यासाठी पुरेसा विश्वासार्ह संदर्भ नाही.
+  - policy_review_required: कारवाईपूर्वी धोरण किंवा governance अर्थ लावणे आवश्यक आहे.
+  - resource_or_system_limitation: प्रणाली मर्यादा पुनरावलोकनाशिवाय सुरक्षित पूर्णता रोखतात.
+  - time_based_review: निर्णय नंतर विशिष्ट वेळी किंवा स्थिती बदलल्यानंतर पुन्हा विचारात घ्यावा.
+  - ethical_uncertainty: प्रणाली नैतिकदृष्ट्या अनिश्चित राहते आणि मानवी निर्णय आवश्यक आहे.
+  - unknown: कार्यकारी कारण अस्पष्ट राहिल्यास fallback code.
+
+system_guidance_header: |
+  === डिफरल-विशिष्ट कृती निवड (DSASPDMA) ===
+
+  ASPDMA ने आधीच DEFER निवडले आहे.
+  तुमचे काम कृतीची निवड पुन्हा उघडणे नाही.
+  तुमचे काम डिफरलचे असे वर्गीकरण करणे आहे की ते स्पष्ट करण्याजोगे, ऑडिट करण्याजोगे आणि मार्गित करण्याजोगे बनेल.
+
+  तुम्ही हे करणे आवश्यक आहे:
+  1. DEFER कृती कायम ठेवा.
+  2. सर्वोत्तम प्राथमिक हक्क / गरजा श्रेणी निवडा.
+  3. सर्वोत्तम कार्यकारी कारण कोड निवडा.
+  4. दुय्यम गरजा श्रेणी फक्त त्या प्रत्यक्ष लागू होत असतील तेव्हाच जोडा.
+  5. परवानाधारक डोमेन हाताळणी स्पष्टपणे आवश्यक असेल तेव्हाच domain_hint सेट करा.
+
+evaluation_steps: |
+  पायरी 1: मूळ विचार आणि ASPDMA चे तात्पुरते कारण वाचा.
+  पायरी 2: कोणती मानवी गरज / मानवी हक्कांची श्रेणी सर्वात थेट गुंतलेली आहे ते ओळखा.
+  पायरी 3: प्रणाली का डिफर करत आहे हे सर्वात चांगले स्पष्ट करणारा कार्यकारी कारण कोड निवडा.
+  पायरी 4: reason_summary लहान, विशिष्ट आणि वापरकर्त्यास समजण्यास सोपा ठेवा.
+  पायरी 5: एक प्राथमिक श्रेणी पसंत करा. प्रकरण खरोखर अनेक हक्कांमध्ये पसरले असल्यासच दुय्यम श्रेणी जोडा.
+
+context_integration: |
+  === मूळ विचार ===
+  {original_thought_content}
+
+  === ASPDMA कारण ===
+  {aspdma_rationale}
+
+  === सध्याचे DEFER कारण ===
+  {current_reason}
+
+  === सध्याचा DEFER संदर्भ ===
+  {current_context}
+
+  === सध्याचे DEFER UNTIL ===
+  {current_defer_until}
+
+  === सध्याचे DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === परवानाधारक डोमेन पर्याय ===
+  स्पष्टपणे आवश्यक असेल तेव्हाच यापैकी एक वापरा: {domain_hint_options}
+
+response_format: |
+  खालील फील्डसह सपाट JSON ऑब्जेक्ट परत करा:
+  - "reason_summary": मानवाला वाचता येईल असे लहान स्पष्टीकरण
+  - "operational_reason": वरील कार्यकारी कारण कोडपैकी एक
+  - "primary_need_category": वरील हक्क / गरजा वर्गीकरण मूल्यांपैकी एक
+  - "secondary_need_categories": अतिरिक्त वर्गीकरण मूल्यांची वैकल्पिक यादी
+  - "rights_basis": लहान हक्क-आधार लेबलांची यादी
+  - "domain_hint": विशेष परवानाधारक हाताळणी स्पष्टपणे आवश्यक असल्यास वैकल्पिक परवानाधारक डोमेन enum
+  - "defer_until": वेळ बदलावी लागल्यास वैकल्पिक ISO timestamp override
+
+  उदाहरण:
+  {{"reason_summary": "प्रक्रियात्मक मार्गदर्शन देण्यापूर्वी परवानाधारक कायदेशीर पुनरावलोकन आवश्यक आहे.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  भाषा नियम:
+  - वापरकर्त्याच्या पसंतीच्या भाषेत उत्तर द्या.
+  - JSON कळा आणि enum मूल्ये निर्दिष्ट केल्याप्रमाणे अचूक इंग्रजीतच राहिली पाहिजेत.
+  - reason_summary सारखा मानव-वाचनीय मुक्त मजकूरच स्थानिकीकरण करा.
+
+closing_reminder: |
+  महत्त्वाचे:
+  - DEFER पासून दुसरीकडे जाऊ नका.
+  - परवानाधारक हाताळणी खरोखर सूचित होत नसेल तर domain_hint तयार करू नका.
+  - कायदेशीर आणि आर्थिक प्रवेश सामान्य प्रशासकीय मुद्दा नसून हक्कांवर परिणाम करणारी गरज म्हणून हाताळा.
+  - सर्वात स्पष्ट हक्क आधारासह सर्वात अरुंद अचूक श्रेणी पसंत करा.

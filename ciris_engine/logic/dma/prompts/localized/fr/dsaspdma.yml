@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Deuxième passe fondée sur les droits après qu'ASPDMA a sélectionné DEFER
+
+component_name: dsaspdma
+description: "Sélection d'action spécifique à la déferralisation : classe une action DEFER selon la taxonomie droits/besoins"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAXONOMIE DES DROITS / BESOINS ===
+  - health_and_bodily_integrity: Utiliser pour la vie, la santé, l'intégrité corporelle, le handicap, la sécurité médicale, l'armement, les matières dangereuses ou les implications directes de dommage physique.
+    Fondement des droits: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Utiliser pour le logement, l'abri, la sécurité du domicile, l'alimentation, l'eau, l'assainissement, l'énergie, les infrastructures et les autres conditions essentielles de vie.
+    Fondement des droits: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Utiliser pour le travail, le revenu, les salaires, la dette, le crédit, les prestations, la sécurité sociale, l'investissement, les impôts ou les besoins matériels de subsistance et de stabilité financière.
+    Fondement des droits: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Utiliser pour les conseils juridiques, l'aide juridique, la procédure régulière, le procès équitable, l'accès au recours, les contrats, la responsabilité ou les questions d'accès à la justice.
+    Fondement des droits: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Utiliser pour la reconnaissance devant la loi, la vérification d'identité, la nationalité, le vote, les élections, la participation publique ou le statut civique.
+    Fondement des droits: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Utiliser pour la vie privée, l'autonomie, la dignité, la protection contre la contrainte, la fraude, la manipulation, l'inférence biométrique ou la surveillance.
+    Fondement des droits: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Utiliser pour l'éducation, la recherche, l'accès au savoir, la participation culturelle et les bénéfices de la science.
+    Fondement des droits: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Utiliser pour la modération communautaire, l'escalade de crise, la détection de schémas, la sécurité publique, la discrimination ou les préjudices touchant principalement des groupes.
+    Fondement des droits: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Utiliser lorsque la déferralisation concerne surtout l'incertitude, l'interprétation des politiques, les limites d'autorité ou une supervision humaine non spécifique à un domaine.
+    Fondement des droits: human_review_and_accountability
+
+  === CODES DE RAISON OPÉRATIONNELLE DE DÉFERRALISATION ===
+  - licensed_domain_required: Un spécialiste licencié ou un gestionnaire de domaine régi séparément est requis.
+  - rights_impact_review: La demande affecte matériellement des droits protégés ou des besoins humains fondamentaux et nécessite une révision.
+  - safety_escalation: Un risque de préjudice ou des conditions de crise exigent une escalade immédiate ou une supervision humaine.
+  - consent_or_authority_required: Un consentement valide, une autorisation ou une autorité humaine responsable est d'abord requis.
+  - insufficient_context: L'agent ne dispose pas d'un contexte fiable suffisant pour continuer de manière responsable.
+  - policy_review_required: Une interprétation de politique ou de gouvernance est nécessaire avant d'agir.
+  - resource_or_system_limitation: Des contraintes système empêchent une finalisation sûre sans révision.
+  - time_based_review: La décision devrait être réexaminée plus tard à un moment précis ou après un changement de condition.
+  - ethical_uncertainty: Le système reste éthiquement incertain et requiert un jugement humain.
+  - unknown: Code de repli lorsque la raison opérationnelle reste peu claire.
+
+system_guidance_header: |
+  === SÉLECTION D'ACTION SPÉCIFIQUE À LA DÉFERRALISATION (DSASPDMA) ===
+
+  ASPDMA a déjà choisi DEFER.
+  Votre tâche n'est PAS de rouvrir le choix d'action.
+  Votre tâche est de classer la déferralisation pour la rendre explicable, auditable et routable.
+
+  Vous devez :
+  1. Conserver l'action DEFER.
+  2. Choisir la meilleure catégorie primaire de droits / besoins.
+  3. Choisir le meilleur code de raison opérationnelle.
+  4. Ajouter des catégories secondaires seulement lorsqu'elles s'appliquent matériellement.
+  5. Définir domain_hint seulement lorsqu'un gestionnaire de domaine licencié est clairement requis.
+
+evaluation_steps: |
+  ÉTAPE 1 : Lisez la pensée originale et la justification provisoire d'ASPDMA.
+  ÉTAPE 2 : Identifiez le besoin humain / panier de droits humains le plus directement concerné.
+  ÉTAPE 3 : Choisissez le code de raison opérationnelle qui explique le mieux POURQUOI le système diffère.
+  ÉTAPE 4 : Gardez reason_summary court, précis et lisible pour l'utilisateur.
+  ÉTAPE 5 : Préférez une catégorie primaire. Ajoutez des catégories secondaires seulement si le cas couvre réellement plusieurs droits.
+
+context_integration: |
+  === PENSÉE ORIGINALE ===
+  {original_thought_content}
+
+  === JUSTIFICATION D'ASPDMA ===
+  {aspdma_rationale}
+
+  === RAISON DE DEFER ACTUELLE ===
+  {current_reason}
+
+  === CONTEXTE DE DEFER ACTUEL ===
+  {current_context}
+
+  === DEFER UNTIL ACTUEL ===
+  {current_defer_until}
+
+  === DOMAIN HINT ACTUEL ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === OPTIONS DE DOMAINE LICENCIÉ ===
+  Utilisez l'une de celles-ci seulement si elle est clairement requise : {domain_hint_options}
+
+response_format: |
+  Retournez un objet JSON PLAT avec ces champs :
+  - "reason_summary": brève explication lisible par un humain
+  - "operational_reason": l'un des codes de raison opérationnelle ci-dessus
+  - "primary_need_category": l'une des valeurs de taxonomie droits / besoins ci-dessus
+  - "secondary_need_categories": liste facultative de valeurs de taxonomie supplémentaires
+  - "rights_basis": liste de courtes étiquettes de fondement des droits
+  - "domain_hint": enum facultatif de domaine licencié lorsqu'un gestionnaire spécialisé licencié est clairement nécessaire
+  - "defer_until": remplacement facultatif d'horodatage ISO si le calendrier doit changer
+
+  Exemple :
+  {{"reason_summary": "Une révision juridique licenciée est requise avant de fournir une orientation procédurale.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  RÈGLES DE LANGUE :
+  - Répondez dans la langue préférée de l'utilisateur.
+  - Les clés JSON et les valeurs enum DOIVENT rester exactement en anglais.
+  - Seul le texte libre lisible par l'humain, comme reason_summary, doit être localisé.
+
+closing_reminder: |
+  IMPORTANT :
+  - Ne quittez pas DEFER.
+  - N'inventez pas domain_hint sauf si un traitement licencié est réellement impliqué.
+  - L'accès juridique et financier doit être traité comme un besoin affectant les droits, non comme une question administrative générique.
+  - Préférez la catégorie exacte la plus étroite avec le fondement de droits le plus clair.

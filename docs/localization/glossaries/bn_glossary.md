@@ -102,6 +102,21 @@ Bengali has T-V distinction (তুমি vs আপনি). Always use আপন
 ### Script/Direction
 Bengali uses the Bengali script (বাংলা লিপি), which is written left-to-right. Numbers typically use Bengali numerals (০১২৩৪৫৬৭৮৯) or Western Arabic numerals (0123456789) - Western numerals are acceptable in technical contexts.
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | ডিফারাল-নির্দিষ্ট কর্ম নির্বাচন | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | অধিকার / প্রয়োজনের শ্রেণিবিন্যাস | Taxonomy section heading |
+| Rights basis | অধিকারের ভিত্তি | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | কার্যগত ডিফারাল কারণ কোড | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

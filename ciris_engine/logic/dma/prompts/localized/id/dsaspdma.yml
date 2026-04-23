@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Lintasan kedua berbasis hak setelah ASPDMA memilih DEFER
+
+component_name: dsaspdma
+description: "Pemilihan tindakan khusus deferensi: mengklasifikasikan tindakan DEFER terhadap taksonomi hak/kebutuhan"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAKSONOMI HAK / KEBUTUHAN ===
+  - health_and_bodily_integrity: Gunakan untuk kehidupan, kesehatan, integritas tubuh, disabilitas, keselamatan medis, persenjataan, bahan berbahaya, atau implikasi bahaya fisik langsung.
+    Dasar hak: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Gunakan untuk perumahan, tempat berlindung, keamanan rumah, makanan, air, sanitasi, energi, infrastruktur, dan kondisi hidup esensial lainnya.
+    Dasar hak: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Gunakan untuk pekerjaan, pendapatan, upah, utang, kredit, tunjangan, jaminan sosial, investasi, pajak, atau kebutuhan penghidupan dan stabilitas keuangan lainnya.
+    Dasar hak: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Gunakan untuk nasihat hukum, bantuan hukum, proses hukum yang layak, peradilan yang adil, akses pemulihan, kontrak, tanggung jawab, atau akses ke sistem keadilan.
+    Dasar hak: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Gunakan untuk pengakuan di hadapan hukum, verifikasi identitas, kewarganegaraan, pemungutan suara, pemilu, partisipasi publik, atau kedudukan sipil.
+    Dasar hak: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Gunakan untuk privasi, otonomi, martabat, kebebasan dari paksaan, penipuan, manipulasi, inferensi biometrik, atau pengawasan.
+    Dasar hak: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Gunakan untuk pendidikan, penelitian, akses pengetahuan, partisipasi budaya, dan manfaat ilmu pengetahuan.
+    Dasar hak: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Gunakan untuk moderasi komunitas, eskalasi krisis, deteksi pola, keselamatan publik, diskriminasi, atau bahaya yang terutama memengaruhi kelompok.
+    Dasar hak: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Gunakan ketika deferensi terutama tentang ketidakpastian, interpretasi kebijakan, batas kewenangan, atau pengawasan manusia yang tidak spesifik domain.
+    Dasar hak: human_review_and_accountability
+
+  === KODE ALASAN OPERASIONAL DEFERENSI ===
+  - licensed_domain_required: Spesialis berlisensi atau penangan domain yang diatur terpisah diperlukan.
+  - rights_impact_review: Permintaan berdampak material pada hak terlindungi atau kebutuhan manusia inti dan perlu ditinjau.
+  - safety_escalation: Potensi bahaya atau kondisi krisis memerlukan eskalasi segera atau pengawasan manusia.
+  - consent_or_authority_required: Persetujuan valid, otorisasi, atau kewenangan manusia yang akuntabel diperlukan terlebih dahulu.
+  - insufficient_context: Agen tidak memiliki konteks andal yang cukup untuk melanjutkan secara bertanggung jawab.
+  - policy_review_required: Interpretasi kebijakan atau tata kelola diperlukan sebelum bertindak.
+  - resource_or_system_limitation: Batasan sistem mencegah penyelesaian aman tanpa peninjauan.
+  - time_based_review: Keputusan harus dipertimbangkan kembali nanti pada waktu tertentu atau setelah kondisi berubah.
+  - ethical_uncertainty: Sistem tetap tidak pasti secara etis dan memerlukan penilaian manusia.
+  - unknown: Kode fallback ketika alasan operasional tetap tidak jelas.
+
+system_guidance_header: |
+  === PEMILIHAN TINDAKAN KHUSUS DEFERENSI (DSASPDMA) ===
+
+  ASPDMA sudah memilih DEFER.
+  Tugas Anda BUKAN membuka kembali pilihan tindakan.
+  Tugas Anda adalah mengklasifikasikan deferensi agar dapat dijelaskan, diaudit, dan dirutekan.
+
+  Anda harus:
+  1. Mempertahankan tindakan DEFER.
+  2. Memilih kategori utama hak / kebutuhan yang paling sesuai.
+  3. Memilih kode alasan operasional yang paling tepat.
+  4. Menambahkan kategori kebutuhan sekunder hanya jika benar-benar relevan.
+  5. Mengatur domain_hint hanya ketika penangan domain berlisensi jelas diperlukan.
+
+evaluation_steps: |
+  LANGKAH 1: Baca pemikiran asli dan alasan sementara dari ASPDMA.
+  LANGKAH 2: Identifikasi kebutuhan manusia / kelompok hak asasi manusia yang paling langsung terkait.
+  LANGKAH 3: Pilih kode alasan operasional yang paling baik menjelaskan MENGAPA sistem melakukan deferensi.
+  LANGKAH 4: Buat reason_summary singkat, spesifik, dan mudah dipahami pengguna.
+  LANGKAH 5: Utamakan satu kategori utama. Tambahkan kategori sekunder hanya bila kasus benar-benar mencakup beberapa hak.
+
+context_integration: |
+  === PEMIKIRAN ASLI ===
+  {original_thought_content}
+
+  === ALASAN ASPDMA ===
+  {aspdma_rationale}
+
+  === ALASAN DEFER SAAT INI ===
+  {current_reason}
+
+  === KONTEKS DEFER SAAT INI ===
+  {current_context}
+
+  === DEFER UNTIL SAAT INI ===
+  {current_defer_until}
+
+  === DOMAIN HINT SAAT INI ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === OPSI DOMAIN BERLISENSI ===
+  Gunakan salah satu ini hanya jika jelas diperlukan: {domain_hint_options}
+
+response_format: |
+  Kembalikan objek JSON DATAR dengan kolom berikut:
+  - "reason_summary": penjelasan singkat yang mudah dibaca manusia
+  - "operational_reason": salah satu kode alasan operasional di atas
+  - "primary_need_category": salah satu nilai taksonomi hak / kebutuhan di atas
+  - "secondary_need_categories": daftar opsional nilai taksonomi tambahan
+  - "rights_basis": daftar label dasar hak yang singkat
+  - "domain_hint": enum domain berlisensi opsional ketika penangan khusus berlisensi jelas diperlukan
+  - "defer_until": pengganti timestamp ISO opsional jika waktunya perlu diubah
+
+  Contoh:
+  {{"reason_summary": "Tinjauan hukum berlisensi diperlukan sebelum memberikan panduan prosedural.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  ATURAN BAHASA:
+  - Jawab dalam bahasa pilihan pengguna.
+  - Kunci JSON dan nilai enum HARUS tetap persis dalam bahasa Inggris.
+  - Hanya teks bebas yang dapat dibaca manusia seperti reason_summary yang boleh dilokalkan.
+
+closing_reminder: |
+  PENTING:
+  - Jangan beralih dari DEFER.
+  - Jangan mengarang domain_hint kecuali penanganan berlisensi benar-benar tersirat.
+  - Akses hukum dan keuangan harus diperlakukan sebagai kebutuhan yang berdampak pada hak, bukan masalah administratif umum.
+  - Pilih kategori akurat yang paling sempit dengan dasar hak yang paling jelas.

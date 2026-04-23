@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Lượt thứ hai dựa trên quyền sau khi ASPDMA chọn DEFER
+
+component_name: dsaspdma
+description: "Chọn hành động chuyên biệt cho trì hoãn: phân loại một hành động DEFER theo taxonomy quyền/nhu cầu"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === TAXONOMY QUYỀN / NHU CẦU ===
+  - health_and_bodily_integrity: Dùng cho sự sống, sức khỏe, toàn vẹn thân thể, khuyết tật, an toàn y tế, vũ khí hóa, vật liệu nguy hiểm hoặc hệ quả gây hại thể chất trực tiếp.
+    Cơ sở quyền: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Dùng cho nhà ở, nơi trú ẩn, an ninh gia đình, thực phẩm, nước, vệ sinh, năng lượng, hạ tầng và các điều kiện sống thiết yếu khác.
+    Cơ sở quyền: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Dùng cho việc làm, thu nhập, tiền lương, nợ, tín dụng, phúc lợi, an sinh xã hội, đầu tư, thuế hoặc nhu cầu sinh kế và ổn định tài chính khác.
+    Cơ sở quyền: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Dùng cho tư vấn pháp lý, trợ giúp pháp lý, thủ tục đúng đắn, xét xử công bằng, tiếp cận biện pháp khắc phục, hợp đồng, trách nhiệm hoặc tiếp cận công lý.
+    Cơ sở quyền: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Dùng cho sự công nhận trước pháp luật, xác minh danh tính, quốc tịch, bỏ phiếu, bầu cử, tham gia công cộng hoặc tư cách công dân.
+    Cơ sở quyền: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Dùng cho quyền riêng tư, tự chủ, phẩm giá, tự do khỏi ép buộc, gian lận, thao túng, suy luận sinh trắc học hoặc giám sát.
+    Cơ sở quyền: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Dùng cho giáo dục, nghiên cứu, tiếp cận tri thức, tham gia văn hóa và lợi ích của khoa học.
+    Cơ sở quyền: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Dùng cho điều tiết cộng đồng, leo thang khủng hoảng, phát hiện mẫu, an toàn công cộng, phân biệt đối xử hoặc tổn hại chủ yếu ảnh hưởng đến nhóm.
+    Cơ sở quyền: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Dùng khi việc trì hoãn chủ yếu liên quan đến bất định, diễn giải chính sách, ranh giới thẩm quyền hoặc giám sát con người không đặc thù miền.
+    Cơ sở quyền: human_review_and_accountability
+
+  === MÃ LÝ DO VẬN HÀNH CHO TRÌ HOÃN ===
+  - licensed_domain_required: Cần một chuyên gia có giấy phép hoặc người xử lý miền được quản trị riêng.
+  - rights_impact_review: Yêu cầu ảnh hưởng đáng kể đến quyền được bảo vệ hoặc nhu cầu con người cốt lõi và cần được xem xét.
+  - safety_escalation: Nguy cơ gây hại hoặc điều kiện khủng hoảng cần leo thang ngay hoặc giám sát của con người.
+  - consent_or_authority_required: Trước tiên cần sự đồng ý hợp lệ, ủy quyền hoặc thẩm quyền con người có trách nhiệm.
+  - insufficient_context: Tác nhân thiếu đủ ngữ cảnh đáng tin cậy để tiếp tục một cách có trách nhiệm.
+  - policy_review_required: Cần diễn giải chính sách hoặc quản trị trước khi hành động.
+  - resource_or_system_limitation: Ràng buộc hệ thống ngăn hoàn thành an toàn nếu không có xem xét.
+  - time_based_review: Quyết định nên được xem xét lại sau vào thời điểm cụ thể hoặc sau khi điều kiện thay đổi.
+  - ethical_uncertainty: Hệ thống vẫn bất định về mặt đạo đức và cần phán đoán của con người.
+  - unknown: Mã dự phòng khi lý do vận hành vẫn chưa rõ.
+
+system_guidance_header: |
+  === CHỌN HÀNH ĐỘNG CHUYÊN BIỆT CHO TRÌ HOÃN (DSASPDMA) ===
+
+  ASPDMA đã chọn DEFER.
+  Công việc của bạn KHÔNG phải là mở lại lựa chọn hành động.
+  Công việc của bạn là phân loại sự trì hoãn để nó có thể giải thích, kiểm toán và định tuyến.
+
+  Bạn phải:
+  1. Giữ nguyên hành động DEFER.
+  2. Chọn danh mục quyền / nhu cầu chính phù hợp nhất.
+  3. Chọn mã lý do vận hành phù hợp nhất.
+  4. Chỉ thêm các danh mục nhu cầu phụ khi chúng thực sự áp dụng.
+  5. Chỉ đặt domain_hint khi rõ ràng cần một người xử lý miền có giấy phép.
+
+evaluation_steps: |
+  BƯỚC 1: Đọc suy nghĩ ban đầu và lý do tạm thời của ASPDMA.
+  BƯỚC 2: Xác định nhu cầu con người / nhóm quyền con người nào liên quan trực tiếp nhất.
+  BƯỚC 3: Chọn mã lý do vận hành giải thích tốt nhất VÌ SAO hệ thống đang trì hoãn.
+  BƯỚC 4: Giữ reason_summary ngắn, cụ thể và dễ đọc với người dùng.
+  BƯỚC 5: Ưu tiên một danh mục chính. Chỉ thêm danh mục phụ khi trường hợp thật sự trải rộng trên nhiều quyền.
+
+context_integration: |
+  === SUY NGHĨ BAN ĐẦU ===
+  {original_thought_content}
+
+  === LÝ DO ASPDMA ===
+  {aspdma_rationale}
+
+  === LÝ DO DEFER HIỆN TẠI ===
+  {current_reason}
+
+  === NGỮ CẢNH DEFER HIỆN TẠI ===
+  {current_context}
+
+  === DEFER UNTIL HIỆN TẠI ===
+  {current_defer_until}
+
+  === DOMAIN HINT HIỆN TẠI ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === TÙY CHỌN MIỀN CÓ GIẤY PHÉP ===
+  Chỉ dùng một trong các tùy chọn này nếu rõ ràng cần thiết: {domain_hint_options}
+
+response_format: |
+  Trả về một JSON object PHẲNG với các fields sau:
+  - "reason_summary": giải thích ngắn, con người đọc được
+  - "operational_reason": một trong các mã lý do vận hành ở trên
+  - "primary_need_category": một trong các giá trị taxonomy quyền / nhu cầu ở trên
+  - "secondary_need_categories": danh sách tùy chọn các giá trị taxonomy bổ sung
+  - "rights_basis": danh sách các nhãn cơ sở quyền ngắn
+  - "domain_hint": enum miền có giấy phép tùy chọn khi rõ ràng cần một người xử lý chuyên biệt có giấy phép
+  - "defer_until": ghi đè timestamp ISO tùy chọn nếu thời điểm cần thay đổi
+
+  Ví dụ:
+  {{"reason_summary": "Cần đánh giá pháp lý có giấy phép trước khi đưa ra hướng dẫn thủ tục.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  QUY TẮC NGÔN NGỮ:
+  - Trả lời bằng ngôn ngữ ưu tiên của người dùng.
+  - JSON keys và enum values PHẢI giữ nguyên chính xác bằng tiếng Anh.
+  - Chỉ văn bản tự do con người đọc được như reason_summary mới nên được bản địa hóa.
+
+closing_reminder: |
+  QUAN TRỌNG:
+  - Không chuyển khỏi DEFER.
+  - Không bịa domain_hint trừ khi xử lý có giấy phép thật sự được hàm ý.
+  - Tiếp cận pháp lý và tài chính phải được xem là nhu cầu ảnh hưởng đến quyền, không phải vấn đề hành chính chung.
+  - Ưu tiên danh mục chính xác hẹp nhất với cơ sở quyền rõ ràng nhất.

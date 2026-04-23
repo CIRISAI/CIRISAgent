@@ -134,6 +134,21 @@ This glossary defines the canonical translations for key CIRIS terms in Hausa. A
 - Secondary: Arabic script (Ajami) - used in religious contexts, traditional writing
 - This glossary standardizes on Boko for accessibility
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | ZABIN AIKI NA MUSAMMAN GA JINKIRTAWA | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | TSARIN HAKKOKI / BUKATU | Taxonomy section heading |
+| Rights basis | Tushen hakki | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | LAMBOBIN DALILIN AIKI NA JINKIRI | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

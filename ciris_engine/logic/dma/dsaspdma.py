@@ -152,6 +152,14 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             return str(value) if isinstance(value, str) else None
         return None
 
+    def _require_prompt_value(self, key: str) -> str:
+        """Read a required prompt block or fail loudly during prompt construction."""
+
+        value = self._get_prompt_value(key)
+        if value is None:
+            raise ValueError(f"DSASPDMA prompt template missing required key: {key}")
+        return value
+
     def _format_original_context(self, params: DeferParams) -> str:
         """Render the provisional deferral context for prompt inclusion."""
 
@@ -189,14 +197,16 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
         system_message = format_system_prompt_blocks(
-            self._get_prompt_value("system_guidance_header"),
-            self._get_prompt_value("evaluation_steps"),
-            self._get_prompt_value("response_format"),
-            self._get_prompt_value("closing_reminder"),
+            self._require_prompt_value("system_guidance_header"),
+            self._require_prompt_value("evaluation_steps"),
+            self._require_prompt_value("response_format"),
+            self._require_prompt_value("closing_reminder"),
         )
 
         original_thought_content = getattr(getattr(original_thought, "content", None), "text", "") or ""
-        taxonomy_text = build_deferral_taxonomy_prompt(self.prompt_loader.language)
+        taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(
+            self.prompt_loader.language
+        )
         context_block = self._get_prompt_value("context_integration") or (
             "Original thought:\n{original_thought_content}\n\n"
             "ASPDMA rationale:\n{aspdma_rationale}\n\n"

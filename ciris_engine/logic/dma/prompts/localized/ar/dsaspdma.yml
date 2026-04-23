@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# مراجعة ثانية قائمة على الحقوق بعد أن تختار ASPDMA إجراء DEFER
+
+component_name: dsaspdma
+description: "اختيار إجراء خاص بالإحالة: يصنف إجراء DEFER وفق تصنيف الحقوق/الاحتياجات"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === تصنيف الحقوق / الاحتياجات ===
+  - health_and_bodily_integrity: استخدمه للحياة والصحة وسلامة الجسد والإعاقة والسلامة الطبية والتسليح والمواد الخطرة أو آثار الضرر الجسدي المباشر.
+    أساس الحقوق: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: استخدمه للسكن والمأوى وأمن المنزل والطعام والماء والصرف الصحي والطاقة والبنية التحتية وغيرها من شروط المعيشة الأساسية.
+    أساس الحقوق: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: استخدمه للعمل والدخل والأجور والديون والائتمان والمزايا والضمان الاجتماعي والاستثمار والضرائب أو غيرها من احتياجات المعيشة والاستقرار المالي.
+    أساس الحقوق: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: استخدمه للمشورة القانونية والمساعدة القانونية والإجراءات الواجبة والمحاكمة العادلة والوصول إلى الانتصاف والعقود والمسؤولية أو مسائل الوصول إلى العدالة.
+    أساس الحقوق: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: استخدمه للاعتراف أمام القانون والتحقق من الهوية والجنسية والتصويت والانتخابات والمشاركة العامة أو المكانة المدنية.
+    أساس الحقوق: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: استخدمه للخصوصية والاستقلالية والكرامة والتحرر من الإكراه والاحتيال والتلاعب والاستدلال البيومتري أو المراقبة.
+    أساس الحقوق: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: استخدمه للتعليم والبحث والوصول إلى المعرفة والمشاركة الثقافية والاستفادة من العلم.
+    أساس الحقوق: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: استخدمه لإدارة المجتمع وتصعيد الأزمات واكتشاف الأنماط والسلامة العامة والتمييز أو الأضرار التي تؤثر أساسا في المجموعات.
+    أساس الحقوق: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: استخدمه عندما يكون سبب الإحالة أساسا هو عدم اليقين أو تفسير السياسات أو حدود السلطة أو المراجعة البشرية غير الخاصة بمجال معين.
+    أساس الحقوق: human_review_and_accountability
+
+  === رموز سبب الإحالة التشغيلية ===
+  - licensed_domain_required: يلزم اختصاصي مرخص أو معالج مجال محكوم بشكل منفصل.
+  - rights_impact_review: يؤثر الطلب ماديا في حقوق محمية أو احتياجات إنسانية أساسية ويحتاج إلى مراجعة.
+  - safety_escalation: الضرر المحتمل أو ظروف الأزمة تتطلب تصعيدا فوريا أو إشرافا بشريا.
+  - consent_or_authority_required: يلزم أولا رضا صحيح أو تفويض أو سلطة بشرية مسؤولة.
+  - insufficient_context: لا يملك الوكيل سياقا موثوقا كافيا للمتابعة بمسؤولية.
+  - policy_review_required: يلزم تفسير سياسة أو حوكمة قبل التصرف.
+  - resource_or_system_limitation: قيود النظام تمنع الإكمال الآمن دون مراجعة.
+  - time_based_review: ينبغي إعادة النظر في القرار لاحقا في وقت محدد أو بعد تغير شرط.
+  - ethical_uncertainty: يبقى النظام غير متأكد أخلاقيا ويتطلب حكما بشريا.
+  - unknown: رمز احتياطي عندما يبقى السبب التشغيلي غير واضح.
+
+system_guidance_header: |
+  === اختيار الإجراء الخاص بالإحالة (DSASPDMA) ===
+
+  اختارت ASPDMA بالفعل إجراء DEFER.
+  مهمتك ليست إعادة فتح اختيار الإجراء.
+  مهمتك هي تصنيف الإحالة كي تصبح قابلة للتفسير والتدقيق والتوجيه.
+
+  يجب عليك:
+  1. الحفاظ على إجراء DEFER.
+  2. اختيار أفضل فئة رئيسية للحقوق / الاحتياجات.
+  3. اختيار أفضل رمز سبب تشغيلي.
+  4. إضافة فئات احتياجات ثانوية فقط عندما تنطبق مادياً.
+  5. تعيين domain_hint فقط عندما يكون مطلوباً بوضوح معالج مجال مرخص.
+
+evaluation_steps: |
+  الخطوة 1: اقرأ الفكرة الأصلية ومبرر ASPDMA المؤقت.
+  الخطوة 2: حدد دلو الحاجة الإنسانية / حقوق الإنسان الأكثر اتصالاً بالمسألة.
+  الخطوة 3: اختر رمز السبب التشغيلي الذي يشرح لماذا يؤجل النظام.
+  الخطوة 4: اجعل reason_summary قصيراً ومحدداً ومفهوماً للمستخدم.
+  الخطوة 5: فضّل فئة رئيسية واحدة. أضف الفئات الثانوية فقط عندما تمتد الحالة حقاً عبر حقوق متعددة.
+
+context_integration: |
+  === الفكرة الأصلية ===
+  {original_thought_content}
+
+  === مبرر ASPDMA ===
+  {aspdma_rationale}
+
+  === سبب DEFER الحالي ===
+  {current_reason}
+
+  === سياق DEFER الحالي ===
+  {current_context}
+
+  === DEFER UNTIL الحالي ===
+  {current_defer_until}
+
+  === DOMAIN HINT الحالي ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === خيارات المجال المرخص ===
+  استخدم واحداً من هذه فقط إذا كان مطلوباً بوضوح: {domain_hint_options}
+
+response_format: |
+  أرجع كائن JSON مسطحاً بهذه الحقول:
+  - "reason_summary": تفسير قصير قابل للقراءة البشرية
+  - "operational_reason": أحد رموز السبب التشغيلي أعلاه
+  - "primary_need_category": إحدى قيم تصنيف الحقوق / الاحتياجات أعلاه
+  - "secondary_need_categories": قائمة اختيارية بقيم تصنيف إضافية
+  - "rights_basis": قائمة بتسميات قصيرة لأساس الحقوق
+  - "domain_hint": enum اختياري لمجال مرخص عندما يلزم معالج متخصص مرخص بوضوح
+  - "defer_until": تجاوز اختياري لطابع زمني ISO إذا كان ينبغي تغيير التوقيت
+
+  مثال:
+  {{"reason_summary": "يلزم مراجعة قانونية مرخصة قبل تقديم إرشاد إجرائي.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  قواعد اللغة:
+  - أجب باللغة المفضلة للمستخدم.
+  - يجب أن تبقى مفاتيح JSON وقيم enum كما هي تماماً بالإنجليزية.
+  - لا تترجم إلا النص الحر المقروء للبشر مثل reason_summary.
+
+closing_reminder: |
+  مهم:
+  - لا تنتقل بعيداً عن DEFER.
+  - لا تخترع domain_hint إلا إذا كان التعامل المرخص مطلوباً فعلاً.
+  - يجب اعتبار الوصول القانوني والمالي احتياجات مؤثرة في الحقوق، لا مسائل إدارية عامة.
+  - فضّل أضيق فئة دقيقة ذات أوضح أساس حقوقي.

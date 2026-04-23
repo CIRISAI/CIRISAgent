@@ -126,6 +126,21 @@ This glossary defines the canonical translations for key CIRIS terms in Indonesi
 - Maintain consistency with established Indonesian technical vocabulary
 - When in doubt, prefer official KBBI (Kamus Besar Bahasa Indonesia) terms
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | PEMILIHAN TINDAKAN KHUSUS DEFERENSI | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | TAKSONOMI HAK / KEBUTUHAN | Taxonomy section heading |
+| Rights basis | Dasar hak | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | KODE ALASAN OPERASIONAL DEFERENSI | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     libtss2-esys-3.0.2-0t64 \
+    libtss2-tctildr0t64 \
     libtss2-tcti-device0t64 \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*

@@ -2,17 +2,12 @@
 """Introspect Python memory usage of running CIRIS agent.
 
 Usage:
-    python3 tools/introspect_memory.py [--adapters ADAPTERS] [--duration SECONDS]
-
-Options:
-    --adapters   Adapter to use (default: cli)
-    --duration   Seconds to run before shutdown (default: 30)
-
-Example:
-    python3 tools/introspect_memory.py
-    python3 tools/introspect_memory.py --adapters api --duration 45
+    python3 tools/introspect_memory.py --adapters api --duration 30
+    python3 tools/introspect_memory.py --adapters api --messages 1000 --concurrency 8
 """
+
 import argparse
+import asyncio
 import os
 import subprocess
 import sys
@@ -65,12 +60,147 @@ def get_children_memory(pid: int) -> int:
         return 0
 
 
-def main(adapters: str = "cli", duration: int = 30) -> int:
+async def _wait_for_server(base_url: str, timeout_seconds: int = 90) -> bool:
+    import httpx
+
+    deadline = time.time() + timeout_seconds
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        while time.time() < deadline:
+            try:
+                response = await client.get(f"{base_url}/v1/system/health")
+                if response.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(1.0)
+    return False
+
+
+async def _get_auth_token(base_url: str, retries: int = 30) -> str:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for _ in range(retries):
+            try:
+                for username in ["admin", "owner"]:
+                    response = await client.post(
+                        f"{base_url}/v1/auth/login",
+                        json={"username": username, "password": "qa_test_password_12345"},
+                    )
+                    if response.status_code == 200:
+                        return response.json().get("access_token", "")
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+    return ""
+
+
+async def _complete_setup(base_url: str, port: int) -> bool:
+    """Complete first-run setup for local benchmark environments."""
+    import httpx
+
+    payload = {
+        "llm_provider": "openai",
+        "llm_api_key": "test-key-for-introspection",
+        "llm_model": "gpt-4",
+        "template_id": "default",
+        "enabled_adapters": ["api"],
+        "adapter_config": {},
+        "admin_username": "owner",
+        "admin_password": "qa_test_password_12345",
+        "agent_port": port,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(f"{base_url}/v1/setup/complete", json=payload)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+async def _wait_for_runtime_ready(base_url: str, token: str, timeout_seconds: int = 120) -> bool:
+    import httpx
+
+    deadline = time.time() + timeout_seconds
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        while time.time() < deadline:
+            try:
+                response = await client.get(f"{base_url}/v1/agent/status", headers=headers)
+                if response.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(1.0)
+    return False
+
+
+async def _run_message_load(base_url: str, token: str, messages: int, concurrency: int) -> tuple[int, int, float]:
+    import httpx
+
+    queue: asyncio.Queue[int] = asyncio.Queue()
+    for i in range(messages):
+        queue.put_nowait(i)
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    success = 0
+    failed = 0
+    lock = asyncio.Lock()
+    start = time.time()
+    client_timeout = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0)
+
+    async def worker(worker_id: int) -> None:
+        nonlocal success, failed
+        async with httpx.AsyncClient(timeout=client_timeout) as client:
+            while True:
+                try:
+                    idx = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+
+                payload = {
+                    "message": f"Introspection benchmark message {idx + 1}/{messages}",
+                    "context": {"channel_id": f"introspection_w{worker_id}_m{idx}"},
+                }
+                try:
+                    accepted = False
+                    for attempt in range(3):
+                        response = await client.post(f"{base_url}/v1/agent/message", headers=headers, json=payload)
+                        if response.status_code == 200:
+                            response_json = response.json()
+                            accepted = bool(
+                                response_json.get("task_id")
+                                or response_json.get("data", {}).get("task_id")
+                            )
+                            if accepted:
+                                break
+                        await asyncio.sleep(0.15 * (attempt + 1))
+
+                    async with lock:
+                        if accepted:
+                            success += 1
+                        else:
+                            failed += 1
+                except Exception:
+                    async with lock:
+                        failed += 1
+
+                queue.task_done()
+
+    workers = [asyncio.create_task(worker(i)) for i in range(max(1, concurrency))]
+    await asyncio.gather(*workers)
+    return success, failed, time.time() - start
+
+
+def main(adapters: str = "cli", duration: int = 30, messages: int = 0, concurrency: int = 8, port: int = 8080) -> int:
     print("=" * 70)
     print("CIRIS 2.0 MEMORY INTROSPECTION")
     print("=" * 70)
     print(f"Adapters: {adapters}")
     print(f"Duration: {duration}s")
+    if messages > 0:
+        print(f"Message load: {messages} (concurrency={concurrency})")
 
     project_root = Path(__file__).parent.parent
     main_py = project_root / "main.py"
@@ -79,19 +209,14 @@ def main(adapters: str = "cli", duration: int = 30) -> int:
         print(f"ERROR: main.py not found at {main_py}")
         return 1
 
-    # Match the working command: python3 main.py --adapter cli --mock-llm --timeout 30
-    cmd = [
-        sys.executable,
-        str(main_py),
-        "--adapter",
-        adapters,
-        "--mock-llm",
-        "--timeout",
-        str(duration),
-    ]
+    cmd = [sys.executable, str(main_py), "--adapter", adapters, "--mock-llm"]
+    if adapters == "api":
+        cmd.extend(["--port", str(port)])
+    else:
+        cmd.extend(["--timeout", str(duration)])
 
     print(f"\nCommand: {' '.join(cmd)}")
-    print(f"\n[1/3] Starting CIRIS agent...")
+    print("\n[1/3] Starting CIRIS agent...")
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -108,35 +233,74 @@ def main(adapters: str = "cli", duration: int = 30) -> int:
     pid = process.pid
     print(f"PID: {pid}")
 
-    print(f"\n[2/3] Monitoring memory for ~{duration}s...")
     samples = []
     start_time = time.time()
 
     try:
-        while process.poll() is None:
-            mem = get_children_memory(pid)
-            if mem > 0:
-                samples.append(mem)
-                elapsed = time.time() - start_time
-                print(f"  {elapsed:5.1f}s: {format_size(mem)}", end="\r")
-            time.sleep(0.1)  # Sample every 100ms for better resolution
+        if adapters == "api" and messages > 0:
+            base_url = f"http://localhost:{port}"
+            if not asyncio.run(_wait_for_server(base_url)):
+                print("ERROR: API server did not become healthy")
+                process.terminate()
+                return 1
 
-        print()  # newline after progress
+            token = asyncio.run(_get_auth_token(base_url))
+            if not token:
+                print("No auth token yet, attempting first-run setup...")
+                setup_ok = asyncio.run(_complete_setup(base_url, port))
+                if setup_ok:
+                    token = asyncio.run(_get_auth_token(base_url))
+            if not token:
+                print("ERROR: Could not authenticate with QA credentials")
+                process.terminate()
+                return 1
+            runtime_ready = asyncio.run(_wait_for_runtime_ready(base_url, token))
+            if not runtime_ready:
+                print("ERROR: Agent runtime did not become ready for authenticated traffic")
+                process.terminate()
+                return 1
 
-        # Process exited
-        exit_code = process.returncode
-        print(f"\n[3/3] Process exited with code: {exit_code}")
+            print("\n[2/3] Running message load...")
+            success, failed, elapsed = asyncio.run(_run_message_load(base_url, token, messages, concurrency))
+            print(f"  Message load complete: {success}/{messages} in {elapsed:.1f}s (failed={failed})")
 
-        # Print summary
+            immediate_mem = get_children_memory(pid)
+            if immediate_mem > 0:
+                samples.append(immediate_mem)
+
+            settle_deadline = time.time() + min(10, duration)
+            while time.time() < settle_deadline and process.poll() is None:
+                mem = get_children_memory(pid)
+                if mem > 0:
+                    samples.append(mem)
+                time.sleep(0.2)
+        else:
+            print(f"\n[2/3] Monitoring memory for ~{duration}s...")
+            end_time = start_time + duration
+            while time.time() < end_time and process.poll() is None:
+                mem = get_children_memory(pid)
+                if mem > 0:
+                    samples.append(mem)
+                    elapsed = time.time() - start_time
+                    print(f"  {elapsed:5.1f}s: {format_size(mem)}", end="\r")
+                time.sleep(0.1)
+            print()
+
+        print("\n[3/3] Shutting down process...")
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
         print("\n" + "=" * 70)
         print("MEMORY SUMMARY")
         print("=" * 70)
         if samples:
-            initial = samples[0] if samples else 0
-            peak = max(samples) if samples else 0
-            final = samples[-1] if samples else 0
-            avg = sum(samples) / len(samples) if samples else 0
-
+            initial = samples[0]
+            peak = max(samples)
+            final = samples[-1]
+            avg = sum(samples) / len(samples)
             print(f"  Initial:    {format_size(initial)}")
             print(f"  Peak:       {format_size(peak)}")
             print(f"  Final:      {format_size(final)}")
@@ -144,10 +308,10 @@ def main(adapters: str = "cli", duration: int = 30) -> int:
             print(f"  Samples:    {len(samples)}")
         else:
             print("  No memory samples collected")
-        print()
-        print(f"  Adapters:   {adapters}")
-        print(f"  Mock LLM:   True")
-        print(f"  Duration:   {duration}s")
+        print(f"\n  Adapters:   {adapters}")
+        print("  Mock LLM:   True")
+        if messages > 0:
+            print(f"  Messages:   {messages}")
         print("\n" + "=" * 70)
         print("INTROSPECTION COMPLETE")
         print("=" * 70)
@@ -173,9 +337,35 @@ def parse_args() -> argparse.Namespace:
         default=30,
         help="Seconds to run before shutdown (default: 30)",
     )
+    parser.add_argument(
+        "--messages",
+        type=int,
+        default=0,
+        help="Optional message-load count (API adapter only)",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=8,
+        help="Message-load concurrency (default: 8)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="API port when adapters=api (default: 8080)",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    sys.exit(main(adapters=args.adapters, duration=args.duration))
+    sys.exit(
+        main(
+            adapters=args.adapters,
+            duration=args.duration,
+            messages=max(0, args.messages),
+            concurrency=max(1, args.concurrency),
+            port=args.port,
+        )
+    )

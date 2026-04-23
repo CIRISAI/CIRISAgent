@@ -16,12 +16,14 @@ from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
 from .degraded_mode_tests import DegradedModeTests
+from .deferral_taxonomy_tests import DeferralTaxonomyTests
 from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
 from .filter_tests import FilterTestModule
 from .handler_tests import HandlerTestModule
+from .homeassistant_agentic_tests import HomeAssistantAgenticTests
 from .hosted_tools_tests import HostedToolsTests
 from .identity_update_tests import IdentityUpdateTests
 from .mcp_tests import MCPTests
@@ -51,12 +53,14 @@ __all__ = [
     "AccordTestModule",
     "DreamLiveTests",
     "HandlerTestModule",
+    "HomeAssistantAgenticTests",
     "IdentityUpdateTests",
     "PlayLiveTests",
     "SDKTestModule",
     "SolitudeLiveTests",
     "ConsentTests",
     "DegradedModeTests",
+    "DeferralTaxonomyTests",
     "DSARTests",
     "DSARMultiSourceTests",
     "DSARTicketWorkflowTests",

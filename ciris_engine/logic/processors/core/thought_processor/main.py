@@ -247,6 +247,7 @@ class ThoughtProcessor(
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
         action_result = await self._maybe_run_tsaspdma(thought_item, action_result, thought_context)
+        action_result = await self._maybe_run_dsaspdma(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -496,6 +497,43 @@ class ThoughtProcessor(
         except Exception as e:
             logger.error(f"TSASPDMA: Failed for thought {thought_item.thought_id}: {e}", exc_info=True)
             # On failure, proceed with original TOOL action
+            return action_result
+
+    async def _maybe_run_dsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run DSASPDMA when ASPDMA selected DEFER."""
+
+        if action_result.selected_action != HandlerActionType.DEFER:
+            return action_result
+
+        if not isinstance(action_result.action_parameters, DeferParams):
+            logger.warning(
+                "DSASPDMA-SKIP: DEFER action has invalid parameters type: %s",
+                type(action_result.action_parameters),
+            )
+            return action_result
+
+        evaluator = getattr(self.dma_orchestrator, "dsaspdma_evaluator", None)
+        if not evaluator:
+            logger.warning("DSASPDMA-SKIP: No DSASPDMA evaluator configured")
+            return action_result
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_dsaspdma
+
+            return await run_dsaspdma(
+                evaluator=evaluator,
+                aspdma_result=action_result,
+                original_thought=thought_item,
+                context=thought_context,
+                time_service=self._time_service,
+            )
+        except Exception as e:
+            logger.error("DSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
             return action_result
 
     async def _emit_tsaspdma_result_event(

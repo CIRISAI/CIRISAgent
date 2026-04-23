@@ -1089,15 +1089,17 @@ class APIServerManager:
         if extracted_pwd:
             self._extracted_password = extracted_pwd
 
-        # SETUP module: Skip WORK state check (first-run mode doesn't reach WORK)
-        if QAModule.SETUP in self.modules:
-            self.console.print("[green]✅ Server ready for SETUP tests (first-run mode)[/green]")
-            return True
-
         # If data was wiped, complete setup to create test user before authenticating
         if self.config.wipe_data:
             if not self._complete_qa_setup():
                 return False
+
+        # Modules that validate first-run/API configuration flows do not require
+        # the agent processor to advertise WORK before they can proceed, but
+        # they still need the setup wizard completed so authentication works.
+        if QAModule.SETUP in self.modules or QAModule.HOMEASSISTANT_AGENTIC in self.modules:
+            self.console.print("[green]✅ Server ready for first-run/API configuration tests[/green]")
+            return True
 
         # Now wait for agent to reach WORK state
         self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")

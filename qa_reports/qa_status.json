@@ -125,13 +125,31 @@
       "status": "failing",
       "duration_seconds": 176.71,
       "context": null
+    },
+    "homeassistant_agentic": {
+      "last_run": "2026-04-23T03:56:13.952828+00:00",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "status": "passing",
+      "duration_seconds": 84.16,
+      "context": null
+    },
+    "deferral_taxonomy": {
+      "last_run": "2026-04-23T04:30:46.544774+00:00",
+      "passed": 5,
+      "failed": 0,
+      "total": 5,
+      "status": "passing",
+      "duration_seconds": 35.57,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 14,
-    "passing": 13,
+    "total_modules": 16,
+    "passing": 15,
     "failing": 1,
     "not_run": 0
   },
-  "last_updated": "2026-04-21T21:16:04.915092+00:00"
+  "last_updated": "2026-04-23T04:30:46.544816+00:00"
 }

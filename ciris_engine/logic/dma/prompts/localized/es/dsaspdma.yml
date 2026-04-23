@@ -1,0 +1,78 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# Segunda pasada basada en derechos después de que ASPDMA selecciona DEFER
+
+component_name: dsaspdma
+description: "Selección de acción específica de deferencia: clasifica una acción DEFER contra la taxonomía de derechos/necesidades"
+version: "1.0"
+
+accord_header: true
+
+system_guidance_header: |
+  === SELECCIÓN DE ACCIÓN ESPECÍFICA DE DEFERENCIA (DSASPDMA) ===
+
+  ASPDMA ya eligió DEFER.
+  Tu trabajo NO es reabrir la elección de acción.
+  Tu trabajo es clasificar la deferencia para que sea explicable, auditable y enrutable.
+
+  Debes:
+  1. Conservar la acción DEFER.
+  2. Elegir la mejor categoría primaria de derechos / necesidades.
+  3. Elegir el código de razón operativa más adecuado.
+  4. Añadir categorías secundarias solo cuando apliquen materialmente.
+  5. Establecer domain_hint solo cuando claramente se requiera un manejador con licencia.
+
+evaluation_steps: |
+  PASO 1: Lee el pensamiento original y la justificación provisional de ASPDMA.
+  PASO 2: Identifica qué necesidad humana / categoría de derechos está implicada más directamente.
+  PASO 3: Elige el código de razón operativa que mejor explique POR QUÉ el sistema difiere.
+  PASO 4: Mantén el resumen de razón corto, específico y legible para una persona.
+  PASO 5: Prefiere una categoría primaria. Añade categorías secundarias solo cuando el caso abarque genuinamente múltiples derechos.
+
+context_integration: |
+  === PENSAMIENTO ORIGINAL ===
+  {original_thought_content}
+
+  === JUSTIFICACIÓN DE ASPDMA ===
+  {aspdma_rationale}
+
+  === RAZÓN ACTUAL DE DEFER ===
+  {current_reason}
+
+  === CONTEXTO ACTUAL DE DEFER ===
+  {current_context}
+
+  === DEFER UNTIL ACTUAL ===
+  {current_defer_until}
+
+  === DOMAIN HINT ACTUAL ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === OPCIONES DE DOMINIO CON LICENCIA ===
+  Usa una de estas solo si claramente es necesaria: {domain_hint_options}
+
+response_format: |
+  Devuelve un objeto JSON PLANO con estos campos:
+  - "reason_summary": explicación humana breve
+  - "operational_reason": uno de los códigos de razón operativa anteriores
+  - "primary_need_category": uno de los valores de la taxonomía de derechos / necesidades anteriores
+  - "secondary_need_categories": lista opcional de valores adicionales de la taxonomía
+  - "rights_basis": lista de etiquetas breves de fundamento de derechos
+  - "domain_hint": enum opcional de dominio con licencia cuando claramente se necesite un manejador especializado
+  - "defer_until": anulación opcional de marca temporal ISO si el momento debe cambiar
+
+  Ejemplo:
+  {"reason_summary": "Se requiere revisión legal con licencia antes de dar orientación procesal.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}
+
+  REGLAS DE IDIOMA:
+  - Responde en el idioma preferido del usuario.
+  - Las claves JSON y los valores enum DEBEN permanecer exactamente en inglés.
+  - Solo el texto humano legible como reason_summary debe localizarse.
+
+closing_reminder: |
+  IMPORTANTE:
+  - No cambies DEFER por otra acción.
+  - No inventes domain_hint salvo que el manejo con licencia esté realmente implicado.
+  - El acceso legal y financiero debe tratarse como una necesidad con impacto en derechos, no como un problema administrativo genérico.
+  - Prefiere la categoría más precisa con la base de derechos más clara.

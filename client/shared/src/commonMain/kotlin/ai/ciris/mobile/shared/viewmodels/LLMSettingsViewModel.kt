@@ -134,10 +134,6 @@ class LLMSettingsViewModel(
 
     // ========== Initialization ==========
 
-    init {
-        loadStatus()
-    }
-
     /**
      * Load LLM Bus status, adapters, and provider list.
      */

@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.9] - 2026-04-22
+
+### Fixed
+
+- **Desktop Startup Polling** - CLI now waits on `/v1/system/startup-status` before launching the desktop app
+  - Uses `api_status == "server_ready"` so first-run onboarding does not false-time out
+  - Reports startup phase and `services_online/services_total` progress while booting
+  - Fails fast if the backend exits during polling instead of waiting for the full timeout
+
+## [2.6.8] - 2026-04-22
+
+### Fixed
+
+- **Desktop Startup Race Condition** - CLI waits for backend health before opening the desktop app
+  - Prevents the desktop app from trying to start a second backend on the same port
+  - Moves the health-wait path inside `try/finally` so Ctrl+C cleans up the backend subprocess
+
 ## [2.6.7] - 2026-04-22
 
 ### Fixed

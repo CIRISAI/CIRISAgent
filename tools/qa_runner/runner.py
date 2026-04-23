@@ -256,6 +256,8 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.HOMEASSISTANT_AGENTIC,
+            QAModule.DEFERRAL_TAXONOMY,
             QAModule.CIRISNODE,
             QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
@@ -893,6 +895,7 @@ class QARunner:
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
+        from .modules.deferral_taxonomy_tests import DeferralTaxonomyTests
         from .modules.deferral_tests import DeferralTestModule
         from .modules.degraded_mode_tests import DegradedModeTests
         from .modules.dream_live_tests import DreamLiveTests
@@ -900,6 +903,7 @@ class QARunner:
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.filter_tests import FilterTestModule
         from .modules.handler_tests import HandlerTestModule
+        from .modules.homeassistant_agentic_tests import HomeAssistantAgenticTests
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.licensed_agent_tests import LicensedAgentTests
@@ -946,6 +950,8 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.HOMEASSISTANT_AGENTIC: HomeAssistantAgenticTests,
+            QAModule.DEFERRAL_TAXONOMY: DeferralTaxonomyTests,
             QAModule.CIRISNODE: CIRISNodeTests,
             QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
@@ -1008,6 +1014,13 @@ class QARunner:
                         test_timeout=self.config.test_timeout,
                         message_count=message_count,
                         concurrent_channels=concurrent_channels,
+                    )
+                elif module == QAModule.DEFERRAL_TAXONOMY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
                     )
                 else:
                     test_instance = test_class(client, self.console)

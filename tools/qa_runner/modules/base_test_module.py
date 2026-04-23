@@ -206,6 +206,8 @@ class BaseTestModule:
         if self.sse_helper:
             self.sse_helper.task_complete_seen = False
             self.sse_helper.completed_tasks.clear()
+            if hasattr(self.sse_helper, "action_results"):
+                self.sse_helper.action_results.clear()
 
         # Submit message (returns immediately)
         submission = await self.client.agent.submit_message(message)

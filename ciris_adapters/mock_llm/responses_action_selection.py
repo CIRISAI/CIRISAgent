@@ -2,6 +2,45 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Union
 
+from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
+from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
+from ciris_engine.logic.utils.channel_utils import create_channel_context
+from ciris_engine.schemas.actions import (
+    DeferParams,
+    ForgetParams,
+    MemorizeParams,
+    ObserveParams,
+    PonderParams,
+    RecallParams,
+    RejectParams,
+    SpeakParams,
+    TaskCompleteParams,
+    ToolParams,
+)
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, ASPDMALLMResult
+from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import (
+    DeferralNeedCategory,
+    DeferralOperationalReason,
+    get_rights_basis_for_need_category,
+)
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+
+from .response_packaging import (
+    defer_success,
+    forget_success,
+    memorize_success,
+    observe_success,
+    ponder_success,
+    recall_not_found,
+    recall_success,
+    reject_success,
+    speak_success,
+    task_complete_success,
+    tool_success,
+)
+
 _logger = logging.getLogger(__name__)
 
 
@@ -25,34 +64,162 @@ def _extract_text_content(content: Any) -> str:
     return str(content) if content else ""
 
 
-from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
-from ciris_engine.schemas.actions import (
-    DeferParams,
-    ForgetParams,
-    MemorizeParams,
-    ObserveParams,
-    PonderParams,
-    RecallParams,
-    RejectParams,
-    SpeakParams,
-    TaskCompleteParams,
-    ToolParams,
-)
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, ASPDMALLMResult
+def _extract_music_play_request(user_speech: str) -> Optional[Dict[str, Any]]:
+    """Infer ma_play parameters from a natural-language playback request."""
+    if not re.search(r"\b(play|put on|listen to)\b", user_speech, re.IGNORECASE):
+        return None
 
-from .response_packaging import (
-    defer_success,
-    forget_success,
-    memorize_success,
-    observe_success,
-    ponder_success,
-    recall_not_found,
-    recall_success,
-    reject_success,
-    speak_success,
-    task_complete_success,
-    tool_success,
-)
+    request_clause = user_speech.strip()
+    observed_match = re.search(r"\bsay:\s*(.+)$", request_clause, re.IGNORECASE)
+    if observed_match:
+        request_clause = observed_match.group(1).strip()
+    request_clause = re.sub(r"\.\s+then\s+confirm.*$", "", request_clause, flags=re.IGNORECASE)
+    request_clause = re.sub(r"\.\s*$", "", request_clause)
+    player_match = re.search(r"(media_player\.[a-z0-9_]+)", request_clause, re.IGNORECASE)
+
+    media_type = "track"
+    if re.search(r"\balbum\b", request_clause, re.IGNORECASE):
+        media_type = "album"
+    elif re.search(r"\bplaylist\b", request_clause, re.IGNORECASE):
+        media_type = "playlist"
+    elif re.search(r"\bradio\b", request_clause, re.IGNORECASE):
+        media_type = "radio"
+    elif re.search(r"\bartist\b", request_clause, re.IGNORECASE):
+        media_type = "artist"
+
+    request_clause = re.sub(
+        r"\s+(?:on|using)\s+(?:the\s+)?(?:home assistant\s+)?player\s+media_player\.[a-z0-9_]+",
+        "",
+        request_clause,
+        flags=re.IGNORECASE,
+    )
+    request_clause = re.sub(r"\s+(?:in|on)\s+the\s+bedroom\b", "", request_clause, flags=re.IGNORECASE)
+    request_clause = re.sub(r"\s+then\s+confirm.*$", "", request_clause, flags=re.IGNORECASE)
+
+    media_phrase = re.sub(
+        r"^\s*(?:please\s+)?(?:play|put on|listen to)\s+",
+        "",
+        request_clause,
+        flags=re.IGNORECASE,
+    ).strip(" .!?,\"'")
+    media_phrase = re.sub(
+        r"^(?:the\s+song\s+|song\s+|the\s+album\s+|album\s+|the\s+playlist\s+|playlist\s+)",
+        "",
+        media_phrase,
+        flags=re.IGNORECASE,
+    )
+    media_phrase = re.sub(r"\s+by\s+", " ", media_phrase, flags=re.IGNORECASE).strip()
+    if not media_phrase:
+        return None
+
+    tool_parameters: Dict[str, Any] = {
+        "media_id": media_phrase,
+        "media_type": media_type,
+        "enqueue": "play",
+    }
+    if player_match:
+        tool_parameters["player_id"] = player_match.group(1)
+    return tool_parameters
+
+
+def _infer_dsaspdma_result(prompt_text: str, current_reason: str) -> DSASPDMALLMResult:
+    """Infer DSASPDMA classification from the prompt text."""
+
+    lowered = f"{prompt_text}\n{current_reason}".lower()
+
+    domain_hint: Optional[DomainCategory] = None
+    primary = DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT
+    operational_reason = DeferralOperationalReason.ETHICAL_UNCERTAINTY
+    reason_summary = current_reason or "Human review is required before proceeding."
+    secondary: List[DeferralNeedCategory] = []
+
+    domain_rules = [
+        (
+            DomainCategory.MEDICAL,
+            [r"\bmedical\b", r"\bdiagnos", r"\btreat", r"\bprescrib", r"\bhealth\b"],
+            DeferralNeedCategory.HEALTH_AND_BODILY_INTEGRITY,
+        ),
+        (
+            DomainCategory.LEGAL,
+            [r"\blegal\b", r"\bfair trial\b", r"\blegal aid\b", r"\bcontract\b", r"\bliabilit"],
+            DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY,
+        ),
+        (
+            DomainCategory.FINANCIAL,
+            [r"\bfinancial\b", r"\binvest", r"\bcredit\b", r"\bdebt\b", r"\btax\b", r"\bloan\b"],
+            DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY,
+        ),
+        (
+            DomainCategory.HOME_SECURITY,
+            [r"\bhome security\b", r"\balarm\b", r"\bsmart lock\b", r"\bcamera\b"],
+            DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
+        ),
+        (
+            DomainCategory.IDENTITY_VERIFICATION,
+            [r"\bidentity\b", r"\bkyc\b", r"\bpassport\b", r"\bverification\b", r"\bauthenticat"],
+            DeferralNeedCategory.IDENTITY_AND_CIVIC_PARTICIPATION,
+        ),
+        (
+            DomainCategory.CONTENT_MODERATION,
+            [r"\bmoderation\b", r"\bcrisis\b", r"\bharassment\b", r"\bself-harm\b", r"\bviolent threat\b"],
+            DeferralNeedCategory.COMMUNITY_AND_COLLECTIVE_SAFETY,
+        ),
+        (
+            DomainCategory.RESEARCH,
+            [r"\bresearch\b", r"\bscientific\b", r"\bexperiment\b", r"\bstudy\b"],
+            DeferralNeedCategory.EDUCATION_CULTURE_AND_SCIENTIFIC_PARTICIPATION,
+        ),
+        (
+            DomainCategory.INFRASTRUCTURE_CONTROL,
+            [r"\binfrastructure\b", r"\bpower grid\b", r"\bwater system\b", r"\butility\b", r"\bscada\b"],
+            DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
+        ),
+    ]
+
+    for candidate_domain, patterns, candidate_primary in domain_rules:
+        if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in patterns):
+            domain_hint = candidate_domain
+            primary = candidate_primary
+            operational_reason = DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED
+            reason_summary = (
+                current_reason
+                or f"Licensed {candidate_domain.value.lower().replace('_', ' ')} review is required before proceeding."
+            )
+            break
+
+    if domain_hint is None:
+        if re.search(r"\binsufficient context\b|\bmissing\b|\bunclear\b|\bambig", lowered, re.IGNORECASE):
+            operational_reason = DeferralOperationalReason.INSUFFICIENT_CONTEXT
+            reason_summary = current_reason or "More context is required before this can be handled responsibly."
+        elif re.search(r"\bconsent\b|\bauthority\b|\bpermission\b|\bapproval\b", lowered, re.IGNORECASE):
+            operational_reason = DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED
+            reason_summary = current_reason or "Human authority or consent is required before proceeding."
+        elif re.search(r"\bpolicy\b|\bgovernance\b|\bcompliance\b", lowered, re.IGNORECASE):
+            operational_reason = DeferralOperationalReason.POLICY_REVIEW_REQUIRED
+            reason_summary = current_reason or "Policy review is required before proceeding."
+        elif re.search(r"\bsystem\b|\berror\b|\blimit\b|\btimeout\b|\bresource\b", lowered, re.IGNORECASE):
+            operational_reason = DeferralOperationalReason.RESOURCE_OR_SYSTEM_LIMITATION
+            reason_summary = current_reason or "The system cannot safely complete this without additional review."
+
+    if re.search(r"\blegal\b", lowered, re.IGNORECASE) and primary != DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY:
+        secondary.append(DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY)
+    if re.search(r"\bfinancial\b|\bcredit\b|\bdebt\b", lowered, re.IGNORECASE) and (
+        primary != DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY
+    ):
+        secondary.append(DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY)
+    if re.search(r"\bprivacy\b|\bcoerc|\bfraud|\bsurveillance\b", lowered, re.IGNORECASE) and (
+        primary != DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY
+    ):
+        secondary.append(DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY)
+
+    return DSASPDMALLMResult(
+        reason_summary=reason_summary,
+        operational_reason=operational_reason,
+        primary_need_category=primary,
+        secondary_need_categories=secondary,
+        rights_basis=get_rights_basis_for_need_category(primary),
+        domain_hint=domain_hint,
+    )
 
 # Union type for all action parameters - 100% schema compliant
 ActionParams = Union[
@@ -67,11 +234,6 @@ ActionParams = Union[
     ForgetParams,
     TaskCompleteParams,
 ]
-from typing import Union
-
-from ciris_engine.logic.utils.channel_utils import create_channel_context
-from ciris_engine.schemas.runtime.enums import HandlerActionType
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 
 
 def action_selection(
@@ -808,15 +970,23 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
     # IMPORTANT: This must be a separate if block, not elif attached to the messages check above
     if user_speech and not is_followup_early:
-        # Regular user input - always speak with deterministic response
-        action = HandlerActionType.SPEAK
-        # Include multimodal detection marker if images were found
-        if multimodal_image_count > 0:
-            speak_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] [MOCK LLM] I can see you've shared {multimodal_image_count} image(s). Response to user message"
+        available_tools_text = " ".join(
+            _extract_text_content(msg.get("content", "")) for msg in messages if isinstance(msg, dict)
+        ).lower()
+        music_tool_params = _extract_music_play_request(user_speech) if "ma_play" in available_tools_text else None
+        if music_tool_params:
+            action = HandlerActionType.TOOL
+            params = ToolParams(name="ma_play", parameters=music_tool_params)
+            rationale = "[MOCK LLM] Routing natural-language music request to Music Assistant"
         else:
-            speak_content = "[MOCK LLM] Response to user message"
-        params = SpeakParams(content=speak_content)
-        rationale = "[MOCK LLM] Responding to user speech"
+            # Include multimodal detection marker if images were found
+            action = HandlerActionType.SPEAK
+            if multimodal_image_count > 0:
+                speak_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] [MOCK LLM] I can see you've shared {multimodal_image_count} image(s). Response to user message"
+            else:
+                speak_content = "[MOCK LLM] Response to user message"
+            params = SpeakParams(content=speak_content)
+            rationale = "[MOCK LLM] Responding to user speech"
 
     elif command_from_context and not is_followup_early:
         # Handle command extracted from context (e.g., from Original Thought)
@@ -1780,6 +1950,11 @@ def tsaspdma_llm_result(
 
                         logger.info(f"[MOCK_LLM] TSASPDMA total regex matches: {match_count}")
                         logger.info(f"[MOCK_LLM] TSASPDMA parsed regex params: {tool_params}")
+            elif tool_name == "ma_play":
+                inferred_params = _extract_music_play_request(thought_content)
+                if inferred_params:
+                    tool_params = inferred_params
+                    logger.info(f"[MOCK_LLM] TSASPDMA inferred natural-language ma_play params: {tool_params}")
 
     # Also check context for forced action params (from original mock LLM flow)
     for item in context:
@@ -1810,3 +1985,25 @@ def tsaspdma_llm_result(
         rationale=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
         tool_parameters=tool_params,
     )
+
+
+def dsaspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> DSASPDMALLMResult:
+    """Mock DSASPDMALLMResult using prompt-text taxonomy inference."""
+
+    context = context or []
+    messages = messages or []
+
+    prompt_text = "\n".join(
+        _extract_text_content(message.get("content", ""))
+        for message in messages
+        if isinstance(message, dict)
+    )
+
+    current_reason = ""
+    reason_match = re.search(r"=== CURRENT DEFER REASON ===\s*(.+?)(?:\n===|\Z)", prompt_text, re.DOTALL)
+    if reason_match:
+        current_reason = reason_match.group(1).strip()
+
+    return _infer_dsaspdma_result(prompt_text, current_reason)

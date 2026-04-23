@@ -73,6 +73,8 @@ Available modules:
   single_step_comprehensive - Complete 17-phase ACCORD single-step validation
   accord        - Accord invocation system (kill switch) tests
   accord_metrics - Accord metrics trace capture and signing
+  homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
+  deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
   cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)

@@ -167,6 +167,26 @@ class TestAdapterLifecycle:
         await adapter.stop()
         assert adapter._health_task is None or adapter._health_task.done()  # type: ignore[attr-defined]
 
+    async def test_stop_cancels_lifecycle_task_cleanly(self, patched_probe):
+        adapter_probe, service_probe = patched_probe
+        adapter_probe.return_value = _incapable_report()
+        service_probe.return_value = _incapable_report()
+
+        cfg = MobileLocalLLMConfig()
+        adapter = MobileLocalLLMAdapter(runtime=None, adapter_config=cfg)
+        mgr = mock.MagicMock()
+        mgr.start = mock.AsyncMock(return_value=None)
+        mgr.stop = mock.AsyncMock(return_value=None)
+        mgr.health_check = mock.AsyncMock(return_value=False)
+        adapter.llm_service._server = mgr  # type: ignore[attr-defined]
+
+        await adapter.start()
+        adapter._lifecycle_task = asyncio.create_task(asyncio.sleep(60))  # type: ignore[attr-defined]
+
+        await adapter.stop()
+
+        assert adapter._lifecycle_task is None  # type: ignore[attr-defined]
+
     async def test_run_lifecycle_returns_when_agent_task_finishes(self, patched_probe):
         adapter_probe, service_probe = patched_probe
         adapter_probe.return_value = _incapable_report()
@@ -187,6 +207,22 @@ class TestAdapterLifecycle:
 
         await adapter.run_lifecycle(asyncio.create_task(agent()))
         assert adapter._running is False  # type: ignore[attr-defined]
+
+    async def test_health_loop_reraises_cancellation(self, patched_probe):
+        adapter_probe, service_probe = patched_probe
+        adapter_probe.return_value = _capable_report()
+        service_probe.return_value = _capable_report()
+
+        cfg = MobileLocalLLMConfig(health_interval_seconds=0.05)
+        adapter = MobileLocalLLMAdapter(runtime=None, adapter_config=cfg)
+        adapter._running = True  # type: ignore[attr-defined]
+
+        health_task = asyncio.create_task(adapter._health_loop())  # type: ignore[attr-defined]
+        await asyncio.sleep(0)
+        health_task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await health_task
 
 
 @pytest.mark.asyncio

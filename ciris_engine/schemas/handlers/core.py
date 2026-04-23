@@ -10,6 +10,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
 
 class DeferralReason(str, Enum):
     """Standard deferral reason codes."""
@@ -76,6 +79,26 @@ class DeferralPackage(BaseModel):
     task_id: str = Field(..., description="ID of associated task")
     deferral_reason: DeferralReason = Field(..., description="Reason code")
     reason_description: str = Field(..., description="Human-readable reason")
+    reason_code: Optional[DeferralOperationalReason] = Field(
+        None,
+        description="Structured operational explanation for the deferral",
+    )
+    needs_category: Optional[DeferralNeedCategory] = Field(
+        None,
+        description="Primary rights/needs category implicated by the deferral",
+    )
+    secondary_needs_categories: List[DeferralNeedCategory] = Field(
+        default_factory=list,
+        description="Additional rights/needs categories implicated by the deferral",
+    )
+    rights_basis: List[str] = Field(
+        default_factory=list,
+        description="Human-rights basis labels supporting the deferral classification",
+    )
+    domain_hint: Optional[DomainCategory] = Field(
+        None,
+        description="Licensed domain hint for routing, if applicable",
+    )
 
     # Core content
     thought_content: str = Field(..., description="The thought being deferred")

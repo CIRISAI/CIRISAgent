@@ -15,6 +15,11 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
 from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
+from ciris_engine.schemas.services.deferral_taxonomy import (
+    DeferralOperationalReason,
+    get_need_category_for_domain,
+    get_rights_basis_for_need_category,
+)
 from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
@@ -173,11 +178,14 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 # Services must explicitly declare supported domains to handle domain-specific deferrals
                 if domain_hint:
                     supported_domains = getattr(caps, "supported_domains", [])
+                    supported_domain_values = {
+                        domain.value if isinstance(domain, DomainCategory) else str(domain) for domain in supported_domains
+                    }
                     # Reject services with empty supported_domains OR without the required domain
-                    if not supported_domains or domain_hint not in supported_domains:
+                    if not supported_domains or domain_hint.value not in supported_domain_values:
                         logger.debug(
                             f"Skipping service {service.__class__.__name__}: "
-                            f"domain '{domain_hint}' not in supported_domains {supported_domains}"
+                            f"domain '{domain_hint.value}' not in supported_domains {supported_domain_values}"
                         )
                         continue
 
@@ -189,7 +197,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         if not services:
             if domain_hint:
                 logger.warning(
-                    f"No wise authority service supports domain '{domain_hint}' for {handler_name}. "
+                    f"No wise authority service supports domain '{domain_hint.value}' for {handler_name}. "
                     f"Ensure a service advertising this domain is registered (e.g., CIRISNode)."
                 )
             else:
@@ -230,12 +238,26 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
                 defer_until = self._time_service.now() + timedelta(hours=1)
 
+            request_context = dict(context.metadata)
+            if context.domain_hint is not None:
+                request_context["domain_hint"] = context.domain_hint.value
+            if context.reason_code is not None:
+                request_context["reason_code"] = context.reason_code.value
+            if context.needs_category is not None:
+                request_context["needs_category"] = context.needs_category.value
+            if context.secondary_needs_categories:
+                request_context["secondary_needs_categories"] = ",".join(
+                    category.value for category in context.secondary_needs_categories
+                )
+            if context.rights_basis:
+                request_context["rights_basis"] = ",".join(context.rights_basis)
+
             deferral_request = DeferralRequest(
                 task_id=context.task_id,
                 thought_id=context.thought_id,
                 reason=context.reason,
                 defer_until=defer_until,
-                context=context.metadata,  # Map metadata to context
+                context=request_context,
             )
 
             # Broadcast to ALL registered WA services
@@ -611,11 +633,15 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             deferral_signal = self._validate_capability(request.capability, agent_tier)
             if deferral_signal is not None:
                 # Route to licensed domain handler via CIRISNode auto-deferral
+                needs_category = get_need_category_for_domain(deferral_signal.category)
                 deferral_context = DeferralContext(
                     thought_id=f"domain_deferral_{id(request)}",
                     task_id=f"domain_task_{id(request)}",
                     reason=deferral_signal.reason,
-                    domain_hint=deferral_signal.category.value,
+                    domain_hint=deferral_signal.category,
+                    reason_code=DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED,
+                    needs_category=needs_category,
+                    rights_basis=get_rights_basis_for_need_category(needs_category),
                     metadata={
                         "domain_category": deferral_signal.category.value,
                         "capability": deferral_signal.capability,

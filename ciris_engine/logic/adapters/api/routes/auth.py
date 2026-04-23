@@ -1399,6 +1399,11 @@ class NativeTokenResponse(BaseModel):
 
 # Valid Google issuers - constant
 VALID_GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+VALID_APPLE_ISSUERS = {"https://appleid.apple.com"}
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_JWKS_CACHE_TTL_SECONDS = 3600
+APPLE_NATIVE_AUDIENCE_FIELDS = ("client_id", "ios_client_id", "native_client_id", "bundle_id")
+_apple_jwks_cache: Dict[str, Any] = {"keys": None, "expires_at": 0.0}
 
 
 def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
@@ -1787,78 +1792,196 @@ class AppleNativeTokenRequest(BaseModel):
     provider: str = Field(default="apple", description="OAuth provider (always 'apple')")
 
 
-def _decode_apple_jwt_locally(id_token: str) -> Dict[str, Optional[str]]:
-    """
-    Decode an Apple ID token locally without calling Apple's API.
+def _get_allowed_apple_audiences_from_config() -> Set[str]:
+    """Load the configured Apple audiences for native auth."""
+    try:
+        provider_config = _load_oauth_config("apple")
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            logger.error("[AppleNativeAuth] Apple OAuth config missing; native Apple auth disabled")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Apple native auth is not configured for this application.",
+            ) from exc
+        raise
 
-    Apple ID tokens are JWTs signed with RS256. For on-device mode,
-    we trust the token because it came from Apple Sign-In SDK running
-    on the device, which already verified it cryptographically.
+    allowed_audiences = {
+        value.strip()
+        for field in APPLE_NATIVE_AUDIENCE_FIELDS
+        if (value := provider_config.get(field))
+    }
+    if not allowed_audiences:
+        logger.error("[AppleNativeAuth] Apple OAuth config has no allowed audiences")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Apple native auth is not configured for this application.",
+        )
 
-    In production, you would verify the signature against Apple's public keys.
-    """
-    import base64
-    import json
-    import time
+    logger.debug("[AppleNativeAuth] Configured allowed audiences count: %d", len(allowed_audiences))
+    return allowed_audiences
 
-    logger.info("[AppleNativeAuth] Decoding Apple JWT locally...")
+
+async def _fetch_apple_jwks() -> List[Dict[str, Any]]:
+    """Fetch Apple's signing keys and cache them briefly."""
+    import asyncio
+
+    import aiohttp
+
+    now = datetime.now(timezone.utc).timestamp()
+    cached_keys = _apple_jwks_cache.get("keys")
+    cache_expiry = float(_apple_jwks_cache.get("expires_at", 0.0))
+    if isinstance(cached_keys, list) and cached_keys and now < cache_expiry:
+        return cached_keys
 
     try:
-        # JWT has 3 parts: header.payload.signature
-        parts = id_token.split(".")
-        if len(parts) != 3:
-            raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+        client_timeout = aiohttp.ClientTimeout(total=10.0)
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
+            async with session.get(APPLE_JWKS_URL) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error("[AppleNativeAuth] Apple JWKS fetch failed: %s - %s", response.status, error_text)
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Apple verification service unavailable. Please try again.",
+                    )
 
-        # Decode the payload (second part) - use URL-safe base64
-        payload_b64 = parts[1]
-        # Add padding if needed
-        padding = 4 - len(payload_b64) % 4
-        if padding != 4:
-            payload_b64 += "=" * padding
+                jwks_payload = await response.json()
+    except asyncio.TimeoutError as exc:
+        logger.warning("[AppleNativeAuth] Apple JWKS fetch timed out")
+        if isinstance(cached_keys, list) and cached_keys:
+            return cached_keys
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Apple verification service unavailable. Please try again.",
+        ) from exc
+    except aiohttp.ClientError as exc:
+        logger.warning("[AppleNativeAuth] Apple JWKS fetch failed: %s", type(exc).__name__)
+        if isinstance(cached_keys, list) and cached_keys:
+            return cached_keys
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Apple verification service unavailable. Please try again.",
+        ) from exc
 
-        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
+    keys = jwks_payload.get("keys")
+    if not isinstance(keys, list) or not keys:
+        logger.error("[AppleNativeAuth] Apple JWKS response missing signing keys")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Apple verification service unavailable. Please try again.",
+        )
 
-        logger.info(f"[AppleNativeAuth] Local decode - sub: {payload.get('sub')}, email: {payload.get('email')}")
+    _apple_jwks_cache["keys"] = keys
+    _apple_jwks_cache["expires_at"] = now + APPLE_JWKS_CACHE_TTL_SECONDS
+    return keys
 
-        # Basic validation
-        exp = payload.get("exp")
-        if exp and int(exp) < time.time():
-            raise ValueError("Token has expired")
 
-        iss = payload.get("iss")
-        if iss != "https://appleid.apple.com":
-            raise ValueError(f"Invalid issuer: {iss}")
+def _get_apple_signing_key(id_token: str, jwks: List[Dict[str, Any]]) -> Any:
+    """Resolve the Apple signing key for the presented token."""
+    import json
 
-        # Extract user info
-        return {
-            "external_id": payload.get("sub"),
-            "email": payload.get("email"),
-            "name": payload.get("name"),  # Apple doesn't include name in JWT after first auth
-            "picture": None,  # Apple doesn't provide picture URLs
-        }
+    import jwt
+    from jwt.algorithms import RSAAlgorithm
 
-    except Exception as e:
-        logger.error(f"[AppleNativeAuth] Local JWT decode failed: {type(e).__name__}: {e}")
-        raise
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except jwt.InvalidTokenError as exc:
+        logger.error("[AppleNativeAuth] Invalid Apple JWT header: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
+        ) from exc
+
+    if header.get("alg") != "RS256":
+        logger.error("[AppleNativeAuth] Unsupported Apple token algorithm: %s", header.get("alg"))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
+        )
+
+    token_kid = header.get("kid")
+    if not token_kid:
+        logger.error("[AppleNativeAuth] Apple JWT missing kid header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
+        )
+
+    for jwk in jwks:
+        if jwk.get("kid") == token_kid and jwk.get("kty") == "RSA":
+            return RSAAlgorithm.from_jwk(json.dumps(jwk))
+
+    logger.error("[AppleNativeAuth] No Apple signing key found for kid=%s", token_kid)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
+    )
 
 
 async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     Verify an Apple ID token and extract user info.
 
-    For on-device mode, we decode the JWT locally since it came from
-    the Apple Sign-In SDK which already verified it cryptographically.
-
-    In production with network access, you could optionally verify
-    the signature against Apple's public keys at:
-    https://appleid.apple.com/auth/keys
+    SECURITY: Apple tokens must be verified cryptographically against Apple's
+    published signing keys, and their audience must match our configured app IDs.
     """
+    import jwt
+
     logger.info(f"[AppleNativeAuth] Verifying Apple ID token (length: {len(id_token)})")
 
-    # For on-device mode, decode locally
-    # The token is trusted because it came from Apple Sign-In SDK
-    return _decode_apple_jwt_locally(id_token)
+    allowed_audiences = _get_allowed_apple_audiences_from_config()
+    jwks = await _fetch_apple_jwks()
+    signing_key = _get_apple_signing_key(id_token, jwks)
+
+    try:
+        token_info = jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=["RS256"],
+            audience=list(allowed_audiences),
+            issuer=next(iter(VALID_APPLE_ISSUERS)),
+            options={"require": ["sub", "aud", "iss", "exp"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        logger.error("[AppleNativeAuth] Apple token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple ID token has expired. Please sign in again.",
+        ) from exc
+    except jwt.InvalidAudienceError as exc:
+        logger.error("[AppleNativeAuth] Apple token audience mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued for this application (audience mismatch).",
+        ) from exc
+    except jwt.InvalidIssuerError as exc:
+        logger.error("[AppleNativeAuth] Apple token issuer mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued by Apple (issuer mismatch).",
+        ) from exc
+    except jwt.MissingRequiredClaimError as exc:
+        logger.error("[AppleNativeAuth] Apple token missing required claim: %s", exc.claim)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Apple ID token missing required claim: {exc.claim}.",
+        ) from exc
+    except jwt.InvalidTokenError as exc:
+        logger.error("[AppleNativeAuth] Apple token verification failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
+        ) from exc
+
+    _validate_token_sub_claim(token_info.get("sub"))
+    _log_email_verification_warning(token_info)
+
+    return {
+        "external_id": token_info.get("sub"),
+        "email": token_info.get("email"),
+        "name": token_info.get("name"),
+        "picture": None,
+    }
 
 
 async def _auto_mint_system_admin_if_needed(

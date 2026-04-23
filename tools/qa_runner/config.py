@@ -48,6 +48,8 @@ class QAModule(Enum):
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
+    HOMEASSISTANT_AGENTIC = "homeassistant_agentic"  # Live Home Assistant + Music Assistant integration testing
+    DEFERRAL_TAXONOMY = "deferral_taxonomy"  # DSASPDMA rights/needs taxonomy coverage and routing tests
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
     CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing

@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.runtime.system_context import ChannelContext
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
 
 from ..services.graph_core import GraphNode, GraphScope
 
@@ -76,6 +78,26 @@ class DeferParams(BaseModel):
     context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
     defer_until: Optional[str] = Field(
         None, description="ISO timestamp to reactivate task (e.g., '2025-01-20T15:00:00Z')"
+    )
+    reason_code: Optional[DeferralOperationalReason] = Field(
+        None,
+        description="Structured reason code for why this deferral is being created",
+    )
+    needs_category: Optional[DeferralNeedCategory] = Field(
+        None,
+        description="Primary rights/needs category implicated by this deferral",
+    )
+    secondary_needs_categories: List[DeferralNeedCategory] = Field(
+        default_factory=list,
+        description="Additional rights/needs categories implicated by this deferral",
+    )
+    rights_basis: List[str] = Field(
+        default_factory=list,
+        description="Human-rights basis labels that justify the deferral classification",
+    )
+    domain_hint: Optional[DomainCategory] = Field(
+        None,
+        description="Licensed domain hint for routing, when applicable",
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

@@ -1072,3 +1072,126 @@ class TestTSASPDMAIntegration:
             # Action value comes from enum.value which is lowercase
             assert call_kwargs["final_action"] == "speak"
             assert call_kwargs["final_tool_name"] is None  # Not a TOOL action
+
+
+class TestDSASPDMAIntegration:
+    """Test cases for DSASPDMA integration in ThoughtProcessor."""
+
+    @pytest.fixture
+    def mock_time_service_dsaspdma(self) -> Mock:
+        """Create mock time service."""
+        import itertools
+
+        counter = itertools.count()
+
+        def get_time() -> datetime:
+            base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            return base_time.replace(microsecond=next(counter) * 1000)
+
+        mock_service = Mock()
+        mock_service.now = Mock(side_effect=get_time)
+        mock_service.now_iso = Mock(side_effect=lambda: mock_service.now().isoformat())
+        return mock_service
+
+    @pytest.fixture
+    def mock_dependencies_dsaspdma(self) -> Mock:
+        """Create mock handler dependencies."""
+
+        deps = Mock(spec=ActionHandlerDependencies)
+        deps.bus_manager = Mock()
+        return deps
+
+    @pytest.fixture
+    def thought_processor_with_dsaspdma(
+        self,
+        mock_time_service_dsaspdma: Mock,
+        mock_dependencies_dsaspdma: Mock,
+    ) -> ThoughtProcessor:
+        """Create ThoughtProcessor with DSASPDMA evaluator configured."""
+
+        mock_dma_orchestrator = Mock()
+        mock_dma_orchestrator.dsaspdma_evaluator = Mock()
+
+        mock_context_builder = Mock()
+        mock_conscience_registry = Mock()
+        mock_conscience_registry.get_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_normal_consciences = Mock(return_value=[])
+        mock_config = Mock(spec=ConfigAccessor)
+
+        return ThoughtProcessor(
+            dma_orchestrator=mock_dma_orchestrator,
+            context_builder=mock_context_builder,
+            conscience_registry=mock_conscience_registry,
+            app_config=mock_config,
+            dependencies=mock_dependencies_dsaspdma,
+            time_service=mock_time_service_dsaspdma,
+            telemetry_service=None,
+            auth_service=None,
+        )
+
+    @pytest.fixture
+    def dsaspdma_thought_item(self) -> ProcessingQueueItem:
+        """Create a thought item for deferral tests."""
+
+        from ciris_engine.logic.processors.support.processing_queue import ThoughtContent
+
+        return ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Please help with a legal contract dispute."),
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_dsaspdma_skips_non_defer_action(
+        self,
+        thought_processor_with_dsaspdma: ThoughtProcessor,
+        dsaspdma_thought_item: ProcessingQueueItem,
+    ) -> None:
+        """Non-DEFER actions should bypass DSASPDMA."""
+
+        speak_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Hello"),
+            rationale="Test speak",
+        )
+
+        result = await thought_processor_with_dsaspdma._maybe_run_dsaspdma(dsaspdma_thought_item, speak_result)
+        assert result == speak_result
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_dsaspdma_processes_defer_action(
+        self,
+        thought_processor_with_dsaspdma: ThoughtProcessor,
+        dsaspdma_thought_item: ProcessingQueueItem,
+    ) -> None:
+        """DEFER actions should run through DSASPDMA."""
+
+        defer_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.DEFER,
+            action_parameters=DeferParams(reason="Human review is required."),
+            rationale="Initial deferral",
+        )
+
+        with patch("ciris_engine.logic.dma.dma_executor.run_dsaspdma") as mock_run_dsaspdma:
+            enriched_result = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.DEFER,
+                action_parameters=DeferParams(
+                    reason="Licensed legal review is required.",
+                    domain_hint="LEGAL",
+                ),
+                rationale="DSASPDMA: Licensed legal review is required.",
+            )
+            mock_run_dsaspdma.return_value = enriched_result
+
+            result = await thought_processor_with_dsaspdma._maybe_run_dsaspdma(
+                dsaspdma_thought_item,
+                defer_result,
+            )
+
+            assert result == enriched_result
+            mock_run_dsaspdma.assert_awaited_once()

@@ -66,11 +66,7 @@ class DeferHandler(BaseActionHandler):
 
     def _parse_defer_params(self, raw_params: Any) -> DeferParams:
         """Parse raw parameters into DeferParams."""
-        if isinstance(raw_params, DeferParams):
-            return raw_params
-        if hasattr(raw_params, "model_dump"):
-            return DeferParams(**raw_params.model_dump())
-        raise ValueError(f"Expected DeferParams but got {type(raw_params)}")
+        return self._validate_and_convert_params(raw_params, DeferParams)
 
     async def _schedule_time_based_deferral(
         self, defer_params: DeferParams, thought: Thought, follow_up_info: str
@@ -112,7 +108,7 @@ class DeferHandler(BaseActionHandler):
     ) -> bool:
         """Send deferral to Wise Authority. Returns success status."""
         try:
-            metadata = self._build_deferral_metadata(thought, dispatch_context)
+            metadata = self._build_deferral_metadata(thought, dispatch_context, defer_params)
 
             defer_until_dt = None
             if defer_params.defer_until:
@@ -124,6 +120,11 @@ class DeferHandler(BaseActionHandler):
                 reason=defer_params.reason,
                 defer_until=defer_until_dt,
                 priority=getattr(defer_params, "priority", "medium"),
+                domain_hint=defer_params.domain_hint,
+                reason_code=defer_params.reason_code,
+                needs_category=defer_params.needs_category,
+                secondary_needs_categories=defer_params.secondary_needs_categories,
+                rights_basis=defer_params.rights_basis,
                 metadata=metadata,
             )
 
@@ -143,12 +144,37 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"WiseAuthorityService deferral failed for thought {thought.thought_id}: {e}")
             return False
 
-    def _build_deferral_metadata(self, thought: Thought, dispatch_context: DispatchContext) -> Dict[str, str]:
+    def _build_deferral_metadata(
+        self,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        defer_params: Optional[DeferParams] = None,
+    ) -> Dict[str, str]:
         """Build metadata dict for deferral context."""
         metadata = {
             "attempted_action": getattr(dispatch_context, "attempted_action", "unknown"),
             "max_rounds_reached": str(getattr(dispatch_context, "max_rounds_reached", False)),
         }
+
+        if defer_params is not None:
+            if defer_params.reason_code is not None:
+                metadata["reason_code"] = defer_params.reason_code.value
+            if defer_params.needs_category is not None:
+                metadata["needs_category"] = defer_params.needs_category.value
+            if defer_params.secondary_needs_categories:
+                metadata["secondary_needs_categories"] = ",".join(
+                    category.value for category in defer_params.secondary_needs_categories
+                )
+            if defer_params.rights_basis:
+                metadata["rights_basis"] = ",".join(defer_params.rights_basis)
+            if defer_params.domain_hint is not None:
+                metadata["domain_hint"] = defer_params.domain_hint.value
+
+            for key, value in (defer_params.context or {}).items():
+                if isinstance(value, list):
+                    metadata[key] = ",".join(str(item) for item in value)
+                else:
+                    metadata[key] = str(value)
 
         if thought.source_task_id:
             task = persistence.get_task_by_id(thought.source_task_id)

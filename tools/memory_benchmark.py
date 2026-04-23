@@ -339,10 +339,20 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
     pid = process.pid
     print(f"  PID: {pid}")
 
+    def shutdown_process() -> None:
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
     print("\n[2/4] Waiting for server...")
     if not asyncio.run(wait_for_server(base_url)):
         print("  ERROR: Server failed to start")
-        process.terminate()
+        shutdown_process()
         return 1
     print("  Server ready!")
 
@@ -358,12 +368,12 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
             token = asyncio.run(get_auth_token(base_url))
     if not token:
         print("  ERROR: Could not get auth token with QA credentials")
-        process.terminate()
+        shutdown_process()
         return 1
     runtime_ready = asyncio.run(wait_for_runtime_ready(base_url, token))
     if not runtime_ready:
         print("  ERROR: Agent runtime did not become ready for authenticated traffic")
-        process.terminate()
+        shutdown_process()
         return 1
 
     benchmark_start_time = datetime.now(timezone.utc).isoformat()
@@ -401,11 +411,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
         print(f"  ERROR: {e}")
     finally:
         print("\nShutting down server...")
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        shutdown_process()
 
     print("\n" + "=" * 70)
     print("MEMORY BENCHMARK RESULTS")

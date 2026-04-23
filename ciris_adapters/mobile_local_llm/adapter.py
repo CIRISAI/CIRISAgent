@@ -200,10 +200,7 @@ class MobileLocalLLMAdapter(Service):
         interval = max(_MIN_HEALTH_INTERVAL_SECONDS, self._config.health_interval_seconds)
         consecutive_failures = 0
         while self._running:
-            try:
-                await asyncio.sleep(interval)
-            except asyncio.CancelledError:
-                raise
+            await asyncio.sleep(interval)
 
             if not self._running:
                 break

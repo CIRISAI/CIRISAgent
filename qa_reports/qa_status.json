@@ -118,12 +118,12 @@
       "context": null
     },
     "memory_benchmark": {
-      "last_run": "2026-04-21T21:16:04.915049+00:00",
+      "last_run": "2026-04-23T16:26:51.833018+00:00",
       "passed": 2,
       "failed": 1,
       "total": 3,
       "status": "failing",
-      "duration_seconds": 176.71,
+      "duration_seconds": 163.69,
       "context": null
     },
     "homeassistant_agentic": {
@@ -143,13 +143,22 @@
       "status": "passing",
       "duration_seconds": 35.57,
       "context": null
+    },
+    "model_eval": {
+      "last_run": "2026-04-23T20:11:48.135630+00:00",
+      "passed": 40,
+      "failed": 0,
+      "total": 40,
+      "status": "passing",
+      "duration_seconds": 185.36,
+      "context": null
     }
   },
   "summary": {
-    "total_modules": 16,
-    "passing": 15,
+    "total_modules": 17,
+    "passing": 16,
     "failing": 1,
     "not_run": 0
   },
-  "last_updated": "2026-04-23T04:30:46.544816+00:00"
+  "last_updated": "2026-04-23T20:11:48.135654+00:00"
 }

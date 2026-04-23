@@ -217,6 +217,22 @@ Available modules:
         default=4,
         help="Number of concurrent channels for memory_benchmark parallel testing (default: 4)",
     )
+    parser.add_argument(
+        "--model-eval-languages",
+        default="am,zh,en,es",
+        help="Comma-separated language codes for multilingual model_eval (default: en; use e.g. am,zh,en,es for multilingual runs)",
+    )
+    parser.add_argument(
+        "--model-eval-concurrency",
+        type=int,
+        default=6,
+        help="Maximum simultaneous in-flight model_eval interactions (default: 6)",
+    )
+    parser.add_argument(
+        "--no-model-eval-memory-profile",
+        action="store_true",
+        help="Disable memory profiling during model_eval",
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -441,6 +457,10 @@ def main():
         # Memory benchmark configuration
         message_count=args.message_count,
         concurrent_channels=args.concurrent_channels,
+        # Model eval configuration
+        model_eval_languages=[lang.strip() for lang in args.model_eval_languages.split(",") if lang.strip()],
+        model_eval_concurrency=args.model_eval_concurrency,
+        model_eval_profile_memory=not args.no_model_eval_memory_profile,
     )
 
     # Create and run runner

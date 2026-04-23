@@ -466,26 +466,81 @@ Adhere strictly to the schema for your JSON output.
         )
 
     def _build_idma_summary(self, idma_result: Optional[IDMAResult]) -> str:
-        """Build IDMA (Intuition DMA / Coherence Collapse Analysis) summary."""
+        """Build IDMA (Intuition DMA / Coherence Collapse Analysis) summary.
+
+        Field labels and prose flow through the localization layer
+        (`handlers.idma_*` keys) so non-English prompt paths receive the
+        guidance in the agent's preferred language. Numeric values, JSON
+        keys (`k_eff`, `rho`), and component identifiers stay code-stable.
+        """
         if not idma_result:
             return ""
 
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+        lang = get_preferred_language()
+
+        def L(key: str, default: str, **params: Any) -> str:
+            return get_string(lang, f"handlers.{key}", default=default, **params)
+
         fragility_warning = ""
         if idma_result.fragility_flag:
-            fragility_warning = (
-                "⚠️ FRAGILITY DETECTED - Reasoning relies on limited/correlated sources. "
+            fragility_warning = "⚠️ " + L(
+                "idma_fragility_warning",
+                "FRAGILITY DETECTED - reasoning may be relying on too few or too-overlapping sources. "
                 "Options: (1) Use web_search tool if available to get independent information, "
                 "(2) Use other tools to gather additional data, "
                 "(3) Ask the user for more information or clarification, "
                 "(4) Consider alternative points of view, "
-                "(5) Acknowledge uncertainty in your response. "
+                "(5) Acknowledge uncertainty in your response.",
+            ) + " "
+
+        source_count = idma_result.k_raw if idma_result.k_raw is not None else len(idma_result.sources_identified)
+        plain_language_bits = [
+            f"{L('idma_label_effective_source_count', 'effective source count')}={idma_result.k_eff:.2f}",
+            f"{L('idma_label_source_overlap', 'source overlap')}={idma_result.correlation_risk:.2f}",
+            f"{L('idma_label_reasoning_state', 'reasoning state')}={idma_result.phase}",
+        ]
+        if idma_result.phase_confidence is not None:
+            plain_language_bits.append(
+                f"{L('idma_label_state_confidence', 'state confidence')}={idma_result.phase_confidence:.2f}"
+            )
+        if idma_result.collapse_margin is not None:
+            plain_language_bits.append(
+                f"{L('idma_label_safety_margin', 'safety margin')}={idma_result.collapse_margin:.2f}"
+            )
+        if source_count:
+            plain_language_bits.append(f"{L('idma_label_raw_source_count', 'raw source count')}={source_count}")
+        if idma_result.common_cause_flags:
+            plain_language_bits.append(
+                f"{L('idma_label_shared_bottlenecks', 'shared bottlenecks')}={', '.join(idma_result.common_cause_flags[:3])}"
+            )
+        if idma_result.intervention_recommendation:
+            plain_language_bits.append(
+                f"{L('idma_label_recommended_recovery', 'recommended recovery')}={idma_result.intervention_recommendation}"
             )
 
+        none_label = L("idma_label_none", "None")
+        unknown_label = L("idma_label_unknown", "Unknown")
+        sources_str = ", ".join(idma_result.sources_identified[:3]) if idma_result.sources_identified else none_label
+        source_types_str = (
+            ", ".join(idma_result.source_type_counts[:3]) if idma_result.source_type_counts else unknown_label
+        )
+        if idma_result.top_correlation_factors:
+            top_drivers = ", ".join(idma_result.top_correlation_factors[:3])
+        elif idma_result.correlation_factors:
+            top_drivers = ", ".join(idma_result.correlation_factors[:3])
+        else:
+            top_drivers = none_label
+
         return (
-            f"IDMA (Intuition/CCA) Output: k_eff={idma_result.k_eff:.2f} (effective sources), "
-            f"ρ={idma_result.correlation_risk:.2f}, Phase={idma_result.phase}. "
+            f"{L('idma_summary_header', 'IDMA (Intuition/CCA) Output')}: "
+            f"{'; '.join(plain_language_bits)}. "
+            f"({L('idma_scientific_mapping', 'Scientific mapping')}: k_eff={idma_result.k_eff:.2f}, rho={idma_result.correlation_risk:.2f}). "
             f"{fragility_warning}"
-            f"Sources: {', '.join(idma_result.sources_identified[:3]) if idma_result.sources_identified else 'None'}. "
+            f"{L('idma_label_sources', 'Sources')}: {sources_str}. "
+            f"{L('idma_label_source_types', 'Source types')}: {source_types_str}. "
+            f"{L('idma_label_top_overlap_drivers', 'Top overlap drivers')}: {top_drivers}. "
             f"Reasoning: {idma_result.reasoning[:150]}..."
         )
 

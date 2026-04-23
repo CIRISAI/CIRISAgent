@@ -47,7 +47,11 @@ class MemorizeHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.MEMORIZE, dispatch_context, thought_id, e)
             return self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"MEMORIZE action failed: {e}",
+                follow_up_content=self._localized_followup(
+                    "memorize_action_failed_with_reason",
+                    default=f"MEMORIZE action failed: {e}",
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -68,7 +72,10 @@ class MemorizeHandler(BaseActionHandler):
             )
             return self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content="MEMORIZE action failed: WA authorization required for identity changes",
+                follow_up_content=self._localized_followup(
+                    "memorize_wa_required",
+                    default="MEMORIZE action failed: WA authorization required for identity changes",
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )

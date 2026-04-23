@@ -5,6 +5,7 @@ API server management for QA testing.
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import pty
 import subprocess
@@ -21,6 +22,8 @@ import requests
 from rich.console import Console
 
 from .config import QAConfig
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Mock Logshipper Server - Receives accord traces from agents
@@ -695,6 +698,28 @@ class APIServerManager:
             env["CIRIS_FORCE_FIRST_RUN"] = "1"
             self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for wiped data[/dim]")
 
+        # model_eval fires all (questions × languages) tasks in parallel against unique
+        # channels. Disable task-append coalescing so any stray cross-channel collision
+        # (system channel bootstraps, identical channel IDs across retries) doesn't
+        # silently merge submissions into a single task.
+        if any(m == QAModule.MODEL_EVAL for m in self.modules):
+            env["CIRIS_DISABLE_TASK_APPEND"] = "1"
+            self.console.print("[dim]Setting CIRIS_DISABLE_TASK_APPEND=1 for MODEL_EVAL module[/dim]")
+            # model_eval fires a burst of concurrent submissions; the default
+            # 60 req/min API rate limit 429s most of them. Raise to 600/min
+            # (10/s) so the bursts land while the LLM bus's own FIFO gate
+            # still backpressures downstream.
+            env.setdefault("CIRIS_API_RATE_LIMIT_PER_MINUTE", "600")
+            # The /v1/agent/interact endpoint defaults to a 55s response
+            # timeout. Live-LLM multilingual DMA chains with conscience
+            # checks routinely run 2-5 min, so the default causes the
+            # server to return synthetic timeout responses. Raise to 600s.
+            env.setdefault("CIRIS_API_INTERACTION_TIMEOUT", "600")
+            self.console.print(
+                "[dim]Setting CIRIS_API_RATE_LIMIT_PER_MINUTE=600 and "
+                "CIRIS_API_INTERACTION_TIMEOUT=600 for MODEL_EVAL module[/dim]"
+            )
+
         # Set backend-specific log directory to avoid symlink collisions
         # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)
         if "CIRIS_LOG_DIR" in env:
@@ -759,9 +784,12 @@ class APIServerManager:
             self.console.print(f"[dim]   CIRIS_MOCK_LLM env: {env.get('CIRIS_MOCK_LLM', 'Not set')}[/dim]")
             self.console.print(f"[dim]   CIRIS_LLM_PROVIDER env: {env.get('CIRIS_LLM_PROVIDER', 'Not set')}[/dim]")
 
-        # Enable accord_metrics adapter with consent for trace capture tests
-        # Also enable when --live-lens is used to send traces to production Lens
-        if any(m == QAModule.ACCORD_METRICS for m in self.modules) or self.config.live_lens:
+        # Enable accord_metrics adapter when explicitly testing traces, when using live Lens,
+        # or during live model eval where we want a full multilingual research export.
+        accord_metrics_requested = any(m == QAModule.ACCORD_METRICS for m in self.modules)
+        model_eval_requested = any(m == QAModule.MODEL_EVAL for m in self.modules)
+        accord_metrics_enabled = accord_metrics_requested or model_eval_requested or self.config.live_lens
+        if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
             if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
@@ -771,16 +799,22 @@ class APIServerManager:
             env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
-            # Set detailed trace level (actionable identifiers) - accord_metrics tests load generic/full
-            env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = "detailed"
+            # Keep the startup adapter at generic so model-eval can explicitly register
+            # the detailed and full_traces adapters after auth. That yields exactly three
+            # active accord_metrics instances: generic, detailed, full_traces.
+            trace_level = "generic" if model_eval_requested else "detailed"
+            env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
             # Set live lens endpoint explicitly
             if self.config.live_lens:
                 env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"
-            self.console.print("[dim]Enabling accord_metrics adapter with consent for trace capture (detailed)[/dim]")
+            self.console.print(
+                f"[dim]Enabling accord_metrics adapter with consent for trace capture ({trace_level})[/dim]"
+            )
             self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT={env['CIRIS_ACCORD_METRICS_CONSENT']}[/dim]")
             self.console.print(
                 f"[dim]   CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={env['CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP']}[/dim]"
             )
+            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_TRACE_LEVEL={trace_level}[/dim]")
             if self.config.live_lens:
                 self.console.print(
                     f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]"
@@ -1007,6 +1041,13 @@ class APIServerManager:
         if llm_base_url:
             setup_payload["llm_base_url"] = llm_base_url
 
+        self.console.print(
+            "[dim]Setup payload summary: "
+            f"provider={llm_provider}, model={llm_model}, base_url={'set' if llm_base_url else 'unset'}, "
+            f"username={self.config.admin_username}, port={self.config.api_port}, "
+            f"adapters={','.join(setup_payload['enabled_adapters'])}[/dim]"
+        )
+
         try:
             response = requests.post(
                 f"{self.config.base_url}/v1/setup/complete",
@@ -1015,15 +1056,66 @@ class APIServerManager:
             )
             if response.status_code == 200:
                 self.console.print("[green]✅ Setup completed, test user created[/green]")
+                try:
+                    response_json = response.json()
+                    message = response_json.get("data", {}).get("message")
+                    next_steps = response_json.get("data", {}).get("next_steps")
+                    if message:
+                        self.console.print(f"[dim]Setup response: {message}[/dim]")
+                    if next_steps:
+                        self.console.print(f"[dim]Next steps: {next_steps}[/dim]")
+                except Exception:
+                    self.console.print("[dim]Setup completed but response body was not parseable JSON[/dim]")
                 # Store the password we used
                 self._extracted_password = setup_payload["admin_password"]
                 return True
             else:
                 self.console.print(f"[red]❌ Setup failed: {response.status_code} - {response.text[:200]}[/red]")
+                self._report_first_run_diagnostics("setup-complete failed")
                 return False
         except Exception as e:
             self.console.print(f"[red]❌ Setup error: {e}[/red]")
+            self._report_first_run_diagnostics("setup-complete request raised exception")
             return False
+
+    def _fetch_json(self, path: str, timeout: float = 3.0, headers: Optional[Dict[str, str]] = None) -> Optional[Dict]:
+        """Fetch a JSON response for diagnostics."""
+        try:
+            response = requests.get(f"{self.config.base_url}{path}", headers=headers, timeout=timeout)
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {"raw_text": response.text[:500]}
+            return {"status_code": response.status_code, "payload": payload}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def _report_first_run_diagnostics(self, reason: str, token: Optional[str] = None) -> None:
+        """Emit setup/runtime diagnostics when first-run bootstrap gets stuck."""
+        self.console.print(f"[yellow]🔎 First-run diagnostics: {reason}[/yellow]")
+
+        setup_status = self._fetch_json("/v1/setup/status")
+        if setup_status:
+            self.console.print(f"[dim]  /v1/setup/status: {setup_status}[/dim]")
+
+        headers = {"Authorization": f"Bearer {token}"} if token else None
+        agent_status = self._fetch_json("/v1/agent/status", headers=headers)
+        if agent_status:
+            self.console.print(f"[dim]  /v1/agent/status: {agent_status}[/dim]")
+
+        system_status = self._fetch_json("/v1/system/status", headers=headers)
+        if system_status:
+            self.console.print(f"[dim]  /v1/system/status: {system_status}[/dim]")
+
+        console_log_path = getattr(self, "_console_log_path", None)
+        if console_log_path and Path(console_log_path).exists():
+            try:
+                recent = Path(console_log_path).read_text(errors="ignore").splitlines()[-20:]
+                self.console.print("[dim]  Recent console log:[/dim]")
+                for line in recent:
+                    self.console.print(f"[dim]    {line[:220]}[/dim]")
+            except Exception as exc:
+                self.console.print(f"[dim]  Could not read console log: {exc}[/dim]")
 
     def _wait_for_server(self) -> bool:
         """Wait for server to be ready and reach WORK state."""
@@ -1093,6 +1185,8 @@ class APIServerManager:
         if self.config.wipe_data:
             if not self._complete_qa_setup():
                 return False
+            self.console.print("[cyan]⏳ Waiting for setup-triggered runtime resume...[/cyan]")
+            time.sleep(1.0)
 
         # Modules that validate first-run/API configuration flows do not require
         # the agent processor to advertise WORK before they can proceed, but
@@ -1121,11 +1215,15 @@ class APIServerManager:
                     f"[red]❌ Authentication failed: {auth_response.status_code} - {auth_response.text[:100]}[/red]"
                 )
                 self.console.print("[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]")
+                self._report_first_run_diagnostics("post-setup authentication failed")
                 return False  # Exit immediately on auth failure
         except Exception as e:
             self.console.print(f"[red]❌ Authentication error: {e}[/red]")
+            self._report_first_run_diagnostics("post-setup authentication raised exception")
             return False  # Exit immediately on auth error
 
+        last_reported_state = ""
+        last_state_report_at = 0.0
         while time.time() - start_time < self.config.server_startup_timeout:
             try:
                 headers = {}
@@ -1152,12 +1250,18 @@ class APIServerManager:
                     if cognitive_state:
                         # Use \r to overwrite previous line
                         self.console.print(f"[dim]Current state: {cognitive_state:<30}[/dim]", end="\r")
+                        now = time.time()
+                        if cognitive_state != last_reported_state or now - last_state_report_at >= 5.0:
+                            self.console.print(f"[dim]State poll: cognitive_state={cognitive_state}[/dim]")
+                            last_reported_state = cognitive_state
+                            last_state_report_at = now
             except Exception:
                 pass
 
             time.sleep(1)
 
         self.console.print("[yellow]⚠️  Agent did not reach WORK state in time[/yellow]")
+        self._report_first_run_diagnostics("agent never reached WORK", token=token)
         return False
 
     def _kill_by_port(self):

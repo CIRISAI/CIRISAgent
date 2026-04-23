@@ -51,7 +51,11 @@ class DreamMemorizeHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.MEMORIZE, dispatch_context, thought_id, e)
             return self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"DREAM MEMORIZE failed: {e}",
+                follow_up_content=self._localized_followup(
+                    "dream_memorize_failed",
+                    default=f"DREAM MEMORIZE failed: {e}",
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )

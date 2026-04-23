@@ -3,6 +3,7 @@ QA Runner configuration and module definitions.
 """
 
 from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -187,6 +188,11 @@ class QAConfig:
     # Memory benchmark configuration
     message_count: int = 100  # Number of messages to send in memory benchmark
     concurrent_channels: int = 4  # Number of concurrent channels for parallel testing
+
+    # Model evaluation configuration
+    model_eval_languages: List[str] = field(default_factory=lambda: ["am", "zh", "en", "es"])
+    model_eval_concurrency: int = 6
+    model_eval_profile_memory: bool = True
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

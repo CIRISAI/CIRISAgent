@@ -9,7 +9,9 @@ Provides three generic money tools:
 The implementation details (crypto vs fiat) are abstracted behind provider parameters.
 """
 
+import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -446,12 +448,22 @@ Only request details when needed.
         """Start the tool service and initialize providers."""
         logger.info("Starting WalletToolService")
         for provider_id, provider in self._providers.items():
+            start_time = time.perf_counter()
             try:
-                success = await provider.initialize()
+                logger.info("Initializing wallet provider %s...", provider_id)
+                success = await asyncio.wait_for(provider.initialize(), timeout=15.0)
                 if success:
-                    logger.info(f"Wallet provider {provider_id} initialized")
+                    elapsed = time.perf_counter() - start_time
+                    logger.info(f"Wallet provider {provider_id} initialized in {elapsed:.2f}s")
                 else:
                     logger.warning(f"Wallet provider {provider_id} initialization failed")
+            except asyncio.TimeoutError:
+                elapsed = time.perf_counter() - start_time
+                logger.error(
+                    "Wallet provider %s initialization timed out after %.2fs; continuing without blocking startup",
+                    provider_id,
+                    elapsed,
+                )
             except Exception as e:
                 logger.error(f"Error initializing provider {provider_id}: {e}")
         self._started = True

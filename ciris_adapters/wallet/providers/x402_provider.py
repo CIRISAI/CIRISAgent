@@ -362,6 +362,7 @@ class X402Provider(WalletProvider):
             poll_interval=30.0,
             on_balance_change=self._on_balance_change,
         )
+        logger.info("[X402] Starting balance monitor for %s", self._evm_address)
         await self._balance_monitor.start()
         logger.info(f"Balance monitor started for {self._evm_address}")
 

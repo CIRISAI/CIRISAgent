@@ -61,7 +61,11 @@ class ObserveHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.OBSERVE, dispatch_context, thought.thought_id, e)
             follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"OBSERVE action failed: {e}",
+                follow_up_content=self._localized_followup(
+                    "observe_action_failed_with_reason",
+                    default=f"OBSERVE action failed: {e}",
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -173,10 +177,18 @@ class ObserveHandler(BaseActionHandler):
     ) -> str:
         """Complete the observe action and create follow-up thought."""
         if success:
-            follow_up_text = f"CIRIS_FOLLOW_UP_THOUGHT: OBSERVE action completed. Info: {follow_up_info}"
+            follow_up_text = self._localized_followup(
+                "observe_followup_success",
+                default=f"OBSERVE action completed. Info: {follow_up_info}",
+                info=follow_up_info,
+            )
             final_status = ThoughtStatus.COMPLETED
         else:
-            follow_up_text = f"CIRIS_FOLLOW_UP_THOUGHT: OBSERVE action failed: {follow_up_info}"
+            follow_up_text = self._localized_followup(
+                "observe_followup_failure",
+                default=f"OBSERVE action failed: {follow_up_info}",
+                info=follow_up_info,
+            )
             final_status = ThoughtStatus.FAILED
 
         follow_up_id = self.complete_thought_and_create_followup(

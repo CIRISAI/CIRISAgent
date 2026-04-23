@@ -195,3 +195,57 @@ class TestDSASPDMAEvaluator:
 
         with pytest.raises(ValueError, match="DSASPDMA requires DEFER action"):
             await evaluator.evaluate_deferral_action(non_defer, sample_thought)
+
+    def test_format_original_context_renders_lists(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+    ) -> None:
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+        params = DeferParams(
+            reason="Need legal review",
+            context={"capability": "legal_advice", "signals": ["risk", "urgency"]},
+        )
+
+        rendered = evaluator._format_original_context(params)
+
+        assert "- capability: legal_advice" in rendered
+        assert "- signals: risk, urgency" in rendered
+
+    def test_format_original_context_handles_empty_context(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+    ) -> None:
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+
+        assert evaluator._format_original_context(DeferParams(reason="Need review")) == "(none)"
+
+    def test_get_original_domain_hint_formats_domain(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+    ) -> None:
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+
+        assert evaluator._get_original_domain_hint(DeferParams(reason="Need review")) == "none"
+        assert (
+            evaluator._get_original_domain_hint(
+                DeferParams(reason="Need review", domain_hint=DomainCategory.LEGAL)
+            )
+            == "LEGAL"
+        )
+
+    def test_sync_language_from_context_accepts_object_snapshot(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+    ) -> None:
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+        profile = MagicMock(preferred_language="fr")
+        system_snapshot = MagicMock(user_profiles=[profile])
+        context = MagicMock(system_snapshot=system_snapshot)
+
+        evaluator._sync_language_from_context(context)
+
+        assert evaluator.prompt_loader.language == "fr"

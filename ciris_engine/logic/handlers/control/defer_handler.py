@@ -157,24 +157,8 @@ class DeferHandler(BaseActionHandler):
         }
 
         if defer_params is not None:
-            if defer_params.reason_code is not None:
-                metadata["reason_code"] = defer_params.reason_code.value
-            if defer_params.needs_category is not None:
-                metadata["needs_category"] = defer_params.needs_category.value
-            if defer_params.secondary_needs_categories:
-                metadata["secondary_needs_categories"] = ",".join(
-                    category.value for category in defer_params.secondary_needs_categories
-                )
-            if defer_params.rights_basis:
-                metadata["rights_basis"] = ",".join(defer_params.rights_basis)
-            if defer_params.domain_hint is not None:
-                metadata["domain_hint"] = defer_params.domain_hint.value
-
-            for key, value in (defer_params.context or {}).items():
-                if isinstance(value, list):
-                    metadata[key] = ",".join(str(item) for item in value)
-                else:
-                    metadata[key] = str(value)
+            self._add_taxonomy_metadata(metadata, defer_params)
+            self._add_context_metadata(metadata, defer_params.context)
 
         if thought.source_task_id:
             task = persistence.get_task_by_id(thought.source_task_id)
@@ -182,6 +166,32 @@ class DeferHandler(BaseActionHandler):
                 metadata["task_description"] = task.description
 
         return metadata
+
+    def _add_taxonomy_metadata(self, metadata: Dict[str, str], defer_params: DeferParams) -> None:
+        """Add structured taxonomy fields to deferral metadata."""
+        if defer_params.reason_code is not None:
+            metadata["reason_code"] = defer_params.reason_code.value
+        if defer_params.needs_category is not None:
+            metadata["needs_category"] = defer_params.needs_category.value
+        if defer_params.secondary_needs_categories:
+            metadata["secondary_needs_categories"] = ",".join(
+                category.value for category in defer_params.secondary_needs_categories
+            )
+        if defer_params.rights_basis:
+            metadata["rights_basis"] = ",".join(defer_params.rights_basis)
+        if defer_params.domain_hint is not None:
+            metadata["domain_hint"] = defer_params.domain_hint.value
+
+    def _add_context_metadata(self, metadata: Dict[str, str], context: Optional[Dict[str, Any]]) -> None:
+        """Add ad hoc deferral context values to metadata."""
+        for key, value in (context or {}).items():
+            metadata[key] = self._stringify_metadata_value(value)
+
+    def _stringify_metadata_value(self, value: Any) -> str:
+        """Serialize context metadata values into strings for DeferralContext."""
+        if isinstance(value, list):
+            return ",".join(str(item) for item in value)
+        return str(value)
 
     async def _send_error_deferral(self, thought: Thought, dispatch_context: DispatchContext) -> None:
         """Send deferral with parameter error context."""

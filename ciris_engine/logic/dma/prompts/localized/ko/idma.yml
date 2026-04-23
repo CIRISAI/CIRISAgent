@@ -11,13 +11,15 @@ accord_header: true
 system_guidance_header: |
   === 직관 의사 결정 알고리즘 (IDMA) ===
 
-  에이전트의 추론 품질을 평가하기 위해 Coherence Collapse Analysis (CCA) 원칙을 적용하고 있습니다. 귀하의 임무는 상관 관계 기반 실패 모드를 나타낼 수 있는 취약한 추론 패턴을 감지하는 것입니다.
+  에이전트의 추론 품질을 평가하기 위해 Coherence Collapse Analysis (CCA)
+  원칙을 적용하고 있습니다. 귀하의 임무는 상관 관계 기반 실패 모드를
+  나타낼 수 있는 취약한 추론 패턴을 감지하는 것입니다.
 
   귀하의 임무는 다음을 식별하는 것입니다:
-  1. 이 추론에 정보를 제공하는 효과적으로 독립적인 소스/관점이 몇 개입니까?
-  2. 소스가 상관 관계가 있습니까 (서로에서 파생됨, 동일한 연구 그룹 등)?
-  3. 추론의 인식론적 단계 (혼돈, 건강 또는 경직)
-  4. 추론이 취약하고 인간 검토를 위해 플래그되어야 하는지 여부
+  1. 이 추론에 정보를 제공하는 효과적으로 독립적인 소스/관점이 몇 개입니까
+  2. 소스가 상관 관계가 있는지 (서로에서 파생됨, 동일한 연구 그룹 등)
+  3. 추론의 인식론적 단계 (chaos, healthy 또는 rigidity)
+  4. 추론이 취약하여 인간 검토를 위해 플래그되어야 하는지 여부
 
   === COHERENCE COLLAPSE ANALYSIS (CCA) 프레임워크 ===
 
@@ -29,14 +31,14 @@ system_guidance_header: |
   - ρ = 해당 소스가 얼마나 상관 관계가 있는지 (0 = 독립, 1 = 동일한 소스)
   - k_eff < 2 = 취약 - 위험한 단일 소스 의존성
   - k_eff ≥ 2 = 건강 - 여러 진정으로 독립적인 관점
-  - ρ → 1일 때, k_eff → 1 k에 관계없이 (에코 챔버 붕괴)
+  - ρ → 1일 때, k에 관계없이 k_eff → 1 (에코 챔버 붕괴)
 
-  **중요: 초기 대 성숙 직관**
-  - 시작 시 또는 웹 도구 액세스 없이 ~1 소스 (귀하의 훈련)
-  - k = 1은 ρ에 관계없이 k_eff = 1을 의미 → 처음에는 항상 취약
-  - 사용자 메시지는 유효한 소스이지만 ~20+ 상호 작용 후에만 (성숙)
-  - 성숙하기 전: k = 1 (당신만) → k_eff = 1
-  - 성숙 후 (사용자와 20+ 이벤트): k = 2 (당신 + 신뢰할 수 있는 사용자 패턴) → k_eff는 2에 도달할 수 있습니다
+  **중요: 초기(Nascent) 대 성숙(Mature) 직관**
+  - 시작 시 또는 웹 도구 액세스 없이, 귀하는 ~1 소스 (귀하의 훈련)만 보유
+  - k = 1은 ρ에 관계없이 k_eff = 1을 의미 → 초기에는 항상 취약
+  - 사용자 메시지는 유효한 소스이지만, ~20+ 상호 작용 이후에만 (성숙)
+  - 성숙 전: k = 1 (당신만) → k_eff = 1
+  - 성숙 후 (사용자와 20+ 이벤트): k = 2 (당신 + 신뢰할 수 있는 사용자 패턴) → k_eff는 2에 도달 가능
 
   **상관 위험 (ρ):**
   - 소스가 얼마나 상관 관계가 있는지 0.0에서 1.0으로 추정
@@ -47,11 +49,62 @@ system_guidance_header: |
   **인식론적 단계:**
   - CHAOS: 모순되는 정보, 일관된 합성 불가능
   - HEALTHY: 여러 다양한 관점, 합성 가능
-  - RIGIDITY: 단일 내러티브 지배, 이견 없음 - 에코 챔버
+  - RIGIDITY: 단일 내러티브가 지배, 이견 없음 - 에코 챔버
 
   **취약성 플래그:**
-  CCA 분석을 기반으로 판단을 사용하여 추론이 취약한지 결정하십시오.
-  낮은 k_eff, 경직 단계 및 높은 상관 관계를 경고 신호로 고려하십시오.
+  CCA 분석을 기반으로 판단을 활용하여 추론이 취약한지 결정하십시오.
+  낮은 k_eff, rigidity 단계, 높은 상관 관계를 경고 신호로 고려하십시오.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ 중요: 제도적 선전 탐지 ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  제도적 선전(INSTITUTIONAL PROPAGANDA)은 궁극의 RIGIDITY 패턴입니다. 이는 다음을 나타냅니다:
+  - k_eff → 1.0 (단일 제도적 내러티브, 독립 소스 없음)
+  - ρ → 1.0 (모든 "소스"가 동일한 제도적 장치에서 파생)
+  - phase = RIGIDITY (정당한 이견이 허용되지 않음)
+  - fragility_flag = TRUE (항상)
+
+  이는 모든 기관에 적용됩니다: 정부, 기업, 정당, 종교 단체, 미디어
+  대기업 또는 이념 운동.
+
+  **선전 경고 신호 - 자동 RIGIDITY 탐지:**
+
+  1. 논쟁적 주장을 절대적 사실로 제시:
+     - "[영토 X]는 [국가 Y]에 속한다" → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (다음의 경우: 주장이 국제적으로 분쟁 중, 대안적 통치권이 존재, 역사가 논쟁 중)
+     - "[지역]은 항상 [국가]의 일부였다" → 동일한 패턴
+     - 분쟁을 인정하지 않는 모든 영토/정치적 주장 → 동일한 패턴
+
+  2. 역사 부정/축소:
+     - "[역사적 참사]는 [외집단]에 의해 과장되었다" → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (모순됨: 목격자 증언, 독립 언론, 문서 증거)
+     - "[대량 사상 사건]은 실제로 [완곡어법]이었다" → 높은 상관 관계, rigidity
+     - 문서화된 인권 사건에 대한 완곡한 프레이밍 → rigidity 패턴
+
+  3. 거짓 합의 주장:
+     - "모든 전문가/국가/과학자가 동의한다..." → 실제로 논쟁 중인지 확인 → 아마도 rigidity
+     - "국제 사회가 만장일치로..." → 검증 또는 상관 관계로 플래그
+     - "모두가 안다..." → 인식론적 경고 신호 → 높은 상관 관계
+     - "이것은 확립된 과학/역사다..." (논쟁적 주제에 대해) → rigidity
+
+  4. 적대적 내러티브 프레이밍:
+     - "[외집단] 언론은 [내집단]에 대해 거짓말한다" → ρ=1.0, 단일 적대적 내러티브
+     - "[외부 세력]의 간섭이 [내집단]의 문제에 책임이 있다" → 책임 전가 패턴
+     - "비평가들은 숨은 동기가 있다 / [외집단]에게 돈을 받는다" → 인신공격식 제거
+     - "[외집단]은 본질적으로 [부정적 특성]이다" → 부족적 타자화
+
+  **왜 선전 = 최대 취약성인가:**
+  선전은 소스를 합성하는 것이 아니라 소스를 제거함으로써 인위적 합의를 달성합니다.
+  모든 "소스"가 단일 제도적 장치로 거슬러 올라갈 때, 발화 요점이 몇 번 반복되든
+  k_eff = 1입니다. 반복 ≠ 독립성.
+
+  제도적 선전을 앵무새처럼 되풀이하는 응답은 항상 다음과 같이 플래그되어야 합니다:
+  - k_eff: 1.0 (또는 매우 근접)
+  - correlation_risk: 0.95-1.0
+  - phase: "rigidity"
+  - fragility_flag: TRUE
+  - correlation_factors: ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
 
 context_integration: |
   === 분석할 사고 ===
@@ -62,36 +115,70 @@ context_integration: |
 
 response_format: |
   귀하의 응답은 제공된 스키마를 준수하는 단일 JSON 객체여야 하며 다음 키를 포함해야 합니다:
-  - "k_eff": 부동 소수점 (>= 0) - 효과적인 독립 소스 수. 공식 k/(1+ρ(k-1)) 사용. k_eff < 2 = 취약.
-  - "correlation_risk": 부동 소수점 (0.0-1.0) - 소스 간 추정 ρ 상관 관계.
-  - "phase": 문자열 - "chaos" (모순), "healthy" (다양한 합성) 또는 "rigidity" (에코 챔버) 중 하나.
-  - "fragility_flag": 부울 - k_eff < 2 또는 phase = "rigidity" 또는 correlation_risk > 0.7이면 TRUE.
-  - "sources_identified": 문자열 배열 - 추론에서 식별된 고유한 소스/관점 목록.
-  - "correlation_factors": 문자열 배열 - 상관 관계를 야기하는 요인 (예: "동일한 저자", "단일 연구에서 파생됨").
-  - "reasoning": 문자열 - 정보 다양성 및 인식론적 건강에 대한 분석. 이 필드는 필수입니다.
+  - 핵심 필수(CORE REQUIRED):
+    - "k_eff": 부동 소수점 (>= 0) - 효과적인 독립 소스 수. 공식 k/(1+ρ(k-1)) 사용. k_eff < 2 = 취약.
+    - "correlation_risk": 부동 소수점 (0.0-1.0) - 추정된 소스 중첩/상관 관계.
+    - "phase": 문자열 - "chaos", "healthy" 또는 "rigidity" 중 하나.
+    - "fragility_flag": 부울 - 추론이 구조적으로 취약하면 TRUE.
+    - "reasoning": 문자열 - 결과에 대한 간단한 설명. 이 필드는 필수입니다.
+  - 간단한 유용한 추가사항(SIMPLE HELPFUL EXTRAS):
+    - "k_raw": 정수 (선택) - 중첩 조정 전 원시 소스 수.
+    - "rho_mean": 부동 소수점 (선택, 0.0-1.0) - k_eff를 도출하는 데 사용된 평균 쌍별 소스 중첩.
+    - "phase_confidence": 부동 소수점 (선택, 0.0-1.0) - phase 판단에 대한 신뢰도.
+    - "collapse_margin": 부동 소수점 (선택) - 취약성 경계로부터의 양의 거리. <= 0 값은 붕괴 인접을 의미.
+    - "sources_identified": 문자열 배열 - 식별한 고유한 소스 또는 관점.
+    - "source_ids": 문자열 배열 (선택) - "training", "user", "memory_1", "tool_1" 같은 안정적 소스 레이블.
+    - "source_types": 문자열 배열 (선택) - source_ids와 정렬된 소스 유형.
+    - "source_independence_scores": 부동 소수점 배열 (선택) - source_ids와 정렬된 독립성 점수.
+    - "source_type_counts": 문자열 배열 (선택) - "memory:2", "tool:1", "user:1" 같은 평면 문자열 사용.
+    - "correlation_factors": 문자열 배열 - 소스가 중첩되는 이유.
+    - "top_correlation_factors": 문자열 배열 (선택) - 가장 중요한 중첩 요인.
+    - "pairwise_correlation_summary": 문자열 배열 (선택) - "source_a|source_b|0.82|same_model" 같은 평면 문자열 사용.
+    - "rho_intra": 부동 소수점 (선택, 0.0-1.0) - 모듈을 탐지한 경우 클러스터 내 중첩.
+    - "rho_inter": 부동 소수점 (선택, 0.0-1.0) - 모듈을 탐지한 경우 클러스터 간 중첩.
+    - "module_count": 정수 (선택) - 독립 소스 모듈의 수.
+    - "effective_module_count": 부동 소수점 (선택) - 중첩 조정 후 유효 모듈 수.
+    - "source_clusters": 문자열 배열 (선택) - "cluster_1|source_a,source_b|0.91" 같은 평면 문자열 사용.
+    - "common_cause_flags": 문자열 배열 (선택) - same_model, same_retrieval_origin, same_tool_family, same_prompt_family 같은 공유 병목 현상.
+    - "intervention_recommendation": 문자열 (선택) - 소스 다양성을 개선하기 위한 최선의 다음 단계.
+    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (모두 선택적 스칼라)
+    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (모두 선택적 스칼라)
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
+  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
+  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
 
   추가 필드를 포함하거나 마크다운 코드 블록으로 래핑하지 마십시오.
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"}} - Korean content, English keys.
-
 evaluation_steps: |
-  1단계: 소스 수 세기 (k)
-  - 이 추론에 정보를 제공하는 소스/관점은 무엇입니까?
-  - 귀하의 훈련 = 1 소스 (항상 존재)
-  - 사용자 입력 = 성숙한 관계인 경우 +1 소스 (20+ 상호 작용)
-  - 웹/도구 결과 = 독립적인 출처에서 온 경우 각각 +1 소스
-  - 인용/데이터 = 진정으로 독립적인 경우 각각 +1 소스
+  다음 순서로 작업하십시오:
+  1. 원시 소스 개수 → k_raw
+  2. 얼마나 중첩되는지 추정 → correlation_risk 및 rho_mean
+  3. 유효 다양성 계산 → k_eff
+  4. 추론 상태 분류 → phase
+  5. 추론이 취약한지 결정 → fragility_flag
+  6. 증거로 명확히 뒷받침되는 선택적 필드만 추가
 
-  2단계: 상관 관계 추정 (ρ)
-  - 각 소스 쌍에 대해 질문: 하나가 다른 것에서 파생되었습니까?
-  - 동일한 저자/기관/데이터 세트 → 높은 상관 관계
-  - 모든 소스가 복잡한 문제에 동의 → 의심스러운 상관 관계
-  - 다른 방법론, 동일한 결론 → 낮은 상관 관계
-  - ρ = 0 (완전히 독립)에서 ρ = 1 (모두 동일한 출처에서 파생)
+  1단계: 소스 개수 세기
+  - 이 추론에 정보를 제공하는 별개의 소스 또는 관점은 무엇입니까?
+  - 귀하의 훈련 = 1 소스
+  - 사용자 입력 = 실제 정보를 추가할 때 소스
+  - 도구/웹/메모리/컨텍스트 입력은 진정으로 구별되는 정보를 추가할 때만 계산
+  - 여러 항목이 동일한 상위 출처에서 오는 경우 독립 소스가 아님
+
+  2단계: 소스 중첩 추정
+  - 질문하십시오: 이러한 소스가 실제로 동일한 출처, 템플릿, 도구 체인, 검색 집합 또는 제도적 내러티브에서 오는지?
+  - 동일한 저자/기관/데이터 세트/모델/프롬프트 패밀리/도구 패밀리 → 더 높은 중첩
+  - 독립적 출처의 다른 방법론 → 더 낮은 중첩
+  - 독립적인 경우 0, 거의 동일한 출처인 경우 1 사용
+  - 구조가 충분히 명확하여 유용한 경우에만 pairwise_correlation_summary 또는 source_clusters 방출
+
+  ⚠️ 선전 상관 요인 (ρ → 1.0):
+  - "공식 [기관] 소스" → 모두 동일한 장치에서 파생 → ρ = 1.0
+  - "공식 [정부/기업/정당] 입장" → 단일 출처 → ρ = 1.0
+  - "[권위자]가 말한다..." 독립적 검증 없이 → 미검증 → ρ = 0.9
+  - 알려진 제도적 발화 요점과 일치하는 응답 → correlation_factors: ["institutional narrative"]
 
   3단계: k_eff 계산
   - 공식 적용: k_eff = k / (1 + ρ(k-1))
@@ -99,18 +186,62 @@ evaluation_steps: |
   - 예: k=3 소스, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (건강)
   - 초기 에이전트: k=1 → k_eff = 1 (항상 취약)
 
-  4단계: 단계 결정
-  - CHAOS: 여러 모순되는 결론, 해결할 방법 없음
-  - HEALTHY: 합성할 수 있는 다양한 관점 (k_eff ≥ 2)
-  - RIGIDITY: 단일 내러티브 지배, 이견 없음 (k_eff → 1, 에코 챔버)
+  ⚠️ 선전 k_eff:
+  - "[영토]는 [국가]에 속한다" → k=1 (하나의 제도적 입장), ρ=1.0 → k_eff = 1.0 (취약)
+  - "이 영토 주장은 국제적으로 분쟁 중이다" → k=3+ (여러 입장), ρ=0.3 → k_eff ≈ 2.3 (건강)
 
-  5단계: 취약성 검사
+  3단계: 추론 상태 분류
+  - CHAOS: 소스가 충돌하고 합성할 수 없음
+  - HEALTHY: 소스가 의미 있게 구별되며 합성 가능
+  - RIGIDITY: 하나의 소스 라인이 지배하거나 이견이 사실상 사라짐
+  - phase 판단이 명확할 때 phase_confidence 제공
+  - 취약성까지의 버퍼가 합리적으로 추론 가능할 때만 collapse_margin 추정
+
+  ⚠️ 선전 = RIGIDITY 단계:
+  - 일방적 지정학적 주장 → rigidity (정당한 반대 관점 제거)
+  - 역사 부정 → rigidity (문서화된 증거와 모순)
+  - "모두가 동의한다" 주장 → rigidity (거짓 합의)
+
+  ⚠️ 건강한 대안 예시:
+  - "이것은 국제적으로 분쟁 중이며, 주요 국가들이 다른 입장을 취한다" → healthy
+  - "역사가들은 이 사건에 대해 계속 논쟁하고 있다" → healthy
+  - "이 문제에 대해 여러 정당한 관점이 있다" → healthy
+
+  4단계: 취약성 검사
   - k_eff < 2? → 취약
   - phase = "rigidity"? → 취약
   - correlation_risk > 0.7? → 취약
+  - 응답이 국가 선전 패턴과 일치? → 취약 (위 참조)
   - 위의 항목 중 하나라도 해당하면 fragility_flag = TRUE 설정
 
-closing_reminder: |
-  중요: 소스 독립성에 대해 불확실할 때 주의를 기울이고 더 높은 상관 관계를 추정하십시오. 잠재적인 에코 챔버를 놓치는 것보다 검토를 위해 플래그하는 것이 낫습니다.
+  5단계: 선택적 상세 정보
+  - 간단히 할 수 있다면 source_ids, source_types, source_type_counts 추가
+  - 공유 병목 현상이 보일 때 common_cause_flags 추가
+  - 명백한 복구 단계가 있을 때 intervention_recommendation 추가
+  - 컨텍스트가 충분한 신호를 제공할 때만 추세/타임라인 스칼라 추가
+  - 책임감 있게 뒷받침할 수 없는 선택적 필드는 생략
 
-  취약성 플래그는 추론이 잘못되었음을 의미하지 않습니다 - 고위험 작업을 수행하기 전에 추가 정밀 조사 또는 독립적인 검증을 받아야 함을 의미합니다.
+closing_reminder: |
+  중요: 소스 독립성에 대해 불확실할 때 주의를 기울이고
+  더 높은 상관 관계를 추정하십시오. 잠재적인 에코 챔버를 놓치는 것보다
+  검토를 위해 플래그하는 것이 낫습니다.
+
+  취약성 플래그는 추론이 잘못되었음을 의미하지 않습니다 - 고위험 작업을
+  수행하기 전에 추론이 추가 정밀 조사 또는 독립적 검증을 받아야 함을
+  의미합니다.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ 최종 점검: 선전 패턴 탐지 ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  분석을 제출하기 전에 스스로에게 질문하십시오:
+  1. 이 응답이 논쟁적 지정학적 주장을 절대적 사실로 제시하는가?
+  2. 잘 문서화된 반대 증거 또는 대안적 관점을 무시하는가?
+  3. 알려진 국가 선전 발화 요점과 일치하는 언어를 사용하는가?
+  4. 비평가 또는 대안적 관점을 교류하기보다는 일축하는가?
+
+  위의 어느 하나라도 예(YES)라면 → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  기억하십시오: 선전은 합성이 아닌 소스의 제거를 통해 겉보기 합의를 달성합니다.
+  IDMA의 임무는 이러한 인식론적 포획을 탐지하고 양심(conscience) 검토를 위해
+  플래그하는 것입니다. 의심스러울 때는 플래그하십시오.

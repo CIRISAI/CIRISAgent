@@ -51,6 +51,7 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+TRACE_SCHEMA_VERSION = "2.7.0"
 
 
 def _get_metrics_env(name: str, default: str = "") -> str:
@@ -149,6 +150,7 @@ class CompleteTrace:
     signature_key_id: Optional[str] = None
     # Trace level determines what data is included - MUST be part of signature
     trace_level: Optional[str] = None
+    trace_schema_version: str = TRACE_SCHEMA_VERSION
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
@@ -163,6 +165,7 @@ class CompleteTrace:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "trace_level": self.trace_level,
+            "trace_schema_version": self.trace_schema_version,
             "components": [
                 {
                     "component_type": c.component_type,
@@ -187,6 +190,7 @@ class CompleteTrace:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "trace_level": self.trace_level,
+            "trace_schema_version": self.trace_schema_version,
             "components": [
                 {
                     "component_type": c.component_type,
@@ -246,14 +250,17 @@ class Ed25519TraceSigner:
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
-        Signs a JSON object containing trace_level and components.
-        This ensures each trace level produces a unique, verifiable signature.
+        The signed payload MUST byte-for-byte match what CIRISLens verifies
+        against (api/accord_api.py::verify_trace_signature). Lens computes:
 
-        CIRISLens verification expects:
-            message = json.dumps({
-                "trace_level": trace.trace_level,
-                "components": [c.model_dump() for c in trace.components]
-            }, sort_keys=True, separators=(",", ":")).encode('utf-8')
+            components_data = [strip_empty(c.model_dump()) for c in trace.components]
+            signed_payload = {"components": components_data, "trace_level": trace_level}
+            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":"))
+
+        trace_schema_version ships in the trace envelope (to_dict) for lens
+        dashboards but is NOT in the signed bytes — lens doesn't include it
+        in its canonical payload, so adding it on the agent side breaks
+        signature verification for every trace.
 
         Returns True if signing succeeded, False if key not available.
         """
@@ -262,20 +269,23 @@ class Ed25519TraceSigner:
             return False
 
         try:
-            # Build the canonical message that CIRISLens will verify against:
-            # JSON object with trace_level and components, alphabetically sorted keys
-            # Strip null values to reduce payload size
+            # Build the canonical message. Match lens's strip_empty semantics:
+            # dump the full component (component_type, event_type, timestamp,
+            # data) then recursively drop None / ""  / [] / {}.
             components_list = [
-                {
-                    "component_type": c.component_type,
-                    "data": _strip_empty(c.data),
-                    "event_type": c.event_type,
-                    "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, "isoformat") else str(c.timestamp),
-                }
+                _strip_empty(
+                    {
+                        "component_type": c.component_type,
+                        "data": c.data,
+                        "event_type": c.event_type,
+                        "timestamp": c.timestamp.isoformat()
+                        if hasattr(c.timestamp, "isoformat")
+                        else str(c.timestamp),
+                    }
+                )
                 for c in trace.components
             ]
 
-            # Include trace_level in signed payload for per-level verification
             signed_payload = {
                 "components": components_list,
                 "trace_level": trace.trace_level,
@@ -305,7 +315,8 @@ class Ed25519TraceSigner:
     def verify_trace(self, trace: CompleteTrace) -> bool:
         """Verify a trace signature using root public key.
 
-        Verifies against the canonical JSON payload with trace_level and components.
+        MUST match the canonical payload used in sign_trace — see that
+        method's docstring. trace_schema_version is NOT included here.
         """
         if not trace.signature or not self._root_pubkey:
             return False
@@ -322,16 +333,19 @@ class Ed25519TraceSigner:
 
             # Build the canonical message (same as sign_trace)
             components_list = [
-                {
-                    "component_type": c.component_type,
-                    "data": _strip_empty(c.data),
-                    "event_type": c.event_type,
-                    "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, "isoformat") else str(c.timestamp),
-                }
+                _strip_empty(
+                    {
+                        "component_type": c.component_type,
+                        "data": c.data,
+                        "event_type": c.event_type,
+                        "timestamp": c.timestamp.isoformat()
+                        if hasattr(c.timestamp, "isoformat")
+                        else str(c.timestamp),
+                    }
+                )
                 for c in trace.components
             ]
 
-            # Include trace_level in signed payload for per-level verification
             signed_payload = {
                 "components": components_list,
                 "trace_level": trace.trace_level,
@@ -806,7 +820,10 @@ class AccordMetricsService:
                 except Exception as e:
                     if isinstance(e, asyncio.CancelledError):
                         raise  # Re-raise to exit cleanly
-                    logger.error(f"Error in periodic flush: {e}")
+                    logger.error(
+                        f"Error in periodic flush: {type(e).__name__}: {e!r}",
+                        exc_info=True,
+                    )
         except asyncio.CancelledError:
             pass  # Clean exit on cancellation
 
@@ -840,9 +857,26 @@ class AccordMetricsService:
             )
             # Persist cumulative total to survive restarts
             self._persist_events_total()
+        except asyncio.TimeoutError as e:
+            # Empty str() on TimeoutError silently swallowed the cause for months.
+            # Log type + endpoint so incident capture records an actionable message.
+            self._events_failed += len(events_to_send)
+            logger.error(
+                f"❌ [{self._adapter_instance_id}] FLUSH FAILED - Timeout ({type(e).__name__}) "
+                f"posting {len(events_to_send)} events to {self._endpoint_url}/accord/events "
+                f"(connect=10s, read=20s, total=30s); level={self._trace_level.value}"
+            )
+            async with self._queue_lock:
+                if len(self._event_queue) < self._batch_size * 10:
+                    self._event_queue = events_to_send + self._event_queue
+                    logger.info(f"   Re-queued {len(events_to_send)} events for retry")
         except Exception as e:
             self._events_failed += len(events_to_send)
-            logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
+            logger.error(
+                f"❌ [{self._adapter_instance_id}] FLUSH FAILED: {len(events_to_send)} events: "
+                f"{type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
             # Re-queue failed events (up to a limit)
             async with self._queue_lock:
                 if len(self._event_queue) < self._batch_size * 10:
@@ -892,6 +926,7 @@ class AccordMetricsService:
             "batch_timestamp": datetime.now(timezone.utc).isoformat(),
             "consent_timestamp": self._consent_timestamp,
             "trace_level": self._trace_level.value,
+            "trace_schema_version": TRACE_SCHEMA_VERSION,
         }
         # Only add correlation metadata if user opted in to any fields
         if correlation_metadata:
@@ -1016,7 +1051,9 @@ class AccordMetricsService:
             completed_at=timestamp,
         )
 
-        # Add connectivity component
+        # Add connectivity component. agent_name is included so lens can
+        # self-identify the agent alongside the hashed agent_id (the bare hash
+        # by itself makes triage in lens dashboards hard).
         connectivity_trace.components.append(
             TraceComponent(
                 component_type="connectivity",
@@ -1025,6 +1062,8 @@ class AccordMetricsService:
                 data={
                     "version": "1.8.5",
                     "trace_level": self._trace_level.value,
+                    "agent_name": self._agent_name or "",
+                    "agent_template": self._agent_template or "",
                     **({"correlation_metadata": correlation_metadata} if correlation_metadata else {}),
                 },
             )
@@ -1077,14 +1116,29 @@ class AccordMetricsService:
 
         except aiohttp.ClientConnectorError as e:
             logger.error("=" * 70)
-            logger.error(f"❌ CONNECTED EVENT FAILED - Cannot reach server: {e}")
+            logger.error(f"❌ CONNECTED EVENT FAILED - Cannot reach server: {type(e).__name__}: {e!r}")
             logger.error(f"   Endpoint: {url}")
             logger.error("   Check network connectivity and endpoint URL")
             logger.error("=" * 70)
 
+        except asyncio.TimeoutError as e:
+            # aiohttp raises asyncio.TimeoutError on ClientTimeout; these have no
+            # str() representation, so surface the type + endpoint so the incident
+            # log actually identifies what hung.
+            logger.error("=" * 70)
+            logger.error(
+                f"❌ CONNECTED EVENT FAILED - Timeout ({type(e).__name__}) posting to {url}"
+            )
+            logger.error("   Server did not respond within client timeout (connect=10s, read=20s)")
+            logger.error("=" * 70)
+
         except Exception as e:
             logger.error("=" * 70)
-            logger.error(f"❌ CONNECTED EVENT FAILED - Unexpected error: {e}")
+            logger.error(
+                f"❌ CONNECTED EVENT FAILED - Unexpected error: {type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
+            logger.error(f"   Endpoint: {url}")
             logger.error("=" * 70)
 
     async def _queue_event(self, event: Dict[str, Any]) -> None:
@@ -1116,7 +1170,11 @@ class AccordMetricsService:
                 self._last_send_time = datetime.now(timezone.utc)
             except Exception as e:
                 self._events_failed += len(events_to_send)
-                logger.error(f"Failed to send batch: {e}")
+                logger.error(
+                    f"Failed to send batch ({len(events_to_send)} events) to "
+                    f"{self._endpoint_url}/accord/events: {type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
 
     # =========================================================================
     # Reasoning Event Stream Processing (6-Component Trace Capture)
@@ -1431,10 +1489,14 @@ class AccordMetricsService:
             idma_data: Optional[Dict[str, Any]] = (
                 {
                     "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
+                    "effective_source_count": idma.get("effective_source_count") if isinstance(idma, dict) else None,
                     "correlation_risk": idma.get("correlation_risk") if isinstance(idma, dict) else None,
+                    "source_overlap": idma.get("source_overlap") if isinstance(idma, dict) else None,
                     "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
+                    "reasoning_is_fragile": idma.get("reasoning_is_fragile") if isinstance(idma, dict) else None,
                     # phase is a key scoring metric: chaos/healthy/rigidity
                     "phase": idma.get("phase") if isinstance(idma, dict) else None,
+                    "reasoning_state": idma.get("reasoning_state") if isinstance(idma, dict) else None,
                 }
                 if idma
                 else None
@@ -1449,10 +1511,62 @@ class AccordMetricsService:
                 pdma_data["conflicts"] = pdma.get("conflicts") if isinstance(pdma, dict) else None
                 pdma_data["alignment_check"] = pdma.get("alignment_check") if isinstance(pdma, dict) else None
                 if idma_data:
+                    idma_data["k_raw"] = idma.get("k_raw") if isinstance(idma, dict) else None
+                    idma_data["raw_source_count"] = idma.get("raw_source_count") if isinstance(idma, dict) else None
+                    idma_data["rho_mean"] = idma.get("rho_mean") if isinstance(idma, dict) else None
+                    idma_data["phase_confidence"] = idma.get("phase_confidence") if isinstance(idma, dict) else None
+                    idma_data["collapse_margin"] = idma.get("collapse_margin") if isinstance(idma, dict) else None
+                    idma_data["safety_margin"] = idma.get("safety_margin") if isinstance(idma, dict) else None
                     idma_data["sources_identified"] = idma.get("sources_identified") if isinstance(idma, dict) else None
+                    idma_data["source_ids"] = idma.get("source_ids") if isinstance(idma, dict) else None
+                    idma_data["source_types"] = idma.get("source_types") if isinstance(idma, dict) else None
+                    idma_data["source_independence_scores"] = (
+                        idma.get("source_independence_scores") if isinstance(idma, dict) else None
+                    )
+                    idma_data["source_type_counts"] = idma.get("source_type_counts") if isinstance(idma, dict) else None
                     idma_data["correlation_factors"] = (
                         idma.get("correlation_factors") if isinstance(idma, dict) else None
                     )
+                    idma_data["top_correlation_factors"] = (
+                        idma.get("top_correlation_factors") if isinstance(idma, dict) else None
+                    )
+                    idma_data["pairwise_correlation_summary"] = (
+                        idma.get("pairwise_correlation_summary") if isinstance(idma, dict) else None
+                    )
+                    idma_data["rho_intra"] = idma.get("rho_intra") if isinstance(idma, dict) else None
+                    idma_data["rho_inter"] = idma.get("rho_inter") if isinstance(idma, dict) else None
+                    idma_data["module_count"] = idma.get("module_count") if isinstance(idma, dict) else None
+                    idma_data["effective_module_count"] = (
+                        idma.get("effective_module_count") if isinstance(idma, dict) else None
+                    )
+                    idma_data["source_clusters"] = idma.get("source_clusters") if isinstance(idma, dict) else None
+                    idma_data["common_cause_flags"] = (
+                        idma.get("common_cause_flags") if isinstance(idma, dict) else None
+                    )
+                    idma_data["intervention_recommendation"] = (
+                        idma.get("intervention_recommendation") if isinstance(idma, dict) else None
+                    )
+                    idma_data["next_best_recovery_step"] = (
+                        idma.get("next_best_recovery_step") if isinstance(idma, dict) else None
+                    )
+                    idma_data["delta_k_eff"] = idma.get("delta_k_eff") if isinstance(idma, dict) else None
+                    idma_data["delta_rho_mean"] = idma.get("delta_rho_mean") if isinstance(idma, dict) else None
+                    idma_data["phase_persistence_steps"] = (
+                        idma.get("phase_persistence_steps") if isinstance(idma, dict) else None
+                    )
+                    idma_data["time_in_fragile_state_ms"] = (
+                        idma.get("time_in_fragile_state_ms") if isinstance(idma, dict) else None
+                    )
+                    idma_data["moving_variance"] = idma.get("moving_variance") if isinstance(idma, dict) else None
+                    idma_data["rho_critical"] = idma.get("rho_critical") if isinstance(idma, dict) else None
+                    idma_data["k_required"] = idma.get("k_required") if isinstance(idma, dict) else None
+                    idma_data["defense_function"] = (
+                        idma.get("defense_function") if isinstance(idma, dict) else None
+                    )
+                    idma_data["collapse_rate"] = idma.get("collapse_rate") if isinstance(idma, dict) else None
+                    idma_data["time_to_truth"] = idma.get("time_to_truth") if isinstance(idma, dict) else None
+                    idma_data["time_to_entropy"] = idma.get("time_to_entropy") if isinstance(idma, dict) else None
+                    idma_data["time_to_capture"] = idma.get("time_to_capture") if isinstance(idma, dict) else None
 
             # FULL: Add reasoning text and prompts
             if is_full:
@@ -1481,18 +1595,54 @@ class AccordMetricsService:
             # GENERIC: Numeric scores only - k_eff is the key metric
             data = {
                 "k_eff": event.get("k_eff"),
+                "effective_source_count": event.get("effective_source_count"),
                 "correlation_risk": event.get("correlation_risk"),
+                "source_overlap": event.get("source_overlap"),
                 "phase": event.get("phase"),
+                "reasoning_state": event.get("reasoning_state"),
                 "fragility_flag": event.get("fragility_flag"),
+                "reasoning_is_fragile": event.get("reasoning_is_fragile"),
             }
             # DETAILED: Add identified sources and correlation factors
             if is_detailed:
+                data["k_raw"] = event.get("k_raw")
+                data["raw_source_count"] = event.get("raw_source_count")
+                data["rho_mean"] = event.get("rho_mean")
+                data["phase_confidence"] = event.get("phase_confidence")
+                data["collapse_margin"] = event.get("collapse_margin")
+                data["safety_margin"] = event.get("safety_margin")
                 data["sources_identified"] = event.get("sources_identified", [])
+                data["source_ids"] = event.get("source_ids", [])
+                data["source_types"] = event.get("source_types", [])
+                data["source_independence_scores"] = event.get("source_independence_scores", [])
+                data["source_type_counts"] = event.get("source_type_counts", [])
                 data["correlation_factors"] = event.get("correlation_factors", [])
+                data["top_correlation_factors"] = event.get("top_correlation_factors", [])
+                data["pairwise_correlation_summary"] = event.get("pairwise_correlation_summary", [])
+                data["rho_intra"] = event.get("rho_intra")
+                data["rho_inter"] = event.get("rho_inter")
+                data["module_count"] = event.get("module_count")
+                data["effective_module_count"] = event.get("effective_module_count")
+                data["source_clusters"] = event.get("source_clusters", [])
+                data["common_cause_flags"] = event.get("common_cause_flags", [])
+                data["intervention_recommendation"] = event.get("intervention_recommendation")
+                data["next_best_recovery_step"] = event.get("next_best_recovery_step")
+                data["delta_k_eff"] = event.get("delta_k_eff")
+                data["delta_rho_mean"] = event.get("delta_rho_mean")
+                data["phase_persistence_steps"] = event.get("phase_persistence_steps")
+                data["time_in_fragile_state_ms"] = event.get("time_in_fragile_state_ms")
+                data["moving_variance"] = event.get("moving_variance")
+                data["rho_critical"] = event.get("rho_critical")
+                data["k_required"] = event.get("k_required")
+                data["defense_function"] = event.get("defense_function")
+                data["collapse_rate"] = event.get("collapse_rate")
+                data["time_to_truth"] = event.get("time_to_truth")
+                data["time_to_entropy"] = event.get("time_to_entropy")
+                data["time_to_capture"] = event.get("time_to_capture")
             # FULL: Add reasoning text and prompt
             if is_full:
                 data["reasoning"] = event.get("reasoning")
-                data["idma_prompt"] = event.get("idma_prompt")
+                data["prompt_used"] = event.get("idma_prompt")
             return data
 
         elif event_type == "ASPDMA_RESULT":
@@ -1724,8 +1874,11 @@ class AccordMetricsService:
     async def send_deferral(self, request: DeferralRequest) -> str:
         """Receive WBD (Wisdom-Based Deferral) events.
 
-        This is called by WiseBus.send_deferral() which broadcasts to all
-        WiseAuthority services with the send_deferral capability.
+        Called by WiseBus.send_deferral() which broadcasts to all WiseAuthority
+        services with the send_deferral capability. WBD events are a distinct
+        accord primitive from traces — they POST to the dedicated endpoint
+        /accord/wbd/deferrals per the CIRISLens accord contract, NOT to
+        /accord/events which is reserved for complete_trace envelopes.
 
         Args:
             request: DeferralRequest containing deferral details
@@ -1735,48 +1888,66 @@ class AccordMetricsService:
         """
         logger.debug(f"Received WBD event for thought {request.thought_id}")
 
-        now = datetime.now(timezone.utc)
-        now_iso = now.isoformat()
-
-        # Build minimal trace for WBD event (CIRISLens requires trace field)
-        wbd_trace: Dict[str, Any] = {
-            "trace_id": f"wbd_{request.thought_id}_{now.strftime('%Y%m%d%H%M%S')}",
-            "thought_id": request.thought_id,
-            "task_id": request.task_id,
-            "agent_id_hash": self._agent_id_hash or "unknown",
-            "started_at": now_iso,
-            "completed_at": now_iso,
-            "trace_level": TraceDetailLevel.GENERIC.value,
-            "components": [
-                {
-                    "component_type": "action",
-                    "event_type": "WISDOM_BASED_DEFERRAL",
-                    "timestamp": now_iso,
-                    "data": {
-                        "action": "defer",
-                        "reason_truncated": request.reason[:200] if request.reason else None,
-                        "defer_until": request.defer_until.isoformat() if request.defer_until else None,
-                    },
-                }
-            ],
-        }
-
-        # Build anonymized event with required trace field
-        wbd_event: Dict[str, Any] = {
-            "event_type": "wbd_deferral",
-            "trace": wbd_trace,
-            "timestamp": now_iso,
+        # Build payload matching CIRISLens WBDDeferralCreate schema.
+        # See CIRISLens/api/accord_api.py::WBDDeferralCreate and POST /accord/wbd/deferrals.
+        reason = (request.reason or "").strip()
+        deferral_payload: Dict[str, Any] = {
             "agent_id": self._agent_id_hash or "unknown",
-            "thought_id": request.thought_id,
-            "task_id": request.task_id,
-            "reason": request.reason[:200] if request.reason else None,  # Truncate
-            "defer_until": request.defer_until.isoformat() if request.defer_until else None,
-            # Do NOT include context/metadata which may contain sensitive info
+            # Default to UNCERTAINTY — the reason text is free-form and we can't
+            # reliably classify it client-side. Lens is free to re-classify.
+            "trigger_type": "UNCERTAINTY",
+            "trigger_description": reason[:500] if reason else "Wisdom-based deferral",
+            "context_summary": (
+                f"thought_id={request.thought_id} task_id={request.task_id} "
+                f"defer_until={request.defer_until.isoformat() if request.defer_until else 'n/a'}"
+            ),
+            "dilemma_description": reason[:2000] if reason else "(no reason provided)",
+            "rationale": reason[:2000] if reason else None,
+            # Thread the thought/task identifiers through as trace_id/span_id so
+            # lens can join WBD events back to the owning trace.
+            "trace_id": request.task_id or None,
+            "span_id": request.thought_id or None,
         }
 
-        await self._queue_event(wbd_event)
+        await self._send_wbd_deferral(deferral_payload, request.thought_id)
 
         return f"WBD event recorded for accord metrics: {request.thought_id}"
+
+    async def _send_wbd_deferral(self, payload: Dict[str, Any], thought_id: str) -> None:
+        """POST a WBD deferral directly to the dedicated lens endpoint.
+
+        Unlike trace events this is NOT batched through _event_queue — WBD is a
+        separate accord primitive with its own endpoint. Failures are logged but
+        don't raise, to keep the WiseBus broadcast non-blocking.
+        """
+        if not self._session:
+            logger.warning("Cannot send WBD deferral — HTTP session not initialized")
+            return
+
+        url = f"{self._endpoint_url}/accord/wbd/deferrals"
+        logger.info(f"📡 [{self._adapter_instance_id}] POST {url} (thought={thought_id})")
+
+        try:
+            async with self._session.post(url, json=payload) as response:
+                if response.status in (200, 201):
+                    logger.info(f"✅ WBD deferral accepted by lens (thought={thought_id})")
+                else:
+                    error_text = await response.text()
+                    logger.error(
+                        f"❌ WBD deferral rejected: Status {response.status} "
+                        f"{error_text[:500]} (url={url}, thought={thought_id})"
+                    )
+        except asyncio.TimeoutError as e:
+            logger.error(
+                f"❌ WBD deferral timed out ({type(e).__name__}) posting to {url} "
+                f"(thought={thought_id})"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ WBD deferral failed: {type(e).__name__}: {e!r} "
+                f"(url={url}, thought={thought_id})",
+                exc_info=True,
+            )
 
     async def fetch_guidance(self, context: Any) -> Optional[str]:
         """Not implemented - this service only receives deferrals.
@@ -1898,7 +2069,10 @@ class AccordMetricsService:
 
         self._session = aiohttp.ClientSession(
             connector=connector,
-            timeout=aiohttp.ClientTimeout(total=30),
+            # Split timeout: distinguishes unreachable host (connect) from slow/stuck
+            # server response (sock_read) when the POST never returns. A total cap
+            # still protects against pathological cases.
+            timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
             headers={
                 "Content-Type": "application/json",
                 "User-Agent": "CIRIS-AccordMetrics/1.0",

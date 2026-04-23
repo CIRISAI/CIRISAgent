@@ -54,7 +54,12 @@ class ToolHandler(BaseActionHandler):
                 )
                 follow_up_id = self.complete_thought_and_create_followup(
                     thought=thought,
-                    follow_up_content=f"TOOL action failed: Invalid parameters type ({type(params)}) for thought {thought_id}.",
+                    follow_up_content=self._localized_followup(
+                        "tool_invalid_params",
+                        default=f"TOOL action failed: Invalid parameters type ({type(params)}) for thought {thought_id}.",
+                        params_type=str(type(params)),
+                        thought_id=thought_id,
+                    ),
                     action_result=result,
                     status=ThoughtStatus.FAILED,
                 )
@@ -66,7 +71,11 @@ class ToolHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.TOOL, dispatch_context, thought_id, e)
             follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"TOOL action failed: {e}",
+                follow_up_content=self._localized_followup(
+                    "tool_action_failed_with_reason",
+                    default=f"TOOL action failed: {e}",
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -152,14 +161,25 @@ class ToolHandler(BaseActionHandler):
         thought_id = thought.thought_id
 
         if success:
-            follow_up_text = (
-                f"CIRIS_FOLLOW_UP_THOUGHT: TOOL action {params.name} executed for thought {thought_id}. "
-                f"Info: {follow_up_info}. Awaiting tool results or next steps. If task complete, use TASK_COMPLETE."
+            follow_up_text = self._localized_followup(
+                "tool_followup_success",
+                default=(
+                    f"TOOL action {params.name} executed for thought {thought_id}. "
+                    f"Result summary: {follow_up_info}. Awaiting tool results or next steps. If task complete, use TASK_COMPLETE."
+                ),
+                tool_name=params.name,
+                thought_id=thought_id,
+                summary=follow_up_info,
             )
         else:
-            follow_up_text = (
-                f"CIRIS_FOLLOW_UP_THOUGHT: TOOL action failed for thought {thought_id}. "
-                f"Reason: {follow_up_info}. Review and determine next steps."
+            follow_up_text = self._localized_followup(
+                "tool_followup_failure",
+                default=(
+                    f"TOOL action failed for thought {thought_id}. "
+                    f"Reason: {follow_up_info}. Review and determine next steps."
+                ),
+                thought_id=thought_id,
+                reason=follow_up_info,
             )
 
         final_status = ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED

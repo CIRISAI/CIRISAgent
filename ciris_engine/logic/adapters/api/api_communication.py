@@ -104,25 +104,35 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         return True
 
     async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
-        """Handle API interaction response storage if applicable."""
-        if not (channel_id and channel_id.startswith("api_")):
-            logger.debug(f"[API_INTERACTION] Skipping non-API channel: {channel_id}")
+        """Handle API interaction response storage if applicable.
+
+        Fires whenever there's a pending interact() waiter for the channel,
+        regardless of the channel prefix. The previous `api_` prefix check
+        silently dropped responses for submissions that used a custom
+        channel_id (e.g. model_eval's per-question channels like
+        'model_eval_en_01'), leaving the client blocked until its HTTP
+        timeout. message_channel_map is populated on every incoming message
+        so its presence is the real signal that a waiter exists.
+        """
+        if not channel_id:
             return
 
-        logger.info(
-            f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, content_preview={content[:100] if content else 'EMPTY'}"
-        )
         try:
             if not hasattr(self, "_app_state"):
                 logger.warning("[API_INTERACTION] No _app_state attribute found")
                 return
 
             message_channel_map = getattr(self._app_state, "message_channel_map", {})
-            logger.debug(f"[API_INTERACTION] message_channel_map keys: {list(message_channel_map.keys())}")
             message_id = message_channel_map.get(channel_id)
             if not message_id:
-                logger.warning(f"[API_INTERACTION] No message_id found for channel {channel_id}")
+                # No waiter — not all SPEAKs are replies to interact() calls.
+                logger.debug(f"[API_INTERACTION] No pending interact waiter for channel {channel_id}")
                 return
+
+            logger.info(
+                f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, "
+                f"content_preview={content[:100] if content else 'EMPTY'}"
+            )
 
             from ciris_engine.logic.adapters.api.routes.agent import store_message_response
 

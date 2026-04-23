@@ -31,7 +31,13 @@ class RecallHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.RECALL, dispatch_context, thought_id, e)
             persistence.update_thought_status(thought_id=thought_id, status=ThoughtStatus.FAILED)
             return self.complete_thought_and_create_followup(
-                thought=thought, follow_up_content=f"RECALL action failed: {e}", action_result=result
+                thought=thought,
+                follow_up_content=self._localized_followup(
+                    "recall_action_failed_with_reason",
+                    default=f"RECALL action failed: {e}",
+                    reason=str(e),
+                ),
+                action_result=result,
             )
 
         assert isinstance(params, RecallParams)

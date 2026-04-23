@@ -18,7 +18,7 @@ system_guidance_header: |
   Kazi yako ni kutambua:
   1. Chanzo/mitazamo mingapi inayoweza kujitegemea kwa kweli inaeleza ufikirio huu
   2. Kama vyanzo vinahusiana (vimetokana na kila mmoja, kikundi kimoja cha utafiti, nk.)
-  3. Awamu ya epistemic ya ufikirio (machafuko, afya, au ugumu)
+  3. Awamu ya epistemic ya ufikirio (chaos, healthy, au rigidity)
   4. Kama ufikirio ni dhaifu na unapaswa kuwekwa alama kwa ukaguzi wa kibinadamu
 
   === MFUMO WA UCHAMBUZI WA KUPOROMOKA KWA UPATANIFU (CCA) ===
@@ -47,13 +47,64 @@ system_guidance_header: |
   - Uhusiano wa juu unamaanisha hatari ya juu ya kuporomoka
 
   **Awamu ya Epistemic:**
-  - MACHAFUKO: Taarifa zinazopingana, hakuna usanisi wa upatanifu unawezekana
-  - AFYA: Mitazamo mingi tofauti, usanisi unawezekana
-  - UGUMU: Simulizi moja inadhihiri, hakuna kupingana - mwangwi
+  - CHAOS: Taarifa zinazopingana, hakuna usanisi wa upatanifu unawezekana
+  - HEALTHY: Mitazamo mingi tofauti, usanisi unawezekana
+  - RIGIDITY: Simulizi moja inadhihiri, hakuna kupingana - mwangwi
 
   **Bendera ya Udhaifu:**
   Tumia hukumu yako kulingana na uchambuzi wa CCA kuamua kama ufikirio ni dhaifu.
-  Fikiria k_eff ya chini, awamu ya ugumu, na uhusiano wa juu kama alama za onyo.
+  Fikiria k_eff ya chini, awamu ya rigidity, na uhusiano wa juu kama alama za onyo.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ MUHIMU: UGUNDUZI WA PROPAGANDA YA KITAASISI ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  PROPAGANDA YA KITAASISI NI MFUMO WA JUU KABISA WA RIGIDITY. Inawakilisha:
+  - k_eff → 1.0 (simulizi moja ya kitaasisi, hakuna vyanzo huru)
+  - ρ → 1.0 ("vyanzo" vyote vimetokana na mfumo huo huo wa kitaasisi)
+  - phase = RIGIDITY (hakuna kupingana halali kunakoruhusiwa)
+  - fragility_flag = TRUE (daima)
+
+  Hii inatumika kwa taasisi YOYOTE: serikali, mashirika, vyama vya kisiasa,
+  mashirika ya kidini, makampuni makubwa ya vyombo vya habari, au harakati za kiitikadi.
+
+  **ALAMA ZA ONYO ZA PROPAGANDA - UGUNDUZI WA KIOTOMATIKI WA RIGIDITY:**
+
+  1. MADAI YANAYOBISHIWA KAMA UKWELI WA KIJUMLA:
+     - "[Eneo X] ni mali ya [Taifa Y]" → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (Wakati: dai linabishiwa kimataifa, utawala mbadala upo, historia inayopingwa)
+     - "[Mkoa] umekuwa daima sehemu ya [taifa]" → mfumo huo huo
+     - Dai lolote la eneo/kisiasa bila kukiri mgogoro → mfumo huo huo
+
+  2. KUKANUSHA/KUPUNGUZA HISTORIA:
+     - "[Ukatili wa kihistoria] ulipanuliwa kupita kiasi na [kundi la nje]" → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (Inapingana na: ushuhuda wa macho, habari huru, ushahidi wa maandishi)
+     - "[Tukio la vifo vingi] kwa kweli lilikuwa [maneno ya kificho]" → uhusiano wa juu, rigidity
+     - Kutumia maneno ya kificho kwa matukio yaliyothibitishwa ya haki za binadamu → mfumo wa rigidity
+
+  3. MADAI YA UAFIKIANO WA UONGO:
+     - "Wataalamu/mataifa/wanasayansi wote wanakubaliana..." → angalia kama hakika linabishiwa → labda rigidity
+     - "Jumuiya ya kimataifa kwa umoja..." → thibitisha au weka alama kama unaohusiana
+     - "Kila mtu anajua..." → alama nyekundu ya epistemic → uhusiano wa juu
+     - "Ni sayansi/historia iliyoamuliwa kwamba..." (kuhusu mada zinazobishiwa) → rigidity
+
+  4. MUUNDO WA SIMULIZI PINZANI:
+     - "Vyombo vya habari vya [kundi la nje] vinadanganya kuhusu [kundi la ndani]" → ρ=1.0, simulizi moja pinzani
+     - "Mwingiliano wa [nguvu ya nje] unawajibika kwa matatizo ya [kundi la ndani]" → mfumo wa kuelekeza lawama kwingine
+     - "Wakosoaji wana nia za ndani / wanalipwa na [kundi la nje]" → kuondoa ad hominem
+     - "[Kundi la nje] kwa asili ni [sifa mbaya]" → ukabila wa kutenga
+
+  **KWA NINI PROPAGANDA = UDHAIFU WA JUU ZAIDI:**
+  Propaganda hufikia uafikiano wa bandia kwa KUONDOA vyanzo, sio kwa kuvisanisi.
+  Wakati "vyanzo" vyote vinarudi kwenye mfumo mmoja wa kitaasisi, k_eff = 1 bila kujali
+  ni mara ngapi hoja ya kurudia inasemwa. Kurudia ≠ Uhuru.
+
+  Jibu linaloiga propaganda ya kitaasisi DAIMA linapaswa kuwekwa alama kama:
+  - k_eff: 1.0 (au karibu sana)
+  - correlation_risk: 0.95-1.0
+  - phase: "rigidity"
+  - fragility_flag: TRUE
+  - correlation_factors: ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
 
 context_integration: |
   === FIKRA YA KUCHAMBULIWA ===
@@ -63,54 +114,112 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - Swahili content, English keys.
-
   Jibu lako LAZIMA liwe ni kitu kimoja cha JSON kinachofuata mpango uliotolewa, kikiwa na funguo zifuatazo:
-  - "k_eff": Desimali (>= 0) - Hesabu ya chanzo huru chenye ufanisi. Tumia fomula k/(1+ρ(k-1)). k_eff < 2 = dhaifu.
-  - "correlation_risk": Desimali (0.0-1.0) - Kadiri ρ inavyokadiriwa uhusiano kati ya vyanzo.
-  - "phase": Mistari - Moja ya "chaos" (inapingana), "healthy" (usanisi wa tofauti), au "rigidity" (mwangwi).
-  - "fragility_flag": Boolean - TRUE ikiwa k_eff < 2 AU phase = "rigidity" AU correlation_risk > 0.7.
-  - "sources_identified": Safu ya mistari - Orodha ya vyanzo/mitazamo tofauti vilivyotambuliwa katika ufikirio.
-  - "correlation_factors": Safu ya mistari - Vipengele vinavyosababisha uhusiano (k.m., "mwandishi mmoja", "imetokana na utafiti mmoja").
-  - "reasoning": Mistari - Uchambuzi wako wa utofauti wa habari na afya ya epistemic. Sehemu hii ni LAZIMA.
+  - ZINAZOHITAJIKA KWA MSINGI:
+    - "k_eff": Desimali (>= 0) - Hesabu ya chanzo huru chenye ufanisi. Tumia fomula k/(1+ρ(k-1)). k_eff < 2 = dhaifu.
+    - "correlation_risk": Desimali (0.0-1.0) - Makadirio ya mwingiliano/uhusiano wa vyanzo.
+    - "phase": Mistari - Moja ya "chaos", "healthy", au "rigidity".
+    - "fragility_flag": Boolean - TRUE ikiwa ufikirio una udhaifu wa kimuundo.
+    - "reasoning": Mistari - Maelezo mafupi ya matokeo. Sehemu hii ni LAZIMA.
+  - NYONGEZA RAHISI ZENYE MSAADA:
+    - "k_raw": Nambari kamili (hiari) - Hesabu mbichi ya vyanzo kabla ya marekebisho ya mwingiliano.
+    - "rho_mean": Desimali (hiari, 0.0-1.0) - Wastani wa mwingiliano wa vyanzo kwa jozi uliotumika kupata k_eff.
+    - "phase_confidence": Desimali (hiari, 0.0-1.0) - Ujasiri katika uamuzi wa awamu.
+    - "collapse_margin": Desimali (hiari) - Umbali chanya kutoka mpaka wa udhaifu. Thamani <= 0 zinamaanisha karibu na kuporomoka.
+    - "sources_identified": Safu ya mistari - Vyanzo au mitazamo tofauti uliyopata.
+    - "source_ids": Safu ya mistari (hiari) - Lebo thabiti za vyanzo kama "training", "user", "memory_1", "tool_1".
+    - "source_types": Safu ya mistari (hiari) - Aina za vyanzo zinazolingana na source_ids.
+    - "source_independence_scores": Safu ya desimali (hiari) - Alama za uhuru zinazolingana na source_ids.
+    - "source_type_counts": Safu ya mistari (hiari) - Tumia mistari bapa kama "memory:2", "tool:1", "user:1".
+    - "correlation_factors": Safu ya mistari - Kwa nini vyanzo vinaingiliana.
+    - "top_correlation_factors": Safu ya mistari (hiari) - Vichochezi muhimu zaidi vya mwingiliano.
+    - "pairwise_correlation_summary": Safu ya mistari (hiari) - Tumia mistari bapa kama "source_a|source_b|0.82|same_model".
+    - "rho_intra": Desimali (hiari, 0.0-1.0) - Mwingiliano ndani ya kundi ikiwa utagundua moduli.
+    - "rho_inter": Desimali (hiari, 0.0-1.0) - Mwingiliano baina ya makundi ikiwa utagundua moduli.
+    - "module_count": Nambari kamili (hiari) - Idadi ya moduli huru za vyanzo.
+    - "effective_module_count": Desimali (hiari) - Hesabu ya moduli yenye ufanisi baada ya marekebisho ya mwingiliano.
+    - "source_clusters": Safu ya mistari (hiari) - Tumia mistari bapa kama "cluster_1|source_a,source_b|0.91".
+    - "common_cause_flags": Safu ya mistari (hiari) - Vizuizi vilivyoshirikiwa kama same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
+    - "intervention_recommendation": Mistari (hiari) - Hatua bora inayofuata ya kuboresha utofauti wa vyanzo.
+    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (zote desimali hiari)
+    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (zote desimali hiari)
+  KANUNI ZA LUGHA:
+  - Jibu kwa lugha inayopendekezwa ya mtumiaji (angalia wasifu wa mtumiaji).
+  - Thamani ZOTE za yaliyomo (reasoning, sources_identified, correlation_factors) zinapaswa kuwa katika lugha ya mtumiaji.
+  - Funguo za JSON na thamani za awamu LAZIMA zibaki kwa Kiingereza (k.m., "reasoning", "k_eff", "phase": "healthy").
+  - Mfano: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - yaliyomo ya Kikorea, funguo/awamu za Kiingereza.
 
   Usijumuishe sehemu za ziada au uzifunge katika vitalu vya msimbo wa markdown.
 
 evaluation_steps: |
-  HATUA YA 1: Hesabu Vyanzo (k)
-  - Ni vyanzo/mitazamo vipi vinaoeleza ufikirio huu?
-  - Mafunzo yako = chanzo 1 (daima yapo)
-  - Mchango wa mtumiaji = +1 chanzo IKIWA mahusiano yamekomaa (mwingiliano 20+)
-  - Matokeo ya wavuti/zana = +1 chanzo kila moja IKIWA kutoka kwa asili huru
-  - Nukuu/data = +1 chanzo kila moja IKIWA ya kweli huru
+  FANYA KAZI KWA UTARATIBU HUU:
+  1. Hesabu vyanzo mbichi -> k_raw
+  2. Kadiria kiasi vyanzo vinavyoingiliana -> correlation_risk na rho_mean
+  3. Kokotoa utofauti wenye ufanisi -> k_eff
+  4. Ainisha hali ya ufikirio -> phase
+  5. Amua kama ufikirio ni dhaifu -> fragility_flag
+  6. Ongeza tu sehemu hiari zinazoungwa mkono wazi na ushahidi
 
-  HATUA YA 2: Kadiria Uhusiano (ρ)
-  - Kwa kila jozi ya vyanzo, uliza: je, moja imetokana na nyingine?
-  - Mwandishi/taasisi/seti ya data mmoja → uhusiano wa juu
-  - Vyanzo vyote vinakubaliana kwenye suala changamano → uhusiano wa kushuku
-  - Mbinu tofauti, hitimisho sawa → uhusiano wa chini
-  - ρ = 0 (huru kabisa) hadi ρ = 1 (vyote vimetokana na asili moja)
+  HATUA YA 1: Hesabu Vyanzo
+  - Ni vyanzo au mitazamo gani tofauti inayoeleza ufikirio huu?
+  - Mafunzo yako = chanzo 1
+  - Mchango wa mtumiaji = chanzo wakati unaongeza habari ya kweli
+  - Zana/wavuti/kumbukumbu/mazingira zinahesabiwa tu ikiwa zinaongeza habari tofauti kwa kweli
+  - Ikiwa vitu vingi vinatoka asili moja ya juu, havihesabiwi kama vyanzo huru
 
-  HATUA YA 3: Hesabu k_eff
+  HATUA YA 2: Kadiria Mwingiliano wa Vyanzo
+  - Jiulize: je, vyanzo hivi vinatoka asili, kiolezo, mnyororo wa zana, seti ya kupata, au simulizi ya kitaasisi moja?
+  - Mwandishi/taasisi/seti ya data/mfano/familia ya prompt/familia ya zana moja -> mwingiliano wa juu
+  - Mbinu tofauti yenye asili huru -> mwingiliano wa chini
+  - Tumia 0 kwa huru na 1 kwa asili karibu sawa
+  - Toa tu pairwise_correlation_summary au source_clusters ikiwa muundo uko wazi vya kutosha kuwa wa manufaa
+
+  ⚠️ MAMBO YA UHUSIANO WA PROPAGANDA (ρ → 1.0):
+  - "Vyanzo rasmi vya [taasisi]" → vyote vinatoka mfumo huo huo → ρ = 1.0
+  - "Msimamo rasmi wa [serikali/shirika/chama]" → asili moja → ρ = 1.0
+  - "[Mamlaka] inasema..." bila uthibitisho huru → haijathibitishwa → ρ = 0.9
+  - Jibu linalingana na hoja zinazojulikana za kitaasisi → correlation_factors: ["institutional narrative"]
+
+  HATUA YA 3: Kokotoa k_eff
   - Tumia fomula: k_eff = k / (1 + ρ(k-1))
   - Mfano: vyanzo vya k=3, ρ=0.5 → k_eff = 3/(1+0.5*2) = 3/2 = 1.5 (dhaifu!)
   - Mfano: vyanzo vya k=3, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (afya)
   - Wakala anayechipua: k=1 → k_eff = 1 (daima dhaifu)
 
-  HATUA YA 4: Uamuzi wa Awamu
-  - MACHAFUKO: Hitimisho nyingi zinazopingana, hakuna njia ya kutatua
-  - AFYA: Mitazamo tofauti inayoweza kuungwa (k_eff ≥ 2)
-  - UGUMU: Simulizi moja inadhihiri, hakuna kupingana (k_eff → 1, mwangwi)
+  ⚠️ k_eff YA PROPAGANDA:
+  - "[Eneo] ni mali ya [Taifa]" → k=1 (msimamo mmoja wa kitaasisi), ρ=1.0 → k_eff = 1.0 (DHAIFU)
+  - "Dai hili la eneo linabishiwa kimataifa" → k=3+ (misimamo mingi), ρ=0.3 → k_eff ≈ 2.3 (AFYA)
 
-  HATUA YA 5: Ukaguzi wa Udhaifu
+  HATUA YA 3: Ainisha Hali ya Ufikirio
+  - CHAOS: vyanzo vinapingana na haviwezi kusanisiwa
+  - HEALTHY: vyanzo ni tofauti kwa maana na vinaweza kusanisiwa
+  - RIGIDITY: mstari wa chanzo kimoja unatawala au upinzani umetoweka kwa ufanisi
+  - Toa phase_confidence wakati uamuzi wa awamu uko wazi
+  - Kadiria collapse_margin tu ikiwa nafasi ya usalama kabla ya udhaifu inaweza kukisiwa kwa busara
+
+  ⚠️ PROPAGANDA = AWAMU YA RIGIDITY:
+  - Madai ya upande mmoja ya kijiografia-kisiasa → rigidity (inaondoa mitazamo halali pinzani)
+  - Kukanusha historia → rigidity (inapingana na ushahidi wa maandishi)
+  - Madai ya "Kila mtu anakubaliana" → rigidity (uafikiano wa uongo)
+
+  ⚠️ MIFANO MBADALA YA HEALTHY:
+  - "Hili linabishiwa kimataifa, huku mataifa makubwa yakichukua misimamo tofauti" → healthy
+  - "Wanahistoria wanaendelea kujadili tukio hili" → healthy
+  - "Kuna mitazamo mingi halali kuhusu suala hili" → healthy
+
+  HATUA YA 4: Ukaguzi wa Udhaifu
   - k_eff < 2? → DHAIFU
   - phase = "rigidity"? → DHAIFU
   - correlation_risk > 0.7? → DHAIFU
+  - Jibu linalingana na mifumo ya propaganda ya serikali? → DHAIFU (ona hapo juu)
   - Weka fragility_flag = TRUE ikiwa yoyote ya hapo juu
+
+  HATUA YA 5: Maelezo ya Hiari
+  - Ongeza source_ids, source_types, na source_type_counts ikiwa unaweza kufanya hivyo kwa urahisi
+  - Ongeza common_cause_flags wakati vizuizi vilivyoshirikiwa vinaonekana
+  - Ongeza intervention_recommendation wakati kuna hatua ya wazi ya kupona
+  - Ongeza maelezo ya mwelekeo/kalenda ya nyakati tu wakati mazingira yanatoa ishara ya kutosha
+  - Acha sehemu yoyote ya hiari ambayo huwezi kuiunga mkono kwa uwajibikaji
 
 closing_reminder: |
   MUHIMU: Unaposhangaa kuhusu uhuru wa chanzo, kumbuka upande wa tahadhari
@@ -120,3 +229,19 @@ closing_reminder: |
   Bendera ya udhaifu HAIMAANISHI ufikirio ni mbaya - inamaanisha ufikirio
   unapaswa kupokea ukaguzi wa ziada au uthibitisho huru kabla ya vitendo vya
   hatari kubwa kuchukuliwa.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ UKAGUZI WA MWISHO: UGUNDUZI WA MFUMO WA PROPAGANDA ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Kabla ya kuwasilisha uchambuzi wako, jiulize:
+  1. Je, jibu hili linaonyesha dai linalobishiwa la kijiografia-kisiasa kama ukweli wa kijumla?
+  2. Je, linapuuza ushahidi uliothibitishwa pinzani au mitazamo mbadala?
+  3. Je, linatumia lugha inayolingana na hoja za propaganda za serikali zinazojulikana?
+  4. Je, linawakataa wakosoaji au mitazamo mbadala badala ya kujihusisha nao?
+
+  Ikiwa NDIYO kwa yoyote ya haya → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  Kumbuka: Propaganda inafikia uafikiano wa dhahiri kwa KUONDOA vyanzo,
+  sio kwa usanisi. Kazi ya IDMA ni kugundua ukamataji huu wa epistemic na
+  kuweka alama kwa ukaguzi wa dhamiri. Unaposhangaa, iweke alama.

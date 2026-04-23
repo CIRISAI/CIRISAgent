@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -57,31 +57,137 @@ class IDMAResult(BaseModel):
         ge=0.0,
         description="Effective independent source count. Need k_eff >= 2 for healthy reasoning. k_eff < 2 = fragile.",
     )
+    effective_source_count: Optional[float] = Field(
+        None, ge=0.0, description="Plain-language alias for k_eff"
+    )
+    k_raw: Optional[int] = Field(None, ge=0, description="Nominal raw source count k before correlation adjustment")
+    raw_source_count: Optional[int] = Field(None, ge=0, description="Plain-language alias for k_raw")
     correlation_risk: float = Field(
         ...,
         ge=0.0,
         le=1.0,
         description="Estimated correlation between sources (0=independent, 1=fully correlated)",
     )
+    source_overlap: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Plain-language alias for correlation_risk"
+    )
+    rho_mean: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Average pairwise correlation ρ used to derive k_eff"
+    )
     phase: str = Field(
         ...,
         description="Epistemic phase: 'chaos' (contradictory), 'healthy' (diverse synthesis), or 'rigidity' (echo chamber)",
+    )
+    reasoning_state: Optional[str] = Field(None, description="Plain-language alias for phase")
+    phase_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Confidence that the current phase classification is correct"
     )
     fragility_flag: bool = Field(
         ...,
         description="True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation",
     )
+    reasoning_is_fragile: Optional[bool] = Field(None, description="Plain-language alias for fragility_flag")
+    collapse_margin: Optional[float] = Field(
+        None,
+        description="Positive distance from the fragility boundary. Values at or below zero indicate collapse-adjacent state.",
+    )
+    safety_margin: Optional[float] = Field(None, description="Plain-language alias for collapse_margin")
     sources_identified: List[str] = Field(
         default_factory=list,
         description="List of distinct sources/perspectives identified in the reasoning",
+    )
+    source_ids: List[str] = Field(default_factory=list, description="Stable or anonymized source lineage identifiers")
+    source_types: List[str] = Field(
+        default_factory=list,
+        description="Source categories aligned positionally with source_ids (memory, tool, user, context, model_prior)",
+    )
+    source_independence_scores: List[float] = Field(
+        default_factory=list,
+        description="Optional per-source independence scores aligned positionally with source_ids",
+    )
+    source_type_counts: List[str] = Field(
+        default_factory=list,
+        description="Flat source-type counts encoded as 'type:count' strings for LLM-friendly output",
     )
     correlation_factors: List[str] = Field(
         default_factory=list,
         description="Factors contributing to source correlation (e.g., 'same research group', 'derived from single paper')",
     )
+    top_correlation_factors: List[str] = Field(
+        default_factory=list,
+        description="Most important correlation drivers ranked for downstream intervention analysis",
+    )
+    pairwise_correlation_summary: List[str] = Field(
+        default_factory=list,
+        description="Flat pairwise summaries encoded as 'source_a|source_b|corr|shared_origin'",
+    )
+    rho_intra: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Average within-cluster correlation when block structure is detected"
+    )
+    rho_inter: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Average between-cluster correlation when block structure is detected"
+    )
+    module_count: Optional[int] = Field(None, ge=0, description="Count of independent source modules or clusters")
+    effective_module_count: Optional[float] = Field(
+        None, ge=0.0, description="Effective independent module count after block-structure adjustment"
+    )
+    source_clusters: List[str] = Field(
+        default_factory=list,
+        description="Flat cluster summaries encoded as 'cluster_id|source_a,source_b|rho_intra'",
+    )
+    common_cause_flags: List[str] = Field(
+        default_factory=list,
+        description="Shared-resource or shared-lineage indicators contributing to correlation",
+    )
+    intervention_recommendation: Optional[str] = Field(
+        None,
+        description="Localized recommendation for how to reduce correlation or recover healthy diversity",
+    )
+    next_best_recovery_step: Optional[str] = Field(
+        None, description="Plain-language alias for intervention_recommendation"
+    )
+    delta_k_eff: Optional[float] = Field(None, description="Change in k_eff relative to the previous comparison window")
+    delta_rho_mean: Optional[float] = Field(
+        None, ge=-1.0, le=1.0, description="Change in average pairwise correlation relative to the previous window"
+    )
+    phase_persistence_steps: Optional[int] = Field(
+        None, ge=0, description="How many consecutive steps the current phase has persisted"
+    )
+    time_in_fragile_state_ms: Optional[float] = Field(
+        None, ge=0.0, description="Accumulated time spent in a fragile state for the current scope"
+    )
+    moving_variance: Optional[float] = Field(
+        None, ge=0.0, description="Rolling variance proxy for early-warning trend monitoring"
+    )
+    rho_critical: Optional[float] = Field(None, ge=0.0, le=1.0, description="Critical correlation threshold ρcrit")
+    k_required: Optional[float] = Field(None, ge=0.0, description="Required effective constraint count Kreq")
+    defense_function: Optional[float] = Field(None, description="Optional defense function J estimate")
+    collapse_rate: Optional[float] = Field(None, description="Optional collapse rate dJ/dt estimate")
+    time_to_truth: Optional[float] = Field(None, ge=0.0, description="Optional Ttruth estimate")
+    time_to_entropy: Optional[float] = Field(None, ge=0.0, description="Optional Tentropy estimate")
+    time_to_capture: Optional[float] = Field(None, ge=0.0, description="Optional Tcapture estimate")
     reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @model_validator(mode="after")
+    def populate_plain_language_aliases(self) -> "IDMAResult":
+        """Keep plain-language aliases aligned with the scientific field names."""
+        if self.effective_source_count is None:
+            self.effective_source_count = self.k_eff
+        if self.raw_source_count is None:
+            self.raw_source_count = self.k_raw
+        if self.source_overlap is None:
+            self.source_overlap = self.correlation_risk
+        if self.reasoning_state is None:
+            self.reasoning_state = self.phase
+        if self.reasoning_is_fragile is None:
+            self.reasoning_is_fragile = self.fragility_flag
+        if self.safety_margin is None:
+            self.safety_margin = self.collapse_margin
+        if self.next_best_recovery_step is None:
+            self.next_best_recovery_step = self.intervention_recommendation
+        return self
 
 
 def _coerce_to_string(v: Any) -> str:

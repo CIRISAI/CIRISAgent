@@ -117,8 +117,11 @@ async def _complete_setup(base_url: str, port: int) -> bool:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(f"{base_url}/v1/setup/complete", json=payload)
+        print(f"Setup response status: {response.status_code}")
+        print(f"Setup response body: {response.text[:300]}")
         return response.status_code == 200
-    except Exception:
+    except Exception as exc:
+        print(f"Setup request failed: {exc}")
         return False
 
 
@@ -132,6 +135,13 @@ async def _wait_for_runtime_ready(base_url: str, token: str, timeout_seconds: in
             try:
                 response = await client.get(f"{base_url}/v1/agent/status", headers=headers)
                 if response.status_code == 200:
+                    try:
+                        data = response.json()
+                    except Exception:
+                        data = {}
+                    cognitive_state = data.get("data", {}).get("cognitive_state")
+                    if cognitive_state:
+                        print(f"Runtime state poll: {cognitive_state}")
                     return True
             except Exception:
                 pass
@@ -294,7 +304,7 @@ def main(
     adapters: str = "cli",
     duration: int = 30,
     messages: int = 0,
-    concurrency: int = 8,
+    concurrency: int = 20,
     port: int = 8080,
     verify_audit: bool = False,
 ) -> int:
@@ -324,6 +334,9 @@ def main(
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    # Benchmarks measure per-task throughput, so bypass the channel-level task-append
+    # coalescing in BaseObserver. See ciris_engine/logic/adapters/base_observer.py.
+    env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
 
     process = subprocess.Popen(
         cmd,
@@ -362,6 +375,7 @@ def main(
                 print("No auth token yet, attempting first-run setup...")
                 setup_ok = asyncio.run(_complete_setup(base_url, port))
                 if setup_ok:
+                    print("Setup completed; retrying authentication...")
                     token = asyncio.run(_get_auth_token(base_url))
             if not token:
                 print("ERROR: Could not authenticate with QA credentials")
@@ -471,8 +485,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=8,
-        help="Message-load concurrency (default: 8)",
+        default=20,
+        help="Message-load concurrency (default: 20)",
     )
     parser.add_argument(
         "--port",

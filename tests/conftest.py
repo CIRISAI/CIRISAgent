@@ -11,6 +11,10 @@ import tempfile
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests
+# Pin language to English so handler-content assertions stay stable regardless
+# of the developer's local CIRIS_PREFERRED_LANGUAGE in .env. Tests that
+# intentionally exercise localization can override via monkeypatch.
+os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
 
 # CRITICAL: Override log directory for tests to prevent container interference
 # Tests should NEVER write to the main logs directory that containers use

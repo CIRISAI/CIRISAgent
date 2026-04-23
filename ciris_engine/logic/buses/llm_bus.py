@@ -4,6 +4,7 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 
 import asyncio
 import logging
+import os
 import random
 import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
@@ -128,10 +129,59 @@ class LLMBus(BaseBus[LLMService]):
         self._rate_limited_until: dict[str, float] = {}
         self._rate_limit_cooldown_seconds = 60.0  # Default cooldown when rate limit exhausted
 
+        # Per-service FIFO concurrency gate. asyncio.Semaphore is fair — waiters
+        # are released in the order they called acquire() — so excess callers
+        # queue up rather than blasting the provider. Default 8 in-flight is
+        # conservative for a single external endpoint (Groq/OpenRouter/etc);
+        # override with CIRIS_LLM_MAX_CONCURRENT for higher-rate-tier providers.
+        try:
+            self._max_in_flight_per_service = max(1, int(os.environ.get("CIRIS_LLM_MAX_CONCURRENT", "8")))
+        except (TypeError, ValueError):
+            self._max_in_flight_per_service = 8
+        self._service_semaphores: dict[str, asyncio.Semaphore] = {}
+        # Explicit pending counter, incremented at selection and decremented on
+        # completion. Needed because asyncio.Semaphore._value only decreases
+        # after `async with` has awaited its turn — under bursty concurrency,
+        # many callers race selection before any of them have acquired, so
+        # LEAST_LOADED needs this counter to see pending-but-unacquired load.
+        self._in_flight: dict[str, int] = defaultdict(int)
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
-        logger.info(f"LLMBus initialized with {distribution_strategy} distribution strategy")
+        logger.info(
+            f"LLMBus initialized with {distribution_strategy} distribution strategy "
+            f"(max {self._max_in_flight_per_service} in-flight per service)"
+        )
+
+    def _get_service_semaphore(self, service_name: str) -> asyncio.Semaphore:
+        """Get or create the FIFO concurrency gate for a service."""
+        sem = self._service_semaphores.get(service_name)
+        if sem is None:
+            sem = asyncio.Semaphore(self._max_in_flight_per_service)
+            self._service_semaphores[service_name] = sem
+        return sem
+
+    def _is_server_error(self, error_str: str, full_error: str) -> bool:
+        """Detect transient upstream server errors (5xx and upstream-provider errors).
+
+        These get the same polite-backoff treatment as 429s — wait, retry, and
+        do NOT count against the circuit breaker. Covers:
+          - HTTP 502 Bad Gateway (upstream dead or overloaded)
+          - HTTP 503 Service Unavailable
+          - HTTP 504 Gateway Timeout
+          - OpenRouter "Provider returned error" (upstream relay error)
+        """
+        combined = f"{error_str} {full_error}".lower()
+        return (
+            "502" in combined
+            or "503" in combined
+            or "504" in combined
+            or "bad gateway" in combined
+            or "service unavailable" in combined
+            or "gateway timeout" in combined
+            or "provider returned error" in combined
+        )
 
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
@@ -225,9 +275,21 @@ class LLMBus(BaseBus[LLMService]):
         error_str = str(e).lower()
         full_error = self._extract_full_error_from_cause_chain(e)
 
-        # Handle rate limit errors
-        if self._is_rate_limit_error(error_str, full_error):
+        # Handle rate limit errors AND upstream server errors (502/503/504,
+        # "Provider returned error"). Both are transient/external — polite
+        # backoff, don't count against the circuit breaker, share the same
+        # retry budget so concurrent waves don't escalate server hiccups into
+        # a cascade of "LLM UNEXPECTED ERROR"s.
+        is_rate_limit = self._is_rate_limit_error(error_str, full_error)
+        is_server_error = self._is_server_error(error_str, full_error)
+        if is_rate_limit or is_server_error:
             rate_limit_retry_count += 1
+            if is_server_error and not is_rate_limit:
+                logger.warning(
+                    f"Upstream server error on {service_name} "
+                    f"(attempt {rate_limit_retry_count}/{max_rate_limit_retries}): "
+                    f"{type(e).__name__} — applying rate-limit backoff"
+                )
             should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
                 service_name,
                 full_error,
@@ -412,17 +474,29 @@ class LLMBus(BaseBus[LLMService]):
         start_time: float,
         retry_count: int,
     ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
-        """Execute the actual LLM call and record metrics on success."""
-        logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+        """Execute the actual LLM call and record metrics on success.
 
-        result, usage = await selected_service.call_llm_structured(
-            messages=normalized_messages,
-            response_model=response_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            thought_id=thought_id,
-            task_id=task_id,
-        )
+        Acquires the per-service FIFO concurrency gate before dispatch so
+        excess callers queue rather than all racing the provider at once.
+        """
+        semaphore = self._get_service_semaphore(service_name)
+        # Log when we actually have to wait so saturation is visible.
+        if semaphore.locked():
+            logger.info(
+                f"[LLM-GATE] {service_name} saturated (max {self._max_in_flight_per_service} "
+                f"in-flight), {handler_name} queued"
+            )
+        async with semaphore:
+            logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+
+            result, usage = await selected_service.call_llm_structured(
+                messages=normalized_messages,
+                response_model=response_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                thought_id=thought_id,
+                task_id=task_id,
+            )
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000
         self._record_success(service_name, latency_ms)
@@ -461,42 +535,68 @@ class LLMBus(BaseBus[LLMService]):
         max_retries_per_service = 1
 
         for priority, service_group in sorted(priority_groups.items()):
-            selected_service = await self._select_service(service_group, priority, handler_name)
-            if not selected_service:
-                continue
+            # Walk through every service in this priority group before falling
+            # through to the next priority. With replica deployments (two
+            # registrations at the same priority), skipping the rate-limited
+            # one must try the sibling — previously we jumped straight to the
+            # next priority and failed the whole call even though a healthy
+            # sibling was available.
+            remaining = list(service_group)
+            tried: set[str] = set()
+            while remaining:
+                selected_service = await self._select_service(remaining, priority, handler_name)
+                if not selected_service:
+                    break
 
-            service_name = self._get_service_name(selected_service)
+                service_name = self._get_service_name(selected_service)
+                # Avoid infinite loop if _select_service returns the same one.
+                if service_name in tried:
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
+                tried.add(service_name)
 
-            if not self._check_circuit_breaker(service_name):
-                logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
-                continue
+                if not self._check_circuit_breaker(service_name):
+                    logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
 
-            # Check global rate limit cooldown
-            if self._is_rate_limited(service_name):
-                logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
-                continue
+                # Check global rate limit cooldown
+                if self._is_rate_limited(service_name):
+                    logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
 
-            result = await self._try_service(
-                selected_service,
-                service_name,
-                normalized_messages,
-                response_model,
-                max_tokens,
-                temperature,
-                thought_id,
-                task_id,
-                handler_name,
-                start_time,
-                max_retries_per_service,
-            )
+                # Track pending+acquired in-flight so LEAST_LOADED can route
+                # around saturated replicas even before their semaphore has
+                # been acquired.
+                self._in_flight[service_name] += 1
+                try:
+                    result = await self._try_service(
+                        selected_service,
+                        service_name,
+                        normalized_messages,
+                        response_model,
+                        max_tokens,
+                        temperature,
+                        thought_id,
+                        task_id,
+                        handler_name,
+                        start_time,
+                        max_retries_per_service,
+                    )
+                finally:
+                    self._in_flight[service_name] = max(0, self._in_flight[service_name] - 1)
 
-            if result[0] is not None and result[1] is not None:  # Success
-                return result[0], result[1]
+                if result[0] is not None and result[1] is not None:  # Success
+                    return result[0], result[1]
 
-            # Service failed
-            if result[2] is not None:
-                last_error = result[2]
-                self._record_service_failure(service_name, result[2], result[3], max_retries_per_service)
+                # Service failed — record and try the next sibling in this
+                # priority group (if any) before falling through to the next
+                # priority tier.
+                if result[2] is not None:
+                    last_error = result[2]
+                    self._record_service_failure(service_name, result[2], result[3], max_retries_per_service)
+                remaining = [s for s in remaining if self._get_service_name(s) != service_name]
 
         # All services failed
         task = asyncio.create_task(
@@ -674,10 +774,17 @@ class LLMBus(BaseBus[LLMService]):
             return random.choice(services)
 
         else:  # DistributionStrategy.LEAST_LOADED
-            # Select service with fewest active requests
-            # This would require tracking active requests
-            # For now, use the one with fewest total requests
-            return min(services, key=lambda s: self.service_metrics[self._get_service_name(s)].total_requests)
+            # Pick the service with the fewest in-flight (pending + acquired)
+            # calls. Ties break on least total_requests so brand-new services
+            # get early traffic. Incremented at selection time in _try_service,
+            # decremented in its finally — see _in_flight counter.
+            return min(
+                services,
+                key=lambda s: (
+                    self._in_flight[self._get_service_name(s)],
+                    self.service_metrics[self._get_service_name(s)].total_requests,
+                ),
+            )
 
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""

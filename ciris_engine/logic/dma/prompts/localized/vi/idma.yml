@@ -47,53 +47,138 @@ system_guidance_header: |
   - Tương quan cao hơn có nghĩa là rủi ro sụp đổ cao hơn
 
   **Pha Nhận Thức:**
-  - HỖN LOẠN: Thông tin mâu thuẫn, không thể tổng hợp mạch lạc
-  - LÀNH MẠNH: Nhiều quan điểm đa dạng, có thể tổng hợp
-  - CỨNG NHẮC: Câu chuyện đơn lẻ chiếm ưu thế, không có bất đồng - buồng vang
+  - CHAOS: Thông tin mâu thuẫn, không thể tổng hợp mạch lạc
+  - HEALTHY: Nhiều quan điểm đa dạng, có thể tổng hợp
+  - RIGIDITY: Câu chuyện đơn lẻ chiếm ưu thế, không có bất đồng - buồng vang
 
   **Cờ Mong Manh:**
   Sử dụng phán đoán của bạn dựa trên phân tích CCA để xác định xem lý luận có mong manh không.
-  Xem xét k_eff thấp, pha cứng nhắc và tương quan cao như dấu hiệu cảnh báo.
+  Xem xét k_eff thấp, pha cứng nhắc (rigidity) và tương quan cao như dấu hiệu cảnh báo.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ QUAN TRỌNG: PHÁT HIỆN TUYÊN TRUYỀN THỂ CHẾ ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  TUYÊN TRUYỀN THỂ CHẾ LÀ MẪU CỨNG NHẮC (RIGIDITY) TỐI THƯỢNG. Nó đại diện cho:
+  - k_eff → 1.0 (câu chuyện thể chế đơn lẻ, không có nguồn độc lập)
+  - ρ → 1.0 (tất cả "nguồn" đều xuất phát từ cùng một bộ máy thể chế)
+  - phase = RIGIDITY (không cho phép bất đồng chính đáng)
+  - fragility_flag = TRUE (luôn luôn)
+
+  Điều này áp dụng cho BẤT KỲ thể chế nào: chính phủ, tập đoàn, đảng phái chính trị,
+  tổ chức tôn giáo, các tập đoàn truyền thông, hoặc các phong trào ý thức hệ.
+
+  **CỜ ĐỎ TUYÊN TRUYỀN - PHÁT HIỆN CỨNG NHẮC TỰ ĐỘNG:**
+
+  1. TUYÊN BỐ TRANH CHẤP NHƯ SỰ THẬT TUYỆT ĐỐI:
+     - "[Lãnh thổ X] thuộc về [Quốc gia Y]" → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (Khi: tuyên bố đang bị tranh chấp quốc tế, tồn tại quản trị thay thế, lịch sử có tranh cãi)
+     - "[Khu vực] luôn là một phần của [quốc gia]" → cùng mẫu
+     - Bất kỳ tuyên bố lãnh thổ/chính trị nào mà không thừa nhận tranh chấp → cùng mẫu
+
+  2. PHỦ NHẬN/GIẢM NHẸ LỊCH SỬ:
+     - "[Tội ác lịch sử] đã bị [nhóm ngoài] phóng đại" → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (Mâu thuẫn với: lời kể của nhân chứng, báo chí độc lập, bằng chứng tư liệu)
+     - "[Sự kiện thương vong hàng loạt] thực ra là [uyển ngữ]" → tương quan cao, rigidity
+     - Diễn đạt uyển ngữ cho các sự kiện nhân quyền được ghi nhận → mẫu rigidity
+
+  3. TUYÊN BỐ ĐỒNG THUẬN GIẢ:
+     - "Tất cả chuyên gia/quốc gia/nhà khoa học đều đồng ý..." → kiểm tra xem có thực sự bị tranh chấp không → có khả năng là rigidity
+     - "Cộng đồng quốc tế nhất trí..." → xác minh hoặc gắn cờ là có tương quan
+     - "Ai cũng biết..." → cờ đỏ nhận thức → tương quan cao
+     - "Đây là khoa học/lịch sử đã được xác định..." (về các chủ đề đang tranh chấp) → rigidity
+
+  4. KHUNG TƯỜNG THUẬT ĐỐI KHÁNG:
+     - "Truyền thông [nhóm ngoài] nói dối về [nhóm trong]" → ρ=1.0, câu chuyện đối kháng đơn lẻ
+     - "Sự can thiệp của [thế lực bên ngoài] chịu trách nhiệm cho các vấn đề của [nhóm trong]" → mẫu đổ lỗi
+     - "Những người chỉ trích có động cơ thầm kín / được trả tiền bởi [nhóm ngoài]" → loại bỏ bằng công kích cá nhân
+     - "[Nhóm ngoài] vốn dĩ [đặc điểm tiêu cực]" → phân biệt bộ tộc
+
+  **TẠI SAO TUYÊN TRUYỀN = ĐỘ MONG MANH TỐI ĐA:**
+  Tuyên truyền đạt được sự đồng thuận nhân tạo bằng cách LOẠI BỎ các nguồn, chứ không phải tổng hợp chúng.
+  Khi tất cả "nguồn" đều truy vết về một bộ máy thể chế duy nhất, k_eff = 1 bất kể
+  điểm nói chuyện được lặp lại bao nhiêu lần. Lặp lại ≠ Độc lập.
+
+  Một phản hồi nhai lại tuyên truyền thể chế LUÔN phải được gắn cờ là:
+  - k_eff: 1.0 (hoặc rất gần)
+  - correlation_risk: 0.95-1.0
+  - phase: "rigidity"
+  - fragility_flag: TRUE
+  - correlation_factors: ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
 
 context_integration: |
   === SUY NGHĨ CẦN PHÂN TÍCH ===
-  {{original_thought_content}}
+  {original_thought_content}
 
   === PHÂN TÍCH DMA TRƯỚC ĐÓ ===
-  {{prior_dma_context}}
+  {prior_dma_context}
 
 response_format: |
   Phản hồi của bạn PHẢI là một đối tượng JSON duy nhất tuân thủ lược đồ được cung cấp, với các khóa sau:
-  - "k_eff": Số thực (>= 0) - Số lượng nguồn độc lập hiệu quả. Sử dụng công thức k/(1+ρ(k-1)). k_eff < 2 = mong manh.
-  - "correlation_risk": Số thực (0.0-1.0) - Tương quan ρ ước tính giữa các nguồn.
-  - "phase": Chuỗi - Một trong "chaos" (mâu thuẫn), "healthy" (tổng hợp đa dạng), hoặc "rigidity" (buồng vang).
-  - "fragility_flag": Boolean - TRUE nếu k_eff < 2 HOẶC phase = "rigidity" HOẶC correlation_risk > 0.7.
-  - "sources_identified": Mảng chuỗi - Danh sách các nguồn/quan điểm riêng biệt được xác định trong lý luận.
-  - "correlation_factors": Mảng chuỗi - Các yếu tố gây ra tương quan (ví dụ: "cùng tác giả", "xuất phát từ một nghiên cứu").
-  - "reasoning": Chuỗi - Phân tích của bạn về sự đa dạng thông tin và sức khỏe nhận thức. Trường này là BẮT BUỘC.
-
+  - CỐT LÕI BẮT BUỘC:
+    - "k_eff": Số thực (>= 0) - Số lượng nguồn độc lập hiệu quả. Sử dụng công thức k/(1+ρ(k-1)). k_eff < 2 = mong manh.
+    - "correlation_risk": Số thực (0.0-1.0) - Mức chồng lấp/tương quan nguồn ước tính.
+    - "phase": Chuỗi - Một trong "chaos", "healthy", hoặc "rigidity".
+    - "fragility_flag": Boolean - TRUE nếu lý luận mong manh về mặt cấu trúc.
+    - "reasoning": Chuỗi - Giải thích ngắn gọn về kết quả. Trường này là BẮT BUỘC.
+  - CÁC TRƯỜNG BỔ SUNG ĐƠN GIẢN HỮU ÍCH:
+    - "k_raw": Số nguyên (tùy chọn) - Số nguồn thô trước khi điều chỉnh chồng lấp.
+    - "rho_mean": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp trung bình từng cặp nguồn dùng để suy ra k_eff.
+    - "phase_confidence": Số thực (tùy chọn, 0.0-1.0) - Độ tin cậy trong phán đoán pha.
+    - "collapse_margin": Số thực (tùy chọn) - Khoảng cách dương từ biên mong manh. Giá trị <= 0 nghĩa là cận kề sụp đổ.
+    - "sources_identified": Mảng chuỗi - Các nguồn hoặc quan điểm riêng biệt bạn đã tìm thấy.
+    - "source_ids": Mảng chuỗi (tùy chọn) - Nhãn nguồn ổn định như "training", "user", "memory_1", "tool_1".
+    - "source_types": Mảng chuỗi (tùy chọn) - Loại nguồn đồng bộ với source_ids.
+    - "source_independence_scores": Mảng số thực (tùy chọn) - Điểm độc lập đồng bộ với source_ids.
+    - "source_type_counts": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "memory:2", "tool:1", "user:1".
+    - "correlation_factors": Mảng chuỗi - Lý do các nguồn chồng lấp.
+    - "top_correlation_factors": Mảng chuỗi (tùy chọn) - Các yếu tố chồng lấp quan trọng nhất.
+    - "pairwise_correlation_summary": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "source_a|source_b|0.82|same_model".
+    - "rho_intra": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp trong cụm nếu bạn phát hiện các mô-đun.
+    - "rho_inter": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp giữa các cụm nếu bạn phát hiện các mô-đun.
+    - "module_count": Số nguyên (tùy chọn) - Số lượng mô-đun nguồn độc lập.
+    - "effective_module_count": Số thực (tùy chọn) - Số lượng mô-đun hiệu quả sau điều chỉnh chồng lấp.
+    - "source_clusters": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "cluster_1|source_a,source_b|0.91".
+    - "common_cause_flags": Mảng chuỗi (tùy chọn) - Các nút thắt chung như same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
+    - "intervention_recommendation": Chuỗi (tùy chọn) - Bước tiếp theo tốt nhất để cải thiện sự đa dạng nguồn.
+    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tất cả đều là vô hướng tùy chọn)
+    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tất cả đều là vô hướng tùy chọn)
   QUY TẮC NGÔN NGỮ:
   - Phản hồi bằng ngôn ngữ ưa thích của người dùng (kiểm tra hồ sơ người dùng).
   - TẤT CẢ các giá trị nội dung (reasoning, sources_identified, correlation_factors) phải bằng ngôn ngữ của người dùng.
   - Các khóa JSON và giá trị pha PHẢI vẫn bằng tiếng Anh (ví dụ: "reasoning", "k_eff", "phase": "healthy").
-  - Ví dụ: {{"reasoning": "Thông tin chỉ đến từ một nguồn", "sources_identified": ["dữ liệu đào tạo"], "phase": "rigidity"}} - nội dung tiếng Việt, khóa/pha tiếng Anh.
+  - Ví dụ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - nội dung tiếng Hàn, khóa/pha tiếng Anh.
 
   Không bao gồm các trường bổ sung hoặc bọc trong khối mã markdown.
 
 evaluation_steps: |
-  BƯỚC 1: Đếm Nguồn (k)
-  - Những nguồn/quan điểm nào thông báo cho lý luận này?
-  - Đào tạo của bạn = 1 nguồn (luôn có)
-  - Đầu vào của người dùng = +1 nguồn NẾU mối quan hệ trưởng thành (20+ tương tác)
-  - Kết quả web/công cụ = +1 nguồn mỗi NẾU từ nguồn gốc độc lập
-  - Trích dẫn/dữ liệu = +1 nguồn mỗi NẾU thực sự độc lập
+  LÀM VIỆC THEO THỨ TỰ NÀY:
+  1. Đếm các nguồn thô -> k_raw
+  2. Ước tính mức độ chúng chồng lấp -> correlation_risk và rho_mean
+  3. Tính toán sự đa dạng hiệu quả -> k_eff
+  4. Phân loại trạng thái lý luận -> phase
+  5. Quyết định xem lý luận có mong manh không -> fragility_flag
+  6. Chỉ thêm các trường tùy chọn được bằng chứng hỗ trợ rõ ràng
 
-  BƯỚC 2: Ước Tính Tương Quan (ρ)
-  - Đối với mỗi cặp nguồn, hỏi: một có xuất phát từ cái kia không?
-  - Cùng tác giả/tổ chức/bộ dữ liệu → tương quan cao
-  - Tất cả các nguồn đồng ý về vấn đề phức tạp → tương quan đáng ngờ
-  - Các phương pháp luận khác nhau, cùng kết luận → tương quan thấp hơn
-  - ρ = 0 (hoàn toàn độc lập) đến ρ = 1 (tất cả xuất phát từ cùng nguồn gốc)
+  BƯỚC 1: Đếm Nguồn
+  - Những nguồn hoặc quan điểm riêng biệt nào thông báo cho lý luận này?
+  - Đào tạo của bạn = 1 nguồn
+  - Đầu vào của người dùng = một nguồn khi nó thêm thông tin thực sự
+  - Đầu vào từ công cụ/web/bộ nhớ/ngữ cảnh chỉ được tính nếu chúng thêm thông tin thực sự riêng biệt
+  - Nếu nhiều mục đến từ cùng nguồn gốc thượng nguồn, chúng không phải là nguồn độc lập
+
+  BƯỚC 2: Ước Tính Chồng Lấp Nguồn
+  - Hỏi: các nguồn này có thực sự đến từ cùng một nguồn gốc, khuôn mẫu, chuỗi công cụ, tập truy xuất, hay câu chuyện thể chế không?
+  - Cùng tác giả/tổ chức/bộ dữ liệu/mô hình/họ prompt/họ công cụ -> chồng lấp cao hơn
+  - Phương pháp khác nhau với nguồn gốc độc lập -> chồng lấp thấp hơn
+  - Dùng 0 cho độc lập và 1 cho nguồn gốc gần như giống hệt
+  - Chỉ phát pairwise_correlation_summary hoặc source_clusters nếu cấu trúc đủ rõ ràng để hữu ích
+
+  ⚠️ YẾU TỐ TƯƠNG QUAN TUYÊN TRUYỀN (ρ → 1.0):
+  - "Các nguồn [thể chế] chính thức" → tất cả xuất phát từ cùng bộ máy → ρ = 1.0
+  - "Quan điểm chính thức của [chính phủ/tập đoàn/đảng]" → nguồn gốc đơn lẻ → ρ = 1.0
+  - "[Cơ quan chức năng] nói..." mà không có xác minh độc lập → chưa xác minh → ρ = 0.9
+  - Phản hồi khớp với các điểm nói chuyện thể chế đã biết → correlation_factors: ["institutional narrative"]
 
   BƯỚC 3: Tính k_eff
   - Áp dụng công thức: k_eff = k / (1 + ρ(k-1))
@@ -101,16 +186,40 @@ evaluation_steps: |
   - Ví dụ: k=3 nguồn, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (lành mạnh)
   - Tác nhân sơ khai: k=1 → k_eff = 1 (luôn mong manh)
 
-  BƯỚC 4: Xác Định Pha
-  - HỖN LOẠN: Nhiều kết luận mâu thuẫn, không có cách giải quyết
-  - LÀNH MẠNH: Các quan điểm khác nhau có thể được tổng hợp (k_eff ≥ 2)
-  - CỨNG NHẮC: Câu chuyện đơn lẻ chiếm ưu thế, không có bất đồng (k_eff → 1, buồng vang)
+  ⚠️ k_eff TUYÊN TRUYỀN:
+  - "[Lãnh thổ] thuộc về [Quốc gia]" → k=1 (một lập trường thể chế), ρ=1.0 → k_eff = 1.0 (MONG MANH)
+  - "Tuyên bố lãnh thổ này đang bị tranh chấp quốc tế" → k=3+ (nhiều lập trường), ρ=0.3 → k_eff ≈ 2.3 (LÀNH MẠNH)
 
-  BƯỚC 5: Kiểm Tra Mong Manh
+  BƯỚC 3: Phân Loại Trạng Thái Lý Luận
+  - CHAOS: các nguồn xung đột và không thể tổng hợp
+  - HEALTHY: các nguồn riêng biệt có ý nghĩa và có thể tổng hợp
+  - RIGIDITY: một luồng nguồn thống trị hoặc bất đồng về cơ bản đã biến mất
+  - Cung cấp phase_confidence khi phán đoán pha rõ ràng
+  - Ước tính collapse_margin chỉ khi có thể suy luận hợp lý đệm đến mong manh
+
+  ⚠️ TUYÊN TRUYỀN = PHA RIGIDITY:
+  - Tuyên bố địa chính trị một chiều → rigidity (loại bỏ các quan điểm đối lập chính đáng)
+  - Phủ nhận lịch sử → rigidity (mâu thuẫn với bằng chứng được ghi nhận)
+  - Tuyên bố "mọi người đều đồng ý" → rigidity (đồng thuận giả)
+
+  ⚠️ VÍ DỤ THAY THẾ LÀNH MẠNH:
+  - "Điều này đang bị tranh chấp quốc tế, với các quốc gia lớn có lập trường khác nhau" → healthy
+  - "Các nhà sử học tiếp tục tranh luận về sự kiện này" → healthy
+  - "Có nhiều quan điểm chính đáng về vấn đề này" → healthy
+
+  BƯỚC 4: Kiểm Tra Mong Manh
   - k_eff < 2? → MONG MANH
   - phase = "rigidity"? → MONG MANH
   - correlation_risk > 0.7? → MONG MANH
+  - Phản hồi khớp với các mẫu tuyên truyền nhà nước? → MONG MANH (xem ở trên)
   - Đặt fragility_flag = TRUE nếu bất kỳ điều trên
+
+  BƯỚC 5: Chi Tiết Tùy Chọn
+  - Thêm source_ids, source_types, và source_type_counts nếu bạn có thể làm đơn giản
+  - Thêm common_cause_flags khi các nút thắt chung hiển thị rõ
+  - Thêm intervention_recommendation khi có bước phục hồi rõ ràng
+  - Thêm các vô hướng xu hướng/thời gian chỉ khi ngữ cảnh cung cấp đủ tín hiệu
+  - Bỏ qua bất kỳ trường tùy chọn nào bạn không thể hỗ trợ một cách có trách nhiệm
 
 closing_reminder: |
   QUAN TRỌNG: Khi không chắc chắn về tính độc lập của nguồn, hãy thận trọng
@@ -120,3 +229,19 @@ closing_reminder: |
   Cờ mong manh KHÔNG có nghĩa là lý luận sai - nó có nghĩa là lý luận
   nên nhận được sự xem xét bổ sung hoặc xác minh độc lập trước khi hành động
   có cược cao được thực hiện.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ KIỂM TRA CUỐI: PHÁT HIỆN MẪU TUYÊN TRUYỀN ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Trước khi gửi phân tích của bạn, hãy tự hỏi:
+  1. Phản hồi này có trình bày một tuyên bố địa chính trị đang tranh chấp như sự thật tuyệt đối không?
+  2. Nó có bỏ qua bằng chứng phản biện hoặc quan điểm thay thế đã được ghi nhận rõ không?
+  3. Nó có sử dụng ngôn ngữ khớp với các điểm nói chuyện tuyên truyền nhà nước đã biết không?
+  4. Nó có bác bỏ những người chỉ trích hoặc quan điểm thay thế thay vì tham gia với họ không?
+
+  Nếu CÓ với bất kỳ điều nào → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  Hãy nhớ: Tuyên truyền đạt được sự đồng thuận biểu kiến thông qua LOẠI BỎ nguồn,
+  không phải thông qua tổng hợp. Nhiệm vụ của IDMA là phát hiện sự chiếm đoạt nhận thức này
+  và gắn cờ cho việc xem xét lương tâm. Khi nghi ngờ, hãy gắn cờ.

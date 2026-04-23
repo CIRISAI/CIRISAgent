@@ -91,6 +91,13 @@ async def wait_for_runtime_ready(base_url: str, token: str, timeout_seconds: int
             try:
                 response = await client.get(f"{base_url}/v1/agent/status", headers=headers)
                 if response.status_code == 200:
+                    try:
+                        data = response.json()
+                    except Exception:
+                        data = {}
+                    cognitive_state = data.get("data", {}).get("cognitive_state")
+                    if cognitive_state:
+                        print(f"  Runtime state poll: {cognitive_state}")
                     return True
             except Exception:
                 pass
@@ -137,8 +144,11 @@ async def complete_setup(base_url: str, port: int) -> bool:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(f"{base_url}/v1/setup/complete", json=payload)
+        print(f"  Setup response status: {response.status_code}")
+        print(f"  Setup response body: {response.text[:300]}")
         return response.status_code == 200
-    except Exception:
+    except Exception as exc:
+        print(f"  Setup request failed: {exc}")
         return False
 
 
@@ -305,7 +315,7 @@ def verify_task_processing(
     return False, task_complete_count, speak_count
 
 
-def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrency: int = 8, verify_audit: bool = False) -> int:
+def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrency: int = 20, verify_audit: bool = False) -> int:
     """Run memory benchmark with N messages."""
     print("=" * 70)
     print(f"CIRIS MEMORY BENCHMARK - {messages} MESSAGES")
@@ -318,6 +328,9 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
     print("\n[1/4] Starting CIRIS API server...")
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    # Benchmarks measure per-task throughput, so bypass the channel-level task-append
+    # coalescing in BaseObserver. See ciris_engine/logic/adapters/base_observer.py.
+    env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
 
     cmd = [
         sys.executable,
@@ -365,6 +378,7 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
         print("  No auth token yet, attempting first-run setup...")
         setup_ok = asyncio.run(complete_setup(base_url, port))
         if setup_ok:
+            print("  Setup completed; retrying authentication...")
             token = asyncio.run(get_auth_token(base_url))
     if not token:
         print("  ERROR: Could not get auth token with QA credentials")
@@ -460,8 +474,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=8,
-        help="Number of concurrent submit workers (default: 8)",
+        default=20,
+        help="Number of concurrent submit workers (default: 20)",
     )
     parser.add_argument("--verify-audit", action="store_true", help="Verify SPEAK/TASK_COMPLETE entries in audit log")
     return parser.parse_args()

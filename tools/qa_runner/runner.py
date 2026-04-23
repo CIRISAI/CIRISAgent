@@ -979,7 +979,12 @@ class QARunner:
 
             # Create SDK client with authentication
             # Use longer timeout for Reddit operations (e.g., get_user_context can be slow)
-            async with CIRISClient(base_url=self.config.base_url, timeout=120.0) as client:
+            # Model-eval interact() calls block server-side until the full
+            # DMA chain + conscience + SPEAK finishes, which is minutes under
+            # live LLM load. Give the SDK plenty of headroom so httpx doesn't
+            # cut the connection before the server responds.
+            sdk_timeout = 900.0 if module == QAModule.MODEL_EVAL else 120.0
+            async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as client:
                 # Manually set the token (skip login since we already have it)
                 client._transport.set_api_key(token_to_use, persist=False)
 
@@ -1014,6 +1019,15 @@ class QARunner:
                         test_timeout=self.config.test_timeout,
                         message_count=message_count,
                         concurrent_channels=concurrent_channels,
+                    )
+                elif module == QAModule.MODEL_EVAL:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        languages=getattr(self.config, "model_eval_languages", ["am", "zh", "en", "es"]),
+                        max_concurrency=getattr(self.config, "model_eval_concurrency", 4),
+                        profile_memory=getattr(self.config, "model_eval_profile_memory", True),
+                        api_port=self.config.api_port,
                     )
                 elif module == QAModule.DEFERRAL_TAXONOMY:
                     test_instance = test_class(

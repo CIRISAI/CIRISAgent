@@ -1,5 +1,7 @@
+import json
 import logging
 import re
+import shlex
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
@@ -102,12 +104,7 @@ def _extract_music_play_request(user_speech: str) -> Optional[Dict[str, Any]]:
         request_clause,
         flags=re.IGNORECASE,
     ).strip(" .!?,\"'")
-    media_phrase = re.sub(
-        r"^(?:the\s+song\s+|song\s+|the\s+album\s+|album\s+|the\s+playlist\s+|playlist\s+)",
-        "",
-        media_phrase,
-        flags=re.IGNORECASE,
-    )
+    media_phrase = _strip_media_prefix(media_phrase)
     media_phrase = re.sub(r"\s+by\s+", " ", media_phrase, flags=re.IGNORECASE).strip()
     if not media_phrase:
         return None
@@ -122,95 +119,39 @@ def _extract_music_play_request(user_speech: str) -> Optional[Dict[str, Any]]:
     return tool_parameters
 
 
+_MEDIA_PREFIXES = (
+    "the song ",
+    "song ",
+    "the album ",
+    "album ",
+    "the playlist ",
+    "playlist ",
+)
+
+
+def _strip_media_prefix(media_phrase: str) -> str:
+    """Remove common leading media labels from a playback request."""
+    lowered = media_phrase.lower()
+    for prefix in _MEDIA_PREFIXES:
+        if lowered.startswith(prefix):
+            return media_phrase[len(prefix) :]
+    return media_phrase
+
+
 def _infer_dsaspdma_result(prompt_text: str, current_reason: str) -> DSASPDMALLMResult:
     """Infer DSASPDMA classification from the prompt text."""
-
     lowered = f"{prompt_text}\n{current_reason}".lower()
+    domain_match = _match_domain_rule(lowered)
+    if domain_match is None:
+        domain_hint = None
+        primary = DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT
+        operational_reason, reason_summary = _infer_general_operational_reason(lowered, current_reason)
+    else:
+        domain_hint, primary = domain_match
+        operational_reason = DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED
+        reason_summary = current_reason or _licensed_review_reason(domain_hint)
 
-    domain_hint: Optional[DomainCategory] = None
-    primary = DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT
-    operational_reason = DeferralOperationalReason.ETHICAL_UNCERTAINTY
-    reason_summary = current_reason or "Human review is required before proceeding."
-    secondary: List[DeferralNeedCategory] = []
-
-    domain_rules = [
-        (
-            DomainCategory.MEDICAL,
-            [r"\bmedical\b", r"\bdiagnos", r"\btreat", r"\bprescrib", r"\bhealth\b"],
-            DeferralNeedCategory.HEALTH_AND_BODILY_INTEGRITY,
-        ),
-        (
-            DomainCategory.LEGAL,
-            [r"\blegal\b", r"\bfair trial\b", r"\blegal aid\b", r"\bcontract\b", r"\bliabilit"],
-            DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY,
-        ),
-        (
-            DomainCategory.FINANCIAL,
-            [r"\bfinancial\b", r"\binvest", r"\bcredit\b", r"\bdebt\b", r"\btax\b", r"\bloan\b"],
-            DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY,
-        ),
-        (
-            DomainCategory.HOME_SECURITY,
-            [r"\bhome security\b", r"\balarm\b", r"\bsmart lock\b", r"\bcamera\b"],
-            DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
-        ),
-        (
-            DomainCategory.IDENTITY_VERIFICATION,
-            [r"\bidentity\b", r"\bkyc\b", r"\bpassport\b", r"\bverification\b", r"\bauthenticat"],
-            DeferralNeedCategory.IDENTITY_AND_CIVIC_PARTICIPATION,
-        ),
-        (
-            DomainCategory.CONTENT_MODERATION,
-            [r"\bmoderation\b", r"\bcrisis\b", r"\bharassment\b", r"\bself-harm\b", r"\bviolent threat\b"],
-            DeferralNeedCategory.COMMUNITY_AND_COLLECTIVE_SAFETY,
-        ),
-        (
-            DomainCategory.RESEARCH,
-            [r"\bresearch\b", r"\bscientific\b", r"\bexperiment\b", r"\bstudy\b"],
-            DeferralNeedCategory.EDUCATION_CULTURE_AND_SCIENTIFIC_PARTICIPATION,
-        ),
-        (
-            DomainCategory.INFRASTRUCTURE_CONTROL,
-            [r"\binfrastructure\b", r"\bpower grid\b", r"\bwater system\b", r"\butility\b", r"\bscada\b"],
-            DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
-        ),
-    ]
-
-    for candidate_domain, patterns, candidate_primary in domain_rules:
-        if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in patterns):
-            domain_hint = candidate_domain
-            primary = candidate_primary
-            operational_reason = DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED
-            reason_summary = (
-                current_reason
-                or f"Licensed {candidate_domain.value.lower().replace('_', ' ')} review is required before proceeding."
-            )
-            break
-
-    if domain_hint is None:
-        if re.search(r"\binsufficient context\b|\bmissing\b|\bunclear\b|\bambig", lowered, re.IGNORECASE):
-            operational_reason = DeferralOperationalReason.INSUFFICIENT_CONTEXT
-            reason_summary = current_reason or "More context is required before this can be handled responsibly."
-        elif re.search(r"\bconsent\b|\bauthority\b|\bpermission\b|\bapproval\b", lowered, re.IGNORECASE):
-            operational_reason = DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED
-            reason_summary = current_reason or "Human authority or consent is required before proceeding."
-        elif re.search(r"\bpolicy\b|\bgovernance\b|\bcompliance\b", lowered, re.IGNORECASE):
-            operational_reason = DeferralOperationalReason.POLICY_REVIEW_REQUIRED
-            reason_summary = current_reason or "Policy review is required before proceeding."
-        elif re.search(r"\bsystem\b|\berror\b|\blimit\b|\btimeout\b|\bresource\b", lowered, re.IGNORECASE):
-            operational_reason = DeferralOperationalReason.RESOURCE_OR_SYSTEM_LIMITATION
-            reason_summary = current_reason or "The system cannot safely complete this without additional review."
-
-    if re.search(r"\blegal\b", lowered, re.IGNORECASE) and primary != DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY:
-        secondary.append(DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY)
-    if re.search(r"\bfinancial\b|\bcredit\b|\bdebt\b", lowered, re.IGNORECASE) and (
-        primary != DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY
-    ):
-        secondary.append(DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY)
-    if re.search(r"\bprivacy\b|\bcoerc|\bfraud|\bsurveillance\b", lowered, re.IGNORECASE) and (
-        primary != DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY
-    ):
-        secondary.append(DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY)
+    secondary = _collect_secondary_need_categories(lowered, primary)
 
     return DSASPDMALLMResult(
         reason_summary=reason_summary,
@@ -220,6 +161,145 @@ def _infer_dsaspdma_result(prompt_text: str, current_reason: str) -> DSASPDMALLM
         rights_basis=get_rights_basis_for_need_category(primary),
         domain_hint=domain_hint,
     )
+
+
+_DOMAIN_RULES = [
+    (
+        DomainCategory.MEDICAL,
+        [r"\bmedical\b", r"\bdiagnos", r"\btreat", r"\bprescrib", r"\bhealth\b"],
+        DeferralNeedCategory.HEALTH_AND_BODILY_INTEGRITY,
+    ),
+    (
+        DomainCategory.LEGAL,
+        [r"\blegal\b", r"\bfair trial\b", r"\blegal aid\b", r"\bcontract\b", r"\bliabilit"],
+        DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY,
+    ),
+    (
+        DomainCategory.FINANCIAL,
+        [r"\bfinancial\b", r"\binvest", r"\bcredit\b", r"\bdebt\b", r"\btax\b", r"\bloan\b"],
+        DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY,
+    ),
+    (
+        DomainCategory.HOME_SECURITY,
+        [r"\bhome security\b", r"\balarm\b", r"\bsmart lock\b", r"\bcamera\b"],
+        DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
+    ),
+    (
+        DomainCategory.IDENTITY_VERIFICATION,
+        [r"\bidentity\b", r"\bkyc\b", r"\bpassport\b", r"\bverification\b", r"\bauthenticat"],
+        DeferralNeedCategory.IDENTITY_AND_CIVIC_PARTICIPATION,
+    ),
+    (
+        DomainCategory.CONTENT_MODERATION,
+        [r"\bmoderation\b", r"\bcrisis\b", r"\bharassment\b", r"\bself-harm\b", r"\bviolent threat\b"],
+        DeferralNeedCategory.COMMUNITY_AND_COLLECTIVE_SAFETY,
+    ),
+    (
+        DomainCategory.RESEARCH,
+        [r"\bresearch\b", r"\bscientific\b", r"\bexperiment\b", r"\bstudy\b"],
+        DeferralNeedCategory.EDUCATION_CULTURE_AND_SCIENTIFIC_PARTICIPATION,
+    ),
+    (
+        DomainCategory.INFRASTRUCTURE_CONTROL,
+        [r"\binfrastructure\b", r"\bpower grid\b", r"\bwater system\b", r"\butility\b", r"\bscada\b"],
+        DeferralNeedCategory.ADEQUATE_STANDARD_OF_LIVING_AND_SERVICES,
+    ),
+]
+
+_GENERAL_OPERATIONAL_REASON_RULES = [
+    (
+        r"\binsufficient context\b|\bmissing\b|\bunclear\b|\bambig",
+        DeferralOperationalReason.INSUFFICIENT_CONTEXT,
+        "More context is required before this can be handled responsibly.",
+    ),
+    (
+        r"\bconsent\b|\bauthority\b|\bpermission\b|\bapproval\b",
+        DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
+        "Human authority or consent is required before proceeding.",
+    ),
+    (
+        r"\bpolicy\b|\bgovernance\b|\bcompliance\b",
+        DeferralOperationalReason.POLICY_REVIEW_REQUIRED,
+        "Policy review is required before proceeding.",
+    ),
+    (
+        r"\bsystem\b|\berror\b|\blimit\b|\btimeout\b|\bresource\b",
+        DeferralOperationalReason.RESOURCE_OR_SYSTEM_LIMITATION,
+        "The system cannot safely complete this without additional review.",
+    ),
+]
+
+_SECONDARY_NEED_RULES = [
+    (
+        r"\blegal\b",
+        DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY,
+    ),
+    (
+        r"\bfinancial\b|\bcredit\b|\bdebt\b",
+        DeferralNeedCategory.LIVELIHOOD_AND_FINANCIAL_SECURITY,
+    ),
+    (
+        r"\bprivacy\b|\bcoerc|\bfraud|\bsurveillance\b",
+        DeferralNeedCategory.PRIVACY_AUTONOMY_AND_DIGNITY,
+    ),
+]
+
+
+def _match_domain_rule(lowered: str) -> Optional[tuple[DomainCategory, DeferralNeedCategory]]:
+    """Return the first domain rule that matches the prompt."""
+    for candidate_domain, patterns, candidate_primary in _DOMAIN_RULES:
+        if any(re.search(pattern, lowered, re.IGNORECASE) for pattern in patterns):
+            return candidate_domain, candidate_primary
+    return None
+
+
+def _licensed_review_reason(domain_hint: DomainCategory) -> str:
+    """Build the default licensed-review message for a matched domain."""
+    return f"Licensed {domain_hint.value.lower().replace('_', ' ')} review is required before proceeding."
+
+
+def _infer_general_operational_reason(
+    lowered: str, current_reason: str
+) -> tuple[DeferralOperationalReason, str]:
+    """Infer the non-domain operational reason and human-readable summary."""
+    default_reason = current_reason or "Human review is required before proceeding."
+    for pattern, operational_reason, fallback_reason in _GENERAL_OPERATIONAL_REASON_RULES:
+        if re.search(pattern, lowered, re.IGNORECASE):
+            return operational_reason, current_reason or fallback_reason
+    return DeferralOperationalReason.ETHICAL_UNCERTAINTY, default_reason
+
+
+def _collect_secondary_need_categories(
+    lowered: str, primary: DeferralNeedCategory
+) -> List[DeferralNeedCategory]:
+    """Infer secondary rights/needs categories from the prompt text."""
+    secondary: List[DeferralNeedCategory] = []
+    for pattern, need_category in _SECONDARY_NEED_RULES:
+        if need_category == primary:
+            continue
+        if re.search(pattern, lowered, re.IGNORECASE):
+            secondary.append(need_category)
+    return secondary
+
+
+def _parse_tool_params_string(params_str: str) -> Dict[str, Any]:
+    """Parse mock tool parameters from a JSON blob or shell-like key=value tokens."""
+    try:
+        loaded = json.loads(params_str)
+    except json.JSONDecodeError:
+        return _parse_key_value_tokens(params_str)
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _parse_key_value_tokens(params_str: str) -> Dict[str, Any]:
+    """Parse simple key=value pairs while preserving quoted values."""
+    parsed: Dict[str, Any] = {}
+    for token in shlex.split(params_str):
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        parsed[key] = value
+    return parsed
 
 # Union type for all action parameters - 100% schema compliant
 ActionParams = Union[
@@ -1964,20 +2044,7 @@ def tsaspdma_llm_result(
                 parts = params_str.split(None, 1)
                 if len(parts) > 1:
                     # First part might be tool name, rest is params
-                    try:
-                        tool_params = json.loads(parts[1])
-                    except json.JSONDecodeError:
-                        # Use regex to parse key="value" pairs with proper quote handling
-                        param_pattern = r'(\w+)="((?:[^"\\]|\\.)*)"|(\w+)=(\S+)'
-                        for match in re.finditer(param_pattern, parts[1]):
-                            if match.group(1):  # Quoted value
-                                k = match.group(1)
-                                v = match.group(2).replace('\\"', '"')
-                                tool_params[k] = v
-                            elif match.group(3):  # Unquoted value
-                                k = match.group(3)
-                                v = match.group(4)
-                                tool_params[k] = v
+                    tool_params = _parse_tool_params_string(parts[1])
 
     logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL '{tool_name}' with params: {tool_params}")
     return TSASPDMALLMResult(

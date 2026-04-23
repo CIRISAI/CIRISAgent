@@ -116,6 +116,32 @@ class TestAPIConfig:
             assert config.port == 8080  # Default retained
             assert config.cors_origins == ["*"]  # Default retained
 
+    def test_rate_limit_per_minute_env_override(self):
+        """CIRIS_API_RATE_LIMIT_PER_MINUTE raises the default 60 req/min cap.
+
+        Used by bursty load tests (model_eval, benchmark) where the default
+        would 429 the burst and silently drop most submissions.
+        """
+        with patch.dict(os.environ, {"CIRIS_API_RATE_LIMIT_PER_MINUTE": "600"}):
+            config = APIAdapterConfig()
+            config.load_env_vars()
+            assert config.rate_limit_per_minute == 600
+            assert config.rate_limit_enabled is True
+
+    def test_rate_limit_enabled_env_override(self):
+        """CIRIS_API_RATE_LIMIT_ENABLED=false disables the middleware entirely."""
+        with patch.dict(os.environ, {"CIRIS_API_RATE_LIMIT_ENABLED": "false"}):
+            config = APIAdapterConfig()
+            config.load_env_vars()
+            assert config.rate_limit_enabled is False
+
+    def test_rate_limit_per_minute_invalid_is_ignored(self):
+        """Garbage in the rate-limit env var keeps the default, doesn't crash."""
+        with patch.dict(os.environ, {"CIRIS_API_RATE_LIMIT_PER_MINUTE": "not-a-number"}):
+            config = APIAdapterConfig()
+            config.load_env_vars()
+            assert config.rate_limit_per_minute == 60  # default retained
+
     def test_config_immutability_after_creation(self):
         """Test that config values are properly set and retained."""
         # Create config with specific values

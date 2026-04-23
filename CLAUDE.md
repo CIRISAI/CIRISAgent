@@ -260,8 +260,13 @@ Only for multi-provider services:
 
 CIRIS supports 29 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
 
-### Supported Languages
-`am` (Amharic), `ar` (Arabic), `bn` (Bengali), `de` (German), `en` (English), `es` (Spanish), `fa` (Persian), `fr` (French), `ha` (Hausa), `hi` (Hindi), `id` (Indonesian), `it` (Italian), `ja` (Japanese), `ko` (Korean), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `tr` (Turkish), `ur` (Urdu), `zh` (Chinese)
+### Supported Languages (29)
+
+Together these reach roughly 95% of the world's population — chosen to maximize accessibility for the people who most need ethical, multilingual AI assistance.
+
+Source of truth: `localization/manifest.json`. To add or remove a language, update the manifest first.
+
+`am` (Amharic), `ar` (Arabic, RTL), `bn` (Bengali), `de` (German), `en` (English, base), `es` (Spanish), `fa` (Persian, RTL), `fr` (French), `ha` (Hausa), `hi` (Hindi), `id` (Indonesian), `it` (Italian), `ja` (Japanese), `ko` (Korean), `mr` (Marathi), `my` (Burmese), `pa` (Punjabi), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `ta` (Tamil), `te` (Telugu), `th` (Thai), `tr` (Turkish), `uk` (Ukrainian), `ur` (Urdu, RTL), `vi` (Vietnamese), `yo` (Yoruba), `zh` (Chinese, Simplified)
 
 ### Key Files
 - **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings

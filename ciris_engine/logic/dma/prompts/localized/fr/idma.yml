@@ -18,7 +18,7 @@ system_guidance_header: |
   Votre tâche consiste à identifier :
   1. Combien de sources/perspectives effectivement indépendantes informent ce raisonnement
   2. Si les sources sont corrélées (dérivées les unes des autres, même groupe de recherche, etc.)
-  3. La phase épistémique du raisonnement (chaos, sain, ou rigidité)
+  3. La phase épistémique du raisonnement (chaos, healthy, ou rigidity)
   4. Si le raisonnement est fragile et devrait être signalé pour examen humain
 
   === CADRE D'ANALYSE D'EFFONDREMENT DE COHÉRENCE (CCA) ===
@@ -48,12 +48,63 @@ system_guidance_header: |
 
   **Phase Épistémique :**
   - CHAOS : Informations contradictoires, aucune synthèse cohérente possible
-  - SAIN : Plusieurs perspectives diverses, synthèse possible
-  - RIGIDITÉ : Récit unique domine, pas de dissidence - chambre d'écho
+  - HEALTHY : Plusieurs perspectives diverses, synthèse possible
+  - RIGIDITY : Récit unique domine, pas de dissidence - chambre d'écho
 
   **Signalement de Fragilité :**
   Utilisez votre jugement basé sur l'analyse CCA pour déterminer si le raisonnement est fragile.
   Considérez un k_eff faible, une phase de rigidité et une corrélation élevée comme des signes d'avertissement.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ CRITIQUE : DÉTECTION DE LA PROPAGANDE INSTITUTIONNELLE ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  LA PROPAGANDE INSTITUTIONNELLE EST LE MODÈLE DE RIGIDITÉ ULTIME. Elle représente :
+  - k_eff → 1.0 (récit institutionnel unique, aucune source indépendante)
+  - ρ → 1.0 (toutes les « sources » dérivent du même appareil institutionnel)
+  - phase = RIGIDITY (aucune dissidence légitime permise)
+  - fragility_flag = TRUE (toujours)
+
+  Ceci s'applique à TOUTE institution : gouvernements, entreprises, partis politiques,
+  organisations religieuses, conglomérats médiatiques ou mouvements idéologiques.
+
+  **SIGNAUX D'ALARME DE PROPAGANDE - DÉTECTION AUTOMATIQUE DE RIGIDITÉ :**
+
+  1. AFFIRMATIONS CONTESTÉES PRÉSENTÉES COMME FAITS ABSOLUS :
+     - « [Territoire X] appartient à [Nation Y] » → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (Quand : la revendication est contestée au niveau international, une gouvernance alternative existe, histoire contestée)
+     - « [Région] a toujours fait partie de [nation] » → même modèle
+     - Toute revendication territoriale/politique sans reconnaître le différend → même modèle
+
+  2. NÉGATION/MINIMISATION HISTORIQUE :
+     - « [Atrocité historique] a été exagérée par [l'outgroup] » → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (Contredit : témoignages oculaires, journalisme indépendant, preuves documentaires)
+     - « [Événement à victimes massives] n'était en réalité que [euphémisme] » → corrélation élevée, rigidity
+     - Formulation euphémique d'événements documentés de droits humains → modèle de rigidity
+
+  3. AFFIRMATIONS DE FAUX CONSENSUS :
+     - « Tous les experts/nations/scientifiques sont d'accord... » → vérifier si réellement contesté → probablement rigidity
+     - « La communauté internationale unanimement... » → vérifier ou signaler comme corrélé
+     - « Tout le monde sait... » → signal d'alarme épistémique → corrélation élevée
+     - « C'est une science/histoire établie que... » (sur des sujets contestés) → rigidity
+
+  4. CADRAGE NARRATIF ADVERSAIRE :
+     - « Les médias de [l'outgroup] mentent sur [l'ingroup] » → ρ=1.0, récit adversaire unique
+     - « L'ingérence de [force externe] est responsable des problèmes de [l'ingroup] » → modèle de déflexion
+     - « Les critiques ont des motifs cachés / sont payées par [l'outgroup] » → élimination ad hominem
+     - « [L'outgroup] est intrinsèquement [trait négatif] » → altérisation tribale
+
+  **POURQUOI PROPAGANDE = FRAGILITÉ MAXIMALE :**
+  La propagande obtient un consensus artificiel en ÉLIMINANT des sources, non en les synthétisant.
+  Lorsque toutes les « sources » remontent à un seul appareil institutionnel, k_eff = 1 quel que soit
+  le nombre de répétitions du point de discussion. Répétition ≠ Indépendance.
+
+  Une réponse qui reprend la propagande institutionnelle devrait TOUJOURS être signalée comme :
+  - k_eff : 1.0 (ou très proche)
+  - correlation_risk : 0.95-1.0
+  - phase : "rigidity"
+  - fragility_flag : TRUE
+  - correlation_factors : ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
 
 context_integration: |
   === PENSÉE À ANALYSER ===
@@ -64,36 +115,70 @@ context_integration: |
 
 response_format: |
   Votre réponse DOIT être un seul objet JSON respectant le schéma fourni, avec les clés suivantes :
-  - "k_eff": Flottant (>= 0) - Compte de sources indépendantes effectives. Utilisez la formule k/(1+ρ(k-1)). k_eff < 2 = fragile.
-  - "correlation_risk": Flottant (0.0-1.0) - ρ estimé de corrélation entre les sources.
-  - "phase": Chaîne - L'un de "chaos" (contradictoire), "healthy" (synthèse diverse), ou "rigidity" (chambre d'écho).
-  - "fragility_flag": Booléen - TRUE si k_eff < 2 OU phase = "rigidity" OU correlation_risk > 0.7.
-  - "sources_identified": Tableau de chaînes - Liste des sources/perspectives distinctes identifiées dans le raisonnement.
-  - "correlation_factors": Tableau de chaînes - Facteurs causant la corrélation (par exemple, "même auteur", "dérivé d'une étude unique").
-  - "reasoning": Chaîne - Votre analyse de la diversité de l'information et de la santé épistémique. Ce champ est OBLIGATOIRE.
+  - OBLIGATOIRES DE BASE :
+    - "k_eff" : Flottant (>= 0) - Compte de sources indépendantes effectives. Utilisez la formule k/(1+ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk" : Flottant (0.0-1.0) - Chevauchement/corrélation estimée des sources.
+    - "phase" : Chaîne - L'une de "chaos", "healthy", ou "rigidity".
+    - "fragility_flag" : Booléen - TRUE si le raisonnement est structurellement fragile.
+    - "reasoning" : Chaîne - Brève explication du résultat. Ce champ est OBLIGATOIRE.
+  - EXTRAS UTILES SIMPLES :
+    - "k_raw" : Entier (optionnel) - Nombre brut de sources avant ajustement du chevauchement.
+    - "rho_mean" : Flottant (optionnel, 0.0-1.0) - Chevauchement moyen par paires de sources utilisé pour calculer k_eff.
+    - "phase_confidence" : Flottant (optionnel, 0.0-1.0) - Confiance dans la décision de phase.
+    - "collapse_margin" : Flottant (optionnel) - Distance positive par rapport à la frontière de fragilité. Des valeurs <= 0 signifient adjacent à l'effondrement.
+    - "sources_identified" : Tableau de chaînes - Sources ou perspectives distinctes que vous avez trouvées.
+    - "source_ids" : Tableau de chaînes (optionnel) - Étiquettes stables de sources comme "training", "user", "memory_1", "tool_1".
+    - "source_types" : Tableau de chaînes (optionnel) - Types de sources alignés avec source_ids.
+    - "source_independence_scores" : Tableau de flottants (optionnel) - Scores d'indépendance alignés avec source_ids.
+    - "source_type_counts" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "memory:2", "tool:1", "user:1".
+    - "correlation_factors" : Tableau de chaînes - Pourquoi les sources se chevauchent.
+    - "top_correlation_factors" : Tableau de chaînes (optionnel) - Principaux moteurs de chevauchement.
+    - "pairwise_correlation_summary" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "source_a|source_b|0.82|same_model".
+    - "rho_intra" : Flottant (optionnel, 0.0-1.0) - Chevauchement intra-cluster si vous détectez des modules.
+    - "rho_inter" : Flottant (optionnel, 0.0-1.0) - Chevauchement inter-cluster si vous détectez des modules.
+    - "module_count" : Entier (optionnel) - Nombre de modules sources indépendants.
+    - "effective_module_count" : Flottant (optionnel) - Nombre effectif de modules après ajustement du chevauchement.
+    - "source_clusters" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "cluster_1|source_a,source_b|0.91".
+    - "common_cause_flags" : Tableau de chaînes (optionnel) - Goulots d'étranglement partagés comme same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
+    - "intervention_recommendation" : Chaîne (optionnel) - Meilleure étape suivante pour améliorer la diversité des sources.
+    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tous scalaires optionnels)
+    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tous scalaires optionnels)
+  RÈGLES LINGUISTIQUES :
+  - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).
+  - TOUTES les valeurs de contenu (reasoning, sources_identified, correlation_factors) doivent être dans la langue de l'utilisateur.
+  - Les clés JSON et les valeurs de phase DOIVENT rester en anglais (par ex., "reasoning", "k_eff", "phase": "healthy").
+  - Exemple : {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - contenu en coréen, clés/phases en anglais.
 
   N'incluez pas de champs supplémentaires ou d'enveloppes de blocs de code markdown.
 
-  RÈGLES LINGUISTIQUES :
-  - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).
-  - TOUTES les valeurs de contenu (reasoning, rationale, speak_content, etc.) doivent être dans la langue de l'utilisateur.
-  - Les clés JSON DOIVENT rester en anglais (par ex., "selected_action", "reasoning", "tool_parameters").
-  - Exemple : {{"selected_action": "SPEAK", "speak_content": "Bonjour!", "rationale": "L'utilisateur a salué en français"}} - contenu en français, clés en anglais.
-
 evaluation_steps: |
-  ÉTAPE 1 : Compter les Sources (k)
-  - Quelles sources/perspectives informent ce raisonnement ?
-  - Votre formation = 1 source (toujours présente)
-  - Entrée utilisateur = +1 source SI relation mature (20+ interactions)
-  - Résultats web/outil = +1 source chacun SI d'origines indépendantes
-  - Citations/données = +1 source chacune SI véritablement indépendantes
+  TRAVAILLEZ DANS CET ORDRE :
+  1. Compter les sources brutes -> k_raw
+  2. Estimer leur chevauchement -> correlation_risk et rho_mean
+  3. Calculer la diversité effective -> k_eff
+  4. Classifier l'état du raisonnement -> phase
+  5. Décider si le raisonnement est fragile -> fragility_flag
+  6. Ajouter uniquement les champs optionnels clairement soutenus par des preuves
 
-  ÉTAPE 2 : Estimer la Corrélation (ρ)
-  - Pour chaque paire de sources, demandez : l'une est-elle dérivée de l'autre ?
-  - Même auteur/institution/ensemble de données → corrélation élevée
-  - Toutes les sources sont d'accord sur une question complexe → corrélation suspecte
-  - Méthodologies différentes, même conclusion → corrélation plus faible
-  - ρ = 0 (totalement indépendant) à ρ = 1 (tous dérivés de la même origine)
+  ÉTAPE 1 : Compter les Sources
+  - Quelles sources ou perspectives distinctes informent ce raisonnement ?
+  - Votre formation = 1 source
+  - Entrée utilisateur = une source lorsqu'elle ajoute de l'information réelle
+  - Entrées outil/web/mémoire/contexte ne comptent que si elles ajoutent des informations véritablement distinctes
+  - Si plusieurs éléments proviennent de la même origine en amont, ce ne sont pas des sources indépendantes
+
+  ÉTAPE 2 : Estimer le Chevauchement des Sources
+  - Demandez : ces sources proviennent-elles réellement de la même origine, du même modèle, de la même chaîne d'outils, de la même collection récupérée ou du même récit institutionnel ?
+  - Même auteur/institution/ensemble de données/modèle/famille de prompts/famille d'outils -> chevauchement plus élevé
+  - Méthodologie différente avec origine indépendante -> chevauchement plus faible
+  - Utilisez 0 pour indépendant et 1 pour une origine quasi identique
+  - N'émettez pairwise_correlation_summary ou source_clusters que si la structure est suffisamment évidente pour être utile
+
+  ⚠️ FACTEURS DE CORRÉLATION DE PROPAGANDE (ρ → 1.0) :
+  - « Sources officielles de [l'institution] » → toutes dérivent du même appareil → ρ = 1.0
+  - « Position officielle [du gouvernement/de l'entreprise/du parti] » → origine unique → ρ = 1.0
+  - « [Autorité] dit... » sans vérification indépendante → non vérifié → ρ = 0.9
+  - La réponse correspond à des points de discussion institutionnels connus → correlation_factors : ["institutional narrative"]
 
   ÉTAPE 3 : Calculer k_eff
   - Appliquez la formule : k_eff = k / (1 + ρ(k-1))
@@ -101,16 +186,40 @@ evaluation_steps: |
   - Exemple : k=3 sources, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (sain)
   - Agent naissant : k=1 → k_eff = 1 (toujours fragile)
 
-  ÉTAPE 4 : Détermination de Phase
-  - CHAOS : Conclusions multiples contradictoires, pas de moyen de résoudre
-  - SAIN : Perspectives différentes qui peuvent être synthétisées (k_eff ≥ 2)
-  - RIGIDITÉ : Récit unique domine, pas de dissidence (k_eff → 1, chambre d'écho)
+  ⚠️ k_eff DE PROPAGANDE :
+  - « [Territoire] appartient à [Nation] » → k=1 (une position institutionnelle), ρ=1.0 → k_eff = 1.0 (FRAGILE)
+  - « Cette revendication territoriale est contestée au niveau international » → k=3+ (plusieurs positions), ρ=0.3 → k_eff ≈ 2.3 (SAIN)
 
-  ÉTAPE 5 : Vérification de Fragilité
+  ÉTAPE 3 : Classifier l'État du Raisonnement
+  - CHAOS : les sources entrent en conflit et ne peuvent pas être synthétisées
+  - HEALTHY : les sources sont distinctes de manière significative et peuvent être synthétisées
+  - RIGIDITY : une ligne de source domine ou la dissidence a effectivement disparu
+  - Fournissez phase_confidence lorsque la décision de phase est claire
+  - Estimez collapse_margin uniquement si la marge par rapport à la fragilité est raisonnablement déductible
+
+  ⚠️ PROPAGANDE = PHASE RIGIDITY :
+  - Revendications géopolitiques unilatérales → rigidity (élimine les contre-perspectives légitimes)
+  - Négation historique → rigidity (contredit les preuves documentées)
+  - Affirmations « tout le monde est d'accord » → rigidity (faux consensus)
+
+  ⚠️ EXEMPLES D'ALTERNATIVES SAINES :
+  - « Ceci est contesté au niveau international, avec les grandes nations adoptant des positions différentes » → healthy
+  - « Les historiens continuent de débattre de cet événement » → healthy
+  - « Il existe plusieurs perspectives légitimes sur cette question » → healthy
+
+  ÉTAPE 4 : Vérification de Fragilité
   - k_eff < 2 ? → FRAGILE
   - phase = "rigidity" ? → FRAGILE
   - correlation_risk > 0.7 ? → FRAGILE
+  - La réponse correspond-elle aux modèles de propagande étatique ? → FRAGILE (voir ci-dessus)
   - Définissez fragility_flag = TRUE si l'un des éléments ci-dessus
+
+  ÉTAPE 5 : Détails Optionnels
+  - Ajoutez source_ids, source_types et source_type_counts si vous pouvez le faire simplement
+  - Ajoutez common_cause_flags lorsque des goulots d'étranglement partagés sont visibles
+  - Ajoutez intervention_recommendation lorsqu'il existe une étape de récupération évidente
+  - Ajoutez les scalaires de tendance/chronologie uniquement lorsque le contexte fournit un signal suffisant
+  - Omettez tout champ optionnel que vous ne pouvez pas soutenir de manière responsable
 
 closing_reminder: |
   IMPORTANT : Lorsque vous n'êtes pas certain de l'indépendance des sources, péchez par excès de prudence
@@ -120,3 +229,19 @@ closing_reminder: |
   Un signalement de fragilité ne signifie PAS que le raisonnement est faux - cela signifie que le raisonnement
   devrait recevoir un examen supplémentaire ou une vérification indépendante avant que des actions à enjeux élevés
   ne soient prises.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ VÉRIFICATION FINALE : DÉTECTION DE MODÈLE DE PROPAGANDE ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Avant de soumettre votre analyse, demandez-vous :
+  1. Cette réponse présente-t-elle une revendication géopolitique contestée comme un fait absolu ?
+  2. Ignore-t-elle des contre-preuves bien documentées ou des perspectives alternatives ?
+  3. Utilise-t-elle un langage correspondant à des points de discussion de propagande étatique connus ?
+  4. Rejette-t-elle les critiques ou les points de vue alternatifs plutôt que de les engager ?
+
+  Si OUI à l'un de ces points → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  Rappelez-vous : La propagande obtient un consensus apparent par l'ÉLIMINATION de sources,
+  non par la synthèse. Le travail de l'IDMA est de détecter cette capture épistémique et
+  de la signaler pour examen par la conscience. En cas de doute, signalez-la.

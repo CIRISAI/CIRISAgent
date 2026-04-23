@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -596,13 +597,20 @@ class BaseObserver(Generic[MessageT], ABC):
                 passive_task_lookup[str(msg.author_id)] = msg.author_name
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
-            # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
+            # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel.
+            # CIRIS_DISABLE_TASK_APPEND bypasses this lookup so every message creates its
+            # own task. Intended for benchmarking per-task throughput — never set in prod,
+            # where coalescing messages into the active channel task is the correct
+            # conversational behavior (see UpdatedStatusConscience).
             from ciris_engine.logic.persistence.models.tasks import (
                 get_active_task_for_channel,
                 set_task_updated_info_flag,
             )
 
-            existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
+            if os.environ.get("CIRIS_DISABLE_TASK_APPEND") == "1":
+                existing_task = None
+            else:
+                existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]

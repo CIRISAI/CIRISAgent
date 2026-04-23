@@ -1403,6 +1403,8 @@ VALID_APPLE_ISSUERS = {"https://appleid.apple.com"}
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 APPLE_JWKS_CACHE_TTL_SECONDS = 3600
 APPLE_NATIVE_AUDIENCE_FIELDS = ("client_id", "ios_client_id", "native_client_id", "bundle_id")
+APPLE_VERIFICATION_UNAVAILABLE_DETAIL = "Apple verification service unavailable. Please try again."
+APPLE_INVALID_ID_TOKEN_DETAIL = "Apple could not verify this ID token. It may be expired, malformed, or invalid."
 _apple_jwks_cache: Dict[str, Any] = {"keys": None, "expires_at": 0.0}
 
 
@@ -1840,36 +1842,24 @@ async def _fetch_apple_jwks() -> List[Dict[str, Any]]:
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error("[AppleNativeAuth] Apple JWKS fetch failed: %s - %s", response.status, error_text)
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Apple verification service unavailable. Please try again.",
-                    )
+                    _raise_apple_verification_unavailable()
 
                 jwks_payload = await response.json()
     except asyncio.TimeoutError as exc:
         logger.warning("[AppleNativeAuth] Apple JWKS fetch timed out")
         if isinstance(cached_keys, list) and cached_keys:
             return cached_keys
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Apple verification service unavailable. Please try again.",
-        ) from exc
+        raise _apple_verification_unavailable_exception() from exc
     except aiohttp.ClientError as exc:
         logger.warning("[AppleNativeAuth] Apple JWKS fetch failed: %s", type(exc).__name__)
         if isinstance(cached_keys, list) and cached_keys:
             return cached_keys
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Apple verification service unavailable. Please try again.",
-        ) from exc
+        raise _apple_verification_unavailable_exception() from exc
 
     keys = jwks_payload.get("keys")
     if not isinstance(keys, list) or not keys:
         logger.error("[AppleNativeAuth] Apple JWKS response missing signing keys")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Apple verification service unavailable. Please try again.",
-        )
+        _raise_apple_verification_unavailable()
 
     _apple_jwks_cache["keys"] = keys
     _apple_jwks_cache["expires_at"] = now + APPLE_JWKS_CACHE_TTL_SECONDS
@@ -1884,38 +1874,26 @@ def _get_apple_signing_key(id_token: str, jwks: List[Dict[str, Any]]) -> Any:
     from jwt.algorithms import RSAAlgorithm
 
     try:
-        header = jwt.get_unverified_header(id_token)
+        header = jwt.get_unverified_header(id_token)  # NOSONAR: Apple key selection requires reading the JWT header kid before signature verification
     except jwt.InvalidTokenError as exc:
         logger.error("[AppleNativeAuth] Invalid Apple JWT header: %s", type(exc).__name__)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
-        ) from exc
+        raise _apple_invalid_id_token_exception() from exc
 
     if header.get("alg") != "RS256":
         logger.error("[AppleNativeAuth] Unsupported Apple token algorithm: %s", header.get("alg"))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
-        )
+        _raise_apple_invalid_id_token()
 
     token_kid = header.get("kid")
     if not token_kid:
         logger.error("[AppleNativeAuth] Apple JWT missing kid header")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
-        )
+        _raise_apple_invalid_id_token()
 
     for jwk in jwks:
         if jwk.get("kid") == token_kid and jwk.get("kty") == "RSA":
             return RSAAlgorithm.from_jwk(json.dumps(jwk))
 
     logger.error("[AppleNativeAuth] No Apple signing key found for kid=%s", token_kid)
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
-    )
+    _raise_apple_invalid_id_token()
 
 
 async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
@@ -1968,10 +1946,7 @@ async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
         ) from exc
     except jwt.InvalidTokenError as exc:
         logger.error("[AppleNativeAuth] Apple token verification failed: %s", type(exc).__name__)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Apple could not verify this ID token. It may be expired, malformed, or invalid.",
-        ) from exc
+        raise _apple_invalid_id_token_exception() from exc
 
     _validate_token_sub_claim(token_info.get("sub"))
     _log_email_verification_warning(token_info)
@@ -1982,6 +1957,32 @@ async def _verify_apple_id_token(id_token: str) -> Dict[str, Optional[str]]:
         "name": token_info.get("name"),
         "picture": None,
     }
+
+
+def _apple_verification_unavailable_exception() -> HTTPException:
+    """Build a standard Apple verification-service outage response."""
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=APPLE_VERIFICATION_UNAVAILABLE_DETAIL,
+    )
+
+
+def _raise_apple_verification_unavailable() -> None:
+    """Raise a standard Apple verification-service outage response."""
+    raise _apple_verification_unavailable_exception()
+
+
+def _apple_invalid_id_token_exception() -> HTTPException:
+    """Build a standard invalid Apple token response."""
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=APPLE_INVALID_ID_TOKEN_DETAIL,
+    )
+
+
+def _raise_apple_invalid_id_token() -> None:
+    """Raise a standard invalid Apple token response."""
+    raise _apple_invalid_id_token_exception()
 
 
 async def _auto_mint_system_admin_if_needed(

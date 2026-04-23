@@ -132,20 +132,31 @@ def extract_first_match(lines: Iterable[str], pattern: re.Pattern[str]) -> str |
 
 def summarize_test_collection() -> TestCollectionSummary:
     command = ["pytest", "--collect-only", "-q", "tests", "-o", "addopts="]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+    )
 
     combined_output = f"{completed.stdout}\n{completed.stderr}".splitlines()
     summary_line = extract_first_match(
         combined_output,
-        re.compile(r"\d+ tests collected, \d+ errors", re.IGNORECASE),
+        re.compile(r"\d+ tests collected(?:, \d+ errors)?(?: in .+)?", re.IGNORECASE),
     )
     if summary_line is None:
         summary_line = "pytest collection summary not found"
 
-    count_match = re.search(r"(\d+) tests collected, (\d+) errors", summary_line)
+    count_match = re.search(
+        r"(?P<collected>\d+) tests collected(?:, (?P<errors>\d+) errors)?",
+        summary_line,
+        re.IGNORECASE,
+    )
     if count_match:
-        collected = int(count_match.group(1))
-        collection_errors = int(count_match.group(2))
+        collected = int(count_match.group("collected"))
+        errors_text = count_match.group("errors")
+        collection_errors = int(errors_text) if errors_text is not None else 0
     else:
         collected = 0
         collection_errors = 0

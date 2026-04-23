@@ -501,6 +501,19 @@ install_dependencies() {
         # Version already verified by get_best_python()
     fi
 
+    # TPM2 TSS runtime libraries for CIRISVerify (Linux/apt only)
+    # Use best-effort install to support both Debian-style and Ubuntu t64 package names.
+    if [ "$pkg_mgr" = "apt" ]; then
+        log_info "Ensuring CIRISVerify runtime libraries are present (TPM2 TSS)"
+        if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-tcti-device0 >/dev/null 2>&1; then
+            sudo apt-get install -y \
+                libtss2-esys-3.0.2-0t64 \
+                libtss2-tctildr0t64 \
+                libtss2-tcti-device0t64 \
+                >/dev/null 2>&1 || log_warn "Could not auto-install TPM2 TSS libs; install manually if setup fails"
+        fi
+    fi
+
     # Check Node.js
     if ! command_exists node; then
         log_warn "Node.js not found, installing..."

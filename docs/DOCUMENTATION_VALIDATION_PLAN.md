@@ -2,220 +2,115 @@
 
 ## Overview
 
-This plan outlines a systematic bottom-up approach to validate and maintain CIRIS documentation accuracy. Starting from the lowest-level implementation files and working up to high-level architecture documents ensures ground truth accuracy.
+This plan defines a reproducible process for keeping grant-facing and architecture-facing claims synchronized with code reality.
+
+The immediate Round 1 objective is to remove stale hard-coded counts (tests/endpoints) and replace them with script-generated baselines that can be re-run before each release and before external reporting deadlines.
 
 ## Validation Hierarchy
 
 ### Level 1: Implementation Files (Ground Truth)
-These are the source of truth - code never lies.
 
 1. **Service Implementations** (`ciris_engine/logic/services/`)
-   - Count actual services
-   - Verify service categories
-   - Check implemented methods
-
+   - Validate service taxonomy and category mapping.
 2. **Protocol Definitions** (`ciris_engine/protocols/`)
-   - Verify protocol-implementation match
-   - Check inheritance hierarchy
-   - Validate method signatures
-
+   - Validate protocol ↔ implementation alignment.
 3. **Schema Definitions** (`ciris_engine/schemas/`)
-   - Count schema directories
-   - Verify type definitions
-   - Check for Dict[str, Any] usage
+   - Validate schema drift and typed contract coverage.
+4. **Action Handlers** (`ciris_engine/logic/handlers/`)
+   - Validate ten-verb implementation and handler routing.
+5. **API Router Registration** (`ciris_engine/logic/adapters/api/app.py`)
+   - Validate endpoint inventory from runtime registration.
 
-4. **Handler Implementations** (`ciris_engine/logic/handlers/`)
-   - Verify all 10 handlers exist
-   - Check handler categories
-   - Validate action mappings
+### Level 2: Local Documentation
 
-### Level 2: Module Documentation
-Documentation within code directories.
+- Service READMEs, protocol READMEs, schema READMEs, and route docs must inherit counts from Level 1 outputs.
 
-1. **Service READMEs** (`*/services/*/README.md`)
-   - Match implementation details
-   - Update API examples
-   - Remove aspirational features
+### Level 3: Public/External Claims
 
-2. **Protocol READMEs** (`*/protocols/*/README.md`)
-   - Verify file references
-   - Update counts and categories
-   - Fix import paths
+- `README.md`, `CLAUDE.md`, grant text, architecture docs, and site pages must only reference script-derived numbers.
 
-3. **Schema READMEs** (`*/schemas/*/README.md`)
-   - Document actual directories
-   - Update type examples
-   - Remove version references
+### Level 4: Operational Evidence
 
-### Level 3: System Documentation
-High-level architecture and design docs.
+- CI test collection logs, endpoint inventory output, and baseline snapshots must be retained in `docs/grant/`.
 
-1. **CLAUDE.md** (Developer guidance)
-   - Verify service counts
-   - Update architecture claims
-   - Check code examples
+---
 
-2. **README.md** (Project overview)
-   - Validate performance claims
-   - Update feature status
-   - Fix architecture diagrams
+## Round 1 Measurement Methodology (Implemented)
 
-3. **Architecture Docs** (`docs/architecture/`)
-   - Verify component counts
-   - Update service categories
-   - Fix dependency graphs
+### Canonical script
 
-### Level 4: Integration Documentation
-Cross-cutting concerns and workflows.
+Use:
 
-1. **API Documentation** (`docs/api/`)
-   - Verify endpoint counts
-   - Update request/response schemas
-   - Check authentication flows
-
-2. **Deployment Guides** (`deployment/`)
-   - Validate resource requirements
-   - Update configuration examples
-   - Check docker-compose files
-
-3. **Test Documentation** (`tests/README.md`)
-   - Update test counts
-   - Verify coverage claims
-   - Document test categories
-
-## Validation Process
-
-### Step 1: Inventory (Automated)
 ```bash
-# Count services
-find ciris_engine/logic/services -name "*.py" -type f | grep -E "(service|Service)" | wc -l
-
-# Count protocols
-find ciris_engine/protocols/services -name "*.py" -type f | wc -l
-
-# Count schemas
-find ciris_engine/schemas -type d | wc -l
-
-# Find Dict[str, Any] usage
-grep -r "Dict\[str, Any\]" ciris_engine/ --include="*.py" | grep -v test | wc -l
+python tools/analysis/round1_grant_baseline.py \
+  --markdown-out docs/grant/ROUND1_BASELINE_$(date +%F).md
 ```
 
-### Step 2: Cross-Reference
-1. Create a source-of-truth table:
-   - Service name | Category | Protocol file | Implementation file | Documented?
-2. Identify discrepancies
-3. Flag outdated documentation
+This script captures:
+- Service taxonomy counts from `ApiServiceConfiguration`
+- Endpoint counts from the live FastAPI route graph (`create_app()`)
+- Test collection totals/errors via `pytest --collect-only -q tests -o addopts=`
 
-### Step 3: Update Documentation
-1. Start with Level 1 files (never change implementation to match docs)
-2. Update Level 2 based on Level 1
-3. Update Level 3 based on Levels 1-2
-4. Update Level 4 based on all previous levels
+### Why this replaces stale static counts
 
-### Step 4: Validation Rules
+- **Tests** and **endpoint** counts change frequently; hard-coding values in docs creates drift.
+- The baseline script provides a single, repeatable mechanism for “latest known truth.”
 
-#### Rule 1: Count Consistency
-- All service counts must be 22
-- All handler counts must be 10
-- Schema directory count must match LS output
+---
 
-#### Rule 2: Category Consistency
-- Graph Services: 6
-- Infrastructure: 7
-- Governance: 4
-- Runtime: 3
-- Tool: 1
+## Round 1 Baseline Snapshot (2026-04-22 UTC)
 
-#### Rule 3: No Aspirational Content
-- Remove "planned features"
-- Remove "future enhancements"
-- Document only what exists
+Source artifact: `docs/grant/ROUND1_BASELINE_2026-04-22.md`.
 
-#### Rule 4: API Examples Must Work
-- Test all code examples
-- Verify import paths
-- Check method signatures
+- **Core services:** 22
+  - graph 7, infrastructure 4, lifecycle 4, governance 4, runtime 2, tool 1
+- **API method+path routes:** 257
+  - GET 139, POST 83, PUT 17, PATCH 2, DELETE 16
+- **Tests collected:** 10,662
+- **Collection errors:** 37
+- **Missing plugins detected in this environment:** `pytest_asyncio`, `hypothesis`
 
-## Maintenance Schedule
+---
 
-### Daily
-- Check for new services/handlers/schemas
-- Validate recent PRs for doc updates
+## Low-Hanging Hygiene Fixes (Round 1)
 
-### Weekly
-- Run full validation script
-- Update any drift
-- Check for new Dict[str, Any]
+### Ship before June 1, 2026
 
-### Monthly
-- Deep review of architecture docs
-- Update performance metrics
-- Refresh API documentation
+1. Replace stale “78/99 endpoint” claims in grant-facing docs with “script-generated; see latest baseline artifact.”
+2. Replace stale “3,500+ tests” claims with baseline-derived count plus date stamp.
+3. Add a CI job that runs `round1_grant_baseline.py --skip-tests` on every PR.
+4. Add a nightly CI job with full collection (`--skip-tests` off) and publish artifact.
 
-### Quarterly
-- Full bottom-up validation
-- Update all examples
-- Architecture diagram refresh
+### Ship this quarter
 
-## Red Flags
+1. Install and pin missing pytest plugins in dev/test image (`pytest-asyncio`, `hypothesis`) so collection errors reflect code issues rather than environment gaps.
+2. Normalize service strata naming across docs (Graph/Infrastructure/Runtime/Governance/Core Tool vs Lifecycle naming).
+3. Add a generated endpoint CSV (path, method, auth dependency presence) to support the authZ audit pass.
 
-These indicate documentation drift:
-1. Service count != 22 anywhere
-2. "Coming soon" or "planned" features
-3. Import paths that don't exist
-4. Code examples that don't run
-5. Performance claims without data
-6. Dict[str, Any] in examples
-7. Version numbers in paths
-8. Non-existent file references
+### Nice to have
 
-## Validation Tools
+1. Add doc lint to block stale numeric claims unless accompanied by baseline date + artifact reference.
+2. Auto-open a docs PR if baseline count deltas exceed thresholds.
 
-### ciris_doc_validator.py
-```python
-"""
-Automated documentation validator.
-Checks counts, paths, and consistency.
-"""
-# Implementation to be created
-```
+---
 
-### validate_examples.py
-```python
-"""
-Tests all code examples in documentation.
-Ensures they compile and run.
-"""
-# Implementation to be created
-```
+## Ongoing Maintenance Schedule
 
-## Success Metrics
+### Per PR
+- Run baseline script with `--skip-tests` and check service/endpoint drift.
 
-1. **Accuracy**: 100% of counts match implementation
-2. **Currency**: No documentation >30 days out of date
-3. **Executability**: 100% of code examples run
-4. **Completeness**: All components documented
-5. **Consistency**: No conflicting information
+### Nightly
+- Run full baseline including pytest collection and persist markdown artifact.
 
-## Current Status (July 2025)
+### Pre-release / Pre-grant submission
+- Regenerate baseline same day as submission and update all externally visible claim docs.
 
-### Completed Updates
-- [x] protocols/README.md - Updated to 22 services
-- [x] schemas/README.md - Documented 24 directories
-- [x] handler protocols/README.md - Removed non-existent files
-- [x] memory service/README.md - Removed aspirational features
-- [x] service protocols/README.md - Fixed categorizations
+---
 
-### Validation Results
-- Service count: Verified 22 services
-- Dict[str, Any] count: 216 instances (README claim of 0 is false)
-- Schema directories: 24 (verified by LS)
-- Handler count: 10 (verified)
-- API endpoints: 78 (verified)
+## Success Criteria
 
-### Next Steps
-1. Create automated validation scripts
-2. Update main README.md claims
-3. Fix Dict[str, Any] count claim
-4. Update performance benchmarks with real data
-5. Create documentation update checklist for PRs
+1. Every numeric claim in docs is either:
+   - generated from tooling, or
+   - stamped with measurement date and source artifact.
+2. No conflicting endpoint/test/service counts across top-level docs.
+3. Grant-facing counts can be reproduced from commands in this file.

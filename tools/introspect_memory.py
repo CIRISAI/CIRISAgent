@@ -233,6 +233,16 @@ def main(adapters: str = "cli", duration: int = 30, messages: int = 0, concurren
     pid = process.pid
     print(f"PID: {pid}")
 
+    def shutdown_process() -> None:
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
     samples = []
     start_time = time.time()
 
@@ -241,7 +251,7 @@ def main(adapters: str = "cli", duration: int = 30, messages: int = 0, concurren
             base_url = f"http://localhost:{port}"
             if not asyncio.run(_wait_for_server(base_url)):
                 print("ERROR: API server did not become healthy")
-                process.terminate()
+                shutdown_process()
                 return 1
 
             token = asyncio.run(_get_auth_token(base_url))
@@ -252,12 +262,12 @@ def main(adapters: str = "cli", duration: int = 30, messages: int = 0, concurren
                     token = asyncio.run(_get_auth_token(base_url))
             if not token:
                 print("ERROR: Could not authenticate with QA credentials")
-                process.terminate()
+                shutdown_process()
                 return 1
             runtime_ready = asyncio.run(_wait_for_runtime_ready(base_url, token))
             if not runtime_ready:
                 print("ERROR: Agent runtime did not become ready for authenticated traffic")
-                process.terminate()
+                shutdown_process()
                 return 1
 
             print("\n[2/3] Running message load...")
@@ -287,11 +297,7 @@ def main(adapters: str = "cli", duration: int = 30, messages: int = 0, concurren
             print()
 
         print("\n[3/3] Shutting down process...")
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        shutdown_process()
 
         print("\n" + "=" * 70)
         print("MEMORY SUMMARY")

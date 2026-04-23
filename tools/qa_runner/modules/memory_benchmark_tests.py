@@ -141,6 +141,7 @@ class MemoryBenchmarkTests(BaseTestModule):
         self.concurrent_channels = max(1, concurrent_channels)
         self.snapshots: List[MemorySnapshot] = []
         self.channel_stats: Dict[str, ChannelStats] = {}
+        self._global_messages_sent = 0
 
     def _take_snapshot(self, messages_sent: int) -> Optional[MemorySnapshot]:
         """Take a memory snapshot."""
@@ -159,6 +160,11 @@ class MemoryBenchmarkTests(BaseTestModule):
         )
         self.snapshots.append(snapshot)
         return snapshot
+
+    def _increment_global_message_count(self) -> int:
+        """Increment and return global sent counter across all channels."""
+        self._global_messages_sent += 1
+        return self._global_messages_sent
 
     async def run(self) -> List[Dict]:
         """Run memory benchmark tests."""
@@ -344,13 +350,16 @@ class MemoryBenchmarkTests(BaseTestModule):
 
                 # Progress update at intervals
                 if (i + 1) % snapshot_interval == 0:
-                    snapshot = self._take_snapshot(stats.messages_sent)
+                    global_count = self._increment_global_message_count()
+                    snapshot = self._take_snapshot(global_count)
                     if snapshot:
                         growth = snapshot.rss_bytes - self.snapshots[0].rss_bytes
                         self.console.print(
                             f"    [{channel_id}] {i + 1}/{message_count}: "
                             f"{format_size(snapshot.rss_bytes)} (+{format_size(growth)})"
                         )
+                else:
+                    self._increment_global_message_count()
 
             except Exception as e:
                 stats.messages_failed += 1

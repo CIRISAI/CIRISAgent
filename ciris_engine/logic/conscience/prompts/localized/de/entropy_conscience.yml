@@ -15,10 +15,43 @@ system_prompt: |
   Antworten, die Bilder genau beschreiben, haben NIEDRIGE Entropie (geordnet, kohärent).
   Verlassen Sie sich NICHT auf visuelle Inhalte - bewerten Sie nur den Text mit Kontextbewusstsein.
 
+  === WAS KEINE ENTROPIE IST (bewerten Sie dafür NICHT höher) ===
+  - LÄNGE: Eine 500-Wörter-Antwort ist nicht chaotischer als eine 5-Wörter-Antwort, wenn beide kohärent sind.
+  - THEMATISCHE BREITE: Mehrere Aspekte einer Frage abzudecken ist Struktur, keine Entropie.
+  - MEHRERE ABSÄTZE: Gut organisierter Prosatext bleibt unabhängig von der Absatzanzahl niedrig in der Entropie.
+  - NICHT-LATEINISCHE SCHRIFTEN: Amharisch, Chinesisch, Hindi, Arabisch usw. sind nicht "chaotischer" als lateinische Schrift.
+  - FACHVOKABULAR: Korrekt verwendete technische / medizinische / philosophische Begriffe haben niedrige Entropie.
+  - NUANCEN & ABSICHERUNGEN: "einerseits X, andererseits Y" ist strukturiertes Denken, keine Unordnung.
+  - AUFZÄHLUNGEN, Überschriften und Aufzählungspunkte sind HOHE Struktur, NIEDRIGE Entropie.
+
+  === WAS ENTROPIE IST (echte Unordnung) ===
+  - WORTSALAT: Tokens, die keine kohärenten Sätze bilden.
+  - INTERNE WIDERSPRÜCHE: Innerhalb derselben Antwort X und nicht-X zu behaupten.
+  - ZUFÄLLIGE THEMENWECHSEL: Sprünge zwischen unverbundenen Themen ohne Übergang.
+  - VERSTÜMMELTE SYNTAX: Fehlerhafte Grammatik, die den Sinn verdunkelt.
+  - TOKEN-WIEDERHOLUNGSSCHLEIFEN: "die die die", "sehr sehr sehr" über rhetorischen Gebrauch hinaus.
+  - UNBEABSICHTIGTER SPRACHWECHSEL mitten im Satz zwischen unverbundenen Sprachen.
+  - HALLUZINIERTE FÜLLTEXTE: Fülltext, der keine Information vermittelt.
+
   Kalibrierungsbeispiele (nur Entropie):
   - "Hallo, wie kann ich Ihnen heute helfen?" → {"entropy": 0.07}
   - "Das Bild zeigt einen Mann in grauem Anzug vor einer Stadt." [mit Bildkontext] → {"entropy": 0.10}
+  - Eine 3-Absätze umfassende, kohärente Antwort in beliebiger Sprache, die ein komplexes Thema erklärt
+    (z. B. Konzepte der psychischen Gesundheit, historische Ereignisse, philosophische Positionen),
+    mit klarer Struktur und angemessener Absicherung → {"entropy": 0.15}
+  - Eine 100-200 Wörter umfassende, substanzielle Antwort mit einigen klar belegten Punkten,
+    ordentlich organisiert, in beliebiger Sprache → {"entropy": 0.20}
+  - Eine lange Antwort, die größtenteils kohärent ist, aber ein oder zwei leicht
+    redundante Sätze enthält → {"entropy": 0.30}
+  - Eine Antwort, die zwischen zwei lose verbundenen Ideen schweift, ohne einen klaren
+    organisierenden Faden → {"entropy": 0.50}
+  - Eine Antwort mit fehlerhafter Syntax, wiederholten Phrasen oder unverbundenen Abschweifungen → {"entropy": 0.70}
   - "luv luv luv $$$$ lol??" → {"entropy": 0.82}
+
+  Grundhaltung: Eine substanzielle, gut formulierte Antwort zu einem komplexen Thema
+  (psychische Gesundheit, Ethik, Geschichte, Politik, Wissenschaft) hat NIEDRIGE Entropie
+  (≤ 0.30). Reservieren Sie Werte über 0.40 für Antworten, die wirklich
+  ungeordnet sind — nicht bloß lang, mehrsprachig oder nuanciert.
 
 user_prompt_template: "ASSISTENTENANTWORT ZUR ENTROPIEBEWERTUNG:\n{text}"
 user_prompt_with_image_template: "{image_context}\n\nASSISTENTENANTWORT ZUR ENTROPIEBEWERTUNG:\n{text}"

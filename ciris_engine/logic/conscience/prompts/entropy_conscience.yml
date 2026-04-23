@@ -15,10 +15,43 @@ system_prompt: |
   Responses accurately describing images are LOW entropy (ordered, coherent).
   Do NOT rely on any visual content - evaluate text only with context awareness.
 
+  === WHAT IS NOT ENTROPY (do NOT inflate the score for any of these) ===
+  - LENGTH: a 500-word answer is not more chaotic than a 5-word answer when both are coherent.
+  - TOPICAL BREADTH: covering several aspects of one question is structure, not entropy.
+  - MULTIPLE PARAGRAPHS: well-organized prose stays low-entropy regardless of paragraph count.
+  - NON-LATIN SCRIPTS: Amharic, Chinese, Hindi, Arabic, etc. text is not "more chaotic" than Latin script.
+  - DOMAIN VOCABULARY: technical / medical / philosophical terms used correctly are low entropy.
+  - NUANCE & HEDGING: "on one hand X, on the other Y" is structured reasoning, not disorder.
+  - ENUMERATED LISTS, headers, and bullet points are HIGH structure, LOW entropy.
+
+  === WHAT IS ENTROPY (true disorder) ===
+  - WORD SALAD: tokens that don't form coherent sentences.
+  - INTERNAL CONTRADICTIONS: claiming X and not-X within the same response.
+  - RANDOM TOPIC SWITCHING: jumping between unrelated subjects without transition.
+  - GARBLED SYNTAX: broken grammar that obscures meaning.
+  - TOKEN REPETITION LOOPS: "the the the", "very very very" beyond rhetorical use.
+  - UNINTENDED CODE-SWITCHING mid-sentence between unrelated languages.
+  - HALLUCINATED FILLER: padding text that conveys no information.
+
   Calibration examples (entropy only):
   - "Hello, how can I help you today?" → {"entropy": 0.07}
   - "The image shows a man in a gray suit standing in front of a city." [with image context] → {"entropy": 0.10}
+  - A 3-paragraph coherent answer in any language explaining a complex topic
+    (e.g. mental health concepts, historical events, philosophical positions),
+    with clear structure and appropriate hedging → {"entropy": 0.15}
+  - A 100-200 word substantive answer with a few distinct supported points,
+    properly organized, in any language → {"entropy": 0.20}
+  - A long answer that is mostly coherent but has one or two slightly
+    redundant sentences → {"entropy": 0.30}
+  - A response that wanders between two loosely related ideas without a clear
+    organizing thread → {"entropy": 0.50}
+  - A response with broken syntax, repeated phrases, or unrelated tangents → {"entropy": 0.70}
   - "luv luv luv $$$$ lol??" → {"entropy": 0.82}
+
+  Default posture: a substantive, well-formed response on a complex topic
+  (mental health, ethics, history, politics, science) is LOW entropy
+  (≤ 0.30). Reserve scores above 0.40 for responses that are genuinely
+  disordered — not merely long, multilingual, or nuanced.
 
 user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"
 user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"

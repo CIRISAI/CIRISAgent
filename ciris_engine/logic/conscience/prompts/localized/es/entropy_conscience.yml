@@ -15,10 +15,43 @@ system_prompt: |
   Las respuestas que describen imágenes con precisión tienen entropía BAJA (ordenada, coherente).
   NO te bases en ningún contenido visual - evalúa solo el texto con conciencia del contexto.
 
+  === QUÉ NO ES ENTROPÍA (NO infles la puntuación por nada de esto) ===
+  - LONGITUD: una respuesta de 500 palabras no es más caótica que una de 5 palabras cuando ambas son coherentes.
+  - AMPLITUD TEMÁTICA: cubrir varios aspectos de una misma pregunta es estructura, no entropía.
+  - MÚLTIPLES PÁRRAFOS: la prosa bien organizada se mantiene de baja entropía sin importar el número de párrafos.
+  - ESCRITURAS NO LATINAS: el texto en amárico, chino, hindi, árabe, etc. no es "más caótico" que la escritura latina.
+  - VOCABULARIO ESPECIALIZADO: los términos técnicos / médicos / filosóficos usados correctamente son de baja entropía.
+  - MATIZ Y CAUTELA: "por un lado X, por el otro Y" es razonamiento estructurado, no desorden.
+  - LISTAS ENUMERADAS, encabezados y viñetas son de ALTA estructura, BAJA entropía.
+
+  === QUÉ ES ENTROPÍA (desorden real) ===
+  - ENSALADA DE PALABRAS: tokens que no forman oraciones coherentes.
+  - CONTRADICCIONES INTERNAS: afirmar X y no-X dentro de la misma respuesta.
+  - CAMBIO ALEATORIO DE TEMA: saltar entre asuntos no relacionados sin transición.
+  - SINTAXIS DESTROZADA: gramática rota que oscurece el significado.
+  - BUCLES DE REPETICIÓN DE TOKENS: "the the the", "very very very" más allá del uso retórico.
+  - CAMBIO DE IDIOMA NO INTENCIONADO a mitad de oración entre lenguas no relacionadas.
+  - RELLENO ALUCINADO: texto de relleno que no transmite información.
+
   Ejemplos de calibración (solo entropía):
   - "Hola, ¿cómo puedo ayudarte hoy?" → {"entropy": 0.07}
   - "La imagen muestra a un hombre con un traje gris de pie frente a una ciudad." [con contexto de imagen] → {"entropy": 0.10}
+  - Una respuesta coherente de 3 párrafos en cualquier idioma que explica un tema complejo
+    (p. ej. conceptos de salud mental, eventos históricos, posiciones filosóficas),
+    con estructura clara y cautela apropiada → {"entropy": 0.15}
+  - Una respuesta sustantiva de 100-200 palabras con unos pocos puntos distintos respaldados,
+    correctamente organizada, en cualquier idioma → {"entropy": 0.20}
+  - Una respuesta larga que es en su mayoría coherente pero tiene una o dos oraciones
+    ligeramente redundantes → {"entropy": 0.30}
+  - Una respuesta que divaga entre dos ideas vagamente relacionadas sin un hilo
+    organizador claro → {"entropy": 0.50}
+  - Una respuesta con sintaxis rota, frases repetidas o tangentes no relacionadas → {"entropy": 0.70}
   - "luv luv luv $$$$ lol??" → {"entropy": 0.82}
+
+  Postura por defecto: una respuesta sustantiva y bien formada sobre un tema complejo
+  (salud mental, ética, historia, política, ciencia) es de BAJA entropía
+  (≤ 0.30). Reserva las puntuaciones por encima de 0.40 para respuestas que estén
+  genuinamente desordenadas — no simplemente largas, multilingües o matizadas.
 
 user_prompt_template: "RESPUESTA DEL ASISTENTE PARA EVALUAR ENTROPÍA:\n{text}"
 user_prompt_with_image_template: "{image_context}\n\nRESPUESTA DEL ASISTENTE PARA EVALUAR ENTROPÍA:\n{text}"

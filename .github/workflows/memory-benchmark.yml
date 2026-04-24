@@ -20,6 +20,18 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      # Benchmarks submit N messages back-to-back. BaseObserver's channel-level
+      # task-append coalescing would collapse them into a single task, which
+      # masks per-task memory behavior. Disable the coalescing so each message
+      # creates its own task on the queue (what we're actually measuring).
+      # The in-Python benchmark scripts also set this, but pinning it at the
+      # workflow level makes the setting visible in CI logs and survives any
+      # subshell env scrubbing.
+      CIRIS_DISABLE_TASK_APPEND: "1"
+      # The default API rate limit (60/min) would throttle the 1000-message
+      # burst benchmark. Match the qa_runner live-mode value.
+      CIRIS_API_RATE_LIMIT_PER_MINUTE: "600"
 
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +54,23 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install psutil
+
+      - name: Install TPM2 TSS runtime libraries (CIRISVerify dep)
+        # CIRISVerify's shared library transitively requires libtss2-tctildr.
+        # Without it, `CIRISVerify()` raises CommunicationError at construction
+        # and setup/complete.py surfaces 503 UNSUPPORTED_PLATFORM_CIRIS_VERIFY,
+        # blocking the 100/1000-message benchmarks on auth.
+        # Mirrors the fallback chain in scripts/install.sh to cover both
+        # Debian-style and Ubuntu (24.04 t64) package names.
+        # TODO(verify-team): CIRISVerify docs promise software fallback when
+        # TPM libs are absent (signing_protocol.py:7, 135, 141). When that
+        # lands, this step can be removed.
+        run: |
+          if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-tcti-device0; then
+            if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-tcti-device0; then
+              sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-tcti-device0t64
+            fi
+          fi
 
       - name: System Info
         run: |

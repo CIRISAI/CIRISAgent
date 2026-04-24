@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
-from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_api_channel, parse_iso_timestamp
+from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
 from ciris_engine.schemas.actions import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
@@ -218,24 +218,29 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"Fallback deferral submission failed for thought {thought.thought_id}: {e}")
 
     def _mark_task_deferred(self, thought: Thought) -> None:
-        """Mark parent task as deferred and send notification."""
+        """Mark parent task as deferred and notify the channel.
+
+        The notification is sent for ANY channel (not just `api_*`). Downstream
+        send_message routing handles whether a waiter exists — this ensures
+        synchronous interact() callers receive a DEFER notification instead of
+        hanging on an unanswered SPEAK until timeout. The deferral reason is
+        intentionally NOT surfaced to the user (it's for WA review only).
+        """
         parent_task_id = thought.source_task_id
         persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default", self.time_service)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
-        # Send notification to API channels
         task = persistence.get_task_by_id(parent_task_id)
-        if task and task.channel_id and is_api_channel(task.channel_id):
-            self.logger.info(f"Sending deferral notification to API channel {task.channel_id}")
-            # Use event loop to schedule the notification
-            import asyncio
+        if not task or not task.channel_id:
+            return
 
-            # Store task reference to prevent garbage collection before completion
-            notification_task = asyncio.create_task(
-                self._send_notification(
-                    task.channel_id,
-                    "The agent chose to defer, check the wise authority panel if you are the setup user",
-                )
+        self.logger.info(f"Sending deferral notification to channel {task.channel_id}")
+        import asyncio
+
+        notification_task = asyncio.create_task(
+            self._send_notification(
+                task.channel_id,
+                "The agent chose to defer, check the wise authority panel if you are the setup user",
             )
-            # Add done callback to handle any exceptions
-            notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)
+        )
+        notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)

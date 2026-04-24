@@ -870,7 +870,7 @@ The system adapts:
 Key decisions that shaped CIRIS:
 
 1. **SQLite over PostgreSQL**: Offline-first requirement
-2. **21 Services**: Right balance of modularity and complexity
+2. **22 Services**: Right balance of modularity and complexity
 3. **Pydantic Everywhere**: Runtime validation critical for medical use
 4. **Graph Memory**: Flexible knowledge representation
 5. **Mock LLM**: Essential for offline operation

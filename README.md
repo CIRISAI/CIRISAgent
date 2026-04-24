@@ -237,8 +237,9 @@ ciris_engine/logic/dma/prompts/localized/{lang}/
 ## Deployment Ready
 
 ✅ **22 core services** with message bus architecture
+✅ **More than 200 API endpoints** verified
 ✅ **4GB RAM target** for edge deployment
-✅ **Thousands of tests** with comprehensive coverage
+✅ **More than 10,000 tests** with comprehensive coverage
 ✅ **SonarCloud quality gates** passing
 ✅ **Currently powering** Discord moderation at agents.ciris.ai
 ✅ **Mobile apps** for Android and iOS via unified KMP codebase

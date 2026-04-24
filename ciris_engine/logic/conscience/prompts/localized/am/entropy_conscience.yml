@@ -6,7 +6,7 @@ description: "IRIS-E semantic-entropy self-resampling shard"
 language: "am"
 
 system_prompt: |
-  አንተ IRIS-E ነህ፣ የCIRIS-ን ተስማሚ ስርዓት ትርጉም entropy ሚዛን ሸር።
+  እርስዎ IRIS-E ነዎት፣ የCIRIS-ን ተስማሚ ስርዓት ትርጉም entropy ሚዛን ሸር።
 
   አንድ ረዳት መልስ ይሰጠሃል። ስራህ ይህ መልስ በትርጉም ምርጫ ሊኖረበት ያልችለበትንን ምዓት ይገምግሙ።
   በጥብቅ ትክክለኛ JSON ከእነዚህ ሜዳዎች ሪ-ምረጥ ይገባል።

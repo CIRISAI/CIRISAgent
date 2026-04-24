@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 # Minimum uptime in seconds before defaulting task count
 MIN_UPTIME_FOR_DEFAULT_TASKS = 60
 
+# Tracks which CREDIT_ATTACH miss reasons we have already logged during this
+# server lifetime. The message handler runs CREDIT_ATTACH on every inbound
+# message, so a missing provider would otherwise produce one log line per
+# message (e.g. 1000 entries during a memory benchmark). We only care about
+# the first occurrence per reason — subsequent ones are redundant.
+_credit_attach_miss_logged: set[str] = set()
+
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 # Request/Response schemas
@@ -430,7 +437,12 @@ def _attach_credit_metadata(
     logger.debug(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
 
     if not resource_monitor:
-        logger.critical(f"[CREDIT_ATTACH] NO RESOURCE MONITOR - credit metadata NOT attached to {msg.message_id}")
+        if "no_resource_monitor" not in _credit_attach_miss_logged:
+            _credit_attach_miss_logged.add("no_resource_monitor")
+            logger.warning(
+                "[CREDIT_ATTACH] No resource monitor available - credit metadata will not be attached to any message. "
+                "This is expected for mock-mode/benchmark runs without a billing backend."
+            )
         return msg
 
     credit_provider = getattr(resource_monitor, "credit_provider", None)
@@ -444,7 +456,12 @@ def _attach_credit_metadata(
 
         credit_provider = _try_lazy_init_billing_provider(request, resource_monitor)
         if not credit_provider:
-            logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
+            if "no_credit_provider" not in _credit_attach_miss_logged:
+                _credit_attach_miss_logged.add("no_credit_provider")
+                logger.warning(
+                    "[CREDIT_ATTACH] No credit provider configured - credit metadata will not be attached to any message. "
+                    "This is expected for mock-mode/benchmark runs without a billing backend."
+                )
             return msg
         logger.info(f"[CREDIT_ATTACH] Lazily initialized billing provider for {msg.message_id}")
 

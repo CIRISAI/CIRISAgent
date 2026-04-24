@@ -56,9 +56,52 @@ MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
 # Simple result models for LLM structured outputs
 class EntropyResult(BaseModel):
-    """Simple entropy result from LLM"""
+    """Semantic-entropy result from a single LLM call.
 
-    entropy: float = Field(ge=0.0, le=1.0)
+    IRIS-E now performs in-prompt self-resampling rather than judging surface
+    disorder. The LLM is asked to first enumerate three semantically different
+    directions a thoughtful CIRIS agent could have gone on this task, THEN
+    compare the actual response against that alternative space. The `entropy`
+    score reflects meaning-space diversity, not token-level chaos:
+
+      - 0.0 → the three alternatives converge to the same meaning as the
+              actual response (anchored, one right answer, low confabulation
+              risk).
+      - 1.0 → the three alternatives diverge widely from each other AND from
+              the actual response (unanchored, many equally plausible
+              answers, high confabulation risk) OR the actual response is
+              an outlier relative to a tight cluster (sycophantic drift,
+              attractor capture).
+
+    The alternatives are retained on the structured result so they flow into
+    traces and become inspectable evidence for the IRIS-E decision. Defaults
+    keep existing tests and older streaming consumers working during rollout.
+    """
+
+    alternative_meanings: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Up to three semantically-distinct alternative responses the "
+            "agent could have produced. NOT paraphrases — genuinely different "
+            "angles, conclusions, or framings. 1-2 sentences each."
+        ),
+    )
+    actual_is_representative: bool = Field(
+        default=True,
+        description=(
+            "Whether the actual response sits inside the meaning cluster "
+            "formed by the alternatives. False indicates outlier / "
+            "attractor-capture / sycophantic-drift risk."
+        ),
+    )
+    entropy: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Semantic entropy 0.00-1.00. High when alternatives diverge or "
+            "when the actual response is an outlier to the cluster."
+        ),
+    )
 
 
 class CoherenceResult(BaseModel):
@@ -282,6 +325,21 @@ class EntropyConscience(_BaseConscience):
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(entropy_eval, EntropyResult):
                 entropy = float(entropy_eval.entropy)
+                # Log the alternative-meaning enumeration alongside the score
+                # so traces carry the evidence, not just the number. Counts +
+                # outlier flag at INFO; full alternatives at DEBUG to keep
+                # default logs tight.
+                alt_count = len(entropy_eval.alternative_meanings)
+                logger.info(
+                    "[CONSCIENCE] EntropyConscience: entropy=%.2f "
+                    "actual_is_representative=%s alternatives=%d",
+                    entropy,
+                    entropy_eval.actual_is_representative,
+                    alt_count,
+                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    for i, alt in enumerate(entropy_eval.alternative_meanings, 1):
+                        logger.debug("  alt #%d: %s", i, alt[:200])
         except Exception as e:
             logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
 

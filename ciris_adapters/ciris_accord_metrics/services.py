@@ -1414,6 +1414,19 @@ class AccordMetricsService:
                 "disclosure_severity": (
                     verify_attestation.get("disclosure_severity", "info") if verify_attestation else "info"
                 ),
+                # Per-check booleans from VerifyAttestationContext. These are
+                # populated even in community mode (where max_level is 0 because
+                # not every check passes) — each individual check still carries
+                # independent signal, and each is near-zero-correlation with the
+                # reasoning stack. Emit at GENERIC level so CIRISLens always has
+                # the hardware-integrity dimensions available for k_eff.
+                "binary_ok": verify_attestation.get("binary_ok") if verify_attestation else None,
+                "env_ok": verify_attestation.get("env_ok") if verify_attestation else None,
+                "registry_ok": verify_attestation.get("registry_ok") if verify_attestation else None,
+                "file_integrity_ok": verify_attestation.get("file_integrity_ok") if verify_attestation else None,
+                "audit_ok": verify_attestation.get("audit_ok") if verify_attestation else None,
+                "play_integrity_ok": verify_attestation.get("play_integrity_ok") if verify_attestation else None,
+                "hardware_backed": verify_attestation.get("hardware_backed") if verify_attestation else None,
             }
             # DETAILED: Add service list, system health info, and key details
             if is_detailed:
@@ -1424,12 +1437,17 @@ class AccordMetricsService:
                 data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
                     "circuit_breaker_status"
                 )
-                # Memory count: count of relevant memories/context sources used
-                # Try to extract from system_counts or context_sources
-                system_counts = snapshot.get("system_counts", {})
-                if isinstance(system_counts, dict):
-                    # Use total_thoughts as a proxy for memory entries being processed
-                    data["memory_count"] = system_counts.get("total_thoughts", 0)
+                # Memory count: count of memories/context pulled FOR THIS THOUGHT,
+                # not the agent's global total_thoughts counter (which is constant
+                # within a run and carries no per-thought signal). Prefer the
+                # event's relevant_memories list length, fall back to the
+                # snapshot's conversation_history length, then 0.
+                relevant_memories = event.get("relevant_memories") or snapshot.get("relevant_memories")
+                conversation_history = event.get("conversation_history") or snapshot.get("conversation_history")
+                if isinstance(relevant_memories, list):
+                    data["memory_count"] = len(relevant_memories)
+                elif isinstance(conversation_history, list):
+                    data["memory_count"] = len(conversation_history)
                 else:
                     data["memory_count"] = 0
                 # Context tokens: estimate based on context enrichment results
@@ -1445,7 +1463,8 @@ class AccordMetricsService:
                     data["key_id"] = verify_attestation.get("key_id")
                     data["ed25519_fingerprint"] = verify_attestation.get("ed25519_fingerprint")
                     data["key_storage_mode"] = verify_attestation.get("key_storage_mode")
-                    data["hardware_backed"] = verify_attestation.get("hardware_backed")
+                    data["hardware_type"] = verify_attestation.get("hardware_type")
+                    data["verify_version"] = verify_attestation.get("verify_version")
             # FULL: Add complete snapshot and context
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)

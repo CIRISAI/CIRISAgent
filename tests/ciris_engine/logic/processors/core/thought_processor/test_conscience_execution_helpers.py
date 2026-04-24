@@ -15,11 +15,14 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def reset_language_to_english():
-    """Reset language to English before each test to avoid test pollution."""
-    # Set environment variable
-    original = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
-    os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
+def reset_language_to_english(monkeypatch):
+    """Reset language to English before each test to avoid test pollution.
+
+    Uses monkeypatch (rather than raw os.environ mutation) so the reset
+    is xdist-safe: each worker's env is cleaned up at test teardown even
+    if the test body crashes.
+    """
+    monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
 
     # Reset localization cache
     try:
@@ -39,13 +42,7 @@ def reset_language_to_english():
 
     yield
 
-    # Restore original
-    if original:
-        os.environ["CIRIS_PREFERRED_LANGUAGE"] = original
-    else:
-        os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
-
-    # Clear cache again
+    # Clear cache again on teardown (monkeypatch handles env restore)
     try:
         from ciris_engine.logic.utils.localization import clear_cache
 

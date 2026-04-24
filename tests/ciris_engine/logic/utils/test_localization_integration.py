@@ -167,17 +167,15 @@ class TestEnvironmentSync:
         finally:
             os.environ.pop(test_var, None)
 
-    def test_sync_language_preference_updates_env(self):
-        """Test that sync_language_preference updates CIRIS_PREFERRED_LANGUAGE."""
-        original = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
-        try:
-            sync_language_preference("es")
-            assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "es"
-        finally:
-            if original:
-                os.environ["CIRIS_PREFERRED_LANGUAGE"] = original
-            else:
-                os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+    def test_sync_language_preference_updates_env(self, monkeypatch):
+        """Test that sync_language_preference updates CIRIS_PREFERRED_LANGUAGE.
+
+        Uses monkeypatch so any leak out of sync_language_preference's raw
+        os.environ mutation is rolled back at teardown, keeping other
+        xdist workers' tests unaffected.
+        """
+        sync_language_preference("es")
+        assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "es"
 
     @patch("ciris_engine.logic.dma.prompt_loader.set_prompt_language")
     def test_sync_language_preference_updates_prompt_loader(self, mock_set_lang):
@@ -429,36 +427,30 @@ class TestTSASPDMALocalization:
 class TestLocalizationIntegration:
     """Integration tests for full localization flow."""
 
-    def test_language_change_flow(self):
-        """Test complete flow: change language -> sync -> use in DMA."""
-        original_lang = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
-        try:
-            # 1. Sync language preference (simulates API call)
-            sync_language_preference("am")
+    def test_language_change_flow(self, monkeypatch):
+        """Test complete flow: change language -> sync -> use in DMA.
 
-            # 2. Verify env is updated
-            assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "am"
+        Uses monkeypatch so sync_language_preference's raw os.environ
+        mutation is rolled back at teardown — prevents cross-worker leaks
+        under `pytest -n`.
+        """
+        # 1. Sync language preference (simulates API call)
+        sync_language_preference("am")
 
-            # 3. Verify localization uses the new language
-            from ciris_engine.logic.utils.localization import get_preferred_language
+        # 2. Verify env is updated
+        assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "am"
 
-            assert get_preferred_language() == "am"
+        # 3. Verify localization uses the new language
+        from ciris_engine.logic.utils.localization import get_preferred_language
 
-        finally:
-            if original_lang:
-                os.environ["CIRIS_PREFERRED_LANGUAGE"] = original_lang
-            else:
-                os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+        assert get_preferred_language() == "am"
 
-    def test_context_language_takes_precedence(self, mock_context_with_language):
+    def test_context_language_takes_precedence(self, mock_context_with_language, monkeypatch):
         """Test that user's context language takes precedence over env."""
-        os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
-        try:
-            lang = get_user_language_from_context(mock_context_with_language)
-            # Context says "am", env says "en" - context should win
-            assert lang == "am"
-        finally:
-            os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+        monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
+        lang = get_user_language_from_context(mock_context_with_language)
+        # Context says "am", env says "en" - context should win
+        assert lang == "am"
 
     def test_all_supported_languages_have_conscience_keys(self):
         """Test that all supported languages have conscience keys."""

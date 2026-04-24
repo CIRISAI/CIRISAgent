@@ -129,6 +129,30 @@ def manage_import_protection():
     os.environ.pop("CIRIS_IMPORT_MODE", None)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_process_global_env(monkeypatch):
+    """Restore global, process-wide env vars to known values for every test.
+
+    Some tests intentionally flip `CIRIS_PREFERRED_LANGUAGE` or
+    `CIRIS_LLM_REPLICAS` via raw `os.environ[...] = ...` to exercise
+    behavior that depends on those globals. Those env vars work fine for
+    personal-agent deployments (one process, one operator) but they are
+    the wrong shape for a test harness: under `pytest -n`, xdist workers
+    run tests serially per worker, so a leaked mutation from test A can
+    change the behavior of unrelated test B and produce flaky CI
+    failures (e.g. a handler follow-up rendered in Amharic, or a second
+    LLM replica being initialized when the test expects one).
+
+    Using monkeypatch here captures the current values before each test
+    and restores them at teardown — even if a test mutates them with raw
+    `os.environ[...]` and forgets to restore, or crashes mid-test. Tests
+    that want a different value should still prefer `monkeypatch.setenv`
+    inside the test so the change is scoped and obvious.
+    """
+    monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
+    monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
+
+
 @pytest.fixture(autouse=True, scope="function")
 def cleanup_after_test(request):
     """

@@ -56,19 +56,18 @@ jobs:
           pip install psutil
 
       - name: Install TPM2 TSS runtime libraries (CIRISVerify dep)
-        # CIRISVerify's shared library transitively requires libtss2-tctildr.
-        # Without it, `CIRISVerify()` raises CommunicationError at construction
-        # and setup/complete.py surfaces 503 UNSUPPORTED_PLATFORM_CIRIS_VERIFY,
-        # blocking the 100/1000-message benchmarks on auth.
-        # Mirrors the fallback chain in scripts/install.sh to cover both
-        # Debian-style and Ubuntu (24.04 t64) package names.
-        # TODO(verify-team): CIRISVerify docs promise software fallback when
-        # TPM libs are absent (signing_protocol.py:7, 135, 141). When that
-        # lands, this step can be removed.
+        # CIRISVerify's shared library has libtss2-* as transitive deps.
+        # Without these, ctypes.CDLL fails before Rust can engage its
+        # software-only fallback (factory.rs degrades when TpmSigner::new
+        # fails, but only if the .so itself loaded). Per the verify team:
+        # libtss2-esys0 + libtss2-tctildr0 + libtss2-mu0 are the runtime
+        # deps; libtss2-dev for dev envs. We install with a 3-way fallback
+        # chain to cover Debian, newer Debian, and Ubuntu 24.04 t64
+        # package renames.
         run: |
-          if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-tcti-device0; then
-            if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-tcti-device0; then
-              sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-tcti-device0t64
+          if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0; then
+            if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-mu-4.0.1-0; then
+              sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-mu-4.0.1-0t64
             fi
           fi
 

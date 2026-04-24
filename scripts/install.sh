@@ -501,20 +501,24 @@ install_dependencies() {
         # Version already verified by get_best_python()
     fi
 
-    # TPM2 TSS runtime libraries for CIRISVerify (Linux/apt only)
-    # Use best-effort install to support both Debian-style and Ubuntu t64 package names.
+    # TPM2 TSS runtime libraries for CIRISVerify (Linux/apt only).
+    # Per the verify team: libtss2-esys0 + libtss2-tctildr0 + libtss2-mu0
+    # are the runtime deps the .so needs to dlopen. Once those resolve,
+    # CIRISVerify's Rust factory degrades cleanly to software-only signing
+    # if no TPM is present. Best-effort install with fallback chain to
+    # cover Debian, newer Debian, and Ubuntu 24.04 t64 package renames.
     if [ "$pkg_mgr" = "apt" ]; then
         log_info "Ensuring CIRISVerify runtime libraries are present (TPM2 TSS)"
-        if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-tcti-device0 >/dev/null 2>&1; then
+        if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0 >/dev/null 2>&1; then
             if ! sudo apt-get install -y \
                 libtss2-esys-3.0.2-0 \
                 libtss2-tctildr0 \
-                libtss2-tcti-device0 \
+                libtss2-mu-4.0.1-0 \
                 >/dev/null 2>&1; then
                 sudo apt-get install -y \
                 libtss2-esys-3.0.2-0t64 \
                 libtss2-tctildr0t64 \
-                libtss2-tcti-device0t64 \
+                libtss2-mu-4.0.1-0t64 \
                 >/dev/null 2>&1 || log_warn "Could not auto-install TPM2 TSS libs; install manually if setup fails"
             fi
         fi

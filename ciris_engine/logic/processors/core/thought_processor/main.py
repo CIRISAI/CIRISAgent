@@ -1033,9 +1033,15 @@ class ThoughtProcessor(
         """Simple conscience application without orchestrator."""
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase without depending on the
+        # key-shape of the extra-allow DMA bag.
+        idma_result = dma_results_dict.get("idma") if isinstance(dma_results_dict, dict) else None
+
         # Create typed context for conscience checks (needed for both bypass and normal)
         context = ConscienceCheckContext(
             thought=thought,
+            idma_result=idma_result,
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 

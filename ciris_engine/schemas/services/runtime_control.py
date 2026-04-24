@@ -1246,6 +1246,17 @@ class ASPDMAResultEvent(BaseModel):
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for selection")
 
+    # Deliberation-diversity signal — how constrained was the choice, and what
+    # other legitimate paths existed. Carries k_eff signal independent of the
+    # reasoning stack. Populated from ASPDMALLMResult when the LLM emitted the
+    # fields; None when not emitted (older prompts / fallback models).
+    selection_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Subjective confidence in chosen action (0.00-1.00)"
+    )
+    alternatives_considered: Optional[List[str]] = Field(
+        None, description="Brief labels of alternative actions the agent considered but rejected"
+    )
+
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 

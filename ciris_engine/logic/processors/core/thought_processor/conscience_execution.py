@@ -87,11 +87,17 @@ class ConscienceExecutionPhase:
         # (bypass consciences need this context to run)
         from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase directly on the context
+        # rather than spelunking through system_snapshot-as-dma-bag.
+        idma_result = dma_results.get("idma") if isinstance(dma_results, dict) else None
+
         context = ConscienceCheckContext(
             thought=thought or thought_item,
             task=None,  # Will be populated by conscience checks if needed
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+            idma_result=idma_result,
         )
 
         # CRITICAL: Run bypass consciences FIRST, even for exempt actions

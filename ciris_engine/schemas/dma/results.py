@@ -308,6 +308,18 @@ class ActionSelectionDMAResult(BaseModel):
     # User prompt for debugging/transparency (set by evaluator)
     user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 
+    # Deliberation-diversity metadata propagated from ASPDMALLMResult. These
+    # carry k_eff signal independent of the reasoning stack and are visible
+    # to every conscience as part of the action being checked (consciences
+    # inspect `action.selection_confidence` / `action.alternatives_considered`
+    # alongside the selected action and its rationale).
+    selection_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Subjective confidence in the chosen action (0.00-1.00)"
+    )
+    alternatives_considered: Optional[List[str]] = Field(
+        None, description="Brief labels of the alternative actions the agent considered but rejected"
+    )
+
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
@@ -364,6 +376,35 @@ class ASPDMALLMResult(BaseModel):
 
     # === TASK_COMPLETE parameters ===
     completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
+
+    # === Deliberation signal (all actions) ===
+    # These are optional because older prompts/models may not populate them;
+    # new prompts instruct the LLM to emit them on every action selection.
+    # They carry DELIBERATION-DIVERSITY signal (k_eff), not decision-correctness
+    # signal: how hard was the choice and what other legitimate paths existed.
+    selection_confidence: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Subjective confidence in the chosen action, 0.00-1.00. "
+            "1.0 = the agent is certain this action is the best available "
+            "response given the context. 0.5 = the agent finds the chosen "
+            "action marginally better than its closest alternative. 0.0 = "
+            "the agent cannot distinguish the chosen action from others and "
+            "is effectively guessing."
+        ),
+    )
+    alternatives_considered: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Brief labels for up to three alternative actions the agent "
+            "considered but did not select. Each 1-2 phrase (e.g. "
+            "'PONDER — ask clarifying question about scope', 'DEFER — "
+            "domain expertise required'). Empty or omitted when the "
+            "chosen action is unambiguous for the task."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -510,6 +551,8 @@ def convert_llm_result_to_action_result(
         evaluation_time_ms=evaluation_time_ms,
         resource_usage=resource_usage,
         user_prompt=user_prompt,
+        selection_confidence=llm_result.selection_confidence,
+        alternatives_considered=llm_result.alternatives_considered,
     )
 
 

@@ -24,6 +24,21 @@ class ConscienceCheckContext(BaseModel):
     round_number: Optional[int] = Field(None, description="Current processing round number")
     system_snapshot: Optional[Any] = Field(None, description="System state snapshot (SystemSnapshot object)")
 
+    # Upstream DMA outputs that every conscience should be able to read when
+    # forming its judgment. These are populated from the DMA chain BEFORE
+    # conscience execution — they are inputs to the conscience layer, not
+    # outputs of it.
+    #
+    # idma_result gives the conscience the fragility / source-diversity /
+    # k_eff picture IDMA built for this thought (phase, collapse_margin,
+    # correlation_risk, etc.). A conscience can cross-reference its own
+    # judgment against IDMA's epistemic state — e.g. a high-coherence answer
+    # on a thought IDMA flagged as fragile (collapse_margin ≤ 0) warrants
+    # extra scrutiny even when no single shard would have fired on its own.
+    idma_result: Optional[Any] = Field(
+        None, description="IDMAResult from the reasoning stack (fragility / k_eff / phase)"
+    )
+
     # Additional context can be added via extra fields
     model_config = ConfigDict(
         extra="allow",  # Allow additional context fields

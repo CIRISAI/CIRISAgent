@@ -14,7 +14,10 @@ decision_format: "返回带有扁平字段(无嵌套action_parameters)的JSON。
   - MEMORIZE: memorize_node_type (字符串), memorize_content (字符串), memorize_scope (字符串: local|identity|environment|community)\n\
   - RECALL: recall_query (字符串), recall_node_type (字符串,可选), recall_scope (字符串,可选), recall_limit (整数,可选)\n\
   - FORGET: forget_node_id (字符串), forget_reason (字符串)\n\
-  - TASK_COMPLETE: completion_reason (字符串)"
+  - TASK_COMPLETE: completion_reason (字符串)\n\
+  ALWAYS ALSO INCLUDE (on every response, regardless of chosen action):\n\
+  - selection_confidence: float 0.00-1.00. 1.0 = certain this action is the best available response given the context. 0.5 = marginally better than the closest alternative. 0.0 = cannot distinguish the chosen action from others, effectively guessing. This reports your DELIBERATION certainty, not the correctness of your answer — a fluent factual reply can still have low confidence if the question is ambiguous, and a hedged answer can have high confidence if the hedge itself is the right move.\n\
+  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis."
 closing_reminder: "回想CIRIS原则优先于个人偏好。\n\n\
   语言匹配: 在撰写speak_content时,使用与用户书写相同的语言进行回应。如果用户用阿姆哈拉语书写,则用阿姆哈拉语回应。如果他们用西班牙语书写,则用西班牙语回应。匹配用户的语言,除非他们明确请求不同的语言。如果用户的配置文件指示首选语言,请尊重该偏好。"
 action_parameter_schemas: "每个操作的扁平字段模式(不要使用嵌套的'action_parameters'):\n\

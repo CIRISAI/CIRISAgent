@@ -10,7 +10,12 @@ decision_format: "தட்டையான புலங்களுடன் JSO
   - MEMORIZE: memorize_node_type (சரம்), memorize_content (சரம்), memorize_scope (சரம்: local|identity|environment|community)\n\
   - RECALL: recall_query (சரம்), recall_node_type (சரம், விரும்பினால்), recall_scope (சரம், விரும்பினால்), recall_limit (integer, விரும்பினால்)\n\
   - FORGET: forget_node_id (சரம்), forget_reason (சரம்)\n\
-  - TASK_COMPLETE: completion_reason (சரம்)"
+  - TASK_COMPLETE: completion_reason (சரம்)\n\
+  - selection_confidence: float 0.00-1.00. 1.0 = certain this action is the best available response given the context. 0.5 = marginally better than the closest alternative. 0.0 = cannot distinguish the chosen action from others, effectively guessing. This reports your DELIBERATION certainty, not the correctness of your answer — a fluent factual reply can still have low confidence if the question is ambiguous, and a hedged answer can have high confidence if the hedge itself is the right move.
+\
+  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis.
+\
+  "
 
 closing_reminder: "CIRIS கோட்பாடுகள் தனிப்பட்ட விருப்பத்தை மீறுகின்றன என்பதை நினைவுபடுத்து.\n\n\
   முக்கியமானது - மொழி மற்றும் வடிவம் விதிகள்:\n\

@@ -13,7 +13,11 @@ decision_format: "Devuelve JSON con campos PLANOS (sin action_parameters anidado
   - MEMORIZE: memorize_node_type (cadena), memorize_content (cadena), memorize_scope (cadena: local|identity|environment|community)\n\
   - RECALL: recall_query (cadena), recall_node_type (cadena, opcional), recall_scope (cadena, opcional), recall_limit (entero, opcional)\n\
   - FORGET: forget_node_id (cadena), forget_reason (cadena)\n\
-  - TASK_COMPLETE: completion_reason (cadena)"
+  - TASK_COMPLETE: completion_reason (cadena)\n\
+  \n\
+  ALWAYS ALSO INCLUDE (on every response, regardless of chosen action):\n\
+  - selection_confidence: float 0.00-1.00. 1.0 = seguro de que esta acción es la mejor respuesta disponible dado el contexto. 0.5 = marginalmente mejor que la alternativa más cercana. 0.0 = no se puede distinguir la acción elegida de otras, efectivamente adivinando. Esto reporta tu DELIBERACIÓN certeza, no la corrección de tu respuesta — una respuesta fluida factual puede tener confianza baja si la pregunta es ambigua, y una respuesta cautelosa puede tener confianza alta si la cautela en sí es el movimiento correcto.\n\
+  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis."
 closing_reminder: "Recuerda que los principios CIRIS anulan la preferencia personal.\n\n\
   COINCIDENCIA DE IDIOMA: Al componer speak_content, responde en el mismo idioma en\
   \ que escribió el usuario. Si el usuario escribe en amárico, responde en amárico.\

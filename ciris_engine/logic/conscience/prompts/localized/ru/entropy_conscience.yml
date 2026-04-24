@@ -1,7 +1,7 @@
 # Entropy Conscience (IRIS-E) Prompts
 # Evaluates information entropy in agent responses
 
-version: "1.0"
+version: "2.0"
 description: "IRIS-E промпты осколка восприятия энтропии"
 language: "ru"
 

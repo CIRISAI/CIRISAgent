@@ -1428,7 +1428,23 @@ class AccordMetricsService:
                 "play_integrity_ok": verify_attestation.get("play_integrity_ok") if verify_attestation else None,
                 "hardware_backed": verify_attestation.get("hardware_backed") if verify_attestation else None,
             }
+            # Counts are privacy-safe (no content, just cardinality) and carry
+            # per-thought diversity signal — emit at GENERIC so they're always
+            # available for k_eff analysis, don't gate behind DETAILED.
+            relevant_memories = event.get("relevant_memories") or snapshot.get("relevant_memories")
+            conversation_history = event.get("conversation_history") or snapshot.get("conversation_history")
+            if isinstance(relevant_memories, list):
+                data["memory_count"] = len(relevant_memories)
+            elif isinstance(conversation_history, list):
+                data["memory_count"] = len(conversation_history)
+            else:
+                data["memory_count"] = 0
+            context_enrichment = snapshot.get("context_enrichment_results", {})
+            data["context_tokens"] = len(context_enrichment) if isinstance(context_enrichment, dict) else 0
+
             # DETAILED: Add service list, system health info, and key details
+            # (these can carry identifying info — service names, key ids,
+            # hardware type — so gate behind DETAILED rather than GENERIC).
             if is_detailed:
                 data["active_services"] = event.get("active_services") or snapshot.get("active_services")
                 data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
@@ -1437,27 +1453,7 @@ class AccordMetricsService:
                 data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
                     "circuit_breaker_status"
                 )
-                # Memory count: count of memories/context pulled FOR THIS THOUGHT,
-                # not the agent's global total_thoughts counter (which is constant
-                # within a run and carries no per-thought signal). Prefer the
-                # event's relevant_memories list length, fall back to the
-                # snapshot's conversation_history length, then 0.
-                relevant_memories = event.get("relevant_memories") or snapshot.get("relevant_memories")
-                conversation_history = event.get("conversation_history") or snapshot.get("conversation_history")
-                if isinstance(relevant_memories, list):
-                    data["memory_count"] = len(relevant_memories)
-                elif isinstance(conversation_history, list):
-                    data["memory_count"] = len(conversation_history)
-                else:
-                    data["memory_count"] = 0
-                # Context tokens: estimate based on context enrichment results
-                # This counts entries in context_enrichment_results as a proxy
-                context_enrichment = snapshot.get("context_enrichment_results", {})
-                if isinstance(context_enrichment, dict):
-                    data["context_tokens"] = len(context_enrichment)  # Count of context sources
-                else:
-                    data["context_tokens"] = 0
-                # Add key signature details
+                # Key signature details (identifying, so DETAILED not GENERIC)
                 if verify_attestation:
                     data["key_status"] = verify_attestation.get("key_status")
                     data["key_id"] = verify_attestation.get("key_id")
@@ -1465,14 +1461,16 @@ class AccordMetricsService:
                     data["key_storage_mode"] = verify_attestation.get("key_storage_mode")
                     data["hardware_type"] = verify_attestation.get("hardware_type")
                     data["verify_version"] = verify_attestation.get("verify_version")
-            # FULL: Add complete snapshot and context
+            # FULL: Add complete snapshot and context. This is for managed
+            # agents where the operator already has full access. We intentionally
+            # do NOT re-dump verify_attestation here — every one of its scalar
+            # fields is already emitted flat at GENERIC/DETAILED above, and
+            # repeating the nested object just doubles the byte cost.
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)
                 data["gathered_context"] = _serialize(event.get("gathered_context"))
                 data["relevant_memories"] = _serialize(event.get("relevant_memories"))
                 data["conversation_history"] = _serialize(event.get("conversation_history"))
-                # Full attestation context object
-                data["verify_attestation"] = _serialize(verify_attestation) if verify_attestation else None
             return data
 
         elif event_type == "DMA_RESULTS":

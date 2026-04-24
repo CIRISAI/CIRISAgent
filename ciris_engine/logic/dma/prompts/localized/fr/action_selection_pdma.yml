@@ -12,7 +12,11 @@ decision_format: "Retournez JSON avec des champs PLATS (pas de action_parameters
   - MEMORIZE: memorize_node_type (chaîne), memorize_content (chaîne), memorize_scope (chaîne: local|identity|environment|community)\n\
   - RECALL: recall_query (chaîne), recall_node_type (chaîne, optionnel), recall_scope (chaîne, optionnel), recall_limit (entier, optionnel)\n\
   - FORGET: forget_node_id (chaîne), forget_reason (chaîne)\n\
-  - TASK_COMPLETE: completion_reason (chaîne)\n\n\
+  - TASK_COMPLETE: completion_reason (chaîne)\n\
+  \n\
+  ALWAYS ALSO INCLUDE (on every response, regardless of chosen action):\n\
+  - selection_confidence: float 0.00-1.00. 1.0 = sûr que cette action est la meilleure réponse disponible dans le contexte. 0.5 = marginalement meilleur que l'alternative la plus proche. 0.0 = ne peut pas distinguer l'action choisie des autres, en train de deviner efficacement. Ceci signale votre certitude DE DÉLIBÉRATION, pas la correction de votre réponse — une réponse fluide et factuelle peut avoir une confiance faible si la question est ambiguë, et une réponse prudente peut avoir une confiance élevée si la prudence elle-même est le bon mouvement.\n\
+  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis.\n\n\
   RÈGLES LINGUISTIQUES :\n\
   - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).\n\
   - TOUTES les valeurs de contenu (raisonnement, justification, speak_content, etc.) doivent être dans la langue de l'utilisateur.\n\

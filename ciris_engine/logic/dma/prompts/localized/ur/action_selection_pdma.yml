@@ -15,7 +15,10 @@ decision_format: "LANGUAGE RULES:\n\
   - MEMORIZE: memorize_node_type (string)، memorize_content (string)، memorize_scope (string: local|identity|environment|community)\n\
   - RECALL: recall_query (string)، recall_node_type (string، اختیاری)، recall_scope (string، اختیاری)، recall_limit (integer، اختیاری)\n\
   - FORGET: forget_node_id (string)، forget_reason (string)\n\
-  - TASK_COMPLETE: completion_reason (string)"
+  - TASK_COMPLETE: completion_reason (string)\n\
+  ALWAYS ALSO INCLUDE (on every response, regardless of chosen action):\n\
+  - selection_confidence: float 0.00-1.00. 1.0 = certain this action is the best available response given the context. 0.5 = marginally better than the closest alternative. 0.0 = cannot distinguish the chosen action from others, effectively guessing. This reports your DELIBERATION certainty, not the correctness of your answer — a fluent factual reply can still have low confidence if the question is ambiguous, and a hedged answer can have high confidence if the hedge itself is the right move.\n\
+  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis."
 closing_reminder: "CIRIS اصول ذاتی ترجیح پر غالب ہیں یاد رکھیں۔\n\n\
   زبان کا ملاپ: جب speak_content مرتب کریں، صارف نے جس زبان میں لکھا اسی میں جواب دیں۔ اگر صارف اردو میں لکھے، اردو میں جواب دیں۔ اگر وہ ہسپانوی میں لکھیں، ہسپانوی میں جواب دیں۔ صارف کی زبان سے ملائیں جب تک کہ وہ واضح طور پر مختلف زبان کی درخواست نہ کریں۔ اگر صارف کی پروفائل پسندیدہ زبان بتاتی ہے، اس ترجیح کا احترام کریں۔"
 action_parameter_schemas: "ہر عمل کے لیے فلیٹ فیلڈ schemas (nested 'action_parameters' استعمال نہ کریں):\n\

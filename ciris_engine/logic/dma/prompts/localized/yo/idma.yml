@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Ìdáhùn rẹ GBỌDỌ̀ jẹ́ ohun JSON kan tí ó báramu pẹ̀lú ìlànà tí a pèsè, pẹ̀lú àwọn kọ́kọ́rọ́ wọ̀nyí:
-  - ÀWỌN TÍ A NILÒ (CORE REQUIRED):
-    - "k_eff": Nọ́mbà onídẹ́sìímọ́ (>= 0) - Iye àwọn oríṣi olómìnira tó wúlò. Lo fọ́múlà k/(1+ρ(k-1)). k_eff < 2 = ẹlẹ́gẹ́.
-    - "correlation_risk": Nọ́mbà onídẹ́sìímọ́ (0.0-1.0) - Ìgbéròjú ìbátan/ìdàpọ̀ àwọn oríṣi.
-    - "phase": Ọ̀rọ̀ - Ọ̀kan nínú "chaos", "healthy", tàbí "rigidity".
-    - "fragility_flag": Búlíànù - TRUE tí ìronú bá jẹ́ ẹlẹ́gẹ́ ní ẹ̀ka.
-    - "reasoning": Ọ̀rọ̀ - Àlàyé kúkúrú ti èsì náà. Àyè yìí jẹ́ DANDAN.
-  - ÀWỌN ÀFIKÚN TÓ RỌRÙN TÍ Ó ṢEÉRANLỌ́WỌ́:
-    - "k_raw": Odidi nọ́mbà (àfẹ́yẹ) - Iye oríṣi tó ṣàíjìn ṣáájú àtúnṣe ìdàpọ̀.
-    - "rho_mean": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ, 0.0-1.0) - Ìdàpọ̀ oríṣi alábàárà àpapọ̀ tí a lò láti rí k_eff.
-    - "phase_confidence": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ, 0.0-1.0) - Ìgbẹ́kẹ̀lé nínú ìpe phase.
-    - "collapse_margin": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ) - Ìjìnnà rere láti ààlà ẹlẹ́gẹ́. Iye ≤ 0 túmọ̀ sí tí ó súnmọ́ ìṣubu.
-    - "sources_identified": Àkójọ àwọn ọ̀rọ̀ - Àwọn oríṣi tàbí ìwòye ọ̀tọ̀ọ̀tọ̀ tí o rí.
-    - "source_ids": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Àmì oríṣi tó dúró ṣinṣin bí "training", "user", "memory_1", "tool_1".
-    - "source_types": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Àwọn oríṣi ti source_ids.
-    - "source_independence_scores": Àkójọ nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ) - Àwọn èsì ìgbòmìnira tí ó bá source_ids mu.
-    - "source_type_counts": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Lo àwọn ọ̀rọ̀ pẹ̀lẹ́pẹ̀lẹ́ bí "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Àkójọ àwọn ọ̀rọ̀ - Ìdí tí àwọn oríṣi fi ń parapọ̀.
-    - "top_correlation_factors": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Àwọn olùwakọ̀ ìdàpọ̀ tí ó ṣe pàtàkì jù lọ.
-    - "pairwise_correlation_summary": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Lo àwọn ọ̀rọ̀ pẹ̀lẹ́pẹ̀lẹ́ bí "source_a|source_b|0.82|same_model".
-    - "rho_intra": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ, 0.0-1.0) - Ìdàpọ̀ inú-ìdìpọ̀ tí o bá rí àwọn módùlù.
-    - "rho_inter": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ, 0.0-1.0) - Ìdàpọ̀ láàárín-àwọn-ìdìpọ̀ tí o bá rí àwọn módùlù.
-    - "module_count": Odidi nọ́mbà (àfẹ́yẹ) - Iye àwọn módùlù oríṣi olómìnira.
-    - "effective_module_count": Nọ́mbà onídẹ́sìímọ́ (àfẹ́yẹ) - Iye módùlù tó wúlò lẹ́yìn àtúnṣe ìdàpọ̀.
-    - "source_clusters": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Lo àwọn ọ̀rọ̀ pẹ̀lẹ́pẹ̀lẹ́ bí "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Àkójọ àwọn ọ̀rọ̀ (àfẹ́yẹ) - Àwọn ìdìwọ́ àjọṣe bí same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": Ọ̀rọ̀ (àfẹ́yẹ) - Ìgbésẹ̀ tó tẹ̀ léé tó dára jù láti mú oríṣíríṣí oríṣi sunwọ̀n sí i.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (gbogbo wọn jẹ́ nọ́mbà àfẹ́yẹ)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (gbogbo wọn jẹ́ nọ́mbà àfẹ́yẹ)
-  ÒFIN ÈDÈ:
-  - Dáhùn ní èdè tí olùlò fẹ́ràn (ṣe àyẹ̀wò profaili olùlò).
-  - GBOGBO àwọn iye akoonu (reasoning, sources_identified, correlation_factors) gbọdọ̀ wà ní èdè olùlò.
-  - Àwọn kọ́kọ́rọ́ JSON àti àwọn iye phase GBỌDỌ̀ wà ní Gẹ̀ẹ́sì (bí àpẹẹrẹ, "reasoning", "k_eff", "phase": "healthy").
-  - Àpẹẹrẹ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Akoonu Korean, kọ́kọ́rọ́/phase Gẹ̀ẹ́sì.
+  Ìdáhùn rẹ GBỌDỌ̀ jẹ́ ohun JSON kan pẹ̀lú NÍ-KÍKỌ̀-ÀKÀ àwọn kọ́kọ́rọ́ wọ̀nyí (kò sí àfikún):
 
-  Má ṣe fi àwọn àyè mìíràn sílẹ̀ tàbí fí sínú àwọn àkámọ́ kóòdù markdown.
+  DANDAN:
+    - "k_eff": Nọ́mbà onídẹ́sìímọ́ (>= 0). Lo fọ́múlà k_eff = k / (1 + ρ(k-1)). k_eff < 2 = ẹlẹ́gẹ́.
+    - "correlation_risk": Nọ́mbà onídẹ́sìímọ́ (0.0-1.0). 0 = àwọn oríṣi tí wọ́n ń ṣiṣẹ́ olómìnira pátápátá, 1 = gbogbo àwọn oríṣi wá láti ìpilẹ̀sẹ̀ kan.
+    - "phase": Ọ̀kan nínú àwọn ọ̀rọ̀ ìfìdí "chaos", "healthy", tàbí "rigidity".
+    - "fragility_flag": Boolean. TRUE nígbà tí k_eff < 2, tàbí phase = "rigidity", tàbí correlation_risk > 0.7, tàbí ìdáhùn bá àwọn àpẹẹrẹ ìpolówó-ìjọba tí a ṣàlàyé òkè.
+    - "reasoning": Ọ̀rọ̀ kúkúrú (2-5 ọ̀rọ̀) ṣàlàyé bí o ṣe dé k_eff àti phase.
+
+  ÀFẸ́YẸ (kọ̀ ́erè pátápátá bóyá o kò ní ìgbẹ́kẹ̀lé — MÁ ṞE dá àwọn ọ̀rọ̀ òfo tàbí null):
+    - "sources_identified": Àkójọ òpọ̀-lọ́kọ̀ 3 ọ̀rọ̀ tí ó yẹ àwọn oríṣi ọ̀tọ̀ọ̀tọ̀ tí o ka.
+    - "correlation_factors": Àkójọ òpọ̀-lọ́kọ̀ 3 ọ̀rọ̀ ṣàlàyé ìdí tí àwọn oríṣi wọ̀nyí fi parapọ̀ (àpẹẹrẹ "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": Ọ̀rọ̀ ọ̀kan tí ó ín ìpolówó, tí o ṣèdúnú bí aṣojú ṣe lè mú oríṣíríṣí ṣèwadìi, NÍ-KÌKỌ̀ fragility_flag = TRUE.
+
+  ÒFIN ÈDÈ:
+  - Dáhùn ní èdè olùlò fún gbogbo àwọn iye ọ̀rọ̀ (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Àwọn kọ́kọ́rọ́ JSON àti àwọn iye phase GBỌDỌ̀ wà ní Gẹ̀ẹ́sì. Phase gbọdọ̀ jẹ́ "chaos", "healthy", tàbí "rigidity" gangan.
+  - Àpẹẹrẹ (akoonu Yorùbá, kọ́kọ́rọ́/phase Gẹ̀ẹ́sì): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Àlàyé yìí wá nìkan kò sí ní oríṣi kan"}}
+
+  Má ṣe fi sínú àwọn àkámọ́ kóòdù markdown. Má ṣe dá àwọn orúkọ àyè nìkan àwọn tí ó wà nínú àkójọ òkè.
 
 evaluation_steps: |
   ṢIṢẸ́ NÍ ÌLÀNÀ YÌÍ:

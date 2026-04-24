@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  您的回应必须是单个符合所提供模式的 JSON 对象,包含以下键:
-  - 核心必需字段:
-    - "k_eff": 浮点数(>= 0) - 有效独立来源数量。使用公式 k/(1+ρ(k-1))。k_eff < 2 = 脆弱。
-    - "correlation_risk": 浮点数(0.0-1.0) - 估计的来源重叠/相关性。
-    - "phase": 字符串 - "chaos"、"healthy" 或 "rigidity" 之一。
-    - "fragility_flag": 布尔值 - 如果推理在结构上脆弱,则为 TRUE。
-    - "reasoning": 字符串 - 对结果的简短解释。此字段是必需的。
-  - 简单有用的附加字段:
-    - "k_raw": 整数(可选) - 重叠调整前的原始来源计数。
-    - "rho_mean": 浮点数(可选, 0.0-1.0) - 用于推导 k_eff 的来源两两平均重叠。
-    - "phase_confidence": 浮点数(可选, 0.0-1.0) - 对 phase 判断的置信度。
-    - "collapse_margin": 浮点数(可选) - 距离脆弱性边界的正向距离。值 <= 0 表示接近崩溃。
-    - "sources_identified": 字符串数组 - 您发现的不同来源或视角。
-    - "source_ids": 字符串数组(可选) - 稳定的来源标签,如 "training"、"user"、"memory_1"、"tool_1"。
-    - "source_types": 字符串数组(可选) - 与 source_ids 对齐的来源类型。
-    - "source_independence_scores": 浮点数数组(可选) - 与 source_ids 对齐的独立性评分。
-    - "source_type_counts": 字符串数组(可选) - 使用扁平字符串,如 "memory:2"、"tool:1"、"user:1"。
-    - "correlation_factors": 字符串数组 - 来源重叠的原因。
-    - "top_correlation_factors": 字符串数组(可选) - 最重要的重叠驱动因素。
-    - "pairwise_correlation_summary": 字符串数组(可选) - 使用扁平字符串,如 "source_a|source_b|0.82|same_model"。
-    - "rho_intra": 浮点数(可选, 0.0-1.0) - 如果检测到模块,则为簇内重叠。
-    - "rho_inter": 浮点数(可选, 0.0-1.0) - 如果检测到模块,则为簇间重叠。
-    - "module_count": 整数(可选) - 独立来源模块的数量。
-    - "effective_module_count": 浮点数(可选) - 重叠调整后的有效模块数量。
-    - "source_clusters": 字符串数组(可选) - 使用扁平字符串,如 "cluster_1|source_a,source_b|0.91"。
-    - "common_cause_flags": 字符串数组(可选) - 共享的瓶颈,如 same_model、same_retrieval_origin、same_tool_family、same_prompt_family。
-    - "intervention_recommendation": 字符串(可选) - 提高来源多样性的最佳下一步。
-    - "delta_k_eff"、"delta_rho_mean"、"phase_persistence_steps"、"time_in_fragile_state_ms"、"moving_variance"(均为可选标量)
-    - "rho_critical"、"k_required"、"defense_function"、"collapse_rate"、"time_to_truth"、"time_to_entropy"、"time_to_capture"(均为可选标量)
-  语言规则:
-  - 使用用户的首选语言回应(检查用户配置文件)。
-  - 所有内容值(reasoning、sources_identified、correlation_factors)应使用用户的语言。
-  - JSON 键和 phase 值必须保持英文(例如 "reasoning"、"k_eff"、"phase": "healthy")。
-  - 示例: {{"reasoning": "该信息仅来自单一来源", "sources_identified": ["训练数据"], "phase": "rigidity"}} - 中文内容,英文键/阶段值。
+  您的回应必须是单个 JSON 对象,包含恰好这些键(无额外):
 
-  不要包含额外字段或用 markdown 代码块包装。
+  必需:
+    - "k_eff": 浮点数(>= 0). 应用公式 k_eff = k / (1 + ρ(k-1)). k_eff < 2 = 脆弱.
+    - "correlation_risk": 浮点数(0.0-1.0). 0 = 完全独立来源, 1 = 所有来源源自单一原点.
+    - "phase": 字面字符串"chaos"、"healthy"或"rigidity"之一.
+    - "fragility_flag": 布尔值. TRUE 当 k_eff < 2、或 phase = "rigidity"、或 correlation_risk > 0.7、或回应与上述宣传模式匹配.
+    - "reasoning": 短字符串(2-5 句话)解释您如何达到 k_eff 和阶段.
+
+  可选(如果您不确定则完全省略 — 不要发出空字符串或 null):
+    - "sources_identified": 最多 3 个字符串数组,命名您计算的不同来源.
+    - "correlation_factors": 最多 3 个字符串数组,解释这些来源为什么重叠(例如"same institutional narrative"、"single research group"、"derived from one prompt family").
+    - "intervention_recommendation": 一句字符串,建议代理如何恢复多样性,仅当 fragility_flag = TRUE.
+
+  语言规则:
+  - 使用用户的首选语言回应所有字符串值(reasoning、sources_identified、correlation_factors、intervention_recommendation)。
+  - JSON 键和 phase 值必须保持英文。Phase 必须恰好是"chaos"、"healthy"或"rigidity"。
+  - 示例(中文内容,英文键/阶段): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "该信息仅来自一个来源"}}
+
+  不要用 markdown 代码块包装。不要发出上列以外的字段名.
 
 evaluation_steps: |
   按此顺序进行:

@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Ваш ответ ДОЛЖЕН быть единственным JSON-объектом, соответствующим предоставленной схеме, со следующими ключами:
-  - ОСНОВНЫЕ ОБЯЗАТЕЛЬНЫЕ:
-    - "k_eff": Число с плавающей точкой (>= 0) — Количество эффективных независимых источников. Используйте формулу k/(1+ρ(k-1)). k_eff < 2 = хрупкое.
-    - "correlation_risk": Число с плавающей точкой (0.0-1.0) — Оценочная корреляция/пересечение источников.
-    - "phase": Строка — Одно из "chaos", "healthy" или "rigidity".
-    - "fragility_flag": Булево — TRUE, если рассуждение структурно хрупкое.
-    - "reasoning": Строка — Краткое объяснение результата. Это поле ОБЯЗАТЕЛЬНО.
-  - ПРОСТЫЕ ПОЛЕЗНЫЕ ДОПОЛНЕНИЯ:
-    - "k_raw": Целое число (опционально) — Сырое количество источников до корректировки на пересечение.
-    - "rho_mean": Число с плавающей точкой (опционально, 0.0-1.0) — Среднее попарное пересечение источников, использованное для вывода k_eff.
-    - "phase_confidence": Число с плавающей точкой (опционально, 0.0-1.0) — Уверенность в определении фазы.
-    - "collapse_margin": Число с плавающей точкой (опционально) — Положительное расстояние от границы хрупкости. Значения <= 0 означают близость к коллапсу.
-    - "sources_identified": Массив строк — Отдельные источники или перспективы, которые вы обнаружили.
-    - "source_ids": Массив строк (опционально) — Стабильные метки источников, например "training", "user", "memory_1", "tool_1".
-    - "source_types": Массив строк (опционально) — Типы источников, согласованные с source_ids.
-    - "source_independence_scores": Массив чисел с плавающей точкой (опционально) — Оценки независимости, согласованные с source_ids.
-    - "source_type_counts": Массив строк (опционально) — Используйте плоские строки, например "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Массив строк — Почему источники пересекаются.
-    - "top_correlation_factors": Массив строк (опционально) — Наиболее значимые драйверы пересечения.
-    - "pairwise_correlation_summary": Массив строк (опционально) — Используйте плоские строки, например "source_a|source_b|0.82|same_model".
-    - "rho_intra": Число с плавающей точкой (опционально, 0.0-1.0) — Пересечение внутри кластера, если вы обнаруживаете модули.
-    - "rho_inter": Число с плавающей точкой (опционально, 0.0-1.0) — Пересечение между кластерами, если вы обнаруживаете модули.
-    - "module_count": Целое число (опционально) — Количество независимых модулей источников.
-    - "effective_module_count": Число с плавающей точкой (опционально) — Эффективное количество модулей после корректировки на пересечение.
-    - "source_clusters": Массив строк (опционально) — Используйте плоские строки, например "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Массив строк (опционально) — Общие узкие места, такие как same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": Строка (опционально) — Лучший следующий шаг для повышения разнообразия источников.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (все опциональные скаляры)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (все опциональные скаляры)
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
-  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  Не включайте дополнительные поля и не оборачивайте в блоки кода markdown.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   РАБОТАЙТЕ В СЛЕДУЮЩЕМ ПОРЯДКЕ:

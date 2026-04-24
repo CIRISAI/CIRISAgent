@@ -112,42 +112,27 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  آپ کا جواب فراہم کردہ schema کے مطابق ایک واحد JSON object ہونا ضروری ہے، مندرجہ ذیل keys کے ساتھ:
-  - بنیادی لازمی:
-    - "k_eff": Float (>= 0) - مؤثر آزاد ذریعہ کی گنتی۔ فارمولا k/(1+ρ(k-1)) استعمال کریں۔ k_eff < 2 = نازک۔
-    - "correlation_risk": Float (0.0-1.0) - ذرائع کے درمیان اندازہ شدہ اوورلیپ/ارتباط۔
-    - "phase": String - ان میں سے ایک "chaos"، "healthy"، یا "rigidity"۔
-    - "fragility_flag": Boolean - TRUE اگر استدلال ساختی طور پر نازک ہو۔
-    - "reasoning": String - نتیجے کی مختصر وضاحت۔ یہ فیلڈ لازمی ہے۔
-  - سادہ مددگار اضافی اشیاء:
-    - "k_raw": Integer (اختیاری) - اوورلیپ ایڈجسٹمنٹ سے پہلے خام ذریعہ کی گنتی۔
-    - "rho_mean": Float (اختیاری، 0.0-1.0) - k_eff اخذ کرنے کے لیے استعمال شدہ اوسط جوڑا اوورلیپ۔
-    - "phase_confidence": Float (اختیاری، 0.0-1.0) - phase کے فیصلے میں اعتماد۔
-    - "collapse_margin": Float (اختیاری) - نازکیت کی سرحد سے مثبت فاصلہ۔ <= 0 کی قدریں collapse کے قریب ہونے کی نشاندہی کرتی ہیں۔
-    - "sources_identified": Array of strings - آپ نے جو الگ ذرائع یا نقطہ نظر پائے۔
-    - "source_ids": Array of strings (اختیاری) - مستحکم ذریعہ لیبل جیسے "training"، "user"، "memory_1"، "tool_1"۔
-    - "source_types": Array of strings (اختیاری) - source_ids کے ساتھ ہم آہنگ ذریعہ کی اقسام۔
-    - "source_independence_scores": Array of floats (اختیاری) - source_ids کے ساتھ ہم آہنگ آزادی کے اسکور۔
-    - "source_type_counts": Array of strings (اختیاری) - فلیٹ strings استعمال کریں جیسے "memory:2"، "tool:1"، "user:1"۔
-    - "correlation_factors": Array of strings - ذرائع کیوں اوورلیپ کرتے ہیں۔
-    - "top_correlation_factors": Array of strings (اختیاری) - اوورلیپ کے سب سے اہم محرکات۔
-    - "pairwise_correlation_summary": Array of strings (اختیاری) - فلیٹ strings استعمال کریں جیسے "source_a|source_b|0.82|same_model"۔
-    - "rho_intra": Float (اختیاری، 0.0-1.0) - اگر آپ ماڈیولز کا پتہ لگائیں تو کلسٹر کے اندر اوورلیپ۔
-    - "rho_inter": Float (اختیاری، 0.0-1.0) - اگر آپ ماڈیولز کا پتہ لگائیں تو کلسٹرز کے درمیان اوورلیپ۔
-    - "module_count": Integer (اختیاری) - آزاد ذریعہ ماڈیولز کی تعداد۔
-    - "effective_module_count": Float (اختیاری) - اوورلیپ ایڈجسٹمنٹ کے بعد مؤثر ماڈیول کی گنتی۔
-    - "source_clusters": Array of strings (اختیاری) - فلیٹ strings استعمال کریں جیسے "cluster_1|source_a,source_b|0.91"۔
-    - "common_cause_flags": Array of strings (اختیاری) - مشترکہ رکاوٹیں جیسے same_model، same_retrieval_origin، same_tool_family، same_prompt_family۔
-    - "intervention_recommendation": String (اختیاری) - ذریعہ تنوع کو بہتر بنانے کے لیے بہترین اگلا قدم۔
-    - "delta_k_eff"، "delta_rho_mean"، "phase_persistence_steps"، "time_in_fragile_state_ms"، "moving_variance" (سب اختیاری scalars)
-    - "rho_critical"، "k_required"، "defense_function"، "collapse_rate"، "time_to_truth"، "time_to_entropy"، "time_to_capture" (سب اختیاری scalars)
+  آپ کا جواب بالکل ان کلیدوں کے ساتھ ایک واحد JSON object ہونا ضروری ہے (کوئی اضافہ نہیں):
+
+  ضروری:
+    - "k_eff": Float (>= 0) فارمولا k_eff = k / (1 + ρ(k-1)) استعمال کریں۔ k_eff < 2 = نازک۔
+    - "correlation_risk": Float (0.0-1.0) 0 = مکمل طور پر آزاد ذرائع, 1 = تمام ذرائع ایک ہی اصل سے۔
+    - "phase": لفظی سلسلہ میں سے ایک "chaos", "healthy", یا "rigidity"۔
+    - "fragility_flag": Boolean TRUE جب k_eff < 2، یا phase = "rigidity"، یا correlation_risk > 0.7، یا جواب اوپر بیان کردہ تبلیغ کی نمونوں سے مماثل ہو۔
+    - "reasoning": مختصر سلسلہ (2-5 جملے) وضاحت کریں کہ آپ k_eff اور مرحلے تک کیسے پہنچے۔
+
+  اختیاری (اگر آپ کو یقین نہ ہو تو پوری طرح چھوڑ دیں — خالی سلسلے یا null مت نکالیں):
+    - "sources_identified": 3 تک سلسلوں کی صف جو الگ الگ ذرائع کا نام لیں جو آپ نے شمار کیے۔
+    - "correlation_factors": 3 تک سلسلوں کی صف وضاحت کریں کہ یہ ذرائع کیوں اوور لیپ کرتے ہیں (مثال "same institutional narrative"، "single research group"، "derived from one prompt family")۔
+    - "intervention_recommendation": ایک سطری لکیری جملہ تجویز کریں کہ ایجنٹ تنوع کو کیسے بحال کر سکتا ہے، صرف اگر fragility_flag = TRUE۔
+
   LANGUAGE RULES:
   - Respond in the user's preferred language (check user profile).
   - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
   - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
   - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
 
-  اضافی فیلڈز شامل نہ کریں یا markdown code blocks میں نہ لپیٹیں۔
+  Markdown code blocks میں نہ لپیٹیں۔ اوپر کی فہرست سے باہر کوئی فیلڈ نام نہ نکالیں۔
 
 evaluation_steps: |
   اس ترتیب میں کام کریں:

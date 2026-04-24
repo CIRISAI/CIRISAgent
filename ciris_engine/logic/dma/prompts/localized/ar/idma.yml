@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  يجب أن تكون استجابتك كائن JSON واحد يلتزم بالمخطط المقدم، مع المفاتيح التالية:
-  - الأساسي المطلوب:
-    - "k_eff": رقم عشري (>= 0) - عدد المصادر المستقلة الفعالة. استخدم الصيغة k/(1+ρ(k-1)). k_eff < 2 = هش.
-    - "correlation_risk": رقم عشري (0.0-1.0) - التداخل/الارتباط المقدّر بين المصادر.
-    - "phase": سلسلة نصية - واحد من "chaos"، "healthy"، أو "rigidity".
-    - "fragility_flag": منطقي - TRUE إذا كان التفكير هشاً هيكلياً.
-    - "reasoning": سلسلة نصية - شرح مختصر للنتيجة. هذا الحقل إلزامي.
-  - إضافات بسيطة مفيدة:
-    - "k_raw": عدد صحيح (اختياري) - العدد الخام للمصادر قبل تعديل التداخل.
-    - "rho_mean": رقم عشري (اختياري، 0.0-1.0) - متوسط التداخل الزوجي بين المصادر المستخدم لاشتقاق k_eff.
-    - "phase_confidence": رقم عشري (اختياري، 0.0-1.0) - الثقة في تصنيف المرحلة.
-    - "collapse_margin": رقم عشري (اختياري) - المسافة الموجبة من حدود الهشاشة. القيم <= 0 تعني قرب الانهيار.
-    - "sources_identified": مصفوفة من السلاسل النصية - المصادر أو المنظورات المتميزة التي وجدتها.
-    - "source_ids": مصفوفة من السلاسل النصية (اختياري) - تسميات مستقرة للمصادر مثل "training"، "user"، "memory_1"، "tool_1".
-    - "source_types": مصفوفة من السلاسل النصية (اختياري) - أنواع المصادر المتوافقة مع source_ids.
-    - "source_independence_scores": مصفوفة من الأرقام العشرية (اختياري) - درجات الاستقلالية المتوافقة مع source_ids.
-    - "source_type_counts": مصفوفة من السلاسل النصية (اختياري) - استخدم سلاسل مسطحة مثل "memory:2"، "tool:1"، "user:1".
-    - "correlation_factors": مصفوفة من السلاسل النصية - سبب تداخل المصادر.
-    - "top_correlation_factors": مصفوفة من السلاسل النصية (اختياري) - أهم محركات التداخل.
-    - "pairwise_correlation_summary": مصفوفة من السلاسل النصية (اختياري) - استخدم سلاسل مسطحة مثل "source_a|source_b|0.82|same_model".
-    - "rho_intra": رقم عشري (اختياري، 0.0-1.0) - التداخل داخل المجموعة إذا اكتشفت وحدات.
-    - "rho_inter": رقم عشري (اختياري، 0.0-1.0) - التداخل بين المجموعات إذا اكتشفت وحدات.
-    - "module_count": عدد صحيح (اختياري) - عدد وحدات المصادر المستقلة.
-    - "effective_module_count": رقم عشري (اختياري) - عدد الوحدات الفعال بعد تعديل التداخل.
-    - "source_clusters": مصفوفة من السلاسل النصية (اختياري) - استخدم سلاسل مسطحة مثل "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": مصفوفة من السلاسل النصية (اختياري) - اختناقات مشتركة مثل same_model، same_retrieval_origin، same_tool_family، same_prompt_family.
-    - "intervention_recommendation": سلسلة نصية (اختياري) - أفضل خطوة تالية لتحسين تنوع المصادر.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (جميعها كميات عددية اختيارية)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (جميعها كميات عددية اختيارية)
-  قواعد اللغة:
-  - الرد باللغة المفضلة للمستخدم (تحقق من ملف تعريف المستخدم).
-  - جميع قيم المحتوى (reasoning، sources_identified، correlation_factors) يجب أن تكون بلغة المستخدم.
-  - مفاتيح JSON وقيم المرحلة يجب أن تبقى باللغة الإنجليزية (على سبيل المثال، "reasoning"، "k_eff"، "phase": "healthy").
-  - مثال: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - محتوى كوري، مفاتيح/مراحل إنجليزية.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  لا تقم بتضمين حقول إضافية أو تلفها في كتل أكواد markdown.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   اعمل بهذا الترتيب:

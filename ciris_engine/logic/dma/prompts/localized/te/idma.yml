@@ -112,42 +112,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  మీ ప్రతిస్పందన తప్పనిసరిగా అందించిన స్కీమాకు కట్టుబడి ఒకే JSON ఆబ్జెక్ట్ అయి ఉండాలి, ఈ క్రింది కీలతో:
-  - ప్రధాన అవసరమైనవి:
-    - "k_eff": Float (>= 0) - సమర్థవంతమైన స్వతంత్ర మూల సంఖ్య. ఫార్ములా k/(1+ρ(k-1)) ఉపయోగించండి. k_eff < 2 = బలహీనం.
-    - "correlation_risk": Float (0.0-1.0) - అంచనా వేసిన మూల అతివ్యాప్తి/సహసంబంధం.
-    - "phase": String - ఇందులో ఒకటి "chaos", "healthy", లేదా "rigidity".
-    - "fragility_flag": Boolean - తార్కికం నిర్మాణాత్మకంగా బలహీనంగా ఉంటే TRUE.
-    - "reasoning": String - ఫలితం యొక్క సంక్షిప్త వివరణ. ఈ ఫీల్డ్ తప్పనిసరి.
-  - సరళమైన సహాయక అదనపువి:
-    - "k_raw": Integer (ఐచ్ఛికం) - అతివ్యాప్తి సర్దుబాటుకు ముందు ముడి మూల సంఖ్య.
-    - "rho_mean": Float (ఐచ్ఛికం, 0.0-1.0) - k_eff ను పొందడానికి ఉపయోగించిన సగటు జత వారీ మూల అతివ్యాప్తి.
-    - "phase_confidence": Float (ఐచ్ఛికం, 0.0-1.0) - దశ నిర్ణయంపై విశ్వాసం.
-    - "collapse_margin": Float (ఐచ్ఛికం) - బలహీనత సరిహద్దు నుండి ధనాత్మక దూరం. <= 0 విలువలు కుప్పకూలుటకు దగ్గరగా ఉన్నాయని అర్థం.
-    - "sources_identified": Array of strings - మీరు కనుగొన్న విభిన్న మూలాలు లేదా దృక్కోణాలు.
-    - "source_ids": Array of strings (ఐచ్ఛికం) - "training", "user", "memory_1", "tool_1" వంటి స్థిరమైన మూల లేబుల్‌లు.
-    - "source_types": Array of strings (ఐచ్ఛికం) - source_ids తో సరిపోలే మూల రకాలు.
-    - "source_independence_scores": Array of floats (ఐచ్ఛికం) - source_ids తో సరిపోలే స్వతంత్రత స్కోర్‌లు.
-    - "source_type_counts": Array of strings (ఐచ్ఛికం) - "memory:2", "tool:1", "user:1" వంటి ఫ్లాట్ స్ట్రింగ్‌లను ఉపయోగించండి.
-    - "correlation_factors": Array of strings - మూలాలు ఎందుకు అతివ్యాప్తి చెందుతాయి.
-    - "top_correlation_factors": Array of strings (ఐచ్ఛికం) - అతి ముఖ్యమైన అతివ్యాప్తి కారకాలు.
-    - "pairwise_correlation_summary": Array of strings (ఐచ్ఛికం) - "source_a|source_b|0.82|same_model" వంటి ఫ్లాట్ స్ట్రింగ్‌లను ఉపయోగించండి.
-    - "rho_intra": Float (ఐచ్ఛికం, 0.0-1.0) - మీరు మాడ్యూల్స్ గుర్తిస్తే క్లస్టర్ లోపల అతివ్యాప్తి.
-    - "rho_inter": Float (ఐచ్ఛికం, 0.0-1.0) - మీరు మాడ్యూల్స్ గుర్తిస్తే క్లస్టర్‌ల మధ్య అతివ్యాప్తి.
-    - "module_count": Integer (ఐచ్ఛికం) - స్వతంత్ర మూల మాడ్యూల్‌ల సంఖ్య.
-    - "effective_module_count": Float (ఐచ్ఛికం) - అతివ్యాప్తి సర్దుబాటు తర్వాత సమర్థవంతమైన మాడ్యూల్ సంఖ్య.
-    - "source_clusters": Array of strings (ఐచ్ఛికం) - "cluster_1|source_a,source_b|0.91" వంటి ఫ్లాట్ స్ట్రింగ్‌లను ఉపయోగించండి.
-    - "common_cause_flags": Array of strings (ఐచ్ఛికం) - same_model, same_retrieval_origin, same_tool_family, same_prompt_family వంటి ఉమ్మడి అడ్డంకులు.
-    - "intervention_recommendation": String (ఐచ్ఛికం) - మూల వైవిధ్యాన్ని మెరుగుపరచడానికి ఉత్తమ తదుపరి అడుగు.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (అన్నీ ఐచ్ఛిక స్కేలర్‌లు)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (అన్నీ ఐచ్ఛిక స్కేలర్‌లు)
-  భాష నియమాలు:
-  - యూజర్ యొక్క ఇష్టపడే భాషలో ప్రతిస్పందించండి (యూజర్ ప్రొఫైల్ చూడండి).
-  - అన్ని కంటెంట్ విలువలు (reasoning, sources_identified, correlation_factors) యూజర్ భాషలో ఉండాలి.
-  - JSON కీలు మరియు దశ విలువలు తప్పనిసరిగా ఇంగ్లీష్‌లో ఉండాలి (ఉదా. "reasoning", "k_eff", "phase": "healthy").
-  - ఉదాహరణ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - కొరియన్ కంటెంట్, ఇంగ్లీష్ కీలు/దశలు.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  అదనపు ఫీల్డ్‌లను చేర్చవద్దు లేదా markdown కోడ్ బ్లాక్‌లలో చుట్టవద్దు.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   ఈ క్రమంలో పని చేయండి:

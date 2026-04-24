@@ -115,6 +115,19 @@ class QARunner:
                 live_lens=self.config.live_lens,
                 # Data management
                 wipe_data=self.config.wipe_data,
+                # Memory benchmark configuration
+                message_count=self.config.message_count,
+                concurrent_channels=self.config.concurrent_channels,
+                # Model eval configuration — propagate so the runner's
+                # backend-specific config (which self.config gets re-bound
+                # to at line ~129) doesn't lose the CLI-passed filters.
+                # Without this, `--model-eval-languages en` and
+                # `--model-eval-questions History` silently reset to the
+                # 4-language × 6-question defaults.
+                model_eval_languages=self.config.model_eval_languages,
+                model_eval_concurrency=self.config.model_eval_concurrency,
+                model_eval_profile_memory=self.config.model_eval_profile_memory,
+                model_eval_question_categories=self.config.model_eval_question_categories,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -1028,6 +1041,7 @@ class QARunner:
                         max_concurrency=getattr(self.config, "model_eval_concurrency", 4),
                         profile_memory=getattr(self.config, "model_eval_profile_memory", True),
                         api_port=self.config.api_port,
+                        question_categories=getattr(self.config, "model_eval_question_categories", []),
                     )
                 elif module == QAModule.DEFERRAL_TAXONOMY:
                     test_instance = test_class(

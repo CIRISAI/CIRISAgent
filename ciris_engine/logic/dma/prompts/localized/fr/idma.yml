@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Votre réponse DOIT être un seul objet JSON respectant le schéma fourni, avec les clés suivantes :
-  - OBLIGATOIRES DE BASE :
-    - "k_eff" : Flottant (>= 0) - Compte de sources indépendantes effectives. Utilisez la formule k/(1+ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk" : Flottant (0.0-1.0) - Chevauchement/corrélation estimée des sources.
-    - "phase" : Chaîne - L'une de "chaos", "healthy", ou "rigidity".
-    - "fragility_flag" : Booléen - TRUE si le raisonnement est structurellement fragile.
-    - "reasoning" : Chaîne - Brève explication du résultat. Ce champ est OBLIGATOIRE.
-  - EXTRAS UTILES SIMPLES :
-    - "k_raw" : Entier (optionnel) - Nombre brut de sources avant ajustement du chevauchement.
-    - "rho_mean" : Flottant (optionnel, 0.0-1.0) - Chevauchement moyen par paires de sources utilisé pour calculer k_eff.
-    - "phase_confidence" : Flottant (optionnel, 0.0-1.0) - Confiance dans la décision de phase.
-    - "collapse_margin" : Flottant (optionnel) - Distance positive par rapport à la frontière de fragilité. Des valeurs <= 0 signifient adjacent à l'effondrement.
-    - "sources_identified" : Tableau de chaînes - Sources ou perspectives distinctes que vous avez trouvées.
-    - "source_ids" : Tableau de chaînes (optionnel) - Étiquettes stables de sources comme "training", "user", "memory_1", "tool_1".
-    - "source_types" : Tableau de chaînes (optionnel) - Types de sources alignés avec source_ids.
-    - "source_independence_scores" : Tableau de flottants (optionnel) - Scores d'indépendance alignés avec source_ids.
-    - "source_type_counts" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "memory:2", "tool:1", "user:1".
-    - "correlation_factors" : Tableau de chaînes - Pourquoi les sources se chevauchent.
-    - "top_correlation_factors" : Tableau de chaînes (optionnel) - Principaux moteurs de chevauchement.
-    - "pairwise_correlation_summary" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "source_a|source_b|0.82|same_model".
-    - "rho_intra" : Flottant (optionnel, 0.0-1.0) - Chevauchement intra-cluster si vous détectez des modules.
-    - "rho_inter" : Flottant (optionnel, 0.0-1.0) - Chevauchement inter-cluster si vous détectez des modules.
-    - "module_count" : Entier (optionnel) - Nombre de modules sources indépendants.
-    - "effective_module_count" : Flottant (optionnel) - Nombre effectif de modules après ajustement du chevauchement.
-    - "source_clusters" : Tableau de chaînes (optionnel) - Utilisez des chaînes plates comme "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags" : Tableau de chaînes (optionnel) - Goulots d'étranglement partagés comme same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation" : Chaîne (optionnel) - Meilleure étape suivante pour améliorer la diversité des sources.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tous scalaires optionnels)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tous scalaires optionnels)
-  RÈGLES LINGUISTIQUES :
-  - Répondez dans la langue préférée de l'utilisateur (vérifiez le profil utilisateur).
-  - TOUTES les valeurs de contenu (reasoning, sources_identified, correlation_factors) doivent être dans la langue de l'utilisateur.
-  - Les clés JSON et les valeurs de phase DOIVENT rester en anglais (par ex., "reasoning", "k_eff", "phase": "healthy").
-  - Exemple : {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - contenu en coréen, clés/phases en anglais.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  N'incluez pas de champs supplémentaires ou d'enveloppes de blocs de code markdown.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   TRAVAILLEZ DANS CET ORDRE :

@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Respons Anda HARUS berupa objek JSON tunggal yang mematuhi skema yang disediakan, dengan kunci berikut:
-  - INTI WAJIB:
-    - "k_eff": Float (>= 0) - Hitungan sumber independen efektif. Gunakan rumus k/(1+ρ(k-1)). k_eff < 2 = rapuh.
-    - "correlation_risk": Float (0.0-1.0) - Perkiraan tumpang tindih/korelasi sumber.
-    - "phase": String - Salah satu dari "chaos", "healthy", atau "rigidity".
-    - "fragility_flag": Boolean - TRUE jika penalaran secara struktural rapuh.
-    - "reasoning": String - Penjelasan singkat tentang hasilnya. Bidang ini WAJIB.
-  - TAMBAHAN SEDERHANA YANG MEMBANTU:
-    - "k_raw": Integer (opsional) - Hitungan sumber mentah sebelum penyesuaian tumpang tindih.
-    - "rho_mean": Float (opsional, 0.0-1.0) - Rata-rata tumpang tindih sumber berpasangan yang digunakan untuk menurunkan k_eff.
-    - "phase_confidence": Float (opsional, 0.0-1.0) - Kepercayaan pada penentuan fase.
-    - "collapse_margin": Float (opsional) - Jarak positif dari batas kerentanan. Nilai <= 0 berarti dekat-kolaps.
-    - "sources_identified": Array of strings - Sumber atau perspektif berbeda yang Anda temukan.
-    - "source_ids": Array of strings (opsional) - Label sumber stabil seperti "training", "user", "memory_1", "tool_1".
-    - "source_types": Array of strings (opsional) - Jenis sumber yang sejajar dengan source_ids.
-    - "source_independence_scores": Array of floats (opsional) - Skor independensi yang sejajar dengan source_ids.
-    - "source_type_counts": Array of strings (opsional) - Gunakan string datar seperti "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Array of strings - Mengapa sumber-sumber tumpang tindih.
-    - "top_correlation_factors": Array of strings (opsional) - Pendorong tumpang tindih yang paling penting.
-    - "pairwise_correlation_summary": Array of strings (opsional) - Gunakan string datar seperti "source_a|source_b|0.82|same_model".
-    - "rho_intra": Float (opsional, 0.0-1.0) - Tumpang tindih dalam-klaster jika Anda mendeteksi modul.
-    - "rho_inter": Float (opsional, 0.0-1.0) - Tumpang tindih antar-klaster jika Anda mendeteksi modul.
-    - "module_count": Integer (opsional) - Jumlah modul sumber independen.
-    - "effective_module_count": Float (opsional) - Hitungan modul efektif setelah penyesuaian tumpang tindih.
-    - "source_clusters": Array of strings (opsional) - Gunakan string datar seperti "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Array of strings (opsional) - Kemacetan bersama seperti same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": String (opsional) - Langkah terbaik berikutnya untuk meningkatkan keragaman sumber.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (semua skalar opsional)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (semua skalar opsional)
-  ATURAN BAHASA:
-  - Respons dalam bahasa pilihan pengguna (periksa profil pengguna).
-  - SEMUA nilai konten (reasoning, sources_identified, correlation_factors) harus dalam bahasa pengguna.
-  - Kunci JSON dan nilai fase HARUS tetap dalam bahasa Inggris (mis., "reasoning", "k_eff", "phase": "healthy").
-  - Contoh: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - konten Korea, kunci/fase Inggris.
+  Respons Anda HARUS berupa objek JSON tunggal dengan TEPAT kunci-kunci ini (tidak ada tambahan):
 
-  Jangan sertakan bidang tambahan atau bungkus dalam blok kode markdown.
+  WAJIB:
+    - "k_eff": Float (>= 0). Terapkan rumus k_eff = k / (1 + ρ(k-1)). k_eff < 2 = rapuh.
+    - "correlation_risk": Float dalam [0.0, 1.0]. 0 = sumber sepenuhnya independen, 1 = semua sumber berbagi asal tunggal.
+    - "phase": Salah satu string literal "chaos", "healthy", atau "rigidity".
+    - "fragility_flag": Boolean. TRUE ketika k_eff < 2, atau phase = "rigidity", atau correlation_risk > 0.7, atau respons cocok dengan pola propaganda yang dijelaskan di atas.
+    - "reasoning": String pendek (2-5 kalimat) menjelaskan bagaimana Anda mencapai k_eff dan phase.
+
+  OPSIONAL (abaikan sepenuhnya jika tidak yakin — JANGAN emit string kosong atau nulls):
+    - "sources_identified": Array hingga 3 string pendek yang memberi nama sumber berbeda yang Anda hitung.
+    - "correlation_factors": Array hingga 3 string pendek menjelaskan mengapa sumber-sumber tumpang tindih (mis. "narasi institusional yang sama", "kelompok penelitian tunggal", "berasal dari keluarga prompt satu").
+    - "intervention_recommendation": String pendek tunggal (satu kalimat) menyarankan bagaimana agen bisa pulih keragaman, HANYA jika fragility_flag = TRUE.
+
+  ATURAN BAHASA:
+  - Respons dalam bahasa pilihan pengguna untuk semua nilai string (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Kunci JSON dan nilai phase HARUS tetap dalam Inggris. Phase harus tepat "chaos", "healthy", atau "rigidity".
+  - Contoh (konten Indonesia, kunci/fase Inggris): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Informasi ini hanya dari satu sumber"}}
+
+  Jangan bungkus dalam blok kode markdown.
 
 evaluation_steps: |
   KERJAKAN DENGAN URUTAN INI:

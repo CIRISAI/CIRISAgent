@@ -119,6 +119,7 @@ class ModelEvalTests:
         max_concurrency: int = 6,
         profile_memory: bool = True,
         api_port: int = 8080,
+        question_categories: Optional[List[str]] = None,
     ):
         self.client = client
         self.console = console
@@ -132,14 +133,28 @@ class ModelEvalTests:
         self._completed_interactions = 0
         self._memory_task: Optional[asyncio.Task[None]] = None
         self._memory_sampling = False
+        # Filter the curated question set by category (case-insensitive exact
+        # match). Empty / None = run all questions. Useful for tight iteration
+        # loops e.g. "run only Tiananmen in just English while tuning OptVeto"
+        # without mutating EVAL_QUESTIONS globally.
+        requested = [c.strip().lower() for c in (question_categories or []) if c.strip()]
+        if requested:
+            self.questions = [q for q in EVAL_QUESTIONS if q.category.lower() in requested]
+            if not self.questions:
+                available = sorted({q.category for q in EVAL_QUESTIONS})
+                raise ValueError(
+                    f"No EVAL_QUESTIONS matched categories {requested}. Available: {available}"
+                )
+        else:
+            self.questions = list(EVAL_QUESTIONS)
 
     async def run(self) -> List[Dict]:
-        total_questions = len(EVAL_QUESTIONS) * len(self.languages)
+        total_questions = len(self.questions) * len(self.languages)
         self.console.print("\n[bold cyan]🧠 Multilingual Model Evaluation[/bold cyan]")
         self.console.print("=" * 70)
         self.console.print("[yellow]NOTE: This module requires --live mode with a real LLM.[/yellow]")
         self.console.print(
-            f"[dim]Firing {len(EVAL_QUESTIONS)} questions × {len(self.languages)} languages "
+            f"[dim]Firing {len(self.questions)} questions × {len(self.languages)} languages "
             f"= {total_questions} submissions — max {self.max_concurrency} in flight "
             f"(task-append bypassed via CIRIS_DISABLE_TASK_APPEND).[/dim]\n"
         )
@@ -158,7 +173,7 @@ class ModelEvalTests:
             # Fan out every (question, language) pair at once.
             pending = [
                 asyncio.create_task(self._ask_question(question, language, index, semaphore))
-                for index, question in enumerate(EVAL_QUESTIONS, 1)
+                for index, question in enumerate(self.questions, 1)
                 for language in self.languages
             ]
             self.console.print(f"[dim]Launched {len(pending)} concurrent interactions...[/dim]\n")

@@ -495,25 +495,40 @@ Adhere strictly to the schema for your JSON output.
                 "(5) Acknowledge uncertainty in your response.",
             ) + " "
 
-        source_count = idma_result.k_raw if idma_result.k_raw is not None else len(idma_result.sources_identified)
+        # IDMAResult was trimmed from 43 → 8 fields (see schema comment for why
+        # the removed fields were causing LLM JSON-validation cascades). The
+        # fields referenced below that are no longer on the schema — k_raw,
+        # phase_confidence, collapse_margin, common_cause_flags,
+        # source_type_counts, top_correlation_factors — are fetched with
+        # getattr-default-None so this code still runs against a lean
+        # IDMAResult and continues to render any extras if a provider still
+        # emits them.
+        k_raw = getattr(idma_result, "k_raw", None)
+        phase_confidence = getattr(idma_result, "phase_confidence", None)
+        collapse_margin = getattr(idma_result, "collapse_margin", None)
+        common_cause_flags = getattr(idma_result, "common_cause_flags", None) or []
+        source_type_counts = getattr(idma_result, "source_type_counts", None) or []
+        top_correlation_factors = getattr(idma_result, "top_correlation_factors", None) or []
+
+        source_count = k_raw if k_raw is not None else len(idma_result.sources_identified)
         plain_language_bits = [
             f"{L('idma_label_effective_source_count', 'effective source count')}={idma_result.k_eff:.2f}",
             f"{L('idma_label_source_overlap', 'source overlap')}={idma_result.correlation_risk:.2f}",
             f"{L('idma_label_reasoning_state', 'reasoning state')}={idma_result.phase}",
         ]
-        if idma_result.phase_confidence is not None:
+        if phase_confidence is not None:
             plain_language_bits.append(
-                f"{L('idma_label_state_confidence', 'state confidence')}={idma_result.phase_confidence:.2f}"
+                f"{L('idma_label_state_confidence', 'state confidence')}={phase_confidence:.2f}"
             )
-        if idma_result.collapse_margin is not None:
+        if collapse_margin is not None:
             plain_language_bits.append(
-                f"{L('idma_label_safety_margin', 'safety margin')}={idma_result.collapse_margin:.2f}"
+                f"{L('idma_label_safety_margin', 'safety margin')}={collapse_margin:.2f}"
             )
         if source_count:
             plain_language_bits.append(f"{L('idma_label_raw_source_count', 'raw source count')}={source_count}")
-        if idma_result.common_cause_flags:
+        if common_cause_flags:
             plain_language_bits.append(
-                f"{L('idma_label_shared_bottlenecks', 'shared bottlenecks')}={', '.join(idma_result.common_cause_flags[:3])}"
+                f"{L('idma_label_shared_bottlenecks', 'shared bottlenecks')}={', '.join(common_cause_flags[:3])}"
             )
         if idma_result.intervention_recommendation:
             plain_language_bits.append(
@@ -524,10 +539,10 @@ Adhere strictly to the schema for your JSON output.
         unknown_label = L("idma_label_unknown", "Unknown")
         sources_str = ", ".join(idma_result.sources_identified[:3]) if idma_result.sources_identified else none_label
         source_types_str = (
-            ", ".join(idma_result.source_type_counts[:3]) if idma_result.source_type_counts else unknown_label
+            ", ".join(source_type_counts[:3]) if source_type_counts else unknown_label
         )
-        if idma_result.top_correlation_factors:
-            top_drivers = ", ".join(idma_result.top_correlation_factors[:3])
+        if top_correlation_factors:
+            top_drivers = ", ".join(top_correlation_factors[:3])
         elif idma_result.correlation_factors:
             top_drivers = ", ".join(idma_result.correlation_factors[:3])
         else:

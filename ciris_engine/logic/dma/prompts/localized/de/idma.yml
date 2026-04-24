@@ -115,42 +115,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Ihre Antwort MUSS ein einzelnes JSON-Objekt sein, das dem bereitgestellten Schema entspricht, mit folgenden Schlüsseln:
-  - KERN (ERFORDERLICH):
-    - "k_eff": Float (>= 0) - Effektive Anzahl unabhängiger Quellen. Verwenden Sie die Formel k/(1+ρ(k-1)). k_eff < 2 = fragil.
-    - "correlation_risk": Float (0.0-1.0) - Geschätzte Quellenüberlappung/-korrelation.
-    - "phase": String - Eines von "chaos", "healthy" oder "rigidity".
-    - "fragility_flag": Boolean - TRUE, wenn die Argumentation strukturell fragil ist.
-    - "reasoning": String - Kurze Erklärung des Ergebnisses. Dieses Feld ist OBLIGATORISCH.
-  - EINFACHE HILFREICHE ZUSÄTZE:
-    - "k_raw": Integer (optional) - Rohe Quellenanzahl vor Überlappungsanpassung.
-    - "rho_mean": Float (optional, 0.0-1.0) - Durchschnittliche paarweise Quellenüberlappung zur Ableitung von k_eff.
-    - "phase_confidence": Float (optional, 0.0-1.0) - Zuversicht bei der Phasenbestimmung.
-    - "collapse_margin": Float (optional) - Positiver Abstand zur Fragilitätsgrenze. Werte <= 0 bedeuten kollapsnah.
-    - "sources_identified": Array von Strings - Unterschiedliche Quellen oder Perspektiven, die Sie gefunden haben.
-    - "source_ids": Array von Strings (optional) - Stabile Quellenbezeichnungen wie "training", "user", "memory_1", "tool_1".
-    - "source_types": Array von Strings (optional) - Quellentypen, ausgerichtet an source_ids.
-    - "source_independence_scores": Array von Floats (optional) - Unabhängigkeitswerte, ausgerichtet an source_ids.
-    - "source_type_counts": Array von Strings (optional) - Verwenden Sie flache Strings wie "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Array von Strings - Warum die Quellen überlappen.
-    - "top_correlation_factors": Array von Strings (optional) - Wichtigste Treiber der Überlappung.
-    - "pairwise_correlation_summary": Array von Strings (optional) - Verwenden Sie flache Strings wie "source_a|source_b|0.82|same_model".
-    - "rho_intra": Float (optional, 0.0-1.0) - Überlappung innerhalb eines Clusters, falls Sie Module erkennen.
-    - "rho_inter": Float (optional, 0.0-1.0) - Überlappung zwischen Clustern, falls Sie Module erkennen.
-    - "module_count": Integer (optional) - Anzahl unabhängiger Quellenmodule.
-    - "effective_module_count": Float (optional) - Effektive Modulanzahl nach Überlappungsanpassung.
-    - "source_clusters": Array von Strings (optional) - Verwenden Sie flache Strings wie "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Array von Strings (optional) - Gemeinsame Engpässe wie same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": String (optional) - Bester nächster Schritt zur Verbesserung der Quellenvielfalt.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (alle optionale Skalare)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (alle optionale Skalare)
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
-  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  Fügen Sie keine zusätzlichen Felder hinzu und packen Sie nicht in Markdown-Codeblöcke ein.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   ARBEITEN SIE IN DIESER REIHENFOLGE:

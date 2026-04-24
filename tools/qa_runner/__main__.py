@@ -233,6 +233,17 @@ Available modules:
         action="store_true",
         help="Disable memory profiling during model_eval",
     )
+    parser.add_argument(
+        "--model-eval-questions",
+        default="",
+        help=(
+            "Comma-separated EvalQuestion categories to include (case-insensitive). "
+            "Empty = all curated questions. "
+            "Examples: 'History' (Tiananmen only), "
+            "'Theology,Politics' (two topics), "
+            "'Mental Health' (quoted because of the space)."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -461,6 +472,9 @@ def main():
         model_eval_languages=[lang.strip() for lang in args.model_eval_languages.split(",") if lang.strip()],
         model_eval_concurrency=args.model_eval_concurrency,
         model_eval_profile_memory=not args.no_model_eval_memory_profile,
+        model_eval_question_categories=[
+            cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()
+        ],
     )
 
     # Create and run runner

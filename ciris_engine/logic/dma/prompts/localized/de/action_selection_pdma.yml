@@ -17,11 +17,7 @@ decision_format: "LANGUAGE RULES:\n\
   - MEMORIZE: memorize_node_type (string), memorize_content (string), memorize_scope (string: local|identity|environment|community)\n\
   - RECALL: recall_query (string), recall_node_type (string, optional), recall_scope (string, optional), recall_limit (integer, optional)\n\
   - FORGET: forget_node_id (string), forget_reason (string)\n\
-  - TASK_COMPLETE: completion_reason (string)\n\
-  \n\
-  ALWAYS ALSO INCLUDE (on every response, regardless of chosen action):\n\
-  - selection_confidence: float 0.00-1.00. 1.0 = sicher, dass diese Aktion die beste verfügbare Antwort im Kontext ist. 0.5 = geringfügig besser als die nächstbeste Alternative. 0.0 = kann die gewählte Aktion nicht von anderen unterscheiden, effektiv erraten. Dies meldet deine ÜBERLEGUNG-Sicherheit, nicht die Richtigkeit deiner Antwort — eine fließende sachliche Antwort kann geringes Vertrauen haben, wenn die Frage mehrdeutig ist, und eine vorsichtige Antwort kann hohes Vertrauen haben, wenn die Vorsicht selbst die richtige Maßnahme ist.\n\
-  - alternatives_considered: list of up to 3 strings labeling the OTHER legitimate actions you considered but rejected. Each item is a short phrase naming the action and its angle, e.g. 'SPEAK — briefer factual summary', 'DEFER — outside the agent's domain', 'TOOL (blogwatcher) — look up existing discussion', 'MEMORIZE — store the user's stated preference', 'OBSERVE — wait for more context'. Do NOT list PONDER as an alternative — PONDER is the conscience-retry mechanism, not a first-pass deliberation choice. Omit only if the chosen action is unambiguous (TASK_COMPLETE on a finished task, trivial greeting, etc.) — in that case return [] rather than null. These are DELIBERATION-DIVERSITY signals for the conscience layer and for CIRISLens k_eff analysis."
+  - TASK_COMPLETE: completion_reason (string)\""
 closing_reminder: "Erinnern Sie sich, dass CIRIS-Prinzipien persönliche Präferenz überschreiben.\n\n\
   SPRACHANPASSUNG: Wenn Sie speak_content verfassen, antworten Sie in derselben Sprache, in der der\
   \ Benutzer geschrieben hat. Wenn der Benutzer auf Amharisch schreibt, antworten Sie auf Amharisch. Wenn sie auf\

@@ -113,42 +113,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  আপনার প্রতিক্রিয়া অবশ্যই প্রদত্ত স্কিমা মেনে একটি একক JSON বস্তু হতে হবে, নিম্নলিখিত কীগুলি সহ:
-  - মূল প্রয়োজনীয়:
-    - "k_eff": ফ্লোট (>= 0) - কার্যকর স্বতন্ত্র উৎস গণনা। সূত্র k/(1+ρ(k-1)) ব্যবহার করুন। k_eff < 2 = ভঙ্গুর।
-    - "correlation_risk": ফ্লোট (0.0-1.0) - আনুমানিক উৎস ওভারল্যাপ/পারস্পরিক সম্পর্ক।
-    - "phase": স্ট্রিং - "chaos", "healthy", বা "rigidity" এর একটি।
-    - "fragility_flag": বুলিয়ান - TRUE যদি যুক্তি কাঠামোগতভাবে ভঙ্গুর।
-    - "reasoning": স্ট্রিং - ফলাফলের সংক্ষিপ্ত ব্যাখ্যা। এই ক্ষেত্রটি বাধ্যতামূলক।
-  - সহজ সহায়ক অতিরিক্ত:
-    - "k_raw": পূর্ণসংখ্যা (ঐচ্ছিক) - ওভারল্যাপ সমন্বয়ের আগে কাঁচা উৎস গণনা।
-    - "rho_mean": ফ্লোট (ঐচ্ছিক, 0.0-1.0) - k_eff বের করতে ব্যবহৃত গড় জোড়াভিত্তিক উৎস ওভারল্যাপ।
-    - "phase_confidence": ফ্লোট (ঐচ্ছিক, 0.0-1.0) - phase নির্ণয়ে আত্মবিশ্বাস।
-    - "collapse_margin": ফ্লোট (ঐচ্ছিক) - ভঙ্গুরতা সীমা থেকে ইতিবাচক দূরত্ব। মান <= 0 মানে পতন-সংলগ্ন।
-    - "sources_identified": স্ট্রিংগুলির অ্যারে - আপনি খুঁজে পাওয়া স্বতন্ত্র উৎস বা দৃষ্টিভঙ্গি।
-    - "source_ids": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - স্থিতিশীল উৎস লেবেল যেমন "training", "user", "memory_1", "tool_1"।
-    - "source_types": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - source_ids এর সাথে সারিবদ্ধ উৎস প্রকার।
-    - "source_independence_scores": ফ্লোটগুলির অ্যারে (ঐচ্ছিক) - source_ids এর সাথে সারিবদ্ধ স্বাধীনতা স্কোর।
-    - "source_type_counts": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - সমতল স্ট্রিং ব্যবহার করুন যেমন "memory:2", "tool:1", "user:1"।
-    - "correlation_factors": স্ট্রিংগুলির অ্যারে - কেন উৎসগুলি ওভারল্যাপ করে।
-    - "top_correlation_factors": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - সবচেয়ে গুরুত্বপূর্ণ ওভারল্যাপ চালক।
-    - "pairwise_correlation_summary": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - সমতল স্ট্রিং ব্যবহার করুন যেমন "source_a|source_b|0.82|same_model"।
-    - "rho_intra": ফ্লোট (ঐচ্ছিক, 0.0-1.0) - আপনি মডিউল সনাক্ত করলে ক্লাস্টার-অভ্যন্তরীণ ওভারল্যাপ।
-    - "rho_inter": ফ্লোট (ঐচ্ছিক, 0.0-1.0) - আপনি মডিউল সনাক্ত করলে ক্লাস্টারের মধ্যে ওভারল্যাপ।
-    - "module_count": পূর্ণসংখ্যা (ঐচ্ছিক) - স্বতন্ত্র উৎস মডিউলের সংখ্যা।
-    - "effective_module_count": ফ্লোট (ঐচ্ছিক) - ওভারল্যাপ সমন্বয়ের পরে কার্যকর মডিউল গণনা।
-    - "source_clusters": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - সমতল স্ট্রিং ব্যবহার করুন যেমন "cluster_1|source_a,source_b|0.91"।
-    - "common_cause_flags": স্ট্রিংগুলির অ্যারে (ঐচ্ছিক) - ভাগ করা বাধা যেমন same_model, same_retrieval_origin, same_tool_family, same_prompt_family।
-    - "intervention_recommendation": স্ট্রিং (ঐচ্ছিক) - উৎস বৈচিত্র্য উন্নত করতে সেরা পরবর্তী পদক্ষেপ।
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (সব ঐচ্ছিক স্কেলার)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (সব ঐচ্ছিক স্কেলার)
-  ভাষা নিয়ম:
-  - ব্যবহারকারীর পছন্দের ভাষায় উত্তর দিন (ব্যবহারকারী প্রোফাইল পরীক্ষা করুন)।
-  - সমস্ত বিষয়বস্তু মান (reasoning, sources_identified, correlation_factors) ব্যবহারকারীর ভাষায় হওয়া উচিত।
-  - JSON কী এবং phase মান অবশ্যই ইংরেজিতে থাকতে হবে (যেমন, "reasoning", "k_eff", "phase": "healthy")।
-  - উদাহরণ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - কোরিয়ান বিষয়বস্তু, ইংরেজি কী/phase।
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  অতিরিক্ত ক্ষেত্র অন্তর্ভুক্ত করবেন না বা মার্কডাউন কোড ব্লকে মোড়াবেন না।
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   এই ক্রমে কাজ করুন:

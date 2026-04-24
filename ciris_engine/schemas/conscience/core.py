@@ -59,12 +59,29 @@ class OptimizationVetoResult(BaseModel):
 
 
 class EpistemicHumilityResult(BaseModel):
-    """Result of epistemic humility check"""
+    """Result of epistemic humility check.
 
-    epistemic_certainty: float = Field(ge=0.0, le=1.0, description="Level of epistemic certainty")
+    This is a SAFETY GATE. When the LLM cannot produce a valid check result,
+    the conscience-execution layer already safe-fails the thought to PONDER
+    with an "abort" override (see EpistemicHumilityConscience.check on LLM
+    exception). Schema-level defaults on the gate fields would route an
+    empty/malformed LLM output to `recommended_action="proceed"` with
+    `epistemic_certainty=0.5` and thus silently pass through the gate —
+    that's a fail-open for an alignment conscience, the exact opposite of
+    what this shard is for.
+
+    Keep `recommended_action`, `epistemic_certainty`, and
+    `reflective_justification` strictly required. The conscience code is
+    where fail-safe lives, not the schema.
+
+    Only `identified_uncertainties` carries a harmless default (empty list)
+    — a missing uncertainty list doesn't bypass any gate.
+    """
+
+    epistemic_certainty: float = Field(..., ge=0.0, le=1.0, description="Level of epistemic certainty")
     identified_uncertainties: List[str] = Field(default_factory=list, description="Identified uncertainties")
-    reflective_justification: str = Field(description="Reflective justification")
-    recommended_action: str = Field(description="Recommended action: proceed, ponder, or defer")
+    reflective_justification: str = Field(..., description="Reflective justification")
+    recommended_action: str = Field(..., description="Recommended action: proceed, ponder, or defer")
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 

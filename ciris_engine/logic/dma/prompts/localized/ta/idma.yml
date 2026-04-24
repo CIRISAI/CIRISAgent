@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  உங்கள் பதில் வழங்கப்பட்ட திட்டத்துடன் ஒத்துப்போகும் ஒற்றை JSON பொருளாக இருக்க வேண்டும், பின்வரும் விசைகளுடன்:
-  - முக்கிய தேவை:
-    - "k_eff": Float (>= 0) - பயனுள்ள சுதந்திர மூல எண்ணிக்கை. சூத்திரம் k/(1+ρ(k-1)) பயன்படுத்து. k_eff < 2 = fragile.
-    - "correlation_risk": Float (0.0-1.0) - மதிப்பிடப்பட்ட மூல ஒன்றுக்கொன்று ஒத்த/தொடர்பு.
-    - "phase": String - "chaos", "healthy", அல்லது "rigidity" ஆகியவற்றில் ஒன்று.
-    - "fragility_flag": Boolean - சிந்தனை கட்டமைப்பு ரீதியாக பலவீனம் என்றால் TRUE.
-    - "reasoning": String - முடிவின் சுருக்கமான விளக்கம். இந்த புலம் கட்டாயம்.
-  - எளிய உதவிகரமான கூடுதல்கள்:
-    - "k_raw": Integer (விருப்பம்) - ஒன்றுக்கொன்று ஒத்த சரிசெய்தல் முன் மூல எண்ணிக்கை.
-    - "rho_mean": Float (விருப்பம், 0.0-1.0) - k_eff-ஐ பெற பயன்படுத்தப்பட்ட சராசரி ஜோடி-வாரியான மூல ஒற்றுமை.
-    - "phase_confidence": Float (விருப்பம், 0.0-1.0) - phase அழைப்பில் நம்பிக்கை.
-    - "collapse_margin": Float (விருப்பம்) - பலவீன எல்லையிலிருந்து நேர்மறை தூரம். <= 0 மதிப்புகள் வீழ்ச்சிக்கு அருகில் என்று பொருள்.
-    - "sources_identified": Array of strings - நீங்கள் கண்டுபிடித்த தனித்துவமான மூலங்கள் அல்லது பார்வைகள்.
-    - "source_ids": Array of strings (விருப்பம்) - "training", "user", "memory_1", "tool_1" போன்ற நிலையான மூல லேபிள்கள்.
-    - "source_types": Array of strings (விருப்பம்) - source_ids உடன் இணைந்த மூல வகைகள்.
-    - "source_independence_scores": Array of floats (விருப்பம்) - source_ids உடன் இணைந்த சுதந்திர மதிப்பெண்கள்.
-    - "source_type_counts": Array of strings (விருப்பம்) - "memory:2", "tool:1", "user:1" போன்ற தட்டையான சரங்களைப் பயன்படுத்தவும்.
-    - "correlation_factors": Array of strings - மூலங்கள் ஏன் ஒன்றுக்கொன்று ஒத்திருக்கின்றன.
-    - "top_correlation_factors": Array of strings (விருப்பம்) - மிக முக்கியமான ஒற்றுமை காரணிகள்.
-    - "pairwise_correlation_summary": Array of strings (விருப்பம்) - "source_a|source_b|0.82|same_model" போன்ற தட்டையான சரங்களைப் பயன்படுத்தவும்.
-    - "rho_intra": Float (விருப்பம், 0.0-1.0) - தொகுதிகளை கண்டறிந்தால் கொத்திற்குள் ஒற்றுமை.
-    - "rho_inter": Float (விருப்பம், 0.0-1.0) - தொகுதிகளை கண்டறிந்தால் கொத்துகளுக்கிடையே ஒற்றுமை.
-    - "module_count": Integer (விருப்பம்) - சுதந்திர மூல தொகுதிகளின் எண்ணிக்கை.
-    - "effective_module_count": Float (விருப்பம்) - ஒற்றுமை சரிசெய்தலுக்குப் பிறகு பயனுள்ள தொகுதி எண்ணிக்கை.
-    - "source_clusters": Array of strings (விருப்பம்) - "cluster_1|source_a,source_b|0.91" போன்ற தட்டையான சரங்களைப் பயன்படுத்தவும்.
-    - "common_cause_flags": Array of strings (விருப்பம்) - same_model, same_retrieval_origin, same_tool_family, same_prompt_family போன்ற பகிரப்பட்ட இடையூறுகள்.
-    - "intervention_recommendation": String (விருப்பம்) - மூல பன்முகத்தன்மையை மேம்படுத்த சிறந்த அடுத்த படி.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (அனைத்தும் விருப்ப scalars)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (அனைத்தும் விருப்ப scalars)
-  மொழி விதிகள்:
-  - பயனரின் விருப்ப மொழியில் பதிலளி (பயனர் சுயவிவரத்தைச் சரிபார்க்கவும்).
-  - அனைத்து உள்ளடக்க மதிப்புகளும் (reasoning, sources_identified, correlation_factors) பயனரின் மொழியில் இருக்க வேண்டும்.
-  - JSON விசைகள் மற்றும் phase மதிப்புகள் ஆங்கிலத்தில் இருக்க வேண்டும் (எ.கா., "reasoning", "k_eff", "phase": "healthy").
-  - உதாரணம்: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - கொரிய உள்ளடக்கம், ஆங்கில விசைகள்/phases.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  கூடுதல் புலங்களைச் சேர்க்காதீர்கள் அல்லது markdown குறியீட்டு தொகுதிகளில் சுற்றாதீர்கள்.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   இந்த வரிசையில் வேலை செய்:

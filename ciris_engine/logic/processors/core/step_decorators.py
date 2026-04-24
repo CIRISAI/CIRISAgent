@@ -1595,8 +1595,6 @@ def _create_aspdma_result_event(
         is_recursive=is_recursive,
         selected_action=getattr(step_data, "selected_action", ""),
         action_rationale=getattr(step_data, "action_rationale", ""),
-        selection_confidence=getattr(step_data, "selection_confidence", None),
-        alternatives_considered=getattr(step_data, "alternatives_considered", None),
         aspdma_prompt=aspdma_prompt,  # User prompt passed to ASPDMA
     )
 

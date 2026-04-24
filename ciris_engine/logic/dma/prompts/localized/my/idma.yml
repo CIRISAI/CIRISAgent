@@ -112,42 +112,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  သင်၏တုံ့ပြန်မှုသည် ပေးအပ်ထားသော schema နှင့် ကိုက်ညီသော တစ်ခုတည်းသော JSON object ဖြစ်ရမည်၊ အောက်ပါ key များနှင့်အတူ:
-  - အဓိက လိုအပ်ချက်များ:
-    - "k_eff": Float (>= 0) - အကျိုးသက်ရောက်မှုအရလွတ်လပ်သောအရင်းအမြစ်အရေအတွက်။ ပုံသေနည်း k/(1+ρ(k-1)) အသုံးပြုပါ။ k_eff < 2 = ကျိုးပဲ့လွယ်။
-    - "correlation_risk": Float (0.0-1.0) - အရင်းအမြစ်များကြား ခန့်မှန်းထားသော ထပ်တူကျမှု/ဆက်စပ်မှု။
-    - "phase": String - "chaos"၊ "healthy" သို့မဟုတ် "rigidity" တစ်ခု။
-    - "fragility_flag": Boolean - ဆင်ခြင်တုံတရားသည် ဖွဲ့စည်းပုံအရ ကျိုးပဲ့လွယ်လျှင် TRUE။
-    - "reasoning": String - ရလဒ်၏ တိုတောင်းသော ရှင်းလင်းချက်။ ဤ field သည် မဖြစ်မနေရှိရမည်။
-  - ရိုးရှင်း၍ အထောက်အကူပြုသော အပိုဆောင်းများ:
-    - "k_raw": Integer (optional) - ထပ်တူကျမှုချိန်ညှိမှုမတိုင်မီ ကြမ်းတမ်းသောအရင်းအမြစ်အရေအတွက်။
-    - "rho_mean": Float (optional, 0.0-1.0) - k_eff ကို ဆင်းယူရန် အသုံးပြုသော ပျမ်းမျှတွဲဆိုင်ရာ အရင်းအမြစ် ထပ်တူကျမှု။
-    - "phase_confidence": Float (optional, 0.0-1.0) - phase ဆုံးဖြတ်ချက်အပေါ် ယုံကြည်မှု။
-    - "collapse_margin": Float (optional) - ကျိုးပဲ့လွယ်မှုနယ်နိမိတ်မှ အပြုသဘော အကွာအဝေး။ <= 0 တန်ဖိုးများသည် ပြိုကွဲမှုနှင့် နီးကပ်သည်ဟု ဆိုလိုသည်။
-    - "sources_identified": Array of strings - သင်တွေ့ရှိခဲ့သော ကွဲပြားသောအရင်းအမြစ်များ သို့မဟုတ် အမြင်များ။
-    - "source_ids": Array of strings (optional) - "training"၊ "user"၊ "memory_1"၊ "tool_1" ကဲ့သို့ တည်ငြိမ်သောအရင်းအမြစ်အမည်များ။
-    - "source_types": Array of strings (optional) - source_ids နှင့် ကိုက်ညီသောအရင်းအမြစ်အမျိုးအစားများ။
-    - "source_independence_scores": Array of floats (optional) - source_ids နှင့် ကိုက်ညီသော လွတ်လပ်မှုရမှတ်များ။
-    - "source_type_counts": Array of strings (optional) - "memory:2"၊ "tool:1"၊ "user:1" ကဲ့သို့ ပြားသောစာကြောင်းများကို အသုံးပြုပါ။
-    - "correlation_factors": Array of strings - အရင်းအမြစ်များ အဘယ်ကြောင့် ထပ်တူကျသနည်း။
-    - "top_correlation_factors": Array of strings (optional) - အရေးအကြီးဆုံး ထပ်တူကျမှု မောင်းနှင်သူများ။
-    - "pairwise_correlation_summary": Array of strings (optional) - "source_a|source_b|0.82|same_model" ကဲ့သို့ ပြားသောစာကြောင်းများကို အသုံးပြုပါ။
-    - "rho_intra": Float (optional, 0.0-1.0) - မော်ဂျူးများ ဖော်ထုတ်နိုင်လျှင် အစုအတွင်း ထပ်တူကျမှု။
-    - "rho_inter": Float (optional, 0.0-1.0) - မော်ဂျူးများ ဖော်ထုတ်နိုင်လျှင် အစုအကြား ထပ်တူကျမှု။
-    - "module_count": Integer (optional) - လွတ်လပ်သောအရင်းအမြစ်မော်ဂျူးအရေအတွက်။
-    - "effective_module_count": Float (optional) - ထပ်တူကျမှုချိန်ညှိပြီးနောက် အကျိုးသက်ရောက်သော မော်ဂျူးအရေအတွက်။
-    - "source_clusters": Array of strings (optional) - "cluster_1|source_a,source_b|0.91" ကဲ့သို့ ပြားသောစာကြောင်းများကို အသုံးပြုပါ။
-    - "common_cause_flags": Array of strings (optional) - same_model၊ same_retrieval_origin၊ same_tool_family၊ same_prompt_family ကဲ့သို့ မျှဝေထားသော bottleneck များ။
-    - "intervention_recommendation": String (optional) - အရင်းအမြစ်မတူကွဲပြားမှုကို တိုးတက်စေမည့် အကောင်းဆုံး နောက်ခြေလှမ်း။
-    - "delta_k_eff"၊ "delta_rho_mean"၊ "phase_persistence_steps"၊ "time_in_fragile_state_ms"၊ "moving_variance" (အားလုံး optional scalar များ)
-    - "rho_critical"၊ "k_required"၊ "defense_function"၊ "collapse_rate"၊ "time_to_truth"၊ "time_to_entropy"၊ "time_to_capture" (အားလုံး optional scalar များ)
-  ဘာသာစကားစည်းမျဉ်းများ:
-  - အသုံးပြုသူ၏ နှစ်သက်သော ဘာသာစကားဖြင့် တုံ့ပြန်ပါ (အသုံးပြုသူပရိုဖိုင် စစ်ဆေးပါ)။
-  - အကြောင်းအရာတန်ဖိုးများအားလုံး (reasoning၊ sources_identified၊ correlation_factors) သည် အသုံးပြုသူ၏ဘာသာစကားဖြင့် ဖြစ်ရမည်။
-  - JSON key များနှင့် phase တန်ဖိုးများသည် အင်္ဂလိပ်ဖြင့် ဆက်ရှိရမည် (ဥပမာ- "reasoning"၊ "k_eff"၊ "phase": "healthy")။
-  - ဥပမာ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - ကိုရီးယား အကြောင်းအရာ၊ အင်္ဂလိပ် key/phase များ။
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  အပိုဆောင်း field များ မထည့်သွင်းပါနှင့် သို့မဟုတ် markdown code blocks ဖြင့် မထုပ်ပိုးပါနှင့်။
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   ဤအစီအစဉ်အတိုင်းလုပ်ဆောင်ပါ:

@@ -115,42 +115,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Yanıtınız, sağlanan şemaya uygun, aşağıdaki anahtarlara sahip tek bir JSON nesnesi OLMALIDIR:
-  - ÇEKİRDEK ZORUNLU:
-    - "k_eff": Kayan nokta (>= 0) - Etkin bağımsız kaynak sayısı. k/(1+ρ(k-1)) formülünü kullanın. k_eff < 2 = kırılgan.
-    - "correlation_risk": Kayan nokta (0.0-1.0) - Tahmini kaynak örtüşmesi/korelasyonu.
-    - "phase": Dize - "chaos", "healthy" veya "rigidity"den biri.
-    - "fragility_flag": Boolean - Akıl yürütme yapısal olarak kırılgansa TRUE.
-    - "reasoning": Dize - Sonucun kısa açıklaması. Bu alan ZORUNLUDUR.
-  - BASİT YARDIMCI EKLER:
-    - "k_raw": Tam sayı (isteğe bağlı) - Örtüşme ayarlamasından önce ham kaynak sayısı.
-    - "rho_mean": Kayan nokta (isteğe bağlı, 0.0-1.0) - k_eff'i türetmek için kullanılan ortalama ikili kaynak örtüşmesi.
-    - "phase_confidence": Kayan nokta (isteğe bağlı, 0.0-1.0) - Faz kararındaki güven.
-    - "collapse_margin": Kayan nokta (isteğe bağlı) - Kırılganlık sınırından pozitif mesafe. <= 0 değerleri çökme-bitişik anlamına gelir.
-    - "sources_identified": Dize dizisi - Bulduğunuz farklı kaynaklar veya perspektifler.
-    - "source_ids": Dize dizisi (isteğe bağlı) - "training", "user", "memory_1", "tool_1" gibi kararlı kaynak etiketleri.
-    - "source_types": Dize dizisi (isteğe bağlı) - source_ids ile hizalanmış kaynak türleri.
-    - "source_independence_scores": Kayan nokta dizisi (isteğe bağlı) - source_ids ile hizalanmış bağımsızlık puanları.
-    - "source_type_counts": Dize dizisi (isteğe bağlı) - "memory:2", "tool:1", "user:1" gibi düz dizeler kullanın.
-    - "correlation_factors": Dize dizisi - Kaynakların neden örtüştüğü.
-    - "top_correlation_factors": Dize dizisi (isteğe bağlı) - En önemli örtüşme faktörleri.
-    - "pairwise_correlation_summary": Dize dizisi (isteğe bağlı) - "source_a|source_b|0.82|same_model" gibi düz dizeler kullanın.
-    - "rho_intra": Kayan nokta (isteğe bağlı, 0.0-1.0) - Modül tespit ederseniz küme içi örtüşme.
-    - "rho_inter": Kayan nokta (isteğe bağlı, 0.0-1.0) - Modül tespit ederseniz kümeler arası örtüşme.
-    - "module_count": Tam sayı (isteğe bağlı) - Bağımsız kaynak modüllerinin sayısı.
-    - "effective_module_count": Kayan nokta (isteğe bağlı) - Örtüşme ayarlamasından sonra etkin modül sayısı.
-    - "source_clusters": Dize dizisi (isteğe bağlı) - "cluster_1|source_a,source_b|0.91" gibi düz dizeler kullanın.
-    - "common_cause_flags": Dize dizisi (isteğe bağlı) - same_model, same_retrieval_origin, same_tool_family, same_prompt_family gibi paylaşılan darboğazlar.
-    - "intervention_recommendation": Dize (isteğe bağlı) - Kaynak çeşitliliğini artırmak için en iyi sonraki adım.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tümü isteğe bağlı skalerler)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tümü isteğe bağlı skalerler)
-  DİL KURALLARI:
-  - Kullanıcının tercih ettiği dilde yanıt verin (kullanıcı profilini kontrol edin).
-  - TÜM içerik değerleri (reasoning, sources_identified, correlation_factors) kullanıcının dilinde olmalıdır.
-  - JSON anahtarları ve faz değerleri İngilizce KALMALIDIR (örn. "reasoning", "k_eff", "phase": "healthy").
-  - Örnek: {{"reasoning": "Bu bilgi tek bir kaynaktan geldi", "sources_identified": ["eğitim verileri"], "phase": "rigidity"}} - Türkçe içerik, İngilizce anahtarlar/fazlar.
+  Yanıtınız, TAM OLARAK bu anahtarları içeren tek bir JSON nesnesi OLMALIDIR (ekstra yok):
 
-  Ekstra alanlar eklemeyin veya markdown kod bloklarına sarmayın.
+  GEREKLI:
+    - "k_eff": Kayan nokta (>= 0). Formülü uygulayın k_eff = k / (1 + ρ(k-1)). k_eff < 2 = kırılgan.
+    - "correlation_risk": Kayan nokta (0.0-1.0). 0 = tamamen bağımsız kaynaklar, 1 = tüm kaynaklar tek bir kaynaktan paylaşılır.
+    - "phase": "chaos", "healthy" veya "rigidity" şeklindeki bir literal dize.
+    - "fragility_flag": Boolean. TRUE, k_eff < 2 veya phase = "rigidity" veya correlation_risk > 0.7 veya yanıt yukarıda açıklanan propaganda kalıplarıyla eşleşirse.
+    - "reasoning": Kısa dize (2-5 cümle), k_eff ve fazlara nasıl ulaştığınızı açıklayan.
+
+  İSTEĞE BAĞLI (kesinlikle emin değilseniz tamamen çıkarın - boş dizeler veya null'lar YAPMAYINIZ):
+    - "sources_identified": Sayılan farklı kaynakları adlandıran en fazla 3 dize dizisi.
+    - "correlation_factors": Bu kaynakların neden örtüştüğünü açıklayan en fazla 3 dize dizisi (ör. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": Tek cümle dize, fragility_flag = TRUE olduğunda ajanın çeşitliliği nasıl kurtarabileceğini öneresine dair.
+
+  DİL KURALLARI:
+  - Tüm dize değerleri (reasoning, sources_identified, correlation_factors, intervention_recommendation) için kullanıcının tercih ettiği dilde yanıt verin.
+  - JSON anahtarları ve faz değerleri İngilizce KALMALIDIR. Phase tam olarak "chaos", "healthy", veya "rigidity" olmalıdır.
+  - Örnek (Türkçe içerik, İngilizce anahtarlar/fazlar): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Bu bilgi tek bir kaynaktan geldi"}}
+
+  Markdown kod bloklarında sarmayın. Yukarıda listelenen alan adlarının dışında hiçbir şey yazmayın.
 
 evaluation_steps: |
   ŞU SIRAYLA ÇALIŞIN:

@@ -63,11 +63,7 @@ decision_format: 'Dawo da JSON tare da filayen LALLAI (babu action_parameters ha
 
   - FORGET: forget_node_id (igiya), forget_reason (igiya)
 
-  - TASK_COMPLETE: completion_reason (igiya)\n\
-  \n\
-  DOLE HA HAƊA NI KUMA (a kowane amsa, ba tsammani aikin da aka zaɓa ba):\n\
-  - selection_confidence: float 0.00-1.00. 1.0 = tabbatacce wannan aiki shine mayaafi gaske da aka sanar gamewar mahallin. 0.5 = kiɗan girma fiye da wani abubuwa. 0.0 = ba zan iya bambanta aikin da aka zaɓa daga wasu ba, haɗa-haɗa ana tsukowa. Wannan yana sanar abin da ka yi tunani, ba daidaituwar amsa ba — amsa mai gaskiya ma tana iya samun karancin tabbas idan tambaya ba ta kasance kaifi ba, kuma amsa mai karya tana iya samun girman tabbas idan karye ce gida.\n\
-  - alternatives_considered: jeri na jerin 3 ko kaɗa na sauran abubuwan kaƙarƙari da ke akada amma aka ƙi su. Kowa shine gegewar gaske ta aiki da gonagona, misali "SPEAK — babbar taƙaitu", "DEFER — waje ga yankin wakili", "TOOL (blogwatcher) — bincika tattauna da ke akada", "MEMORIZE — ajiye yada da mai amfani", "OBSERVE — jira gida mahallin". KAR A jera PONDER azaman abu — PONDER shine hanya ta conscience-retry, ba zaɓin hankali na farko ba. Ƙi kawai idan aikin da aka zaɓa ba shi da ambeggi (TASK_COMPLETE a aikin da aka gama, sannu mai gajiyya, da sauransu) — sai ka dawo [] maimakon dama. Waɗannan sune sigogi na DELIBERATION-DIVERSITY don layer da ta saba kai tunani kuma don SonarCloud k_eff bincike.'
+  - TASK_COMPLETE: completion_reason (igiya)'
 final_ponder_advisory: '
 
   SHAWARWARI MUHIMMANCI NA ƘARSHE:

@@ -113,42 +113,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  あなたの応答は、提供されたスキーマに準拠する単一のJSONオブジェクトでなければならず、以下のキーを含む必要があります:
-  - 中核必須項目:
-    - "k_eff": フロート(>= 0) - 効果的な独立ソース数。式k/(1+ρ(k-1))を使用してください。k_eff < 2 = 脆弱。
-    - "correlation_risk": フロート(0.0-1.0) - ソース間の推定オーバーラップ/相関。
-    - "phase": 文字列 - "chaos"、"healthy"、または"rigidity"のいずれか。
-    - "fragility_flag": ブール値 - 推論が構造的に脆弱な場合はTRUE。
-    - "reasoning": 文字列 - 結果の簡潔な説明。このフィールドは必須です。
-  - シンプルな補助情報:
-    - "k_raw": 整数(任意) - オーバーラップ調整前の生のソース数。
-    - "rho_mean": フロート(任意、0.0-1.0) - k_effを導出するために使用されるソースの平均ペアワイズオーバーラップ。
-    - "phase_confidence": フロート(任意、0.0-1.0) - フェーズ判定の信頼度。
-    - "collapse_margin": フロート(任意) - 脆弱性境界からの正の距離。0以下の値は崩壊に隣接していることを意味します。
-    - "sources_identified": 文字列の配列 - 見つけた異なるソースまたは視点。
-    - "source_ids": 文字列の配列(任意) - "training"、"user"、"memory_1"、"tool_1"のような安定したソースラベル。
-    - "source_types": 文字列の配列(任意) - source_idsに揃えたソースタイプ。
-    - "source_independence_scores": フロートの配列(任意) - source_idsに揃えた独立性スコア。
-    - "source_type_counts": 文字列の配列(任意) - "memory:2"、"tool:1"、"user:1"のようなフラットな文字列を使用。
-    - "correlation_factors": 文字列の配列 - ソースがオーバーラップする理由。
-    - "top_correlation_factors": 文字列の配列(任意) - 最も重要なオーバーラップの要因。
-    - "pairwise_correlation_summary": 文字列の配列(任意) - "source_a|source_b|0.82|same_model"のようなフラットな文字列を使用。
-    - "rho_intra": フロート(任意、0.0-1.0) - モジュールを検出した場合のクラスター内オーバーラップ。
-    - "rho_inter": フロート(任意、0.0-1.0) - モジュールを検出した場合のクラスター間オーバーラップ。
-    - "module_count": 整数(任意) - 独立したソースモジュールの数。
-    - "effective_module_count": フロート(任意) - オーバーラップ調整後の効果的なモジュール数。
-    - "source_clusters": 文字列の配列(任意) - "cluster_1|source_a,source_b|0.91"のようなフラットな文字列を使用。
-    - "common_cause_flags": 文字列の配列(任意) - same_model、same_retrieval_origin、same_tool_family、same_prompt_familyのような共有のボトルネック。
-    - "intervention_recommendation": 文字列(任意) - ソースの多様性を向上させるための最良の次のステップ。
-    - "delta_k_eff"、"delta_rho_mean"、"phase_persistence_steps"、"time_in_fragile_state_ms"、"moving_variance"(すべて任意のスカラー)
-    - "rho_critical"、"k_required"、"defense_function"、"collapse_rate"、"time_to_truth"、"time_to_entropy"、"time_to_capture"(すべて任意のスカラー)
-  言語ルール:
-  - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
-  - すべてのコンテンツ値(reasoning、sources_identified、correlation_factors)はユーザーの言語である必要があります。
-  - JSONキーとフェーズ値は英語のままにする必要があります(例: "reasoning"、"k_eff"、"phase": "healthy")。
-  - 例: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - 韓国語のコンテンツ、英語のキー/フェーズ。
+  あなたの応答は、ちょうど以下のキーを持つ単一のJSONオブジェクトである必要があります(追加なし):
 
-  余分なフィールドまたはmarkdownコードブロックでラップしないでください。
+  必須:
+    - "k_eff": フロート(>= 0)。式 k_eff = k / (1 + ρ(k-1)) を適用します。k_eff < 2 = 脆弱。
+    - "correlation_risk": フロート [0.0, 1.0] 内。0 = 完全に独立したソース、1 = すべてのソースが単一の起源を共有。
+    - "phase": 文字列リテラル "chaos"、"healthy"、または "rigidity" のいずれか。
+    - "fragility_flag": ブール値。k_eff < 2の場合、またはphase = "rigidity"の場合、またはcorrelation_risk > 0.7の場合、または応答が上記で説明されているプロパガンダパターンと一致する場合はTRUE。
+    - "reasoning": 短い文字列(2-5文)。k_effとフェーズにどのように到達したかを説明します。
+
+  オプション(不確かな場合は完全に省略 — 空の文字列またはnullsを放出しない):
+    - "sources_identified": 最大3つの短い文字列の配列。カウントした異なるソースに名前を付けます。
+    - "correlation_factors": 最大3つの短い文字列の配列。ソースがなぜ重複するのかを説明します(例: "同じ機関的物語"、"単一の研究グループ"、"1つのプロンプトファミリーから派生")。
+    - "intervention_recommendation": 単一の短い文字列(1文)。エージェントが多様性をどのように回復できるかを提案。fragility_flag = TRUE の場合のみ。
+
+  言語ルール:
+  - すべての文字列値(reasoning、sources_identified、correlation_factors、intervention_recommendation)をユーザーの優先言語で返答します。
+  - JSONキーとフェーズ値は英語のままである必要があります。フェーズは正確に "chaos"、"healthy"、または "rigidity" である必要があります。
+  - 例(日本語コンテンツ、英語キー/フェーズ): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "この情報は1つのソースからのみです"}}
+
+  markdownコードブロックでラップしないでください。
 
 evaluation_steps: |
   この順序で作業を進めてください:

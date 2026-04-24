@@ -512,14 +512,35 @@ class TestIDMAResultSchema:
         assert result.sources_identified == []
         assert result.correlation_factors == []
 
-    def test_idma_result_forbids_extra_fields(self):
-        """Test IDMAResult forbids extra fields."""
+    def test_idma_result_tolerates_extra_fields(self):
+        """IDMAResult uses extra='ignore' so legacy LLM outputs don't break.
+
+        The schema was trimmed from 43 → 8 fields because the LLM kept
+        returning malformed JSON trying to fill the full old shape. IDMA is
+        informational (not a safety gate — see EpistemicHumilityResult which
+        IS strict), so extras are silently dropped. The five required fields
+        still validate strictly; if any of them is missing the LLM call
+        raises InstructorRetryException and the DMA retry logic takes over.
+        """
+        # Extras are silently dropped — this must NOT raise.
+        result = IDMAResult(
+            k_eff=2.0,
+            correlation_risk=0.3,
+            phase="healthy",
+            fragility_flag=False,
+            reasoning="test",
+            rho_mean=0.4,  # v1 field, no longer declared; accepted and dropped
+            source_type_counts=["memory:2"],  # v1 list field, same
+            completely_unknown_field="x",  # never existed; same
+        )
+        assert result.k_eff == 2.0
+        assert not hasattr(result, "rho_mean")
+        # Missing REQUIRED field — must still raise (safety gate on inputs).
         with pytest.raises(ValueError):
             IDMAResult(
                 k_eff=2.0,
                 correlation_risk=0.3,
                 phase="healthy",
                 fragility_flag=False,
-                reasoning="test",
-                extra_field="not_allowed",  # This should fail
+                # reasoning intentionally omitted
             )

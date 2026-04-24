@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  پاسخ شما باید یک شیء JSON واحد باشد که با طرح‌واره ارائه‌شده مطابقت داشته باشد، با کلیدهای زیر:
-  - اصلی و اجباری:
-    - "k_eff": عدد اعشاری (>= 0) - تعداد منابع مستقل مؤثر. از فرمول k/(1+ρ(k-1)) استفاده کنید. k_eff < 2 = شکننده.
-    - "correlation_risk": عدد اعشاری (0.0-1.0) - میزان تخمینی همپوشانی/همبستگی منابع.
-    - "phase": رشته - یکی از "chaos"، "healthy"، یا "rigidity".
-    - "fragility_flag": بولی - TRUE اگر استدلال از نظر ساختاری شکننده باشد.
-    - "reasoning": رشته - توضیح کوتاهی از نتیجه. این فیلد الزامی است.
-  - افزودنی‌های ساده و مفید:
-    - "k_raw": عدد صحیح (اختیاری) - شمارش خام منابع پیش از تعدیل همپوشانی.
-    - "rho_mean": عدد اعشاری (اختیاری، 0.0-1.0) - میانگین همپوشانی جفتی منابع که برای استخراج k_eff استفاده شده است.
-    - "phase_confidence": عدد اعشاری (اختیاری، 0.0-1.0) - میزان اطمینان در تعیین فاز.
-    - "collapse_margin": عدد اعشاری (اختیاری) - فاصله مثبت از مرز شکنندگی. مقادیر <= 0 به معنای نزدیک‌بودن به فروپاشی است.
-    - "sources_identified": آرایه‌ای از رشته‌ها - منابع یا دیدگاه‌های متمایزی که یافته‌اید.
-    - "source_ids": آرایه‌ای از رشته‌ها (اختیاری) - برچسب‌های پایدار منبع مانند "training"، "user"، "memory_1"، "tool_1".
-    - "source_types": آرایه‌ای از رشته‌ها (اختیاری) - انواع منابع هم‌تراز با source_ids.
-    - "source_independence_scores": آرایه‌ای از اعداد اعشاری (اختیاری) - امتیازات استقلال هم‌تراز با source_ids.
-    - "source_type_counts": آرایه‌ای از رشته‌ها (اختیاری) - از رشته‌های ساده مانند "memory:2"، "tool:1"، "user:1" استفاده کنید.
-    - "correlation_factors": آرایه‌ای از رشته‌ها - دلایل همپوشانی منابع.
-    - "top_correlation_factors": آرایه‌ای از رشته‌ها (اختیاری) - مهم‌ترین محرک‌های همپوشانی.
-    - "pairwise_correlation_summary": آرایه‌ای از رشته‌ها (اختیاری) - از رشته‌های ساده مانند "source_a|source_b|0.82|same_model" استفاده کنید.
-    - "rho_intra": عدد اعشاری (اختیاری، 0.0-1.0) - همپوشانی درون‌خوشه‌ای در صورت تشخیص ماژول‌ها.
-    - "rho_inter": عدد اعشاری (اختیاری، 0.0-1.0) - همپوشانی بین‌خوشه‌ای در صورت تشخیص ماژول‌ها.
-    - "module_count": عدد صحیح (اختیاری) - تعداد ماژول‌های منبع مستقل.
-    - "effective_module_count": عدد اعشاری (اختیاری) - تعداد ماژول مؤثر پس از تعدیل همپوشانی.
-    - "source_clusters": آرایه‌ای از رشته‌ها (اختیاری) - از رشته‌های ساده مانند "cluster_1|source_a,source_b|0.91" استفاده کنید.
-    - "common_cause_flags": آرایه‌ای از رشته‌ها (اختیاری) - گلوگاه‌های مشترک مانند same_model، same_retrieval_origin، same_tool_family، same_prompt_family.
-    - "intervention_recommendation": رشته (اختیاری) - بهترین گام بعدی برای بهبود تنوع منابع.
-    - "delta_k_eff"، "delta_rho_mean"، "phase_persistence_steps"، "time_in_fragile_state_ms"، "moving_variance" (همه اسکالرهای اختیاری)
-    - "rho_critical"، "k_required"، "defense_function"، "collapse_rate"، "time_to_truth"، "time_to_entropy"، "time_to_capture" (همه اسکالرهای اختیاری)
-  قواعد زبانی:
-  - به زبان ترجیحی کاربر پاسخ دهید (پروفایل کاربر را بررسی کنید).
-  - همه مقادیر محتوایی (reasoning، sources_identified، correlation_factors) باید به زبان کاربر باشند.
-  - کلیدهای JSON و مقادیر فاز باید به انگلیسی باقی بمانند (مثلاً "reasoning"، "k_eff"، "phase": "healthy").
-  - مثال: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - محتوای کره‌ای، کلیدها/فازهای انگلیسی.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  فیلدهای اضافی اضافه نکنید یا در بلوک‌های کد markdown قرار ندهید.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   به این ترتیب کار کنید:

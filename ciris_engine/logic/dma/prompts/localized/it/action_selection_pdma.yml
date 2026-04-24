@@ -12,11 +12,7 @@ decision_format: "Restituisci JSON con campi PIATTI (nessun action_parameters ni
   - MEMORIZE: memorize_node_type (string), memorize_content (string), memorize_scope (string: local|identity|environment|community)\n\
   - RECALL: recall_query (string), recall_node_type (string, opzionale), recall_scope (string, opzionale), recall_limit (intero, opzionale)\n\
   - FORGET: forget_node_id (string), forget_reason (string)\n\
-  - TASK_COMPLETE: completion_reason (string)\n\
-  \n\
-  INCLUDI SEMPRE ANCHE (su ogni risposta, indipendentemente dall'azione scelta):\n\
-  - selection_confidence: float 0.00-1.00. 1.0 = certo che questa azione è la migliore risposta disponibile dato il contesto. 0.5 = marginalmente migliore dell'alternativa più vicina. 0.0 = non puoi distinguere l'azione scelta dalle altre, essenzialmente indovinando. Ciò segnala la tua certezza DELIBERATIVA, non la correttezza della tua risposta — una risposta fattuali fluente può comunque avere bassa fiducia se la domanda è ambigua, e una risposta cauta può avere alta fiducia se la cautela stessa è la mossa giusta.\n\
-  - alternatives_considered: elenco di fino a 3 stringhe che etichettano le altre azioni legittime che hai considerato ma rifiutato. Ogni elemento è una breve frase che nomina l'azione e il suo angolo, ad es. 'SPEAK — riassunto fattuale più breve', 'DEFER — al di fuori del dominio dell'agente', 'TOOL (blogwatcher) — cercare la discussione esistente', 'MEMORIZE — archiviare la preferenza indicata dall'utente', 'OBSERVE — attendere ulteriore contesto'. NON ELENCARE PONDER come alternativa — PONDER è il meccanismo di ritentativo della coscienza, non una scelta di deliberazione al primo passaggio. Omettere solo se l'azione scelta è univoca (TASK_COMPLETE su un'attività terminata, saluto banale, ecc.) — in quel caso restituisci [] piuttosto che null. Questi sono segnali DELIBERATION-DIVERSITY per lo strato della coscienza e per l'analisi CIRISLens k_eff."
+  - TASK_COMPLETE: completion_reason (string)"
 closing_reminder: "Ricorda che i principi CIRIS prevalgono sulla preferenza personale.\n\n\
   CORRISPONDENZA LINGUISTICA: Quando componi speak_content, rispondi nella stessa lingua in cui l'utente\
   \ ha scritto. Se l'utente scrive in amharico, rispondi in amharico. Se scrive\

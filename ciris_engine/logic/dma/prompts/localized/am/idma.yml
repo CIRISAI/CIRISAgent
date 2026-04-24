@@ -113,42 +113,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  ምላሽዎ ከተሰጠው ስኪማ ጋር የሚዛመድ አንድ JSON ነገር መሆን አለበት፣ የሚከተሉት ቁልፎች ይኑሩት፦
-  - CORE REQUIRED (ግዴታዊ ዋና)፦
-    - "k_eff": Float (>= 0) - የተመጣጣኝ ነጻ ምንጭ ቆጠራ። ቀመሩን k/(1+ρ(k-1)) ይጠቀሙ። k_eff < 2 = ደካማ።
-    - "correlation_risk": Float (0.0-1.0) - የተገመተ የምንጮች መደራረብ/ተዛመድ።
-    - "phase": String - ከ"chaos"፣ "healthy"፣ ወይም "rigidity" አንዱ።
-    - "fragility_flag": Boolean - ምክንያቱ በመዋቅር ደካማ ከሆነ TRUE።
-    - "reasoning": String - የውጤቱ አጭር ማብራሪያ። ይህ መስክ ግዴታዊ ነው።
-  - SIMPLE HELPFUL EXTRAS (ቀላል ረዳት ተጨማሪዎች)፦
-    - "k_raw": Integer (አማራጭ) - ከመደራረብ ማስተካከያ በፊት ያለው ጥሬ የምንጭ ቆጠራ።
-    - "rho_mean": Float (አማራጭ፣ 0.0-1.0) - k_eff ለማግኘት የተጠቀመበት አማካይ የጥንድ ምንጭ መደራረብ።
-    - "phase_confidence": Float (አማራጭ፣ 0.0-1.0) - በphase ውሳኔ ላይ ያለ እምነት።
-    - "collapse_margin": Float (አማራጭ) - ከደካማነት ድንበር ያለው አዎንታዊ ርቀት። <= 0 እሴቶች ከውድቀት አጠገብ መሆናቸውን ያመለክታሉ።
-    - "sources_identified": Array of strings - ያገኙዋቸው የተለያዩ ምንጮች ወይም አመለካከቶች።
-    - "source_ids": Array of strings (አማራጭ) - እንደ "training"፣ "user"፣ "memory_1"፣ "tool_1" ያሉ ቋሚ የምንጭ መለያዎች።
-    - "source_types": Array of strings (አማራጭ) - ከ source_ids ጋር የተስተካከሉ የምንጭ ዓይነቶች።
-    - "source_independence_scores": Array of floats (አማራጭ) - ከsource_ids ጋር የተስተካከሉ የነጻነት ነጥቦች።
-    - "source_type_counts": Array of strings (አማራጭ) - እንደ "memory:2"፣ "tool:1"፣ "user:1" ያሉ ጠፍጣፋ ሕብረቁምፊዎችን ይጠቀሙ።
-    - "correlation_factors": Array of strings - ምንጮቹ ለምን እንደሚደራረቡ።
-    - "top_correlation_factors": Array of strings (አማራጭ) - በጣም አስፈላጊ የመደራረብ መንስኤዎች።
-    - "pairwise_correlation_summary": Array of strings (አማራጭ) - እንደ "source_a|source_b|0.82|same_model" ያሉ ጠፍጣፋ ሕብረቁምፊዎችን ይጠቀሙ።
-    - "rho_intra": Float (አማራጭ፣ 0.0-1.0) - ሞጁሎች ከለዩ በክላስተር-ውስጥ መደራረብ።
-    - "rho_inter": Float (አማራጭ፣ 0.0-1.0) - ሞጁሎች ከለዩ በክላስተሮች መካከል መደራረብ።
-    - "module_count": Integer (አማራጭ) - የነጻ የምንጭ ሞጁሎች ብዛት።
-    - "effective_module_count": Float (አማራጭ) - ከመደራረብ ማስተካከያ በኋላ ውጤታማ የሞጁል ቆጠራ።
-    - "source_clusters": Array of strings (አማራጭ) - እንደ "cluster_1|source_a,source_b|0.91" ያሉ ጠፍጣፋ ሕብረቁምፊዎችን ይጠቀሙ።
-    - "common_cause_flags": Array of strings (አማራጭ) - እንደ same_model፣ same_retrieval_origin፣ same_tool_family፣ same_prompt_family ያሉ የጋራ ጉድጓዶች።
-    - "intervention_recommendation": String (አማራጭ) - የምንጭ ልዩነትን ለማሻሻል ምርጥ ቀጣይ እርምጃ።
-    - "delta_k_eff"፣ "delta_rho_mean"፣ "phase_persistence_steps"፣ "time_in_fragile_state_ms"፣ "moving_variance" (ሁሉም አማራጭ ስካላርስ)
-    - "rho_critical"፣ "k_required"፣ "defense_function"፣ "collapse_rate"፣ "time_to_truth"፣ "time_to_entropy"፣ "time_to_capture" (ሁሉም አማራጭ ስካላርስ)
-  LANGUAGE RULES (የቋንቋ ደንቦች)፦
-  - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
-  - ሁሉም የይዘት እሴቶች (reasoning፣ sources_identified፣ correlation_factors) በተጠቃሚው ቋንቋ መሆን አለባቸው።
-  - የJSON ቁልፎች እና የphase እሴቶች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "reasoning"፣ "k_eff"፣ "phase": "healthy")።
-  - ምሳሌ፦ {{"reasoning": "ይህ መረጃ ከአንድ ምንጭ ብቻ የመጣ ነው"፣ "sources_identified": ["ስልጠና ውሂብ"]፣ "phase": "rigidity"}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች/phases።
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  ተጨማሪ መስኮችን አያካትቱ ወይም በmarkdown code blocks ውስጥ አይጠቀሙም።
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   በዚህ ቅደም ተከተል ይሥሩ፦

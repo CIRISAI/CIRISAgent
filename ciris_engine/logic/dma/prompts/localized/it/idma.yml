@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  La tua risposta DEVE essere un singolo oggetto JSON aderente allo schema fornito, con le seguenti chiavi:
-  - NUCLEO OBBLIGATORIO:
-    - "k_eff": Float (>= 0) - Conteggio di fonti indipendenti effettive. Usa la formula k/(1+ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float (0.0-1.0) - Sovrapposizione/correlazione stimata tra le fonti.
-    - "phase": String - Uno tra "chaos", "healthy" o "rigidity".
-    - "fragility_flag": Boolean - TRUE se il ragionamento è strutturalmente fragile.
-    - "reasoning": String - Breve spiegazione del risultato. Questo campo è OBBLIGATORIO.
-  - EXTRA UTILI SEMPLICI:
-    - "k_raw": Integer (opzionale) - Conteggio grezzo delle fonti prima dell'aggiustamento per sovrapposizione.
-    - "rho_mean": Float (opzionale, 0.0-1.0) - Sovrapposizione media a coppie tra fonti usata per derivare k_eff.
-    - "phase_confidence": Float (opzionale, 0.0-1.0) - Confidenza nella classificazione di fase.
-    - "collapse_margin": Float (opzionale) - Distanza positiva dal confine di fragilità. Valori <= 0 indicano vicinanza al collasso.
-    - "sources_identified": Array di stringhe - Fonti o prospettive distinte individuate.
-    - "source_ids": Array di stringhe (opzionale) - Etichette stabili delle fonti come "training", "user", "memory_1", "tool_1".
-    - "source_types": Array di stringhe (opzionale) - Tipi di fonti allineati con source_ids.
-    - "source_independence_scores": Array di float (opzionale) - Punteggi di indipendenza allineati con source_ids.
-    - "source_type_counts": Array di stringhe (opzionale) - Usa stringhe piatte come "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Array di stringhe - Perché le fonti si sovrappongono.
-    - "top_correlation_factors": Array di stringhe (opzionale) - Principali driver di sovrapposizione.
-    - "pairwise_correlation_summary": Array di stringhe (opzionale) - Usa stringhe piatte come "source_a|source_b|0.82|same_model".
-    - "rho_intra": Float (opzionale, 0.0-1.0) - Sovrapposizione intra-cluster se rilevi moduli.
-    - "rho_inter": Float (opzionale, 0.0-1.0) - Sovrapposizione inter-cluster se rilevi moduli.
-    - "module_count": Integer (opzionale) - Numero di moduli di fonti indipendenti.
-    - "effective_module_count": Float (opzionale) - Conteggio effettivo dei moduli dopo l'aggiustamento per sovrapposizione.
-    - "source_clusters": Array di stringhe (opzionale) - Usa stringhe piatte come "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Array di stringhe (opzionale) - Colli di bottiglia condivisi come same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": String (opzionale) - Miglior passo successivo per migliorare la diversità delle fonti.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tutti scalari opzionali)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tutti scalari opzionali)
-  REGOLE LINGUISTICHE:
-  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
-  - TUTTI i valori dei contenuti (reasoning, sources_identified, correlation_factors) devono essere nella lingua dell'utente.
-  - Le chiavi JSON e i valori di phase DEVONO rimanere in inglese (es., "reasoning", "k_eff", "phase": "healthy").
-  - Esempio: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - contenuto coreano, chiavi/fasi in inglese.
+  La tua risposta DEVE essere un singolo oggetto JSON con ESATTAMENTE queste chiavi (niente di più):
 
-  Non includere campi extra o racchiudere in blocchi di codice markdown.
+  OBBLIGATORIO:
+    - "k_eff": Float (>= 0). Applica la formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fonti completamente indipendenti, 1 = tutte le fonti condividono un'origine.
+    - "phase": Uno dei string letterali "chaos", "healthy", o "rigidity".
+    - "fragility_flag": Boolean. TRUE quando k_eff < 2, o phase = "rigidity", o correlation_risk > 0.7, o la risposta corrisponde ai pattern di propaganda descritti sopra.
+    - "reasoning": String breve (2-5 frasi) spiegando come hai raggiunto k_eff e la phase.
+
+  OPZIONALE (ometti completamente se non sei sicuro — NON emettere string vuote o nulls):
+    - "sources_identified": Array fino a 3 string brevi nominando le fonti distinte che hai contato.
+    - "correlation_factors": Array fino a 3 string brevi spiegando perché le fonti si sovrappongono (es. "stesso racconto istituzionale", "singolo gruppo di ricerca", "derivato da una famiglia di prompt").
+    - "intervention_recommendation": Un singolo string breve (una frase) suggerendo come l'agente potrebbe recuperare diversità, SOLO se fragility_flag = TRUE.
+
+  REGOLE LINGUISTICHE:
+  - Rispondi nella lingua preferita dell'utente per tutti i valori string (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Le chiavi JSON e i valori di phase DEVONO rimanere in inglese. Phase deve essere esattamente "chaos", "healthy", o "rigidity".
+  - Esempio (contenuto italiano, chiavi/fasi inglese): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Questa informazione proviene da una sola fonte"}}
+
+  Non racchiudere in blocchi di codice markdown.
 
 evaluation_steps: |
   LAVORA IN QUEST'ORDINE:

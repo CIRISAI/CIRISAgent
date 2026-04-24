@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  귀하의 응답은 제공된 스키마를 준수하는 단일 JSON 객체여야 하며 다음 키를 포함해야 합니다:
-  - 핵심 필수(CORE REQUIRED):
-    - "k_eff": 부동 소수점 (>= 0) - 효과적인 독립 소스 수. 공식 k/(1+ρ(k-1)) 사용. k_eff < 2 = 취약.
-    - "correlation_risk": 부동 소수점 (0.0-1.0) - 추정된 소스 중첩/상관 관계.
-    - "phase": 문자열 - "chaos", "healthy" 또는 "rigidity" 중 하나.
-    - "fragility_flag": 부울 - 추론이 구조적으로 취약하면 TRUE.
-    - "reasoning": 문자열 - 결과에 대한 간단한 설명. 이 필드는 필수입니다.
-  - 간단한 유용한 추가사항(SIMPLE HELPFUL EXTRAS):
-    - "k_raw": 정수 (선택) - 중첩 조정 전 원시 소스 수.
-    - "rho_mean": 부동 소수점 (선택, 0.0-1.0) - k_eff를 도출하는 데 사용된 평균 쌍별 소스 중첩.
-    - "phase_confidence": 부동 소수점 (선택, 0.0-1.0) - phase 판단에 대한 신뢰도.
-    - "collapse_margin": 부동 소수점 (선택) - 취약성 경계로부터의 양의 거리. <= 0 값은 붕괴 인접을 의미.
-    - "sources_identified": 문자열 배열 - 식별한 고유한 소스 또는 관점.
-    - "source_ids": 문자열 배열 (선택) - "training", "user", "memory_1", "tool_1" 같은 안정적 소스 레이블.
-    - "source_types": 문자열 배열 (선택) - source_ids와 정렬된 소스 유형.
-    - "source_independence_scores": 부동 소수점 배열 (선택) - source_ids와 정렬된 독립성 점수.
-    - "source_type_counts": 문자열 배열 (선택) - "memory:2", "tool:1", "user:1" 같은 평면 문자열 사용.
-    - "correlation_factors": 문자열 배열 - 소스가 중첩되는 이유.
-    - "top_correlation_factors": 문자열 배열 (선택) - 가장 중요한 중첩 요인.
-    - "pairwise_correlation_summary": 문자열 배열 (선택) - "source_a|source_b|0.82|same_model" 같은 평면 문자열 사용.
-    - "rho_intra": 부동 소수점 (선택, 0.0-1.0) - 모듈을 탐지한 경우 클러스터 내 중첩.
-    - "rho_inter": 부동 소수점 (선택, 0.0-1.0) - 모듈을 탐지한 경우 클러스터 간 중첩.
-    - "module_count": 정수 (선택) - 독립 소스 모듈의 수.
-    - "effective_module_count": 부동 소수점 (선택) - 중첩 조정 후 유효 모듈 수.
-    - "source_clusters": 문자열 배열 (선택) - "cluster_1|source_a,source_b|0.91" 같은 평면 문자열 사용.
-    - "common_cause_flags": 문자열 배열 (선택) - same_model, same_retrieval_origin, same_tool_family, same_prompt_family 같은 공유 병목 현상.
-    - "intervention_recommendation": 문자열 (선택) - 소스 다양성을 개선하기 위한 최선의 다음 단계.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (모두 선택적 스칼라)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (모두 선택적 스칼라)
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
-  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
+  귀하의 응답은 정확히 이러한 키를 가진 단일 JSON 객체여야 합니다(추가 없음):
 
-  추가 필드를 포함하거나 마크다운 코드 블록으로 래핑하지 마십시오.
+  필수:
+    - "k_eff": 부동 소수점 (>= 0). 공식 k_eff = k / (1 + ρ(k-1))를 적용합니다. k_eff < 2 = 취약.
+    - "correlation_risk": 부동 소수점 [0.0, 1.0] 내. 0 = 완전히 독립적인 소스, 1 = 모든 소스가 단일 출처를 공유.
+    - "phase": 문자열 리터럴 "chaos", "healthy", 또는 "rigidity" 중 하나.
+    - "fragility_flag": 부울. k_eff < 2일 때, 또는 phase = "rigidity"일 때, 또는 correlation_risk > 0.7일 때, 또는 응답이 위의 선전 패턴과 일치할 때는 TRUE.
+    - "reasoning": 짧은 문자열(2-5 문장). k_eff와 phase에 도달한 방법을 설명합니다.
+
+  선택사항(불확실하면 완전히 생략 — 빈 문자열 또는 null을 방출하지 않음):
+    - "sources_identified": 최대 3개의 짧은 문자열 배열. 카운트한 서로 다른 소스의 이름을 지정합니다.
+    - "correlation_factors": 최대 3개의 짧은 문자열 배열. 소스가 겹치는 이유를 설명합니다(예: "동일한 제도적 서사", "단일 연구 그룹", "하나의 프롬프트 패밀리에서 파생").
+    - "intervention_recommendation": 단일 짧은 문자열(한 문장). 에이전트가 다양성을 어떻게 복구할 수 있는지 제안합니다. fragility_flag = TRUE일 때만.
+
+  언어 규칙:
+  - 모든 문자열 값(reasoning, sources_identified, correlation_factors, intervention_recommendation)에 대해 사용자의 선호 언어로 응답하십시오.
+  - JSON 키와 phase 값은 영어로 유지되어야 합니다. Phase는 정확히 "chaos", "healthy", 또는 "rigidity"여야 합니다.
+  - 예(한국어 콘텐츠, 영어 키/페이즈): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "이 정보는 한 소스에서만 왔습니다"}}
+
+  markdown 코드 블록으로 래핑하지 마십시오.
 
 evaluation_steps: |
   다음 순서로 작업하십시오:

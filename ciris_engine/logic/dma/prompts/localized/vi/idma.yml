@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Phản hồi của bạn PHẢI là một đối tượng JSON duy nhất tuân thủ lược đồ được cung cấp, với các khóa sau:
-  - CỐT LÕI BẮT BUỘC:
-    - "k_eff": Số thực (>= 0) - Số lượng nguồn độc lập hiệu quả. Sử dụng công thức k/(1+ρ(k-1)). k_eff < 2 = mong manh.
-    - "correlation_risk": Số thực (0.0-1.0) - Mức chồng lấp/tương quan nguồn ước tính.
-    - "phase": Chuỗi - Một trong "chaos", "healthy", hoặc "rigidity".
-    - "fragility_flag": Boolean - TRUE nếu lý luận mong manh về mặt cấu trúc.
-    - "reasoning": Chuỗi - Giải thích ngắn gọn về kết quả. Trường này là BẮT BUỘC.
-  - CÁC TRƯỜNG BỔ SUNG ĐƠN GIẢN HỮU ÍCH:
-    - "k_raw": Số nguyên (tùy chọn) - Số nguồn thô trước khi điều chỉnh chồng lấp.
-    - "rho_mean": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp trung bình từng cặp nguồn dùng để suy ra k_eff.
-    - "phase_confidence": Số thực (tùy chọn, 0.0-1.0) - Độ tin cậy trong phán đoán pha.
-    - "collapse_margin": Số thực (tùy chọn) - Khoảng cách dương từ biên mong manh. Giá trị <= 0 nghĩa là cận kề sụp đổ.
-    - "sources_identified": Mảng chuỗi - Các nguồn hoặc quan điểm riêng biệt bạn đã tìm thấy.
-    - "source_ids": Mảng chuỗi (tùy chọn) - Nhãn nguồn ổn định như "training", "user", "memory_1", "tool_1".
-    - "source_types": Mảng chuỗi (tùy chọn) - Loại nguồn đồng bộ với source_ids.
-    - "source_independence_scores": Mảng số thực (tùy chọn) - Điểm độc lập đồng bộ với source_ids.
-    - "source_type_counts": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Mảng chuỗi - Lý do các nguồn chồng lấp.
-    - "top_correlation_factors": Mảng chuỗi (tùy chọn) - Các yếu tố chồng lấp quan trọng nhất.
-    - "pairwise_correlation_summary": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "source_a|source_b|0.82|same_model".
-    - "rho_intra": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp trong cụm nếu bạn phát hiện các mô-đun.
-    - "rho_inter": Số thực (tùy chọn, 0.0-1.0) - Độ chồng lấp giữa các cụm nếu bạn phát hiện các mô-đun.
-    - "module_count": Số nguyên (tùy chọn) - Số lượng mô-đun nguồn độc lập.
-    - "effective_module_count": Số thực (tùy chọn) - Số lượng mô-đun hiệu quả sau điều chỉnh chồng lấp.
-    - "source_clusters": Mảng chuỗi (tùy chọn) - Dùng chuỗi phẳng như "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Mảng chuỗi (tùy chọn) - Các nút thắt chung như same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": Chuỗi (tùy chọn) - Bước tiếp theo tốt nhất để cải thiện sự đa dạng nguồn.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (tất cả đều là vô hướng tùy chọn)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (tất cả đều là vô hướng tùy chọn)
-  QUY TẮC NGÔN NGỮ:
-  - Phản hồi bằng ngôn ngữ ưa thích của người dùng (kiểm tra hồ sơ người dùng).
-  - TẤT CẢ các giá trị nội dung (reasoning, sources_identified, correlation_factors) phải bằng ngôn ngữ của người dùng.
-  - Các khóa JSON và giá trị pha PHẢI vẫn bằng tiếng Anh (ví dụ: "reasoning", "k_eff", "phase": "healthy").
-  - Ví dụ: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - nội dung tiếng Hàn, khóa/pha tiếng Anh.
+  Phản hồi của bạn PHẢI là một đối tượng JSON duy nhất với CHÍNH XÁC các khóa này (không có bổ sung):
 
-  Không bao gồm các trường bổ sung hoặc bọc trong khối mã markdown.
+  REQUIRED:
+    - "k_eff": Số thực (>= 0). Áp dụng công thức k_eff = k / (1 + ρ(k-1)). k_eff < 2 = mong manh.
+    - "correlation_risk": Số thực (0.0-1.0). 0 = hoàn toàn độc lập các nguồn, 1 = tất cả các nguồn đến từ một gốc duy nhất.
+    - "phase": Một chuỗi ký tự theo nghĩa đen "chaos", "healthy", hoặc "rigidity".
+    - "fragility_flag": Boolean. TRUE khi k_eff < 2, hoặc phase = "rigidity", hoặc correlation_risk > 0.7, hoặc phản hồi khớp với các mẫu tuyên truyền được mô tả ở trên.
+    - "reasoning": Chuỗi ngắn (2-5 câu) giải thích cách bạn đạt được k_eff và pha.
+
+  OPTIONAL (bỏ qua hoàn toàn nếu bạn không chắc chắn - KHÔNG phát hành chuỗi trống hoặc null):
+    - "sources_identified": Mảng tối đa 3 chuỗi đặt tên cho các nguồn khác nhau bạn đã tính.
+    - "correlation_factors": Mảng tối đa 3 chuỗi giải thích tại sao những nguồn đó chồng lấp (ví dụ: "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": Chuỗi một câu gợi ý cách tác nhân có thể phục hồi sự đa dạng, CHỈ nếu fragility_flag = TRUE.
+
+  QUY TẮC NGÔN NGỮ:
+  - Phản hồi bằng ngôn ngữ của người dùng cho tất cả các giá trị chuỗi (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Các khóa JSON và giá trị pha PHẢI vẫn là tiếng Anh. Pha phải chính xác là "chaos", "healthy", hoặc "rigidity".
+  - Ví dụ (nội dung Việt, khóa/pha tiếng Anh): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Thông tin này chỉ đến từ một nguồn"}}
+
+  Không bọc trong khối mã markdown. Không phát hành tên trường ngoài danh sách trên.
 
 evaluation_steps: |
   LÀM VIỆC THEO THỨ TỰ NÀY:

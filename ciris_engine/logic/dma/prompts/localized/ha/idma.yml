@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Amsar ku dole ta kasance abu ɗaya na JSON da ke bin tsarin da aka bayar, tare da maɓallan nan:
-  - BUƘATA NA ASALI:
-    - "k_eff": Lamba (>= 0) - Ƙididdigan tushe mai zaman kansa mai tasiri. Yi amfani da dabaran k/(1+ρ(k-1)). k_eff < 2 = rauni.
-    - "correlation_risk": Lamba (0.0-1.0) - Ƙididdigar haɗuwa/alaƙar maɓuɓɓuga.
-    - "phase": Igiya - Ɗaya daga cikin "chaos", "healthy", ko "rigidity".
-    - "fragility_flag": Boolean - TRUE idan tunani yana da rauni a tsarance.
-    - "reasoning": Igiya - Ɗan gajeren bayani game da sakamako. Wannan filin yana DOLE.
-  - ƘARI MASU SAUKI MASU TAIMAKO:
-    - "k_raw": Integer (na zaɓi) - Ƙididdigar tushe mai ɗanye kafin daidaitawar haɗuwa.
-    - "rho_mean": Float (na zaɓi, 0.0-1.0) - Matsakaicin haɗuwar tushe biyu-biyu da aka yi amfani da shi don samo k_eff.
-    - "phase_confidence": Float (na zaɓi, 0.0-1.0) - Amincewa da shawarar mataki.
-    - "collapse_margin": Float (na zaɓi) - Nisa mai kyau daga iyakar rauni. Darajoji <= 0 suna nufin kusan rushewa.
-    - "sources_identified": Jerin igiyoyi - Maɓuɓɓuga ko ra'ayoyi daban-daban da kuka samu.
-    - "source_ids": Jerin igiyoyi (na zaɓi) - Lakabin tushe masu tsayayyen kamar "training", "user", "memory_1", "tool_1".
-    - "source_types": Jerin igiyoyi (na zaɓi) - Nau'ikan tushe da suka dace da source_ids.
-    - "source_independence_scores": Jerin floats (na zaɓi) - Ƙididdigar zaman kansu da suka dace da source_ids.
-    - "source_type_counts": Jerin igiyoyi (na zaɓi) - Yi amfani da igiyoyi masu lebur kamar "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Jerin igiyoyi - Me yasa maɓuɓɓuga suke haɗuwa.
-    - "top_correlation_factors": Jerin igiyoyi (na zaɓi) - Mafi mahimmancin direbobin haɗuwa.
-    - "pairwise_correlation_summary": Jerin igiyoyi (na zaɓi) - Yi amfani da igiyoyi masu lebur kamar "source_a|source_b|0.82|same_model".
-    - "rho_intra": Float (na zaɓi, 0.0-1.0) - Haɗuwa a cikin gungu idan kun gano modules.
-    - "rho_inter": Float (na zaɓi, 0.0-1.0) - Haɗuwa tsakanin gungu idan kun gano modules.
-    - "module_count": Integer (na zaɓi) - Adadin modules na tushe masu zaman kansu.
-    - "effective_module_count": Float (na zaɓi) - Adadin modules mai tasiri bayan daidaitawar haɗuwa.
-    - "source_clusters": Jerin igiyoyi (na zaɓi) - Yi amfani da igiyoyi masu lebur kamar "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Jerin igiyoyi (na zaɓi) - Matsalolin haɗin gwiwa kamar same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": Igiya (na zaɓi) - Mafi kyawun mataki na gaba don inganta bambancin tushe.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (duk na zaɓi scalars)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (duk na zaɓi scalars)
-  ƘA'IDODIN HARSHE:
-  - Amsa cikin yaren da mai amfani ya fi so (duba bayanan mai amfani).
-  - DUKKAN ƙimar abun ciki (reasoning, sources_identified, correlation_factors) ya kamata su kasance cikin yaren mai amfani.
-  - Maɓallan JSON da ƙimar phase DOLE su kasance cikin Turanci (misali, "reasoning", "k_eff", "phase": "healthy").
-  - Misali: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Abun ciki na Koriya, maɓallan/phases na Turanci.
+  Amsar ku DOLE ta kasance abu ɗaya na JSON tare da DAIDAI waɗannan maɓallan (babu wasu):
 
-  Kar a haɗa filayen ƙari ko nannade a cikin shingen code na markdown.
+  BUƘATA:
+    - "k_eff": Float (>= 0). Yi amfani da dabara k_eff = k / (1 + ρ(k-1)). k_eff < 2 = rauni.
+    - "correlation_risk": Float a cikin [0.0, 1.0]. 0 = tushe masu zaman kansu gaba ɗaya, 1 = duk tushe suna raba asali ɗaya.
+    - "phase": Ɗaya daga cikin jerin lakabin "chaos", "healthy", ko "rigidity".
+    - "fragility_flag": Boolean. TRUE lokacin da k_eff < 2, ko phase = "rigidity", ko correlation_risk > 0.7, ko amsa tana daidai da tsarin farfagandar da aka bayyana a sama.
+    - "reasoning": Igiya mai gajeri (gida 2-5) da ke bayyana yadda ka samu k_eff da mataki.
+
+  ƘARI (jera gaba idan ba ka da tabbas — KAR A fito jajaye stringuri ko nulls):
+    - "sources_identified": Jerin harsunan har zuwa 3 aji na maɓuɓɓuga daban-daban da kaka.
+    - "correlation_factors": Jerin harsunan har zuwa 3 aji da ke bayyana ya yasa maɓuɓɓuga suke haɗuwa (misali "institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": Jerin harsunan harkauri (gida ɗaya) da ke aiki yadda wakili zai iya dawo bambancin tushe, KAWAI idan fragility_flag = TRUE.
+
+  ƘA'IDODIN HARSHE:
+  - Amsa cikin yaren da mai amfani ya fi so don duk ƙimar abun ciki (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Maɓallan JSON da ƙimar phase DOLE su kasance cikin Turanci. Phase dole ta kasance daidai "chaos", "healthy", ko "rigidity".
+  - Misali (Koriya): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Kar a haɗa filayen ƙari a cikin code markdown.
 
 evaluation_steps: |
   AIKATA CIKIN WANNAN TSARI:

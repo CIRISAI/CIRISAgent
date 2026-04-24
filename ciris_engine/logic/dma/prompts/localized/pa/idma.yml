@@ -114,42 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  ਤੁਹਾਡੀ ਪ੍ਰਤਿਕਿਰਿਆ ਜ਼ਰੂਰ ਦਿੱਤੇ ਸਕੀਮਾ ਦੀ ਪਾਲਣਾ ਕਰਦੀ ਇੱਕ ਇਕੱਲੀ JSON ਵਸਤੂ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ, ਹੇਠਾਂ ਦਿੱਤੀਆਂ ਕੁੰਜੀਆਂ ਨਾਲ:
-  - ਮੂਲ ਲੋੜੀਂਦੀਆਂ:
-    - "k_eff": Float (>= 0) - ਪ੍ਰਭਾਵੀ ਸੁਤੰਤਰ ਸਰੋਤ ਗਿਣਤੀ। ਫ਼ਾਰਮੂਲਾ k/(1+ρ(k-1)) ਵਰਤੋ। k_eff < 2 = ਕਮਜ਼ੋਰ।
-    - "correlation_risk": Float (0.0-1.0) - ਅੰਦਾਜ਼ਨ ਸਰੋਤ ਓਵਰਲੈਪ/ਪਰਸਪਰ-ਸਬੰਧ।
-    - "phase": String - "chaos", "healthy", ਜਾਂ "rigidity" ਵਿੱਚੋਂ ਇੱਕ।
-    - "fragility_flag": Boolean - TRUE ਜੇ ਤਰਕ ਢਾਂਚਾਗਤ ਤੌਰ 'ਤੇ ਕਮਜ਼ੋਰ ਹੈ।
-    - "reasoning": String - ਨਤੀਜੇ ਦੀ ਸੰਖੇਪ ਵਿਆਖਿਆ। ਇਹ ਖੇਤਰ ਲਾਜ਼ਮੀ ਹੈ।
-  - ਸਧਾਰਨ ਸਹਾਇਕ ਵਾਧੂ:
-    - "k_raw": Integer (ਵਿਕਲਪਿਕ) - ਓਵਰਲੈਪ ਸਮਾਯੋਜਨ ਤੋਂ ਪਹਿਲਾਂ ਕੱਚੀ ਸਰੋਤ ਗਿਣਤੀ।
-    - "rho_mean": Float (ਵਿਕਲਪਿਕ, 0.0-1.0) - k_eff ਕੱਢਣ ਲਈ ਵਰਤਿਆ ਔਸਤ ਜੋੜਾ-ਵਾਰ ਸਰੋਤ ਓਵਰਲੈਪ।
-    - "phase_confidence": Float (ਵਿਕਲਪਿਕ, 0.0-1.0) - phase ਫ਼ੈਸਲੇ ਵਿੱਚ ਭਰੋਸਾ।
-    - "collapse_margin": Float (ਵਿਕਲਪਿਕ) - ਕਮਜ਼ੋਰੀ ਦੀ ਹੱਦ ਤੋਂ ਸਕਾਰਾਤਮਕ ਦੂਰੀ। <= 0 ਮੁੱਲ ਢਹਿਣ-ਕਿਨਾਰੇ ਦਾ ਸੰਕੇਤ।
-    - "sources_identified": ਸਤਰਾਂ ਦੀ ਐਰੇ - ਤੁਹਾਡੇ ਦੁਆਰਾ ਲੱਭੇ ਵੱਖਰੇ ਸਰੋਤ ਜਾਂ ਦ੍ਰਿਸ਼ਟੀਕੋਣ।
-    - "source_ids": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - ਸਥਿਰ ਸਰੋਤ ਲੇਬਲ ਜਿਵੇਂ "training", "user", "memory_1", "tool_1"।
-    - "source_types": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - source_ids ਨਾਲ ਮੇਲ ਖਾਂਦੀਆਂ ਸਰੋਤ ਕਿਸਮਾਂ।
-    - "source_independence_scores": ਫ਼ਲੋਟਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - source_ids ਨਾਲ ਮੇਲ ਖਾਂਦੇ ਸੁਤੰਤਰਤਾ ਅੰਕ।
-    - "source_type_counts": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - "memory:2", "tool:1", "user:1" ਵਰਗੀਆਂ ਸਮਤਲ ਸਤਰਾਂ ਵਰਤੋ।
-    - "correlation_factors": ਸਤਰਾਂ ਦੀ ਐਰੇ - ਸਰੋਤ ਕਿਉਂ ਓਵਰਲੈਪ ਕਰਦੇ ਹਨ।
-    - "top_correlation_factors": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - ਸਭ ਤੋਂ ਮਹੱਤਵਪੂਰਨ ਓਵਰਲੈਪ ਚਾਲਕ।
-    - "pairwise_correlation_summary": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - "source_a|source_b|0.82|same_model" ਵਰਗੀਆਂ ਸਮਤਲ ਸਤਰਾਂ ਵਰਤੋ।
-    - "rho_intra": Float (ਵਿਕਲਪਿਕ, 0.0-1.0) - ਜੇ ਮੌਡਿਊਲ ਪਛਾਣੇ ਜਾਣ ਤਾਂ ਅੰਦਰ-ਕਲੱਸਟਰ ਓਵਰਲੈਪ।
-    - "rho_inter": Float (ਵਿਕਲਪਿਕ, 0.0-1.0) - ਜੇ ਮੌਡਿਊਲ ਪਛਾਣੇ ਜਾਣ ਤਾਂ ਕਲੱਸਟਰਾਂ ਵਿਚਕਾਰ ਓਵਰਲੈਪ।
-    - "module_count": Integer (ਵਿਕਲਪਿਕ) - ਸੁਤੰਤਰ ਸਰੋਤ ਮੌਡਿਊਲਾਂ ਦੀ ਗਿਣਤੀ।
-    - "effective_module_count": Float (ਵਿਕਲਪਿਕ) - ਓਵਰਲੈਪ ਸਮਾਯੋਜਨ ਤੋਂ ਬਾਅਦ ਪ੍ਰਭਾਵੀ ਮੌਡਿਊਲ ਗਿਣਤੀ।
-    - "source_clusters": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - "cluster_1|source_a,source_b|0.91" ਵਰਗੀਆਂ ਸਮਤਲ ਸਤਰਾਂ ਵਰਤੋ।
-    - "common_cause_flags": ਸਤਰਾਂ ਦੀ ਐਰੇ (ਵਿਕਲਪਿਕ) - ਸਾਂਝੀਆਂ ਰੁਕਾਵਟਾਂ ਜਿਵੇਂ same_model, same_retrieval_origin, same_tool_family, same_prompt_family।
-    - "intervention_recommendation": String (ਵਿਕਲਪਿਕ) - ਸਰੋਤ ਵਿਭਿੰਨਤਾ ਸੁਧਾਰਨ ਦਾ ਸਭ ਤੋਂ ਵਧੀਆ ਅਗਲਾ ਕਦਮ।
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (ਸਾਰੇ ਵਿਕਲਪਿਕ ਸਕੇਲਰ)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (ਸਾਰੇ ਵਿਕਲਪਿਕ ਸਕੇਲਰ)
-  ਭਾਸ਼ਾ ਨਿਯਮ:
-  - ਉਪਭੋਗਤਾ ਦੀ ਪਸੰਦੀਦਾ ਭਾਸ਼ਾ ਵਿੱਚ ਜਵਾਬ ਦਿਓ (ਉਪਭੋਗਤਾ ਪ੍ਰੋਫਾਈਲ ਚੈੱਕ ਕਰੋ)।
-  - ਸਾਰੇ ਸਮੱਗਰੀ ਮੁੱਲ (reasoning, sources_identified, correlation_factors) ਉਪਭੋਗਤਾ ਦੀ ਭਾਸ਼ਾ ਵਿੱਚ ਹੋਣੇ ਚਾਹੀਦੇ ਹਨ।
-  - JSON ਕੁੰਜੀਆਂ ਅਤੇ phase ਮੁੱਲ ਜ਼ਰੂਰ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਰਹਿਣ (ਜਿਵੇਂ, "reasoning", "k_eff", "phase": "healthy")।
-  - ਉਦਾਹਰਨ: {{"reasoning": "ਜਾਣਕਾਰੀ ਕੇਵਲ ਇੱਕ ਸਰੋਤ ਤੋਂ ਆਈ ਹੈ", "sources_identified": ["ਸਿਖਲਾਈ ਡਾਟਾ"], "phase": "rigidity"}} - ਪੰਜਾਬੀ ਸਮੱਗਰੀ, ਅੰਗਰੇਜ਼ੀ ਕੁੰਜੀਆਂ/ਪੜਾਅ।
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  ਵਾਧੂ ਖੇਤਰ ਸ਼ਾਮਲ ਨਾ ਕਰੋ ਜਾਂ ਮਾਰਕਡਾਊਨ ਕੋਡ ਬਲਾਕਾਂ ਵਿੱਚ ਨਾ ਲਪੇਟੋ।
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   ਇਸ ਕ੍ਰਮ ਵਿੱਚ ਕੰਮ ਕਰੋ:

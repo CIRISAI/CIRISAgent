@@ -116,42 +116,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
-  - CORE REQUIRED:
-    - "k_eff": Float (>= 0) - Effective independent source count. Use formula k/(1+ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float (0.0-1.0) - Estimated source overlap/correlation.
-    - "phase": String - One of "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean - TRUE if reasoning is structurally fragile.
-    - "reasoning": String - Short explanation of the result. This field is MANDATORY.
-  - SIMPLE HELPFUL EXTRAS:
-    - "k_raw": Integer (optional) - Raw source count before overlap adjustment.
-    - "rho_mean": Float (optional, 0.0-1.0) - Average pairwise source overlap used to derive k_eff.
-    - "phase_confidence": Float (optional, 0.0-1.0) - Confidence in the phase call.
-    - "collapse_margin": Float (optional) - Positive distance from the fragility boundary. Values <= 0 mean collapse-adjacent.
-    - "sources_identified": Array of strings - Distinct sources or perspectives you found.
-    - "source_ids": Array of strings (optional) - Stable source labels like "training", "user", "memory_1", "tool_1".
-    - "source_types": Array of strings (optional) - Source types aligned with source_ids.
-    - "source_independence_scores": Array of floats (optional) - Independence scores aligned with source_ids.
-    - "source_type_counts": Array of strings (optional) - Use flat strings like "memory:2", "tool:1", "user:1".
-    - "correlation_factors": Array of strings - Why the sources overlap.
-    - "top_correlation_factors": Array of strings (optional) - Most important overlap drivers.
-    - "pairwise_correlation_summary": Array of strings (optional) - Use flat strings like "source_a|source_b|0.82|same_model".
-    - "rho_intra": Float (optional, 0.0-1.0) - Within-cluster overlap if you detect modules.
-    - "rho_inter": Float (optional, 0.0-1.0) - Between-cluster overlap if you detect modules.
-    - "module_count": Integer (optional) - Number of independent source modules.
-    - "effective_module_count": Float (optional) - Effective module count after overlap adjustment.
-    - "source_clusters": Array of strings (optional) - Use flat strings like "cluster_1|source_a,source_b|0.91".
-    - "common_cause_flags": Array of strings (optional) - Shared bottlenecks like same_model, same_retrieval_origin, same_tool_family, same_prompt_family.
-    - "intervention_recommendation": String (optional) - Best next step to improve source diversity.
-    - "delta_k_eff", "delta_rho_mean", "phase_persistence_steps", "time_in_fragile_state_ms", "moving_variance" (all optional scalars)
-    - "rho_critical", "k_required", "defense_function", "collapse_rate", "time_to_truth", "time_to_entropy", "time_to_capture" (all optional scalars)
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
-  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
 
-  Do not include extra fields or wrap in markdown code blocks.
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
   WORK IN THIS ORDER:

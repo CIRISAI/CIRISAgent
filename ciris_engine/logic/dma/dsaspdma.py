@@ -96,12 +96,15 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         self._prompt_template_name = "dsaspdma"
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
+        # Per-thought language override; populated by _sync_language_from_context.
+        # When None, the loader falls back to env var (CIRIS_PREFERRED_LANGUAGE).
+        self._explicit_language: Optional[str] = None
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        """Get prompt loader fresh each time to respect runtime language changes."""
+        """Get prompt loader for the thread's currently-active language."""
 
-        return get_prompt_loader()
+        return get_prompt_loader(language=self._explicit_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -135,10 +138,12 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             if isinstance(first_profile, dict)
             else getattr(first_profile, "preferred_language", None)
         )
-        if preferred_language and preferred_language != self.prompt_loader.language:
-            from ciris_engine.logic.dma.prompt_loader import set_prompt_language
-
-            set_prompt_language(preferred_language)
+        if preferred_language and preferred_language != self._explicit_language:
+            # Record the per-thought language; the prompt_loader property uses
+            # it on next access to return the per-language cached loader. No
+            # global mutation, no cross-thread bleed for concurrent thoughts
+            # in different languages.
+            self._explicit_language = preferred_language
             logger.debug(f"DSASPDMA: Synced prompt language to {preferred_language}")
 
     def _get_prompt_value(self, key: str) -> Optional[str]:

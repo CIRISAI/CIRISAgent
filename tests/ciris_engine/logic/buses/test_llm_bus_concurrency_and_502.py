@@ -118,9 +118,32 @@ def time_svc():
     return MockTimeService()
 
 
-def _build_bus(registry, time_svc, services: List[CountingMockService], max_in_flight: int = 3) -> LLMBus:
-    """Build an LLMBus with the given max-in-flight and inject services."""
-    os.environ["CIRIS_LLM_MAX_CONCURRENT"] = str(max_in_flight)
+@pytest.fixture(autouse=True)
+def _clean_llm_env(monkeypatch):
+    """Belt-and-suspenders: ensure LLM env vars are unset for every test in
+    this module so xdist parallel runs can't leak between worker processes
+    (and a leaked CIRIS_LLM_MAX_CONCURRENT/CIRIS_LLM_REPLICAS doesn't bleed
+    into adjacent tests like test_initialize_llm_service_real)."""
+    for key in ("CIRIS_LLM_MAX_CONCURRENT", "CIRIS_LLM_REPLICAS", "CIRIS_LLM_DISTRIBUTION_STRATEGY"):
+        monkeypatch.delenv(key, raising=False)
+
+
+def _build_bus(
+    registry,
+    time_svc,
+    services: List[CountingMockService],
+    max_in_flight: int = 3,
+    monkeypatch=None,
+) -> LLMBus:
+    """Build an LLMBus with the given max-in-flight and inject services.
+
+    Pass `monkeypatch` for thread-safe env handling. Falls back to direct
+    os.environ mutation only if no monkeypatch is supplied (legacy callers).
+    """
+    if monkeypatch is not None:
+        monkeypatch.setenv("CIRIS_LLM_MAX_CONCURRENT", str(max_in_flight))
+    else:
+        os.environ["CIRIS_LLM_MAX_CONCURRENT"] = str(max_in_flight)
     try:
         bus = LLMBus(
             service_registry=registry,
@@ -135,7 +158,8 @@ def _build_bus(registry, time_svc, services: List[CountingMockService], max_in_f
             },
         )
     finally:
-        os.environ.pop("CIRIS_LLM_MAX_CONCURRENT", None)
+        if monkeypatch is None:
+            os.environ.pop("CIRIS_LLM_MAX_CONCURRENT", None)
 
     async def _get_prioritized_services(handler_name: str, domain=None):
         return list(services)
@@ -271,32 +295,26 @@ async def test_gate_logs_saturation_when_in_flight_cap_hit(registry, time_svc, c
     assert len(gate_logs) > 0, "expected at least one LLM-GATE saturated log line"
 
 
-def test_max_in_flight_env_var_invalid_falls_back_to_default(registry, time_svc):
+def test_max_in_flight_env_var_invalid_falls_back_to_default(registry, time_svc, monkeypatch):
     """Invalid CIRIS_LLM_MAX_CONCURRENT values fall back to 8, not crash."""
-    os.environ["CIRIS_LLM_MAX_CONCURRENT"] = "not-a-number"
-    try:
-        bus = LLMBus(
-            service_registry=registry,
-            time_service=time_svc,
-            telemetry_service=None,
-        )
-    finally:
-        os.environ.pop("CIRIS_LLM_MAX_CONCURRENT", None)
+    monkeypatch.setenv("CIRIS_LLM_MAX_CONCURRENT", "not-a-number")
+    bus = LLMBus(
+        service_registry=registry,
+        time_service=time_svc,
+        telemetry_service=None,
+    )
     assert bus._max_in_flight_per_service == 8
 
 
-def test_max_in_flight_env_var_respects_minimum(registry, time_svc):
+def test_max_in_flight_env_var_respects_minimum(registry, time_svc, monkeypatch):
     """max_in_flight is clamped to at least 1 (a value of 0 or negative would
     deadlock the bus, so we floor it)."""
-    os.environ["CIRIS_LLM_MAX_CONCURRENT"] = "0"
-    try:
-        bus = LLMBus(
-            service_registry=registry,
-            time_service=time_svc,
-            telemetry_service=None,
-        )
-    finally:
-        os.environ.pop("CIRIS_LLM_MAX_CONCURRENT", None)
+    monkeypatch.setenv("CIRIS_LLM_MAX_CONCURRENT", "0")
+    bus = LLMBus(
+        service_registry=registry,
+        time_service=time_svc,
+        telemetry_service=None,
+    )
     assert bus._max_in_flight_per_service >= 1
 
 

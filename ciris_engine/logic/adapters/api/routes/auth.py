@@ -15,7 +15,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional, Set
+from typing import Annotated, Any, Dict, List, Optional, Set, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -1863,7 +1863,7 @@ async def _fetch_apple_jwks() -> List[Dict[str, Any]]:
 
     _apple_jwks_cache["keys"] = keys
     _apple_jwks_cache["expires_at"] = now + APPLE_JWKS_CACHE_TTL_SECONDS
-    return keys
+    return cast(List[Dict[str, Any]], keys)
 
 
 def _get_apple_signing_key(id_token: str, jwks: List[Dict[str, Any]]) -> Any:

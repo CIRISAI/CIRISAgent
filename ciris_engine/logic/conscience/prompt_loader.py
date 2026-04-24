@@ -190,53 +190,57 @@ class ConsciencePromptLoader:
             return template
 
 
-# Global instance for convenience
-_default_loader: Optional[ConsciencePromptLoader] = None
-_current_language = DEFAULT_LANGUAGE
+# Per-language loader cache. Each language gets its own independent loader so
+# concurrent thoughts in different languages never trample each other's state.
+# The previous singleton + mutable-language design caused a real production bug:
+# the first thought that ran (whatever language CIRIS_PREFERRED_LANGUAGE held)
+# locked the loader, and every subsequent thought — regardless of its actual
+# user — was evaluated with that language's conscience prompts. For a Spanish
+# user whose response was being judged with Amharic instructions, the LLM
+# judge over-scored entropy and forced spurious PONDERs.
+_loader_cache: dict[str, ConsciencePromptLoader] = {}
 
 
 def get_conscience_prompt_loader(language: Optional[str] = None) -> ConsciencePromptLoader:
-    """Get the default conscience prompt loader instance.
+    """Get a conscience prompt loader for the requested language.
+
+    Returns a per-language loader (cached). The agent should always pass the
+    language of the THOUGHT/USER being evaluated — not rely on a global env
+    var — so multilingual deployments grade each thought in its own language.
 
     Args:
-        language: Optional language code. If provided and different from current,
-                  updates the loader's language setting. If None on first call,
-                  uses the user's preferred language from CIRIS_PREFERRED_LANGUAGE.
+        language: Optional ISO 639-1 language code. If None, falls back to
+            the env var via get_preferred_language() — but callers should
+            normally pass an explicit language derived from the user profile.
 
     Returns:
-        ConsciencePromptLoader instance configured for the specified language.
+        ConsciencePromptLoader instance for the requested language.
     """
-    global _default_loader, _current_language
+    if language is None:
+        try:
+            from ciris_engine.logic.utils.localization import get_preferred_language
 
-    if _default_loader is None:
-        # If no language specified, check the user's preferred language
-        if language is None:
-            try:
-                from ciris_engine.logic.utils.localization import get_preferred_language
+            language = get_preferred_language()
+        except ImportError:
+            language = DEFAULT_LANGUAGE
 
-                lang = get_preferred_language()
-            except ImportError:
-                lang = DEFAULT_LANGUAGE
-        else:
-            lang = language
-        _default_loader = ConsciencePromptLoader(language=lang)
-        _current_language = lang
-        logger.info(f"Conscience prompt loader initialized with language: {_sanitize_for_log(lang)}")
-    elif language and language != _current_language:
-        _default_loader.set_language(language)
-        _current_language = language
-
-    return _default_loader
+    loader = _loader_cache.get(language)
+    if loader is None:
+        loader = ConsciencePromptLoader(language=language)
+        _loader_cache[language] = loader
+        logger.info(f"Conscience prompt loader created for language: {_sanitize_for_log(language)}")
+    return loader
 
 
 def set_conscience_prompt_language(language: str) -> None:
-    """Set the language for conscience prompts globally.
+    """Compatibility shim — no-op now that loaders are per-language.
 
-    Args:
-        language: ISO 639-1 language code (e.g., 'en', 'am', 'es')
+    Previously this mutated a global singleton; with per-language caching
+    each call site selects its own loader at request time. Kept as a no-op
+    so existing callers don't break, but issues a one-time warning to help
+    surface stale globals.
     """
-    global _default_loader, _current_language
-    _current_language = language
-    if _default_loader is not None:
-        _default_loader.set_language(language)
-    logger.info(f"Conscience prompt language set to: {_sanitize_for_log(language)}")
+    logger.warning(
+        f"set_conscience_prompt_language({_sanitize_for_log(language)}) called — "
+        "this is a no-op now; pass language to get_conscience_prompt_loader() per request"
+    )

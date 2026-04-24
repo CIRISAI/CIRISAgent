@@ -19,11 +19,16 @@ from ciris_engine.schemas.services.deferral_taxonomy import (
 
 @pytest.fixture(autouse=True)
 def reset_dma_prompt_language() -> None:
-    """Reset DMA prompt language around each test to avoid cross-test bleed."""
+    """Clear the per-language DMA loader cache between tests.
 
-    set_prompt_language("en")
+    Replaces the old set_prompt_language("en") fixture; each language now
+    has its own cached loader and the test should start with a clean slate.
+    """
+    from ciris_engine.logic.dma.prompt_loader import _loader_cache
+
+    _loader_cache.clear()
     yield
-    set_prompt_language("en")
+    _loader_cache.clear()
 
 
 @pytest.fixture

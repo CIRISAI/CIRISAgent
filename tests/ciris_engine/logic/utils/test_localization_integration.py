@@ -484,23 +484,28 @@ class TestLocalizationIntegration:
 class TestPromptLoaderSync:
     """Tests for DMA prompt loader language synchronization."""
 
-    def test_set_prompt_language(self):
-        """Test that set_prompt_language updates the loader."""
-        from ciris_engine.logic.dma.prompt_loader import get_prompt_loader, set_prompt_language
+    def test_get_prompt_loader_per_language_cache(self):
+        """get_prompt_loader caches per-language; mutating a global is not the API.
 
-        # Get initial state
-        loader = get_prompt_loader()
-        original_lang = loader.language
+        Replaces the old set_prompt_language(...) test. The mutable-singleton
+        design that test exercised was the source of the multilingual race
+        bug — concurrent thoughts in different languages trampled each other.
+        Now each language has its own cached loader; explicit per-call lang is
+        the contract.
+        """
+        from ciris_engine.logic.dma.prompt_loader import _loader_cache, get_prompt_loader
 
+        _loader_cache.clear()
         try:
-            # Set new language
-            set_prompt_language("es")
-
-            # Verify it changed
-            assert loader.language == "es"
+            en = get_prompt_loader(language="en")
+            es = get_prompt_loader(language="es")
+            assert en.language == "en"
+            assert es.language == "es"
+            assert en is not es
+            # Cache hit returns the same instance
+            assert get_prompt_loader(language="en") is en
         finally:
-            # Restore
-            set_prompt_language(original_lang)
+            _loader_cache.clear()
 
     def test_get_prompt_loader_returns_loader(self):
         """Test that get_prompt_loader returns a valid loader."""

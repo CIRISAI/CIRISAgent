@@ -173,14 +173,34 @@ class LLMBus(BaseBus[LLMService]):
           - OpenRouter "Provider returned error" (upstream relay error)
         """
         combined = f"{error_str} {full_error}".lower()
-        return (
-            "502" in combined
-            or "503" in combined
-            or "504" in combined
-            or "bad gateway" in combined
-            or "service unavailable" in combined
-            or "gateway timeout" in combined
-            or "provider returned error" in combined
+        # Match HTTP-shape patterns only — bare "503" or "service unavailable"
+        # are too broad (a generic RuntimeError mentioning "service unavailable"
+        # would trip backoff and retry-loop on a non-transient error).
+        # Look for status codes attached to HTTP-style markers, or specific
+        # provider/proxy error envelopes.
+        return any(
+            marker in combined
+            for marker in (
+                "http 502",
+                "http 503",
+                "http 504",
+                "status 502",
+                "status 503",
+                "status 504",
+                "code: 502",
+                "code: 503",
+                "code: 504",
+                "code': 502",
+                "code': 503",
+                "code': 504",
+                "error code: 502",
+                "error code: 503",
+                "error code: 504",
+                "(502)",
+                "(503)",
+                "(504)",
+                "provider returned error",
+            )
         )
 
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:

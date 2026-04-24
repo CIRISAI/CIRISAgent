@@ -687,6 +687,21 @@ class APIServerManager:
         if self.mock_logshipper:
             env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
+        # When running in --live mode, opt the agent into location sharing in
+        # accord traces so lens dashboards can correlate by region. Defaults
+        # to the dev's home base (Schaumburg, IL) and can be overridden by
+        # exporting the CIRIS_USER_* vars before invocation.
+        if self.config.live_api_key:
+            env.setdefault("CIRIS_SHARE_LOCATION_IN_TRACES", "true")
+            env.setdefault("CIRIS_USER_LOCATION", "Schaumburg, Illinois, USA")
+            env.setdefault("CIRIS_USER_TIMEZONE", "America/Chicago")
+            env.setdefault("CIRIS_USER_LATITUDE", "42.0334")
+            env.setdefault("CIRIS_USER_LONGITUDE", "-88.0834")
+            self.console.print(
+                f"[dim]Live mode: location sharing enabled "
+                f"(CIRIS_USER_LOCATION={env['CIRIS_USER_LOCATION']})[/dim]"
+            )
+
         # Force first-run mode for SETUP module tests or when data was wiped
         from .config import QAModule
 

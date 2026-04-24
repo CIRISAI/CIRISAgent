@@ -269,6 +269,9 @@ class TestServiceInitializer:
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         # Clear secondary LLM keys to ensure only primary is initialized in this test
         monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
+        # Clear LLM replica env so this test always sees a single replica
+        # regardless of what other parallel tests are doing in os.environ.
+        monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as mock_llm_class:
             mock_llm = AsyncMock()

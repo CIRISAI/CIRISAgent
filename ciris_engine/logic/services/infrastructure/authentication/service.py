@@ -120,6 +120,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
         self._attestation_refresh_interval = 2700  # 45 min refresh (before 1h TTL)
         self._attestation_refresh_task: Optional[asyncio.Task[None]] = None
+        # The startup attestation task — kicked off in start(), awaited by
+        # any consumer that needs the populated cache. None until start().
+        self._attestation_task: Optional[asyncio.Task[None]] = None
         self._baseline_attestation: Optional[AttestationResult] = (
             None  # First successful result for degradation detection
         )
@@ -1769,16 +1772,24 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Note: CIRISVerify singleton must be initialized before this runs
         await self._migrate_wa_keys_to_verify()
 
-        # Skip attestation in test mode to avoid TPM operations
-        if os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true":
-            logger.info("AuthenticationService: skipping attestation in test mode")
-            return
-
-        # Kick off startup attestation in background (non-blocking)
-        # Store task reference to prevent garbage collection
-        attestation_task = asyncio.create_task(self.run_startup_attestation())
-        self._background_tasks.add(attestation_task)
-        attestation_task.add_done_callback(self._background_tasks.discard)
+        # Kick off startup attestation in the BACKGROUND — but capture the
+        # task so any code that *needs* the attestation result can await it.
+        # The previous pattern was create-task-and-forget plus a test-mode
+        # skip, which let thoughts start processing before attestation was
+        # done and emitted null verify_attestation fields to Lens. The new
+        # contract:
+        #   - start() returns fast (no FFI latency on the critical path)
+        #   - any consumer that requires the attestation result calls
+        #     `await_attestation_ready()` first; that awaits this task,
+        #     re-raising on failure. Failure is fatal — there is no path
+        #     that runs without verified attestation.
+        #   - test-mode env vars (CIRIS_IMPORT_MODE / CIRIS_MOCK_LLM) no
+        #     longer bypass this. ciris_verify is a hard requirement; if
+        #     the FFI can't load, the await raises and the requesting
+        #     thought fails loudly.
+        self._attestation_task = asyncio.create_task(self.run_startup_attestation())
+        self._background_tasks.add(self._attestation_task)
+        self._attestation_task.add_done_callback(self._background_tasks.discard)
 
         # Start periodic attestation refresh loop
         self._attestation_refresh_task = asyncio.create_task(self._attestation_refresh_loop())
@@ -2048,6 +2059,35 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Build and return attestation result
         result = build_attestation_result(verify_result, attestation_mode)
         return result
+
+    async def await_attestation_ready(self) -> None:
+        """Block until the startup attestation task has completed.
+
+        ciris_verify is a hard runtime dependency — there is no path that
+        runs without verified attestation. Startup attestation is launched
+        as a background task in `start()` so the service can return quickly
+        and other init can run in parallel; any consumer that requires the
+        populated cache (e.g., batch_context building a thought context)
+        calls this method first.
+
+        Behavior:
+          - If the task hasn't been kicked off (start() never ran), raises
+            RuntimeError immediately.
+          - If the task is still running, awaits its completion.
+          - If the task already finished, returns immediately.
+          - If the task raised, the exception is re-raised here so the
+            caller fails loudly. We do not swallow attestation failures.
+        """
+        if self._attestation_task is None:
+            raise RuntimeError(
+                "AuthenticationService.start() has not been called — "
+                "no attestation task to await. ciris_verify attestation is "
+                "mandatory; the service must be started before consumers "
+                "can request the attestation context."
+            )
+        # awaiting a completed task is a no-op except that exceptions
+        # raised inside the task are re-raised here.
+        await self._attestation_task
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.

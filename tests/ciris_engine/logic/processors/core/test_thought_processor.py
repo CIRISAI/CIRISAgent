@@ -165,22 +165,31 @@ class TestThoughtProcessor:
         mock_context_builder = Mock()
         mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
 
-        # Mock runtime with proper adapter manager structure
-        mock_runtime = Mock()
-        mock_adapter_manager = Mock()
-        mock_adapter_manager._adapters = {}  # Empty dict for iteration
-        mock_runtime.adapter_manager = mock_adapter_manager
+        # Mock runtime — use the centralized MockRuntime which carries the
+        # ciris_verify adapter required by the strict attestation gate added
+        # in 2.7.1. Override `current_shutdown_context` to None so Pydantic
+        # validation downstream sees None (not the default Mock-shaped
+        # ShutdownContext built into MockRuntime).
+        from tests.fixtures.mocks import MockRuntime
+
+        mock_runtime = MockRuntime(include_logging_mocks=False, include_time_service=False)
+        mock_runtime.current_shutdown_context = None
         mock_runtime.bus_manager = Mock()
         mock_runtime.service_registry = Mock()
-        mock_runtime.service_registry._services = {}  # Empty _services dict for tool provider iteration
-        mock_runtime.current_shutdown_context = None  # None, not Mock, for Pydantic validation
+        mock_runtime.service_registry._services = {}
         mock_context_builder.runtime = mock_runtime
 
         # Mock other services needed by batch context
         mock_context_builder.memory_service = AsyncMock()
         mock_context_builder.memory_service.recall = AsyncMock(return_value=[])
         mock_context_builder.secrets_service = None
-        mock_context_builder.service_registry = Mock()
+        # Centralized MockServiceRegistry — carries get_authentication() that
+        # returns an attestation-aware auth service satisfying the post-2.7.1
+        # strict gate. `get_provider_info` etc. are surfaced as Mocks for the
+        # system-snapshot helpers that consume them.
+        from tests.fixtures.mocks import MockServiceRegistry
+
+        mock_context_builder.service_registry = MockServiceRegistry()
         mock_context_builder.service_registry.get_provider_info = Mock(
             return_value={"handlers": {}, "global_services": {}}
         )

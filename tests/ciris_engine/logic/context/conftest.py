@@ -77,28 +77,43 @@ def mock_resource_monitor():
 
 @pytest.fixture
 def mock_service_registry():
-    """Create a proper service registry mock."""
-    registry = Mock()
-    registry.get_provider_info.return_value = {"handlers": {}, "global_services": {}}
-    registry.get_services_by_type.return_value = []
+    """Create a proper service registry mock.
+
+    Delegates to centralized MockServiceRegistry which carries the
+    attestation-aware get_authentication() required by the strict
+    attestation gate added in 2.7.1. Adds the system-snapshot-specific
+    return-value shims (`get_provider_info`, `get_services_by_type`)
+    on top so this fixture is a strict superset of the prior local mock.
+    """
+    from tests.fixtures.mocks import MockServiceRegistry
+
+    registry = MockServiceRegistry()
+    registry.get_provider_info = Mock(return_value={"handlers": {}, "global_services": {}})
+    registry.get_services_by_type = Mock(return_value=[])
     return registry
 
 
 @pytest.fixture
 def mock_runtime():
-    """Create a proper runtime mock."""
-    from ciris_engine.schemas.runtime.enums import ServiceType
+    """Create a proper runtime mock.
 
-    runtime = Mock()
+    Delegates to the centralized MockRuntime (tests/fixtures/mocks.py)
+    which carries the ciris_verify adapter required by the strict
+    attestation gate added in 2.7.1. The shape augmentations below
+    (adapter_manager._adapters, service_registry._services, etc.) are
+    surface that the system-snapshot helpers consume — kept for parity
+    with the previous local fixture.
+    """
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=False, include_time_service=False)
     runtime.current_shutdown_context = None
 
-    # Mock adapter manager
     runtime.adapter_manager = Mock()
     runtime.adapter_manager._adapters = {}
 
-    # Mock service registry with _services dict (no tool providers by default)
     runtime.service_registry = Mock()
-    runtime.service_registry._services = {}  # Empty _services dict
+    runtime.service_registry._services = {}
     runtime.service_registry.get_services_by_type.return_value = []
     runtime.bus_manager = Mock()
 

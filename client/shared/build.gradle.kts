@@ -122,7 +122,11 @@ kotlin {
                 // On-device LLM inference via ONNX Runtime
                 // 64-bit devices (arm64-v8a, x86_64): Full on-device inference
                 // 32-bit devices (armeabi-v7a): Falls back to "Local Inference Server" provider
-                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
+                // 1.20.0+ ships .so files with 16 KB page-size alignment, required
+                // by Google Play for Android 15 targets — earlier 1.17.0 was 4 KB
+                // aligned and triggered the "does not support 16 KB memory pages"
+                // upload rejection.
+                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.0")
 
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")

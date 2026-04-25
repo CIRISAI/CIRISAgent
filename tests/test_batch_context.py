@@ -133,24 +133,64 @@ class TestPrefetchBatchContext:
     """Test prefetch_batch_context with focus on resilience and error handling."""
 
     @patch("ciris_engine.logic.context.batch_context.persistence")
-    async def test_prefetch_resilience_with_no_services(self, mock_persistence):
-        """Test graceful degradation when no services available (Resilience principle)."""
-        # Mock persistence to return empty lists
+    async def test_prefetch_raises_without_runtime(self, mock_persistence):
+        """Without runtime, prefetch_batch_context MUST raise — there is no
+        path that builds a thought context without ciris_verify attestation.
+        Replaces the old graceful-degradation test (2.7.1)."""
         mock_persistence.get_recent_completed_tasks.return_value = []
         mock_persistence.get_top_tasks.return_value = []
 
-        batch_data = await prefetch_batch_context()
+        with pytest.raises(RuntimeError, match="runtime.adapters unavailable"):
+            await prefetch_batch_context()
 
-        # Should return valid empty state, not fail
+    @patch("ciris_engine.logic.context.batch_context.persistence")
+    async def test_prefetch_raises_when_ciris_verify_adapter_missing(
+        self, mock_persistence, mock_service_registry
+    ):
+        """If runtime has no ciris_verify adapter, prefetch MUST raise.
+        ciris_verify is a hard runtime dependency."""
+        mock_persistence.get_recent_completed_tasks.return_value = []
+        mock_persistence.get_top_tasks.return_value = []
+
+        runtime_without_verify = MagicMock()
+        runtime_without_verify.adapters = []  # explicitly no ciris_verify
+        runtime_without_verify.current_shutdown_context = None
+
+        with pytest.raises(RuntimeError, match="ciris_verify adapter not loaded"):
+            await prefetch_batch_context(
+                runtime=runtime_without_verify,
+                service_registry=mock_service_registry,
+            )
+
+    @patch("ciris_engine.logic.context.batch_context.persistence")
+    async def test_prefetch_resilience_with_minimal_services(
+        self, mock_persistence, mock_runtime, mock_service_registry
+    ):
+        """With only the mandatory runtime + auth + verify adapter wired,
+        prefetch should still build a valid (empty) batch — agent_identity,
+        tasks, alerts all default to safe empty values."""
+        mock_persistence.get_recent_completed_tasks.return_value = []
+        mock_persistence.get_top_tasks.return_value = []
+
+        batch_data = await prefetch_batch_context(
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
+
         assert isinstance(batch_data, BatchContextData)
-        assert batch_data.agent_identity is None  # No identity service means None, not empty dict
+        assert batch_data.agent_identity is None
         assert batch_data.recent_tasks == []
         assert batch_data.top_tasks == []
         assert batch_data.service_health == {}
         assert batch_data.resource_alerts == []
+        # And critically: verify_attestation IS populated (no nulls).
+        assert batch_data.verify_attestation is not None
+        assert batch_data.verify_attestation.attestation_status in {"verified", "partial"}
 
     @patch("ciris_engine.logic.context.batch_context.persistence")
-    async def test_prefetch_with_proper_task_models(self, mock_persistence):
+    async def test_prefetch_with_proper_task_models(
+        self, mock_persistence, mock_runtime, mock_service_registry
+    ):
         """Test tasks are properly converted from persistence models."""
         # Create properly typed mock tasks as BaseModel instances
         mock_task1 = MockPersistedTask(
@@ -176,7 +216,10 @@ class TestPrefetchBatchContext:
         mock_persistence.get_recent_completed_tasks.return_value = [mock_task1]
         mock_persistence.get_top_tasks.return_value = [mock_task2]
 
-        batch_data = await prefetch_batch_context()
+        batch_data = await prefetch_batch_context(
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Verify tasks were properly converted to TaskSummary
         assert len(batch_data.recent_tasks) == 1
@@ -200,7 +243,9 @@ class TestPrefetchBatchContext:
         assert top.retry_count == 0
         assert top.parent_task_id is None
 
-    async def test_prefetch_identity_from_memory(self):
+    async def test_prefetch_identity_from_memory(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test agent identity retrieval respects data types."""
         mock_memory = AsyncMock()
 
@@ -221,7 +266,11 @@ class TestPrefetchBatchContext:
         )
         mock_memory.recall.return_value = [identity_node]
 
-        batch_data = await prefetch_batch_context(memory_service=mock_memory)
+        batch_data = await prefetch_batch_context(
+            memory_service=mock_memory,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Verify identity was properly extracted - agent_identity is now IdentityData model
         assert batch_data.agent_identity.agent_id == "ciris_001"
@@ -231,14 +280,20 @@ class TestPrefetchBatchContext:
         assert "speak" in batch_data.identity_capabilities
         assert "tool" in batch_data.identity_restrictions
 
-    async def test_prefetch_handles_memory_service_failure(self):
+    async def test_prefetch_handles_memory_service_failure(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test resilience when memory service fails."""
         mock_memory = AsyncMock()
         mock_memory.recall.side_effect = Exception("Memory service unavailable")
 
         # Should not crash, should log warning
         with patch("ciris_engine.logic.context.batch_context.logger") as mock_logger:
-            batch_data = await prefetch_batch_context(memory_service=mock_memory)
+            batch_data = await prefetch_batch_context(
+                memory_service=mock_memory,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
+            )
 
             # Verify warning was logged
             mock_logger.warning.assert_called()
@@ -247,7 +302,9 @@ class TestPrefetchBatchContext:
             assert batch_data.agent_identity is None
             assert batch_data.identity_purpose is None
 
-    async def test_prefetch_critical_resource_alerts(self):
+    async def test_prefetch_critical_resource_alerts(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test critical resource monitoring per accord harm prevention."""
         mock_monitor = MagicMock()
         mock_snapshot = MagicMock()
@@ -257,7 +314,11 @@ class TestPrefetchBatchContext:
         mock_snapshot.healthy = False
         mock_monitor.snapshot = mock_snapshot
 
-        batch_data = await prefetch_batch_context(resource_monitor=mock_monitor)
+        batch_data = await prefetch_batch_context(
+            resource_monitor=mock_monitor,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Should generate proper critical alerts
         assert len(batch_data.resource_alerts) >= 2
@@ -270,20 +331,28 @@ class TestPrefetchBatchContext:
         assert any("REJECT OR DEFER ALL TASKS" in alert for alert in batch_data.resource_alerts)
         assert any("IMMEDIATE ACTION REQUIRED" in alert for alert in batch_data.resource_alerts)
 
-    async def test_prefetch_resource_monitor_failure_handling(self):
+    async def test_prefetch_resource_monitor_failure_handling(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test that resource monitor failures are treated as critical."""
         mock_monitor = MagicMock()
         # Simulate monitor failure
         mock_monitor.snapshot = property(lambda self: (_ for _ in ()).throw(Exception("Monitor failed")))
 
-        batch_data = await prefetch_batch_context(resource_monitor=mock_monitor)
+        batch_data = await prefetch_batch_context(
+            resource_monitor=mock_monitor,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Should generate critical alert about failure
         assert len(batch_data.resource_alerts) == 1
         assert "CRITICAL" in batch_data.resource_alerts[0]
         assert "FAILED TO CHECK RESOURCES" in batch_data.resource_alerts[0]
 
-    async def test_prefetch_secrets_snapshot_typing(self):
+    async def test_prefetch_secrets_snapshot_typing(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test secrets snapshot maintains proper typing."""
         mock_secrets = AsyncMock()
 
@@ -294,14 +363,20 @@ class TestPrefetchBatchContext:
                 "secrets_filter_version": 2,
             }
 
-            batch_data = await prefetch_batch_context(secrets_service=mock_secrets)
+            batch_data = await prefetch_batch_context(
+                secrets_service=mock_secrets,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
+            )
 
             # Verify types match schema expectations
             assert isinstance(batch_data.secrets_snapshot["detected_secrets"], list)
             assert isinstance(batch_data.secrets_snapshot["total_secrets_stored"], int)
             assert isinstance(batch_data.secrets_snapshot["secrets_filter_version"], int)
 
-    async def test_prefetch_telemetry_summary_proper_schema(self):
+    async def test_prefetch_telemetry_summary_proper_schema(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test telemetry summary uses proper schema."""
         mock_telemetry = AsyncMock()
 
@@ -324,7 +399,11 @@ class TestPrefetchBatchContext:
         )
         mock_telemetry.get_telemetry_summary.return_value = telemetry_summary
 
-        batch_data = await prefetch_batch_context(telemetry_service=mock_telemetry)
+        batch_data = await prefetch_batch_context(
+            telemetry_service=mock_telemetry,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Verify it's the proper type
         assert isinstance(batch_data.telemetry_summary, TelemetrySummary)
@@ -332,11 +411,13 @@ class TestPrefetchBatchContext:
         assert batch_data.telemetry_summary.errors_24h == 3
         assert batch_data.telemetry_summary.cost_last_hour_cents == 25.5
 
-    async def test_prefetch_shutdown_context_handling(self):
+    async def test_prefetch_shutdown_context_handling(
+        self, mock_runtime, mock_service_registry
+    ):
         """Test shutdown context is properly handled."""
-        mock_runtime = MagicMock()
-
-        # Create proper ShutdownContext with correct fields
+        # mock_runtime (centralized MockRuntime) already carries the
+        # ciris_verify adapter required by the strict attestation gate;
+        # we just override its shutdown context for this test.
         shutdown_context = ShutdownContext(
             is_terminal=False,
             reason="Scheduled maintenance",
@@ -347,7 +428,10 @@ class TestPrefetchBatchContext:
         )
         mock_runtime.current_shutdown_context = shutdown_context
 
-        batch_data = await prefetch_batch_context(runtime=mock_runtime)
+        batch_data = await prefetch_batch_context(
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
+        )
 
         # Verify shutdown context is preserved
         assert isinstance(batch_data.shutdown_context, ShutdownContext)

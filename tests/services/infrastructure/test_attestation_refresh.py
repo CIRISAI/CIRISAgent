@@ -408,3 +408,134 @@ class TestStartupBaselineCapture:
             await svc.run_startup_attestation()
 
             assert svc._baseline_attestation is result
+
+
+# ---------------------------------------------------------------------------
+# await_attestation_ready — block-until-ready contract
+# ---------------------------------------------------------------------------
+#
+# Why these exist: ciris_verify is a hard runtime dependency. The previous
+# pattern launched run_startup_attestation as a fire-and-forget background
+# task with a test-mode skip; thoughts could fire before attestation
+# completed and emit null verify_attestation fields to Lens. The new
+# contract is a background task captured on `_attestation_task` plus an
+# `await_attestation_ready()` gate that any consumer must call before
+# reading the cache. These tests pin every branch of that gate.
+
+
+class TestAwaitAttestationReady:
+    """Pin the await_attestation_ready() contract surface."""
+
+    def _make_bare_service(self):
+        """Build a service instance without running __init__ (no DB, no FFI)."""
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService.__init__",
+            lambda self_inner, *a, **kw: None,
+        ):
+            from ciris_engine.logic.services.infrastructure.authentication.service import (
+                AuthenticationService,
+            )
+
+            svc = AuthenticationService.__new__(AuthenticationService)
+            svc._attestation_task = None
+            return svc
+
+    @pytest.mark.asyncio
+    async def test_raises_when_start_never_ran(self):
+        """If _attestation_task is None (start() never called), raise.
+
+        This is the wedge that catches consumers running before the
+        service has been properly started — they should not silently
+        proceed with a null attestation context.
+        """
+        svc = self._make_bare_service()
+        with pytest.raises(RuntimeError, match="start.* has not been called"):
+            await svc.await_attestation_ready()
+
+    @pytest.mark.asyncio
+    async def test_returns_immediately_when_task_already_done(self):
+        """If the attestation task already finished cleanly, await is a no-op."""
+        svc = self._make_bare_service()
+
+        async def already_done() -> None:
+            return None
+
+        svc._attestation_task = asyncio.create_task(already_done())
+        await svc._attestation_task  # Drive it to completion
+        # Second await — should return immediately without raising
+        await svc.await_attestation_ready()
+
+    @pytest.mark.asyncio
+    async def test_blocks_until_running_task_completes(self):
+        """If the task is in flight, await blocks until it finishes.
+
+        Concretely: kick off a task that sleeps briefly, then assert the
+        gate doesn't return until the sleep is done.
+        """
+        svc = self._make_bare_service()
+        completed = False
+
+        async def slow_attestation() -> None:
+            nonlocal completed
+            await asyncio.sleep(0.05)
+            completed = True
+
+        svc._attestation_task = asyncio.create_task(slow_attestation())
+        # Gate must not return until the task finished
+        assert completed is False
+        await svc.await_attestation_ready()
+        assert completed is True
+
+    @pytest.mark.asyncio
+    async def test_reraises_task_failure(self):
+        """If the attestation task raised, the exception is re-raised here.
+
+        This is the load-bearing assertion: there is no path that swallows
+        attestation failures. Lens should never see null verify fields
+        because the agent crashed before it could emit them.
+        """
+        svc = self._make_bare_service()
+
+        class FFIUnloadable(RuntimeError):
+            pass
+
+        async def failing_attestation() -> None:
+            raise FFIUnloadable("libtss2-tctildr.so.0 not loadable")
+
+        svc._attestation_task = asyncio.create_task(failing_attestation())
+        with pytest.raises(FFIUnloadable, match="tctildr"):
+            await svc.await_attestation_ready()
+
+    @pytest.mark.asyncio
+    async def test_test_mode_env_vars_no_longer_skip_attestation(self, monkeypatch):
+        """Confirm CIRIS_IMPORT_MODE / CIRIS_MOCK_LLM no longer bypass.
+
+        The previous start() had:
+            if CIRIS_IMPORT_MODE or CIRIS_MOCK_LLM: return
+        which left _attestation_task == None and let consumers proceed
+        with no attestation. We removed that skip; setting the env vars
+        must have no effect on whether the task gets created.
+        """
+        monkeypatch.setenv("CIRIS_IMPORT_MODE", "true")
+        monkeypatch.setenv("CIRIS_MOCK_LLM", "true")
+
+        # Read the source of start() and confirm the skip block is gone.
+        # Source-level assertion is the right shape: a behavioral test
+        # would need a fully-wired service which is far out of scope here.
+        import inspect
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        src = inspect.getsource(AuthenticationService.start)
+        assert "skipping attestation in test mode" not in src, (
+            "Test-mode attestation-skip reintroduced. ciris_verify is a hard "
+            "runtime dependency; CIRIS_IMPORT_MODE / CIRIS_MOCK_LLM must NOT "
+            "bypass startup attestation."
+        )
+        assert "self._attestation_task = asyncio.create_task" in src, (
+            "start() should kick off run_startup_attestation as a captured "
+            "background task on self._attestation_task so "
+            "await_attestation_ready() can gate on it."
+        )

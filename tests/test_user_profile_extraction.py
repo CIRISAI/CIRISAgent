@@ -144,8 +144,15 @@ class TestUserProfileExtraction:
         return mock
 
     @pytest.fixture
-    def setup_mocks(self):
-        """Set up all required mocks with proper data structures."""
+    def setup_mocks(self, mock_runtime, mock_service_registry):
+        """Set up all required mocks with proper data structures.
+
+        Pulls `runtime` and `service_registry` from the centralized fixtures
+        (tests/fixtures/system_snapshot_fixtures.py + attestation.py) so the
+        ciris_verify adapter and attestation-aware auth service are wired
+        in by default — the strict attestation gate added in 2.7.1 demands
+        both, and re-creating them inline is just drift waiting to happen.
+        """
         from datetime import timedelta
 
         from ciris_engine.schemas.runtime.extended import ShutdownContext
@@ -155,8 +162,8 @@ class TestUserProfileExtraction:
             "graphql_provider": AsyncMock(),
             "telemetry_service": AsyncMock(),
             "secrets_service": MagicMock(),
-            "runtime": MagicMock(),
-            "service_registry": MagicMock(),
+            "runtime": mock_runtime,
+            "service_registry": mock_service_registry,
         }
 
         # Configure mocks with proper data structures

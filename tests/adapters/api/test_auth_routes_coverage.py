@@ -2404,6 +2404,10 @@ class TestNativeAppleTokenExchange:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._fetch_apple_jwks", new=AsyncMock(return_value=[jwk])),
+            # Force non-Apple platform so the bundle-ID fallback (added in
+            # 2.7.1) doesn't kick in and convert the missing-config path
+            # back into a passing audience check.
+            patch("sys.platform", "linux"),
         ):
             mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
 
@@ -2412,6 +2416,95 @@ class TestNativeAppleTokenExchange:
 
             assert exc_info.value.status_code == 503
             assert "not configured" in exc_info.value.detail.lower()
+
+    # -- Apple-platform fallback (2.7.1) ----------------------------------
+    #
+    # When oauth.json is absent, _get_allowed_apple_audiences_from_config()
+    # has two behaviors:
+    #   - Apple platform (sys.platform in {"ios", "darwin"}): return the
+    #     standard CIRIS bundle IDs as the allowed audience set, so native
+    #     Sign in with Apple works on standalone iOS/macOS deployments.
+    #   - Non-Apple platform: raise 503 (existing behavior).
+    # The tests below pin both branches.
+
+    def test_apple_platform_default_audiences_on_darwin_returns_bundle_ids(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_platform_default_audiences
+
+        with patch("sys.platform", "darwin"):
+            audiences = _get_apple_platform_default_audiences()
+
+        assert audiences == {"ai.ciris.mobile", "ai.ciris.mobile.debug"}
+
+    def test_apple_platform_default_audiences_on_ios_returns_bundle_ids(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_platform_default_audiences
+
+        with patch("sys.platform", "ios"):
+            audiences = _get_apple_platform_default_audiences()
+
+        assert audiences == {"ai.ciris.mobile", "ai.ciris.mobile.debug"}
+
+    def test_apple_platform_default_audiences_on_linux_returns_none(self):
+        """Non-Apple platforms get no fallback — oauth.json is required.
+
+        This is the regression check: if the platform tuple ever gets
+        loosened to include linux, native auth on a Linux server would
+        silently accept any token claiming the CIRIS bundle ID as audience.
+        """
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_platform_default_audiences
+
+        with patch("sys.platform", "linux"):
+            assert _get_apple_platform_default_audiences() is None
+
+    def test_get_allowed_apple_audiences_falls_back_on_apple_when_oauth_missing(self):
+        """Missing oauth.json + Apple platform → return bundle-ID defaults."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("sys.platform", "darwin"),
+        ):
+            mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
+            audiences = _get_allowed_apple_audiences_from_config()
+
+        assert audiences == {"ai.ciris.mobile", "ai.ciris.mobile.debug"}
+
+    def test_get_allowed_apple_audiences_raises_503_on_non_apple_when_oauth_missing(self):
+        """Missing oauth.json + non-Apple platform → 503 (existing behavior)."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("sys.platform", "linux"),
+        ):
+            mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
+
+            with pytest.raises(HTTPException) as exc_info:
+                _get_allowed_apple_audiences_from_config()
+
+            assert exc_info.value.status_code == 503
+
+    def test_get_allowed_apple_audiences_uses_oauth_json_over_fallback_on_apple(self):
+        """oauth.json is authoritative even on Apple platforms — defaults
+        only fire when the file is absent (404). This pins that the
+        fallback is NOT an override that ignores configured audiences.
+
+        Audience fields the function reads are defined by
+        APPLE_NATIVE_AUDIENCE_FIELDS (`client_id`, `ios_client_id`,
+        `native_client_id`, `bundle_id`); we use `client_id` here as the
+        canonical entry."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("sys.platform", "darwin"),
+        ):
+            mock_load_config.return_value = {"client_id": "com.example.custom.audience"}
+            audiences = _get_allowed_apple_audiences_from_config()
+
+        # Configured audience wins — the bundle-ID default doesn't override.
+        assert audiences == {"com.example.custom.audience"}
+        # And the bundle-ID defaults are NOT silently merged in.
+        assert "ai.ciris.mobile" not in audiences
 
     def test_get_apple_signing_key_rejects_invalid_header(self):
         from ciris_engine.logic.adapters.api.routes.auth import _get_apple_signing_key

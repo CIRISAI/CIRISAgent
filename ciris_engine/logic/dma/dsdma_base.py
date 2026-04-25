@@ -304,6 +304,8 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # system_snapshot_raw is not a dict - shouldn't happen but handle gracefully
                 user_profiles_block = ""
                 system_snapshot_block = ""
+                # No profiles → reset language so previous thought doesn't bleed.
+                self._sync_language_from_profiles(None)
 
         escalation_guidance_block = get_escalation_guidance(0)
 

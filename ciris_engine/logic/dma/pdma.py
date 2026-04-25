@@ -72,6 +72,11 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         Also syncs user's language preference to the DMA prompt loader.
         """
         if not context:
+            # No context = no profile = no language. Reset so a previous
+            # thought's language doesn't bleed into this one.
+            if self._explicit_language is not None:
+                self._explicit_language = None
+                logger.debug("PDMA: Cleared prompt language (no context)")
             return "", ""
 
         system_snapshot_str = ""

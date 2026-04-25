@@ -148,6 +148,11 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         context_summary = "CIRIS AI Agent - evaluating information diversity"
 
         if not context:
+            # No context = no profile = no language. Reset so a previous
+            # thought's language doesn't bleed into this one.
+            if self._explicit_language is not None:
+                self._explicit_language = None
+                logger.debug("IDMA: Cleared prompt language (no context)")
             return system_snapshot_str, user_profiles_str, context_summary
 
         # Track user profiles for language sync

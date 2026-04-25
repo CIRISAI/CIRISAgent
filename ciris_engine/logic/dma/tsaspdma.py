@@ -127,29 +127,30 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync user's language preference from context to prompt loader."""
-        if not context:
-            return
+        """Sync user's language preference from context to per-instance state.
 
-        user_profiles = None
+        Always assigns _explicit_language to the value derived from THIS
+        thought (None included). Without this reset, a reused evaluator
+        instance would inherit a previous thought's language when the next
+        thought arrives without context or profile data.
+        """
+        user_profiles: Optional[Any] = None
 
-        # Try to extract user profiles from various context structures
-        if hasattr(context, "system_snapshot") and context.system_snapshot:
-            if hasattr(context.system_snapshot, "user_profiles"):
-                user_profiles = context.system_snapshot.user_profiles
-        elif hasattr(context, "user_profiles"):
-            user_profiles = context.user_profiles
-        elif isinstance(context, dict):
-            system_snapshot = context.get("system_snapshot")
-            if system_snapshot:
-                if isinstance(system_snapshot, dict):
-                    user_profiles = system_snapshot.get("user_profiles")
-                elif hasattr(system_snapshot, "user_profiles"):
-                    user_profiles = system_snapshot.user_profiles
+        if context:
+            # Try to extract user profiles from various context structures
+            if hasattr(context, "system_snapshot") and context.system_snapshot:
+                if hasattr(context.system_snapshot, "user_profiles"):
+                    user_profiles = context.system_snapshot.user_profiles
+            elif hasattr(context, "user_profiles"):
+                user_profiles = context.user_profiles
+            elif isinstance(context, dict):
+                system_snapshot = context.get("system_snapshot")
+                if system_snapshot:
+                    if isinstance(system_snapshot, dict):
+                        user_profiles = system_snapshot.get("user_profiles")
+                    elif hasattr(system_snapshot, "user_profiles"):
+                        user_profiles = system_snapshot.user_profiles
 
-        # Sync user's language preference into per-instance _explicit_language.
-        # Always assigns (None included) so reused evaluator instances don't
-        # carry a previous thought's language when profile data is absent.
         new_language: Optional[str] = None
         if user_profiles and len(user_profiles) > 0:
             first_profile = user_profiles[0]
@@ -158,6 +159,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                 if isinstance(first_profile, dict)
                 else getattr(first_profile, "preferred_language", None)
             )
+
         if new_language != self._explicit_language:
             self._explicit_language = new_language
             if new_language:

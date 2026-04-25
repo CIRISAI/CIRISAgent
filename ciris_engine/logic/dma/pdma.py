@@ -66,6 +66,22 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
+    def _sync_language(self, user_profiles: Any) -> None:
+        """Update _explicit_language from the first user profile.
+
+        Always assigns (None included) so a reused evaluator instance never
+        inherits a previous thought's language when profile data is absent.
+        """
+        new_language: Optional[str] = None
+        if user_profiles and len(user_profiles) > 0:
+            new_language = getattr(user_profiles[0], "preferred_language", None)
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            if new_language:
+                logger.debug(f"PDMA: Synced prompt language to user preference: {new_language}")
+            else:
+                logger.debug("PDMA: Cleared prompt language (no profile/context)")
+
     def _build_context_strings(self, context: Any) -> tuple[str, str]:
         """Extract system snapshot and user profile context strings.
 
@@ -74,9 +90,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         if not context:
             # No context = no profile = no language. Reset so a previous
             # thought's language doesn't bleed into this one.
-            if self._explicit_language is not None:
-                self._explicit_language = None
-                logger.debug("PDMA: Cleared prompt language (no context)")
+            self._sync_language(None)
             return "", ""
 
         system_snapshot_str = ""
@@ -92,19 +106,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             user_profiles = context.user_profiles
             user_profile_str = format_user_profiles(user_profiles)
 
-        # Sync user's language preference into per-instance _explicit_language.
-        # Always assigns (None included) so reused evaluator instances don't
-        # carry a previous thought's language when profile data is absent.
-        new_language: Optional[str] = None
-        if user_profiles and len(user_profiles) > 0:
-            new_language = getattr(user_profiles[0], "preferred_language", None)
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            if new_language:
-                logger.debug(f"PDMA: Synced prompt language to user preference: {new_language}")
-            else:
-                logger.debug("PDMA: Cleared prompt language (no profile/context)")
-
+        self._sync_language(user_profiles)
         return system_snapshot_str, user_profile_str
 
     def _get_template_override(self, key: str) -> Optional[str]:

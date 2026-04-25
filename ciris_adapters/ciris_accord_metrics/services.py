@@ -1503,21 +1503,23 @@ class AccordMetricsService:
                 conflicts_val and isinstance(conflicts_val, str) and conflicts_val.lower().strip() != "none"
             )
             pdma_data: Dict[str, Any] = {"has_conflicts": has_conflicts}
-            idma_data: Optional[Dict[str, Any]] = (
-                {
-                    "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
-                    "effective_source_count": idma.get("effective_source_count") if isinstance(idma, dict) else None,
-                    "correlation_risk": idma.get("correlation_risk") if isinstance(idma, dict) else None,
-                    "source_overlap": idma.get("source_overlap") if isinstance(idma, dict) else None,
-                    "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
-                    "reasoning_is_fragile": idma.get("reasoning_is_fragile") if isinstance(idma, dict) else None,
+            # Build idma_data only if idma is a non-empty dict. The earlier
+            # version had a nested ternary on every key (`idma.get(k) if
+            # isinstance(idma, dict) else None`) — redundant since a single
+            # outer dict-check is sufficient.
+            idma_data: Optional[Dict[str, Any]] = None
+            if isinstance(idma, dict) and idma:
+                idma_data = {
+                    "k_eff": idma.get("k_eff"),
+                    "effective_source_count": idma.get("effective_source_count"),
+                    "correlation_risk": idma.get("correlation_risk"),
+                    "source_overlap": idma.get("source_overlap"),
+                    "fragility_flag": idma.get("fragility_flag"),
+                    "reasoning_is_fragile": idma.get("reasoning_is_fragile"),
                     # phase is a key scoring metric: chaos/healthy/rigidity
-                    "phase": idma.get("phase") if isinstance(idma, dict) else None,
-                    "reasoning_state": idma.get("reasoning_state") if isinstance(idma, dict) else None,
+                    "phase": idma.get("phase"),
+                    "reasoning_state": idma.get("reasoning_state"),
                 }
-                if idma
-                else None
-            )
 
             # DETAILED: Add flags, lists, identifiers
             if is_detailed:

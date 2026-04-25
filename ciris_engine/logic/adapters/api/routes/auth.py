@@ -1874,7 +1874,10 @@ def _get_apple_signing_key(id_token: str, jwks: List[Dict[str, Any]]) -> Any:
     from jwt.algorithms import RSAAlgorithm
 
     try:
-        header = jwt.get_unverified_header(id_token)  # NOSONAR: Apple key selection requires reading the JWT header kid before signature verification
+        # NOSONAR python:S5659 - Apple key selection requires reading the JWT
+        # header `kid` BEFORE signature verification (we look up the public key
+        # by `kid`, then verify with it on the next call).
+        header = jwt.get_unverified_header(id_token)  # NOSONAR
     except jwt.InvalidTokenError as exc:
         logger.error("[AppleNativeAuth] Invalid Apple JWT header: %s", type(exc).__name__)
         raise _apple_invalid_id_token_exception() from exc

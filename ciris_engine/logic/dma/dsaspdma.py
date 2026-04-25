@@ -112,6 +112,28 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
+    @staticmethod
+    def _user_profiles_from_context(context: Optional[Any]) -> Optional[Any]:
+        """Extract user_profiles from a polymorphic context (object or dict)."""
+        if not context:
+            return None
+        if hasattr(context, "system_snapshot") and getattr(context, "system_snapshot", None):
+            return getattr(getattr(context, "system_snapshot"), "user_profiles", None)
+        if isinstance(context, dict):
+            snapshot = context.get("system_snapshot")
+            if isinstance(snapshot, dict):
+                return snapshot.get("user_profiles")
+            if snapshot is not None:
+                return getattr(snapshot, "user_profiles", None)
+        return None
+
+    @staticmethod
+    def _preferred_language_of(profile: Any) -> Optional[str]:
+        """Read preferred_language from a profile (object or dict)."""
+        if isinstance(profile, dict):
+            return profile.get("preferred_language")
+        return getattr(profile, "preferred_language", None)
+
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Sync prompt language from the current user context.
 
@@ -121,28 +143,10 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         language. Without this reset, thought A in `am` followed by thought
         B with no profile would silently keep loading Amharic prompts.
         """
-
-        preferred_language: Optional[str] = None
-        user_profiles: Optional[Any] = None
-
-        if context:
-            if hasattr(context, "system_snapshot") and getattr(context, "system_snapshot", None):
-                system_snapshot = getattr(context, "system_snapshot")
-                user_profiles = getattr(system_snapshot, "user_profiles", None)
-            elif isinstance(context, dict):
-                system_snapshot = context.get("system_snapshot")
-                if isinstance(system_snapshot, dict):
-                    user_profiles = system_snapshot.get("user_profiles")
-                elif system_snapshot is not None:
-                    user_profiles = getattr(system_snapshot, "user_profiles", None)
-
-        if user_profiles:
-            first_profile = user_profiles[0]
-            preferred_language = (
-                first_profile.get("preferred_language")
-                if isinstance(first_profile, dict)
-                else getattr(first_profile, "preferred_language", None)
-            )
+        user_profiles = self._user_profiles_from_context(context)
+        preferred_language: Optional[str] = (
+            self._preferred_language_of(user_profiles[0]) if user_profiles else None
+        )
 
         if preferred_language != self._explicit_language:
             # The prompt_loader property reads _explicit_language on next

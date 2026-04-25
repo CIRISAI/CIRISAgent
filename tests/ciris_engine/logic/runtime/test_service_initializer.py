@@ -272,6 +272,13 @@ class TestServiceInitializer:
         # Clear LLM replica env so this test always sees a single replica
         # regardless of what other parallel tests are doing in os.environ.
         monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
+        # Clear billing ID tokens — when a non-CIRIS-proxy primary is configured
+        # AND an id_token is present, _initialize_llm_services auto-registers
+        # a CIRIS proxy fallback (a 2nd OpenAICompatibleClient). Other tests in
+        # the same xdist worker can leak these tokens into our env, breaking
+        # the call_count==1 assertion.
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as mock_llm_class:
             mock_llm = AsyncMock()

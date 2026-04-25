@@ -69,12 +69,16 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
 
+        # Per-thought language override populated from user_profiles in
+        # _extract_context_data. None means fall back to env var.
+        self._explicit_language: Optional[str] = None
+
         logger.info(f"IDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        """Get prompt loader fresh each time to respect language changes."""
-        return get_prompt_loader()
+        """Get prompt loader for the thread's currently-active language."""
+        return get_prompt_loader(language=self._explicit_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -163,14 +167,18 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             user_profiles = context.user_profiles
             user_profiles_str = format_user_profiles(user_profiles)
 
-        # Sync user's language preference to prompt loader
+        # Sync user's language preference into per-instance _explicit_language.
+        # Always assigns (None included) so reused evaluator instances don't
+        # carry a previous thought's language when profile data is absent.
+        new_language: Optional[str] = None
         if user_profiles and len(user_profiles) > 0:
-            user_lang = getattr(user_profiles[0], "preferred_language", None)
-            if user_lang and user_lang != self.prompt_loader.language:
-                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
-
-                set_prompt_language(user_lang)
-                logger.debug(f"IDMA: Synced prompt language to user preference: {user_lang}")
+            new_language = getattr(user_profiles[0], "preferred_language", None)
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            if new_language:
+                logger.debug(f"IDMA: Synced prompt language to user preference: {new_language}")
+            else:
+                logger.debug("IDMA: Cleared prompt language (no profile/context)")
 
         return system_snapshot_str, user_profiles_str, context_summary
 

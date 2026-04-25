@@ -43,7 +43,7 @@ class TestIDMAEvaluator:
         mock_loader.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_loader.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
-        monkeypatch.setattr("ciris_engine.logic.dma.idma.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.idma.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture

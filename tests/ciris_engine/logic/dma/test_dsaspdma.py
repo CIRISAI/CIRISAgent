@@ -254,3 +254,42 @@ class TestDSASPDMAEvaluator:
         evaluator._sync_language_from_context(context)
 
         assert evaluator.prompt_loader.language == "fr"
+
+    def test_sync_language_clears_when_subsequent_thought_lacks_profile(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+    ) -> None:
+        """Regression: a reused evaluator must not inherit the previous
+        thought's language when the next thought arrives without profile
+        data. Without this clear, an `am` thought followed by a
+        no-profile thought would silently keep loading Amharic prompts."""
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+
+        # First thought: am profile
+        am_profile = MagicMock(preferred_language="am")
+        am_context = MagicMock(system_snapshot=MagicMock(user_profiles=[am_profile]))
+        evaluator._sync_language_from_context(am_context)
+        assert evaluator._explicit_language == "am"
+
+        # Second thought: no context at all
+        evaluator._sync_language_from_context(None)
+        assert evaluator._explicit_language is None, (
+            "stale language bled across thoughts"
+        )
+
+        # Third thought: context but no user_profiles
+        empty_context = MagicMock(system_snapshot=MagicMock(user_profiles=None))
+        evaluator._sync_language_from_context(am_context)  # set back to am
+        assert evaluator._explicit_language == "am"
+        evaluator._sync_language_from_context(empty_context)
+        assert evaluator._explicit_language is None, (
+            "stale language bled across thoughts when context had no profiles"
+        )
+
+        # Fourth thought: dict-shaped context with no system_snapshot
+        evaluator._sync_language_from_context(am_context)  # set back to am
+        evaluator._sync_language_from_context({})
+        assert evaluator._explicit_language is None, (
+            "stale language bled across thoughts when context dict was empty"
+        )

@@ -68,12 +68,38 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
 
+        # Per-thought language override populated from user_profiles in the
+        # context-building paths below. None means fall back to env var.
+        self._explicit_language: Optional[str] = None
+
         logger.info(f"BaseDSDMA '{self.domain_name}' initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        """Get prompt loader fresh each time to respect language changes."""
-        return get_prompt_loader()
+        """Get prompt loader for the thread's currently-active language."""
+        return get_prompt_loader(language=self._explicit_language)
+
+    def _sync_language_from_profiles(self, user_profiles: Optional[Any]) -> None:
+        """Update _explicit_language from the first user profile.
+
+        Always assigns (None included) so a reused evaluator instance never
+        inherits a previous thought's language when profile data is absent.
+        Accepts both dataclass-style and dict-style profile lists.
+        """
+        new_language: Optional[str] = None
+        if user_profiles and len(user_profiles) > 0:
+            first = user_profiles[0]
+            new_language = (
+                first.get("preferred_language")
+                if isinstance(first, dict)
+                else getattr(first, "preferred_language", None)
+            )
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            if new_language:
+                logger.debug(f"DSDMA: Synced prompt language to user preference: {new_language}")
+            else:
+                logger.debug("DSDMA: Cleared prompt language (no profile/context)")
 
     @property
     def prompt_template_data(self) -> PromptCollection:
@@ -155,14 +181,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             system_snapshot = current_context.system_snapshot
             user_profiles_data = system_snapshot.user_profiles
 
-            # Sync user's language preference to prompt loader
-            if user_profiles_data and len(user_profiles_data) > 0:
-                user_lang = getattr(user_profiles_data[0], "preferred_language", None)
-                if user_lang and user_lang != self.prompt_loader.language:
-                    from ciris_engine.logic.dma.prompt_loader import set_prompt_language
-
-                    set_prompt_language(user_lang)
-                    logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
+            self._sync_language_from_profiles(user_profiles_data)
 
             # Convert list of UserProfile to dict format expected by format_user_profiles
             user_profiles_dict = {}
@@ -278,19 +297,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # format_user_profiles accepts Union[List[Any], dict[str, Any], None]
                 user_profiles_block = format_user_profiles(user_profiles_data_raw) if user_profiles_data_raw else ""
 
-                # Sync user's language preference to prompt loader (legacy path)
-                if user_profiles_data_raw and len(user_profiles_data_raw) > 0:
-                    first_profile = user_profiles_data_raw[0]
-                    user_lang = (
-                        first_profile.get("preferred_language")
-                        if isinstance(first_profile, dict)
-                        else getattr(first_profile, "preferred_language", None)
-                    )
-                    if user_lang and user_lang != self.prompt_loader.language:
-                        from ciris_engine.logic.dma.prompt_loader import set_prompt_language
-
-                        set_prompt_language(user_lang)
-                        logger.debug(f"DSDMA: Synced prompt language to user preference: {user_lang}")
+                self._sync_language_from_profiles(user_profiles_data_raw)
                 # Cast dict to SystemSnapshot for format_system_snapshot
                 system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, system_snapshot_raw))
             else:

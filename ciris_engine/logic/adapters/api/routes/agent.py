@@ -332,6 +332,15 @@ async def _create_interaction_message(
         except Exception:
             pass  # Keep default author_name on lookup failure
 
+    # Surface caller-declared locale (e.g. from qa_runner channel metadata)
+    # so it lands on the task at creation time. This is the top of the
+    # localization chain — task/thought beats user/system/env defaults.
+    preferred_language: Optional[str] = None
+    if body.context and body.context.metadata:
+        meta_lang = body.context.metadata.get("language") or body.context.metadata.get("preferred_language")
+        if isinstance(meta_lang, str) and meta_lang.strip():
+            preferred_language = meta_lang.strip()
+
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
@@ -340,6 +349,7 @@ async def _create_interaction_message(
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         images=images,
+        preferred_language=preferred_language,
     )
 
     return message_id, channel_id, msg

@@ -158,9 +158,16 @@ async def send_messages(
     token: str,
     concurrency: int,
     process_tasks: bool,
-) -> tuple[int, int, float, list[str]]:
-    """Submit messages concurrently, optionally forcing full task processing."""
+) -> tuple[int, int, float, list[str], dict[str, int]]:
+    """Submit messages concurrently, optionally forcing full task processing.
+
+    Returns (success, failed, elapsed, task_ids, failure_reasons).
+    failure_reasons is a count of (status_code or exception_type) → count
+    so a CI summary can show *why* messages failed instead of just the
+    aggregate count.
+    """
     import httpx
+    from collections import Counter
 
     queue: asyncio.Queue[int] = asyncio.Queue()
     for i in range(messages):
@@ -170,6 +177,7 @@ async def send_messages(
     success = 0
     failed = 0
     task_ids: list[str] = []
+    failure_reasons: Counter[str] = Counter()
     counter_lock = asyncio.Lock()
     start = time.time()
 
@@ -194,10 +202,11 @@ async def send_messages(
                     "context": {"channel_id": f"memory_benchmark_w{worker_id}_m{idx}"},
                 }
 
-                try:
-                    accepted = False
-                    for attempt in range(3):
-                        endpoint = "/v1/agent/interact" if process_tasks else "/v1/agent/message"
+                accepted = False
+                last_reason = "no_attempts"
+                for attempt in range(3):
+                    endpoint = "/v1/agent/interact" if process_tasks else "/v1/agent/message"
+                    try:
                         response = await client.post(f"{base_url}{endpoint}", json=payload, headers=headers)
                         if response.status_code == 200:
                             response_json = response.json()
@@ -211,16 +220,19 @@ async def send_messages(
                                         task_ids.append(task_id)
                             if accepted:
                                 break
-                        await asyncio.sleep(0.15 * (attempt + 1))
-
-                    async with counter_lock:
-                        if accepted:
-                            success += 1
+                            last_reason = "200_no_task_id"
                         else:
-                            failed += 1
-                except Exception:
-                    async with counter_lock:
+                            last_reason = f"http_{response.status_code}"
+                    except Exception as e:
+                        last_reason = f"exc_{type(e).__name__}"
+                    await asyncio.sleep(0.15 * (attempt + 1))
+
+                async with counter_lock:
+                    if accepted:
+                        success += 1
+                    else:
                         failed += 1
+                        failure_reasons[last_reason] += 1
 
                 if (idx + 1) % 100 == 0:
                     print(f"  Submitted {idx + 1}/{messages} messages...")
@@ -230,7 +242,7 @@ async def send_messages(
     workers = [asyncio.create_task(worker(i)) for i in range(max(1, concurrency))]
     await asyncio.gather(*workers)
     elapsed = time.time() - start
-    return success, failed, elapsed, task_ids
+    return success, failed, elapsed, task_ids, dict(failure_reasons)
 
 
 def _extract_task_ids_from_payload(payload_text: str) -> set[str]:
@@ -315,7 +327,14 @@ def verify_task_processing(
     return False, task_complete_count, speak_count
 
 
-def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrency: int = 20, verify_audit: bool = False) -> int:
+def main(
+    messages: int = 100,
+    adapter: str = "api",
+    port: int = 8080,
+    concurrency: int = 20,
+    verify_audit: bool = False,
+    idle_seconds: int = 0,
+) -> int:
     """Run memory benchmark with N messages."""
     print("=" * 70)
     print(f"CIRIS MEMORY BENCHMARK - {messages} MESSAGES")
@@ -395,11 +414,16 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
     samples = []
     success = 0
     failed = 0
+    failure_reasons: dict[str, int] = {}
     try:
-        success, failed, elapsed, task_ids = asyncio.run(
+        success, failed, elapsed, task_ids, failure_reasons = asyncio.run(
             send_messages(base_url, messages, token, concurrency, process_tasks=verify_audit)
         )
         print(f"  Submitted {success}/{messages} messages in {elapsed:.1f}s")
+        if failure_reasons:
+            print(f"  Failure breakdown ({failed} total):")
+            for reason, count in sorted(failure_reasons.items(), key=lambda x: -x[1]):
+                print(f"    {count:>4}× {reason}")
 
         if verify_audit and success > 0:
             verified, task_complete_count, speak_count = verify_task_processing(task_ids, success, benchmark_start_time)
@@ -420,6 +444,35 @@ def main(messages: int = 100, adapter: str = "api", port: int = 8080, concurrenc
             if mem > 0:
                 samples.append(mem)
             time.sleep(0.5)
+
+        # Optional idle window: hold the server alive after the burst and
+        # sample memory periodically so we can observe whether async task
+        # processing eventually drains and memory plateaus. Without this,
+        # the headline "Final" memory in CI is taken 2.5s after submission
+        # — well before the queued thoughts have actually finished
+        # processing — and underrepresents steady-state RSS.
+        if idle_seconds > 0:
+            print(f"\n  Idle settling window: {idle_seconds}s, sampling every 2s...")
+            idle_samples: list[tuple[float, float]] = []
+            t0 = time.time()
+            while time.time() - t0 < idle_seconds:
+                t = time.time() - t0
+                mem = get_children_memory(pid)
+                if mem > 0:
+                    samples.append(mem)
+                    idle_samples.append((t, mem / 1024 / 1024))
+                time.sleep(2.0)
+            if idle_samples:
+                first = idle_samples[0][1]
+                last = idle_samples[-1][1]
+                peak = max(s[1] for s in idle_samples)
+                # Plateau = last 10% of samples agree within 1 MB
+                tail = idle_samples[-max(1, len(idle_samples) // 10):]
+                stable = (max(s[1] for s in tail) - min(s[1] for s in tail)) < 1.0
+                print(
+                    f"  Idle: first={first:.1f}MB peak={peak:.1f}MB final={last:.1f}MB "
+                    f"delta={last - first:+.1f}MB plateau={'yes' if stable else 'no'}"
+                )
 
     except Exception as e:
         print(f"  ERROR: {e}")
@@ -478,6 +531,16 @@ def parse_args() -> argparse.Namespace:
         help="Number of concurrent submit workers (default: 20)",
     )
     parser.add_argument("--verify-audit", action="store_true", help="Verify SPEAK/TASK_COMPLETE entries in audit log")
+    parser.add_argument(
+        "--idle-seconds",
+        type=int,
+        default=0,
+        help=(
+            "After submitting all messages, hold the server alive for N seconds "
+            "and sample memory every 2s. Reveals whether async task processing "
+            "drains and RAM plateaus. Default 0 (matches old behavior)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -490,5 +553,6 @@ if __name__ == "__main__":
             port=args.port,
             concurrency=max(1, args.concurrency),
             verify_audit=args.verify_audit,
+            idle_seconds=max(0, args.idle_seconds),
         )
     )

@@ -102,10 +102,16 @@ jobs:
       - name: 1000 Message Benchmark
         run: |
           echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
-          python3 tools/memory_benchmark.py --messages 1000 --adapter api | tee 1000msg.log || echo "1000-msg benchmark skipped"
+          # --idle-seconds 90 holds the server alive after the burst so we can
+          # see whether async task processing drains and RAM plateaus. Without
+          # it, "Final" memory in the summary is the value 2.5s after the last
+          # POST returns — well before the queued thoughts have been processed.
+          python3 tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 90 | tee 1000msg.log || echo "1000-msg benchmark skipped"
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -20 1000msg.log >> $GITHUB_STEP_SUMMARY
+            # Tail 30 lines instead of 20 so the failure-breakdown + idle
+            # summary lines both make it into the GitHub summary.
+            tail -30 1000msg.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 

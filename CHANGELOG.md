@@ -5,6 +5,28 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-04-25
+
+### Fixed
+
+- **CIRISLens reporting null `verify_attestation` fields (production)** — `docker/agent/Dockerfile` was installing `libtss2-esys-3.0.2-0t64` and `libtss2-tcti-device0t64` but missing `libtss2-tctildr0t64`, the TCTI loader the FFI calls at runtime. CIRISVerify failed to initialize in production with `Failed to load library: libtss2-tctildr.so.0`, every batch context fell into the silent fallback, and Lens received nulls. Added the missing package and a `python3 -c "ctypes.CDLL('libtss2-tctildr.so.0')"` smoke check inside the same RUN so a missing TPM2 lib fails the build instead of shipping silently.
+- **CIRISLens reporting null `verify_attestation` fields (QA)** — separate root cause from production. `AuthenticationService.start()` (a) skipped attestation entirely when `CIRIS_IMPORT_MODE` or `CIRIS_MOCK_LLM` was set — a path that should never have existed; ciris_verify is a hard runtime dependency — and (b) launched `run_startup_attestation` as fire-and-forget `asyncio.create_task(...)`, racing the first `batch_context` build which then hit a broad `except Exception` fallback that emitted nulls. Replaced with a captured `self._attestation_task` plus an `await_attestation_ready()` gate that any consumer requiring the cache must call first; failures re-raise loudly. `prefetch_batch_context()` no longer has a fallback path — missing or failed attestation is fatal at thought-context build.
+- **Google Play 16 KB page-size rejection (partial)** — bumped `com.microsoft.onnxruntime:onnxruntime-android` from 1.17.0 to 1.21.0. ONNX Runtime added 16 KB-aligned `.so` files in 1.20.0; 1.21.0 is the current stable. `libonnxruntime.so` and `libonnxruntime4j_jni.so` are now 16 KB-aligned in the AAB. **Still pending: `libllama_server.so` (Android) and `libciris_verify_ffi.so` (iOS) need the same 16 KB rebuild — see Known Issues below.**
+- **SonarCloud blockers in `ciris_adapters/__init__.py`** — `__all__` declared three module names that have never existed (`geo_wisdom`, `weather_wisdom`, `sensor_wisdom`); removed them and rewrote the docstring to reflect that adapters are discovered via `manifest.json` at runtime, not enumerated here.
+
+### Changed
+
+- **Test infrastructure consolidated around centralized fixtures.** The strict attestation gate exposed a wide set of tests that were either constructing throwaway runtime mocks inline (`mock_runtime = MagicMock()`) or relying on a permissive graceful-degradation path that no longer exists. The fix touched the centralized fixtures rather than chasing every test:
+  - `tests.fixtures.mocks.MockRuntime` now bakes in the `ciris_verify` adapter, `adapter_manager`, `service_registry`, and `bus_manager` so tests that need custom adapters or services seed the existing mutable dicts rather than rebuilding the runtime from scratch.
+  - `tests.fixtures.mocks.MockServiceRegistry` now carries an attestation-aware `get_authentication()` returning a fully-passing `AttestationResult` via `await_attestation_ready()` / `get_cached_attestation()`.
+  - All three `mock_runtime` fixtures (`tests/conftest.py`, `tests/fixtures/system_snapshot_fixtures.py`, `tests/ciris_engine/logic/context/conftest.py`) now delegate to `MockRuntime` so the strict gate sees a consistent shape regardless of fixture-resolution order.
+  - ~75 tests across 9 files updated to use the centralized fixtures instead of inline `Mock()` runtimes — most via mechanical script edits, a few hand-rewritten because they were testing real SUT type-safety branches the strict gate would otherwise mask.
+
+### Known Issues (Carry-Over)
+
+- **iOS bundled `libciris_verify_ffi.so` still 4 KB-aligned.** `client/iosApp/Resources/app/ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so` reports `LOAD p_align=0x1000`. Apple Silicon iOS uses 16 KB pages; the iOS team should rebuild this binary with `-Wl,-z,max-page-size=16384` (or the equivalent flag for whatever toolchain produced the original). Linking with the existing CIRISVerify Rust source — same target triple, same exports — is the expected path; no Python/Kotlin changes needed.
+- **Android bundled `libllama_server.so` still 4 KB-aligned.** Local-LLM (llama.cpp + Gemma 4) feature in the AAB is gated on this. Rebuild with the same linker flag against the llama.cpp source that produced the 2.6.0 binary, then drop into `client/androidApp/src/main/jniLibs/{arm64-v8a,x86_64}/`.
+
 ## [2.7.0] - 2026-04-23
 
 ### Added

@@ -840,11 +840,13 @@ class ThoughtProcessor(
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
         retry_context = self._create_retry_context_copy(thought_context)
-        # Resolve agent locale so the retry guidance is rendered in the same
-        # language the agent was speaking — prevents the model from flipping
-        # to English when it sees an English override block.
+        # Resolve agent locale via the canonical chain (task/thought ->
+        # user -> system -> en). The retry guidance must be in the same
+        # language the agent was working in — an English override block
+        # injected into a non-English thought flips the model's language.
         from ciris_engine.logic.utils.localization import get_user_language_from_context
         retry_language = get_user_language_from_context(thought_context)
+        logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
         retry_guidance = self._build_retry_guidance(
             attempted_action,
             override_reason,

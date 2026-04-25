@@ -664,6 +664,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
                 images=msg_images,
+                preferred_language=getattr(msg, "preferred_language", None),
             )
 
             await self._sign_and_add_task(task)

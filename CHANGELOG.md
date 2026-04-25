@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Lens null `verify_attestation` (production)** — Dockerfile was missing `libtss2-tctildr0t64`; CIRISVerify failed to load `libtss2-tctildr.so.0` at runtime. Added the package plus a `ctypes.CDLL` smoke-check in the same RUN.
 - **Lens null `verify_attestation` (QA)** — `AuthenticationService.start()` skipped attestation under `CIRIS_IMPORT_MODE`/`CIRIS_MOCK_LLM` and ran `run_startup_attestation` as fire-and-forget. Removed the skip, captured the task on `self._attestation_task`, added `await_attestation_ready()` for consumers. `prefetch_batch_context()` blocks on it before reading the cache and no longer has a silent fallback — missing/failed attestation is fatal.
-- **Google Play 16 KB page-size rejection (partial)** — bumped `com.microsoft.onnxruntime:onnxruntime-android` 1.17.0 → 1.21.0 for 16 KB-aligned `.so` files. `libllama_server.so` still 4 KB-aligned, separate work.
+- **Google Play 16 KB page-size rejection** — three fixes converged: bumped `com.microsoft.onnxruntime:onnxruntime-android` 1.17.0 → 1.25.0 (1.21.0 fixed `libonnxruntime.so` but its `libonnxruntime4j_jni.so` was still 4 KB-aligned; 1.25.0 fixes both); rebuilt `libllama_server.so` from llama.cpp HEAD with NDK 27 and `-Wl,-z,max-page-size=16384` (37 MB → 8.8 MB after strip, replacing the 12 MB 2.6.0 build); audited every `.so` in the resulting AAB — all 14 binaries are 16 KB-aligned.
 - **SonarCloud blockers** — removed undefined `geo_wisdom`/`weather_wisdom`/`sensor_wisdom` from `ciris_adapters/__init__.py:__all__`.
 
 ### Changed

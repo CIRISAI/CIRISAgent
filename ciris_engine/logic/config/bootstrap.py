@@ -7,10 +7,11 @@ then migrates to graph-based configuration for runtime management.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles
 import yaml
+from pydantic import BaseModel, ValidationError
 
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.types import ConfigMapping, JSONDict
@@ -206,14 +207,92 @@ class ConfigBootstrap:
         # Resolve relative database paths to use proper data directory
         config_data = ConfigBootstrap._resolve_database_paths(config_data)
 
-        # Create and validate config
+        # Create and validate config. Bootstrap YAML lives in persistent
+        # user volumes that outlive any single agent image, so schema
+        # evolution (renamed/removed fields) must not crash-loop the agent.
+        # Strip unknown keys, warn loudly, and retry. extra="forbid" stays on
+        # the inner models for defense-in-depth — only the outer bootstrap
+        # loader is forgiving.
         try:
             essential_config = EssentialConfig(**config_data)
             logger.info("Essential configuration loaded and validated")
             return essential_config
+        except ValidationError as e:
+            if not ConfigBootstrap._has_only_extra_forbidden_errors(e):
+                logger.error(f"Configuration validation failed: {e}")
+                raise ValueError(f"Invalid configuration: {e}") from e
+            stripped, dropped = ConfigBootstrap._strip_unknown_keys(EssentialConfig, config_data)
+            if not dropped:
+                logger.error(f"Configuration validation failed: {e}")
+                raise ValueError(f"Invalid configuration: {e}") from e
+            logger.warning(
+                "Essential config contained %d unknown field(s) from older schema "
+                "(persistent volume outlived the schema) — dropping and continuing: %s",
+                len(dropped),
+                ", ".join(sorted(dropped)),
+            )
+            try:
+                essential_config = EssentialConfig(**stripped)
+                logger.info("Essential configuration loaded after stripping legacy keys")
+                return essential_config
+            except Exception as retry_e:
+                logger.error(f"Configuration validation failed even after stripping legacy keys: {retry_e}")
+                raise ValueError(f"Invalid configuration: {retry_e}") from retry_e
         except Exception as e:
             logger.error(f"Configuration validation failed: {e}")
             raise ValueError(f"Invalid configuration: {e}") from e
+
+    @staticmethod
+    def _has_only_extra_forbidden_errors(err: ValidationError) -> bool:
+        """Check whether every ValidationError entry is an extra_forbidden.
+
+        If any other error type is present (wrong type, missing required,
+        enum mismatch, etc.), we must NOT swallow them — they signal real
+        misconfiguration rather than a simple stale-volume/rename case.
+        """
+        errors = err.errors()
+        if not errors:
+            return False
+        return all(e.get("type") == "extra_forbidden" for e in errors)
+
+    @staticmethod
+    def _strip_unknown_keys(
+        model_cls: type, data: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """Recursively drop keys not declared on the target Pydantic model.
+
+        Only strips keys that the model doesn't know about. Preserves all
+        known fields and recursively descends into nested BaseModel fields.
+        Returns (cleaned_dict, list_of_dropped_dotted_paths).
+        """
+        dropped: List[str] = []
+
+        def _clean(submodel: type, subdata: Any, path: str) -> Any:
+            if not isinstance(subdata, dict):
+                return subdata
+            if not (isinstance(submodel, type) and issubclass(submodel, BaseModel)):
+                return subdata
+            known = set(submodel.model_fields.keys())
+            cleaned: Dict[str, Any] = {}
+            for key, value in subdata.items():
+                if key not in known:
+                    dropped.append(f"{path}.{key}" if path else key)
+                    continue
+                field_info = submodel.model_fields[key]
+                annotation = field_info.annotation
+                # Descend if the field is itself a BaseModel subclass.
+                if (
+                    isinstance(annotation, type)
+                    and issubclass(annotation, BaseModel)
+                    and isinstance(value, dict)
+                ):
+                    cleaned[key] = _clean(annotation, value, f"{path}.{key}" if path else key)
+                else:
+                    cleaned[key] = value
+            return cleaned
+
+        cleaned_data = _clean(model_cls, data, "")
+        return cleaned_data, dropped
 
     @staticmethod
     def get_config_metadata(config: EssentialConfig, yaml_path: Optional[Path] = None) -> JSONDict:

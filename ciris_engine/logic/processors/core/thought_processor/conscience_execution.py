@@ -87,11 +87,17 @@ class ConscienceExecutionPhase:
         # (bypass consciences need this context to run)
         from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase directly on the context
+        # rather than spelunking through system_snapshot-as-dma-bag.
+        idma_result = dma_results.get("idma") if isinstance(dma_results, dict) else None
+
         context = ConscienceCheckContext(
             thought=thought or thought_item,
             task=None,  # Will be populated by conscience checks if needed
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+            idma_result=idma_result,
         )
 
         # CRITICAL: Run bypass consciences FIRST, even for exempt actions
@@ -211,12 +217,19 @@ class ConscienceExecutionPhase:
             # Aggregate epistemic metrics from conscience results
             if result.entropy_score is not None:
                 entropy_level = result.entropy_score
-                # Capture full entropy check result
+                # Capture full entropy check result, preserving IRIS-E's
+                # alternative_meanings for recursive ASPDMA retry guidance.
+                _alts = getattr(result, "entropy_alternatives", None)
+                _alt_list = list(_alts) if isinstance(_alts, list) else []
+                _rep = getattr(result, "entropy_actual_is_representative", None)
+                _rep_bool = _rep if isinstance(_rep, bool) else None
                 entropy_check_result = EntropyCheckResult(
                     passed=result.passed,
                     entropy_score=result.entropy_score,
                     threshold=0.4,  # Default threshold from ConscienceConfig
                     message=result.reason or f"Entropy: {result.entropy_score:.2f}",
+                    alternative_meanings=_alt_list,
+                    actual_is_representative=_rep_bool,
                 )
                 # Capture prompt for localization validation
                 if result.entropy_prompt:

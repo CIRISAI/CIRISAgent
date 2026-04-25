@@ -1151,13 +1151,80 @@ class IDMAResultEvent(BaseModel):
 
     # IDMA results - CCA epistemic diversity check
     k_eff: float = Field(..., description="Effective independent source count (need >= 2 for healthy reasoning)")
+    effective_source_count: Optional[float] = Field(None, description="Plain-language alias for k_eff")
+    k_raw: Optional[int] = Field(None, description="Nominal raw source count k before correlation adjustment")
+    raw_source_count: Optional[int] = Field(None, description="Plain-language alias for k_raw")
     correlation_risk: float = Field(..., description="Estimated correlation between sources (0-1)")
+    source_overlap: Optional[float] = Field(None, description="Plain-language alias for correlation_risk")
+    rho_mean: Optional[float] = Field(None, description="Average pairwise correlation ρ used to derive k_eff")
     phase: str = Field(..., description="Epistemic phase: 'chaos', 'healthy', or 'rigidity'")
+    reasoning_state: Optional[str] = Field(None, description="Plain-language alias for phase")
+    phase_confidence: Optional[float] = Field(None, description="Confidence that the phase classification is correct")
     fragility_flag: bool = Field(..., description="True if reasoning may be brittle")
+    reasoning_is_fragile: Optional[bool] = Field(None, description="Plain-language alias for fragility_flag")
+    collapse_margin: Optional[float] = Field(
+        None, description="Positive distance from the fragility boundary; <= 0 indicates collapse-adjacent state"
+    )
+    safety_margin: Optional[float] = Field(None, description="Plain-language alias for collapse_margin")
     sources_identified: List[str] = Field(default_factory=list, description="List of distinct sources identified")
+    source_ids: List[str] = Field(
+        default_factory=list, description="Stable or anonymized source lineage identifiers"
+    )
+    source_types: List[str] = Field(
+        default_factory=list,
+        description="Source categories aligned positionally with source_ids (memory, tool, user, context, model_prior)",
+    )
+    source_independence_scores: List[float] = Field(
+        default_factory=list, description="Optional per-source independence scores aligned positionally with source_ids"
+    )
+    source_type_counts: List[str] = Field(
+        default_factory=list, description="Flat source-type counts encoded as 'type:count' strings"
+    )
     correlation_factors: List[str] = Field(
         default_factory=list, description="Factors contributing to source correlation"
     )
+    top_correlation_factors: List[str] = Field(
+        default_factory=list, description="Most important correlation drivers ranked for intervention analysis"
+    )
+    pairwise_correlation_summary: List[str] = Field(
+        default_factory=list, description="Flat pairwise summaries encoded as 'source_a|source_b|corr|shared_origin'"
+    )
+    rho_intra: Optional[float] = Field(None, description="Average within-cluster correlation when block structure exists")
+    rho_inter: Optional[float] = Field(None, description="Average between-cluster correlation when block structure exists")
+    module_count: Optional[int] = Field(None, description="Count of independent source modules or clusters")
+    effective_module_count: Optional[float] = Field(
+        None, description="Effective independent module count after block-structure adjustment"
+    )
+    source_clusters: List[str] = Field(
+        default_factory=list, description="Flat cluster summaries encoded as 'cluster_id|source_a,source_b|rho_intra'"
+    )
+    common_cause_flags: List[str] = Field(
+        default_factory=list, description="Shared-resource or shared-lineage indicators contributing to correlation"
+    )
+    intervention_recommendation: Optional[str] = Field(
+        None, description="Recommendation for how to reduce correlation or recover healthy diversity"
+    )
+    next_best_recovery_step: Optional[str] = Field(
+        None, description="Plain-language alias for intervention_recommendation"
+    )
+    delta_k_eff: Optional[float] = Field(None, description="Change in k_eff relative to the previous comparison window")
+    delta_rho_mean: Optional[float] = Field(
+        None, description="Change in average pairwise correlation relative to the previous window"
+    )
+    phase_persistence_steps: Optional[int] = Field(
+        None, description="How many consecutive steps the current phase has persisted"
+    )
+    time_in_fragile_state_ms: Optional[float] = Field(
+        None, description="Accumulated time spent in a fragile state for the current scope"
+    )
+    moving_variance: Optional[float] = Field(None, description="Rolling variance proxy for early-warning monitoring")
+    rho_critical: Optional[float] = Field(None, description="Critical correlation threshold ρcrit")
+    k_required: Optional[float] = Field(None, description="Required effective constraint count Kreq")
+    defense_function: Optional[float] = Field(None, description="Optional defense function J estimate")
+    collapse_rate: Optional[float] = Field(None, description="Optional collapse rate dJ/dt estimate")
+    time_to_truth: Optional[float] = Field(None, description="Optional Ttruth estimate")
+    time_to_entropy: Optional[float] = Field(None, description="Optional Tentropy estimate")
+    time_to_capture: Optional[float] = Field(None, description="Optional Tcapture estimate")
     reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
 
     # User prompt passed to IDMA (for debugging/transparency)
@@ -1178,6 +1245,17 @@ class ASPDMAResultEvent(BaseModel):
     # ASPDMA selection
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for selection")
+
+    # Deliberation-diversity signal — how constrained was the choice, and what
+    # other legitimate paths existed. Carries k_eff signal independent of the
+    # reasoning stack. Populated from ASPDMALLMResult when the LLM emitted the
+    # fields; None when not emitted (older prompts / fallback models).
+    selection_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Subjective confidence in chosen action (0.00-1.00)"
+    )
+    alternatives_considered: Optional[List[str]] = Field(
+        None, description="Brief labels of alternative actions the agent considered but rejected"
+    )
 
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
@@ -1201,13 +1279,13 @@ class TSASPDMAResultEvent(BaseModel):
     # TSASPDMA input - what ASPDMA selected
     original_tool_name: str = Field(..., description="Tool name selected by ASPDMA")
     original_parameters: JSONDict = Field(default_factory=dict, description="Original parameters from ASPDMA")
-    aspdma_rationale: str = Field(..., description="Rationale from ASPDMA for tool selection")
+    aspdma_reasoning: str = Field(..., description="Rationale from ASPDMA for tool selection")
 
     # TSASPDMA output - refined decision
     final_action: str = Field(..., description="Final action: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)")
     final_tool_name: Optional[str] = Field(None, description="Tool name if action is TOOL")
     final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
-    tsaspdma_rationale: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+    tsaspdma_reasoning: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")

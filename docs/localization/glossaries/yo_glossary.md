@@ -112,3 +112,18 @@ This glossary defines the canonical translations for key CIRIS terms in Yoruba. 
 4. Use respectful forms for system messages
 5. Preserve placeholders exactly: {action}, {threshold}, {confidence}
 6. Yoruba is spoken across Nigeria, Benin, Togo - use standard Nigerian Yoruba
+
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | YIYAN IṢE PATAKI FUN FIFIRANṢẸ SIWAJU | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | TAXONOMY AWỌN ẸTỌ / AINI | Taxonomy section heading |
+| Rights basis | Ipilẹ ẹtọ | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | AWỌN KOODU IDI IṢẸ FUN FIFIRANṢẸ SIWAJU | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |

@@ -11,6 +11,7 @@ Tests cover:
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -411,7 +412,12 @@ class TestAccordMetricsAdapterIntegration:
 
     @pytest.mark.asyncio
     async def test_full_wbd_flow_with_consent(self, mock_runtime):
-        """Test full WBD event flow with consent."""
+        """Test full WBD event flow with consent.
+
+        WBD deferrals bypass the trace event queue and POST directly to the
+        dedicated /accord/wbd/deferrals lens endpoint (accord contract:
+        /accord/events is for complete_trace envelopes only).
+        """
         adapter = AccordMetricsAdapter(
             runtime=mock_runtime,
             context=None,
@@ -425,13 +431,31 @@ class TestAccordMetricsAdapterIntegration:
         service = registrations[0].provider
         assert isinstance(service, AccordMetricsService)
 
-        # Service should receive WBD events
+        # Service should route WBD events to the dedicated endpoint, not the
+        # trace event queue. Patch the direct-POST method and verify the
+        # payload matches lens's WBDDeferralCreate schema.
         request = make_deferral_request()
+
+        captured: Dict[str, Any] = {}
+
+        async def capture(payload, thought_id):
+            captured["payload"] = payload
+            captured["thought_id"] = thought_id
+
+        service._send_wbd_deferral = capture  # type: ignore[assignment]
 
         result = await service.send_deferral(request)
 
         assert "WBD event recorded" in result
-        assert len(service._event_queue) == 1
+        # Trace event queue must NOT receive WBD events — those have their own endpoint
+        assert len(service._event_queue) == 0
+        assert captured["thought_id"] == request.thought_id
+        payload = captured["payload"]
+        assert payload["trigger_type"] == "UNCERTAINTY"
+        assert payload["agent_id"]
+        assert payload["dilemma_description"]
+        assert payload["trace_id"] == request.task_id
+        assert payload["span_id"] == request.thought_id
 
     @pytest.mark.asyncio
     async def test_full_flow_without_consent(self, mock_runtime):

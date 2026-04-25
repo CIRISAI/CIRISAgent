@@ -287,51 +287,66 @@ class TestGlobalLoaderFunctions:
 
     @pytest.fixture(autouse=True)
     def reset_global_state(self) -> Generator[None, None, None]:
-        """Reset global state before each test."""
+        """Reset the per-language loader cache before each test."""
         import ciris_engine.logic.conscience.prompt_loader as pl
 
-        pl._default_loader = None
-        pl._current_language = DEFAULT_LANGUAGE
+        pl._loader_cache.clear()
         yield
-        # Cleanup after test
-        pl._default_loader = None
-        pl._current_language = DEFAULT_LANGUAGE
+        pl._loader_cache.clear()
 
-    def test_get_conscience_prompt_loader_singleton(self) -> None:
-        """Test that get_conscience_prompt_loader returns a singleton."""
-        # Force English by explicitly passing it
-        loader1 = get_conscience_prompt_loader(language="en")
-        loader2 = get_conscience_prompt_loader()
+    def test_get_conscience_prompt_loader_caches_per_language(self) -> None:
+        """Same language returns the cached loader; different languages get distinct loaders.
 
-        assert loader1 is loader2
+        Replaces the old singleton expectation. The previous design returned
+        the same loader regardless of language and mutated its language on
+        each call — that caused a real production bug where concurrent
+        thoughts in different languages trampled each other's state.
+        """
+        en1 = get_conscience_prompt_loader(language="en")
+        en2 = get_conscience_prompt_loader(language="en")
+        de = get_conscience_prompt_loader(language="de")
+
+        # Same language returns the cached instance.
+        assert en1 is en2
+        # Different language returns a different loader (no shared state).
+        assert en1 is not de
+        assert en1.language == "en"
+        assert de.language == "de"
 
     def test_get_conscience_prompt_loader_with_language(self) -> None:
-        """Test get_conscience_prompt_loader with explicit language."""
+        """Explicit language parameter returns a loader for that language."""
         loader = get_conscience_prompt_loader(language="fr")
         assert loader.language == "fr"
 
-    def test_set_conscience_prompt_language(self) -> None:
-        """Test set_conscience_prompt_language updates global loader."""
-        # Initialize with explicit English
-        loader = get_conscience_prompt_loader(language="en")
-        assert loader.language == "en"
+    def test_set_conscience_prompt_language_is_noop(self) -> None:
+        """set_conscience_prompt_language is now a no-op shim with a warning.
 
-        # Set new language
+        Per-language loaders mean callers must request their language at
+        get-time; mutating a global is unsafe under concurrency. The shim
+        exists for backward compat — it does not change any cached loader.
+        """
+        en_loader = get_conscience_prompt_loader(language="en")
+        assert en_loader.language == "en"
+
+        # No-op: must not mutate the en loader.
         set_conscience_prompt_language("de")
+        assert en_loader.language == "en"  # Unchanged
 
-        # Verify loader was updated
-        assert loader.language == "de"
+        # Requesting de explicitly returns a NEW (different) cached loader.
+        de_loader = get_conscience_prompt_loader(language="de")
+        assert de_loader is not en_loader
+        assert de_loader.language == "de"
 
     def test_loader_with_explicit_language_overrides_default(self) -> None:
-        """Test that explicit language parameter overrides any default."""
-        # Even if environment might be set to something else,
-        # explicit language should win
+        """Explicit language always wins over env-var fallback."""
         loader = get_conscience_prompt_loader(language="ja")
         assert loader.language == "ja"
 
-        # Changing language should update the loader
-        set_conscience_prompt_language("ko")
-        assert loader.language == "ko"
+        # Each subsequent get_conscience_prompt_loader call with a NEW language
+        # returns a distinct loader. No global mutation.
+        ko_loader = get_conscience_prompt_loader(language="ko")
+        assert ko_loader.language == "ko"
+        assert loader.language == "ja"  # original ja loader unaffected
 
 
 class TestConsciencePromptIntegration:
@@ -339,15 +354,12 @@ class TestConsciencePromptIntegration:
 
     @pytest.fixture(autouse=True)
     def reset_global_state(self) -> Generator[None, None, None]:
-        """Reset global state before each test."""
+        """Reset the per-language loader cache before each test."""
         import ciris_engine.logic.conscience.prompt_loader as pl
 
-        pl._default_loader = None
-        pl._current_language = DEFAULT_LANGUAGE
+        pl._loader_cache.clear()
         yield
-        # Cleanup after test
-        pl._default_loader = None
-        pl._current_language = DEFAULT_LANGUAGE
+        pl._loader_cache.clear()
 
     @pytest.fixture
     def mock_service_registry(self) -> MagicMock:
@@ -410,28 +422,24 @@ class TestConsciencePromptIntegration:
     def test_localized_conscience_prompts_used(
         self, mock_service_registry: MagicMock, mock_config: Any, mock_time_service: MagicMock
     ) -> None:
-        """Test that localized prompts are used when language is set."""
-        from ciris_engine.logic.conscience.core import EntropyConscience
-        from ciris_engine.logic.conscience.prompt_loader import (
-            get_conscience_prompt_loader,
-            set_conscience_prompt_language,
-        )
+        """Per-thought language is honored: passing language='fr' loads French prompts.
 
-        # Initialize and set to French
-        get_conscience_prompt_loader(language="en")  # First init
-        set_conscience_prompt_language("fr")
+        Replaces the old globals-based test. The conscience accepts language
+        per call; no global mutation needed.
+        """
+        from ciris_engine.logic.conscience.core import EntropyConscience
 
         conscience = EntropyConscience(mock_service_registry, mock_config, time_service=mock_time_service)
-        messages, _user_prompt = conscience._create_entropy_messages("Test text")
+        messages, _user_prompt = conscience._create_entropy_messages("Test text", language="fr")
 
         # Verify French content appears
         system_contents = [str(m.content) for m in messages if m.role == "system"]
         all_content = " ".join(system_contents)
 
-        # Should contain French, not English
+        # Should contain French, not the English original
         assert (
             "Vous êtes IRIS-E" in all_content or "l'éclat" in all_content
         ), f"Expected French content in: {all_content[:500]}..."
         assert (
             "You are IRIS-E, the entropy-sensing" not in all_content
-        ), "Should not contain English original when French is set"
+        ), "Should not contain English original when French is requested"

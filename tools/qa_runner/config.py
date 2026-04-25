@@ -3,6 +3,7 @@ QA Runner configuration and module definitions.
 """
 
 from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -48,6 +49,8 @@ class QAModule(Enum):
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
+    HOMEASSISTANT_AGENTIC = "homeassistant_agentic"  # Live Home Assistant + Music Assistant integration testing
+    DEFERRAL_TAXONOMY = "deferral_taxonomy"  # DSASPDMA rights/needs taxonomy coverage and routing tests
     HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
     CIRISNODE = "cirisnode"  # CIRISNode integration testing (deferral routing, trace forwarding)
     LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
@@ -185,6 +188,18 @@ class QAConfig:
     # Memory benchmark configuration
     message_count: int = 100  # Number of messages to send in memory benchmark
     concurrent_channels: int = 4  # Number of concurrent channels for parallel testing
+
+    # Model evaluation configuration
+    model_eval_languages: List[str] = field(default_factory=lambda: ["am", "zh", "en", "es"])
+    model_eval_concurrency: int = 6
+    model_eval_profile_memory: bool = True
+    # Filter the model_eval question set by category (exact match, case-insensitive).
+    # Empty list = run all curated questions. Use to scope a run to a single
+    # topic e.g. ["RLHFTradeoffs"] for one bias-torque axis, or two like
+    # ["BenchmarkLegitimacy","ArchitectureTradeoffs"]. Combine with
+    # --model-eval-languages to run a single (question, language) pair for
+    # tight iteration loops.
+    model_eval_question_categories: List[str] = field(default_factory=list)
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

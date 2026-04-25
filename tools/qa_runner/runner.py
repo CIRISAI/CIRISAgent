@@ -115,6 +115,19 @@ class QARunner:
                 live_lens=self.config.live_lens,
                 # Data management
                 wipe_data=self.config.wipe_data,
+                # Memory benchmark configuration
+                message_count=self.config.message_count,
+                concurrent_channels=self.config.concurrent_channels,
+                # Model eval configuration — propagate so the runner's
+                # backend-specific config (which self.config gets re-bound
+                # to at line ~129) doesn't lose the CLI-passed filters.
+                # Without this, `--model-eval-languages en` and
+                # `--model-eval-questions History` silently reset to the
+                # 4-language × 6-question defaults.
+                model_eval_languages=self.config.model_eval_languages,
+                model_eval_concurrency=self.config.model_eval_concurrency,
+                model_eval_profile_memory=self.config.model_eval_profile_memory,
+                model_eval_question_categories=self.config.model_eval_question_categories,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -256,6 +269,8 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.HOMEASSISTANT_AGENTIC,
+            QAModule.DEFERRAL_TAXONOMY,
             QAModule.CIRISNODE,
             QAModule.LICENSED_AGENT,
             QAModule.SOLITUDE_LIVE,
@@ -893,6 +908,7 @@ class QARunner:
         from .modules.cirisnode_tests import CIRISNodeTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
+        from .modules.deferral_taxonomy_tests import DeferralTaxonomyTests
         from .modules.deferral_tests import DeferralTestModule
         from .modules.degraded_mode_tests import DegradedModeTests
         from .modules.dream_live_tests import DreamLiveTests
@@ -900,6 +916,7 @@ class QARunner:
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.filter_tests import FilterTestModule
         from .modules.handler_tests import HandlerTestModule
+        from .modules.homeassistant_agentic_tests import HomeAssistantAgenticTests
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.licensed_agent_tests import LicensedAgentTests
@@ -946,6 +963,8 @@ class QARunner:
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.HOMEASSISTANT_AGENTIC: HomeAssistantAgenticTests,
+            QAModule.DEFERRAL_TAXONOMY: DeferralTaxonomyTests,
             QAModule.CIRISNODE: CIRISNodeTests,
             QAModule.LICENSED_AGENT: LicensedAgentTests,
             QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
@@ -973,7 +992,12 @@ class QARunner:
 
             # Create SDK client with authentication
             # Use longer timeout for Reddit operations (e.g., get_user_context can be slow)
-            async with CIRISClient(base_url=self.config.base_url, timeout=120.0) as client:
+            # Model-eval interact() calls block server-side until the full
+            # DMA chain + conscience + SPEAK finishes, which is minutes under
+            # live LLM load. Give the SDK plenty of headroom so httpx doesn't
+            # cut the connection before the server responds.
+            sdk_timeout = 900.0 if module == QAModule.MODEL_EVAL else 120.0
+            async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as client:
                 # Manually set the token (skip login since we already have it)
                 client._transport.set_api_key(token_to_use, persist=False)
 
@@ -1008,6 +1032,23 @@ class QARunner:
                         test_timeout=self.config.test_timeout,
                         message_count=message_count,
                         concurrent_channels=concurrent_channels,
+                    )
+                elif module == QAModule.MODEL_EVAL:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        languages=getattr(self.config, "model_eval_languages", ["am", "zh", "en", "es"]),
+                        max_concurrency=getattr(self.config, "model_eval_concurrency", 4),
+                        profile_memory=getattr(self.config, "model_eval_profile_memory", True),
+                        api_port=self.config.api_port,
+                        question_categories=getattr(self.config, "model_eval_question_categories", []),
+                    )
+                elif module == QAModule.DEFERRAL_TAXONOMY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
                     )
                 else:
                     test_instance = test_class(client, self.console)

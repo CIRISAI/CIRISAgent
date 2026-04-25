@@ -40,6 +40,15 @@ logger = logging.getLogger(__name__)
 _MIN_HEALTH_INTERVAL_SECONDS = 5.0
 
 
+async def _cancel_task_and_wait(task: asyncio.Task[Any]) -> None:
+    """Cancel a child task and wait for it without swallowing parent cancellation."""
+    if task.done():
+        return
+
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
 class MobileLocalLLMAdapter(Service):
     """Adapter that runs a local Gemma 4 inference server on capable phones."""
 
@@ -142,23 +151,15 @@ class MobileLocalLLMAdapter(Service):
         logger.info("Stopping MobileLocalLLMAdapter")
         self._running = False
 
-        if self._health_task and not self._health_task.done():
-            self._health_task.cancel()
-            try:
-                await self._health_task
-            except asyncio.CancelledError:
-                # Expected — we just cancelled the health loop ourselves.
-                pass
-        self._health_task = None
+        if self._health_task:
+            health_task = self._health_task
+            self._health_task = None
+            await _cancel_task_and_wait(health_task)
 
-        if self._lifecycle_task and not self._lifecycle_task.done():
-            self._lifecycle_task.cancel()
-            try:
-                await self._lifecycle_task
-            except asyncio.CancelledError:
-                # Expected — cancellation is how the lifecycle task exits.
-                pass
-        self._lifecycle_task = None
+        if self._lifecycle_task:
+            lifecycle_task = self._lifecycle_task
+            self._lifecycle_task = None
+            await _cancel_task_and_wait(lifecycle_task)
 
         await self._llm_service.stop()
         logger.info("MobileLocalLLMAdapter stopped")
@@ -199,10 +200,7 @@ class MobileLocalLLMAdapter(Service):
         interval = max(_MIN_HEALTH_INTERVAL_SECONDS, self._config.health_interval_seconds)
         consecutive_failures = 0
         while self._running:
-            try:
-                await asyncio.sleep(interval)
-            except asyncio.CancelledError:
-                break
+            await asyncio.sleep(interval)
 
             if not self._running:
                 break

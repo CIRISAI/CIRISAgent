@@ -37,7 +37,7 @@ class TestTSASPDMALLMResult:
         """Test creating a TOOL action result."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Tool is appropriate for this task",
+            reasoning="Tool is appropriate for this task",
             tool_parameters={"path": "/test"},
         )
         assert result.selected_action == HandlerActionType.TOOL
@@ -47,7 +47,7 @@ class TestTSASPDMALLMResult:
         """Test creating a SPEAK action result."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="Need clarification",
+            reasoning="Need clarification",
             speak_content="What file would you like to read?",
         )
         assert result.selected_action == HandlerActionType.SPEAK
@@ -57,7 +57,7 @@ class TestTSASPDMALLMResult:
         """Test creating a PONDER action result."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
-            rationale="Should reconsider approach",
+            reasoning="Should reconsider approach",
             ponder_questions=["Is this the right tool?"],
         )
         assert result.selected_action == HandlerActionType.PONDER
@@ -67,7 +67,7 @@ class TestTSASPDMALLMResult:
         """Test creating a TOOL action result with corrected tool_name."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Correcting tool name from ha_control_light to ha_device_control",
+            reasoning="Correcting tool name from ha_control_light to ha_device_control",
             tool_name="ha_device_control",  # Corrected name
             tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
         )
@@ -79,7 +79,7 @@ class TestTSASPDMALLMResult:
         """Test creating a TOOL action result without tool_name (normal mode)."""
         result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Tool is appropriate",
+            reasoning="Tool is appropriate",
             tool_parameters={"path": "/test"},
         )
         assert result.selected_action == HandlerActionType.TOOL
@@ -163,7 +163,7 @@ class TestTSASPDMAEvaluator:
 
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Proceeding with tool",
+            reasoning="Proceeding with tool",
             tool_parameters={"path": "/test"},
         )
 
@@ -188,7 +188,7 @@ class TestTSASPDMAEvaluator:
         # LLM returns corrected tool name
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Correcting tool name",
+            reasoning="Correcting tool name",
             tool_name="ha_device_control",  # Corrected name
             tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
         )
@@ -216,7 +216,7 @@ class TestTSASPDMAEvaluator:
         # LLM doesn't provide tool_name (normal mode)
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Tool is appropriate",
+            reasoning="Tool is appropriate",
             tool_parameters={"path": "/test"},
             # tool_name not set
         )
@@ -239,7 +239,7 @@ class TestTSASPDMAEvaluator:
 
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="Need clarification",
+            reasoning="Need clarification",
             speak_content="Which file?",
         )
 
@@ -260,7 +260,7 @@ class TestTSASPDMAEvaluator:
 
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
-            rationale="Reconsidering",
+            reasoning="Reconsidering",
             ponder_questions=["Is this the right tool?"],
         )
 
@@ -282,7 +282,7 @@ class TestTSASPDMAEvaluator:
         # Force an unexpected action
         llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.OBSERVE,  # Unexpected for TSASPDMA
-            rationale="Something went wrong",
+            reasoning="Something went wrong",
         )
 
         result = evaluator._convert_tsaspdma_result(llm_result, "file_read")
@@ -414,7 +414,7 @@ class TestTSASPDMAEvaluator:
         messages = evaluator._create_tsaspdma_messages(
             tool_name="file_read",
             tool_info=sample_tool_info,
-            aspdma_rationale="ASPDMA selected this tool",
+            aspdma_reasoning="ASPDMA selected this tool",
             original_thought_content="Read /tmp/test.txt",
         )
 
@@ -449,7 +449,7 @@ class TestTSASPDMAEvaluator:
         # Mock call_llm_structured
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Tool appropriate for task",
+            reasoning="Tool appropriate for task",
             tool_parameters={"path": "/tmp/test.txt"},
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -457,7 +457,7 @@ class TestTSASPDMAEvaluator:
         result = await evaluator.evaluate_tool_action(
             tool_name="file_read",
             tool_info=sample_tool_info,
-            aspdma_rationale="ASPDMA selected file_read",
+            aspdma_reasoning="ASPDMA selected file_read",
             original_thought=sample_thought,
         )
 
@@ -489,7 +489,7 @@ class TestTSASPDMAEvaluator:
 
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="Need to clarify file path",
+            reasoning="Need to clarify file path",
             speak_content="Which file would you like me to read?",
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -497,7 +497,7 @@ class TestTSASPDMAEvaluator:
         result = await evaluator.evaluate_tool_action(
             tool_name="file_read",
             tool_info=sample_tool_info,
-            aspdma_rationale="ASPDMA selected file_read",
+            aspdma_reasoning="ASPDMA selected file_read",
             original_thought=sample_thought,
         )
 
@@ -528,7 +528,7 @@ class TestTSASPDMAEvaluator:
 
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
-            rationale="This tool is not appropriate",
+            reasoning="This tool is not appropriate",
             ponder_questions=["Should I use a different tool?"],
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -536,7 +536,7 @@ class TestTSASPDMAEvaluator:
         result = await evaluator.evaluate_tool_action(
             tool_name="file_read",
             tool_info=sample_tool_info,
-            aspdma_rationale="ASPDMA selected file_read",
+            aspdma_reasoning="ASPDMA selected file_read",
             original_thought=sample_thought,
         )
 
@@ -571,7 +571,7 @@ class TestTSASPDMAEvaluator:
             await evaluator.evaluate_tool_action(
                 tool_name="file_read",
                 tool_info=sample_tool_info,
-                aspdma_rationale="ASPDMA selected file_read",
+                aspdma_reasoning="ASPDMA selected file_read",
                 original_thought=sample_thought,
             )
 
@@ -599,7 +599,7 @@ class TestTSASPDMAEvaluator:
 
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Proceeding",
+            reasoning="Proceeding",
             tool_parameters={"path": "/test"},
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -607,7 +607,7 @@ class TestTSASPDMAEvaluator:
         result = await evaluator.evaluate(
             tool_name="file_read",
             tool_info=sample_tool_info,
-            aspdma_rationale="Selected",
+            aspdma_reasoning="Selected",
             original_thought=sample_thought,
         )
 
@@ -768,7 +768,7 @@ class TestTSASPDMACorrectionMode:
         # LLM corrects ha_control_light -> ha_device_control
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Correcting to ha_device_control which handles lights",
+            reasoning="Correcting to ha_device_control which handles lights",
             tool_name="ha_device_control",
             tool_parameters={"entity_id": "light.bedroom", "action": "turn_off"},
         )
@@ -777,7 +777,7 @@ class TestTSASPDMACorrectionMode:
         result = await evaluator.evaluate_tool_correction(
             requested_tool_name="ha_control_light",  # Hallucinated name
             available_tools=available_tools,
-            aspdma_rationale="ASPDMA selected ha_control_light for turning off light",
+            aspdma_reasoning="ASPDMA selected ha_control_light for turning off light",
             original_thought=sample_thought,
         )
 
@@ -813,7 +813,7 @@ class TestTSASPDMACorrectionMode:
         # LLM decides to ask for clarification
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="Multiple tools could match, need clarification",
+            reasoning="Multiple tools could match, need clarification",
             speak_content="Did you mean ha_device_control or file_read?",
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -821,7 +821,7 @@ class TestTSASPDMACorrectionMode:
         result = await evaluator.evaluate_tool_correction(
             requested_tool_name="unknown_tool",
             available_tools=available_tools,
-            aspdma_rationale="ASPDMA selected unknown_tool",
+            aspdma_reasoning="ASPDMA selected unknown_tool",
             original_thought=sample_thought,
         )
 
@@ -855,7 +855,7 @@ class TestTSASPDMACorrectionMode:
         # LLM decides no tool matches
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
-            rationale="No available tool matches the user's intent",
+            reasoning="No available tool matches the user's intent",
             ponder_questions=["Should I use a different approach?"],
         )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_result, None))
@@ -863,7 +863,7 @@ class TestTSASPDMACorrectionMode:
         result = await evaluator.evaluate_tool_correction(
             requested_tool_name="nonexistent_tool",
             available_tools=available_tools,
-            aspdma_rationale="ASPDMA selected nonexistent_tool",
+            aspdma_reasoning="ASPDMA selected nonexistent_tool",
             original_thought=sample_thought,
         )
 
@@ -897,7 +897,7 @@ class TestTSASPDMACorrectionMode:
         # LLM returns a tool_name that's also not in the available list
         mock_llm_result = TSASPDMALLMResult(
             selected_action=HandlerActionType.TOOL,
-            rationale="Trying to correct",
+            reasoning="Trying to correct",
             tool_name="also_nonexistent",  # This is also not in available_tools
             tool_parameters={"some": "param"},
         )
@@ -906,7 +906,7 @@ class TestTSASPDMACorrectionMode:
         result = await evaluator.evaluate_tool_correction(
             requested_tool_name="nonexistent_tool",
             available_tools=available_tools,
-            aspdma_rationale="ASPDMA selected nonexistent_tool",
+            aspdma_reasoning="ASPDMA selected nonexistent_tool",
             original_thought=sample_thought,
         )
 
@@ -943,6 +943,6 @@ class TestTSASPDMACorrectionMode:
             await evaluator.evaluate_tool_correction(
                 requested_tool_name="nonexistent_tool",
                 available_tools=available_tools,
-                aspdma_rationale="ASPDMA selected nonexistent_tool",
+                aspdma_reasoning="ASPDMA selected nonexistent_tool",
                 original_thought=sample_thought,
             )

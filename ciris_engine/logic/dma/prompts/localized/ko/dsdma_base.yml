@@ -37,10 +37,10 @@ context_integration: |
   사고: {{original_thought_content}}
 
 response_guidance: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"}} - Korean content, English keys.
+  언어 규칙:
+  - 사용자의 선호 언어로 응답하십시오 (사용자 프로필 확인).
+  - 모든 콘텐츠 값 (reasoning, rationale, speak_content 등)은 사용자의 언어로 작성하십시오.
+  - JSON 키는 반드시 영어로 유지해야 합니다 (예: "selected_action", "reasoning", "tool_parameters").
+  - 예시: {{"selected_action": "SPEAK", "speak_content": "안녕하세요!", "rationale": "사용자가 한국어로 인사했습니다"}} - 한국어 콘텐츠, 영어 키.
 
 accord_header: true  # Use ACCORD_TEXT as system message

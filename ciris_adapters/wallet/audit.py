@@ -15,10 +15,27 @@ Spam prevention:
 
 import hashlib
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, Dict, Optional
+
+_ADDR_LOG_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
+
+
+def _addr_for_log(addr: str) -> str:
+    """Render an address safely for log output.
+
+    User-supplied addresses flow into audit logs. Anything that isn't a
+    well-formed `0x`-prefixed 40-hex-char string could smuggle in CR/LF
+    or ANSI control chars and forge fake log lines. Rather than sanitize
+    char-by-char and keep a partial-looking address, reject the whole
+    value and emit a fixed placeholder the SOC can grep for.
+    """
+    if isinstance(addr, str) and _ADDR_LOG_RE.match(addr):
+        return addr[:10] + "..."
+    return "<invalid-address>"
 
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.audit_service.service import GraphAuditService
@@ -174,7 +191,7 @@ class WalletAuditHelper:
                 network=network,
             )
 
-            logger.info(f"[WALLET_AUDIT] Audited send: {amount} {currency} to {recipient[:10]}...")
+            logger.info(f"[WALLET_AUDIT] Audited send: {amount} {currency} to {_addr_for_log(recipient)}")
             return True
 
         except Exception as e:
@@ -306,7 +323,7 @@ class WalletAuditHelper:
                 network=network,
             )
 
-            logger.info(f"[WALLET_AUDIT] Audited receive: {amount} {currency} from {sender[:10]}...")
+            logger.info(f"[WALLET_AUDIT] Audited receive: {amount} {currency} from {_addr_for_log(sender)}")
             return True
 
         except Exception as e:

@@ -108,6 +108,21 @@ This glossary defines the canonical translations for key CIRIS terms in Urdu. Al
 - English terms within Urdu sentences maintain their direction
 - Punctuation follows Urdu conventions (۔ instead of .)
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | تعویق کے لیے مخصوص عمل کا انتخاب | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | حقوق / ضروریات کی TAXONOMY | Taxonomy section heading |
+| Rights basis | حقوق کی بنیاد | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | عملیاتی تعویق کے سبب کوڈز | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

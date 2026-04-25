@@ -1,0 +1,275 @@
+- generic [active] [ref=e1]:
+  - heading "Directory listing for /" [level=1] [ref=e2]
+  - separator [ref=e3]
+  - list [ref=e4]:
+    - listitem [ref=e5]:
+      - link ".ci-trigger" [ref=e6] [cursor=pointer]:
+        - /url: .ci-trigger
+    - listitem [ref=e7]:
+      - link ".ci_trigger" [ref=e8] [cursor=pointer]:
+        - /url: .ci_trigger
+    - listitem [ref=e9]:
+      - link ".ciris_keys/" [ref=e10] [cursor=pointer]:
+        - /url: .ciris_keys/
+    - listitem [ref=e11]:
+      - link ".coveragerc" [ref=e12] [cursor=pointer]:
+        - /url: .coveragerc
+    - listitem [ref=e13]:
+      - link ".coveragerc-ciris-manager" [ref=e14] [cursor=pointer]:
+        - /url: .coveragerc-ciris-manager
+    - listitem [ref=e15]:
+      - link ".dockerignore" [ref=e16] [cursor=pointer]:
+        - /url: .dockerignore
+    - listitem [ref=e17]:
+      - link ".DS_Store" [ref=e18] [cursor=pointer]:
+        - /url: .DS_Store
+    - listitem [ref=e19]:
+      - link ".env" [ref=e20] [cursor=pointer]:
+        - /url: .env
+    - listitem [ref=e21]:
+      - link ".env.example" [ref=e22] [cursor=pointer]:
+        - /url: .env.example
+    - listitem [ref=e23]:
+      - link ".git/" [ref=e24] [cursor=pointer]:
+        - /url: .git/
+    - listitem [ref=e25]:
+      - link ".git-trigger" [ref=e26] [cursor=pointer]:
+        - /url: .git-trigger
+    - listitem [ref=e27]:
+      - link ".githooks/" [ref=e28] [cursor=pointer]:
+        - /url: .githooks/
+    - listitem [ref=e29]:
+      - link ".github/" [ref=e30] [cursor=pointer]:
+        - /url: .github/
+    - listitem [ref=e31]:
+      - link ".gitignore" [ref=e32] [cursor=pointer]:
+        - /url: .gitignore
+    - listitem [ref=e33]:
+      - link ".hypothesis/" [ref=e34] [cursor=pointer]:
+        - /url: .hypothesis/
+    - listitem [ref=e35]:
+      - link ".mypy_cache/" [ref=e36] [cursor=pointer]:
+        - /url: .mypy_cache/
+    - listitem [ref=e37]:
+      - link ".playwright-cli/" [ref=e38] [cursor=pointer]:
+        - /url: .playwright-cli/
+    - listitem [ref=e39]:
+      - link ".pre-commit-config.yaml" [ref=e40] [cursor=pointer]:
+        - /url: .pre-commit-config.yaml
+    - listitem [ref=e41]:
+      - link ".pytest_cache/" [ref=e42] [cursor=pointer]:
+        - /url: .pytest_cache/
+    - listitem [ref=e43]:
+      - link ".venv/" [ref=e44] [cursor=pointer]:
+        - /url: .venv/
+    - listitem [ref=e45]:
+      - link ".vscode/" [ref=e46] [cursor=pointer]:
+        - /url: .vscode/
+    - listitem [ref=e47]:
+      - link ".vulture.toml" [ref=e48] [cursor=pointer]:
+        - /url: .vulture.toml
+    - listitem [ref=e49]:
+      - link "__pycache__/" [ref=e50] [cursor=pointer]:
+        - /url: __pycache__/
+    - listitem [ref=e51]:
+      - link "ACCORD.md" [ref=e52] [cursor=pointer]:
+        - /url: ACCORD.md
+    - listitem [ref=e53]:
+      - link "accord_1.0b.txt" [ref=e54] [cursor=pointer]:
+        - /url: accord_1.0b.txt
+    - listitem [ref=e55]:
+      - link "accord_1.2b.txt" [ref=e56] [cursor=pointer]:
+        - /url: accord_1.2b.txt
+    - listitem [ref=e57]:
+      - link "AGENTS.md" [ref=e58] [cursor=pointer]:
+        - /url: AGENTS.md
+    - listitem [ref=e59]:
+      - link "ARCHITECTURE_OVERVIEW.md" [ref=e60] [cursor=pointer]:
+        - /url: ARCHITECTURE_OVERVIEW.md
+    - listitem [ref=e61]:
+      - link "benchmark_results/" [ref=e62] [cursor=pointer]:
+        - /url: benchmark_results/
+    - listitem [ref=e63]:
+      - link "BUILD_INFO.txt" [ref=e64] [cursor=pointer]:
+        - /url: BUILD_INFO.txt
+    - listitem [ref=e65]:
+      - link "CHANGELOG-2025.md" [ref=e66] [cursor=pointer]:
+        - /url: CHANGELOG-2025.md
+    - listitem [ref=e67]:
+      - link "CHANGELOG.md" [ref=e68] [cursor=pointer]:
+        - /url: CHANGELOG.md
+    - listitem [ref=e69]:
+      - link "ciris_adapters/" [ref=e70] [cursor=pointer]:
+        - /url: ciris_adapters/
+    - listitem [ref=e71]:
+      - link "CIRIS_COMPREHENSIVE_GUIDE.md" [ref=e72] [cursor=pointer]:
+        - /url: CIRIS_COMPREHENSIVE_GUIDE.md
+    - listitem [ref=e73]:
+      - link "CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md" [ref=e74] [cursor=pointer]:
+        - /url: CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md
+    - listitem [ref=e75]:
+      - link "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md" [ref=e76] [cursor=pointer]:
+        - /url: CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md
+    - listitem [ref=e77]:
+      - link "ciris_engine/" [ref=e78] [cursor=pointer]:
+        - /url: ciris_engine/
+    - listitem [ref=e79]:
+      - link "ciris_sdk/" [ref=e80] [cursor=pointer]:
+        - /url: ciris_sdk/
+    - listitem [ref=e81]:
+      - link "ciris_signet.svg" [ref=e82] [cursor=pointer]:
+        - /url: ciris_signet.svg
+    - listitem [ref=e83]:
+      - link "CLAUDE.md" [ref=e84] [cursor=pointer]:
+        - /url: CLAUDE.md
+    - listitem [ref=e85]:
+      - link "CLAUDE_DEVELOPER_NOTES.md" [ref=e86] [cursor=pointer]:
+        - /url: CLAUDE_DEVELOPER_NOTES.md
+    - listitem [ref=e87]:
+      - link "client/" [ref=e88] [cursor=pointer]:
+        - /url: client/
+    - listitem [ref=e89]:
+      - link "config/" [ref=e90] [cursor=pointer]:
+        - /url: config/
+    - listitem [ref=e91]:
+      - link "CONTRIBUTING.md" [ref=e92] [cursor=pointer]:
+        - /url: CONTRIBUTING.md
+    - listitem [ref=e93]:
+      - link "coverage.json" [ref=e94] [cursor=pointer]:
+        - /url: coverage.json
+    - listitem [ref=e95]:
+      - link "data/" [ref=e96] [cursor=pointer]:
+        - /url: data/
+    - listitem [ref=e97]:
+      - link "data-local/" [ref=e98] [cursor=pointer]:
+        - /url: data-local/
+    - listitem [ref=e99]:
+      - link "data_archive/" [ref=e100] [cursor=pointer]:
+        - /url: data_archive/
+    - listitem [ref=e101]:
+      - link "deployment/" [ref=e102] [cursor=pointer]:
+        - /url: deployment/
+    - listitem [ref=e103]:
+      - link "docker/" [ref=e104] [cursor=pointer]:
+        - /url: docker/
+    - listitem [ref=e105]:
+      - link "docker-compose-api-discord-mock-autoheal.yml" [ref=e106] [cursor=pointer]:
+        - /url: docker-compose-api-discord-mock-autoheal.yml
+    - listitem [ref=e107]:
+      - link "docker-compose-api-discord-mock.yml" [ref=e108] [cursor=pointer]:
+        - /url: docker-compose-api-discord-mock.yml
+    - listitem [ref=e109]:
+      - link "docker-compose-dev-full.yml" [ref=e110] [cursor=pointer]:
+        - /url: docker-compose-dev-full.yml
+    - listitem [ref=e111]:
+      - link "docker-compose-discord.yml" [ref=e112] [cursor=pointer]:
+        - /url: docker-compose-discord.yml
+    - listitem [ref=e113]:
+      - link "docker-compose-local.yml" [ref=e114] [cursor=pointer]:
+        - /url: docker-compose-local.yml
+    - listitem [ref=e115]:
+      - link "Dockerfile" [ref=e116] [cursor=pointer]:
+        - /url: Dockerfile
+    - listitem [ref=e117]:
+      - link "docs/" [ref=e118] [cursor=pointer]:
+        - /url: docs/
+    - listitem [ref=e119]:
+      - link "FSD/" [ref=e120] [cursor=pointer]:
+        - /url: FSD/
+    - listitem [ref=e121]:
+      - link "grace.py" [ref=e122] [cursor=pointer]:
+        - /url: grace.py
+    - listitem [ref=e123]:
+      - link "LIABILITY_BOUNDARIES.md" [ref=e124] [cursor=pointer]:
+        - /url: LIABILITY_BOUNDARIES.md
+    - listitem [ref=e125]:
+      - link "LICENSE" [ref=e126] [cursor=pointer]:
+        - /url: LICENSE
+    - listitem [ref=e127]:
+      - link "llms.txt" [ref=e128] [cursor=pointer]:
+        - /url: llms.txt
+    - listitem [ref=e129]:
+      - link "localization/" [ref=e130] [cursor=pointer]:
+        - /url: localization/
+    - listitem [ref=e131]:
+      - link "logs/" [ref=e132] [cursor=pointer]:
+        - /url: logs/
+    - listitem [ref=e133]:
+      - link "main.py" [ref=e134] [cursor=pointer]:
+        - /url: main.py
+    - listitem [ref=e135]:
+      - link "MANIFEST.in" [ref=e136] [cursor=pointer]:
+        - /url: MANIFEST.in
+    - listitem [ref=e137]:
+      - link "mypy.ini" [ref=e138] [cursor=pointer]:
+        - /url: mypy.ini
+    - listitem [ref=e139]:
+      - link "NOTICE" [ref=e140] [cursor=pointer]:
+        - /url: NOTICE
+    - listitem [ref=e141]:
+      - link "OAUTH_STATE_SECURITY_AUDIT.md" [ref=e142] [cursor=pointer]:
+        - /url: OAUTH_STATE_SECURITY_AUDIT.md
+    - listitem [ref=e143]:
+      - link "packages/" [ref=e144] [cursor=pointer]:
+        - /url: packages/
+    - listitem [ref=e145]:
+      - link "POSTGRESQL_SETUP.md" [ref=e146] [cursor=pointer]:
+        - /url: POSTGRESQL_SETUP.md
+    - listitem [ref=e147]:
+      - link "pre-approved-templates.json" [ref=e148] [cursor=pointer]:
+        - /url: pre-approved-templates.json
+    - listitem [ref=e149]:
+      - link "pyproject.toml" [ref=e150] [cursor=pointer]:
+        - /url: pyproject.toml
+    - listitem [ref=e151]:
+      - link "pytest.ini" [ref=e152] [cursor=pointer]:
+        - /url: pytest.ini
+    - listitem [ref=e153]:
+      - link "qa_reports/" [ref=e154] [cursor=pointer]:
+        - /url: qa_reports/
+    - listitem [ref=e155]:
+      - link "README.md" [ref=e156] [cursor=pointer]:
+        - /url: README.md
+    - listitem [ref=e157]:
+      - link "requirements-dev.txt" [ref=e158] [cursor=pointer]:
+        - /url: requirements-dev.txt
+    - listitem [ref=e159]:
+      - link "requirements.txt" [ref=e160] [cursor=pointer]:
+        - /url: requirements.txt
+    - listitem [ref=e161]:
+      - link "scripts/" [ref=e162] [cursor=pointer]:
+        - /url: scripts/
+    - listitem [ref=e163]:
+      - link "secrets/" [ref=e164] [cursor=pointer]:
+        - /url: secrets/
+    - listitem [ref=e165]:
+      - link "SECURITY.md" [ref=e166] [cursor=pointer]:
+        - /url: SECURITY.md
+    - listitem [ref=e167]:
+      - link "SECURITY_AUDIT_PROHIBITED_CAPABILITIES.md" [ref=e168] [cursor=pointer]:
+        - /url: SECURITY_AUDIT_PROHIBITED_CAPABILITIES.md
+    - listitem [ref=e169]:
+      - link "seed/" [ref=e170] [cursor=pointer]:
+        - /url: seed/
+    - listitem [ref=e171]:
+      - link "setup.py" [ref=e172] [cursor=pointer]:
+        - /url: setup.py
+    - listitem [ref=e173]:
+      - link "shared/" [ref=e174] [cursor=pointer]:
+        - /url: shared/
+    - listitem [ref=e175]:
+      - link "sonar-project.properties" [ref=e176] [cursor=pointer]:
+        - /url: sonar-project.properties
+    - listitem [ref=e177]:
+      - link "test_logs/" [ref=e178] [cursor=pointer]:
+        - /url: test_logs/
+    - listitem [ref=e179]:
+      - link "tests/" [ref=e180] [cursor=pointer]:
+        - /url: tests/
+    - listitem [ref=e181]:
+      - link "tools/" [ref=e182] [cursor=pointer]:
+        - /url: tools/
+    - listitem [ref=e183]:
+      - link "version.py" [ref=e184] [cursor=pointer]:
+        - /url: version.py
+  - separator [ref=e185]

@@ -37,7 +37,7 @@ class TestCSDMAEvaluator:
         mock_loader.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         # Mock the get_prompt_loader function
-        monkeypatch.setattr("ciris_engine.logic.dma.csdma.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.csdma.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture

@@ -109,28 +109,62 @@ class AdapterLoader:
             logger.error(f"Dependencies not satisfied for {manifest.module.name}")
             return None
 
-        # Add service directory to Python path temporarily
+        parts = class_path.split(".")
+        module_path = ".".join(parts[:-1])
+        class_name = parts[-1]
+
+        # Prefer fully-qualified package import (e.g. "ciris_adapters.<name>.<module>")
+        # so the module is identity-equal with any other import site — loading the
+        # same adapter under multiple adapter_ids must not create sibling module
+        # instances, which leaks duplicate loggers, duplicate isinstance classes,
+        # and duplicated module-level state.
+        services_pkg = self.services_dir.name
+        candidate_paths = []
+        if services_pkg and not module_path.startswith(f"{services_pkg}."):
+            candidate_paths.append(f"{services_pkg}.{module_path}")
+        candidate_paths.append(module_path)
+
+        for candidate in candidate_paths:
+            try:
+                module = importlib.import_module(candidate)
+                service_class = getattr(module, class_name)
+                logger.info(
+                    f"Successfully loaded service class: {class_name} from {manifest.module.name} "
+                    f"(module={candidate})"
+                )
+                return cast(type[ServiceProtocol], service_class)
+            except ModuleNotFoundError:
+                continue
+            except Exception as e:
+                logger.error(
+                    f"Failed to load service class {class_path} from {manifest.module.name} "
+                    f"via {candidate}: {type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
+                return None
+
+        # Final fallback: sys.path-based import for non-package layouts (e.g. tests
+        # pointing services_dir at a plain directory without __init__.py).
         import sys
 
         sys.path.insert(0, str(self.services_dir))
-
         try:
-            parts = class_path.split(".")
-            module_path = ".".join(parts[:-1])
-            class_name = parts[-1]
-
-            # Import module
             module = importlib.import_module(module_path)
             service_class = getattr(module, class_name)
-
-            logger.info(f"Successfully loaded service class: {class_name} from {manifest.module.name}")
+            logger.warning(
+                f"Loaded {class_name} from {manifest.module.name} via sys.path fallback "
+                f"(module={module_path}); consider making {services_pkg!r} a package to avoid "
+                f"duplicate module instances"
+            )
             return cast(type[ServiceProtocol], service_class)
-
         except Exception as e:
-            logger.error(f"Failed to load service class {class_path} from {manifest.module.name}: {e}")
+            logger.error(
+                f"Failed to load service class {class_path} from {manifest.module.name}: "
+                f"{type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
             return None
         finally:
-            # Remove from path
             sys.path.pop(0)
 
     def load_service(self, manifest: ServiceManifest) -> Optional[type[ServiceProtocol]]:

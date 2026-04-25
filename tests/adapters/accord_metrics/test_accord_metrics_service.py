@@ -256,7 +256,7 @@ class TestAccordMetricsServiceWBDEvents:
 
     @pytest.mark.asyncio
     async def test_send_deferral_with_consent(self):
-        """Test receiving WBD deferral events with consent."""
+        """WBD deferrals are routed to the dedicated endpoint, not the trace queue."""
         service = AccordMetricsService(config={"consent_given": True})
         service.set_agent_id("test-agent")
 
@@ -266,46 +266,77 @@ class TestAccordMetricsServiceWBDEvents:
             reason="Ethical uncertainty - needs human wisdom",
         )
 
+        captured = {}
+
+        async def capture(payload, thought_id):
+            captured["payload"] = payload
+            captured["thought_id"] = thought_id
+
+        service._send_wbd_deferral = capture
+
         result = await service.send_deferral(request)
 
         assert "WBD event recorded" in result
-        assert len(service._event_queue) == 1
-
-        event = service._event_queue[0]
-        assert event["event_type"] == "wbd_deferral"
-        assert event["thought_id"] == "thought-123"
-        assert event["task_id"] == "task-456"
-        assert event["reason"] == "Ethical uncertainty - needs human wisdom"
+        # Trace event queue must stay empty — /accord/events is for traces only
+        assert len(service._event_queue) == 0
+        assert captured["thought_id"] == "thought-123"
+        payload = captured["payload"]
+        # Validate CIRISLens WBDDeferralCreate contract
+        assert payload["trigger_type"] == "UNCERTAINTY"
+        assert payload["trigger_description"] == "Ethical uncertainty - needs human wisdom"
+        assert payload["rationale"] == "Ethical uncertainty - needs human wisdom"
+        assert payload["trace_id"] == "task-456"
+        assert payload["span_id"] == "thought-123"
+        assert "thought_id=thought-123" in payload["context_summary"]
 
     @pytest.mark.asyncio
     async def test_send_deferral_without_consent(self):
-        """Test WBD events are dropped without consent."""
+        """Without consent, send_deferral still returns but forwards nothing."""
         service = AccordMetricsService()  # No consent
 
         request = make_deferral_request()
 
+        captured = []
+
+        async def capture(payload, thought_id):
+            captured.append((payload, thought_id))
+
+        service._send_wbd_deferral = capture
+
         result = await service.send_deferral(request)
 
+        # Without consent the no-op path runs; trace queue stays empty.
         assert "WBD event recorded" in result
-        assert len(service._event_queue) == 0  # Dropped
+        assert len(service._event_queue) == 0
 
     @pytest.mark.asyncio
     async def test_send_deferral_truncates_long_reason(self):
-        """Test long reasons are truncated."""
+        """Long reason text is truncated to fit lens schema limits."""
         service = AccordMetricsService(config={"consent_given": True})
 
-        long_reason = "x" * 500  # Much longer than 200 char limit
+        long_reason = "x" * 3000  # Much longer than 500/2000 char limits
 
         request = make_deferral_request(reason=long_reason)
 
+        captured = {}
+
+        async def capture(payload, thought_id):
+            captured["payload"] = payload
+
+        service._send_wbd_deferral = capture
+
         await service.send_deferral(request)
 
-        event = service._event_queue[0]
-        assert len(event["reason"]) == 200
+        payload = captured["payload"]
+        # trigger_description is hard-capped at 500
+        assert len(payload["trigger_description"]) == 500
+        # dilemma_description and rationale are capped at 2000
+        assert len(payload["dilemma_description"]) == 2000
+        assert len(payload["rationale"]) == 2000
 
     @pytest.mark.asyncio
     async def test_send_deferral_with_defer_until(self):
-        """Test WBD event with defer_until timestamp."""
+        """defer_until is threaded into the context_summary."""
         service = AccordMetricsService(config={"consent_given": True})
 
         defer_time = datetime.now(timezone.utc)
@@ -316,10 +347,17 @@ class TestAccordMetricsServiceWBDEvents:
             defer_until=defer_time,
         )
 
+        captured = {}
+
+        async def capture(payload, thought_id):
+            captured["payload"] = payload
+
+        service._send_wbd_deferral = capture
+
         await service.send_deferral(request)
 
-        event = service._event_queue[0]
-        assert event["defer_until"] == defer_time.isoformat()
+        payload = captured["payload"]
+        assert defer_time.isoformat() in payload["context_summary"]
 
 
 class TestAccordMetricsServicePDMAEvents:

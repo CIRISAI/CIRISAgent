@@ -9,6 +9,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
 
 class GuidanceContext(BaseModel):
     """Context for requesting guidance from Wise Authority."""
@@ -30,9 +33,25 @@ class DeferralContext(BaseModel):
     reason: str = Field(..., description="Reason for deferral")
     defer_until: Optional[datetime] = Field(None, description="When to reconsider")
     priority: Optional[str] = Field(None, description="Priority level for later consideration")
-    domain_hint: Optional[str] = Field(
+    domain_hint: Optional[DomainCategory] = Field(
         None,
         description="Licensed domain category for routing (MEDICAL, FINANCIAL, etc.)",
+    )
+    reason_code: Optional[DeferralOperationalReason] = Field(
+        None,
+        description="Structured operational reason for the deferral",
+    )
+    needs_category: Optional[DeferralNeedCategory] = Field(
+        None,
+        description="Primary human-rights / needs category implicated by the deferral",
+    )
+    secondary_needs_categories: List[DeferralNeedCategory] = Field(
+        default_factory=list,
+        description="Additional rights/needs categories implicated by the deferral",
+    )
+    rights_basis: List[str] = Field(
+        default_factory=list,
+        description="Human-rights basis labels supporting the deferral classification",
     )
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional deferral metadata")
 

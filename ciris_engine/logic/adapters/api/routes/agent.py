@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 # Minimum uptime in seconds before defaulting task count
 MIN_UPTIME_FOR_DEFAULT_TASKS = 60
 
+# Tracks which CREDIT_ATTACH miss reasons we have already logged during this
+# server lifetime. The message handler runs CREDIT_ATTACH on every inbound
+# message, so a missing provider would otherwise produce one log line per
+# message (e.g. 1000 entries during a memory benchmark). We only care about
+# the first occurrence per reason — subsequent ones are redundant.
+_credit_attach_miss_logged: set[str] = set()
+
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 # Request/Response schemas
@@ -325,6 +332,15 @@ async def _create_interaction_message(
         except Exception:
             pass  # Keep default author_name on lookup failure
 
+    # Surface caller-declared locale (e.g. from qa_runner channel metadata)
+    # so it lands on the task at creation time. This is the top of the
+    # localization chain — task/thought beats user/system/env defaults.
+    preferred_language: Optional[str] = None
+    if body.context and body.context.metadata:
+        meta_lang = body.context.metadata.get("language") or body.context.metadata.get("preferred_language")
+        if isinstance(meta_lang, str) and meta_lang.strip():
+            preferred_language = meta_lang.strip()
+
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
@@ -333,6 +349,7 @@ async def _create_interaction_message(
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         images=images,
+        preferred_language=preferred_language,
     )
 
     return message_id, channel_id, msg
@@ -430,7 +447,12 @@ def _attach_credit_metadata(
     logger.debug(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
 
     if not resource_monitor:
-        logger.critical(f"[CREDIT_ATTACH] NO RESOURCE MONITOR - credit metadata NOT attached to {msg.message_id}")
+        if "no_resource_monitor" not in _credit_attach_miss_logged:
+            _credit_attach_miss_logged.add("no_resource_monitor")
+            logger.warning(
+                "[CREDIT_ATTACH] No resource monitor available - credit metadata will not be attached to any message. "
+                "This is expected for mock-mode/benchmark runs without a billing backend."
+            )
         return msg
 
     credit_provider = getattr(resource_monitor, "credit_provider", None)
@@ -444,7 +466,12 @@ def _attach_credit_metadata(
 
         credit_provider = _try_lazy_init_billing_provider(request, resource_monitor)
         if not credit_provider:
-            logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
+            if "no_credit_provider" not in _credit_attach_miss_logged:
+                _credit_attach_miss_logged.add("no_credit_provider")
+                logger.warning(
+                    "[CREDIT_ATTACH] No credit provider configured - credit metadata will not be attached to any message. "
+                    "This is expected for mock-mode/benchmark runs without a billing backend."
+                )
             return msg
         logger.info(f"[CREDIT_ATTACH] Lazily initialized billing provider for {msg.message_id}")
 

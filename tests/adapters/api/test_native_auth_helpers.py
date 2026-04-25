@@ -3,7 +3,6 @@ Tests for native auth helper functions in auth.py
 
 Covers:
 - _decode_google_jwt_locally()
-- _decode_apple_jwt_locally()
 - _auto_mint_system_admin_if_needed()
 """
 
@@ -16,7 +15,6 @@ import pytest
 
 from ciris_engine.logic.adapters.api.routes.auth import (
     _auto_mint_system_admin_if_needed,
-    _decode_apple_jwt_locally,
     _decode_google_jwt_locally,
 )
 from ciris_engine.logic.adapters.api.services.auth_service import OAuthUser
@@ -140,75 +138,6 @@ class TestDecodeGoogleJwtLocally:
         result = _decode_google_jwt_locally(token)
 
         assert result["external_id"] == "123456789"
-
-
-class TestDecodeAppleJwtLocally:
-    """Tests for _decode_apple_jwt_locally function."""
-
-    def test_decodes_valid_apple_jwt(self):
-        """Decodes a valid Apple JWT and extracts user info."""
-        payload = {
-            "iss": "https://appleid.apple.com",
-            "sub": "000123.abc456.789",
-            "email": "user@privaterelay.appleid.com",
-            "name": "Apple User",
-            "exp": int(time.time()) + 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_apple_jwt_locally(token)
-
-        assert result["external_id"] == "000123.abc456.789"
-        assert result["email"] == "user@privaterelay.appleid.com"
-        assert result["name"] == "Apple User"
-        assert result["picture"] is None  # Apple doesn't provide pictures
-
-    def test_rejects_invalid_apple_issuer(self):
-        """Rejects tokens not from Apple."""
-        payload = {
-            "iss": "https://accounts.google.com",
-            "sub": "123456789",
-            "email": "test@example.com",
-            "exp": int(time.time()) + 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        with pytest.raises(ValueError, match="Invalid issuer"):
-            _decode_apple_jwt_locally(token)
-
-    def test_rejects_expired_apple_token(self):
-        """Rejects expired Apple tokens."""
-        payload = {
-            "iss": "https://appleid.apple.com",
-            "sub": "000123.abc456.789",
-            "email": "user@example.com",
-            "exp": int(time.time()) - 3600,
-        }
-        token = _create_test_jwt(payload)
-
-        with pytest.raises(ValueError, match="Token has expired"):
-            _decode_apple_jwt_locally(token)
-
-    def test_rejects_invalid_jwt_format(self):
-        """Rejects tokens that don't have 3 parts."""
-        with pytest.raises(ValueError, match="Invalid JWT format"):
-            _decode_apple_jwt_locally("invalid")
-
-    def test_handles_missing_name(self):
-        """Handles tokens without name (Apple only sends name on first auth)."""
-        payload = {
-            "iss": "https://appleid.apple.com",
-            "sub": "000123.abc456.789",
-            "email": "user@example.com",
-            "exp": int(time.time()) + 3600,
-            # No name field
-        }
-        token = _create_test_jwt(payload)
-
-        result = _decode_apple_jwt_locally(token)
-
-        assert result["external_id"] == "000123.abc456.789"
-        assert result["name"] is None
 
 
 class TestAutoMintSystemAdminIfNeeded:

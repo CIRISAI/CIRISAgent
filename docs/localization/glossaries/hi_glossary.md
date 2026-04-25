@@ -130,6 +130,21 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 - Adapter → "एडॉप्टर" is transliterated but well-understood
 - Service → "सेवा" is native Hindi, widely used in technical contexts
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | डिफरल-विशिष्ट ACTION SELECTION | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | अधिकार / आवश्यकताओं की वर्गीकरण प्रणाली | Taxonomy section heading |
+| Rights basis | अधिकार आधार | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | परिचालन डिफरल कारण कोड | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

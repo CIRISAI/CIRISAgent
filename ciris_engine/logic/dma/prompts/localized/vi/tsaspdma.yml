@@ -1,188 +1,179 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# A "second look" after ASPDMA selects a TOOL action
-
 component_name: tsaspdma
-description: "Tool-Specific ASPDMA - xem xét lựa chọn công cụ với tài liệu đầy đủ"
-version: "1.0"
-
-# Accord is always included in DMA prompts
+description: Tool-Specific ASPDMA - xem xét lựa chọn công cụ với tài liệu đầy đủ
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===\n\nBạn đang xem xét một hành động TOOL mà ASPDMA đã chọn.\nBây giờ bạn có TÀI LIỆU ĐẦY ĐỦ cho công cụ này.\n\nNhiệm vụ của bạn: Với bối cảnh bổ sung này, quyết định hành động tốt nhất.\n\n=== LỰA CHỌN CỦA BẠN (các loại hành động giống ASPDMA) ===\n\n1. **TOOL** - Tiến hành thực thi công cụ\n   - Sử dụng nếu tài liệu xác nhận đây là công cụ phù hợp\n   - Bạn có thể tinh chỉnh tham số dựa trên tài liệu/ví dụ\n   - Bao gồm các lưu ý bạn đang thừa nhận trong lý do của bạn\n\n2. **SPEAK** - Yêu cầu người dùng làm rõ\n   - Sử dụng nếu tài liệu tiết lộ sự mơ hồ cần đầu vào người dùng\n   - Định dạng: \"Tôi cần người dùng trả lời: [câu hỏi cụ thể]\"\n   - Ví dụ:\n     - \"Tôi cần người dùng trả lời: kho lưu trữ nào tôi nên kiểm tra?\"\n     - \"Tôi cần người dùng trả lời: bạn muốn báo cáo đầy đủ hay tóm tắt?\"\n\n3. **PONDER** - Xem xét lại phương pháp\n   - Sử dụng nếu tài liệu cho thấy công cụ này sai cho nhiệm vụ\n   - Sử dụng nếu một công cụ khác sẽ rõ ràng tốt hơn\n   - Bao gồm lý do tại sao công cụ này không phù hợp\n\n=== TIÊU CHÍ QUYẾT ĐỊNH ===\n\nChọn SPEAK nếu:\n- Các tham số bắt buộc mơ hồ\n- Tồn tại nhiều cách giải thích hợp lệ\n- Các lưu ý áp dụng cần xác nhận người dùng\n- Nhiệm vụ không được chỉ định đầy đủ cho công cụ này\n\nChọn PONDER nếu:\n- Công cụ này không thể hoàn thành nhiệm vụ\n- Một công cụ khác sẽ tốt hơn đáng kể\n- Tài liệu tiết lộ sự không khớp khả năng\n- Sử dụng công cụ này sẽ không phù hợp hoặc không đạo đức trong bối cảnh\n\nChọn TOOL nếu:\n- Tài liệu xác nhận điều này là phù hợp\n- Tham số rõ ràng (tinh chỉnh nếu ví dụ đề xuất cải tiến)\n- Bạn có thể thừa nhận các lưu ý liên quan\n- Sử dụng công cụ có đạo đức và thúc đẩy mục tiêu của người dùng một cách phù hợp\n"
+tool_documentation_section: '=== TOOL: {{tool_name}} ===
 
-system_guidance_header: |
-  === LỰA CHỌN HÀNH ĐỘNG CHUYÊN BIỆT CÔNG CỤ (TSASPDMA) ===
-
-  Bạn đang xem xét một hành động TOOL mà ASPDMA đã chọn.
-  Bây giờ bạn có TÀI LIỆU ĐẦY ĐỦ cho công cụ này.
-
-  Nhiệm vụ của bạn: Với bối cảnh bổ sung này, quyết định hành động tốt nhất.
-
-  === LỰA CHỌN CỦA BẠN (các loại hành động giống ASPDMA) ===
-
-  1. **TOOL** - Tiến hành thực thi công cụ
-     - Sử dụng nếu tài liệu xác nhận đây là công cụ phù hợp
-     - Bạn có thể tinh chỉnh tham số dựa trên tài liệu/ví dụ
-     - Bao gồm các lưu ý bạn đang thừa nhận trong lý do của bạn
-
-  2. **SPEAK** - Yêu cầu người dùng làm rõ
-     - Sử dụng nếu tài liệu tiết lộ sự mơ hồ cần đầu vào người dùng
-     - Định dạng: "Tôi cần người dùng trả lời: [câu hỏi cụ thể]"
-     - Ví dụ:
-       - "Tôi cần người dùng trả lời: kho lưu trữ nào tôi nên kiểm tra?"
-       - "Tôi cần người dùng trả lời: bạn muốn báo cáo đầy đủ hay tóm tắt?"
-
-  3. **PONDER** - Xem xét lại phương pháp
-     - Sử dụng nếu tài liệu cho thấy công cụ này sai cho nhiệm vụ
-     - Sử dụng nếu một công cụ khác sẽ rõ ràng tốt hơn
-     - Bao gồm lý do tại sao công cụ này không phù hợp
-
-  === TIÊU CHÍ QUYẾT ĐỊNH ===
-
-  Chọn SPEAK nếu:
-  - Các tham số bắt buộc mơ hồ
-  - Tồn tại nhiều cách giải thích hợp lệ
-  - Các lưu ý áp dụng cần xác nhận người dùng
-  - Nhiệm vụ không được chỉ định đầy đủ cho công cụ này
-
-  Chọn PONDER nếu:
-  - Công cụ này không thể hoàn thành nhiệm vụ
-  - Một công cụ khác sẽ tốt hơn đáng kể
-  - Tài liệu tiết lộ sự không khớp khả năng
-  - Sử dụng công cụ này sẽ không phù hợp hoặc không đạo đức trong bối cảnh
-
-  Chọn TOOL nếu:
-  - Tài liệu xác nhận điều này là phù hợp
-  - Tham số rõ ràng (tinh chỉnh nếu ví dụ đề xuất cải tiến)
-  - Bạn có thể thừa nhận các lưu ý liên quan
-  - Sử dụng công cụ có đạo đức và thúc đẩy mục tiêu của người dùng một cách phù hợp
-
-tool_documentation_section: |
-  === CÔNG CỤ: {{tool_name}} ===
 
   **Mô Tả:** {{description}}
 
+
   **Khi Nào Sử Dụng:** {{when_to_use}}
 
+
   ### Lược Đồ Tham Số (BẠN PHẢI ĐIỀN VÀO)
+
   {{parameter_schema}}
 
+
   ### Bắt Đầu Nhanh
+
   {{quick_start}}
 
+
   ### Hướng Dẫn Chi Tiết
+
   {{detailed_instructions}}
 
+
   ### Ví Dụ
+
   {{examples}}
 
+
   ### Lưu Ý (Cẩn Thận!)
+
   {{gotchas}}
 
+
   ### Hướng Dẫn DMA
+
   {{dma_guidance}}
 
-context_enrichment_section: |
-  === TÀI NGUYÊN CÓ SẴN (từ làm phong phú bối cảnh) ===
+  '
+context_enrichment_section: '=== TÀI NGUYÊN CÓ SẴN (từ làm phong phú bối cảnh) ===
+
   {{context_enrichment_data}}
 
+
   QUAN TRỌNG: Sử dụng các giá trị entity_id CHÍNH XÁC từ danh sách ở trên.
+
   ĐỪNG sử dụng tên thân thiện trực tiếp - ánh xạ chúng với entity_id trước.
 
-context_integration: |
-  === LỰA CHỌN CỦA ASPDMA ===
+  '
+context_integration: '=== LỰA CHỌN CỦA ASPDMA ===
+
   Công Cụ: {{tool_name}}
-  Lý Do: {{aspdma_rationale}}
+
+  Lý Do: {{aspdma_reasoning}}
+
 
   === SUY NGHĨ GỐC (ý định của người dùng - sử dụng để suy ra tham số) ===
+
   {{original_thought_content}}
+
 
   {{context_enrichment_section}}
 
-  === TÀI LIỆU CÔNG CỤ (với Lược Đồ Tham Số) ===
+
+  === TOOL DOCUMENTATION (với Lược Đồ Tham Số) ===
+
   {{tool_documentation}}
 
-response_format: |
-  Trả về một đối tượng JSON PHẲNG với các trường này:
+  '
+response_format: 'Trả về một đối tượng JSON PHẲNG với các trường này:
+
   - "selected_action": Một trong "TOOL", "SPEAK", "PONDER"
-  - "rationale": Giải thích quyết định của bạn bao gồm các lưu ý bạn đang thừa nhận
+
+  - "reasoning": Giải thích quyết định của bạn bao gồm các lưu ý bạn đang thừa nhận
+
 
   CỘNG các trường cụ thể hành động (sử dụng tên trường chính xác bên dưới):
 
+
   Cho hành động TOOL (chế độ bình thường - công cụ tồn tại):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
 
   Cho hành động TOOL (chế độ sửa - tên công cụ sai):
-  {{"selected_action": "TOOL", "rationale": "Sửa tên công cụ để khớp với công cụ có sẵn...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "Sửa tên công cụ để khớp với công cụ có sẵn...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
 
   Cho hành động SPEAK:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Tôi cần người dùng trả lời: đèn nào?"}}
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "Tôi cần người dùng trả lời: đèn nào?"}}
+
 
   Cho hành động PONDER:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Đây có phải là phương pháp đúng không?"]}}
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["Đây có phải là phương pháp đúng không?"]}}
+
 
   QUAN TRỌNG:
+
   - Sử dụng Lược Đồ Tham Số ở trên để xác định tham số công cụ bắt buộc
+
   - Suy ra giá trị tham số từ ý định của người dùng và bối cảnh cuộc trò chuyện
+
   - tool_parameters là một dict chứa các đối số của công cụ
+
   - Trong CHẾ ĐỘ SỬA: bao gồm trường "tool_name" với tên CHÍNH XÁC từ danh sách công cụ có sẵn
+
   - Không bọc trong khối mã markdown
 
+
   QUY TẮC NGÔN NGỮ:
+
   - Phản hồi bằng ngôn ngữ ưa thích của người dùng (kiểm tra hồ sơ người dùng).
-  - TẤT CẢ các giá trị nội dung (rationale, speak_content, ponder_questions) phải bằng ngôn ngữ của người dùng.
-  - Các khóa JSON và tên hành động PHẢI vẫn bằng tiếng Anh (ví dụ: "selected_action": "TOOL", "rationale", "tool_parameters").
-  - Ví dụ: {{"selected_action": "SPEAK", "rationale": "Cần người dùng làm rõ", "speak_content": "Bạn muốn điều khiển đèn nào?"}} - nội dung tiếng Việt, khóa/hành động tiếng Anh.
 
-# Tool correction mode section (used when ASPDMA selected non-existent tool)
-tool_correction_section: |
-  === CHẾ ĐỘ SỬA CÔNG CỤ ===
+  - TẤT CẢ các giá trị nội dung (reasoning, speak_content, ponder_questions) phải bằng ngôn ngữ của người dùng.
 
-  ASPDMA đã chọn công cụ '{{requested_tool}}' nhưng công cụ này KHÔNG tồn tại.
+  - Các khóa JSON và tên hành động PHẢI vẫn bằng tiếng Anh (ví dụ: "selected_action": "TOOL", "reasoning", "tool_parameters").
 
-  Nhiệm vụ của bạn: Tìm công cụ ĐÚNG từ danh sách công cụ có sẵn khớp với
-  ý định của người dùng, HOẶC sử dụng SPEAK/PONDER nếu không có công cụ phù hợp tồn tại.
+  - Ví dụ: {{"selected_action": "SPEAK", "reasoning": "Cần người dùng làm rõ", "speak_content": "Bạn muốn điều khiển đèn nào?"}} - nội dung tiếng Việt, khóa/hành động tiếng Anh.
 
-  Công cụ có sẵn:
-  {{available_tools_list}}
+  '
+tool_correction_section: "=== TOOL CORRECTION MODE ===\n\nASPDMA đã chọn công cụ '{{requested_tool}}' nhưng công cụ này KHÔNG tồn tại.\n\nNhiệm vụ của bạn: Tìm công cụ ĐÚNG từ danh sách công cụ có sẵn khớp với\ný định của người dùng, HOẶC sử dụng SPEAK/PONDER nếu không có công cụ phù hợp tồn tại.\n\nCông cụ có sẵn:\n{{available_tools_list}}\n\nHƯỚNG DẪN:\n1. Phân tích ý định ban đầu của người dùng từ nội dung suy nghĩ\n2. Xem xét các công cụ có sẵn ở trên - tìm một công cụ khớp với ý định\n3. Nếu bạn tìm thấy một công cụ khớp:\n   - Trả về hành động TOOL với \"tool_name\" được đặt thành tên CHÍNH XÁC từ danh sách\n   - Điền \"tool_parameters\" phù hợp dựa trên lược đồ của công cụ\n4. Nếu nhiều công cụ có thể khớp:\n   - Trả về SPEAK để hỏi người dùng khả năng cụ thể nào họ muốn\n5. Nếu KHÔNG có công cụ nào khớp với ý định:\n   - Trả về PONDER để xem xét lại phương pháp hoàn toàn\n\nQUAN TRỌNG: Trường \"tool_name\" phải KHỚP CHÍNH XÁC từ danh sách công cụ có sẵn ở trên.\n"
+evaluation_steps: 'BƯỚC 1: Đọc Tài Liệu
 
-  HƯỚNG DẪN:
-  1. Phân tích ý định ban đầu của người dùng từ nội dung suy nghĩ
-  2. Xem xét các công cụ có sẵn ở trên - tìm một công cụ khớp với ý định
-  3. Nếu bạn tìm thấy một công cụ khớp:
-     - Trả về hành động TOOL với "tool_name" được đặt thành tên CHÍNH XÁC từ danh sách
-     - Điền "tool_parameters" phù hợp dựa trên lược đồ của công cụ
-  4. Nếu nhiều công cụ có thể khớp:
-     - Trả về SPEAK để hỏi người dùng khả năng cụ thể nào họ muốn
-  5. Nếu KHÔNG có công cụ nào khớp với ý định:
-     - Trả về PONDER để xem xét lại phương pháp hoàn toàn
-
-  QUAN TRỌNG: Trường "tool_name" phải KHỚP CHÍNH XÁC từ danh sách công cụ có sẵn ở trên.
-
-evaluation_steps: |
-  BƯỚC 1: Đọc Tài Liệu
   - Xem xét quick_start, detailed_instructions, examples
+
   - Ghi chú bất kỳ lưu ý nào áp dụng cho trường hợp sử dụng này
+
   - Kiểm tra xem when_to_use có khớp với nhiệm vụ không
 
+
   BƯỚC 2: Đánh Giá Lựa Chọn Của ASPDMA
+
   - Các tham số có đúng theo tài liệu không?
+
   - Các ví dụ có đề xuất định dạng tham số tốt hơn không?
+
   - Có các tham số bắt buộc nào mơ hồ không?
 
+
   BƯỚC 3: Kiểm Tra Lưu Ý
+
   - Có lưu ý nào áp dụng cho việc sử dụng cụ thể này không?
+
   - Người dùng có mong đợi hành vi này không?
+
   - Người dùng có nên được cảnh báo hoặc hỏi trước không?
 
+
   BƯỚC 4: Quyết Định Hành Động
+
   - TOOL: Xác nhận hoặc tinh chỉnh, thừa nhận lưu ý
+
   - SPEAK: Yêu cầu làm rõ cụ thể
+
   - PONDER: Giải thích tại sao cần xem xét lại
 
-closing_reminder: |
-  QUAN TRỌNG: Vai trò của bạn là phát hiện các vấn đề mà ASPDMA không thể thấy mà không có
+  '
+closing_reminder: 'QUAN TRỌNG: Vai trò của bạn là phát hiện các vấn đề mà ASPDMA không thể thấy mà không có
+
   tài liệu đầy đủ. Nếu lựa chọn công cụ có vẻ tốt, hãy xác nhận nhanh chóng.
+
   Chỉ SPEAK hoặc PONDER khi tài liệu tiết lộ mối lo ngại thực sự.
 
+
   Khi chọn SPEAK, hãy cụ thể: "Tôi cần người dùng trả lời: [câu hỏi]"
+
   Khi chọn PONDER, hãy giải thích: "Công cụ này không thể X vì Y, hãy xem xét Z"
+
   Khi chọn TOOL, hãy thừa nhận: "Tiến hành với nhận thức về lưu ý X"
+
+  '

@@ -32,7 +32,9 @@ from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import ChannelContext
+from ciris_engine.schemas.services.agent_credits import DomainCategory
 from ciris_engine.schemas.services.context import DeferralContext
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
 
 
 @contextmanager
@@ -589,3 +591,42 @@ class TestDeferHandler:
             assert isinstance(context, DeferralContext)
             assert context.thought_id == "thought_123"
             assert context.task_id == "task_123"
+
+    @pytest.mark.asyncio
+    async def test_taxonomy_fields_are_preserved_in_deferral_context(
+        self,
+        defer_handler: DeferHandler,
+        test_thought: Thought,
+        dispatch_context: DispatchContext,
+        mock_wise_bus: AsyncMock,
+        test_task: Task,
+    ) -> None:
+        """Structured taxonomy fields should survive into the WA deferral context."""
+
+        result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.DEFER,
+            action_parameters=DeferParams(
+                reason="Licensed legal review is required.",
+                context={"capability": "legal_advice"},
+                reason_code=DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED,
+                needs_category=DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY,
+                secondary_needs_categories=[DeferralNeedCategory.IDENTITY_AND_CIVIC_PARTICIPATION],
+                rights_basis=["fair_trial", "access_to_justice"],
+                domain_hint=DomainCategory.LEGAL,
+            ),
+            rationale="DSASPDMA enriched deferral",
+        )
+
+        with patch_persistence_properly(test_task):
+            await defer_handler.handle(result, test_thought, dispatch_context)
+
+        deferral_call = mock_wise_bus.send_deferral.call_args
+        context = deferral_call.kwargs["context"]
+        assert isinstance(context, DeferralContext)
+        assert context.domain_hint == DomainCategory.LEGAL
+        assert context.reason_code == DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED
+        assert context.needs_category == DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY
+        assert context.secondary_needs_categories == [DeferralNeedCategory.IDENTITY_AND_CIVIC_PARTICIPATION]
+        assert context.rights_basis == ["fair_trial", "access_to_justice"]
+        assert context.metadata["reason_code"] == "licensed_domain_required"
+        assert context.metadata["capability"] == "legal_advice"

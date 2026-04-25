@@ -55,8 +55,29 @@ class BusManager:
         self.tool = ToolBus(service_registry, time_service, telemetry_service)
         self.wise = WiseBus(service_registry, time_service, telemetry_service)
         self.runtime_control = RuntimeControlBus(service_registry, time_service, telemetry_service)
-        # LLM bus already has telemetry service for resource tracking
-        self.llm = LLMBus(service_registry, time_service, telemetry_service)
+        # LLM bus already has telemetry service for resource tracking.
+        # When CIRIS_LLM_REPLICAS>1, default to LEAST_LOADED so the bus uses
+        # each replica's semaphore headroom to distribute load (pure
+        # LATENCY_BASED doesn't know about in-flight capacity).
+        import os as _os
+
+        from ciris_engine.logic.buses.llm_bus import DistributionStrategy as _Strategy
+
+        try:
+            _replicas = max(1, int(_os.environ.get("CIRIS_LLM_REPLICAS", "1")))
+        except (TypeError, ValueError):
+            _replicas = 1
+        _strategy_env = _os.environ.get("CIRIS_LLM_DISTRIBUTION_STRATEGY", "").strip().lower()
+        if _strategy_env:
+            try:
+                _strategy = _Strategy(_strategy_env)
+            except ValueError:
+                _strategy = _Strategy.LATENCY_BASED
+        elif _replicas > 1:
+            _strategy = _Strategy.LEAST_LOADED
+        else:
+            _strategy = _Strategy.LATENCY_BASED
+        self.llm = LLMBus(service_registry, time_service, telemetry_service, distribution_strategy=_strategy)
 
         # Store all buses for lifecycle management
         self._buses: Dict[str, BaseBus[Any]] = {

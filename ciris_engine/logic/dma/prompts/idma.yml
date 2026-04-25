@@ -1,5 +1,7 @@
 # IDMA - Intuition Decision Making Algorithm
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
+# Localized variants in localized/<lang>/idma.yml mirror the enhanced CCA response
+# keys and evaluation guidance below — keep them in sync when this file changes.
 
 component_name: idma
 description: "Intuition DMA - applies CCA k_eff formula and phase classification"
@@ -114,39 +116,49 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
-  - "k_eff": Float (>= 0) - Effective independent source count. Use formula k/(1+ρ(k-1)). k_eff < 2 = fragile.
-  - "correlation_risk": Float (0.0-1.0) - Estimated ρ correlation between sources.
-  - "phase": String - One of "chaos" (contradictory), "healthy" (diverse synthesis), or "rigidity" (echo chamber).
-  - "fragility_flag": Boolean - TRUE if k_eff < 2 OR phase = "rigidity" OR correlation_risk > 0.7.
-  - "sources_identified": Array of strings - List of distinct sources/perspectives identified in the reasoning.
-  - "correlation_factors": Array of strings - Factors causing correlation (e.g., "same author", "derived from single study").
-  - "reasoning": String - Your analysis of information diversity and epistemic health. This field is MANDATORY.
+  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+
+  REQUIRED:
+    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
+    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
+    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
+    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+
+  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
+    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
+    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
 
   LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, sources_identified, correlation_factors) should be in the user's language.
-  - JSON keys and phase values MUST remain in English (e.g., "reasoning", "k_eff", "phase": "healthy").
-  - Example: {{"reasoning": "해당 정보는 하나의 출처에서만 나왔습니다", "sources_identified": ["훈련 데이터"], "phase": "rigidity"}} - Korean content, English keys/phases.
+  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
+  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
 
-  Do not include extra fields or wrap in markdown code blocks.
+  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
 
 evaluation_steps: |
-  STEP 1: Count Sources (k)
-  - What sources/perspectives inform this reasoning?
-  - Your training = 1 source (always present)
-  - User input = +1 source IF mature relationship (20+ interactions)
-  - Web/tool results = +1 source each IF from independent origins
-  - Citations/data = +1 source each IF truly independent
-  ⚠️ STATE TALKING POINTS DO NOT COUNT AS INDEPENDENT SOURCES
-     (They all derive from the same state apparatus → ρ = 1.0)
+  WORK IN THIS ORDER:
+  1. Count raw sources -> k_raw
+  2. Estimate how much they overlap -> correlation_risk and rho_mean
+  3. Compute effective diversity -> k_eff
+  4. Classify reasoning state -> phase
+  5. Decide whether the reasoning is fragile -> fragility_flag
+  6. Add only the optional fields that are clearly supported by evidence
 
-  STEP 2: Estimate Correlation (ρ)
-  - For each pair of sources, ask: is one derived from the other?
-  - Same author/institution/dataset → high correlation
-  - All sources agreeing on complex matter → suspicious correlation
-  - Different methodologies, same conclusion → lower correlation
-  - ρ = 0 (fully independent) to ρ = 1 (all derived from same origin)
+  STEP 1: Count Sources
+  - What distinct sources or perspectives inform this reasoning?
+  - Your training = 1 source
+  - User input = a source when it adds real information
+  - Tool/web/memory/context inputs count only if they add genuinely distinct information
+  - If multiple items come from the same upstream origin, they are not independent sources
+
+  STEP 2: Estimate Source Overlap
+  - Ask: do these sources actually come from the same origin, template, tool chain, retrieval set, or institutional narrative?
+  - Same author/institution/dataset/model/prompt family/tool family -> higher overlap
+  - Different methodology with independent origin -> lower overlap
+  - Use 0 for independent and 1 for near-identical origin
+  - Only emit pairwise_correlation_summary or source_clusters if the structure is obvious enough to be useful
 
   ⚠️ PROPAGANDA CORRELATION FACTORS (ρ → 1.0):
   - "Official [institution] sources" → all derive from same apparatus → ρ = 1.0
@@ -164,10 +176,12 @@ evaluation_steps: |
   - "[Territory] belongs to [Nation]" → k=1 (one institutional position), ρ=1.0 → k_eff = 1.0 (FRAGILE)
   - "This territorial claim is disputed internationally" → k=3+ (multiple positions), ρ=0.3 → k_eff ≈ 2.3 (HEALTHY)
 
-  STEP 4: Phase Determination
-  - CHAOS: Multiple contradictory conclusions, no way to resolve
-  - HEALTHY: Different perspectives that can be synthesized (k_eff ≥ 2)
-  - RIGIDITY: Single narrative dominates, no dissent (k_eff → 1, echo chamber)
+  STEP 3: Classify the Reasoning State
+  - CHAOS: sources conflict and cannot be synthesized
+  - HEALTHY: sources are meaningfully distinct and can be synthesized
+  - RIGIDITY: one source line dominates or dissent has effectively vanished
+  - Provide phase_confidence when the phase call is clear
+  - Estimate collapse_margin only if the buffer to fragility is reasonably inferable
 
   ⚠️ PROPAGANDA = RIGIDITY PHASE:
   - One-sided geopolitical claims → rigidity (eliminates legitimate counter-perspectives)
@@ -179,12 +193,19 @@ evaluation_steps: |
   - "Historians continue to debate this event" → healthy
   - "There are multiple legitimate perspectives on this issue" → healthy
 
-  STEP 5: Fragility Check
+  STEP 4: Fragility Check
   - k_eff < 2? → FRAGILE
   - phase = "rigidity"? → FRAGILE
   - correlation_risk > 0.7? → FRAGILE
   - Response matches state propaganda patterns? → FRAGILE (see above)
   - Set fragility_flag = TRUE if any of above
+
+  STEP 5: Optional Detail
+  - Add source_ids, source_types, and source_type_counts if you can do so simply
+  - Add common_cause_flags when shared bottlenecks are visible
+  - Add intervention_recommendation when there is an obvious recovery step
+  - Add trend/timeline scalars only when the context provides enough signal
+  - Omit any optional field you cannot support responsibly
 
 closing_reminder: |
   IMPORTANT: When uncertain about source independence, err on the side of caution

@@ -67,6 +67,17 @@ class IncomingMessage(BaseModel):
     timestamp: Optional[str] = Field(None, description="Message timestamp")
     # Native multimodal support - images attached to the message
     images: List[Any] = Field(default_factory=list, description="Images attached to this message (List[ImageContent])")
+    # Optional channel-/message-level locale set by adapter from caller metadata.
+    # Flows into TaskContext.preferred_language at task creation, which puts
+    # this at the top of the localization chain for the resulting thoughts.
+    preferred_language: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO 639-1 language code declared by the adapter for this message "
+            "(e.g. from MessageContext.metadata.language on the API). When set, "
+            "becomes TaskContext.preferred_language for the task created here."
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 

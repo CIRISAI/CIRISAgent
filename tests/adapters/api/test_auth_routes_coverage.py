@@ -12,11 +12,14 @@ This test file focuses on covering the missing paths identified in the coverage 
 These tests complement the existing OAuth tests to achieve better coverage.
 """
 
+import base64
 import os
+import time
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import jwt
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -33,6 +36,36 @@ from ciris_engine.logic.adapters.api.routes.auth import (
     router,
 )
 from ciris_engine.schemas.api.auth import LoginRequest, UserRole
+
+
+def _base64url_uint(value: int) -> str:
+    length = max(1, (value.bit_length() + 7) // 8)
+    return base64.urlsafe_b64encode(value.to_bytes(length, "big")).rstrip(b"=").decode("ascii")
+
+
+def _generate_apple_test_token(audience: str, kid: str = "test-apple-kid", **claims: str) -> tuple[str, dict[str, str]]:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_numbers = private_key.public_key().public_numbers()
+    jwk = {
+        "kty": "RSA",
+        "kid": kid,
+        "use": "sig",
+        "alg": "RS256",
+        "n": _base64url_uint(public_numbers.n),
+        "e": _base64url_uint(public_numbers.e),
+    }
+    payload = {
+        "sub": "apple-user-123",
+        "email": "native@example.com",
+        "aud": audience,
+        "iss": "https://appleid.apple.com",
+        "exp": int(time.time()) + 3600,
+    }
+    payload.update(claims)
+    token = jwt.encode(payload, private_key, algorithm="RS256", headers={"kid": kid, "alg": "RS256"})
+    return token, jwk
 
 
 class TestPasswordLoginFlow:
@@ -2303,6 +2336,228 @@ class TestNativeGoogleTokenExchange:
             assert exc_info.value.status_code == 500
             assert "Native token exchange failed" in exc_info.value.detail
 
+
+class TestNativeAppleTokenExchange:
+    """Test native Apple token verification and exchange."""
+
+    @pytest.mark.asyncio
+    async def test_verify_apple_id_token_success(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_apple_id_token
+
+        token, jwk = _generate_apple_test_token("ai.ciris.mobile")
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._fetch_apple_jwks", new=AsyncMock(return_value=[jwk])),
+        ):
+            mock_load_config.return_value = {"client_id": "ai.ciris.mobile"}
+
+            result = await _verify_apple_id_token(token)
+
+            assert result["external_id"] == "apple-user-123"
+            assert result["email"] == "native@example.com"
+            assert result["picture"] is None
+
+    @pytest.mark.asyncio
+    async def test_verify_apple_id_token_audience_mismatch(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_apple_id_token
+
+        token, jwk = _generate_apple_test_token("wrong.audience")
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._fetch_apple_jwks", new=AsyncMock(return_value=[jwk])),
+        ):
+            mock_load_config.return_value = {"client_id": "ai.ciris.mobile"}
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_apple_id_token(token)
+
+            assert exc_info.value.status_code == 401
+            assert "audience mismatch" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_verify_apple_id_token_rejects_invalid_signature(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_apple_id_token
+
+        token, _ = _generate_apple_test_token("ai.ciris.mobile")
+        _, different_jwk = _generate_apple_test_token("ai.ciris.mobile")
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._fetch_apple_jwks", new=AsyncMock(return_value=[different_jwk])),
+        ):
+            mock_load_config.return_value = {"client_id": "ai.ciris.mobile"}
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_apple_id_token(token)
+
+            assert exc_info.value.status_code == 401
+            assert "could not verify" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_verify_apple_id_token_requires_configured_audience(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_apple_id_token
+
+        token, jwk = _generate_apple_test_token("ai.ciris.mobile")
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._fetch_apple_jwks", new=AsyncMock(return_value=[jwk])),
+        ):
+            mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_apple_id_token(token)
+
+            assert exc_info.value.status_code == 503
+            assert "not configured" in exc_info.value.detail.lower()
+
+    def test_get_apple_signing_key_rejects_invalid_header(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_signing_key
+
+        with pytest.raises(HTTPException) as exc_info:
+            _get_apple_signing_key("not-a-jwt", [])
+
+        assert exc_info.value.status_code == 401
+        assert "could not verify" in exc_info.value.detail.lower()
+
+    def test_get_apple_signing_key_rejects_non_rs256_algorithm(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_signing_key
+
+        token = jwt.encode({"sub": "apple-user-123"}, "secret", algorithm="HS256", headers={"kid": "test-apple-kid"})
+
+        with pytest.raises(HTTPException) as exc_info:
+            _get_apple_signing_key(token, [])
+
+        assert exc_info.value.status_code == 401
+        assert "could not verify" in exc_info.value.detail.lower()
+
+    def test_get_apple_signing_key_requires_kid_header(self):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_signing_key
+
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        token = jwt.encode(
+            {"sub": "apple-user-123", "aud": "ai.ciris.mobile", "iss": "https://appleid.apple.com"},
+            private_key,
+            algorithm="RS256",
+            headers={"alg": "RS256"},
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            _get_apple_signing_key(token, [])
+
+        assert exc_info.value.status_code == 401
+        assert "could not verify" in exc_info.value.detail.lower()
+
+    def test_get_apple_signing_key_requires_matching_jwk(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _get_apple_signing_key
+
+        token, jwk = _generate_apple_test_token("ai.ciris.mobile", kid="expected-kid")
+        jwk["kid"] = "different-kid"
+
+        with pytest.raises(HTTPException) as exc_info:
+            _get_apple_signing_key(token, [jwk])
+
+        assert exc_info.value.status_code == 401
+        assert "could not verify" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_fetch_apple_jwks_uses_cache_when_fresh(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _apple_jwks_cache, _fetch_apple_jwks
+
+        cached_keys = [{"kid": "cached"}]
+        original_cache = dict(_apple_jwks_cache)
+        try:
+            _apple_jwks_cache["keys"] = cached_keys
+            _apple_jwks_cache["expires_at"] = datetime.now(timezone.utc).timestamp() + 60
+
+            result = await _fetch_apple_jwks()
+
+            assert result == cached_keys
+        finally:
+            _apple_jwks_cache.clear()
+            _apple_jwks_cache.update(original_cache)
+
+    @pytest.mark.asyncio
+    async def test_fetch_apple_jwks_raises_when_payload_has_no_keys(self):
+        from ciris_engine.logic.adapters.api.routes.auth import _apple_jwks_cache, _fetch_apple_jwks
+
+        class FakeResponse:
+            status = 200
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def json(self):
+                return {}
+
+        class FakeSession:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def get(self, url):
+                return FakeResponse()
+
+        original_cache = dict(_apple_jwks_cache)
+        try:
+            _apple_jwks_cache["keys"] = None
+            _apple_jwks_cache["expires_at"] = 0.0
+
+            with patch("aiohttp.ClientSession", FakeSession):
+                with pytest.raises(HTTPException) as exc_info:
+                    await _fetch_apple_jwks()
+
+            assert exc_info.value.status_code == 503
+            assert "verification service unavailable" in exc_info.value.detail.lower()
+        finally:
+            _apple_jwks_cache.clear()
+            _apple_jwks_cache.update(original_cache)
+
+    @pytest.mark.asyncio
+    async def test_native_apple_token_exchange_success(self):
+        from ciris_engine.logic.adapters.api.routes.auth import AppleNativeTokenRequest, native_apple_token_exchange
+
+        native_request = AppleNativeTokenRequest(id_token="valid-apple-token", provider="apple")
+        mock_fastapi_request = Mock()
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._verify_apple_id_token") as mock_verify,
+            patch("ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"),
+        ):
+            mock_verify.return_value = {
+                "external_id": "apple-123",
+                "email": "native@example.com",
+                "name": "Native Apple User",
+                "picture": None,
+            }
+
+            mock_auth_service = Mock()
+            mock_auth_service._ensure_users_loaded = AsyncMock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "apple:apple-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+            mock_auth_service._oauth_users = {"existing": Mock()}
+
+            response = await native_apple_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
+
+            assert response.user_id == "apple:apple-123"
+            assert response.role == "OBSERVER"
+            assert response.email == "native@example.com"
 
 class TestAPIKeyManagement:
     """Test API key management endpoints - covers lines 1192-1272."""

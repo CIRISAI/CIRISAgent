@@ -37,7 +37,7 @@ class TestDSDMAEvaluator:
         mock_loader.get_accord_mode = Mock(return_value="full")
 
         # Mock the get_prompt_loader function
-        monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture

@@ -245,7 +245,7 @@ class TestDeferralContextDomainHint:
             reason="Domain deferral",
             domain_hint="MEDICAL",
         )
-        assert ctx.domain_hint == "MEDICAL"
+        assert ctx.domain_hint == DomainCategory.MEDICAL
 
     def test_domain_hint_optional(self) -> None:
         ctx = DeferralContext(
@@ -264,7 +264,7 @@ class TestDeferralContextDomainHint:
             domain_hint="FINANCIAL",
             metadata={"extra": "data"},
         )
-        assert ctx.domain_hint == "FINANCIAL"
+        assert ctx.domain_hint == DomainCategory.FINANCIAL
         assert "extra" in ctx.metadata
 
 

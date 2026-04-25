@@ -11,6 +11,10 @@ import tempfile
 os.environ["CIRIS_IMPORT_MODE"] = "true"
 os.environ["CIRIS_MOCK_LLM"] = "true"
 os.environ["CIRIS_TESTING_MODE"] = "true"  # Enable fallback admin credentials for tests
+# Pin language to English so handler-content assertions stay stable regardless
+# of the developer's local CIRIS_PREFERRED_LANGUAGE in .env. Tests that
+# intentionally exercise localization can override via monkeypatch.
+os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
 
 # CRITICAL: Override log directory for tests to prevent container interference
 # Tests should NEVER write to the main logs directory that containers use
@@ -123,6 +127,30 @@ def manage_import_protection():
     # After all tests are done, we can clear the protection
     # (though it doesn't really matter since process is ending)
     os.environ.pop("CIRIS_IMPORT_MODE", None)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_global_env(monkeypatch):
+    """Restore global, process-wide env vars to known values for every test.
+
+    Some tests intentionally flip `CIRIS_PREFERRED_LANGUAGE` or
+    `CIRIS_LLM_REPLICAS` via raw `os.environ[...] = ...` to exercise
+    behavior that depends on those globals. Those env vars work fine for
+    personal-agent deployments (one process, one operator) but they are
+    the wrong shape for a test harness: under `pytest -n`, xdist workers
+    run tests serially per worker, so a leaked mutation from test A can
+    change the behavior of unrelated test B and produce flaky CI
+    failures (e.g. a handler follow-up rendered in Amharic, or a second
+    LLM replica being initialized when the test expects one).
+
+    Using monkeypatch here captures the current values before each test
+    and restores them at teardown — even if a test mutates them with raw
+    `os.environ[...]` and forgets to restore, or crashes mid-test. Tests
+    that want a different value should still prefer `monkeypatch.setenv`
+    inside the test so the change is scoped and obvious.
+    """
+    monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
+    monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
 
 
 @pytest.fixture(autouse=True, scope="function")

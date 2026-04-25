@@ -169,6 +169,21 @@ This glossary defines the canonical translations for key CIRIS terms in Japanese
 - Verb-final word order
 - Context-dependent subject omission is natural and preferred
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | 延期専用アクション選択 | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | 権利 / ニーズ分類体系 | Taxonomy section heading |
+| Rights basis | 権利根拠 | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | 運用上の延期理由コード | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

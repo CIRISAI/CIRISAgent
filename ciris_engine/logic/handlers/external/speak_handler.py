@@ -125,7 +125,12 @@ class SpeakHandler(BaseActionHandler):
 
             follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"SPEAK action failed for thought {thought_id}. Reason: {e}",
+                follow_up_content=self._localized_followup(
+                    "speak_action_failed_with_reason",
+                    default=f"SPEAK action failed for thought {thought_id}. Reason: {e}",
+                    thought_id=thought_id,
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -256,15 +261,25 @@ class SpeakHandler(BaseActionHandler):
             self._update_trace_correlation(True, f"[BENCHMARK] Message sent to {channel_id}, task auto-completed")
             return f"benchmark_complete_{thought.thought_id}"
 
-        # Normal mode: create follow-up thought
+        # Normal mode: create follow-up thought (localized via handlers.* keys)
         if success:
-            follow_up_text = (
-                f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
-                "Speaking repeatedly on the same task is not useful - if you have nothing new to add, use TASK_COMPLETE. "
-                "New user messages will create new tasks automatically."
+            follow_up_text = self._localized_followup(
+                "speak_followup_success",
+                default=(
+                    f"SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
+                    "Speaking repeatedly on the same task is usually incorrect. "
+                    "Unless you need to use a tool to follow up on the task, the next choice is almost certainly TASK_COMPLETE. "
+                    "Do not SPEAK again unless a correction is truly necessary. "
+                    "New user messages will create new tasks automatically."
+                ),
+                channel_id=channel_id,
             )
         else:
-            follow_up_text = f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK action failed for thought {thought.thought_id}."
+            follow_up_text = self._localized_followup(
+                "speak_followup_failure",
+                default=f"SPEAK action failed for thought {thought.thought_id}.",
+                thought_id=thought.thought_id,
+            )
 
         final_status = ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED
 

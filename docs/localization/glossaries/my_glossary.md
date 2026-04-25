@@ -112,3 +112,18 @@ This glossary defines the canonical translations for key CIRIS terms in Burmese.
 4. Word order is Subject-Object-Verb (SOV)
 5. Preserve placeholders exactly: {action}, {threshold}, {confidence}
 6. Myanmar has diverse dialects - use standard Burmese (Yangon)
+
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | ရွှေ့ဆိုင်းမှုအထူးပြု လုပ်ဆောင်ချက်ရွေးချယ်ခြင်း | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | အခွင့်အရေး / လိုအပ်ချက် TAXONOMY | Taxonomy section heading |
+| Rights basis | အခွင့်အရေးအခြေခံ | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | လုပ်ငန်းဆိုင်ရာ ရွှေ့ဆိုင်းမှု အကြောင်းပြချက် CODE များ | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |

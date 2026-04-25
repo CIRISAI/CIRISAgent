@@ -20,6 +20,18 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      # Benchmarks submit N messages back-to-back. BaseObserver's channel-level
+      # task-append coalescing would collapse them into a single task, which
+      # masks per-task memory behavior. Disable the coalescing so each message
+      # creates its own task on the queue (what we're actually measuring).
+      # The in-Python benchmark scripts also set this, but pinning it at the
+      # workflow level makes the setting visible in CI logs and survives any
+      # subshell env scrubbing.
+      CIRIS_DISABLE_TASK_APPEND: "1"
+      # The default API rate limit (60/min) would throttle the 1000-message
+      # burst benchmark. Match the qa_runner live-mode value.
+      CIRIS_API_RATE_LIMIT_PER_MINUTE: "600"
 
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +54,22 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install psutil
+
+      - name: Install TPM2 TSS runtime libraries (CIRISVerify dep)
+        # CIRISVerify's shared library has libtss2-* as transitive deps.
+        # Without these, ctypes.CDLL fails before Rust can engage its
+        # software-only fallback (factory.rs degrades when TpmSigner::new
+        # fails, but only if the .so itself loaded). Per the verify team:
+        # libtss2-esys0 + libtss2-tctildr0 + libtss2-mu0 are the runtime
+        # deps; libtss2-dev for dev envs. We install with a 3-way fallback
+        # chain to cover Debian, newer Debian, and Ubuntu 24.04 t64
+        # package renames.
+        run: |
+          if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0; then
+            if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-mu-4.0.1-0; then
+              sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-mu-4.0.1-0t64
+            fi
+          fi
 
       - name: System Info
         run: |
@@ -74,10 +102,16 @@ jobs:
       - name: 1000 Message Benchmark
         run: |
           echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
-          python3 tools/memory_benchmark.py --messages 1000 --adapter api | tee 1000msg.log || echo "1000-msg benchmark skipped"
+          # --idle-seconds 90 holds the server alive after the burst so we can
+          # see whether async task processing drains and RAM plateaus. Without
+          # it, "Final" memory in the summary is the value 2.5s after the last
+          # POST returns — well before the queued thoughts have been processed.
+          python3 tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 90 | tee 1000msg.log || echo "1000-msg benchmark skipped"
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -20 1000msg.log >> $GITHUB_STEP_SUMMARY
+            # Tail 30 lines instead of 20 so the failure-breakdown + idle
+            # summary lines both make it into the GitHub summary.
+            tail -30 1000msg.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 

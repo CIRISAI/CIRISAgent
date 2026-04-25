@@ -48,17 +48,39 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         self.last_user_prompt: Optional[str] = None
         self.last_system_prompt: Optional[str] = None
 
+        # Per-thought language override; populated from user_profiles in
+        # _build_context_strings. None means fall back to env var. Never use
+        # the legacy global set_prompt_language() — that mutated shared
+        # state and bled across concurrent thoughts.
+        self._explicit_language: Optional[str] = None
+
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        """Get prompt loader fresh each time to respect language changes."""
-        return get_prompt_loader()
+        """Get prompt loader for the thread's currently-active language."""
+        return get_prompt_loader(language=self._explicit_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
+
+    def _sync_language(self, user_profiles: Any) -> None:
+        """Update _explicit_language from the first user profile.
+
+        Always assigns (None included) so a reused evaluator instance never
+        inherits a previous thought's language when profile data is absent.
+        """
+        new_language: Optional[str] = None
+        if user_profiles and len(user_profiles) > 0:
+            new_language = getattr(user_profiles[0], "preferred_language", None)
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            if new_language:
+                logger.debug(f"PDMA: Synced prompt language to user preference: {new_language}")
+            else:
+                logger.debug("PDMA: Cleared prompt language (no profile/context)")
 
     def _build_context_strings(self, context: Any) -> tuple[str, str]:
         """Extract system snapshot and user profile context strings.
@@ -66,6 +88,9 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         Also syncs user's language preference to the DMA prompt loader.
         """
         if not context:
+            # No context = no profile = no language. Reset so a previous
+            # thought's language doesn't bleed into this one.
+            self._sync_language(None)
             return "", ""
 
         system_snapshot_str = ""
@@ -81,15 +106,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             user_profiles = context.user_profiles
             user_profile_str = format_user_profiles(user_profiles)
 
-        # Sync user's language preference to prompt loader
-        if user_profiles and len(user_profiles) > 0:
-            user_lang = getattr(user_profiles[0], "preferred_language", None)
-            if user_lang and user_lang != self.prompt_loader.language:
-                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
-
-                set_prompt_language(user_lang)
-                logger.debug(f"PDMA: Synced prompt language to user preference: {user_lang}")
-
+        self._sync_language(user_profiles)
         return system_snapshot_str, user_profile_str
 
     def _get_template_override(self, key: str) -> Optional[str]:
@@ -196,7 +213,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         result_tuple = await self.call_llm_structured(
             messages=messages,
             response_model=EthicalDMAResult,
-            max_tokens=4096,
+            max_tokens=16384,
             temperature=0.0,
             thought_id=input_data.thought_id,
             task_id=input_data.source_task_id,

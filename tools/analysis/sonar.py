@@ -449,16 +449,35 @@ def format_quality_gate_summary(qg_status: Dict[str, Any], label: str, timestamp
     if timestamp:
         time_str = f" ({format_time_ago(timestamp)})"
 
+    metric_labels = {
+        "reliability_rating": "Reliability Rating",
+        "security_rating": "Security Rating",
+        "coverage": "Coverage",
+        "new_coverage": "Coverage",
+        "security_hotspots_reviewed": "Security Hotspots Reviewed",
+        "new_security_hotspots_reviewed": "Security Hotspots Reviewed",
+    }
+    percentage_metrics = {
+        "coverage",
+        "new_coverage",
+        "security_hotspots_reviewed",
+        "new_security_hotspots_reviewed",
+    }
+
     # Find failed conditions
     failed_conditions = []
     if qg_status.get("conditions"):
         for condition in qg_status["conditions"]:
             if condition["status"] != "OK":
-                metric = condition["metricKey"].replace("_", " ").replace("new ", "").title()
+                metric_key = condition["metricKey"]
+                metric = metric_labels.get(metric_key, metric_key.replace("_", " ").replace("new ", "").title())
                 actual = condition.get("actualValue", "?")
                 threshold = condition["errorThreshold"]
                 comparator = "≥" if condition["comparator"] == "LT" else "≤"
-                failed_conditions.append(f"{metric}: {actual}% (needs {comparator} {threshold}%)")
+                if metric_key in percentage_metrics:
+                    actual = f"{actual}%"
+                    threshold = f"{threshold}%"
+                failed_conditions.append(f"{metric}: {actual} (needs {comparator} {threshold})")
 
     result = f"{status_icon} {label}: {status}{time_str}"
     if failed_conditions:
@@ -797,9 +816,24 @@ def main():
             print(f"\n🔍 Pull Request #{args.pr_number} ({branch_name}) Analysis")
             print("=" * 70)
 
-            # Try branch-based quality gate query
+            metric_labels = {
+                "reliability_rating": "Reliability Rating",
+                "security_rating": "Security Rating",
+                "coverage": "Coverage",
+                "new_coverage": "Coverage",
+                "security_hotspots_reviewed": "Security Hotspots Reviewed",
+                "new_security_hotspots_reviewed": "Security Hotspots Reviewed",
+            }
+            percentage_metrics = {
+                "coverage",
+                "new_coverage",
+                "security_hotspots_reviewed",
+                "new_security_hotspots_reviewed",
+            }
+
+            # Use PR-aware Sonar API path first; fall back to branch only if needed.
             try:
-                qg_status = client.get_quality_gate_status(branch=branch_name)
+                qg_status = client.get_quality_gate_status(pull_request=args.pr_number)
                 status = qg_status["status"]
                 status_icon = "✅" if status == "OK" else "❌"
                 print(f"\nQuality Gate: {status_icon} {status}")
@@ -808,13 +842,23 @@ def main():
                     print("\nConditions:")
                     for condition in qg_status["conditions"]:
                         cond_status = "✓" if condition["status"] == "OK" else "✗"
-                        metric = condition["metricKey"].replace("_", " ").title()
+                        metric_key = condition["metricKey"]
+                        metric = metric_labels.get(metric_key, metric_key.replace("_", " ").title())
                         actual = condition.get("actualValue", "N/A")
                         threshold = condition["errorThreshold"]
                         comparator = "≥" if condition["comparator"] == "LT" else "≤"
+                        if metric_key in percentage_metrics:
+                            actual = f"{actual}%"
+                            threshold = f"{threshold}%"
                         print(f"  {cond_status} {metric}: {actual} (needs {comparator} {threshold})")
             except Exception as e:
-                print(f"\n❌ Quality Gate: Could not retrieve status ({e})")
+                try:
+                    qg_status = client.get_quality_gate_status(branch=branch_name)
+                    status = qg_status["status"]
+                    status_icon = "✅" if status == "OK" else "❌"
+                    print(f"\nQuality Gate: {status_icon} {status} (branch fallback)")
+                except Exception:
+                    print(f"\n❌ Quality Gate: Could not retrieve status ({e})")
 
             # Coverage Metrics
             try:

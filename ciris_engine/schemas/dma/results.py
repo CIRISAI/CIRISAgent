@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -52,6 +52,7 @@ class IDMAResult(BaseModel):
     - As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
     """
 
+    # === LOAD-BEARING (required) — these four drive every downstream check ===
     k_eff: float = Field(
         ...,
         ge=0.0,
@@ -71,17 +72,30 @@ class IDMAResult(BaseModel):
         ...,
         description="True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation",
     )
+    reasoning: str = Field(..., description="Short analysis of information diversity and epistemic health")
+
+    # === OPTIONAL — descriptive lists the context builder surfaces to ASPDMA ===
     sources_identified: List[str] = Field(
         default_factory=list,
-        description="List of distinct sources/perspectives identified in the reasoning",
+        description="Distinct sources/perspectives identified (max 3).",
     )
     correlation_factors: List[str] = Field(
         default_factory=list,
-        description="Factors contributing to source correlation (e.g., 'same research group', 'derived from single paper')",
+        description="Reasons sources correlate (e.g., 'same institutional narrative', 'derived from single paper').",
     )
-    reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
+    intervention_recommendation: Optional[str] = Field(
+        None,
+        description="One-line recommendation to recover healthy diversity when the agent is fragile.",
+    )
 
-    model_config = ConfigDict(extra="forbid", defer_build=True)
+    # Accept (and ignore) the 35 fields the v1.x schema used to ask the LLM to
+    # populate. Usage analysis showed they were near-constant in production
+    # and their list-type variants were the #1 source of `validation error
+    # for IDMAResult` cascades (LLM returned scalars / empty strings where
+    # lists were expected, every retry failed the same way, agent hung).
+    # `extra="ignore"` means an older provider or prompt that still emits
+    # those fields won't break validation — they're silently dropped.
+    model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
 def _coerce_to_string(v: Any) -> str:
@@ -202,7 +216,11 @@ class ActionSelectionDMAResult(BaseModel):
     # User prompt for debugging/transparency (set by evaluator)
     user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 
-    model_config = ConfigDict(extra="forbid", defer_build=True)
+    # selection_confidence / alternatives_considered removed — see comment on
+    # ASPDMALLMResult. extra="ignore" so stale consumers or older event wire
+    # formats that still include them don't raise validation errors.
+
+    model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
 class ASPDMALLMResult(BaseModel):
@@ -216,7 +234,8 @@ class ASPDMALLMResult(BaseModel):
     """
 
     selected_action: HandlerActionType = Field(..., description="The chosen handler action")
-    rationale: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
+    # DMA-lexicon convention: all DMAs emit `reasoning` (not `rationale`).
+    reasoning: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
 
     # === SPEAK parameters ===
     speak_content: Optional[str] = Field(None, description="Content to speak (for SPEAK action)")
@@ -259,7 +278,14 @@ class ASPDMALLMResult(BaseModel):
     # === TASK_COMPLETE parameters ===
     completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
 
-    model_config = ConfigDict(extra="forbid", defer_build=True)
+    # selection_confidence and alternatives_considered were briefly added here
+    # (commit 4ffe82895) as a deliberation-diversity signal for k_eff analysis.
+    # Production telemetry showed the action_rationale field already carries
+    # that signal and the extra two optionals just increased schema burden,
+    # correlating with the ASPDMA "Invalid JSON: input_value='}'" LLM failures
+    # that hung the pipeline. Reverted to the minimal 20-field shape.
+
+    model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
 def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:
@@ -399,7 +425,7 @@ def convert_llm_result_to_action_result(
     return ActionSelectionDMAResult(
         selected_action=action,
         action_parameters=params,
-        rationale=llm_result.rationale,
+        rationale=llm_result.reasoning,
         raw_llm_response=raw_llm_response,
         evaluation_time_ms=evaluation_time_ms,
         resource_usage=resource_usage,

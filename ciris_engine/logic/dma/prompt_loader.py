@@ -160,7 +160,7 @@ class DMAPromptLoader:
                 action_params_speak_csdma_guidance=template_data.get("action_params_speak_csdma_guidance"),
                 action_params_ponder_guidance=template_data.get("action_params_ponder_guidance"),
                 action_params_observe_guidance=template_data.get("action_params_observe_guidance"),
-                rationale_csdma_guidance=template_data.get("rationale_csdma_guidance"),
+                reasoning_csdma_guidance=template_data.get("reasoning_csdma_guidance"),
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
                 context_integration=template_data.get("context_integration"),
@@ -265,53 +265,56 @@ class DMAPromptLoader:
         return template_data.accord_mode in ("full", "compressed")
 
 
-# Global instance for convenience
-_default_loader = None
-_current_language = DEFAULT_LANGUAGE
+# Per-language DMA loader cache. Each language gets its own independent loader
+# so concurrent thoughts in different languages never trample each other's
+# state. The previous singleton + mutable-language design caused the same bug
+# the conscience loader had: a Spanish thought could end up using Amharic
+# prompts because some other thread mutated the global between selection
+# and the actual DMA call.
+_loader_cache: dict[str, DMAPromptLoader] = {}
 
 
 def get_prompt_loader(language: Optional[str] = None) -> DMAPromptLoader:
-    """Get the default prompt loader instance.
+    """Get a DMA prompt loader for the requested language.
+
+    Returns a per-language loader (cached). The agent should always pass the
+    language of the THOUGHT/USER being evaluated — not rely on a global env
+    var — so multilingual deployments build prompts per thought in its own
+    language.
 
     Args:
-        language: Optional language code. If provided and different from current,
-                  updates the loader's language setting. If None on first call,
-                  uses the user's preferred language from CIRIS_PREFERRED_LANGUAGE.
+        language: Optional ISO 639-1 language code. If None, falls back to
+            the env var via get_preferred_language() — but callers should
+            normally pass an explicit language derived from the user profile.
 
     Returns:
-        DMAPromptLoader instance configured for the specified language.
+        DMAPromptLoader instance for the requested language.
     """
-    global _default_loader, _current_language
+    if language is None:
+        try:
+            from ciris_engine.logic.utils.localization import get_preferred_language
 
-    if _default_loader is None:
-        # If no language specified, check the user's preferred language
-        if language is None:
-            try:
-                from ciris_engine.logic.utils.localization import get_preferred_language
+            language = get_preferred_language()
+        except ImportError:
+            language = DEFAULT_LANGUAGE
 
-                lang = get_preferred_language()
-            except ImportError:
-                lang = DEFAULT_LANGUAGE
-        else:
-            lang = language
-        _default_loader = DMAPromptLoader(language=lang)
-        _current_language = lang
-        logger.info(f"DMA prompt loader initialized with language: {_sanitize_for_log(lang)}")
-    elif language and language != _current_language:
-        _default_loader.set_language(language)
-        _current_language = language
-
-    return _default_loader
+    loader = _loader_cache.get(language)
+    if loader is None:
+        loader = DMAPromptLoader(language=language)
+        _loader_cache[language] = loader
+        logger.info(f"DMA prompt loader created for language: {_sanitize_for_log(language)}")
+    return loader
 
 
 def set_prompt_language(language: str) -> None:
-    """Set the language for DMA prompts globally.
+    """Compatibility shim — no-op now that loaders are per-language.
 
-    Args:
-        language: ISO 639-1 language code (e.g., 'en', 'am', 'es')
+    Previously this mutated a global singleton; with per-language caching
+    each call site selects its own loader at request time. Kept as a no-op
+    so existing callers don't break, but issues a one-time warning to help
+    surface stale globals.
     """
-    global _default_loader, _current_language
-    _current_language = language
-    if _default_loader is not None:
-        _default_loader.set_language(language)
-    logger.info(f"DMA prompt language set to: {_sanitize_for_log(language)}")
+    logger.warning(
+        f"set_prompt_language({_sanitize_for_log(language)}) called — "
+        "this is a no-op now; pass language to get_prompt_loader() per request"
+    )

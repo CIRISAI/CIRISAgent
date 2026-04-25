@@ -18,7 +18,7 @@ system_guidance_header: |
   Iṣẹ́ rẹ ni láti mọ̀:
   1. Mélòó ni àwọn oríṣi/ìwòye tí wọ́n ń ṣe olómìnira lóòótọ́ tí ó ń sọ fún ìronú yìí
   2. Bóyá àwọn oríṣi náà bá ara wọn ṣe ìbátan (wọ́n ti ara wọn wá, ẹgbẹ́ ìwádìí kannáà, àti bẹ́ẹ̀ bẹ́ẹ̀ lọ)
-  3. Ìgbòǹgbò epistẹmíkì ti ìronú náà (ìdàrúdàpọ̀, ìlera, tàbí líle)
+  3. Ìgbòǹgbò epistẹmíkì ti ìronú náà (chaos, healthy, tàbí rigidity)
   4. Bóyá ìronú náà bá jẹ́ ẹlẹ́gẹ́ tí ó sì yẹ kí a tọ́ka sí fún àyẹ̀wò ènìyàn
 
   === ÌLÀNÀ ÀTÚPALẸ̀ ÌṢUBU ÌBÁRAMU (CCA) ===
@@ -47,53 +47,122 @@ system_guidance_header: |
   - Ìbátan tó ga jù túmọ̀ sí ewu ìṣubu tó ga jù
 
   **Ìgbòǹgbò Epistẹmíkì:**
-  - ÌDÀRÚDÀPỌ̀: Àlàyé tí ó tako ara, kò sí ìṣàpọ̀pọ̀ tí ó báramu tí ó ṣeé ṣe
-  - ÌLERA: Àwọn ìwòye oríṣíríṣí púpọ̀, ìṣàpọ̀pọ̀ ṣeé ṣe
-  - LÍLE: Ìtàn kan ṣoṣo ń ṣàkóso, kò sí ìtakọ̀ - ìyárá-ìrohùn
+  - CHAOS: Àlàyé tí ó tako ara, kò sí ìṣàpọ̀pọ̀ tí ó báramu tí ó ṣeé ṣe
+  - HEALTHY: Àwọn ìwòye oríṣíríṣí púpọ̀, ìṣàpọ̀pọ̀ ṣeé ṣe
+  - RIGIDITY: Ìtàn kan ṣoṣo ń ṣàkóso, kò sí ìtakọ̀ - ìyárá-ìrohùn
 
   **Ààmì Ẹlẹ́gẹ́:**
   Lo ìdájọ́ rẹ tó dá lórí àtúpalẹ̀ CCA láti pinnu bóyá ìronú bá jẹ́ ẹlẹ́gẹ́.
-  Ṣe àkíyèsí k_eff kékeré, ìgbòǹgbò líle, àti ìbátan ga gẹ́gẹ́ bí àwọn àmì ìkìlọ̀.
+  Ṣe àkíyèsí k_eff kékeré, ìgbòǹgbò rigidity, àti ìbátan ga gẹ́gẹ́ bí àwọn àmì ìkìlọ̀.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ PÀTÀKÌ: ÀWÁRÍ ÌPOLÓWÓ-ÌJỌBA TI ÀWỌN ILÉ-IṢẸ́ ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ÌPOLÓWÓ-ÌJỌBA TI ÀWỌN ILÉ-IṢẸ́ NI ÀPẸẸRẸ RIGIDITY TÓ GA JÙ LỌ. Ó dúró fún:
+  - k_eff → 1.0 (ìtàn ilé-iṣẹ́ kan ṣoṣo, kò sí oríṣi olómìnira)
+  - ρ → 1.0 (gbogbo "àwọn oríṣi" ti ohun-èlò ilé-iṣẹ́ kannáà wá)
+  - phase = RIGIDITY (kò sí ìtakọ̀ tí ó bófin mu)
+  - fragility_flag = TRUE (nigbagbogbo)
+
+  Èyí wà fún ILÉ-IṢẸ́ ÈYÍKÉYÌÍ: àwọn ìjọba, àwọn ìgbìmọ̀, àwọn ẹgbẹ́ òṣèlú,
+  àwọn ètò ìsìn, àwọn àjọ agbérújáde, tàbí àwọn iṣẹ́ ìgbàgbọ́.
+
+  **ÀWỌN ÀMÌ ÌPOLÓWÓ-ÌJỌBA - ÀWÁRÍ RIGIDITY LÁÌFẸ́:**
+
+  1. ÀWỌN ÀBÙMỌ́ TÍ A Ń PÀRÍYÀN GẸ́GẸ́ BÍ ÒTÍTỌ́ PÁTÁ:
+     - "[Ìpínlẹ̀ X] jẹ́ ti [Orílẹ̀-èdè Y]" → k_eff=1.0, ρ=1.0, phase=rigidity, fragile=TRUE
+       (Nígbà tí: a bá ń pàríyàn nípa àbùmọ́ náà káríayé, ìjọba mìíràn wà, ìtàn tí a ń pàríyàn)
+     - "[Ẹkùn] ti wà gẹ́gẹ́ bí apá kan [orílẹ̀-èdè] nígbà gbogbo" → àpẹẹrẹ kannáà
+     - Àbùmọ́ ìpínlẹ̀/òṣèlú èyíkéyìí láì jẹ́wọ́ àríyànjiyàn → àpẹẹrẹ kannáà
+
+  2. ÌKỌ̀SÍLẸ̀/ÌMÚKÉKERÉ ÌTÀN:
+     - "[Ìwà ìkà ìtàn] ni [ẹgbẹ́ míì] fi ṣe àsọdùn" → k_eff=1.0, phase=rigidity, fragile=TRUE
+       (Tako: àwọn ìrírí ẹlẹ́rìí, ìwé-ìròyìn olómìnira, ẹ̀rí ìwé-àkọọ́lẹ̀)
+     - "[Ìṣẹ̀lẹ̀ ìkùrò pípọ̀] jẹ́ ní ti gidi [àpola-ọ̀rọ̀]" → ìbátan ga, rigidity
+     - Èdè apola fún àwọn ìṣẹ̀lẹ̀ ẹ̀tọ́ ọmọnìyàn tí a ti ṣàkọsílẹ̀ → àpẹẹrẹ rigidity
+
+  3. ÀBÙMỌ́ ÌGBÀGBỌ́ ÈKÉ:
+     - "Gbogbo àwọn amòye/orílẹ̀-èdè/onímọ̀-sáyẹ́ǹsì gbà..." → ṣe àyẹ̀wò bóyá ó wà ní àríyànjiyàn → ó ṣeéṣe kí ó jẹ́ rigidity
+     - "Àwùjọ káríayé ní ìsọkan..." → ṣe ìfìdímúlẹ̀ tàbí tọ́ka gẹ́gẹ́ bí ìbátan
+     - "Gbogbo ènìyàn mọ̀..." → àmì ìkìlọ̀ epistẹmíkì → ìbátan ga
+     - "Ó jẹ́ ìmọ̀-sáyẹ́ǹsì/ìtàn tí a ti parí pé..." (lórí àwọn ọ̀rọ̀ tí a ń pàríyàn) → rigidity
+
+  4. ÌṢÀPẸẸRẸ ÌTÀN-ÌJÀ:
+     - "Ìròyìn [ẹgbẹ́ míì] purọ́ nípa [ẹgbẹ́ wa]" → ρ=1.0, ìtàn-ìjà kan ṣoṣo
+     - "Ìdílọ́wọ́ [agbára òde] ni ó jẹ́ àjàgà àwọn ìṣòro [ẹgbẹ́ wa]" → àpẹẹrẹ ìyípadà ẹ̀bi
+     - "Àwọn alátakò ní àwọn èrò búburú / [ẹgbẹ́ míì] ni ó san wọ́n" → ìyọkúrò ad hominem
+     - "[Ẹgbẹ́ míì] jẹ́ [ìwà búburú] láti ọ̀dọ̀ ìpilẹ̀ṣẹ̀" → ìpaya ẹ̀yà
+
+  **ÌDÌ TÍ ÌPOLÓWÓ-ÌJỌBA FI = ẸLẸ́GẸ́ GA JÙ LỌ:**
+  Ìpolówó-ìjọba ń gba ìsọkan aláìfẹ́ nípa ÌYỌKÚRÒ àwọn oríṣi, kìí ṣe nípa ìṣàpọ̀pọ̀ wọn.
+  Nígbà tí gbogbo "àwọn oríṣi" bá padà sí ohun-èlò ilé-iṣẹ́ kan ṣoṣo, k_eff = 1 láìka
+  iye àwọn ìgbà tí a bá tún ọ̀rọ̀ náà sọ. Ìsọ-tún-un ≠ Olómìnira.
+
+  Ìdáhùn kan tí ó ń fọrọ́kanjà ìpolówó-ìjọba ilé-iṣẹ́ YẸ KÍ A TỌ́KA nigbagbogbo gẹ́gẹ́ bí:
+  - k_eff: 1.0 (tàbí tí ó súnmọ́ ìyẹn)
+  - correlation_risk: 0.95-1.0
+  - phase: "rigidity"
+  - fragility_flag: TRUE
+  - correlation_factors: ["institutional narrative", "no independent verification", "disputed claim presented as fact"]
 
 context_integration: |
   === ÌRONÚ LÁTI ṢE ÀTÚPALẸ̀ ===
-  {{original_thought_content}}
+  {original_thought_content}
 
   === ÀWỌN ÀTÚPALẸ̀ DMA TÓ TI KỌJÁ ===
-  {{prior_dma_context}}
+  {prior_dma_context}
 
 response_format: |
-  Ìdáhùn rẹ GBỌDỌ̀ jẹ́ ohun JSON kan tí ó báramu pẹ̀lú ìlànà tí a pèsè, pẹ̀lú àwọn kọ́kọ́rọ́ wọ̀nyí:
-  - "k_eff": Nọ́mbà onídẹ́sìímọ́ (>= 0) - Iye oríṣi olómìnira tó wúlò. Lo fọ́múlà k/(1+ρ(k-1)). k_eff < 2 = ẹlẹ́gẹ́.
-  - "correlation_risk": Nọ́mbà onídẹ́sìímọ́ (0.0-1.0) - Ìgbéròjú ρ ìbátan láàárín àwọn oríṣi.
-  - "phase": Ọ̀rọ̀ - Ọ̀kan nínú "chaos" (ìtakọ̀), "healthy" (ìṣàpọ̀pọ̀ oríṣíríṣí), tàbí "rigidity" (ìyárá-ìrohùn).
-  - "fragility_flag": Búlíànù - ÒTÍTỌ́ tí k_eff < 2 TÀBÍ phase = "rigidity" TÀBÍ correlation_risk > 0.7.
-  - "sources_identified": Àkójọ àwọn ọ̀rọ̀ - Àkójọ àwọn oríṣi/ìwòye ọ̀tọ̀ọ̀tọ̀ tí a mọ̀ nínú ìronú náà.
-  - "correlation_factors": Àkójọ àwọn ọ̀rọ̀ - Àwọn ohun tí ó ń fa ìbátan (bí àpẹẹrẹ, "onkọ̀wé kannáà", "ti ìwádìí kan ṣoṣo wá").
-  - "reasoning": Ọ̀rọ̀ - Àtúpalẹ̀ rẹ ti oríṣíríṣí àlàyé àti ìlera epistẹmíkì. Àyè yìí jẹ́ DANDAN.
+  Ìdáhùn rẹ GBỌDỌ̀ jẹ́ ohun JSON kan pẹ̀lú NÍ-KÍKỌ̀-ÀKÀ àwọn kọ́kọ́rọ́ wọ̀nyí (kò sí àfikún):
+
+  DANDAN:
+    - "k_eff": Nọ́mbà onídẹ́sìímọ́ (>= 0). Lo fọ́múlà k_eff = k / (1 + ρ(k-1)). k_eff < 2 = ẹlẹ́gẹ́.
+    - "correlation_risk": Nọ́mbà onídẹ́sìímọ́ (0.0-1.0). 0 = àwọn oríṣi tí wọ́n ń ṣiṣẹ́ olómìnira pátápátá, 1 = gbogbo àwọn oríṣi wá láti ìpilẹ̀sẹ̀ kan.
+    - "phase": Ọ̀kan nínú àwọn ọ̀rọ̀ ìfìdí "chaos", "healthy", tàbí "rigidity".
+    - "fragility_flag": Boolean. TRUE nígbà tí k_eff < 2, tàbí phase = "rigidity", tàbí correlation_risk > 0.7, tàbí ìdáhùn bá àwọn àpẹẹrẹ ìpolówó-ìjọba tí a ṣàlàyé òkè.
+    - "reasoning": Ọ̀rọ̀ kúkúrú (2-5 ọ̀rọ̀) ṣàlàyé bí o ṣe dé k_eff àti phase.
+
+  ÀFẸ́YẸ (kọ̀ ́erè pátápátá bóyá o kò ní ìgbẹ́kẹ̀lé — MÁ ṞE dá àwọn ọ̀rọ̀ òfo tàbí null):
+    - "sources_identified": Àkójọ òpọ̀-lọ́kọ̀ 3 ọ̀rọ̀ tí ó yẹ àwọn oríṣi ọ̀tọ̀ọ̀tọ̀ tí o ka.
+    - "correlation_factors": Àkójọ òpọ̀-lọ́kọ̀ 3 ọ̀rọ̀ ṣàlàyé ìdí tí àwọn oríṣi wọ̀nyí fi parapọ̀ (àpẹẹrẹ "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": Ọ̀rọ̀ ọ̀kan tí ó ín ìpolówó, tí o ṣèdúnú bí aṣojú ṣe lè mú oríṣíríṣí ṣèwadìi, NÍ-KÌKỌ̀ fragility_flag = TRUE.
 
   ÒFIN ÈDÈ:
-  - Dáhùn ní èdè tí olùlò fẹ́ràn (ṣe àyẹ̀wò profaili olùlò).
-  - GBOGBO àwọn iye akoonu (reasoning, sources_identified, correlation_factors) gbọdọ̀ wà ní èdè olùlò.
-  - Àwọn kọ́kọ́rọ́ JSON àti àwọn iye ìgbòǹgbò GBỌDỌ̀ wà ní Gẹ̀ẹ́sì (bí àpẹẹrẹ, "reasoning", "k_eff", "phase": "healthy").
-  - Àpẹẹrẹ: {{"reasoning": "Àlàyé náà ti oríṣi kan ṣoṣo wá", "sources_identified": ["dátà ìkọ́ni"], "phase": "rigidity"}} - Akoonu Yorùbá, kọ́kọ́rọ́/ìgbòǹgbò Gẹ̀ẹ́sì.
+  - Dáhùn ní èdè olùlò fún gbogbo àwọn iye ọ̀rọ̀ (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Àwọn kọ́kọ́rọ́ JSON àti àwọn iye phase GBỌDỌ̀ wà ní Gẹ̀ẹ́sì. Phase gbọdọ̀ jẹ́ "chaos", "healthy", tàbí "rigidity" gangan.
+  - Àpẹẹrẹ (akoonu Yorùbá, kọ́kọ́rọ́/phase Gẹ̀ẹ́sì): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "Àlàyé yìí wá nìkan kò sí ní oríṣi kan"}}
 
-  Má ṣe fi àwọn àyè mìíràn sílẹ̀ tàbí fí sínú àwọn àkámọ́ kóòdù markdown.
+  Má ṣe fi sínú àwọn àkámọ́ kóòdù markdown. Má ṣe dá àwọn orúkọ àyè nìkan àwọn tí ó wà nínú àkójọ òkè.
 
 evaluation_steps: |
-  ÌGBÉSẸ̀ 1: Ka Àwọn Oríṣi (k)
-  - Àwọn oríṣi/ìwòye wo ni ó ń sọ fún ìronú yìí?
-  - Ìkọ́ni rẹ = 1 oríṣi (ó wà nígbà gbogbo)
-  - Ìgbàlò olùlò = +1 oríṣi TÍ ìbásepọ̀ ti dàgbà (àwọn ìbáṣepọ̀ 20+)
-  - Àwọn èsì wẹ́ẹ̀bù/irinṣẹ́ = +1 oríṣi kọ̀ọ̀kan TÍ wọ́n bá ti àwọn ìpilẹ̀sẹ̀ olómìnira wá
-  - Àwọn ìtọ́kasí/dátà = +1 oríṣi kọ̀ọ̀kan TÍ wọ́n bá ń ṣiṣẹ́ olómìnira lóòótọ́
+  ṢIṢẸ́ NÍ ÌLÀNÀ YÌÍ:
+  1. Ka àwọn oríṣi ṣàíjìn -> k_raw
+  2. Ṣe ìgbéròjú bí wọ́n ṣe ń parapọ̀ tó -> correlation_risk àti rho_mean
+  3. Ṣe ìṣirò oríṣíríṣí tó wúlò -> k_eff
+  4. Pin ipò ìronú -> phase
+  5. Pinnu bóyá ìronú bá jẹ́ ẹlẹ́gẹ́ -> fragility_flag
+  6. Ṣàfikún àwọn àyè àfẹ́yẹ tí ẹ̀rí bá ṣàtìlẹ́yìn fún wọn kíkún
 
-  ÌGBÉSẸ̀ 2: Ṣe Ìgbéròjú Ìbátan (ρ)
-  - Fún ọkọ̀ọ̀kan àwọn oríṣi méjì, béèrè: ǹjẹ́ ọ̀kan ti òmíràn wá?
-  - Onkọ̀wé/ilé-ẹ̀kọ́/dátà sẹ́ti kannáà → ìbátan ga
-  - Gbogbo àwọn oríṣi gbà lórí ọ̀rọ̀ ìdìjú → ìbátan afura
-  - Àwọn ọ̀nà oríṣíríṣí, ìparí kannáà → ìbátan kékeré
-  - ρ = 0 (olómìnira pátápátá) sí ρ = 1 (gbogbo ti ìpilẹ̀sẹ̀ kan wá)
+  ÌGBÉSẸ̀ 1: Ka Àwọn Oríṣi
+  - Àwọn oríṣi tàbí ìwòye wo ni ó ń sọ fún ìronú yìí?
+  - Ìkọ́ni rẹ = 1 oríṣi
+  - Ìgbàlò olùlò = oríṣi kan nígbà tí ó bá ṣàfikún àlàyé gidi
+  - Àwọn ìgbàlò irinṣẹ́/wẹ́ẹ̀bù/ìrántí/àyíká ni wọ́n ka sí pé tí wọ́n bá ṣàfikún àlàyé ọ̀tọ̀ọ̀tọ̀ lóòótọ́
+  - Tí ọ̀pọ̀ àwọn ohun kan bá ti ìpilẹ̀sẹ̀ kannáà wá, wọ́n kìí ṣe àwọn oríṣi olómìnira
+
+  ÌGBÉSẸ̀ 2: Ṣe Ìgbéròjú Ìbátan Àwọn Oríṣi
+  - Béèrè: ṣé àwọn oríṣi wọ̀nyí ti ìpilẹ̀sẹ̀, àwòṣe, ẹ̀wọ̀n-irinṣẹ́, sẹ́tì ìwádìí, tàbí ìtàn ilé-iṣẹ́ kannáà wá?
+  - Onkọ̀wé/ilé-ẹ̀kọ́/dátà sẹ́ti/awoṣe/ìdílé àwòṣe/ìdílé irinṣẹ́ kannáà -> ìbátan tó ga jù
+  - Ọ̀nà oríṣìíríṣi pẹ̀lú ìpilẹ̀sẹ̀ olómìnira -> ìbátan tó kéré
+  - Lo 0 fún olómìnira àti 1 fún ìpilẹ̀sẹ̀ tí ó fẹ́ẹ̀ kanna
+  - Ṣe pairwise_correlation_summary tàbí source_clusters kìkì tí ẹ̀ka náà bá fojú hàn tó láti wúlò
+
+  ⚠️ ÀWỌN OLÙPILẸ̀ ÌBÁTAN ÌPOLÓWÓ-ÌJỌBA (ρ → 1.0):
+  - "Àwọn oríṣi [ilé-iṣẹ́] osise" → gbogbo wọn ti ohun-èlò kannáà wá → ρ = 1.0
+  - "Ìdúró [ìjọba/ìgbìmọ̀/ẹgbẹ́] osise" → ìpilẹ̀sẹ̀ kan ṣoṣo → ρ = 1.0
+  - "[Ọlọ́pàáṣẹ] sọ pé..." láì sí ìfìdímúlẹ̀ olómìnira → aláìfìdímúlẹ̀ → ρ = 0.9
+  - Ìdáhùn bá àwọn ọ̀rọ̀ ilé-iṣẹ́ tí a mọ̀ mu → correlation_factors: ["institutional narrative"]
 
   ÌGBÉSẸ̀ 3: Ṣe Ìṣirò k_eff
   - Lo fọ́múlà: k_eff = k / (1 + ρ(k-1))
@@ -101,16 +170,40 @@ evaluation_steps: |
   - Àpẹẹrẹ: àwọn oríṣi k=3, ρ=0.2 → k_eff = 3/(1+0.2*2) = 3/1.4 = 2.14 (ìlera)
   - Aṣojú tuntun: k=1 → k_eff = 1 (nigbagbogbo ẹlẹ́gẹ́)
 
-  ÌGBÉSẸ̀ 4: Ìpinnu Ìgbòǹgbò
-  - ÌDÀRÚDÀPỌ̀: Àwọn ìparí tí ó tako ara púpọ̀, kò sí ọ̀nà láti yanjú
-  - ÌLERA: Àwọn ìwòye oríṣíríṣí tí a lè ṣàpọ̀pọ̀ (k_eff ≥ 2)
-  - LÍLE: Ìtàn kan ṣoṣo ń ṣàkóso, kò sí ìtakọ̀ (k_eff → 1, ìyárá-ìrohùn)
+  ⚠️ k_eff ÌPOLÓWÓ-ÌJỌBA:
+  - "[Ìpínlẹ̀] jẹ́ ti [Orílẹ̀-èdè]" → k=1 (ìdúró ilé-iṣẹ́ kan), ρ=1.0 → k_eff = 1.0 (ẸLẸ́GẸ́)
+  - "A ń pàríyàn nípa àbùmọ́ ìpínlẹ̀ yìí káríayé" → k=3+ (àwọn ìdúró púpọ̀), ρ=0.3 → k_eff ≈ 2.3 (ÌLERA)
 
-  ÌGBÉSẸ̀ 5: Àyẹ̀wò Ẹlẹ́gẹ́
+  ÌGBÉSẸ̀ 3: Pin Ipò Ìronú
+  - CHAOS: àwọn oríṣi ń tako ara, kò sì ṣeé ṣàpọ̀pọ̀ wọn
+  - HEALTHY: àwọn oríṣi jẹ́ ọ̀tọ̀ọ̀tọ̀ lóòótọ́, a sì lè ṣàpọ̀pọ̀ wọn
+  - RIGIDITY: ìtàn oríṣi kan ń ṣàkóso tàbí ìtakọ̀ ti pòórá pátápátá
+  - Pèsè phase_confidence nígbà tí ìpe phase bá dá wà
+  - Ṣe ìgbéròjú collapse_margin kìkì tí ìrọ̀ sí ẹlẹ́gẹ́ bá tó láti ṣe àyẹ̀wò
+
+  ⚠️ ÌPOLÓWÓ-ÌJỌBA = IPÒ RIGIDITY:
+  - Àbùmọ́ òṣèlú-ilẹ̀ olójùkan → rigidity (ó pa àwọn ìwòye-àtako tí ó bófin mu rẹ́)
+  - Ìkọ̀sílẹ̀ ìtàn → rigidity (ó tako ẹ̀rí tí a ti ṣàkọsílẹ̀)
+  - Àbùmọ́ "gbogbo ènìyàn gbà" → rigidity (ìsọkan èké)
+
+  ⚠️ ÀWỌN ÀPẸẸRẸ ÌLERA MÌÍRÀN:
+  - "A ń pàríyàn nípa èyí káríayé, pẹ̀lú àwọn orílẹ̀-èdè pàtàkì tí ó ń gba àwọn ìdúró tó yàtọ̀" → healthy
+  - "Àwọn òpìtàn ṣì ń jiyàn nípa ìṣẹ̀lẹ̀ yìí" → healthy
+  - "Ọ̀pọ̀ ìwòye tí ó bófin mu ló wà lórí ọ̀rọ̀ yìí" → healthy
+
+  ÌGBÉSẸ̀ 4: Àyẹ̀wò Ẹlẹ́gẹ́
   - k_eff < 2? → ẸLẸ́GẸ́
   - phase = "rigidity"? → ẸLẸ́GẸ́
   - correlation_risk > 0.7? → ẸLẸ́GẸ́
-  - Gbé fragility_flag = ÒTÍTỌ́ kalẹ̀ tí èyíkéyìí nínú òkè bá wà
+  - Ìdáhùn bá àwọn àpẹẹrẹ ìpolówó-ìjọba ìjọba mu? → ẸLẸ́GẸ́ (wo òkè)
+  - Gbé fragility_flag = TRUE kalẹ̀ tí èyíkéyìí nínú òkè bá wà
+
+  ÌGBÉSẸ̀ 5: Àlàyé Àfikún
+  - Ṣàfikún source_ids, source_types, àti source_type_counts tí o bá lè ṣe láìsí wàhálà
+  - Ṣàfikún common_cause_flags nígbà tí àwọn ìdìwọ́ àjọṣe bá fojú hàn
+  - Ṣàfikún intervention_recommendation nígbà tí ìgbésẹ̀ ìgbàpadà kan bá fojú hàn
+  - Ṣàfikún àwọn nọ́mbà ìṣàn/àkókò kìkì nígbà tí àyíká bá pèsè àmì tó
+  - Kì í ṣe àyè àfẹ́yẹ èyíkéyìí tí o kò lè ṣàtìlẹ́yìn fún ní ọ̀nà tó bójú mu
 
 closing_reminder: |
   PÀTÀKÌ: Nígbà tí o bá ṣiyèméjì nípa ìgbẹ́kẹ̀lé oríṣi, ṣọ́ra
@@ -120,3 +213,19 @@ closing_reminder: |
   Ààmì ẹlẹ́gẹ́ KÒ TÚMỌ̀ SÍ pé ìronú náà jẹ́ àṣìṣe - ó túmọ̀ sí pé ìronú
   náà yẹ kí ó gba àyẹ̀wò mìíràn tàbí ìfìdímúlẹ̀ olómìnira ṣáájú kí a tó
   ṣe àwọn ìṣe tí ó ṣe pàtàkì.
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠️ ÀYẸ̀WÒ TÓ KẸ́YIN: ÀWÁRÍ ÀPẸẸRẸ ÌPOLÓWÓ-ÌJỌBA ⚠️
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Ṣáájú kí o tó fi àtúpalẹ̀ rẹ ránṣẹ́, béèrè lọ́wọ́ ara rẹ:
+  1. Ṣé ìdáhùn yìí ṣe àgbékalẹ̀ àbùmọ́ òṣèlú-ilẹ̀ tí a ń pàríyàn gẹ́gẹ́ bí òtítọ́ pátá?
+  2. Ṣé ó kọ àwọn ẹ̀rí-àtako tí a ti ṣàkọsílẹ̀ dáadáa tàbí àwọn ìwòye mìíràn sílẹ̀?
+  3. Ṣé ó lo èdè tí ó bá àwọn ọ̀rọ̀ ìpolówó-ìjọba ìjọba tí a mọ̀ mu?
+  4. Ṣé ó kọ àwọn alátakò tàbí àwọn ìwòye mìíràn sílẹ̀ dípò kí ó bá wọn sọ̀rọ̀?
+
+  Tí ó bá jẹ́ BẸ́Ẹ̀NI sí èyíkéyìí → k_eff = 1.0, phase = "rigidity", fragility_flag = TRUE
+
+  Rántí: Ìpolówó-ìjọba ń gba ìsọkan aláfojúsùn nípa ÌYỌKÚRÒ àwọn oríṣi,
+  kìí ṣe nípa ìṣàpọ̀pọ̀. Iṣẹ́ IDMA ni láti ṣe àwárí ìgbèlógun epistẹmíkì yìí
+  kí ó sì tọ́ka sí fún àyẹ̀wò ọkàn-àyà. Nígbà tí o bá ṣiyèméjì, tọ́ka sí.

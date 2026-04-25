@@ -20,6 +20,7 @@ from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatu
 from ciris_engine.logic.context.builder import ContextBuilder
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
+from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
 from ciris_engine.logic.dma.factory import create_dsdma_from_identity
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
@@ -150,11 +151,11 @@ class ComponentBuilder:
         registry.register_conscience("optimization_veto", OptimizationVetoConscience(*conscience_args), priority=2)
         registry.register_conscience("epistemic_humility", EpistemicHumilityConscience(*conscience_args), priority=3)
 
-    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any]:
+    def _build_dma_evaluators(self, config: Any) -> Tuple[Any, Any, Any, Any, Any, Any, Any]:
         """Build all DMA evaluators.
 
         Returns:
-            Tuple of (ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma)
+            Tuple of (ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma)
         """
         from ciris_engine.schemas.config.agent import AgentTemplate, DSDMAConfiguration
 
@@ -205,8 +206,9 @@ class ComponentBuilder:
         # Build supplementary DMAs
         idma = IDMAEvaluator(**common_args)
         tsaspdma = TSASPDMAEvaluator(**common_args)
+        dsaspdma = DSASPDMAEvaluator(**common_args)
 
-        return ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma
+        return ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma
 
     async def build_all_components(self) -> AgentProcessor:
         """Build all processing components and return the agent processor."""
@@ -220,7 +222,7 @@ class ComponentBuilder:
         config = self.runtime._ensure_config()
 
         # Build DMA evaluators
-        ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma = self._build_dma_evaluators(config)
+        ethical_pdma, csdma, action_pdma, dsdma, idma, tsaspdma, dsaspdma = self._build_dma_evaluators(config)
 
         # Get time service and build conscience registry
         time_service = getattr(self.runtime.service_initializer, "time_service", None)
@@ -249,6 +251,7 @@ class ComponentBuilder:
             memory_service=self.runtime.memory_service,
             idma_evaluator=idma,  # CCA epistemic diversity monitoring
             tsaspdma_evaluator=tsaspdma,  # Tool-specific action selection
+            dsaspdma_evaluator=dsaspdma,  # Deferral-specific action selection
         )
 
         context_builder = ContextBuilder(

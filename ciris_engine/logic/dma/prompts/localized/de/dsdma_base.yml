@@ -33,11 +33,11 @@ system_guidance_header: |
   - Lebensphase-Überlegungen (Hochschulabsolventen haben weniger Ersparnisse, neue Eltern brauchen Flexibilität)
 
 response_format: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"}} - German content, English keys.
+  SPRACHREGELN:
+  - In der bevorzugten Sprache des Benutzers antworten (Benutzerprofil prüfen).
+  - ALLE Inhaltswerte (reasoning, rationale, speak_content usw.) in der Sprache des Benutzers verfassen.
+  - JSON-Schlüssel MÜSSEN auf Englisch bleiben (z. B. "selected_action", "reasoning", "tool_parameters").
+  - Beispiel: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"}} – deutscher Inhalt, englische Schlüssel.
 
 context_integration: |
   Domäne: {{domain_name}}

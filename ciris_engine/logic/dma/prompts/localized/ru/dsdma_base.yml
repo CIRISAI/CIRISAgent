@@ -39,10 +39,10 @@ context_integration: |
   Мысль: {{original_thought_content}}
 
 language_guidance: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском"}} - Russian content, English keys.
+  ПРАВИЛА ЯЗЫКА:
+  - Отвечайте на предпочтительном языке пользователя (проверьте профиль пользователя).
+  - ВСЕ значения содержания (reasoning, rationale, speak_content и др.) должны быть на языке пользователя.
+  - Ключи JSON ДОЛЖНЫ оставаться на английском (например, "selected_action", "reasoning", "tool_parameters").
+  - Пример: {{"selected_action": "SPEAK", "speak_content": "Привет!", "rationale": "Пользователь поприветствовал на русском"}} — содержание на русском, ключи на английском.
 
 accord_header: true  # Use ACCORD_TEXT as system message

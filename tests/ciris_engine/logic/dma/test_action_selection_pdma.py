@@ -100,7 +100,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="User asked a question that needs a response",
+            reasoning="User asked a question that needs a response",
             speak_content="Here is my response to your question",
         )
 
@@ -134,7 +134,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.OBSERVE,
-            rationale="Need more information",
+            reasoning="Need more information",
             observe_active=True,
         )
 
@@ -239,7 +239,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="All faculties approve",
+            reasoning="All faculties approve",
             speak_content="Response based on faculty evaluations",
         )
 

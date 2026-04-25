@@ -30,7 +30,12 @@ class ForgetHandler(BaseActionHandler):
                     raise ValueError(f"Expected ForgetParams but got {type(params)}")
             except ValueError as e:  # ValidationError inherits from ValueError
                 logger.error(f"ForgetHandler: Invalid params dict: {e}")
-                follow_up_content = f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. FORGET action failed: Invalid parameters. {e}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK."
+                follow_up_content = self._localized_followup(
+                    "forget_invalid_params_followup",
+                    default=f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. FORGET action failed: Invalid parameters. {e}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK.",
+                    task_id=thought.source_task_id,
+                    error=str(e),
+                )
 
                 # Use the proper method to complete thought and create follow-up
                 follow_up_id = self.complete_thought_and_create_followup(
@@ -44,7 +49,11 @@ class ForgetHandler(BaseActionHandler):
                 return follow_up_id
         if not self._can_forget(params, dispatch_context):
             logger.info("ForgetHandler: Permission denied or WA required for forget operation. Creating deferral.")
-            follow_up_content = f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. FORGET action was not permitted. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK."
+            follow_up_content = self._localized_followup(
+                "forget_not_permitted_followup",
+                default=f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. FORGET action was not permitted. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK.",
+                task_id=thought.source_task_id,
+            )
 
             # Use the proper method to complete thought and create follow-up
             follow_up_id = self.complete_thought_and_create_followup(
@@ -62,9 +71,21 @@ class ForgetHandler(BaseActionHandler):
         success = forget_result.status == MemoryOpStatus.OK
 
         if success:
-            follow_up_content = f"CIRIS_FOLLOW_UP_THOUGHT: This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. Successfully forgot key '{node.id}' in scope {node.scope.value}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK."
+            follow_up_content = self._localized_followup(
+                "forget_success_followup",
+                default=f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. Successfully forgot key '{node.id}' in scope {node.scope.value}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK.",
+                task_id=thought.source_task_id,
+                key=node.id,
+                scope=node.scope.value,
+            )
         else:
-            follow_up_content = f"CIRIS_FOLLOW_UP_THOUGHT: This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. Failed to forget key '{node.id}' in scope {node.scope.value}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK."
+            follow_up_content = self._localized_followup(
+                "forget_failure_followup",
+                default=f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. Failed to forget key '{node.id}' in scope {node.scope.value}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK.",
+                task_id=thought.source_task_id,
+                key=node.id,
+                scope=node.scope.value,
+            )
 
         # Use the proper method to complete thought and create follow-up
         follow_up_id = self.complete_thought_and_create_followup(

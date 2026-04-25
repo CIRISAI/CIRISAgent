@@ -82,6 +82,20 @@ class APIAdapterConfig(BaseModel):
             except ValueError:
                 pass
 
+        # Rate limit overrides. Bursty load-test / model_eval workloads submit
+        # 20+ messages in sub-second windows and need the cap raised; a plain
+        # boolean opt-out is also useful for testing.
+        env_rate_enabled = get_env_var("CIRIS_API_RATE_LIMIT_ENABLED")
+        if env_rate_enabled is not None:
+            self.rate_limit_enabled = env_rate_enabled.lower() in ("true", "1", "yes", "on")
+
+        env_rate_per_min = get_env_var("CIRIS_API_RATE_LIMIT_PER_MINUTE")
+        if env_rate_per_min:
+            try:
+                self.rate_limit_per_minute = int(env_rate_per_min)
+            except ValueError:
+                pass
+
         env_cors_origins = get_env_var("CIRIS_API_CORS_ORIGINS")
         if env_cors_origins:
             try:

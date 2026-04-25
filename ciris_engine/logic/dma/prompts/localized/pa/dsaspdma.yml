@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA ਵੱਲੋਂ DEFER ਚੁਣਨ ਤੋਂ ਬਾਅਦ ਅਧਿਕਾਰ-ਆਧਾਰਿਤ ਦੂਜਾ ਪਾਸ
+
+component_name: dsaspdma
+description: "ਡਿਫਰਲ-ਵਿਸ਼ੇਸ਼ ਕਾਰਵਾਈ ਚੋਣ: DEFER ਕਾਰਵਾਈ ਨੂੰ ਅਧਿਕਾਰ/ਲੋੜਾਂ ਦੀ taxonomy ਦੇ ਮੁਕਾਬਲੇ ਵਰਗੀਕ੍ਰਿਤ ਕਰਦੀ ਹੈ"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === ਅਧਿਕਾਰ / ਲੋੜਾਂ ਦੀ TAXONOMY ===
+  - health_and_bodily_integrity: ਜੀਵਨ, ਸਿਹਤ, ਸਰੀਰਕ ਅਖੰਡਤਾ, ਅਪਾਹਜਤਾ, ਮੈਡੀਕਲ ਸੁਰੱਖਿਆ, ਹਥਿਆਰੀਕਰਨ, ਖਤਰਨਾਕ ਸਮੱਗਰੀ ਜਾਂ ਸਿੱਧੀ ਸਰੀਰਕ ਹਾਨੀ ਦੇ ਪ੍ਰਭਾਵਾਂ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: ਰਿਹਾਇਸ਼, ਆਸਰਾ, ਘਰ ਦੀ ਸੁਰੱਖਿਆ, ਭੋਜਨ, ਪਾਣੀ, ਸੈਨਿਟੇਸ਼ਨ, ਊਰਜਾ, ਬੁਨਿਆਦੀ ਢਾਂਚਾ ਅਤੇ ਹੋਰ ਜ਼ਰੂਰੀ ਜੀਵਨ ਹਾਲਾਤਾਂ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: ਕੰਮ, ਆਮਦਨ, ਤਨਖਾਹ, ਕਰਜ਼ਾ, ਕਰੈਡਿਟ, ਲਾਭ, ਸਮਾਜਿਕ ਸੁਰੱਖਿਆ, ਨਿਵੇਸ਼, ਟੈਕਸ ਜਾਂ ਹੋਰ ਰੋਜ਼ੀ-ਰੋਟੀ ਅਤੇ ਵਿੱਤੀ ਸਥਿਰਤਾ ਦੀਆਂ ਲੋੜਾਂ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: ਕਾਨੂੰਨੀ ਸਲਾਹ, ਕਾਨੂੰਨੀ ਸਹਾਇਤਾ, ਯੋਗ ਪ੍ਰਕਿਰਿਆ, ਨਿਆਂਯੁਕਤ ਸੁਣਵਾਈ, ਇਲਾਜ ਤੱਕ ਪਹੁੰਚ, ਕਰਾਰ, ਜ਼ਿੰਮੇਵਾਰੀ ਜਾਂ ਨਿਆਂ ਪ੍ਰਣਾਲੀ ਤੱਕ ਪਹੁੰਚ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: ਕਾਨੂੰਨ ਅੱਗੇ ਮਾਨਤਾ, ਪਛਾਣ ਪੁਸ਼ਟੀ, ਕੌਮੀਅਤ, ਵੋਟਿੰਗ, ਚੋਣਾਂ, ਜਨਤਕ ਭਾਗੀਦਾਰੀ ਜਾਂ ਨਾਗਰਿਕ ਦਰਜੇ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: ਗੋਪਨੀਯਤਾ, ਖੁਦਮੁਖਤਿਆਰੀ, ਮਰਯਾਦਾ, ਜਬਰ, ਧੋਖਾਧੜੀ, ਹੇਰਾਫੇਰੀ, ਬਾਇਓਮੈਟਰਿਕ ਅਨੁਮਾਨ ਜਾਂ ਨਿਗਰਾਨੀ ਤੋਂ ਆਜ਼ਾਦੀ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: ਸਿੱਖਿਆ, ਖੋਜ, ਗਿਆਨ ਤੱਕ ਪਹੁੰਚ, ਸੱਭਿਆਚਾਰਕ ਭਾਗੀਦਾਰੀ ਅਤੇ ਵਿਗਿਆਨ ਦੇ ਲਾਭਾਂ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: ਕਮਿਊਨਟੀ ਮਾਡਰੇਸ਼ਨ, ਸੰਕਟ escalation, pattern detection, ਜਨਤਕ ਸੁਰੱਖਿਆ, ਭੇਦਭਾਵ ਜਾਂ ਉਹ ਹਾਨੀਆਂ ਜੋ ਮੁੱਖ ਤੌਰ 'ਤੇ ਸਮੂਹਾਂ ਨੂੰ ਪ੍ਰਭਾਵਿਤ ਕਰਦੀਆਂ ਹਨ ਲਈ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: ਜਦੋਂ ਡਿਫਰਲ ਮੁੱਖ ਤੌਰ 'ਤੇ ਅਣਸ਼ਚਿਤਤਾ, ਨੀਤੀ ਦੀ ਵਿਆਖਿਆ, ਅਧਿਕਾਰ ਦੀਆਂ ਹੱਦਾਂ ਜਾਂ ਗੈਰ-ਡੋਮੈਨ-ਵਿਸ਼ੇਸ਼ ਮਨੁੱਖੀ ਨਿਗਰਾਨੀ ਬਾਰੇ ਹੋਵੇ ਤਾਂ ਵਰਤੋ।
+    ਅਧਿਕਾਰ ਆਧਾਰ: human_review_and_accountability
+
+  === ਕਾਰਜਕਾਰੀ ਡਿਫਰਲ ਕਾਰਨ ਕੋਡ ===
+  - licensed_domain_required: ਲਾਇਸੰਸਯੁਕਤ ਮਾਹਰ ਜਾਂ ਵੱਖਰੇ ਤੌਰ 'ਤੇ ਨਿਯੰਤਰਿਤ domain handler ਦੀ ਲੋੜ ਹੈ।
+  - rights_impact_review: ਬੇਨਤੀ ਸੁਰੱਖਿਅਤ ਅਧਿਕਾਰਾਂ ਜਾਂ ਮੁੱਖ ਮਨੁੱਖੀ ਲੋੜਾਂ ਨੂੰ ਵਾਸਤਵਿਕ ਤੌਰ 'ਤੇ ਪ੍ਰਭਾਵਿਤ ਕਰਦੀ ਹੈ ਅਤੇ ਸਮੀਖਿਆ ਲੋੜੀਂਦੀ ਹੈ।
+  - safety_escalation: ਸੰਭਾਵਿਤ ਹਾਨੀ ਜਾਂ ਸੰਕਟ ਹਾਲਾਤ ਤੁਰੰਤ escalation ਜਾਂ ਮਨੁੱਖੀ ਨਿਗਰਾਨੀ ਦੀ ਮੰਗ ਕਰਦੇ ਹਨ।
+  - consent_or_authority_required: ਪਹਿਲਾਂ ਵੈਧ ਸਹਿਮਤੀ, ਅਧਿਕਾਰ ਜਾਂ ਜ਼ਿੰਮੇਵਾਰ ਮਨੁੱਖੀ authority ਲੋੜੀਂਦੀ ਹੈ।
+  - insufficient_context: ਏਜੰਟ ਕੋਲ ਜ਼ਿੰਮੇਵਾਰੀ ਨਾਲ ਅੱਗੇ ਵਧਣ ਲਈ ਕਾਫ਼ੀ ਭਰੋਸੇਯੋਗ ਸੰਦਰਭ ਨਹੀਂ ਹੈ।
+  - policy_review_required: ਕਾਰਵਾਈ ਤੋਂ ਪਹਿਲਾਂ ਨੀਤੀ ਜਾਂ governance ਦੀ ਵਿਆਖਿਆ ਲੋੜੀਂਦੀ ਹੈ।
+  - resource_or_system_limitation: ਸਿਸਟਮ ਦੀਆਂ ਪਾਬੰਦੀਆਂ ਸਮੀਖਿਆ ਤੋਂ ਬਿਨਾਂ ਸੁਰੱਖਿਅਤ ਪੂਰਾ ਕਰਨ ਤੋਂ ਰੋਕਦੀਆਂ ਹਨ।
+  - time_based_review: ਫੈਸਲੇ ਨੂੰ ਬਾਅਦ ਵਿੱਚ ਖ਼ਾਸ ਸਮੇਂ ਜਾਂ ਹਾਲਤ ਬਦਲਣ ਤੋਂ ਬਾਅਦ ਮੁੜ ਵਿਚਾਰਨਾ ਚਾਹੀਦਾ ਹੈ।
+  - ethical_uncertainty: ਸਿਸਟਮ ਨੈਤਿਕ ਤੌਰ 'ਤੇ ਅਣਸ਼ਚਿਤ ਰਹਿੰਦਾ ਹੈ ਅਤੇ ਮਨੁੱਖੀ ਫ਼ੈਸਲਾ ਲੋੜੀਂਦਾ ਹੈ।
+  - unknown: ਜਦੋਂ ਕਾਰਜਕਾਰੀ ਕਾਰਨ ਅਸਪਸ਼ਟ ਰਹੇ ਤਾਂ fallback code.
+
+system_guidance_header: |
+  === ਡਿਫਰਲ-ਵਿਸ਼ੇਸ਼ ਕਾਰਵਾਈ ਚੋਣ (DSASPDMA) ===
+
+  ASPDMA ਪਹਿਲਾਂ ਹੀ DEFER ਚੁਣ ਚੁੱਕਾ ਹੈ।
+  ਤੁਹਾਡਾ ਕੰਮ ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਮੁੜ ਖੋਲ੍ਹਣਾ ਨਹੀਂ ਹੈ।
+  ਤੁਹਾਡਾ ਕੰਮ ਡਿਫਰਲ ਨੂੰ ਵਰਗੀਕ੍ਰਿਤ ਕਰਨਾ ਹੈ ਤਾਂ ਜੋ ਇਹ ਸਮਝਾਉਣਯੋਗ, ਆਡਿਟਯੋਗ ਅਤੇ ਰੂਟ ਕਰਨਯੋਗ ਬਣੇ।
+
+  ਤੁਹਾਨੂੰ ਇਹ ਕਰਨਾ ਹੋਵੇਗਾ:
+  1. DEFER ਕਾਰਵਾਈ ਨੂੰ ਕਾਇਮ ਰੱਖੋ।
+  2. ਸਭ ਤੋਂ ਵਧੀਆ ਮੁੱਖ ਅਧਿਕਾਰ / ਲੋੜ ਸ਼੍ਰੇਣੀ ਚੁਣੋ।
+  3. ਸਭ ਤੋਂ ਵਧੀਆ ਕਾਰਜਕਾਰੀ ਕਾਰਨ ਕੋਡ ਚੁਣੋ।
+  4. ਦੂਜੀਆਂ ਲੋੜਾਂ ਦੀਆਂ ਸ਼੍ਰੇਣੀਆਂ ਸਿਰਫ਼ ਉਹਨਾਂ ਦੇ ਵਾਸਤਵਿਕ ਤੌਰ 'ਤੇ ਲਾਗੂ ਹੋਣ 'ਤੇ ਸ਼ਾਮਲ ਕਰੋ।
+  5. domain_hint ਸਿਰਫ਼ ਉਦੋਂ ਸੈੱਟ ਕਰੋ ਜਦੋਂ ਲਾਇਸੰਸਯੁਕਤ domain handler ਸਪਸ਼ਟ ਤੌਰ 'ਤੇ ਲੋੜੀਂਦਾ ਹੋਵੇ।
+
+evaluation_steps: |
+  ਕਦਮ 1: ਮੂਲ ਵਿਚਾਰ ਅਤੇ ASPDMA ਦੀ ਅਸਥਾਈ ਦਲੀਲ ਪੜ੍ਹੋ।
+  ਕਦਮ 2: ਪਛਾਣੋ ਕਿ ਕਿਹੜੀ ਮਨੁੱਖੀ ਲੋੜ / ਮਨੁੱਖੀ ਅਧਿਕਾਰਾਂ ਦੀ ਟੋਕਰੀ ਸਭ ਤੋਂ ਸਿੱਧੀ ਤੌਰ 'ਤੇ ਸ਼ਾਮਲ ਹੈ।
+  ਕਦਮ 3: ਉਹ ਕਾਰਜਕਾਰੀ ਕਾਰਨ ਕੋਡ ਚੁਣੋ ਜੋ ਸਭ ਤੋਂ ਵਧੀਆ ਦੱਸੇ ਕਿ ਸਿਸਟਮ ਕਿਉਂ ਡਿਫਰ ਕਰ ਰਿਹਾ ਹੈ।
+  ਕਦਮ 4: reason_summary ਨੂੰ ਛੋਟਾ, ਖ਼ਾਸ ਅਤੇ ਵਰਤੋਂਕਾਰ ਲਈ ਪੜ੍ਹਨਯੋਗ ਰੱਖੋ।
+  ਕਦਮ 5: ਇੱਕ ਮੁੱਖ ਸ਼੍ਰੇਣੀ ਨੂੰ ਤਰਜੀਹ ਦਿਓ। ਦੂਜੀਆਂ ਸ਼੍ਰੇਣੀਆਂ ਸਿਰਫ਼ ਜਦੋਂ ਮਾਮਲਾ ਅਸਲ ਵਿੱਚ ਕਈ ਅਧਿਕਾਰਾਂ 'ਚ ਫੈਲਦਾ ਹੋਵੇ।
+
+context_integration: |
+  === ਮੂਲ ਵਿਚਾਰ ===
+  {original_thought_content}
+
+  === ASPDMA ਦਲੀਲ ===
+  {aspdma_reasoning}
+
+  === ਮੌਜੂਦਾ DEFER ਕਾਰਨ ===
+  {current_reason}
+
+  === ਮੌਜੂਦਾ DEFER ਸੰਦਰਭ ===
+  {current_context}
+
+  === ਮੌਜੂਦਾ DEFER UNTIL ===
+  {current_defer_until}
+
+  === ਮੌਜੂਦਾ DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === ਲਾਇਸੰਸਯੁਕਤ DOMAIN ਵਿਕਲਪ ===
+  ਇਨ੍ਹਾਂ ਵਿੱਚੋਂ ਇੱਕ ਸਿਰਫ਼ ਸਪਸ਼ਟ ਲੋੜ ਹੋਣ 'ਤੇ ਵਰਤੋ: {domain_hint_options}
+
+response_format: |
+  ਹੇਠਾਂ ਦਿੱਤੇ fields ਨਾਲ ਇੱਕ FLAT JSON object ਵਾਪਸ ਕਰੋ:
+  - "reason_summary": ਮਨੁੱਖ ਲਈ ਪੜ੍ਹਨਯੋਗ ਛੋਟੀ ਵਿਆਖਿਆ
+  - "operational_reason": ਉੱਪਰਲੇ ਕਾਰਜਕਾਰੀ ਕਾਰਨ ਕੋਡਾਂ ਵਿੱਚੋਂ ਇੱਕ
+  - "primary_need_category": ਉੱਪਰਲੇ ਅਧਿਕਾਰ / ਲੋੜ taxonomy ਮੁੱਲਾਂ ਵਿੱਚੋਂ ਇੱਕ
+  - "secondary_need_categories": ਵਾਧੂ taxonomy ਮੁੱਲਾਂ ਦੀ ਵਿਕਲਪਿਕ ਸੂਚੀ
+  - "rights_basis": ਛੋਟੇ ਅਧਿਕਾਰ-ਆਧਾਰ label ਦੀ ਸੂਚੀ
+  - "domain_hint": ਜਦੋਂ ਖ਼ਾਸ ਲਾਇਸੰਸਯੁਕਤ handler ਸਪਸ਼ਟ ਤੌਰ 'ਤੇ ਲੋੜੀਂਦਾ ਹੋਵੇ ਤਾਂ ਵਿਕਲਪਿਕ ਲਾਇਸੰਸਯੁਕਤ domain enum
+  - "defer_until": ਜੇ ਸਮਾਂ ਬਦਲਣਾ ਹੋਵੇ ਤਾਂ ਵਿਕਲਪਿਕ ISO timestamp override
+
+  ਉਦਾਹਰਨ:
+  {{"reason_summary": "ਕਾਰਵਾਈ ਸੰਬੰਧੀ ਮਾਰਗਦਰਸ਼ਨ ਦੇਣ ਤੋਂ ਪਹਿਲਾਂ ਲਾਇਸੰਸਯੁਕਤ ਕਾਨੂੰਨੀ ਸਮੀਖਿਆ ਲੋੜੀਂਦੀ ਹੈ।", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  ਭਾਸ਼ਾ ਨਿਯਮ:
+  - ਵਰਤੋਂਕਾਰ ਦੀ ਪਸੰਦੀਦਾ ਭਾਸ਼ਾ ਵਿੱਚ ਜਵਾਬ ਦਿਓ।
+  - JSON keys ਅਤੇ enum values ਬਿਲਕੁਲ ਨਿਰਧਾਰਤ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੀ ਰਹਿਣੇ ਚਾਹੀਦੇ ਹਨ।
+  - ਸਿਰਫ਼ ਮਨੁੱਖ-ਪੜ੍ਹਨਯੋਗ ਮੁਕਤ text ਜਿਵੇਂ reason_summary ਨੂੰ localized ਕਰੋ।
+
+closing_reminder: |
+  ਮਹੱਤਵਪੂਰਨ:
+  - DEFER ਤੋਂ ਦੂਰ ਨਾ ਜਾਓ।
+  - domain_hint ਨਾ ਬਣਾਓ ਜਦ ਤਕ ਲਾਇਸੰਸਯੁਕਤ ਸੰਭਾਲ ਸੱਚਮੁੱਚ ਸੰਕੇਤਿਤ ਨਾ ਹੋਵੇ।
+  - ਕਾਨੂੰਨੀ ਅਤੇ ਵਿੱਤੀ ਪਹੁੰਚ ਨੂੰ ਆਮ ਪ੍ਰਸ਼ਾਸਕੀ ਮੁੱਦਾ ਨਹੀਂ, ਸਗੋਂ ਅਧਿਕਾਰਾਂ 'ਤੇ ਅਸਰ ਕਰਨ ਵਾਲੀ ਲੋੜ ਸਮਝੋ।
+  - ਸਭ ਤੋਂ ਸਪਸ਼ਟ ਅਧਿਕਾਰ ਆਧਾਰ ਵਾਲੀ ਸਭ ਤੋਂ ਸੰਕੁਚਿਤ ਸਹੀ ਸ਼੍ਰੇਣੀ ਨੂੰ ਤਰਜੀਹ ਦਿਓ।

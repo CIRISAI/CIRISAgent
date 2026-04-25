@@ -7,7 +7,7 @@ Ensures filter tests wait for task completion before proceeding to next test.
 import json
 import threading
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import requests
 
@@ -26,6 +26,7 @@ class FilterTestHelper:
         self.stream_connected = threading.Event()
         self.current_response: Optional[Any] = None  # Track response for cleanup
         self.task_complete_seen = False  # Track if TASK_COMPLETE action was seen
+        self.action_results: List[Dict[str, Any]] = []
 
     def start_monitoring(self) -> None:
         """Start monitoring SSE stream for task completions."""
@@ -36,6 +37,7 @@ class FilterTestHelper:
         self.stream_error.clear()
         self.stream_connected.clear()
         self.task_complete_seen = False  # Reset on start
+        self.action_results.clear()
         self.stream_thread = threading.Thread(target=self._monitor_stream, daemon=True)
         self.stream_thread.start()
 
@@ -62,6 +64,7 @@ class FilterTestHelper:
         """Clear completed task IDs to prepare for next test."""
         self.completed_tasks.clear()
         self.task_complete_seen = False
+        self.action_results.clear()
 
     def wait_for_task_complete(self, task_id: Optional[str] = None, timeout: float = 30.0) -> bool:
         """
@@ -150,6 +153,10 @@ class FilterTestHelper:
 
                                 # Look for action_result events
                                 if event_type == "action_result":
+                                    self.action_results.append(event)
+                                    if len(self.action_results) > 200:
+                                        self.action_results = self.action_results[-200:]
+
                                     action_executed = event.get("action_executed", "")
                                     execution_success = event.get("execution_success", False)
                                     task_id = event.get("task_id", "unknown")

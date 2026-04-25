@@ -17,7 +17,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 2.6.9-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 2.7.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -237,8 +237,9 @@ ciris_engine/logic/dma/prompts/localized/{lang}/
 ## Deployment Ready
 
 ✅ **22 core services** with message bus architecture
+✅ **More than 200 API endpoints** verified
 ✅ **4GB RAM target** for edge deployment
-✅ **Thousands of tests** with comprehensive coverage
+✅ **More than 10,000 tests** with comprehensive coverage
 ✅ **SonarCloud quality gates** passing
 ✅ **Currently powering** Discord moderation at agents.ciris.ai
 ✅ **Mobile apps** for Android and iOS via unified KMP codebase

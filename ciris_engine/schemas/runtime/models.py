@@ -46,6 +46,15 @@ class TaskContext(BaseModel):
     correlation_id: str = Field(..., description="Correlation ID for tracing")
     parent_task_id: Optional[str] = Field(None, description="Parent task if nested")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID that owns this task")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "task. When present, takes priority over user/system defaults in "
+            "the localization chain. Set by adapters from the originating "
+            "channel/user metadata (e.g. MessageContext.metadata.language)."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -72,6 +81,14 @@ class ThoughtContext(BaseModel):
     parent_thought_id: Optional[str] = Field(None, description="Parent thought if pondering")
     correlation_id: str = Field(..., description="Correlation ID")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID (inherited from task)")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "thought. Inherited from the parent task's preferred_language at "
+            "thought creation time. Top of the localization chain."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

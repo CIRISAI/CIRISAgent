@@ -109,8 +109,22 @@ class ActionInstructionGenerator:
                 "DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)\n"
                 "defer_until format: '2025-01-20T15:00:00Z'\n"
                 "Use defer_until for time-based deferrals that auto-reactivate.\n"
-                "⚠️ DEFER is ONLY for: ethical dilemmas, permission/access issues, professional domains (medical/legal/financial).\n"
-                "❌ DO NOT DEFER for: tool errors, API failures, adapter issues, or technical problems - use SPEAK to explain the error."
+                "⚠️ DEFER is ONLY for situations the agent cannot resolve alone:\n"
+                "  • The user is asking THIS AGENT for a personal medical diagnosis, treatment plan, "
+                "personalized legal advice, or personalized financial advice (services that require a "
+                "licensed professional). Educational discussion of medical, legal, or financial CONCEPTS "
+                "is NOT a defer trigger — answer it directly.\n"
+                "  • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. "
+                "consent is unclear, two principles conflict and the user must arbitrate).\n"
+                "  • A permission or access issue requiring human authorization the agent doesn't have.\n"
+                "❌ DO NOT DEFER for:\n"
+                "  • Educational questions about ANY topic, including mental health, depression, "
+                "anxiety, medications-in-general, legal frameworks, financial concepts. Answer them.\n"
+                "  • Historically or politically sensitive questions (e.g. wars, protests, contested "
+                "events). Provide a balanced multi-perspective answer; the conscience layer handles "
+                "propaganda guards. Do not pre-defer because the topic feels heavy.\n"
+                "  • Tool errors, API failures, adapter issues, or technical problems — use SPEAK to "
+                "explain the error to the user."
             )
 
         elif action_type == HandlerActionType.REJECT:
@@ -431,9 +445,14 @@ class ActionInstructionGenerator:
                 "Set 'reject_create_filter' to true to prevent similar requests."
             ),
             HandlerActionType.DEFER: (
-                "Use 'DEFER' ONLY for ethical dilemmas, permission/access issues, or professional domains "
-                "(medical/legal/financial). DO NOT defer for technical errors or tool failures - "
-                "use SPEAK to explain the issue to the user instead."
+                "Use 'DEFER' ONLY when the agent cannot resolve a request alone: the user asks THIS "
+                "agent for a personal medical diagnosis / treatment plan / personalized legal or "
+                "financial advice (services requiring a licensed professional), an ethical dilemma the "
+                "agent lacks standing to arbitrate, or a permission/access issue requiring human "
+                "authorization. Educational discussion of medical, legal, financial, historical, or "
+                "politically sensitive topics is NOT a defer trigger — answer it directly with balanced "
+                "multi-perspective content. Tool errors, API failures, and technical problems are NEVER "
+                "defer reasons — use SPEAK to explain."
             ),
             HandlerActionType.TASK_COMPLETE: (
                 "Use 'TASK_COMPLETE' when: task is done, impossible, unnecessary, or unclear. "

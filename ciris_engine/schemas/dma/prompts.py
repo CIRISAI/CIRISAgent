@@ -64,7 +64,7 @@ class PromptCollection(BaseModel):
     action_params_speak_csdma_guidance: Optional[str] = Field(None, description="SPEAK action guidance")
     action_params_ponder_guidance: Optional[str] = Field(None, description="PONDER action guidance")
     action_params_observe_guidance: Optional[str] = Field(None, description="OBSERVE action guidance")
-    rationale_csdma_guidance: Optional[str] = Field(None, description="Rationale guidance")
+    reasoning_csdma_guidance: Optional[str] = Field(None, description="Reasoning guidance for CSDMA-flagged ambiguity")
 
     # Special case prompts
     final_ponder_advisory: Optional[str] = Field(None, description="Final ponder advisory template")

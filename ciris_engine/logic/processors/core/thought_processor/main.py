@@ -247,6 +247,7 @@ class ThoughtProcessor(
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
         action_result = await self._maybe_run_tsaspdma(thought_item, action_result, thought_context)
+        action_result = await self._maybe_run_dsaspdma(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -372,7 +373,7 @@ class ThoughtProcessor(
                     evaluator=evaluator,
                     requested_tool_name=tool_name,
                     available_tools=all_tools,
-                    aspdma_rationale=action_result.rationale or "",
+                    aspdma_reasoning=action_result.rationale or "",
                     original_thought=thought_item,
                     time_service=self._time_service,
                 )
@@ -463,7 +464,7 @@ class ThoughtProcessor(
                 evaluator=evaluator,
                 tool_name=tool_name,
                 tool_info=tool_info,
-                aspdma_rationale=action_result.rationale or "",
+                aspdma_reasoning=action_result.rationale or "",
                 original_thought=thought_item,
                 context=None,
                 time_service=self._time_service,
@@ -480,7 +481,7 @@ class ThoughtProcessor(
                 thought_item=thought_item,
                 tool_name=tool_name,
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale=action_result.rationale or "",
+                aspdma_reasoning=action_result.rationale or "",
             )
 
             # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
@@ -498,12 +499,49 @@ class ThoughtProcessor(
             # On failure, proceed with original TOOL action
             return action_result
 
+    async def _maybe_run_dsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run DSASPDMA when ASPDMA selected DEFER."""
+
+        if action_result.selected_action != HandlerActionType.DEFER:
+            return action_result
+
+        if not isinstance(action_result.action_parameters, DeferParams):
+            logger.warning(
+                "DSASPDMA-SKIP: DEFER action has invalid parameters type: %s",
+                type(action_result.action_parameters),
+            )
+            return action_result
+
+        evaluator = getattr(self.dma_orchestrator, "dsaspdma_evaluator", None)
+        if not evaluator:
+            logger.warning("DSASPDMA-SKIP: No DSASPDMA evaluator configured")
+            return action_result
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_dsaspdma
+
+            return await run_dsaspdma(
+                evaluator=evaluator,
+                aspdma_result=action_result,
+                original_thought=thought_item,
+                context=thought_context,
+                time_service=self._time_service,
+            )
+        except Exception as e:
+            logger.error("DSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
+            return action_result
+
     async def _emit_tsaspdma_result_event(
         self,
         thought_item: ProcessingQueueItem,
         tool_name: str,
         tsaspdma_result: ActionSelectionDMAResult,
-        aspdma_rationale: str = "",
+        aspdma_reasoning: str = "",
     ) -> None:
         """Emit TSASPDMA_RESULT reasoning event for trace capture.
 
@@ -544,12 +582,12 @@ class ThoughtProcessor(
                 # TSASPDMA input - what ASPDMA selected
                 original_tool_name=tool_name,
                 original_parameters={},  # ASPDMA doesn't provide params in v1.9.3
-                aspdma_rationale=aspdma_rationale,
+                aspdma_reasoning=aspdma_reasoning,
                 # TSASPDMA output - refined decision
                 final_action=tsaspdma_result.selected_action.value,
                 final_tool_name=final_tool_name,
                 final_parameters=final_params,
-                tsaspdma_rationale=tsaspdma_result.rationale or "",
+                tsaspdma_reasoning=tsaspdma_result.rationale or "",
             )
 
             await reasoning_event_stream.broadcast_reasoning_event(event)
@@ -557,7 +595,7 @@ class ThoughtProcessor(
                 f"TSASPDMA-EVENT: Emitted TSASPDMA_RESULT for thought {thought_item.thought_id}: "
                 f"final_action={tsaspdma_result.selected_action.value}, "
                 f"final_tool_name={final_tool_name}, "
-                f"tsaspdma_rationale={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
+                f"tsaspdma_reasoning={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
             )
 
         except Exception as e:
@@ -634,29 +672,153 @@ class ThoughtProcessor(
             thought_context.is_conscience_retry = True
         return thought_context
 
-    def _build_retry_guidance(
-        self, attempted_action: str, override_reason: str, updated_observation: Optional[str]
+    def _build_structured_shard_detail(
+        self, conscience_result: ConscienceApplicationResult, language: str = "en"
     ) -> str:
-        """Build retry guidance message based on whether there's a new observation."""
-        base_guidance = (
-            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
-            "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
+        """Format per-shard conscience results into a structured retry envelope.
+
+        Technical labels ([IRIS-O], decision=, ratio=, etc.) stay in English so
+        the agent's structured-output schema sees consistent identifiers across
+        locales. Natural-language headers (`why:`, `Alternatives ... pivot
+        targets`, `uncertainties:`) are localized so the retry context does not
+        leak English into a non-English thought and cause language drift.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        lines: List[str] = []
+
+        o = conscience_result.optimization_veto_check
+        if o is not None:
+            affected = ", ".join(o.affected_values) if o.affected_values else "(none listed)"
+            lines.append(
+                f"[IRIS-O] decision={o.decision} ratio={o.entropy_reduction_ratio:.1f} "
+                f"affected_values=[{affected}]"
+            )
+            if o.justification:
+                why_label = get_string(language, "conscience.retry_why_label", default="why")
+                lines.append(f"  {why_label}: {o.justification[:400]}")
+
+        e = conscience_result.entropy_check
+        if e is not None:
+            rep = "representative=True" if e.actual_is_representative else "representative=False"
+            lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
+            if e.alternative_meanings:
+                alts_header = get_string(
+                    language,
+                    "conscience.retry_alternatives_header",
+                    default="Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):",
+                )
+                lines.append(f"  {alts_header}")
+                for i, alt in enumerate(e.alternative_meanings[:3], 1):
+                    lines.append(f"    {i}. {alt[:280]}")
+
+        c = conscience_result.coherence_check
+        if c is not None:
+            lines.append(
+                f"[IRIS-C] coherence={c.coherence_score:.2f} threshold={c.threshold:.2f} "
+                f"{'PASS' if c.passed else 'FAIL'}"
+            )
+
+        h = conscience_result.epistemic_humility_check
+        if h is not None:
+            lines.append(
+                f"[IRIS-H] certainty={h.epistemic_certainty:.2f} "
+                f"recommended={h.recommended_action}"
+            )
+            if h.identified_uncertainties:
+                unc_label = get_string(
+                    language, "conscience.retry_uncertainties_label", default="uncertainties"
+                )
+                lines.append(
+                    f"  {unc_label}: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4])
+                )
+
+        return "\n".join(lines)
+
+    def _build_retry_guidance(
+        self,
+        attempted_action: str,
+        override_reason: str,
+        updated_observation: Optional[str],
+        conscience_result: Optional[ConscienceApplicationResult] = None,
+        language: str = "en",
+    ) -> str:
+        """Build retry guidance message based on whether there's a new observation.
+
+        All natural-language guidance is rendered in `language` so the retry
+        context does not flip the agent's response language mid-thought. The
+        per-shard structured detail keeps technical identifiers in English.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        # Structured per-shard detail — gives ASPDMA concrete pivot targets.
+        shard_detail = (
+            self._build_structured_shard_detail(conscience_result, language=language)
+            if conscience_result
+            else ""
         )
+
+        header = get_string(
+            language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**"
+        )
+        intro = get_string(
+            language,
+            "conscience.retry_intro",
+            default="Your previous attempt to {action} was rejected because: {reason}",
+            action=attempted_action,
+            reason=override_reason,
+        )
+        intro = f"{header}\n{intro}"
+        materially_different_rule = get_string(
+            language,
+            "conscience.retry_must_be_different",
+            default=(
+                "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT "
+                "from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
+                "above as pivot directions if provided. CRITICAL: respond in the same "
+                "language you were responding in before — do not switch the user's "
+                "language. If the conscience flagged propaganda/defensive-mimicry patterns "
+                "you cannot ethically rewrite, DEFER to Wise Authority. PONDER auto-DEFERS "
+                "at max depth — avoid that unless a SPEAK is genuinely unsafe."
+            ),
+        )
+
+        base_guidance = (
+            f"{intro}\n\n{shard_detail}\n\n" if shard_detail else f"{intro}\n\n"
+        )
+
         if updated_observation:
             logger.info("[CONSCIENCE_RETRY] Including new observation in retry_guidance")
-            return (
-                f"IMPORTANT: A NEW MESSAGE arrived from the user while you were processing: '{updated_observation}'. "
-                f"You must now respond to THIS new message, not complete the old task. "
-                f"{base_guidance}"
-                "The user is waiting for a response to their new message. Use SPEAK to respond or use a TOOL if needed."
+            obs_intro = get_string(
+                language,
+                "conscience.retry_observation_intro",
+                default=(
+                    "IMPORTANT: A NEW MESSAGE arrived from the user while you were "
+                    "processing: '{updated_observation}'. You must now respond to THIS "
+                    "new message, not complete the old task."
+                ),
+                updated_observation=updated_observation,
             )
-        return (
-            f"{base_guidance}"
-            "Consider: Is there a more cautious approach? Should you gather more information first? "
-            "Can this task be marked as complete without further action? "
-            "Remember: DEFER only for ethical dilemmas or permission issues - NOT for technical errors. "
-            "If a tool fails, SPEAK to explain the error to the user."
+            obs_outro = get_string(
+                language,
+                "conscience.retry_observation_outro",
+                default=(
+                    "The user is waiting for a response to their new message. Use SPEAK "
+                    "to respond or use a TOOL if needed."
+                ),
+            )
+            return f"{obs_intro}\n\n{base_guidance}{materially_different_rule}\n{obs_outro}"
+
+        general_outro = get_string(
+            language,
+            "conscience.retry_general_outro",
+            default=(
+                "Remember: DEFER only for ethical dilemmas or permission issues — NOT "
+                "for technical errors. If a tool fails, SPEAK to explain the error to "
+                "the user."
+            ),
         )
+        return f"{base_guidance}{materially_different_rule}\n{general_outro}"
 
     def _prepare_conscience_retry_context(
         self, thought_item: ProcessingQueueItem, thought_context: Any, conscience_result: ConscienceApplicationResult
@@ -678,7 +840,20 @@ class ThoughtProcessor(
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
         retry_context = self._create_retry_context_copy(thought_context)
-        retry_guidance = self._build_retry_guidance(attempted_action, override_reason, updated_observation)
+        # Resolve agent locale via the canonical chain (task/thought ->
+        # user -> system -> en). The retry guidance must be in the same
+        # language the agent was working in — an English override block
+        # injected into a non-English thought flips the model's language.
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+        retry_language = get_user_language_from_context(thought_context)
+        logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
+        retry_guidance = self._build_retry_guidance(
+            attempted_action,
+            override_reason,
+            updated_observation,
+            conscience_result,
+            language=retry_language,
+        )
 
         conscience_feedback = {
             "failed_action": attempted_action,
@@ -995,9 +1170,15 @@ class ThoughtProcessor(
         """Simple conscience application without orchestrator."""
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase without depending on the
+        # key-shape of the extra-allow DMA bag.
+        idma_result = dma_results_dict.get("idma") if isinstance(dma_results_dict, dict) else None
+
         # Create typed context for conscience checks (needed for both bypass and normal)
         context = ConscienceCheckContext(
             thought=thought,
+            idma_result=idma_result,
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 

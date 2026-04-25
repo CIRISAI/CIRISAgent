@@ -153,9 +153,17 @@ fun computeLocalScore(
     serviceHealthFrac: Float?,
     llmHealthFrac: Float?,
 ): Float? {
-    if (serviceHealthFrac == null && llmHealthFrac == null) return null
-    val svc = (serviceHealthFrac ?: 1f).coerceIn(0f, 1f)
-    val llm = (llmHealthFrac ?: 1f).coerceIn(0f, 1f)
+    // Require BOTH signals before rendering a score. The previous version
+    // fell back to 1.0 for a missing signal and then did the 60/40 weighted
+    // average — meaning the score spiked to exactly 1.00 on the first poll
+    // when service-health arrived before llm-health (or vice-versa). That
+    // "jumps to 1" was the artifact of treating `null` as "perfectly
+    // healthy" rather than "unknown." Return null until we have real data
+    // for both terms; the UI will keep showing the fleet-only or prior
+    // value until the first honest sample lands.
+    if (serviceHealthFrac == null || llmHealthFrac == null) return null
+    val svc = serviceHealthFrac.coerceIn(0f, 1f)
+    val llm = llmHealthFrac.coerceIn(0f, 1f)
     // 60/40 weighting: core services are the primary constraint fabric,
     // LLM providers are one sustainability channel. Both floor at modest
     // values so a single-provider agent doesn't read as "broken."

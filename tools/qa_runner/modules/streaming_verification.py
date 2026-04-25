@@ -858,14 +858,54 @@ class StreamingVerificationModule:
                                         "pdma_system_prompt",
                                     },  # DMA results + optional prompt fields
                                     "idma_result": {
-                                        # IDMA epistemic evaluation fields (v1.9.3)
+                                        # IDMA epistemic evaluation fields.
+                                        # Keep in sync with IDMAResult in
+                                        # ciris_engine/schemas/dma/results.py —
+                                        # the schema has grown as the fragility
+                                        # model gained more observables.
                                         "k_eff",
+                                        "k_raw",
+                                        "raw_source_count",
+                                        "effective_source_count",
                                         "correlation_risk",
                                         "fragility_flag",
+                                        "reasoning_is_fragile",
                                         "phase",
+                                        "phase_confidence",
+                                        "reasoning_state",
+                                        "collapse_margin",
+                                        "safety_margin",
                                         "reasoning",
                                         "sources_identified",
+                                        "source_ids",
+                                        "source_types",
+                                        "source_independence_scores",
+                                        "source_type_counts",
+                                        "source_overlap",
                                         "correlation_factors",
+                                        "top_correlation_factors",
+                                        "pairwise_correlation_summary",
+                                        "rho_mean",
+                                        "rho_intra",
+                                        "rho_inter",
+                                        "rho_critical",
+                                        "module_count",
+                                        "effective_module_count",
+                                        "source_clusters",
+                                        "common_cause_flags",
+                                        "intervention_recommendation",
+                                        "next_best_recovery_step",
+                                        "delta_k_eff",
+                                        "delta_rho_mean",
+                                        "phase_persistence_steps",
+                                        "time_in_fragile_state_ms",
+                                        "moving_variance",
+                                        "k_required",
+                                        "defense_function",
+                                        "collapse_rate",
+                                        "time_to_truth",
+                                        "time_to_entropy",
+                                        "time_to_capture",
                                         "idma_prompt",  # Optional prompt
                                     },
                                     "tsaspdma_result": {

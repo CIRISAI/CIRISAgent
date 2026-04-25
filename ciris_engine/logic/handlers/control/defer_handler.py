@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
-from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_api_channel, parse_iso_timestamp
+from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
 from ciris_engine.schemas.actions import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
@@ -66,11 +66,7 @@ class DeferHandler(BaseActionHandler):
 
     def _parse_defer_params(self, raw_params: Any) -> DeferParams:
         """Parse raw parameters into DeferParams."""
-        if isinstance(raw_params, DeferParams):
-            return raw_params
-        if hasattr(raw_params, "model_dump"):
-            return DeferParams(**raw_params.model_dump())
-        raise ValueError(f"Expected DeferParams but got {type(raw_params)}")
+        return self._validate_and_convert_params(raw_params, DeferParams)
 
     async def _schedule_time_based_deferral(
         self, defer_params: DeferParams, thought: Thought, follow_up_info: str
@@ -112,7 +108,7 @@ class DeferHandler(BaseActionHandler):
     ) -> bool:
         """Send deferral to Wise Authority. Returns success status."""
         try:
-            metadata = self._build_deferral_metadata(thought, dispatch_context)
+            metadata = self._build_deferral_metadata(thought, dispatch_context, defer_params)
 
             defer_until_dt = None
             if defer_params.defer_until:
@@ -124,6 +120,11 @@ class DeferHandler(BaseActionHandler):
                 reason=defer_params.reason,
                 defer_until=defer_until_dt,
                 priority=getattr(defer_params, "priority", "medium"),
+                domain_hint=defer_params.domain_hint,
+                reason_code=defer_params.reason_code,
+                needs_category=defer_params.needs_category,
+                secondary_needs_categories=defer_params.secondary_needs_categories,
+                rights_basis=defer_params.rights_basis,
                 metadata=metadata,
             )
 
@@ -143,12 +144,21 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"WiseAuthorityService deferral failed for thought {thought.thought_id}: {e}")
             return False
 
-    def _build_deferral_metadata(self, thought: Thought, dispatch_context: DispatchContext) -> Dict[str, str]:
+    def _build_deferral_metadata(
+        self,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        defer_params: Optional[DeferParams] = None,
+    ) -> Dict[str, str]:
         """Build metadata dict for deferral context."""
         metadata = {
             "attempted_action": getattr(dispatch_context, "attempted_action", "unknown"),
             "max_rounds_reached": str(getattr(dispatch_context, "max_rounds_reached", False)),
         }
+
+        if defer_params is not None:
+            self._add_taxonomy_metadata(metadata, defer_params)
+            self._add_context_metadata(metadata, defer_params.context)
 
         if thought.source_task_id:
             task = persistence.get_task_by_id(thought.source_task_id)
@@ -156,6 +166,32 @@ class DeferHandler(BaseActionHandler):
                 metadata["task_description"] = task.description
 
         return metadata
+
+    def _add_taxonomy_metadata(self, metadata: Dict[str, str], defer_params: DeferParams) -> None:
+        """Add structured taxonomy fields to deferral metadata."""
+        if defer_params.reason_code is not None:
+            metadata["reason_code"] = defer_params.reason_code.value
+        if defer_params.needs_category is not None:
+            metadata["needs_category"] = defer_params.needs_category.value
+        if defer_params.secondary_needs_categories:
+            metadata["secondary_needs_categories"] = ",".join(
+                category.value for category in defer_params.secondary_needs_categories
+            )
+        if defer_params.rights_basis:
+            metadata["rights_basis"] = ",".join(defer_params.rights_basis)
+        if defer_params.domain_hint is not None:
+            metadata["domain_hint"] = defer_params.domain_hint.value
+
+    def _add_context_metadata(self, metadata: Dict[str, str], context: Optional[Dict[str, Any]]) -> None:
+        """Add ad hoc deferral context values to metadata."""
+        for key, value in (context or {}).items():
+            metadata[key] = self._stringify_metadata_value(value)
+
+    def _stringify_metadata_value(self, value: Any) -> str:
+        """Serialize context metadata values into strings for DeferralContext."""
+        if isinstance(value, list):
+            return ",".join(str(item) for item in value)
+        return str(value)
 
     async def _send_error_deferral(self, thought: Thought, dispatch_context: DispatchContext) -> None:
         """Send deferral with parameter error context."""
@@ -182,24 +218,29 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"Fallback deferral submission failed for thought {thought.thought_id}: {e}")
 
     def _mark_task_deferred(self, thought: Thought) -> None:
-        """Mark parent task as deferred and send notification."""
+        """Mark parent task as deferred and notify the channel.
+
+        The notification is sent for ANY channel (not just `api_*`). Downstream
+        send_message routing handles whether a waiter exists — this ensures
+        synchronous interact() callers receive a DEFER notification instead of
+        hanging on an unanswered SPEAK until timeout. The deferral reason is
+        intentionally NOT surfaced to the user (it's for WA review only).
+        """
         parent_task_id = thought.source_task_id
         persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default", self.time_service)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
-        # Send notification to API channels
         task = persistence.get_task_by_id(parent_task_id)
-        if task and task.channel_id and is_api_channel(task.channel_id):
-            self.logger.info(f"Sending deferral notification to API channel {task.channel_id}")
-            # Use event loop to schedule the notification
-            import asyncio
+        if not task or not task.channel_id:
+            return
 
-            # Store task reference to prevent garbage collection before completion
-            notification_task = asyncio.create_task(
-                self._send_notification(
-                    task.channel_id,
-                    "The agent chose to defer, check the wise authority panel if you are the setup user",
-                )
+        self.logger.info(f"Sending deferral notification to channel {task.channel_id}")
+        import asyncio
+
+        notification_task = asyncio.create_task(
+            self._send_notification(
+                task.channel_id,
+                "The agent chose to defer, check the wise authority panel if you are the setup user",
             )
-            # Add done callback to handle any exceptions
-            notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)
+        )
+        notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)

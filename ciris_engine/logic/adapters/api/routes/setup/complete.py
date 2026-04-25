@@ -829,13 +829,25 @@ async def _schedule_runtime_resume(runtime: Any) -> None:
     # The timestamp enables timeout detection for stuck resume scenarios
     runtime._resume_in_progress = True
     runtime._resume_started_at = time.time()
-    logger.info(f"[Setup] Set _resume_in_progress=True, _resume_started_at={runtime._resume_started_at:.3f}")
+    has_resume = hasattr(runtime, "resume_from_first_run")
+    logger.info(
+        "[Setup] Scheduling runtime resume: runtime_type=%s has_resume_from_first_run=%s "
+        "resume_started_at=%.3f agent_processor_present=%s",
+        type(runtime).__name__,
+        has_resume,
+        runtime._resume_started_at,
+        bool(getattr(runtime, "agent_processor", None)),
+    )
 
     async def _resume_runtime() -> None:
         await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
         try:
+            logger.info("[Setup] Background resume task starting")
             await runtime.resume_from_first_run()
-            logger.info("Successfully resumed from first-run mode - agent processor running")
+            logger.info(
+                "Successfully resumed from first-run mode - agent processor running=%s",
+                bool(getattr(runtime, "agent_processor", None)),
+            )
         except Exception as e:
             logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
             # Clear the flag and timestamp so shutdown can proceed

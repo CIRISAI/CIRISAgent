@@ -50,7 +50,7 @@ class TSASPDMALLMResult(BaseModel):
     selected_action: HandlerActionType = Field(
         ..., description="Action to take: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)"
     )
-    rationale: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
+    reasoning: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
 
     # === TOOL parameters (TSASPDMA refines these) ===
     tool_name: Optional[str] = Field(
@@ -109,12 +109,17 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # Store last user prompt for debugging/streaming
         self.last_user_prompt: Optional[str] = None
 
+        # Per-thought language override populated from user_profiles. None
+        # falls back to env var. Avoids the legacy global set_prompt_language
+        # path which mutated shared state.
+        self._explicit_language: Optional[str] = None
+
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        """Get prompt loader fresh each time to respect language changes."""
-        return get_prompt_loader()
+        """Get prompt loader for the thread's currently-active language."""
+        return get_prompt_loader(language=self._explicit_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -122,38 +127,45 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync user's language preference from context to prompt loader."""
-        if not context:
-            return
+        """Sync user's language preference from context to per-instance state.
 
-        user_profiles = None
+        Always assigns _explicit_language to the value derived from THIS
+        thought (None included). Without this reset, a reused evaluator
+        instance would inherit a previous thought's language when the next
+        thought arrives without context or profile data.
+        """
+        user_profiles: Optional[Any] = None
 
-        # Try to extract user profiles from various context structures
-        if hasattr(context, "system_snapshot") and context.system_snapshot:
-            if hasattr(context.system_snapshot, "user_profiles"):
-                user_profiles = context.system_snapshot.user_profiles
-        elif hasattr(context, "user_profiles"):
-            user_profiles = context.user_profiles
-        elif isinstance(context, dict):
-            system_snapshot = context.get("system_snapshot")
-            if system_snapshot:
-                if isinstance(system_snapshot, dict):
-                    user_profiles = system_snapshot.get("user_profiles")
-                elif hasattr(system_snapshot, "user_profiles"):
-                    user_profiles = system_snapshot.user_profiles
+        if context:
+            # Try to extract user profiles from various context structures
+            if hasattr(context, "system_snapshot") and context.system_snapshot:
+                if hasattr(context.system_snapshot, "user_profiles"):
+                    user_profiles = context.system_snapshot.user_profiles
+            elif hasattr(context, "user_profiles"):
+                user_profiles = context.user_profiles
+            elif isinstance(context, dict):
+                system_snapshot = context.get("system_snapshot")
+                if system_snapshot:
+                    if isinstance(system_snapshot, dict):
+                        user_profiles = system_snapshot.get("user_profiles")
+                    elif hasattr(system_snapshot, "user_profiles"):
+                        user_profiles = system_snapshot.user_profiles
 
+        new_language: Optional[str] = None
         if user_profiles and len(user_profiles) > 0:
             first_profile = user_profiles[0]
-            user_lang = (
+            new_language = (
                 first_profile.get("preferred_language")
                 if isinstance(first_profile, dict)
                 else getattr(first_profile, "preferred_language", None)
             )
-            if user_lang and user_lang != self.prompt_loader.language:
-                from ciris_engine.logic.dma.prompt_loader import set_prompt_language
 
-                set_prompt_language(user_lang)
-                logger.debug(f"TSASPDMA: Synced prompt language to user preference: {user_lang}")
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            if new_language:
+                logger.debug(f"TSASPDMA: Synced prompt language to user preference: {new_language}")
+            else:
+                logger.debug("TSASPDMA: Cleared prompt language (no profile/context)")
 
     def _convert_tsaspdma_result(
         self,
@@ -204,7 +216,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return ActionSelectionDMAResult(
             selected_action=action,
             action_parameters=params,
-            rationale=llm_result.rationale,
+            rationale=llm_result.reasoning,
         )
 
     def _format_parameter_schema(self, tool_info: ToolInfo) -> List[str]:
@@ -338,7 +350,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         tool_name: str,
         tool_info: ToolInfo,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought_content: str,
         context_enrichment: Optional[Dict[str, Any]] = None,
     ) -> List[JSONDict]:
@@ -395,7 +407,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         user_message_text = self.prompt_loader.get_user_message(
             self.prompt_template_data,
             tool_name=tool_name,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=original_thought_content,
             tool_documentation=tool_documentation,
             context_enrichment_section=context_enrichment_section,
@@ -409,7 +421,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         tool_name: str,
         tool_info: ToolInfo,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
         context_enrichment: Optional[Dict[str, Any]] = None,
@@ -451,7 +463,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         messages = self._create_tsaspdma_messages(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
         )
@@ -472,7 +484,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             result_tuple = await self.call_llm_structured(
                 messages=messages,
                 response_model=TSASPDMALLMResult,
-                max_tokens=4096,
+                max_tokens=16384,
                 temperature=0.0,
                 thought_id=original_thought.thought_id,
                 task_id=original_thought.source_task_id,
@@ -493,7 +505,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                     action_parameters=tsaspdma_result.action_parameters,
                     rationale=f"TSASPDMA: {tsaspdma_result.rationale}",
                     raw_llm_response=tsaspdma_result.raw_llm_response,
-                    reasoning=tsaspdma_result.reasoning,
+                    reasoning=tsaspdma_result.rationale,
                     evaluation_time_ms=tsaspdma_result.evaluation_time_ms,
                     resource_usage=tsaspdma_result.resource_usage,
                     user_prompt=tsaspdma_result.user_prompt,
@@ -517,7 +529,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         requested_tool_name: str,
         available_tools: List[ToolInfo],
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
     ) -> ActionSelectionDMAResult:
@@ -544,7 +556,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         messages = self._create_correction_mode_messages(
             requested_tool=requested_tool_name,
             available_tools_list=tools_list_text,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
         )
 
@@ -557,7 +569,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             result_tuple = await self.call_llm_structured(
                 messages=messages,
                 response_model=TSASPDMALLMResult,
-                max_tokens=4096,
+                max_tokens=16384,
                 temperature=0.0,
                 thought_id=original_thought.thought_id,
                 task_id=original_thought.source_task_id,
@@ -629,7 +641,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         requested_tool: str,
         available_tools_list: str,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought_content: str,
     ) -> List[JSONDict]:
         """Create prompt messages for TSASPDMA correction mode."""
@@ -663,7 +675,7 @@ ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
 
 === ASPDMA'S ORIGINAL SELECTION ===
 Tool: {requested_tool}
-Rationale: {aspdma_rationale}
+Rationale: {aspdma_reasoning}
 
 === ORIGINAL THOUGHT (user's intent) ===
 {original_thought_content}
@@ -684,7 +696,7 @@ Return your response as a FLAT JSON object."""
         # Extract required arguments
         tool_name = kwargs.get("tool_name") or (args[0] if len(args) > 0 else None)
         tool_info = kwargs.get("tool_info") or (args[1] if len(args) > 1 else None)
-        aspdma_rationale = kwargs.get("aspdma_rationale") or (args[2] if len(args) > 2 else "")
+        aspdma_reasoning = kwargs.get("aspdma_reasoning") or (args[2] if len(args) > 2 else "")
         original_thought = kwargs.get("original_thought") or (args[3] if len(args) > 3 else None)
         context = kwargs.get("context")
 
@@ -694,7 +706,7 @@ Return your response as a FLAT JSON object."""
         return await self.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
         )

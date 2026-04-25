@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# بازبینی دوم مبتنی بر حقوق پس از اینکه ASPDMA اقدام DEFER را انتخاب کرد
+
+component_name: dsaspdma
+description: "انتخاب اقدام ویژه ارجاع: یک اقدام DEFER را بر اساس رده‌بندی حقوق/نیازها طبقه‌بندی می‌کند"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === رده‌بندی حقوق / نیازها ===
+  - health_and_bodily_integrity: برای زندگی، سلامت، تمامیت بدنی، ناتوانی، ایمنی پزشکی، سلاح‌سازی، مواد خطرناک یا پیامدهای مستقیم آسیب جسمی استفاده کنید.
+    مبنای حقوقی: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: برای مسکن، پناهگاه، امنیت خانه، غذا، آب، بهداشت، انرژی، زیرساخت و دیگر شرایط ضروری زندگی استفاده کنید.
+    مبنای حقوقی: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: برای کار، درآمد، دستمزد، بدهی، اعتبار، مزایا، تأمین اجتماعی، سرمایه‌گذاری، مالیات یا دیگر نیازهای معیشتی و ثبات مالی استفاده کنید.
+    مبنای حقوقی: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: برای مشاوره حقوقی، کمک حقوقی، فرایند عادلانه، دادرسی منصفانه، دسترسی به جبران، قراردادها، مسئولیت یا دیگر مسائل دسترسی به عدالت استفاده کنید.
+    مبنای حقوقی: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: برای شناسایی در برابر قانون، تأیید هویت، تابعیت، رأی‌دادن، انتخابات، مشارکت عمومی یا جایگاه مدنی استفاده کنید.
+    مبنای حقوقی: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: برای حریم خصوصی، خودمختاری، کرامت، آزادی از اجبار، کلاهبرداری، دستکاری، استنتاج زیست‌سنجی یا نظارت استفاده کنید.
+    مبنای حقوقی: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: برای آموزش، پژوهش، دسترسی به دانش، مشارکت فرهنگی و بهره‌مندی از علم استفاده کنید.
+    مبنای حقوقی: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: برای مدیریت اجتماع، تشدید بحران، تشخیص الگو، ایمنی عمومی، تبعیض یا آسیب‌هایی که عمدتا گروه‌ها را تحت تأثیر قرار می‌دهند استفاده کنید.
+    مبنای حقوقی: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: وقتی ارجاع عمدتا درباره عدم قطعیت، تفسیر سیاست، حدود اختیار یا نظارت انسانی غیر اختصاصی به حوزه است استفاده کنید.
+    مبنای حقوقی: human_review_and_accountability
+
+  === کدهای دلیل عملیاتی ارجاع ===
+  - licensed_domain_required: یک متخصص دارای مجوز یا گرداننده حوزه که جداگانه اداره می‌شود لازم است.
+  - rights_impact_review: درخواست به‌طور مادی بر حقوق حفاظت‌شده یا نیازهای بنیادی انسان اثر می‌گذارد و نیازمند بازبینی است.
+  - safety_escalation: آسیب احتمالی یا شرایط بحران نیازمند تشدید فوری یا نظارت انسانی است.
+  - consent_or_authority_required: ابتدا رضایت معتبر، مجوز یا اختیار انسانی پاسخگو لازم است.
+  - insufficient_context: عامل برای ادامه مسئولانه زمینه قابل اعتماد کافی ندارد.
+  - policy_review_required: پیش از اقدام، تفسیر سیاست یا حکمرانی لازم است.
+  - resource_or_system_limitation: محدودیت‌های سیستم تکمیل ایمن بدون بازبینی را ناممکن می‌کند.
+  - time_based_review: تصمیم باید بعدا در زمان مشخص یا پس از تغییر یک شرط بازنگری شود.
+  - ethical_uncertainty: سیستم از نظر اخلاقی همچنان نامطمئن است و به داوری انسانی نیاز دارد.
+  - unknown: کد پشتیبان وقتی دلیل عملیاتی همچنان نامشخص است.
+
+system_guidance_header: |
+  === انتخاب اقدام ویژه ارجاع (DSASPDMA) ===
+
+  ASPDMA قبلاً DEFER را انتخاب کرده است.
+  وظیفه تو باز کردن دوباره انتخاب اقدام نیست.
+  وظیفه تو طبقه‌بندی ارجاع است تا قابل توضیح، قابل حسابرسی و قابل مسیریابی شود.
+
+  باید:
+  1. اقدام DEFER را حفظ کنی.
+  2. بهترین دسته اصلی حقوق / نیازها را انتخاب کنی.
+  3. بهترین کد دلیل عملیاتی را انتخاب کنی.
+  4. دسته‌های نیاز ثانویه را فقط وقتی واقعاً صدق می‌کنند اضافه کنی.
+  5. domain_hint را فقط وقتی تنظیم کنی که به‌وضوح handler دارای مجوز لازم است.
+
+evaluation_steps: |
+  گام 1: فکر اصلی و استدلال موقت ASPDMA را بخوان.
+  گام 2: مشخص کن کدام نیاز انسانی / حوزه حقوق بشر مستقیم‌تر درگیر است.
+  گام 3: کد دلیل عملیاتی را انتخاب کن که بهترین توضیح را برای چرایی ارجاع سیستم می‌دهد.
+  گام 4: reason_summary را کوتاه، مشخص و قابل خواندن برای کاربر نگه دار.
+  گام 5: یک دسته اصلی را ترجیح بده. دسته‌های ثانویه را فقط وقتی اضافه کن که پرونده واقعاً چندین حق را دربرگیرد.
+
+context_integration: |
+  === فکر اصلی ===
+  {original_thought_content}
+
+  === استدلال ASPDMA ===
+  {aspdma_reasoning}
+
+  === دلیل فعلی DEFER ===
+  {current_reason}
+
+  === زمینه فعلی DEFER ===
+  {current_context}
+
+  === DEFER UNTIL فعلی ===
+  {current_defer_until}
+
+  === DOMAIN HINT فعلی ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === گزینه‌های دامنه دارای مجوز ===
+  فقط اگر به‌وضوح لازم است یکی از این‌ها را استفاده کن: {domain_hint_options}
+
+response_format: |
+  یک شیء JSON تخت با این فیلدها برگردان:
+  - "reason_summary": توضیح کوتاه و قابل خواندن برای انسان
+  - "operational_reason": یکی از کدهای دلیل عملیاتی بالا
+  - "primary_need_category": یکی از مقادیر رده‌بندی حقوق / نیازهای بالا
+  - "secondary_need_categories": فهرست اختیاری مقادیر رده‌بندی اضافی
+  - "rights_basis": فهرست برچسب‌های کوتاه مبنای حقوقی
+  - "domain_hint": enum اختیاری دامنه دارای مجوز وقتی handler تخصصی دارای مجوز به‌وضوح لازم است
+  - "defer_until": override اختیاری زمان ISO اگر زمان‌بندی باید تغییر کند
+
+  مثال:
+  {{"reason_summary": "پیش از ارائه راهنمایی آیینی، بازبینی حقوقی دارای مجوز لازم است.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  قواعد زبان:
+  - به زبان ترجیحی کاربر پاسخ بده.
+  - JSON keys و enum values باید دقیقاً همان‌گونه که به انگلیسی مشخص شده‌اند باقی بمانند.
+  - فقط متن آزاد انسانی مانند reason_summary را بومی‌سازی کن.
+
+closing_reminder: |
+  مهم:
+  - از DEFER به اقدام دیگری تغییر نده.
+  - domain_hint نساز مگر اینکه رسیدگی دارای مجوز واقعاً دلالت شده باشد.
+  - دسترسی حقوقی و مالی باید نیازهای اثرگذار بر حقوق تلقی شوند، نه مسائل اداری عمومی.
+  - دقیق‌ترین دسته محدود با روشن‌ترین مبنای حقوقی را ترجیح بده.

@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA کے DEFER منتخب کرنے کے بعد حقوق پر مبنی دوسرا مرحلہ
+
+component_name: dsaspdma
+description: "تعویق کے لیے مخصوص عمل کا انتخاب: DEFER عمل کو حقوق/ضروریات کی taxonomy کے مطابق درجہ بند کرتا ہے"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === حقوق / ضروریات کی TAXONOMY ===
+  - health_and_bodily_integrity: زندگی، صحت، جسمانی سالمیت، معذوری، طبی حفاظت، ہتھیار بندی، خطرناک مواد یا براہ راست جسمانی نقصان کے اثرات کے لیے استعمال کریں۔
+    حقوق کی بنیاد: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: رہائش، پناہ، گھر کی حفاظت، خوراک، پانی، صفائی، توانائی، بنیادی ڈھانچے اور دیگر لازمی رہائشی حالات کے لیے استعمال کریں۔
+    حقوق کی بنیاد: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: کام، آمدن، اجرت، قرض، کریڈٹ، فوائد، سماجی تحفظ، سرمایہ کاری، ٹیکس یا دیگر معاشی زندگی اور مالی استحکام کی ضروریات کے لیے استعمال کریں۔
+    حقوق کی بنیاد: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: قانونی مشورہ، قانونی امداد، مناسب عمل، منصفانہ مقدمہ، remedy تک رسائی، معاہدوں، ذمہ داری یا انصاف تک رسائی کے سوالات کے لیے استعمال کریں۔
+    حقوق کی بنیاد: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: قانون کے سامنے شناخت، identity verification، nationality، voting، elections، public participation یا civic standing کے لیے استعمال کریں۔
+    حقوق کی بنیاد: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: privacy، autonomy، dignity، coercion، fraud، manipulation، biometric inference یا surveillance سے آزادی کے لیے استعمال کریں۔
+    حقوق کی بنیاد: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: education، research، access to knowledge، cultural participation اور benefits of science کے لیے استعمال کریں۔
+    حقوق کی بنیاد: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: community moderation، crisis escalation، pattern detection، public safety، discrimination یا ایسے harms کے لیے استعمال کریں جو بنیادی طور پر groups کو متاثر کرتے ہیں۔
+    حقوق کی بنیاد: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: جب deferral بنیادی طور پر uncertainty، policy interpretation، authority boundaries یا non-domain-specific human oversight کے بارے میں ہو تو استعمال کریں۔
+    حقوق کی بنیاد: human_review_and_accountability
+
+  === عملیاتی تعویق کے سبب کوڈز ===
+  - licensed_domain_required: licensed specialist یا الگ سے governed domain handler درکار ہے۔
+  - rights_impact_review: درخواست محفوظ حقوق یا بنیادی انسانی ضروریات کو مادی طور پر متاثر کرتی ہے اور review درکار ہے۔
+  - safety_escalation: ممکنہ نقصان یا بحران کی حالت فوری escalation یا انسانی نگرانی کا تقاضا کرتی ہے۔
+  - consent_or_authority_required: پہلے valid consent، authorization یا accountable human authority درکار ہے۔
+  - insufficient_context: agent کے پاس ذمہ داری سے آگے بڑھنے کے لیے کافی reliable context نہیں ہے۔
+  - policy_review_required: عمل سے پہلے policy یا governance interpretation درکار ہے۔
+  - resource_or_system_limitation: system constraints review کے بغیر safe completion کو روکتے ہیں۔
+  - time_based_review: decision کو بعد میں کسی specific time پر یا condition بدلنے کے بعد reconsider کیا جانا چاہیے۔
+  - ethical_uncertainty: system اخلاقی طور پر uncertain رہتا ہے اور human judgment درکار ہے۔
+  - unknown: fallback code جب operational reason واضح نہ رہے۔
+
+system_guidance_header: |
+  === تعویق کے لیے مخصوص عمل کا انتخاب (DSASPDMA) ===
+
+  ASPDMA پہلے ہی DEFER منتخب کر چکا ہے۔
+  آپ کا کام عمل کے انتخاب کو دوبارہ کھولنا نہیں ہے۔
+  آپ کا کام تعویق کو اس طرح درجہ بند کرنا ہے کہ وہ قابل وضاحت، قابل آڈٹ، اور قابل روٹنگ بنے۔
+
+  آپ کو لازماً:
+  1. DEFER عمل کو برقرار رکھنا ہے۔
+  2. بہترین بنیادی حقوق / ضروریات کی category منتخب کرنی ہے۔
+  3. بہترین operational reason code منتخب کرنا ہے۔
+  4. ثانوی ضروریات کی categories صرف اس وقت شامل کرنی ہیں جب وہ واقعی لاگو ہوں۔
+  5. domain_hint صرف اس وقت set کرنا ہے جب licensed domain handler واضح طور پر درکار ہو۔
+
+evaluation_steps: |
+  مرحلہ 1: اصل thought اور ASPDMA کی عارضی rationale پڑھیں۔
+  مرحلہ 2: شناخت کریں کہ کون سی انسانی ضرورت / انسانی حقوق کی bucket سب سے براہ راست متاثر ہے۔
+  مرحلہ 3: وہ operational reason code منتخب کریں جو بہترین طور پر بتاتا ہو کہ نظام کیوں defer کر رہا ہے۔
+  مرحلہ 4: reason_summary کو مختصر، مخصوص، اور user-readable رکھیں۔
+  مرحلہ 5: ایک primary category کو ترجیح دیں۔ secondary categories صرف اس وقت شامل کریں جب معاملہ واقعی متعدد حقوق کو شامل کرتا ہو۔
+
+context_integration: |
+  === اصل THOUGHT ===
+  {original_thought_content}
+
+  === ASPDMA RATIONALE ===
+  {aspdma_reasoning}
+
+  === موجودہ DEFER REASON ===
+  {current_reason}
+
+  === موجودہ DEFER CONTEXT ===
+  {current_context}
+
+  === موجودہ DEFER UNTIL ===
+  {current_defer_until}
+
+  === موجودہ DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === LICENSED DOMAIN OPTIONS ===
+  ان میں سے کوئی ایک صرف اس وقت استعمال کریں جب واضح طور پر درکار ہو: {domain_hint_options}
+
+response_format: |
+  ان fields کے ساتھ ایک FLAT JSON object واپس کریں:
+  - "reason_summary": انسان کے لیے قابل فہم مختصر وضاحت
+  - "operational_reason": اوپر دیے گئے operational reason codes میں سے ایک
+  - "primary_need_category": اوپر دی گئی rights / needs taxonomy values میں سے ایک
+  - "secondary_need_categories": اضافی taxonomy values کی optional list
+  - "rights_basis": مختصر rights-basis labels کی list
+  - "domain_hint": جب specialized licensed handler واضح طور پر درکار ہو تو optional licensed domain enum
+  - "defer_until": اگر timing تبدیل ہونی چاہیے تو optional ISO timestamp override
+
+  مثال:
+  {{"reason_summary": "طریقہ کار سے متعلق رہنمائی دینے سے پہلے licensed قانونی review درکار ہے۔", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  زبان کے اصول:
+  - صارف کی ترجیحی زبان میں جواب دیں۔
+  - JSON keys اور enum values لازماً بالکل انگریزی میں رہیں جیسا کہ specified ہے۔
+  - صرف human-readable free text جیسے reason_summary کو localize کریں۔
+
+closing_reminder: |
+  اہم:
+  - DEFER سے کسی اور action کی طرف نہ جائیں۔
+  - domain_hint نہ گھڑیں جب تک licensed handling واقعی implied نہ ہو۔
+  - قانونی اور مالی access کو generic administrative issue نہیں، بلکہ rights-impacting needs سمجھا جائے۔
+  - سب سے واضح rights basis کے ساتھ سب سے narrow accurate category کو ترجیح دیں۔

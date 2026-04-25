@@ -98,11 +98,32 @@ class BalanceMonitor:
         logger.info(f"Starting BalanceMonitor for {self.provider_id}")
         self._running = True
 
-        # Do initial poll immediately
-        await self._poll_once()
+        # Do initial poll immediately, but do not let provider or network latency wedge startup.
+        initial_poll_timeout = min(5.0, self._poll_interval)
+        logger.info(
+            "BalanceMonitor %s performing initial poll with timeout %.1fs",
+            self.provider_id,
+            initial_poll_timeout,
+        )
+        try:
+            await asyncio.wait_for(self._poll_once(), timeout=initial_poll_timeout)
+            logger.info("BalanceMonitor %s initial poll completed", self.provider_id)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "BalanceMonitor %s initial poll timed out after %.1fs; background polling will continue",
+                self.provider_id,
+                initial_poll_timeout,
+            )
+        except Exception as exc:
+            logger.warning(
+                "BalanceMonitor %s initial poll failed during startup: %s; background polling will continue",
+                self.provider_id,
+                exc,
+            )
 
         # Start background polling
         self._poll_task = asyncio.create_task(self._poll_loop())
+        logger.info("BalanceMonitor %s background polling started", self.provider_id)
 
     async def stop(self) -> None:
         """Stop the balance polling loop."""

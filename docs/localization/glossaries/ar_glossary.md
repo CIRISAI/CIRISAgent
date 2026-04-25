@@ -147,6 +147,21 @@ This glossary defines the canonical translations for key CIRIS terms in Arabic. 
 - Ensure proper diacritical mark handling when needed
 - Consider letter connecting forms (initial, medial, final, isolated)
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | اختيار الإجراء الخاص بالإحالة | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | تصنيف الحقوق / الاحتياجات | Taxonomy section heading |
+| Rights basis | أساس الحقوق | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | رموز سبب الإحالة التشغيلية | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

@@ -15,15 +15,15 @@ evaluation_steps: |
   7. **現実の持続性チェック**: オブジェクト、人、または条件が説明や原因なしに単に消え、現れ、または変化しますか?実世界では、識別可能な力によって作用されない限り、物事は持続します。オブジェクトはランダムに消失せず、人々は輸送なしにテレポートせず、条件は基礎的なメカニズムなしに変化しません。説明のない消失、出現、または状態変化を仮定する思考に"Reality_Persistence_Violation"のフラグを立ててください。
   8. **緊急性対策評価**: 思考には注意深い考慮をバイパスする可能性のある緊急性マーカーが含まれていますか?以下を探してください: 時間的圧力語("immediately"、"urgent"、"ASAP"、"emergency"、"now"、"quickly")、性急な行動を示唆するコマンド、または熟考を妨げる言語。**ACCORD原則**: 緊急の決定はしばしば倫理的考慮をバイパスします - すぐに行動するのではなく、Wise Authorityのガイダンスにエスカレートすべき緊急性パターンを示す思考にフラグを立ててください。WAの監視から利益を得る可能性のある重要な緊急性マーカーが見つかった場合は、"Urgency_Detected_Escalation_Recommended"でフラグを立ててください。
   9. **時間的/因果推論チェック**: 正当化、言い訳、推論チェーンに厳密な論理分析を適用する:
-     - **論理的接続の検証**: 正当化は実際に行動に接続していますか?例: "私は歯を磨いた"は"顔を洗う"をスキップすることを論理的に正当化しません - これらは無関係な活動です。有効な正当化は、正当化される行動に対する因果関係または論理的関係を持つ必要があります。接続されていない正当化に"Non_Sequitur_Justification"でフラグを立ててください。
+     - **論理的接続の検証**: 正当化は実際に行動に接続していますか?例: "私は歯を磨いた"は"顔を洗う"をスキップすることを論理的に正当化しません - これらは無関係な活動です。有効な正当化は、正当化される行動に対する因果関係または論理的関係を持つ必要があります。接続されていない正当化に"Non_Sequitur_Reasoning"でフラグを立ててください。
      - **時間的関連性評価**: 最近の時間的状態はしばしば関連しています。例: "私は20分前に食べたばかりです"は、誰かが今食べ物を欲しがっているかどうかに直接関連しています - 時間的コンテキストを無関係として却下しないでください。最近の活動、最近の食事、最近の睡眠、最近の運動はすべて現在の状態と好みに影響を与えます。関連する時間的コンテキストを無視する思考に"Temporal_Relevance_Ignored"でフラグを立ててください。
      - **因果方向分析**: 因果関係が反転または逆であるかどうかを確認してください。例: "私たちは新しいジャムを持っている"はトーストを持つ理由(正の因果関係)であり、それをスキップする理由ではありません。新しい材料、新鮮な供給、または利用可能なリソースは通常、行動の理由であり、それに反対する理由ではありません。反転した因果関係に"Causal_Direction_Inverted"でフラグを立ててください。
-     - **弱い正当化の検出**: 正当化が十分な因果強度を持っているかどうかを評価してください。接線的に関連する事実は、真の理由と同じではありません。尋ねる: "この正当化は実際に結論を説明または引き起こしますか?"接続が歪んだ論理、欠落したステップ、または述べられていない仮定を必要とする場合は、"Weak_Justification_Insufficient_Causation"でフラグを立ててください。
+     - **弱い正当化の検出**: 正当化が十分な因果強度を持っているかどうかを評価してください。接線的に関連する事実は、真の理由と同じではありません。尋ねる: "この正当化は実際に結論を説明または引き起こしますか?"接続が歪んだ論理、欠落したステップ、または述べられていない仮定を必要とする場合は、"Weak_Reasoning_Insufficient_Causation"でフラグを立ててください。
 
 response_format: |
   あなたの応答は、提供されたスキーマに準拠する単一のJSONオブジェクトでなければならず、以下のキーを含む必要があります:
   - "plausibility_score": 0.0(高度に不可能)から1.0(高度に可能)の間のフロート。**このスコアは、実世界の物理的妥当性と記述された要素間の相互作用の即時で避けられない結果(熱いパンで溶ける氷など)を大きく考慮する必要があります。これらの要素に対する明示的で特定の理想化されたコンテキストが思考で提供されない限り。明白な物理がそのような明示的な理想化なしに無視される場合、低スコアを与えるべきです。**
-  - "flags": 特定の常識違反、物理的不可能性(特に無視された相互作用)、明確性の問題、現実の持続性違反、緊急性マーカー、または因果/時間的推論の問題を識別する文字列のリスト(例: "Physical_Implausibility_Ignored_Interaction"、"Atypical_Approach"、"Ambiguous_Statement"、"Needs_Clarification"、"Information_Missing"、"Requires_Explicit_Idealization_Statement"、"Potential_Trick_Question_Physics_Ignored"、"Reality_Persistence_Violation"、"Urgency_Detected_Escalation_Recommended"、"Non_Sequitur_Justification"、"Temporal_Relevance_Ignored"、"Causal_Direction_Inverted"、"Weak_Justification_Insufficient_Causation")。何もない場合は、空のリストを提供してください。このフィールドは必須です(空でも)。
+  - "flags": 特定の常識違反、物理的不可能性(特に無視された相互作用)、明確性の問題、現実の持続性違反、緊急性マーカー、または因果/時間的推論の問題を識別する文字列のリスト(例: "Physical_Implausibility_Ignored_Interaction"、"Atypical_Approach"、"Ambiguous_Statement"、"Needs_Clarification"、"Information_Missing"、"Requires_Explicit_Idealization_Statement"、"Potential_Trick_Question_Physics_Ignored"、"Reality_Persistence_Violation"、"Urgency_Detected_Escalation_Recommended"、"Non_Sequitur_Reasoning"、"Temporal_Relevance_Ignored"、"Causal_Direction_Inverted"、"Weak_Reasoning_Insufficient_Causation")。何もない場合は、空のリストを提供してください。このフィールドは必須です(空でも)。
   - "reasoning": あなたのスコアとフラグの簡単な(1-2文)説明。このフィールドは必須です。
 
   言語ルール:

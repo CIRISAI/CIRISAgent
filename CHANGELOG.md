@@ -5,6 +5,49 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-04-23
+
+### Added
+
+- **Full 29-language pipeline localization** - the complete ethical reasoning chain (DMAs, consciences, handler follow-ups, ACCORD/guides, DSASPDMA taxonomy + glossaries) now operates in the user's preferred language rather than English-with-translation. Language is resolved per thought from `context.system_snapshot.user_profiles[0].preferred_language`, with a per-language loader cache so no shared global state is mutated. Covers ~95% of the world population by language need, not market size.
+- **LLM bus FIFO + dual-replica load balancing** - the LLM bus now maintains a per-service FIFO concurrency gate and tracks in-flight requests for `LEAST_LOADED` replica selection. Set `CIRIS_LLM_REPLICAS=2` to run dual-registered providers; the bus prefers the least-loaded sibling before falling through to the secondary priority.
+- **Round-1 grant baseline workflow** - reproducible measurement pipeline for service taxonomy + endpoint inventory snapshots (`GRANT_EVIDENCE_REFRESH.md`).
+
+### Changed
+
+- **Entropy conscience recalibrated** so it no longer blocks substantive multilingual content for non-English languages (previously fired on normal Amharic/Arabic/Chinese responses due to English-biased thresholds).
+- **ASPDMA deferral guidance tightened** - `action_instruction_generator.py` now distinguishes personal medical/legal/financial ADVICE (defer) from EDUCATIONAL discussion of those concepts (answer directly). Also explicitly disallows pre-deferral on historically or politically sensitive questions; the conscience layer already handles propaganda guards.
+- **DEFER notification fires on any channel**, not just `api_*`, so synchronous `interact()` callers get a notification instead of hanging on an unanswered SPEAK until timeout. User-facing text intentionally omits the deferral reason - that stays for WA review only.
+- **Handler credit-attach warnings downgraded and deduplicated** - `[CREDIT_ATTACH]` missing-provider / missing-resource-monitor messages no longer fire at CRITICAL per message. They now fire once per reason per server lifetime at WARNING, removing the 1000-line noise from mock-mode benchmark runs.
+- **Apple native auth token verification hardened** - full cryptographic verification via Apple JWKS (RS256 + audience + issuer + required claims) with JWKS caching and graceful timeout fallback to cached keys.
+
+### Fixed
+
+- **Trace signing canonicalization** - signed payloads no longer include `trace_schema_version` (that field stays in the envelope), eliminating verification mismatches between the agent's signed digest and CIRISLens's canonical JSON reconstruction.
+- **Benchmark subprocess reaping** - `tools/memory_benchmark.py` and `tools/introspect_memory.py` now always terminate the child agent process on any early-exit path, with fallback to SIGKILL after grace period.
+- **CI memory benchmark unblocked** - workflow now installs the CIRISVerify runtime deps (`libtss2-esys0` + `libtss2-tctildr0` + `libtss2-mu0`, with a fallback chain for Ubuntu 24.04 t64 renames) and pins `CIRIS_DISABLE_TASK_APPEND=1` + `CIRIS_API_RATE_LIMIT_PER_MINUTE=600` at the workflow env level so the 100/1000-message benchmarks can complete on `ubuntu-latest`. Once the libtss2-* deps resolve at dlopen time, CIRISVerify's Rust factory degrades cleanly to software-only signing if no TPM is present; the deploy/CI environment just needs the libs installed. `scripts/install.sh` updated to match.
+- **Streaming verification schema allowlist** synced with the current `IDMAResult` schema - recent fragility-model fields (`collapse_margin`, `collapse_rate`, `rho_mean`, etc.) are now accepted by the H3ERE reasoning-event stream test.
+- **Test harness env-isolation** - autouse conftest fixture pins `CIRIS_PREFERRED_LANGUAGE=en` and clears `CIRIS_LLM_REPLICAS` via monkeypatch for every test, so raw `os.environ[...]` mutations in any test are rolled back at teardown and can't leak between xdist workers.
+- **Pytest collection baseline parsing** hardened against malformed or partial baselines.
+- **Wallet audit log sanitization** (SonarCloud S5145) - user-supplied addresses are validated as `0x` + 40 hex before being logged; non-conforming values render as `<invalid-address>` to prevent CR/LF log injection.
+
+## [2.6.9] - 2026-04-22
+
+### Fixed
+
+- **Desktop Startup Polling** - CLI now waits on `/v1/system/startup-status` before launching the desktop app
+  - Uses `api_status == "server_ready"` so first-run onboarding does not false-time out
+  - Reports startup phase and `services_online/services_total` progress while booting
+  - Fails fast if the backend exits during polling instead of waiting for the full timeout
+
+## [2.6.8] - 2026-04-22
+
+### Fixed
+
+- **Desktop Startup Race Condition** - CLI waits for backend health before opening the desktop app
+  - Prevents the desktop app from trying to start a second backend on the same port
+  - Moves the health-wait path inside `try/finally` so Ctrl+C cleans up the backend subprocess
+
 ## [2.6.7] - 2026-04-22
 
 ### Fixed

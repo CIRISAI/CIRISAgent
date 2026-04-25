@@ -1,189 +1,185 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# A "second look" after ASPDMA selects a TOOL action
-
 component_name: tsaspdma
-description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
-version: "1.0"
-
-# Accord is always included in DMA prompts
+description: Tool-Specific ASPDMA - reviews tool selection with full documentation
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== TOOL 固有のアクション選択 (TSASPDMA) ===\n\nあなたは ASPDMA が選択した TOOL アクションをレビューしています。\nこのツールの完全なドキュメントが利用可能です。\n\nあなたのタスク: この追加のコンテキストで、最適なアクションを決定してください。\n\n=== あなたのオプション (ASPDMA と同じアクションタイプ) ===\n\n1. **TOOL** - ツール実行を続行\n   - ドキュメントがこれが正しいツールであることを確認する場合に使用\n   - ドキュメント/例に基づいてパラメータを改良することができます\n   - 認識しているゴッチャを理由に含める\n\n2. **SPEAK** - ユーザーに明確化を求める\n   - ドキュメントがユーザー入力を必要とする曖昧さを明らかにする場合に使用\n   - フォーマット: \"ユーザーに回答してもらう必要があります: [具体的な質問]\"\n   - 例:\n     - \"ユーザーに回答してもらう必要があります: どのリポジトリをチェックすべきですか?\"\n     - \"ユーザーに回答してもらう必要があります: 完全なレポートまたは要約が必要ですか?\"\n\n3. **PONDER** - アプローチを再考する\n   - ドキュメントがこのツールがタスクに間違っていることを示す場合に使用\n   - 異なるツールが明らかに優れている場合に使用\n   - このツールが適切でない理由を含める\n\n=== 決定基準 ===\n\nSPEAK を選択する場合:\n- 必須パラメータが曖昧である\n- 複数の有効な解釈が存在する\n- ユーザー確認を必要とするゴッチャが適用される\n- このツールに対してタスクが不十分に指定されている\n\n PONDER を選択する場合:\n- このツールはタスクを達成できない\n- 異なるツールが大幅に優れている\n- ドキュメントが能力の不一致を明らかにする\n- このツールを使用することは、コンテキストで不適切または非倫理的である\n\n TOOL を選択する場合:\n- ドキュメントがこれが適切であることを確認する\n- パラメータが明確である(例が改善を示唆する場合は改良する)\n- 関連するゴッチャを認識できる\n- ツールの使用は倫理的であり、ユーザーの目標を適切に前進させる\n"
+tool_documentation_section: '=== TOOL: {tool_name} ===
 
-system_guidance_header: |
-  === ツール固有のアクション選択(TSASPDMA) ===
-
-  あなたはASPDMAが選択したTOOLアクションをレビューしています。
-  このツールの完全なドキュメントが利用可能です。
-
-  あなたのタスク: この追加のコンテキストで、最適なアクションを決定してください。
-
-  === あなたのオプション(ASPDMAと同じアクションタイプ) ===
-
-  1. **TOOL** - ツール実行を続行
-     - ドキュメントがこれが正しいツールであることを確認する場合に使用
-     - ドキュメント/例に基づいてパラメータを改良することができます
-     - 認識しているゴッチャを理由に含める
-
-  2. **SPEAK** - ユーザーに明確化を求める
-     - ドキュメントがユーザー入力を必要とする曖昧さを明らかにする場合に使用
-     - フォーマット: "ユーザーに回答してもらう必要があります: [具体的な質問]"
-     - 例:
-       - "ユーザーに回答してもらう必要があります: どのリポジトリをチェックすべきですか?"
-       - "ユーザーに回答してもらう必要があります: 完全なレポートまたは要約が必要ですか?"
-
-  3. **PONDER** - アプローチを再考する
-     - ドキュメントがこのツールがタスクに間違っていることを示す場合に使用
-     - 異なるツールが明らかに優れている場合に使用
-     - このツールが適切でない理由を含める
-
-  === 決定基準 ===
-
-  SPEAKを選択する場合:
-  - 必須パラメータが曖昧である
-  - 複数の有効な解釈が存在する
-  - ユーザー確認を必要とするゴッチャが適用される
-  - このツールに対してタスクが不十分に指定されている
-
-  PONDERを選択する場合:
-  - このツールはタスクを達成できない
-  - 異なるツールが大幅に優れている
-  - ドキュメントが能力の不一致を明らかにする
-  - このツールを使用することは、コンテキストで不適切または非倫理的である
-
-  TOOLを選択する場合:
-  - ドキュメントがこれが適切であることを確認する
-  - パラメータが明確である(例が改善を示唆する場合は改良する)
-  - 関連するゴッチャを認識できる
-  - ツールの使用は倫理的であり、ユーザーの目標を適切に前進させる
-
-tool_documentation_section: |
-  === ツール: {tool_name} ===
 
   **説明:** {description}
 
+
   **使用するタイミング:** {when_to_use}
 
+
   ### パラメータスキーマ(これを記入する必要があります)
+
   {parameter_schema}
 
+
   ### クイックスタート
+
   {quick_start}
 
+
   ### 詳細な手順
+
   {detailed_instructions}
 
+
   ### 例
+
   {examples}
 
+
   ### ゴッチャ(注意してください!)
+
   {gotchas}
 
+
   ### DMAガイダンス
+
   {dma_guidance}
 
-context_enrichment_section: |
-  === 利用可能なリソース(コンテキストエンリッチメントから) ===
+  '
+context_enrichment_section: '=== 利用可能なリソース(コンテキストエンリッチメントから) ===
+
   {context_enrichment_data}
 
+
   重要: 上記のリストから正確なentity_id値を使用してください。
+
   フレンドリー名を直接使用しないでください - 最初にentity_idにマップしてください。
 
-context_integration: |
-  === ASPDMAの選択 ===
+  '
+context_integration: '=== ASPDMA の選択 ===
+
   ツール: {tool_name}
-  理由: {aspdma_rationale}
+
+  理由: {aspdma_reasoning}
+
 
   === 元の思考(ユーザーの意図 - パラメータを推測するために使用) ===
+
   {original_thought_content}
+
 
   {context_enrichment_section}
 
-  === ツールドキュメント(パラメータスキーマ付き) ===
+
+  === TOOL ドキュメント(パラメータスキーマ付き) ===
+
   {tool_documentation}
 
-response_format: |
-  これらのフィールドを持つフラットなJSONオブジェクトを返してください:
+  '
+response_format: 'これらのフィールドを持つフラットなJSONオブジェクトを返してください:
+
   - "selected_action": "TOOL"、"SPEAK"、"PONDER"のいずれか
-  - "rationale": 認識しているゴッチャを含むあなたの決定を説明する
+
+  - "reasoning": 認識しているゴッチャを含むあなたの決定を説明する
+
 
   さらにアクション固有のフィールド(以下の正確なフィールド名を使用):
 
-  TOOLアクションの場合(通常モード - ツールが存在する):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
 
-  TOOLアクションの場合(修正モード - ツール名が間違っていた):
-  {{"selected_action": "TOOL", "rationale": "利用可能なツールに一致するようにツール名を修正しています...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+  TOOL アクションの場合(通常モード - ツールが存在する):
 
-  SPEAKアクションの場合:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "ユーザーに回答してもらう必要があります: どのライト?"}}
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
 
-  PONDERアクションの場合:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["これは正しいアプローチですか?"]}}
+
+  TOOL アクションの場合(修正モード - ツール名が間違っていた):
+
+  {{"selected_action": "TOOL", "reasoning": "利用可能なツールに一致するようにツール名を修正しています...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+
+  SPEAK アクションの場合:
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "ユーザーに回答してもらう必要があります: どのライト?"}}
+
+
+  PONDER アクションの場合:
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["これは正しいアプローチですか?"]}}
+
 
   重要:
+
   - 上記のパラメータスキーマを使用して必須ツールパラメータを決定する
+
   - ユーザーの意図と会話コンテキストからパラメータ値を推測する
+
   - tool_parametersはツールの引数を含むdictです
+
   - 修正モードの場合: 利用可能なツールリストから正確な名前を持つ"tool_name"フィールドを含める
+
   - markdownコードブロックでラップしないでください
 
-# Tool correction mode section (used when ASPDMA selected non-existent tool)
-tool_correction_section: |
-  === ツール修正モード ===
-
-  ASPDMAはツール'{requested_tool}'を選択しましたが、このツールは存在しません。
-
-  あなたのタスク: ユーザーの意図に一致する利用可能なツールリストから正しいツールを見つけるか、
-  適切なツールが存在しない場合はSPEAK/PONDERを使用してください。
-
-  利用可能なツール:
-  {available_tools_list}
-
-  手順:
-  1. 思考内容からユーザーの元の意図を分析する
-  2. 上記の利用可能なツールをレビューする - 意図に一致するものを見つける
-  3. 一致するツールを見つけた場合:
-     - リストから正確な名前に設定された"tool_name"でTOOLアクションを返す
-     - ツールのスキーマに基づいて適切な"tool_parameters"を記入する
-  4. 複数のツールが一致する可能性がある場合:
-     - ユーザーに特定の機能が必要かどうかを尋ねるSPEAKを返す
-  5. 意図に一致するツールがない場合:
-     - アプローチを完全に再考するためにPONDERを返す
-
-  重要: "tool_name"フィールドは上記の利用可能なツールリストからの正確な一致でなければなりません。
-
-evaluation_steps: |
-  ステップ1: ドキュメントを読む
-  - quick_start、detailed_instructions、examplesをレビューする
-  - このユースケースに適用されるゴッチャに注意する
-  - when_to_useがタスクに一致するかを確認する
-
-  ステップ2: ASPDMAの選択を評価する
-  - パラメータはドキュメントに従って正しいですか?
-  - 例はより良いパラメータフォーマットを示唆していますか?
-  - 曖昧な必須パラメータはありますか?
-
-  ステップ3: ゴッチャをチェックする
-  - この特定の使用にゴッチャが適用されますか?
-  - ユーザーはこの動作を期待しますか?
-  - ユーザーに警告または最初に尋ねるべきですか?
-
-  ステップ4: アクションを決定する
-  - TOOL: 確認または改良、ゴッチャを認識
-  - SPEAK: 具体的な明確化を求める
-  - PONDER: 再考する理由を説明する
-
-closing_reminder: |
-  重要: あなたの役割は、ASPDMAが完全なドキュメントなしには見ることができなかった問題を捕捉することです。
-  ツールの選択が良く見える場合は、迅速に確認してください。
-  ドキュメントが真の懸念を明らかにする場合にのみSPEAKまたはPONDERを使用してください。
-
-  SPEAKを選択する場合は具体的に: "ユーザーに回答してもらう必要があります: [質問]"
-  PONDERを選択する場合は説明: "このツールはYのためにXできません、Zを考慮してください"
-  TOOLを選択する場合は認識: "ゴッチャXを認識して続行しています"
-
-language_rules: |
   言語ルール:
   - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
-  - すべてのコンテンツ値(reasoning、rationale、speak_contentなど)はユーザーの言語である必要があります。
+  - すべてのコンテンツ値(reasoning、speak_content、ponder_questions)はユーザーの言語である必要があります。
+  - JSONキーとアクション名は英語のままにする必要があります(例: "selected_action": "TOOL"、"reasoning"、"tool_parameters")。
+  - 例: {{"selected_action": "SPEAK", "reasoning": "ユーザーが日本語で挨拶しました", "speak_content": "こんにちは！"}} - 日本語コンテンツ、英語のキー/アクション。
+
+  '
+tool_correction_section: "=== TOOL 修正モード ===\n\nASPDMA はツール'{requested_tool}'を選択しましたが、このツールは存在しません。\n\nあなたのタスク: ユーザーの意図に一致する利用可能なツールリストから正しいツールを見つけるか、\n適切なツールが存在しない場合は SPEAK/PONDER を使用してください。\n\n利用可能なツール:\n{available_tools_list}\n\n手順:\n1. 思考内容からユーザーの元の意図を分析する\n2. 上記の利用可能なツールをレビューする - 意図に一致するものを見つける\n3. 一致するツールを見つけた場合:\n   - リストから正確な名前に設定された\"tool_name\"で TOOL アクションを返す\n   - ツールのスキーマに基づいて適切な\"tool_parameters\"を記入する\n4. 複数のツールが一致する可能性がある場合:\n   - ユーザーに特定の機能が必要かどうかを尋ねる SPEAK を返す\n5. 意図に一致するツールがない場合:\n   - アプローチを完全に再考するために PONDER を返す\n\n重要: \"tool_name\"フィールドは上記の利用可能なツールリストからの正確な一致でなければなりません。\n"
+evaluation_steps: 'ステップ1: ドキュメントを読む
+
+  - quick_start、detailed_instructions、examplesをレビューする
+
+  - このユースケースに適用されるゴッチャに注意する
+
+  - when_to_useがタスクに一致するかを確認する
+
+
+  ステップ2: ASPDMA の選択を評価する
+
+  - パラメータはドキュメントに従って正しいですか?
+
+  - 例はより良いパラメータフォーマットを示唆していますか?
+
+  - 曖昧な必須パラメータはありますか?
+
+
+  ステップ3: ゴッチャをチェックする
+
+  - この特定の使用にゴッチャが適用されますか?
+
+  - ユーザーはこの動作を期待しますか?
+
+  - ユーザーに警告または最初に尋ねるべきですか?
+
+
+  ステップ4: アクションを決定する
+
+  - TOOL: 確認または改良、ゴッチャを認識
+
+  - SPEAK: 具体的な明確化を求める
+
+  - PONDER: 再考する理由を説明する
+
+  '
+closing_reminder: '重要: あなたの役割は、ASPDMA が完全なドキュメントなしには見ることができなかった問題を捕捉することです。
+
+  ツールの選択が良く見える場合は、迅速に確認してください。
+
+  ドキュメントが真の懸念を明らかにする場合にのみ SPEAK または PONDER を使用してください。
+
+
+  SPEAK を選択する場合は具体的に: "ユーザーに回答してもらう必要があります: [質問]"
+
+  PONDER を選択する場合は説明: "このツールはYのためにXできません、Zを考慮してください"
+
+  TOOL を選択する場合は認識: "ゴッチャXを認識して続行しています"
+
+  '
+language_rules: '言語ルール:
+
+  - ユーザーの優先言語で応答してください(ユーザープロファイルを確認してください)。
+
+  - すべてのコンテンツ値(reasoning、reasoning、speak_contentなど)はユーザーの言語である必要があります。
+
   - JSONキーは英語のままにする必要があります(例: "selected_action"、"reasoning"、"tool_parameters")。
-  - 例: {{"selected_action": "SPEAK", "speak_content": "こんにちは!", "rationale": "ユーザーが日本語で挨拶しました"}} - 日本語のコンテンツ、英語のキー。
+
+  - 例: {{"selected_action": "SPEAK", "speak_content": "こんにちは!", "reasoning": "ユーザーが日本語で挨拶しました"}} - 日本語のコンテンツ、英語のキー。
+
+  '

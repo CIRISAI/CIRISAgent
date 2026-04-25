@@ -15,7 +15,7 @@ Localization is not translation. It is extending ethical agency across linguisti
 - **29 languages**: am, ar, bn, de, en, es, fa, fr, ha, hi, id, it, ja, ko, mr, my, pa, pt, ru, sw, ta, te, th, tr, uk, ur, vi, yo, zh
 - **Gross coverage**: ~72% of world population (deduplicated)
 - **Need-adjusted coverage**: ~95%
-- **All 28 languages complete**: glossary, JSON, DMA prompts (ACCORD and guide for Tier 1-2)
+- **All 29 languages complete**: glossary, JSON, DMA prompts (ACCORD and guide for Tier 1-2)
 
 ## What "Complete" Means
 

@@ -73,6 +73,8 @@ Available modules:
   single_step_comprehensive - Complete 17-phase ACCORD single-step validation
   accord        - Accord invocation system (kill switch) tests
   accord_metrics - Accord metrics trace capture and signing
+  homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
+  deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
   cirisnode       - CIRISNode integration (deferral routing, trace forwarding)
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)
@@ -214,6 +216,33 @@ Available modules:
         type=int,
         default=4,
         help="Number of concurrent channels for memory_benchmark parallel testing (default: 4)",
+    )
+    parser.add_argument(
+        "--model-eval-languages",
+        default="am,zh,en,es",
+        help="Comma-separated language codes for multilingual model_eval (default: en; use e.g. am,zh,en,es for multilingual runs)",
+    )
+    parser.add_argument(
+        "--model-eval-concurrency",
+        type=int,
+        default=6,
+        help="Maximum simultaneous in-flight model_eval interactions (default: 6)",
+    )
+    parser.add_argument(
+        "--no-model-eval-memory-profile",
+        action="store_true",
+        help="Disable memory profiling during model_eval",
+    )
+    parser.add_argument(
+        "--model-eval-questions",
+        default="",
+        help=(
+            "Comma-separated EvalQuestion categories to include (case-insensitive). "
+            "Empty = all curated questions. "
+            "Examples: 'RLHFTradeoffs' (one bias axis), "
+            "'BenchmarkLegitimacy,ArchitectureTradeoffs' (two topics), "
+            "'CorporateSustainability' (geopolitical/corporate bias)."
+        ),
     )
 
     # Output configuration
@@ -439,6 +468,13 @@ def main():
         # Memory benchmark configuration
         message_count=args.message_count,
         concurrent_channels=args.concurrent_channels,
+        # Model eval configuration
+        model_eval_languages=[lang.strip() for lang in args.model_eval_languages.split(",") if lang.strip()],
+        model_eval_concurrency=args.model_eval_concurrency,
+        model_eval_profile_memory=not args.no_model_eval_memory_profile,
+        model_eval_question_categories=[
+            cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()
+        ],
     )
 
     # Create and run runner

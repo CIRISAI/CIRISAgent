@@ -311,12 +311,29 @@ class CIRISVerify:
 
         # Also check relative to this module
         module_dir = Path(__file__).parent
-        for suffix in [".so", ".dylib", ".dll"]:
+        for suffix in self._get_platform_binary_suffixes(system):
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate
 
         raise BinaryNotFoundError(f"Searched: {paths}")
+
+    @staticmethod
+    def _get_platform_binary_suffixes(system: str) -> list[str]:
+        """Return library suffixes in platform-preferred order."""
+        preferred_suffixes = {
+            "Linux": ".so",
+            "Darwin": ".dylib",
+            "Windows": ".dll",
+        }
+        ordered_suffixes: list[str] = []
+        preferred = preferred_suffixes.get(system)
+        if preferred is not None:
+            ordered_suffixes.append(preferred)
+        for suffix in [".so", ".dylib", ".dll"]:
+            if suffix not in ordered_suffixes:
+                ordered_suffixes.append(suffix)
+        return ordered_suffixes
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""

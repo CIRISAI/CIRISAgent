@@ -990,7 +990,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         service_name = "local_primary" if is_local_provider else "ciris_primary"
 
-        # Create and start service
+        # Optional: register the same OpenAI-compatible endpoint N times so the
+        # LLM bus can load-balance across independently-gated replicas. Each
+        # replica gets its own in-flight semaphore and circuit breaker — useful
+        # for tuning: halve CIRIS_LLM_MAX_CONCURRENT and double CIRIS_LLM_REPLICAS
+        # to test bus distribution under the same aggregate load.
+        try:
+            replica_count = max(1, int(os.environ.get("CIRIS_LLM_REPLICAS", "1")))
+        except (TypeError, ValueError):
+            replica_count = 1
+
+        # Create and start primary service
         openai_service = OpenAICompatibleClient(
             config=llm_config,
             telemetry_service=self.telemetry_service,
@@ -999,7 +1009,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await openai_service.start()
 
-        # Register service
+        # Register primary
         if self.service_registry:
             self.service_registry.register_service(
                 service_type=ServiceType.LLM,
@@ -1007,6 +1017,39 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
                 metadata={"provider": provider.value, "model": llm_config.model_name, "is_local": is_local_provider},
+            )
+
+        # Register additional replicas (same config, distinct service_name)
+        self._llm_replica_services: List[Any] = []
+        for i in range(2, replica_count + 1):
+            replica_name = f"{service_name}_{i}"
+            replica_service = OpenAICompatibleClient(
+                config=llm_config,
+                telemetry_service=self.telemetry_service,
+                time_service=self.time_service,
+                service_name=replica_name,
+            )
+            await replica_service.start()
+            if self.service_registry:
+                self.service_registry.register_service(
+                    service_type=ServiceType.LLM,
+                    provider=replica_service,
+                    priority=Priority.HIGH,
+                    capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                    metadata={
+                        "provider": provider.value,
+                        "model": llm_config.model_name,
+                        "is_local": is_local_provider,
+                        "replica_of": service_name,
+                    },
+                )
+            self._llm_replica_services.append(replica_service)
+            logger.info(f"[LLM-REPLICA] Registered {replica_name} (replica #{i} of {service_name})")
+
+        if replica_count > 1:
+            logger.info(
+                f"[LLM-REPLICA] {replica_count} replicas registered at HIGH priority — "
+                f"bus will load-balance across them (each with own semaphore/circuit-breaker)"
             )
 
         # Store reference

@@ -337,47 +337,94 @@ def get_preferred_language() -> str:
     return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
 
 
+def _str_lang(obj: Any, attr: str) -> Optional[str]:
+    """Read attr off obj only if it's a non-empty string.
+
+    Mock objects return a MagicMock for any attribute access, so guarding
+    against non-strings is required for tests that don't pre-stub attrs.
+    """
+    val = getattr(obj, attr, None)
+    return val.strip() if isinstance(val, str) and val.strip() else None
+
+
+def _lang_from_obj_or_inner_context(obj: Any) -> Optional[str]:
+    """Try `obj.preferred_language`, then `obj.context.preferred_language`."""
+    if obj is None:
+        return None
+    lang = _str_lang(obj, "preferred_language")
+    if lang:
+        return lang
+    inner_ctx = getattr(obj, "context", None)
+    if inner_ctx is not None:
+        return _str_lang(inner_ctx, "preferred_language")
+    return None
+
+
+def _lang_from_thought_or_task(context: Any) -> Optional[str]:
+    """Layer 1: task/thought-specific preferred_language.
+
+    Checks context.thought (and its inner context), then context.task /
+    context.current_task (and its inner context), in that order.
+    """
+    thought_lang = _lang_from_obj_or_inner_context(getattr(context, "thought", None))
+    if thought_lang:
+        return thought_lang
+    task = getattr(context, "task", None) or getattr(context, "current_task", None)
+    return _lang_from_obj_or_inner_context(task)
+
+
+def _lang_from_user_profiles(context: Any) -> Optional[str]:
+    """Layer 2: first matching user profile's preferred_language (or
+    legacy `language` alias). Looks under `context.system_snapshot` first,
+    then treats `context` itself as the snapshot."""
+    snapshot = getattr(context, "system_snapshot", None) or context
+    user_profiles = getattr(snapshot, "user_profiles", None)
+    if not isinstance(user_profiles, list):
+        return None
+    for profile in user_profiles:
+        lang = _str_lang(profile, "preferred_language") or _str_lang(profile, "language")
+        if lang:
+            return lang
+    return None
+
+
 def get_user_language_from_context(context: Any) -> str:
-    """Extract user's preferred language from processing context/snapshot.
+    """Resolve the agent's working language for THIS thought.
 
-    Looks for preferred_language in:
-    1. context.system_snapshot.user_profiles[0].preferred_language
-    2. context.system_snapshot.user_profiles[0].language
-    3. Falls back to get_preferred_language() (env var or 'en')
+    Walks the canonical localization chain in priority order:
+      1. Task / thought specific (set by the originating channel/adapter):
+         a. `context.thought.preferred_language`
+         b. `context.thought.context.preferred_language`
+         c. `context.task.preferred_language`
+         d. `context.task.context.preferred_language`
+      2. Channel / user preference: first matching
+         `system_snapshot.user_profiles[*].preferred_language`
+         (or `.language` legacy alias)
+      3. System setting: `CIRIS_PREFERRED_LANGUAGE` env var
+      4. English default
 
-    Args:
-        context: Processing context (ThoughtContext, BatchContext, or snapshot)
-
-    Returns:
-        Language code (e.g., 'en', 'am', 'es')
+    Adapters and the QA runner set the language at task/thought creation
+    time by populating the appropriate `preferred_language` field. This
+    helper does NOT do script-based language detection — language is an
+    explicit input, not something we infer from the bytes.
     """
     if context is None:
         logger.debug("get_user_language_from_context: context is None, using env fallback")
         return get_preferred_language()
 
     try:
-        # Try to get system_snapshot from context
-        snapshot = getattr(context, "system_snapshot", None)
-        if snapshot is None:
-            # Maybe context IS the snapshot
-            snapshot = context
+        lang = _lang_from_thought_or_task(context)
+        if lang:
+            logger.debug(f"get_user_language_from_context: thought/task lang='{lang}'")
+            return lang
 
-        # Get user_profiles from snapshot
-        user_profiles = getattr(snapshot, "user_profiles", None)
-        if user_profiles and len(user_profiles) > 0:
-            profile = user_profiles[0]
-            lang = getattr(profile, "preferred_language", None)
-            if lang:
-                logger.debug(f"get_user_language_from_context: Found user language '{lang}' from profile")
-                return str(lang)
-            # Try alternative field name
-            lang = getattr(profile, "language", None)
-            if lang:
-                logger.debug(f"get_user_language_from_context: Found user language '{lang}' from profile.language")
-                return str(lang)
+        lang = _lang_from_user_profiles(context)
+        if lang:
+            logger.debug(f"get_user_language_from_context: profile lang='{lang}'")
+            return lang
 
-        logger.debug("get_user_language_from_context: No user profile found, using env fallback")
+        logger.debug("get_user_language_from_context: no thought/task/profile signal — env fallback")
     except Exception as e:
-        logger.debug(f"get_user_language_from_context: Error extracting language: {e}")
+        logger.debug(f"get_user_language_from_context: error walking chain: {e}")
 
     return get_preferred_language()

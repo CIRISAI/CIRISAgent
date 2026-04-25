@@ -41,6 +41,7 @@ def create_task(
     parent_task_id: Optional[str] = None,
     context: Optional[TaskContext] = None,
     images: Optional[List[ImageContent]] = None,
+    preferred_language: Optional[str] = None,
 ) -> Task:
     """
     Create a Task with proper occurrence_id handling.
@@ -90,6 +91,7 @@ def create_task(
             correlation_id=correlation_id,
             parent_task_id=parent_task_id,
             agent_occurrence_id=agent_occurrence_id,
+            preferred_language=preferred_language,
         )
     else:
         # Verify existing context has correct occurrence_id
@@ -104,6 +106,7 @@ def create_task(
                 correlation_id=context.correlation_id,
                 parent_task_id=context.parent_task_id if hasattr(context, "parent_task_id") else parent_task_id,
                 agent_occurrence_id=agent_occurrence_id,  # Override with correct one
+                preferred_language=context.preferred_language or preferred_language,
             )
 
     task = Task(
@@ -291,6 +294,11 @@ def create_seed_thought_for_task(
     if task.context and hasattr(task.context, "correlation_id"):
         correlation_id = task.context.correlation_id
 
+    # Inherit preferred_language from task context (if set)
+    inherited_language: Optional[str] = None
+    if task.context and hasattr(task.context, "preferred_language"):
+        inherited_language = task.context.preferred_language
+
     # Build thought context from task context
     thought_context = ThoughtContext(
         task_id=task.task_id,
@@ -300,6 +308,7 @@ def create_seed_thought_for_task(
         parent_thought_id=None,
         correlation_id=correlation_id,
         agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
+        preferred_language=inherited_language,
     )
 
     return create_thought(
@@ -365,6 +374,8 @@ def create_follow_up_thought(
             if hasattr(parent_thought.context, "correlation_id")
             else str(uuid.uuid4())
         )
+        # Inherit preferred_language from the parent thought's context
+        parent_lang = getattr(parent_thought.context, "preferred_language", None)
         follow_up_context = ThoughtContext(
             task_id=parent_thought.source_task_id,
             channel_id=parent_thought.channel_id,
@@ -373,6 +384,7 @@ def create_follow_up_thought(
             parent_thought_id=parent_thought.thought_id,
             correlation_id=correlation_id,
             agent_occurrence_id=parent_thought.agent_occurrence_id,  # Inherit from parent
+            preferred_language=parent_lang,
         )
 
     # Extract correlation_id from parent

@@ -56,9 +56,52 @@ MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
 # Simple result models for LLM structured outputs
 class EntropyResult(BaseModel):
-    """Simple entropy result from LLM"""
+    """Semantic-entropy result from a single LLM call.
 
-    entropy: float = Field(ge=0.0, le=1.0)
+    IRIS-E now performs in-prompt self-resampling rather than judging surface
+    disorder. The LLM is asked to first enumerate three semantically different
+    directions a thoughtful CIRIS agent could have gone on this task, THEN
+    compare the actual response against that alternative space. The `entropy`
+    score reflects meaning-space diversity, not token-level chaos:
+
+      - 0.0 → the three alternatives converge to the same meaning as the
+              actual response (anchored, one right answer, low confabulation
+              risk).
+      - 1.0 → the three alternatives diverge widely from each other AND from
+              the actual response (unanchored, many equally plausible
+              answers, high confabulation risk) OR the actual response is
+              an outlier relative to a tight cluster (sycophantic drift,
+              attractor capture).
+
+    The alternatives are retained on the structured result so they flow into
+    traces and become inspectable evidence for the IRIS-E decision. Defaults
+    keep existing tests and older streaming consumers working during rollout.
+    """
+
+    alternative_meanings: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Up to three semantically-distinct alternative responses the "
+            "agent could have produced. NOT paraphrases — genuinely different "
+            "angles, conclusions, or framings. 1-2 sentences each."
+        ),
+    )
+    actual_is_representative: bool = Field(
+        default=True,
+        description=(
+            "Whether the actual response sits inside the meaning cluster "
+            "formed by the alternatives. False indicates outlier / "
+            "attractor-capture / sycophantic-drift risk."
+        ),
+    )
+    entropy: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Semantic entropy 0.00-1.00. High when alternatives diverge or "
+            "when the actual response is an outlier to the cluster."
+        ),
+    )
 
 
 class CoherenceResult(BaseModel):
@@ -83,6 +126,18 @@ class _BaseConscience(ConscienceInterface):
         if not time_service:
             raise RuntimeError("TimeService is required for Conscience")
         self._time_service = time_service
+
+    def _resolve_language(self, context: ConscienceCheckContext) -> str:
+        """Determine the language for THIS conscience check from the thought's user.
+
+        Walks: context.system_snapshot.user_profiles[0].preferred_language →
+        env var fallback. The conscience evaluates each thought in the
+        thought's user's language so the agent's internal reasoning is
+        immersed in the same language as its outward communication.
+        """
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+
+        return get_user_language_from_context(context.system_snapshot)
 
     def _create_trace_correlation(
         self, conscience_type: str, context: ConscienceCheckContext, start_time: datetime
@@ -253,13 +308,15 @@ class EntropyConscience(_BaseConscience):
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] EntropyConscience: Image context detected, using textual metadata")
-            messages, entropy_user_prompt = self._create_entropy_messages(text, image_context)
+            messages, entropy_user_prompt = self._create_entropy_messages(
+                text, image_context, language=self._resolve_language(context)
+            )
             if hasattr(sink, "llm"):
                 entropy_eval, _ = await sink.llm.call_llm_structured(
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
-                    max_tokens=4096,
+                    max_tokens=16384,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -268,8 +325,30 @@ class EntropyConscience(_BaseConscience):
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(entropy_eval, EntropyResult):
                 entropy = float(entropy_eval.entropy)
+                # Log the alternative-meaning enumeration alongside the score
+                # so traces carry the evidence, not just the number. Counts +
+                # outlier flag at INFO; full alternatives at DEBUG to keep
+                # default logs tight.
+                alt_count = len(entropy_eval.alternative_meanings)
+                logger.info(
+                    "[CONSCIENCE] EntropyConscience: entropy=%.2f "
+                    "actual_is_representative=%s alternatives=%d",
+                    entropy,
+                    entropy_eval.actual_is_representative,
+                    alt_count,
+                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    for i, alt in enumerate(entropy_eval.alternative_meanings, 1):
+                        logger.debug("  alt #%d: %s", i, alt[:200])
+                entropy_alternatives = list(entropy_eval.alternative_meanings)
+                entropy_actual_is_representative = entropy_eval.actual_is_representative
+            else:
+                entropy_alternatives = []
+                entropy_actual_is_representative = None
         except Exception as e:
             logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
+            entropy_alternatives = []
+            entropy_actual_is_representative = None
 
         passed = entropy <= self.config.entropy_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -288,20 +367,29 @@ class EntropyConscience(_BaseConscience):
             reason=reason,
             entropy_score=entropy,
             entropy_prompt=entropy_user_prompt,
+            entropy_alternatives=entropy_alternatives,
+            entropy_actual_is_representative=entropy_actual_is_representative,
             check_timestamp=ts_datetime,
         )
 
-    def _create_entropy_messages(self, text: str, image_context: Optional[str] = None) -> tuple[List[LLMMessage], str]:
+    def _create_entropy_messages(
+        self, text: str, image_context: Optional[str] = None, language: Optional[str] = None
+    ) -> tuple[List[LLMMessage], str]:
         """Create messages for entropy evaluation with optional image context metadata.
 
         Returns:
             Tuple of (messages list, user_prompt string for streaming)
         """
-        loader = get_conscience_prompt_loader()
+        loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("entropy_conscience")
         user_prompt = loader.get_user_prompt("entropy_conscience", image_context=image_context, text=text)
 
         return [
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
@@ -349,13 +437,15 @@ class CoherenceConscience(_BaseConscience):
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
-            messages, coherence_user_prompt = self._create_coherence_messages(text, image_context)
+            messages, coherence_user_prompt = self._create_coherence_messages(
+                text, image_context, language=self._resolve_language(context)
+            )
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await sink.llm.call_llm_structured(
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
-                    max_tokens=4096,
+                    max_tokens=16384,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -388,18 +478,23 @@ class CoherenceConscience(_BaseConscience):
         )
 
     def _create_coherence_messages(
-        self, text: str, image_context: Optional[str] = None
+        self, text: str, image_context: Optional[str] = None, language: Optional[str] = None
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for coherence evaluation with optional image context metadata.
 
         Returns:
             Tuple of (messages list, user_prompt string for streaming)
         """
-        loader = get_conscience_prompt_loader()
+        loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("coherence_conscience")
         user_prompt = loader.get_user_prompt("coherence_conscience", image_context=image_context, text=text)
 
         return [
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
@@ -429,7 +524,9 @@ class OptimizationVetoConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] OptimizationVetoConscience: Image context detected, using textual metadata")
-        messages, opt_veto_user_prompt = self._create_optimization_veto_messages(action_desc, image_context)
+        messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
+            action_desc, image_context, language=self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):
@@ -437,7 +534,7 @@ class OptimizationVetoConscience(_BaseConscience):
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
-                    max_tokens=4096,
+                    max_tokens=16384,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -486,20 +583,25 @@ class OptimizationVetoConscience(_BaseConscience):
         )
 
     def _create_optimization_veto_messages(
-        self, action_description: str, image_context: Optional[str] = None
+        self, action_description: str, image_context: Optional[str] = None, language: Optional[str] = None
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for optimization veto evaluation with optional image context metadata.
 
         Returns:
             Tuple of (messages list, user_prompt string for streaming)
         """
-        loader = get_conscience_prompt_loader()
+        loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("optimization_veto_conscience")
         user_prompt = loader.get_user_prompt(
             "optimization_veto_conscience", image_context=image_context, action_description=action_description
         )
 
         return [
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
@@ -529,7 +631,9 @@ class EpistemicHumilityConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
-        messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(desc, image_context)
+        messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(
+            desc, image_context, language=self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):
@@ -537,7 +641,7 @@ class EpistemicHumilityConscience(_BaseConscience):
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",
-                    max_tokens=4096,
+                    max_tokens=32768,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -588,20 +692,25 @@ class EpistemicHumilityConscience(_BaseConscience):
         )
 
     def _create_epistemic_humility_messages(
-        self, action_description: str, image_context: Optional[str] = None
+        self, action_description: str, image_context: Optional[str] = None, language: Optional[str] = None
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for balanced epistemic humility evaluation with optional image context metadata.
 
         Returns:
             Tuple of (messages list, user_prompt string for streaming)
         """
-        loader = get_conscience_prompt_loader()
+        loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("epistemic_humility_conscience")
         user_prompt = loader.get_user_prompt(
             "epistemic_humility_conscience", image_context=image_context, action_description=action_description
         )
 
         return [
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
             LLMMessage(role="system", content=ACCORD_TEXT),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),

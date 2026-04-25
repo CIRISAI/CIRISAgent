@@ -771,10 +771,17 @@ class InteractViewModel(
                     )
                 }.ifEmpty { null }
 
-                // Add user message to chat immediately
+                // Add user message to chat immediately with a local placeholder
+                // ID. We'll reconcile this to the server's canonical message_id
+                // as soon as the send response returns (see below) so that
+                // fetchHistory's ID-based dedup does the right thing — the
+                // content+timestamp-window fallback at line ~1254 can't rescue
+                // us when the agent's retry cascade takes longer than the dedup
+                // window (we've seen 300-600s retries in live Tiananmen runs).
                 val displayText = if (text.isNotEmpty()) text else "Sent ${files.size} file${if (files.size > 1) "s" else ""}"
+                val localMessageId = generateMessageId()
                 val userMessage = ChatMessage(
-                    id = generateMessageId(),
+                    id = localMessageId,
                     text = displayText,
                     type = MessageType.USER,
                     timestamp = Clock.System.now(),
@@ -792,6 +799,15 @@ class InteractViewModel(
                     documents = documentPayloads
                 )
                 logInfo(method, "Message sent successfully: messageId=${response.message_id}")
+
+                // Reconcile the optimistic user message's ID to the server's
+                // canonical message_id. Without this, fetchHistory (which dedups
+                // by id at line ~1240) sees server-ID != local-ID and keeps
+                // both copies — the user sees their own message twice, once
+                // with the local placeholder ID and once with the server ID.
+                _messages.value = _messages.value.map { msg ->
+                    if (msg.id == localMessageId) msg.copy(id = response.message_id) else msg
+                }
 
                 // Add agent response to chat
                 val agentResponse = response.response

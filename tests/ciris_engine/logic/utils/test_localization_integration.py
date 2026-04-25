@@ -167,17 +167,15 @@ class TestEnvironmentSync:
         finally:
             os.environ.pop(test_var, None)
 
-    def test_sync_language_preference_updates_env(self):
-        """Test that sync_language_preference updates CIRIS_PREFERRED_LANGUAGE."""
-        original = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
-        try:
-            sync_language_preference("es")
-            assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "es"
-        finally:
-            if original:
-                os.environ["CIRIS_PREFERRED_LANGUAGE"] = original
-            else:
-                os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+    def test_sync_language_preference_updates_env(self, monkeypatch):
+        """Test that sync_language_preference updates CIRIS_PREFERRED_LANGUAGE.
+
+        Uses monkeypatch so any leak out of sync_language_preference's raw
+        os.environ mutation is rolled back at teardown, keeping other
+        xdist workers' tests unaffected.
+        """
+        sync_language_preference("es")
+        assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "es"
 
     @patch("ciris_engine.logic.dma.prompt_loader.set_prompt_language")
     def test_sync_language_preference_updates_prompt_loader(self, mock_set_lang):
@@ -282,33 +280,33 @@ class TestCSDMALocalization:
     """Tests for CSDMA language handling."""
 
     def test_csdma_extract_context_syncs_language(self, mock_context_with_language):
-        """Test that CSDMA._extract_context_data syncs user's language."""
+        """Test that CSDMA._extract_context_data syncs user's language into
+        the per-instance _explicit_language field. (The legacy global
+        set_prompt_language() call was removed — see prompt_loader.py."""
         with patch("ciris_engine.logic.dma.csdma.get_prompt_loader") as mock_loader, patch(
             "ciris_engine.logic.dma.csdma.format_system_snapshot"
-        ) as mock_format_ss, patch("ciris_engine.logic.dma.csdma.format_user_profiles") as mock_format_up, patch(
-            "ciris_engine.logic.dma.prompt_loader.set_prompt_language"
-        ) as mock_set_lang:
+        ) as mock_format_ss, patch("ciris_engine.logic.dma.csdma.format_user_profiles") as mock_format_up:
 
-            # Setup mocks
             mock_loader_instance = MagicMock()
-            mock_loader_instance.language = "en"  # Different from user's "am"
+            mock_loader_instance.language = "en"
             mock_loader_instance.load_prompt_template.return_value = MagicMock()
             mock_loader.return_value = mock_loader_instance
 
             mock_format_ss.return_value = "snapshot"
             mock_format_up.return_value = "profiles"
 
-            # Create CSDMA
             mock_registry = MagicMock()
             from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 
             csdma = CSDMAEvaluator(service_registry=mock_registry)
+            assert csdma._explicit_language is None  # starts unset
 
-            # Call _extract_context_data
             csdma._extract_context_data(mock_context_with_language)
 
-            # Verify set_prompt_language was called with user's language
-            mock_set_lang.assert_called_once_with("am")
+            # The mock context's user has preferred_language="am" → CSDMA's
+            # _explicit_language must now be "am". Subsequent get_prompt_loader
+            # calls receive language="am" via the prompt_loader property.
+            assert csdma._explicit_language == "am"
 
 
 class TestPDMALocalization:
@@ -399,13 +397,12 @@ class TestTSASPDMALocalization:
             assert hasattr(TSASPDMAEvaluator, "_sync_language_from_context")
 
     def test_tsaspdma_sync_language_from_context(self, mock_context_with_language):
-        """Test that TSASPDMA syncs language from context."""
-        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader, patch(
-            "ciris_engine.logic.dma.prompt_loader.set_prompt_language"
-        ) as mock_set_lang:
-
+        """Test that TSASPDMA syncs language from context into the per-instance
+        _explicit_language field. (Replaces the old set_prompt_language
+        assertion — the global mutator was removed in prompt_loader.py.)"""
+        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
             mock_loader_instance = MagicMock()
-            mock_loader_instance.language = "en"  # Different from user's "am"
+            mock_loader_instance.language = "en"
             mock_loader_instance.load_prompt_template.return_value = MagicMock()
             mock_loader.return_value = mock_loader_instance
 
@@ -413,12 +410,15 @@ class TestTSASPDMALocalization:
             from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
 
             tsaspdma = TSASPDMAEvaluator(service_registry=mock_registry)
+            assert tsaspdma._explicit_language is None  # starts unset
 
-            # Call _sync_language_from_context
             tsaspdma._sync_language_from_context(mock_context_with_language)
+            assert tsaspdma._explicit_language == "am"
 
-            # Verify set_prompt_language was called with user's language
-            mock_set_lang.assert_called_once_with("am")
+            # Stale-bleed regression: a follow-up call with no context must
+            # clear the language back to None, not inherit "am" from before.
+            tsaspdma._sync_language_from_context(None)
+            assert tsaspdma._explicit_language is None
 
 
 # ============================================================================
@@ -429,36 +429,30 @@ class TestTSASPDMALocalization:
 class TestLocalizationIntegration:
     """Integration tests for full localization flow."""
 
-    def test_language_change_flow(self):
-        """Test complete flow: change language -> sync -> use in DMA."""
-        original_lang = os.environ.get("CIRIS_PREFERRED_LANGUAGE")
-        try:
-            # 1. Sync language preference (simulates API call)
-            sync_language_preference("am")
+    def test_language_change_flow(self, monkeypatch):
+        """Test complete flow: change language -> sync -> use in DMA.
 
-            # 2. Verify env is updated
-            assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "am"
+        Uses monkeypatch so sync_language_preference's raw os.environ
+        mutation is rolled back at teardown — prevents cross-worker leaks
+        under `pytest -n`.
+        """
+        # 1. Sync language preference (simulates API call)
+        sync_language_preference("am")
 
-            # 3. Verify localization uses the new language
-            from ciris_engine.logic.utils.localization import get_preferred_language
+        # 2. Verify env is updated
+        assert os.environ.get("CIRIS_PREFERRED_LANGUAGE") == "am"
 
-            assert get_preferred_language() == "am"
+        # 3. Verify localization uses the new language
+        from ciris_engine.logic.utils.localization import get_preferred_language
 
-        finally:
-            if original_lang:
-                os.environ["CIRIS_PREFERRED_LANGUAGE"] = original_lang
-            else:
-                os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+        assert get_preferred_language() == "am"
 
-    def test_context_language_takes_precedence(self, mock_context_with_language):
+    def test_context_language_takes_precedence(self, mock_context_with_language, monkeypatch):
         """Test that user's context language takes precedence over env."""
-        os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
-        try:
-            lang = get_user_language_from_context(mock_context_with_language)
-            # Context says "am", env says "en" - context should win
-            assert lang == "am"
-        finally:
-            os.environ.pop("CIRIS_PREFERRED_LANGUAGE", None)
+        monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
+        lang = get_user_language_from_context(mock_context_with_language)
+        # Context says "am", env says "en" - context should win
+        assert lang == "am"
 
     def test_all_supported_languages_have_conscience_keys(self):
         """Test that all supported languages have conscience keys."""
@@ -484,23 +478,28 @@ class TestLocalizationIntegration:
 class TestPromptLoaderSync:
     """Tests for DMA prompt loader language synchronization."""
 
-    def test_set_prompt_language(self):
-        """Test that set_prompt_language updates the loader."""
-        from ciris_engine.logic.dma.prompt_loader import get_prompt_loader, set_prompt_language
+    def test_get_prompt_loader_per_language_cache(self):
+        """get_prompt_loader caches per-language; mutating a global is not the API.
 
-        # Get initial state
-        loader = get_prompt_loader()
-        original_lang = loader.language
+        Replaces the old set_prompt_language(...) test. The mutable-singleton
+        design that test exercised was the source of the multilingual race
+        bug — concurrent thoughts in different languages trampled each other.
+        Now each language has its own cached loader; explicit per-call lang is
+        the contract.
+        """
+        from ciris_engine.logic.dma.prompt_loader import _loader_cache, get_prompt_loader
 
+        _loader_cache.clear()
         try:
-            # Set new language
-            set_prompt_language("es")
-
-            # Verify it changed
-            assert loader.language == "es"
+            en = get_prompt_loader(language="en")
+            es = get_prompt_loader(language="es")
+            assert en.language == "en"
+            assert es.language == "es"
+            assert en is not es
+            # Cache hit returns the same instance
+            assert get_prompt_loader(language="en") is en
         finally:
-            # Restore
-            set_prompt_language(original_lang)
+            _loader_cache.clear()
 
     def test_get_prompt_loader_returns_loader(self):
         """Test that get_prompt_loader returns a valid loader."""

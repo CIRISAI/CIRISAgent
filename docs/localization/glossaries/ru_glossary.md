@@ -166,6 +166,21 @@ This glossary defines the canonical translations for key CIRIS terms in Russian.
 - UI actions typically use infinitive verb forms
 - Status messages use present tense or short adjectives
 
+## DSASPDMA Deferral Taxonomy Terms
+
+| English | Localized | Notes |
+|---------|-----------|-------|
+| DSASPDMA | DSASPDMA | Keep acronym in English |
+| Deferral-Specific Action Selection | ВЫБОР ДЕЙСТВИЯ ДЛЯ ОТЛОЖЕННОГО РЕШЕНИЯ | DSASPDMA prompt title |
+| Rights / Needs Taxonomy | ТАКСОНОМИЯ ПРАВ / ПОТРЕБНОСТЕЙ | Taxonomy section heading |
+| Rights basis | Правовое основание | Label for treaty-aligned rights basis |
+| Operational Deferral Reason | КОДЫ ОПЕРАЦИОННЫХ ПРИЧИН ОТЛОЖЕНИЯ | Operational reason-code section heading |
+| primary_need_category | primary_need_category | JSON key; keep in English |
+| operational_reason | operational_reason | JSON key; keep in English |
+| secondary_need_categories | secondary_need_categories | JSON key; keep in English |
+| rights_basis | rights_basis | JSON key; keep in English |
+| domain_hint | domain_hint | JSON key; keep in English |
+
 ## Version History
 
 | Version | Date | Changes |

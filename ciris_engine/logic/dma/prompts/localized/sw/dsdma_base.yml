@@ -33,11 +33,11 @@ system_guidance_header: |
   - Ufikirio wa hatua ya maisha (wahitimu wapya wana akiba ndogo, wazazi wapya wanahitaji unyumbufu)
 
 response_format: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
-  - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - Swahili content, English keys.
+  KANUNI ZA LUGHA:
+  - Jibu kwa lugha inayopendelewa na mtumiaji (angalia wasifu wa mtumiaji).
+  - Thamani ZOTE za maudhui (reasoning, rationale, speak_content, n.k.) ziwe kwa lugha ya mtumiaji.
+  - Funguo za JSON LAZIMA zibaki kwa Kiingereza (k.m., "selected_action", "reasoning", "tool_parameters").
+  - Mfano: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - maudhui ya Kiswahili, funguo za Kiingereza.
 
 context_integration: |
   Kikoa: {{domain_name}}

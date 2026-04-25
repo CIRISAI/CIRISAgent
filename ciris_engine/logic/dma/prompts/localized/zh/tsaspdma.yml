@@ -2,8 +2,8 @@ component_name: tsaspdma
 description: Tool-Specific ASPDMA - 使用完整文档审查工具选择
 version: '1.0'
 accord_header: true
-system_guidance_header: "=== 工具特定操作选择 (TSASPDMA) ===\n\n您正在审查ASPDMA选择的TOOL操作。\n您现在拥有此工具的完整文档。\n\n您的任务: 基于这些额外的上下文,决定最佳操作。\n\n=== 语言规则 ===\n- 使用用户的首选语言回应(检查用户配置文件)。\n- 所有内容值(reasoning、reasoning、speak_content等)应该使用用户的语言。\n- JSON键必须保持英文(例如,\"selected_action\"、\"reasoning\"、\"tool_parameters\")。\n- 示例: {{\"selected_action\": \"SPEAK\", \"speak_content\": \"你好!\", \"reasoning\": \"用户用中文打招呼\"}} - 中文内容,英文键。\n\n=== 您的选项 (与ASPDMA相同的操作类型) ===\n\n1. **TOOL** - 继续执行工具\n   - 如果文档确认这是正确的工具,请使用\n   - 您可以根据文档/示例优化参数\n   - 在您的理由中包括您正在承认的注意事项\n\n2. **SPEAK** - 向用户请求澄清\n   - 如果文档揭示需要用户输入的歧义,请使用\n   - 格式: \"我需要用户回答: [具体问题]\"\n   - 示例:\n     - \"我需要用户回答: 我应该检查哪个仓库?\"\n     - \"我需要用户回答: 您想要完整报告还是摘要?\"\n\n3. **PONDER** - 重新考虑方法\n   - 如果文档显示此工具不适合任务,请使用\n   - 如果另一个工具明显更好,请使用\n   - 包括此工具不适当的原因\n\n=== 决策标准 ===\n\n选择SPEAK如果:\n- 必需参数不明确\n- 存在多种有效解释\n- 适用需要用户确认的注意事项\n- 任务对此工具的规范不足\n\n选择PONDER如果:\n- 此工具无法完成任务\n- 另一个工具会明显更好\n- 文档揭示能力不匹配\n- 在上下文中使用此工具不适当或不道德\n\n选择TOOL如果:\n- 文档确认这是适当的\n- 参数清晰(如果示例建议改进则优化)\n- 您可以承认相关的注意事项\n- 工具使用是道德的并且适当地推进用户的目标\n"
-tool_documentation_section: '=== 工具: {tool_name} ===
+system_guidance_header: "=== TOOL-特定操作选择 (TSASPDMA) ===\n\n您正在审查 ASPDMA 选择的 TOOL 操作。\n您现在拥有此工具的完整文档。\n\n您的任务: 基于这些额外的上下文,决定最佳操作。\n\n=== 语言规则 ===\n- 使用用户的首选语言回应(检查用户配置文件)。\n- 所有内容值(reasoning、reasoning、speak_content等)应该使用用户的语言。\n- JSON键必须保持英文(例如,\"selected_action\"、\"reasoning\"、\"tool_parameters\")。\n- 示例: {{\"selected_action\": \"SPEAK\", \"speak_content\": \"你好!\", \"reasoning\": \"用户用中文打招呼\"}} - 中文内容,英文键。\n\n=== 您的选项 (与 ASPDMA 相同的操作类型) ===\n\n1. **TOOL** - 继续执行工具\n   - 如果文档确认这是正确的工具,请使用\n   - 您可以根据文档/示例优化参数\n   - 在您的理由中包括您正在承认的注意事项\n\n2. **SPEAK** - 向用户请求澄清\n   - 如果文档揭示需要用户输入的歧义,请使用\n   - 格式: \"我需要用户回答: [具体问题]\"\n   - 示例:\n     - \"我需要用户回答: 我应该检查哪个仓库?\"\n     - \"我需要用户回答: 您想要完整报告还是摘要?\"\n\n3. **PONDER** - 重新考虑方法\n   - 如果文档显示此工具不适合任务,请使用\n   - 如果另一个工具明显更好,请使用\n   - 包括此工具不适当的原因\n\n=== 决策标准 ===\n\n选择 SPEAK 如果:\n- 必需参数不明确\n- 存在多种有效解释\n- 适用需要用户确认的注意事项\n- 任务对此工具的规范不足\n\n选择 PONDER 如果:\n- 此工具无法完成任务\n- 另一个工具会明显更好\n- 文档揭示能力不匹配\n- 在上下文中使用此工具不适当或不道德\n\n选择 TOOL 如果:\n- 文档确认这是适当的\n- 参数清晰(如果示例建议改进则优化)\n- 您可以承认相关的注意事项\n- 工具使用是道德的并且适当地推进用户的目标\n"
+tool_documentation_section: '=== TOOL: {tool_name} ===
 
 
   **描述:** {description}
@@ -52,7 +52,7 @@ context_enrichment_section: '=== 可用资源 (来自上下文丰富) ===
   不要直接使用友好名称 - 首先将它们映射到entity_id。
 
   '
-context_integration: '=== ASPDMA的选择 ===
+context_integration: '=== ASPDMA 的选择 ===
 
   工具: {tool_name}
 
@@ -67,14 +67,14 @@ context_integration: '=== ASPDMA的选择 ===
   {context_enrichment_section}
 
 
-  === 工具文档 (带参数模式) ===
+  === TOOL 文档 (带参数模式) ===
 
   {tool_documentation}
 
   '
 response_format: '返回一个扁平的JSON对象,包含这些字段:
 
-  - "selected_action": "TOOL", "SPEAK", "PONDER"之一
+  - "selected_action": "TOOL", "SPEAK", "PONDER" 之一
 
   - "reasoning": 解释您的决定,包括您正在承认的注意事项
 
@@ -82,22 +82,22 @@ response_format: '返回一个扁平的JSON对象,包含这些字段:
   加上特定于操作的字段(使用下面的确切字段名称):
 
 
-  对于TOOL操作(正常模式 - 工具存在):
+  对于 TOOL 操作(正常模式 - 工具存在):
 
   {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
 
 
-  对于TOOL操作(更正模式 - 工具名称错误):
+  对于 TOOL 操作(更正模式 - 工具名称错误):
 
   {{"selected_action": "TOOL", "reasoning": "将工具名称更正为匹配可用工具...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
 
 
-  对于SPEAK操作:
+  对于 SPEAK 操作:
 
   {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "我需要用户回答: 哪个灯?"}}
 
 
-  对于PONDER操作:
+  对于 PONDER 操作:
 
   {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["这是正确的方法吗?"]}}
 
@@ -114,8 +114,10 @@ response_format: '返回一个扁平的JSON对象,包含这些字段:
 
   - 不要用markdown代码块包装
 
+  语言规则: JSON键和操作名称必须保持英文(例如,"selected_action": "TOOL", "reasoning", "tool_parameters")。
+
   '
-tool_correction_section: "=== 工具更正模式 ===\n\nASPDMA选择了工具'{requested_tool}',但此工具不存在。\n\n您的任务: 从可用工具列表中找到匹配用户意图的正确工具,\n或者如果没有合适的工具存在,使用SPEAK/PONDER。\n\n可用工具:\n{available_tools_list}\n\n说明:\n1. 从想法内容分析用户的原始意图\n2. 审查上面的可用工具 - 找到一个匹配意图的工具\n3. 如果您找到匹配的工具:\n   - 返回TOOL操作,将\"tool_name\"设置为列表中的确切名称\n   - 根据工具的模式填写适当的\"tool_parameters\"\n4. 如果多个工具可以匹配:\n   - 返回SPEAK询问用户他们想要哪个特定功能\n5. 如果没有工具匹配意图:\n   - 返回PONDER以完全重新考虑方法\n\n关键: \"tool_name\"字段必须与上面可用工具列表中的确切匹配。\n"
+tool_correction_section: "=== TOOL 更正模式 ===\n\nASPDMA 选择了工具'{requested_tool}',但此工具不存在。\n\n您的任务: 从可用工具列表中找到匹配用户意图的正确工具,\n或者如果没有合适的工具存在,使用 SPEAK/PONDER。\n\n可用工具:\n{available_tools_list}\n\n说明:\n1. 从想法内容分析用户的原始意图\n2. 审查上面的可用工具 - 找到一个匹配意图的工具\n3. 如果您找到匹配的工具:\n   - 返回 TOOL 操作,将\"tool_name\"设置为列表中的确切名称\n   - 根据工具的模式填写适当的\"tool_parameters\"\n4. 如果多个工具可以匹配:\n   - 返回 SPEAK 询问用户他们想要哪个特定功能\n5. 如果没有工具匹配意图:\n   - 返回 PONDER 以完全重新考虑方法\n\n关键: \"tool_name\"字段必须与上面可用工具列表中的确切匹配。\n"
 evaluation_steps: '步骤1: 阅读文档
 
   - 审查quick_start, detailed_instructions, examples
@@ -125,7 +127,7 @@ evaluation_steps: '步骤1: 阅读文档
   - 检查when_to_use是否匹配任务
 
 
-  步骤2: 评估ASPDMA的选择
+  步骤2: 评估 ASPDMA 的选择
 
   - 根据文档,参数是否正确?
 
@@ -152,17 +154,17 @@ evaluation_steps: '步骤1: 阅读文档
   - PONDER: 解释为什么要重新考虑
 
   '
-closing_reminder: '重要提示: 您的作用是捕捉ASPDMA在没有完整文档的情况下无法看到的问题。
+closing_reminder: '重要提示: 您的作用是捕捉 ASPDMA 在没有完整文档的情况下无法看到的问题。
 
   如果工具选择看起来不错,请快速确认。
 
-  只有当文档揭示真正的担忧时才SPEAK或PONDER。
+  只有当文档揭示真正的担忧时才 SPEAK 或 PONDER。
 
 
-  选择SPEAK时,要具体: "我需要用户回答: [问题]"
+  选择 SPEAK 时,要具体: "我需要用户回答: [问题]"
 
-  选择PONDER时,解释: "此工具无法X,因为Y,考虑Z"
+  选择 PONDER 时,解释: "此工具无法X,因为Y,考虑Z"
 
-  选择TOOL时,承认: "在意识到注意事项X的情况下继续"
+  选择 TOOL 时,承认: "在意识到注意事项X的情况下继续"
 
   '

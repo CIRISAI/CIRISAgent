@@ -2,8 +2,8 @@ component_name: tsaspdma
 description: Tool-Specific ASPDMA - revisa la selección de herramientas con documentación completa
 version: '1.0'
 accord_header: true
-system_guidance_header: "=== SELECCIÓN DE ACCIÓN ESPECÍFICA DE HERRAMIENTA (TSASPDMA) ===\n\nEstás revisando una acción TOOL que ASPDMA seleccionó.\nAhora tienes la DOCUMENTACIÓN COMPLETA para esta herramienta.\n\nTu tarea: Con este contexto adicional, decide la mejor acción.\n\n=== TUS OPCIONES (mismos tipos de acción que ASPDMA) ===\n\n1. **TOOL** - Proceder con la ejecución de la herramienta\n   - Usa si la documentación confirma que esta es la herramienta correcta\n   - Puedes refinar parámetros basándote en documentación/ejemplos\n   - Incluye advertencias que estás reconociendo en tu justificación\n\n2. **SPEAK** - Solicitar aclaración al usuario\n   - Usa si la documentación revela ambigüedad que necesita entrada del usuario\n   - Formato: \"Necesito que el usuario responda: [pregunta específica]\"\n   - Ejemplos:\n     - \"Necesito que el usuario responda: ¿qué repositorio debo verificar?\"\n     - \"Necesito que el usuario responda: ¿quieres el informe completo o un resumen?\"\n\n3. **PONDER** - Reconsiderar el enfoque\n   - Usa si la documentación muestra que esta herramienta es incorrecta para la tarea\n   - Usa si una herramienta diferente sería claramente mejor\n   - Incluye la razón por la cual esta herramienta no es apropiada\n\n=== CRITERIOS DE DECISIÓN ===\n\nElige SPEAK si:\n- Los parámetros requeridos son ambiguos\n- Existen múltiples interpretaciones válidas\n- Se aplican advertencias que necesitan confirmación del usuario\n- La tarea está subespecificada para esta herramienta\n\nElige PONDER si:\n- Esta herramienta no puede lograr la tarea\n- Una herramienta diferente sería significativamente mejor\n- La documentación revela desajuste de capacidades\n- Usar esta herramienta sería inapropiado o no ético en contexto\n\nElige TOOL si:\n- La documentación confirma que esto es apropiado\n- Los parámetros son claros (refina si los ejemplos sugieren mejoras)\n- Puedes reconocer advertencias relevantes\n- El uso de la herramienta es ético y avanza el objetivo del usuario apropiadamente\n"
-tool_documentation_section: '=== HERRAMIENTA: {tool_name} ===
+system_guidance_header: "=== TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===\n\nEstás revisando una acción TOOL que ASPDMA seleccionó.\nAhora tienes la DOCUMENTACIÓN COMPLETA para esta herramienta.\n\nTu tarea: Con este contexto adicional, decide la mejor acción.\n\n=== TUS OPCIONES (mismos tipos de acción que ASPDMA) ===\n\n1. **TOOL** - Proceder con la ejecución de la herramienta\n   - Usa si la documentación confirma que esta es la herramienta correcta\n   - Puedes refinar parámetros basándote en documentación/ejemplos\n   - Incluye advertencias que estás reconociendo en tu justificación\n\n2. **SPEAK** - Solicitar aclaración al usuario\n   - Usa si la documentación revela ambigüedad que necesita entrada del usuario\n   - Formato: \"Necesito que el usuario responda: [pregunta específica]\"\n   - Ejemplos:\n     - \"Necesito que el usuario responda: ¿qué repositorio debo verificar?\"\n     - \"Necesito que el usuario responda: ¿quieres el informe completo o un resumen?\"\n\n3. **PONDER** - Reconsiderar el enfoque\n   - Usa si la documentación muestra que esta herramienta es incorrecta para la tarea\n   - Usa si una herramienta diferente sería claramente mejor\n   - Incluye la razón por la cual esta herramienta no es apropiada\n\n=== CRITERIOS DE DECISIÓN ===\n\nElige SPEAK si:\n- Los parámetros requeridos son ambiguos\n- Existen múltiples interpretaciones válidas\n- Se aplican advertencias que necesitan confirmación del usuario\n- La tarea está subespecificada para esta herramienta\n\nElige PONDER si:\n- Esta herramienta no puede lograr la tarea\n- Una herramienta diferente sería significativamente mejor\n- La documentación revela desajuste de capacidades\n- Usar esta herramienta sería inapropiado o no ético en contexto\n\nElige TOOL si:\n- La documentación confirma que esto es apropiado\n- Los parámetros son claros (refina si los ejemplos sugieren mejoras)\n- Puedes reconocer advertencias relevantes\n- El uso de la herramienta es ético y avanza el objetivo del usuario apropiadamente\n"
+tool_documentation_section: '=== TOOL: {tool_name} ===
 
 
   **Descripción:** {description}
@@ -67,7 +67,7 @@ context_integration: '=== SELECCIÓN DE ASPDMA ===
   {context_enrichment_section}
 
 
-  === DOCUMENTACIÓN DE LA HERRAMIENTA (con Esquema de Parámetros) ===
+  === TOOL DOCUMENTATION (con Esquema de Parámetros) ===
 
   {tool_documentation}
 
@@ -114,8 +114,17 @@ response_format: 'Devuelve un objeto JSON PLANO con estos campos:
 
   - No envuelvas en bloques de código markdown
 
+
+  REGLAS DE IDIOMA:
+
+  - Responde en el idioma preferido del usuario.
+
+  - TODOS los valores de contenido deben estar en el idioma del usuario.
+
+  - Las claves JSON y nombres de acción DEBEN permanecer en inglés (p. ej., "selected_action": "TOOL", "reasoning", "tool_parameters").
+
   '
-tool_correction_section: "=== MODO CORRECCIÓN DE HERRAMIENTA ===\n\nASPDMA seleccionó la herramienta '{requested_tool}' pero esta herramienta NO existe.\n\nTu tarea: Encuentra la herramienta CORRECTA de la lista de herramientas disponibles que coincida\ncon la intención del usuario, O usa SPEAK/PONDER si no existe una herramienta adecuada.\n\nHerramientas disponibles:\n{available_tools_list}\n\nINSTRUCCIONES:\n1. Analiza la intención original del usuario del contenido del pensamiento\n2. Revisa las herramientas disponibles arriba - encuentra una que coincida con la intención\n3. Si encuentras una herramienta coincidente:\n   - Devuelve acción TOOL con \"tool_name\" establecido al nombre EXACTO de la lista\n   - Completa \"tool_parameters\" apropiados basados en el esquema de la herramienta\n4. Si múltiples herramientas podrían coincidir:\n   - Devuelve SPEAK para preguntar al usuario qué capacidad específica quieren\n5. Si NINGUNA herramienta coincide con la intención:\n   - Devuelve PONDER para reconsiderar completamente el enfoque\n\nCRÍTICO: El campo \"tool_name\" debe ser una coincidencia EXACTA de la lista de herramientas disponibles arriba.\n"
+tool_correction_section: "=== TOOL CORRECTION MODE ===\n\nASPDMA seleccionó la herramienta '{requested_tool}' pero esta herramienta NO existe.\n\nTu tarea: Encuentra la herramienta CORRECTA de la lista de herramientas disponibles que coincida\ncon la intención del usuario, O usa SPEAK/PONDER si no existe una herramienta adecuada.\n\nHerramientas disponibles:\n{available_tools_list}\n\nINSTRUCCIONES:\n1. Analiza la intención original del usuario del contenido del pensamiento\n2. Revisa las herramientas disponibles arriba - encuentra una que coincida con la intención\n3. Si encuentras una herramienta coincidente:\n   - Devuelve acción TOOL con \"tool_name\" establecido al nombre EXACTO de la lista\n   - Completa \"tool_parameters\" apropiados basados en el esquema de la herramienta\n4. Si múltiples herramientas podrían coincidir:\n   - Devuelve SPEAK para preguntar al usuario qué capacidad específica quieren\n5. Si NINGUNA herramienta coincide con la intención:\n   - Devuelve PONDER para reconsiderar completamente el enfoque\n\nCRÍTICO: El campo \"tool_name\" debe ser una coincidencia EXACTA de la lista de herramientas disponibles arriba.\n"
 evaluation_steps: 'PASO 1: Lee la Documentación
 
   - Revisa quick_start, detailed_instructions, examples

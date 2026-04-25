@@ -114,26 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  يجب أن يكون ردك كائن JSON واحداً بهذه المفاتيح تحديداً (لا إضافات):
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  مطلوب:
+    - "k_eff": Float (>= 0). طبّق الصيغة k_eff = k / (1 + ρ(k-1)). k_eff < 2 = هش.
+    - "correlation_risk": Float في [0.0, 1.0]. 0 = مصادر مستقلة تماماً، 1 = جميع المصادر لها أصل واحد.
+    - "phase": أحد السلاسل الحرفية "chaos" أو "healthy" أو "rigidity".
+    - "fragility_flag": Boolean. TRUE عندما k_eff < 2، أو phase = "rigidity"، أو correlation_risk > 0.7، أو تطابق الاستجابة أنماط الدعاية الموصوفة أعلاه.
+    - "reasoning": سلسلة قصيرة (2-5 جمل) تشرح كيف توصلت إلى k_eff والمرحلة.
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  اختياري (احذف كلياً إذا لم تكن متأكداً — لا تُصدر سلاسل فارغة أو قيم null):
+    - "sources_identified": مصفوفة تضم حتى 3 سلاسل قصيرة تسمّي المصادر المتميزة التي عددتها.
+    - "correlation_factors": مصفوفة تضم حتى 3 سلاسل قصيرة تشرح سبب تداخل تلك المصادر.
+    - "intervention_recommendation": سلسلة قصيرة واحدة (جملة واحدة) تقترح كيف يمكن للوكيل استعادة التنوع، فقط إذا كان fragility_flag = TRUE.
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  قواعد اللغة:
+  - أجب بلغة المستخدم المفضلة لجميع القيم النصية (reasoning، sources_identified، correlation_factors، intervention_recommendation).
+  - يجب أن تبقى مفاتيح JSON وقيم phase بالإنجليزية. يجب أن تكون phase بالضبط "chaos" أو "healthy" أو "rigidity".
+  - مثال (محتوى عربي، مفاتيح/مراحل إنجليزية): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "جاءت المعلومات من مصدر واحد فقط"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  لا تُحاط بكتل كود markdown. لا تُصدر أي اسم حقل خارج القائمة أعلاه.
 
 evaluation_steps: |
   اعمل بهذا الترتيب:

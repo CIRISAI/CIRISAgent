@@ -114,26 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  உங்கள் பதில் சரியாக இந்த திறவுகோல்களுடன் (கூடுதல் எதுவும் இல்லாமல்) ஒரே ஒரு JSON பொருளாக இருக்க வேண்டும்:
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  கட்டாயமான புலங்கள்:
+    - "k_eff": Float (>= 0). சூத்திரம் பயன்படுத்தவும்: k_eff = k / (1 + ρ(k-1)). k_eff < 2 = பலவீனம்.
+    - "correlation_risk": Float in [0.0, 1.0]. 0 = முழுமையாக சுதந்திர மூலங்கள், 1 = அனைத்து மூலங்களும் ஒரே தோற்றத்திலிருந்து.
+    - "phase": "chaos", "healthy", அல்லது "rigidity" என்ற சரியான string மதிப்புகளில் ஒன்று.
+    - "fragility_flag": Boolean. k_eff < 2 ஆகும்போது, அல்லது phase = "rigidity" ஆகும்போது, அல்லது correlation_risk > 0.7 ஆகும்போது, அல்லது பதில் மேலே விவரிக்கப்பட்ட பிரச்சார வடிவங்களுடன் பொருந்தும்போது TRUE.
+    - "reasoning": k_eff மற்றும் phase-ஐ எவ்வாறு அடைந்தீர்கள் என்று விளக்கும் சுருக்கமான string (2-5 வாக்கியங்கள்).
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  விருப்ப புலங்கள் (நிச்சயமில்லாத போது முழுவதுமாக தவிர்க்கவும் — காலி string அல்லது null வெளியிட வேண்டாம்):
+    - "sources_identified": நீங்கள் எண்ணிய வேறுபட்ட மூலங்களை பெயரிடும் 3 சுருக்கமான string வரிசை வரை.
+    - "correlation_factors": அந்த மூலங்கள் ஏன் ஒன்றுடன் ஒன்று தொடர்புடையவை என்று விளக்கும் 3 சுருக்கமான string வரிசை வரை (எ.கா. "same institutional narrative", "single research group", "derived from one prompt family").
+    - "intervention_recommendation": முகவர் பன்முகத்தன்மையை எவ்வாறு மீட்டெடுக்கலாம் என்று பரிந்துரைக்கும் ஒரு சுருக்கமான string (ஒரு வாக்கியம்), fragility_flag = TRUE ஆகும்போது மட்டும்.
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  மொழி விதிகள்:
+  - அனைத்து string மதிப்புகளுக்கும் (reasoning, sources_identified, correlation_factors, intervention_recommendation) பயனரின் விரும்பிய மொழியில் பதில் அளிக்கவும்.
+  - JSON திறவுகோல்களும் phase மதிப்புகளும் ஆங்கிலத்திலேயே இருக்க வேண்டும். Phase சரியாக "chaos", "healthy", அல்லது "rigidity" ஆக இருக்க வேண்டும்.
+  - உதாரணம் (கொரிய உள்ளடக்கம், ஆங்கில திறவுகோல்கள்/phase): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  markdown code blocks-இல் சுற்றி வேண்டாம். மேலே உள்ள பட்டியலுக்கு வெளியே எந்த புல பெயரும் வெளியிட வேண்டாம்.
 
 evaluation_steps: |
   இந்த வரிசையில் வேலை செய்:

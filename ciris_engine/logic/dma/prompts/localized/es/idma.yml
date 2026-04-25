@@ -114,26 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  Tu respuesta DEBE ser un único objeto JSON con EXACTAMENTE estas claves (sin extras):
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  REQUERIDO:
+    - "k_eff": Número decimal (>= 0). Aplica la fórmula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = frágil.
+    - "correlation_risk": Número decimal en [0.0, 1.0]. 0 = fuentes completamente independientes, 1 = todas las fuentes comparten un único origen.
+    - "phase": Una de las cadenas literales "chaos", "healthy" o "rigidity".
+    - "fragility_flag": Booleano. TRUE cuando k_eff < 2, o phase = "rigidity", o correlation_risk > 0.7, o la respuesta coincide con patrones de propaganda descritos anteriormente.
+    - "reasoning": Cadena breve (2-5 oraciones) que explica cómo llegaste a k_eff y la fase.
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  OPCIONAL (omitir completamente si no estás seguro — NO emitas cadenas vacías ni nulos):
+    - "sources_identified": Arreglo de hasta 3 cadenas cortas que nombran las fuentes distintas que contaste.
+    - "correlation_factors": Arreglo de hasta 3 cadenas cortas que explican por qué esas fuentes se superponen (p. ej., "misma narrativa institucional", "único grupo de investigación", "derivado de una familia de prompts").
+    - "intervention_recommendation": Una única cadena corta (una oración) que sugiere cómo el agente podría recuperar diversidad, SOLO si fragility_flag = TRUE.
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  REGLAS DE IDIOMA:
+  - Responde en el idioma preferido del usuario para todos los valores de cadena (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Las claves JSON y los valores de phase DEBEN permanecer en inglés. Phase debe ser exactamente "chaos", "healthy" o "rigidity".
+  - Ejemplo (contenido en coreano, claves/fases en inglés): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  No envuelvas en bloques de código markdown. No emitas ningún nombre de campo fuera de la lista anterior.
 
 evaluation_steps: |
   TRABAJA EN ESTE ORDEN:

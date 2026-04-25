@@ -114,26 +114,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  Jibu lako LAZIMA liwe kitu kimoja cha JSON chenye funguo HIZI HASA (bila ziada):
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  LAZIMA:
+    - "k_eff": Float (>= 0). Tumia fomula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = dhaifu.
+    - "correlation_risk": Float katika [0.0, 1.0]. 0 = vyanzo huru kabisa, 1 = vyanzo vyote vinatoka asili moja.
+    - "phase": Moja ya strings halisi "chaos", "healthy", au "rigidity".
+    - "fragility_flag": Boolean. TRUE wakati k_eff < 2, au phase = "rigidity", au correlation_risk > 0.7, au jibu linalingana na mifumo ya propaganda iliyoelezwa hapo juu.
+    - "reasoning": String fupi (sentensi 2-5) inayofafanua jinsi ulivyofikia k_eff na awamu.
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  SI LAZIMA (acha kabisa ikiwa huna uhakika — USITOE strings tupu au nulls):
+    - "sources_identified": Mkondo wa hadi strings 3 fupi zinazotaja vyanzo tofauti ulivyohesabu.
+    - "correlation_factors": Mkondo wa hadi strings 3 fupi zinazofafanua kwa nini vyanzo vinavyoingiliana (k.m. "simulizi moja ya kitaasisi", "kikundi kimoja cha utafiti", "imetokana na familia moja ya prompt").
+    - "intervention_recommendation": String moja fupi (sentensi moja) inayopendekeza jinsi wakala anavyoweza kupata utofauti, PEKE YAKE ikiwa fragility_flag = TRUE.
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  KANUNI ZA LUGHA:
+  - Jibu kwa lugha inayopendelewa na mtumiaji kwa thamani zote za string (reasoning, sources_identified, correlation_factors, intervention_recommendation).
+  - Funguo za JSON na thamani za phase LAZIMA zibaki kwa Kiingereza. Phase lazima iwe hasa "chaos", "healthy", au "rigidity".
+  - Mfano (maudhui ya Kikorea, funguo/awamu za Kiingereza): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  Usifunge katika vitalu vya markdown. Usitoe jina lolote la sehemu nje ya orodha hapo juu.
 
 evaluation_steps: |
   FANYA KAZI KWA UTARATIBU HUU:

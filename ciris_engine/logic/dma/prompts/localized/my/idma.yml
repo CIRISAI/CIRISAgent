@@ -112,26 +112,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  သင်၏တုံ့ပြန်မှုသည် အောက်ပါ key များသာပါဝင်သော JSON object တစ်ခုတည်းဖြစ်ရမည်:
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  မဖြစ်မနေထည့်သွင်းရမည်:
+    - "k_eff": Float (>= 0)။ ပုံသေနည်းကျင့်သုံးပါ k_eff = k / (1 + ρ(k-1))။ k_eff < 2 = ကျိုးပဲ့လွယ်သည်။
+    - "correlation_risk": Float in [0.0, 1.0]။ 0 = လုံးဝလွတ်လပ်သောအရင်းအမြစ်များ၊ 1 = အရင်းအမြစ်အားလုံး တစ်ခုတည်းမှ ဆင်းသက်သည်။
+    - "phase": "chaos"၊ "healthy" သို့မဟုတ် "rigidity" literal string တစ်ခု။
+    - "fragility_flag": Boolean။ k_eff < 2 ဖြစ်သောအခါ၊ phase = "rigidity" ဖြစ်သောအခါ၊ correlation_risk > 0.7 ဖြစ်သောအခါ၊ သို့မဟုတ် တုံ့ပြန်မှုသည် အထက်ဖော်ပြပါ ဝါဒဖြန့်မှုပုံစံများနှင့် ကိုက်ညီသောအခါ TRUE ဖြစ်သည်။
+    - "reasoning": k_eff နှင့် phase သို့ ရောက်ရှိပုံကို ရှင်းပြသော ဝါကျတိုများ (၂-၅ ဝါကျ)။
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  ရွေးချယ်ဖြည့်နိုင်သည် (မသေချာလျှင် လုံးဝချန်ထားပါ — empty string သို့မဟုတ် null မထုတ်ပါနှင့်):
+    - "sources_identified": ရေတွက်သည့် ကွဲပြားသောအရင်းအမြစ်များကို အမည်ပေးသော string တိုများ ၃ ခုအထိ array။
+    - "correlation_factors": ထိုအရင်းအမြစ်များ ဘာကြောင့်ထပ်တူကျသည်ကို ရှင်းပြသော string တိုများ ၃ ခုအထိ array (ဥပမာ "တစ်ခုတည်းသောအဖွဲ့အစည်းဇာတ်ကြောင်း"၊ "သုတေသနအဖွဲ့တစ်ခုတည်း")။
+    - "intervention_recommendation": fragility_flag = TRUE ဖြစ်သောအခါသာ အေးဂျင့်မည်သို့ ကွဲပြားမှုကို ပြန်လည်ရရှိနိုင်ကြောင်း အကြံပြုသော ဝါကျတစ်ကြောင်း။
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  ဘာသာစကားဆိုင်ရာ စည်းမျဉ်းများ:
+  - string တန်ဖိုးအားလုံး (reasoning, sources_identified, correlation_factors, intervention_recommendation) ကို အသုံးပြုသူ၏ နှစ်သက်ရာဘာသာဖြင့် တုံ့ပြန်ပါ။
+  - JSON key များနှင့် phase တန်ဖိုးများသည် အင်္ဂလိပ်ဘာသာဖြင့်သာ ဆက်လက်ရှိရမည်။ phase သည် "chaos"၊ "healthy" သို့မဟုတ် "rigidity" ဖြစ်ရမည်။
+  - ဥပမာ (မြန်မာဘာသာအကြောင်းအရာ၊ အင်္ဂလိပ်ဘာသာ key/phase): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "ဤသတင်းအချက်အလက်သည် တစ်ခုတည်းသောအရင်းအမြစ်မှသာ ဆင်းသက်သည်"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  markdown code block ဖြင့် ပတ်ရံမထားပါနှင့်။ အထက်ပါစာရင်းမပါသောမည်သည့် field name ကိုမဆို မထုတ်ပါနှင့်။
 
 evaluation_steps: |
   ဤအစီအစဉ်အတိုင်းလုပ်ဆောင်ပါ:

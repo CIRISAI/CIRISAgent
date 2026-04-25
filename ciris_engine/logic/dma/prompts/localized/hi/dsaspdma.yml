@@ -87,21 +87,21 @@ context_integration: |
 
 response_format: |
   इन fields के साथ एक FLAT JSON object लौटाएं:
-  - "reason_summary": छोटा human-readable explanation
-  - "operational_reason": ऊपर दिए गए operational reason codes में से एक
-  - "primary_need_category": ऊपर दिए गए rights / needs taxonomy values में से एक
-  - "secondary_need_categories": additional taxonomy values की optional list
-  - "rights_basis": छोटे rights-basis labels की list
-  - "domain_hint": optional licensed domain enum जब specialized licensed handler स्पष्ट रूप से आवश्यक हो
-  - "defer_until": optional ISO timestamp override यदि timing बदलनी चाहिए
+  - "reason_summary": छोटा मानव-पठनीय विवरण
+  - "operational_reason": ऊपर दिए गए परिचालन कारण कोड में से एक
+  - "primary_need_category": ऊपर दिए गए अधिकार/आवश्यकता वर्गीकरण मूल्यों में से एक
+  - "secondary_need_categories": अतिरिक्त वर्गीकरण मूल्यों की वैकल्पिक सूची
+  - "rights_basis": छोटे अधिकार-आधार लेबल की सूची
+  - "domain_hint": वैकल्पिक licensed domain enum जब विशेष licensed handler स्पष्ट रूप से आवश्यक हो
+  - "defer_until": वैकल्पिक ISO timestamp override यदि समय-निर्धारण बदलनी चाहिए
 
-  Example:
+  उदाहरण:
   {{"reason_summary": "प्रक्रियात्मक मार्गदर्शन देने से पहले licensed legal review आवश्यक है।", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
 
-  LANGUAGE RULES:
-  - user की preferred language में उत्तर दें।
-  - JSON keys और enum values बिल्कुल English में निर्दिष्ट रूप में ही रहें।
-  - केवल reason_summary जैसे human-readable free text को localize करें।
+  भाषा नियम:
+  - उपयोगकर्ता की पसंदीदा भाषा में उत्तर दें।
+  - JSON keys और enum values बिल्कुल अंग्रेज़ी में निर्दिष्ट रूप में ही रहें।
+  - केवल reason_summary जैसे मानव-पठनीय मुक्त पाठ को स्थानीयकृत करें।
 
 closing_reminder: |
   IMPORTANT:

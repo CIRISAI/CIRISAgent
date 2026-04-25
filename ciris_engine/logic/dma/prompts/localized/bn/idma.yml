@@ -113,26 +113,26 @@ context_integration: |
   {prior_dma_context}
 
 response_format: |
-  Your response MUST be a single JSON object with EXACTLY these keys (no extras):
+  আপনার প্রতিক্রিয়া অবশ্যই ঠিক এই কী-গুলি সহ একটি একক JSON অবজেক্ট হতে হবে (কোনো অতিরিক্ত নয়):
 
-  REQUIRED:
-    - "k_eff": Float (>= 0). Apply the formula k_eff = k / (1 + ρ(k-1)). k_eff < 2 = fragile.
-    - "correlation_risk": Float in [0.0, 1.0]. 0 = fully independent sources, 1 = all sources share a single origin.
-    - "phase": One of the literal strings "chaos", "healthy", or "rigidity".
-    - "fragility_flag": Boolean. TRUE when k_eff < 2, or phase = "rigidity", or correlation_risk > 0.7, or the response matches propaganda patterns described above.
-    - "reasoning": Short string (2-5 sentences) explaining how you reached k_eff and the phase.
+  আবশ্যিক:
+    - "k_eff": Float (>= 0)। সূত্র প্রয়োগ করুন k_eff = k / (1 + ρ(k-1))। k_eff < 2 = ভঙ্গুর।
+    - "correlation_risk": Float [0.0, 1.0]-এর মধ্যে। 0 = সম্পূর্ণ স্বতন্ত্র উৎস, 1 = সমস্ত উৎস একটি মূল উৎস থেকে।
+    - "phase": "chaos", "healthy", বা "rigidity" এই literal string-গুলির মধ্যে একটি।
+    - "fragility_flag": Boolean। k_eff < 2, বা phase = "rigidity", বা correlation_risk > 0.7, বা প্রতিক্রিয়া উপরে বর্ণিত প্রচারণা প্যাটার্নের সাথে মিলে গেলে TRUE।
+    - "reasoning": সংক্ষিপ্ত string (২-৫ বাক্য) যা ব্যাখ্যা করে কীভাবে k_eff এবং phase-এ পৌঁছালেন।
 
-  OPTIONAL (omit entirely if you are not sure — do NOT emit empty strings or nulls):
-    - "sources_identified": Array of up to 3 short strings naming the distinct sources you counted.
-    - "correlation_factors": Array of up to 3 short strings explaining why those sources overlap (e.g. "same institutional narrative", "single research group", "derived from one prompt family").
-    - "intervention_recommendation": A single short string (one sentence) suggesting how the agent could recover diversity, ONLY if fragility_flag = TRUE.
+  ঐচ্ছিক (যদি নিশ্চিত না হন তবে সম্পূর্ণ বাদ দিন — খালি string বা null নির্গত করবেন না):
+    - "sources_identified": গণনা করা স্বতন্ত্র উৎসের নাম দেওয়া সর্বোচ্চ ৩টি সংক্ষিপ্ত string-এর Array।
+    - "correlation_factors": সেই উৎসগুলি কেন ওভারল্যাপ করে তা ব্যাখ্যাকারী সর্বোচ্চ ৩টি সংক্ষিপ্ত string-এর Array (যেমন "same institutional narrative", "single research group", "derived from one prompt family")।
+    - "intervention_recommendation": একটি একক সংক্ষিপ্ত string (এক বাক্য) যা পরামর্শ দেয় এজেন্ট কীভাবে বৈচিত্র্য পুনরুদ্ধার করতে পারে, শুধুমাত্র যদি fragility_flag = TRUE হয়।
 
-  LANGUAGE RULES:
-  - Respond in the user's preferred language for all string values (reasoning, sources_identified, correlation_factors, intervention_recommendation).
-  - JSON keys and phase values MUST remain in English. Phase must be exactly "chaos", "healthy", or "rigidity".
-  - Example (Korean content, English keys/phases): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
+  ভাষার নিয়ম:
+  - সমস্ত string মানের জন্য (reasoning, sources_identified, correlation_factors, intervention_recommendation) ব্যবহারকারীর পছন্দের ভাষায় উত্তর দিন।
+  - JSON কী এবং phase মান অবশ্যই ইংরেজিতে থাকতে হবে। Phase অবশ্যই ঠিক "chaos", "healthy", বা "rigidity" হতে হবে।
+  - উদাহরণ (কোরিয়ান বিষয়বস্তু, ইংরেজি কী/phase): {{"k_eff": 1.0, "correlation_risk": 0.95, "phase": "rigidity", "fragility_flag": true, "reasoning": "해당 정보는 하나의 출처에서만 나왔습니다"}}
 
-  Do not wrap in markdown code blocks. Do not emit any field name outside the list above.
+  markdown কোড ব্লকে মোড়াবেন না। উপরের তালিকার বাইরে কোনো ফিল্ডের নাম নির্গত করবেন না।
 
 evaluation_steps: |
   এই ক্রমে কাজ করুন:

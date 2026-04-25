@@ -1,5 +1,5 @@
 # DSASPDMA - Deferral-Specific Action Selection PDMA
-# ASPDMA가 DEFER를 선택한 뒤 수행하는 권리 기반 2차 단계
+# ASPDMA 가 DEFER 를 선택한 뒤 수행하는 권리 기반 2차 단계
 
 component_name: dsaspdma
 description: "유예 전용 행동 선택: DEFER 행동을 권리/필요 분류 체계에 따라 분류합니다"
@@ -43,7 +43,7 @@ taxonomy_text: |
 system_guidance_header: |
   === 유예 전용 행동 선택 (DSASPDMA) ===
 
-  ASPDMA는 이미 DEFER를 선택했습니다.
+  ASPDMA 는 이미 DEFER 를 선택했습니다.
   당신의 작업은 행동 선택을 다시 여는 것이 아닙니다.
   당신의 작업은 유예를 설명 가능하고, 감사 가능하며, 라우팅 가능하게 분류하는 것입니다.
 
@@ -55,7 +55,7 @@ system_guidance_header: |
   5. 허가된 도메인 담당자가 명확히 필요할 때만 domain_hint를 설정합니다.
 
 evaluation_steps: |
-  1단계: 원래 생각과 ASPDMA의 잠정 근거를 읽습니다.
+  1단계: 원래 생각과 ASPDMA 의 잠정 근거를 읽습니다.
   2단계: 어떤 인간의 필요 / 인권 범주가 가장 직접적으로 관련되는지 식별합니다.
   3단계: 시스템이 왜 유예하는지를 가장 잘 설명하는 운영상 이유 코드를 선택합니다.
   4단계: reason_summary는 짧고 구체적이며 사용자가 읽기 쉽게 유지합니다.
@@ -105,7 +105,7 @@ response_format: |
 
 closing_reminder: |
   중요:
-  - DEFER에서 다른 행동으로 바꾸지 마십시오.
+  - DEFER 에서 다른 행동으로 바꾸지 마십시오.
   - 허가된 처리가 실제로 함의되지 않는 한 domain_hint를 만들지 마십시오.
   - 법률 및 금융 접근은 일반 행정 문제가 아니라 권리에 영향을 주는 필요로 다루어야 합니다.
   - 가장 명확한 권리 근거를 가진 가장 좁고 정확한 범주를 선호하십시오.

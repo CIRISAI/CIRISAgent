@@ -195,9 +195,10 @@ class QAConfig:
     model_eval_profile_memory: bool = True
     # Filter the model_eval question set by category (exact match, case-insensitive).
     # Empty list = run all curated questions. Use to scope a run to a single
-    # topic e.g. ["History"] for Tiananmen only, ["Theology"] for theodicy,
-    # etc. Combine with --model-eval-languages to run a single (question,
-    # language) pair for tight iteration loops.
+    # topic e.g. ["RLHFTradeoffs"] for one bias-torque axis, or two like
+    # ["BenchmarkLegitimacy","ArchitectureTradeoffs"]. Combine with
+    # --model-eval-languages to run a single (question, language) pair for
+    # tight iteration loops.
     model_eval_question_categories: List[str] = field(default_factory=list)
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:

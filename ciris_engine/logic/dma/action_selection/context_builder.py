@@ -651,14 +651,20 @@ Adhere strictly to the schema for your JSON output.
     def _build_conscience_guidance(
         self, conscience_feedback: Optional[Union[JSONDict, ConscienceFailureContext]]
     ) -> str:
-        """Build conscience guidance from feedback if available."""
+        """Build conscience guidance from feedback if available.
+
+        The `retry_guidance` payload is already pre-formatted in the agent's
+        locale (header + structured shard detail + materially-different rule)
+        by `_build_retry_guidance` in thought_processor.main, so we just emit
+        it with surrounding whitespace.
+        """
         if not conscience_feedback:
             return ""
 
         if isinstance(conscience_feedback, ConscienceFailureContext):
-            return f"\n\n**CONSCIENCE OVERRIDE GUIDANCE:**\n{conscience_feedback.retry_guidance}\n"
+            return f"\n\n{conscience_feedback.retry_guidance}\n"
         elif isinstance(conscience_feedback, dict) and "retry_guidance" in conscience_feedback:
-            return f"\n\n**CONSCIENCE OVERRIDE GUIDANCE:**\n{conscience_feedback['retry_guidance']}\n"
+            return f"\n\n{conscience_feedback['retry_guidance']}\n"
 
         return ""
 

@@ -239,9 +239,9 @@ Available modules:
         help=(
             "Comma-separated EvalQuestion categories to include (case-insensitive). "
             "Empty = all curated questions. "
-            "Examples: 'History' (Tiananmen only), "
-            "'Theology,Politics' (two topics), "
-            "'Mental Health' (quoted because of the space)."
+            "Examples: 'RLHFTradeoffs' (one bias axis), "
+            "'BenchmarkLegitimacy,ArchitectureTradeoffs' (two topics), "
+            "'CorporateSustainability' (geopolitical/corporate bias)."
         ),
     )
 

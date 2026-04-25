@@ -672,15 +672,19 @@ class ThoughtProcessor(
             thought_context.is_conscience_retry = True
         return thought_context
 
-    def _build_structured_shard_detail(self, conscience_result: ConscienceApplicationResult) -> str:
+    def _build_structured_shard_detail(
+        self, conscience_result: ConscienceApplicationResult, language: str = "en"
+    ) -> str:
         """Format per-shard conscience results into a structured retry envelope.
 
-        Reads the preserved entropy_check / coherence_check / optimization_veto_check
-        / epistemic_humility_check fields on ConscienceApplicationResult and renders
-        them as a structured block. The goal is to give ASPDMA concrete pivot
-        targets (IRIS-E's alternatives) and per-shard severity signals rather
-        than a free-text paragraph.
+        Technical labels ([IRIS-O], decision=, ratio=, etc.) stay in English so
+        the agent's structured-output schema sees consistent identifiers across
+        locales. Natural-language headers (`why:`, `Alternatives ... pivot
+        targets`, `uncertainties:`) are localized so the retry context does not
+        leak English into a non-English thought and cause language drift.
         """
+        from ciris_engine.logic.utils.localization import get_string
+
         lines: List[str] = []
 
         o = conscience_result.optimization_veto_check
@@ -691,14 +695,20 @@ class ThoughtProcessor(
                 f"affected_values=[{affected}]"
             )
             if o.justification:
-                lines.append(f"  why: {o.justification[:400]}")
+                why_label = get_string(language, "conscience.retry_why_label", default="why")
+                lines.append(f"  {why_label}: {o.justification[:400]}")
 
         e = conscience_result.entropy_check
         if e is not None:
             rep = "representative=True" if e.actual_is_representative else "representative=False"
             lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
             if e.alternative_meanings:
-                lines.append("  Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):")
+                alts_header = get_string(
+                    language,
+                    "conscience.retry_alternatives_header",
+                    default="Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):",
+                )
+                lines.append(f"  {alts_header}")
                 for i, alt in enumerate(e.alternative_meanings[:3], 1):
                     lines.append(f"    {i}. {alt[:280]}")
 
@@ -716,8 +726,11 @@ class ThoughtProcessor(
                 f"recommended={h.recommended_action}"
             )
             if h.identified_uncertainties:
+                unc_label = get_string(
+                    language, "conscience.retry_uncertainties_label", default="uncertainties"
+                )
                 lines.append(
-                    "  uncertainties: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4])
+                    f"  {unc_label}: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4])
                 )
 
         return "\n".join(lines)
@@ -728,42 +741,84 @@ class ThoughtProcessor(
         override_reason: str,
         updated_observation: Optional[str],
         conscience_result: Optional[ConscienceApplicationResult] = None,
+        language: str = "en",
     ) -> str:
-        """Build retry guidance message based on whether there's a new observation."""
+        """Build retry guidance message based on whether there's a new observation.
+
+        All natural-language guidance is rendered in `language` so the retry
+        context does not flip the agent's response language mid-thought. The
+        per-shard structured detail keeps technical identifiers in English.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
         # Structured per-shard detail — gives ASPDMA concrete pivot targets.
         shard_detail = (
-            self._build_structured_shard_detail(conscience_result) if conscience_result else ""
+            self._build_structured_shard_detail(conscience_result, language=language)
+            if conscience_result
+            else ""
         )
 
-        materially_different_rule = (
-            "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT from the "
-            "previous attempt — not a paraphrase. Use the IRIS-E alternatives above as pivot "
-            "directions if provided. If the conscience flagged propaganda/defensive-mimicry "
-            "patterns you cannot ethically rewrite, DEFER to Wise Authority. PONDER auto-DEFERS "
-            "at max depth — avoid that unless a SPEAK is genuinely unsafe."
+        header = get_string(
+            language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**"
+        )
+        intro = get_string(
+            language,
+            "conscience.retry_intro",
+            default="Your previous attempt to {action} was rejected because: {reason}",
+            action=attempted_action,
+            reason=override_reason,
+        )
+        intro = f"{header}\n{intro}"
+        materially_different_rule = get_string(
+            language,
+            "conscience.retry_must_be_different",
+            default=(
+                "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT "
+                "from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
+                "above as pivot directions if provided. CRITICAL: respond in the same "
+                "language you were responding in before — do not switch the user's "
+                "language. If the conscience flagged propaganda/defensive-mimicry patterns "
+                "you cannot ethically rewrite, DEFER to Wise Authority. PONDER auto-DEFERS "
+                "at max depth — avoid that unless a SPEAK is genuinely unsafe."
+            ),
         )
 
         base_guidance = (
-            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}\n\n"
-            f"{shard_detail}\n\n" if shard_detail else
-            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}\n\n"
+            f"{intro}\n\n{shard_detail}\n\n" if shard_detail else f"{intro}\n\n"
         )
 
         if updated_observation:
             logger.info("[CONSCIENCE_RETRY] Including new observation in retry_guidance")
-            return (
-                f"IMPORTANT: A NEW MESSAGE arrived from the user while you were processing: '{updated_observation}'. "
-                f"You must now respond to THIS new message, not complete the old task.\n\n"
-                f"{base_guidance}"
-                f"{materially_different_rule}\n"
-                "The user is waiting for a response to their new message. Use SPEAK to respond or use a TOOL if needed."
+            obs_intro = get_string(
+                language,
+                "conscience.retry_observation_intro",
+                default=(
+                    "IMPORTANT: A NEW MESSAGE arrived from the user while you were "
+                    "processing: '{updated_observation}'. You must now respond to THIS "
+                    "new message, not complete the old task."
+                ),
+                updated_observation=updated_observation,
             )
-        return (
-            f"{base_guidance}"
-            f"{materially_different_rule}\n"
-            "Remember: DEFER only for ethical dilemmas or permission issues - NOT for technical errors. "
-            "If a tool fails, SPEAK to explain the error to the user."
+            obs_outro = get_string(
+                language,
+                "conscience.retry_observation_outro",
+                default=(
+                    "The user is waiting for a response to their new message. Use SPEAK "
+                    "to respond or use a TOOL if needed."
+                ),
+            )
+            return f"{obs_intro}\n\n{base_guidance}{materially_different_rule}\n{obs_outro}"
+
+        general_outro = get_string(
+            language,
+            "conscience.retry_general_outro",
+            default=(
+                "Remember: DEFER only for ethical dilemmas or permission issues — NOT "
+                "for technical errors. If a tool fails, SPEAK to explain the error to "
+                "the user."
+            ),
         )
+        return f"{base_guidance}{materially_different_rule}\n{general_outro}"
 
     def _prepare_conscience_retry_context(
         self, thought_item: ProcessingQueueItem, thought_context: Any, conscience_result: ConscienceApplicationResult
@@ -785,8 +840,17 @@ class ThoughtProcessor(
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
         retry_context = self._create_retry_context_copy(thought_context)
+        # Resolve agent locale so the retry guidance is rendered in the same
+        # language the agent was speaking — prevents the model from flipping
+        # to English when it sees an English override block.
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+        retry_language = get_user_language_from_context(thought_context)
         retry_guidance = self._build_retry_guidance(
-            attempted_action, override_reason, updated_observation, conscience_result
+            attempted_action,
+            override_reason,
+            updated_observation,
+            conscience_result,
+            language=retry_language,
         )
 
         conscience_feedback = {

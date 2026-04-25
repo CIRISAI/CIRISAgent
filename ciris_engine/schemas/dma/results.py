@@ -234,7 +234,8 @@ class ASPDMALLMResult(BaseModel):
     """
 
     selected_action: HandlerActionType = Field(..., description="The chosen handler action")
-    rationale: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
+    # DMA-lexicon convention: all DMAs emit `reasoning` (not `rationale`).
+    reasoning: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
 
     # === SPEAK parameters ===
     speak_content: Optional[str] = Field(None, description="Content to speak (for SPEAK action)")
@@ -424,7 +425,7 @@ def convert_llm_result_to_action_result(
     return ActionSelectionDMAResult(
         selected_action=action,
         action_parameters=params,
-        rationale=llm_result.rationale,
+        rationale=llm_result.reasoning,
         raw_llm_response=raw_llm_response,
         evaluation_time_ms=evaluation_time_ms,
         resource_usage=resource_usage,

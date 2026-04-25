@@ -15,15 +15,15 @@ evaluation_steps: |
   7. **현실 지속성 검토**: 객체, 사람 또는 조건이 설명이나 원인 없이 사라지거나 나타나거나 변경됩니까? 실제로는 식별 가능한 힘에 의해 작용하지 않는 한 사물이 지속됩니다. 객체는 무작위로 사라지지 않고, 사람은 운송 없이 순간 이동하지 않으며, 조건은 기본 메커니즘 없이 변하지 않습니다. 설명되지 않은 사라짐, 나타남 또는 상태 변경을 가정하는 사고를 "Reality_Persistence_Violation"으로 플래그하십시오.
   8. **긴급성 방지 평가**: 사고에 신중한 고려를 우회할 수 있는 긴급성 마커가 포함되어 있습니까? 다음을 찾으십시오: 시간적 압력 단어 ("즉시", "긴급", "ASAP", "긴급", "지금", "빨리"), 성급한 행동을 제안하는 명령 또는 숙고를 방해하는 언어. **ACCORD 원칙**: 긴급한 결정은 종종 윤리적 고려를 우회합니다 - 즉각 행동하는 대신 Wise Authority의 지침을 위해 확대되어야 하는 긴급성 패턴을 나타내는 사고를 플래그하십시오. 중요한 긴급성 마커가 발견되어 WA 감독의 이점을 얻을 수 있는 경우 "Urgency_Detected_Escalation_Recommended"로 플래그하십시오.
   9. **시간적/인과적 추론 검토**: 정당화, 변명 및 추론 체인에 엄격한 논리적 분석을 적용합니다:
-     - **논리적 연결 검증**: 정당화가 실제로 행동에 연결됩니까? 예: "나는 이를 닦았다"는 "세수 건너뛰기"를 논리적으로 정당화하지 않습니다 - 이것들은 관련 없는 활동입니다. 유효한 정당화는 정당화되는 행동에 대한 인과적 또는 논리적 관계를 가져야 합니다. 연결되지 않은 정당화를 "Non_Sequitur_Justification"으로 플래그하십시오.
+     - **논리적 연결 검증**: 정당화가 실제로 행동에 연결됩니까? 예: "나는 이를 닦았다"는 "세수 건너뛰기"를 논리적으로 정당화하지 않습니다 - 이것들은 관련 없는 활동입니다. 유효한 정당화는 정당화되는 행동에 대한 인과적 또는 논리적 관계를 가져야 합니다. 연결되지 않은 정당화를 "Non_Sequitur_Reasoning"으로 플래그하십시오.
      - **시간적 관련성 평가**: 최근의 시간적 상태는 종종 관련이 있습니다. 예: "나는 20분 전에 먹었다"는 누군가가 지금 음식을 원하는지와 직접 관련이 있습니다 - 시간적 컨텍스트를 무관한 것으로 무시하지 마십시오. 최근 활동, 최근 식사, 최근 수면, 최근 운동은 모두 현재 상태와 선호도에 영향을 미칩니다. 관련 시간적 컨텍스트를 무시하는 사고를 "Temporal_Relevance_Ignored"로 플래그하십시오.
      - **인과 방향 분석**: 인과 관계가 반전되거나 역방향인지 확인하십시오. 예: "우리는 새로운 잼이 있다"는 토스트를 가지는 이유 (긍정적 인과)이지, 건너뛸 이유가 아닙니다. 새로운 재료, 신선한 공급품 또는 사용 가능한 자원은 일반적으로 행동에 대한 이유이지 반대가 아닙니다. 반전된 인과를 "Causal_Direction_Inverted"로 플래그하십시오.
-     - **약한 정당화 감지**: 정당화가 충분한 인과적 강도를 갖는지 평가합니다. 접선적으로 관련된 사실은 진정한 이유와 동일하지 않습니다. 질문: "이 정당화가 실제로 결론을 설명하거나 야기합니까?" 연결이 고문된 논리, 누락된 단계 또는 명시되지 않은 가정을 필요로 하는 경우 "Weak_Justification_Insufficient_Causation"으로 플래그하십시오.
+     - **약한 정당화 감지**: 정당화가 충분한 인과적 강도를 갖는지 평가합니다. 접선적으로 관련된 사실은 진정한 이유와 동일하지 않습니다. 질문: "이 정당화가 실제로 결론을 설명하거나 야기합니까?" 연결이 고문된 논리, 누락된 단계 또는 명시되지 않은 가정을 필요로 하는 경우 "Weak_Reasoning_Insufficient_Causation"으로 플래그하십시오.
 
 response_format: |
   귀하의 응답은 제공된 스키마를 준수하는 단일 JSON 객체여야 하며 다음 키를 포함해야 합니다:
   - "plausibility_score": 0.0 (매우 불가능)과 1.0 (매우 가능) 사이의 부동 소수점. **이 점수는 실제 물리적 타당성과 명시된 요소 간의 즉각적이고 피할 수 없는 상호 작용의 결과 (뜨거운 팬에서 녹는 얼음과 같은)를 크게 고려해야 하며, 해당 요소에 대한 명시적이고 구체적인 이상화된 컨텍스트가 사고에 제공되지 않는 한. 명백한 물리학이 그러한 명시적 이상화 없이 무시되면 낮은 점수를 부여해야 합니다.**
-  - "flags": 특정 상식 위반, 물리적 불가능성 (특히 무시된 상호 작용), 명확성 문제, 현실 지속성 위반, 긴급성 마커 또는 인과적/시간적 추론 문제를 식별하는 문자열 목록 (예: "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Justification", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Justification_Insufficient_Causation"). 없으면 빈 목록을 제공하십시오. 이 필드는 필수입니다 (비어 있더라도).
+  - "flags": 특정 상식 위반, 물리적 불가능성 (특히 무시된 상호 작용), 명확성 문제, 현실 지속성 위반, 긴급성 마커 또는 인과적/시간적 추론 문제를 식별하는 문자열 목록 (예: "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Reasoning", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Reasoning_Insufficient_Causation"). 없으면 빈 목록을 제공하십시오. 이 필드는 필수입니다 (비어 있더라도).
   - "reasoning": 점수와 플래그에 대한 간략한 (1-2 문장) 설명. 이 필드는 필수입니다.
 
   LANGUAGE RULES:

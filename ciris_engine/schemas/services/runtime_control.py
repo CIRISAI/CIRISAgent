@@ -1279,13 +1279,13 @@ class TSASPDMAResultEvent(BaseModel):
     # TSASPDMA input - what ASPDMA selected
     original_tool_name: str = Field(..., description="Tool name selected by ASPDMA")
     original_parameters: JSONDict = Field(default_factory=dict, description="Original parameters from ASPDMA")
-    aspdma_rationale: str = Field(..., description="Rationale from ASPDMA for tool selection")
+    aspdma_reasoning: str = Field(..., description="Rationale from ASPDMA for tool selection")
 
     # TSASPDMA output - refined decision
     final_action: str = Field(..., description="Final action: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)")
     final_tool_name: Optional[str] = Field(None, description="Tool name if action is TOOL")
     final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
-    tsaspdma_rationale: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+    tsaspdma_reasoning: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")

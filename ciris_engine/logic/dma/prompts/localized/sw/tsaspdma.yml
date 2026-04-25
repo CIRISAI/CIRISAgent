@@ -1,188 +1,179 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# A "second look" after ASPDMA selects a TOOL action
-
 component_name: tsaspdma
-description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
-version: "1.0"
-
-# Accord is always included in DMA prompts
+description: Tool-Specific ASPDMA - reviews tool selection with full documentation
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== UCHAGUZI WA KITENDO MAALUM CHA ZANA (TSASPDMA) ===\n\nUnakagua kitendo cha TOOL ambacho ASPDMA kimechagua.\nSasa una NYARAKA KAMILI kwa zana hii.\n\nKazi yako: Kwa muktadha huu wa ziada, amua kitendo bora.\n\n=== CHAGUO ZAKO (aina za vitendo sawa na ASPDMA) ===\n\n1. **TOOL** - Endelea na utekelezaji wa zana\n   - Tumia ikiwa nyaraka zinakubali hii ndiyo zana sahihi\n   - Unaweza kusahihisha vigezo kulingana na nyaraka/mifano\n   - Jumuisha mambo makali unayoyakubali katika mantiki yako\n\n2. **SPEAK** - Uliza mtumiaji kwa ufafanuzi\n   - Tumia ikiwa nyaraka zinafichua kutokuwa wazi kunakohitaji mchango wa mtumiaji\n   - Muundo: \"Ninahitaji mtumiaji ajibu: [swali maalum]\"\n   - Mifano:\n     - \"Ninahitaji mtumiaji ajibu: ni hazina gani niangalie?\"\n     - \"Ninahitaji mtumiaji ajibu: unataka ripoti kamili au muhtasari?\"\n\n3. **PONDER** - Fikiria upya mbinu\n   - Tumia ikiwa nyaraka zinaonyesha zana hii ni sio sahihi kwa kazi\n   - Tumia ikiwa zana tofauti ingekuwa bora zaidi kwa wazi\n   - Jumuisha sababu kwa nini zana hii haifai\n\n=== VIGEZO VYA UAMUZI ===\n\nChagua SPEAK kama:\n- Vigezo vinavyohitajika havina wazi\n- Tafsiri nyingi halali zinapo\n- Mambo makali yanatumika ambayo yanahitaji uthibitisho wa mtumiaji\n- Kazi haijafafanuliwa vya kutosha kwa zana hii\n\nChagua PONDER kama:\n- Zana hii haiwezi kufikia kazi\n- Zana tofauti ingekuwa bora zaidi sana\n- Nyaraka zinafichua kutofaa kwa uwezo\n- Kutumia zana hii kungekuwa sio sahihi au sio maadili katika muktadha\n\nChagua TOOL kama:\n- Nyaraka zinakubali hii ni sahihi\n- Vigezo ni wazi (sahihisha ikiwa mifano inapendekeza maboresho)\n- Unaweza kukubali mambo makali yanayohusika\n- Matumizi ya zana ni ya kimaadili na yanasogeza lengo la mtumiaji kwa njia sahihi\n"
+tool_documentation_section: '=== ZANA: {tool_name} ===
 
-system_guidance_header: |
-  === UCHAGUZI WA KITENDO MAALUM CHA ZANA (TSASPDMA) ===
-
-  Unakagua kitendo cha TOOL ambacho ASPDMA kimechagua.
-  Sasa una NYARAKA KAMILI kwa zana hii.
-
-  Kazi yako: Kwa muktadha huu wa ziada, amua kitendo bora.
-
-  === CHAGUO ZAKO (aina za vitendo sawa na ASPDMA) ===
-
-  1. **TOOL** - Endelea na utekelezaji wa zana
-     - Tumia ikiwa nyaraka zinakubali hii ndiyo zana sahihi
-     - Unaweza kusahihisha vigezo kulingana na nyaraka/mifano
-     - Jumuisha mambo makali unayoyakubali katika mantiki yako
-
-  2. **SPEAK** - Uliza mtumiaji kwa ufafanuzi
-     - Tumia ikiwa nyaraka zinafichua kutokuwa wazi kunakohitaji mchango wa mtumiaji
-     - Muundo: "Ninahitaji mtumiaji ajibu: [swali maalum]"
-     - Mifano:
-       - "Ninahitaji mtumiaji ajibu: ni hazina gani niangalie?"
-       - "Ninahitaji mtumiaji ajibu: unataka ripoti kamili au muhtasari?"
-
-  3. **PONDER** - Fikiria upya mbinu
-     - Tumia ikiwa nyaraka zinaonyesha zana hii ni sio sahihi kwa kazi
-     - Tumia ikiwa zana tofauti ingekuwa bora zaidi kwa wazi
-     - Jumuisha sababu kwa nini zana hii haifai
-
-  === VIGEZO VYA UAMUZI ===
-
-  Chagua SPEAK kama:
-  - Vigezo vinavyohitajika havina wazi
-  - Tafsiri nyingi halali zinapo
-  - Mambo makali yanatumika ambayo yanahitaji uthibitisho wa mtumiaji
-  - Kazi haijafafanuliwa vya kutosha kwa zana hii
-
-  Chagua PONDER kama:
-  - Zana hii haiwezi kufikia kazi
-  - Zana tofauti ingekuwa bora zaidi sana
-  - Nyaraka zinafichua kutofaa kwa uwezo
-  - Kutumia zana hii kungekuwa sio sahihi au sio maadili katika muktadha
-
-  Chagua TOOL kama:
-  - Nyaraka zinakubali hii ni sahihi
-  - Vigezo ni wazi (sahihisha ikiwa mifano inapendekeza maboresho)
-  - Unaweza kukubali mambo makali yanayohusika
-  - Matumizi ya zana ni ya kimaadili na yanasogeza lengo la mtumiaji kwa njia sahihi
-
-tool_documentation_section: |
-  === ZANA: {tool_name} ===
 
   **Maelezo:** {description}
 
+
   **Lini kutumia:** {when_to_use}
 
+
   ### Mpango wa Vigezo (LAZIMA UJAZE HIVI)
+
   {parameter_schema}
 
+
   ### Mwanzo wa Haraka
+
   {quick_start}
 
+
   ### Maelekezo ya Kina
+
   {detailed_instructions}
 
+
   ### Mifano
+
   {examples}
 
+
   ### Mambo Makali (Angalia!)
+
   {gotchas}
 
+
   ### Mwongozo wa DMA
+
   {dma_guidance}
 
-context_enrichment_section: |
-  === RASILIMALI ZINAZOPATIKANA (kutoka kwa utajiri wa muktadha) ===
+  '
+context_enrichment_section: '=== RASILIMALI ZINAZOPATIKANA (kutoka kwa utajiri wa muktadha) ===
+
   {context_enrichment_data}
 
+
   MUHIMU: Tumia thamani HALISI za entity_id kutoka kwa orodha hapo juu.
+
   USITUMIE majina ya kirafiki moja kwa moja - yaunganishe kwanza kwa entity_id.
 
-context_integration: |
-  === UCHAGUZI WA ASPDMA ===
+  '
+context_integration: '=== UCHAGUZI WA ASPDMA ===
+
   Zana: {tool_name}
-  Mantiki: {aspdma_rationale}
+
+  Mantiki: {aspdma_reasoning}
+
 
   === FIKRA YA ASILI (nia ya mtumiaji - tumia kuona vigezo) ===
+
   {original_thought_content}
+
 
   {context_enrichment_section}
 
+
   === NYARAKA ZA ZANA (na Mpango wa Vigezo) ===
+
   {tool_documentation}
 
-response_format: |
-  LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (reasoning, rationale, speak_content, etc.) should be in the user's language.
+  '
+response_format: 'LANGUAGE RULES:
+
+  - Respond in the user''s preferred language (check user profile).
+
+  - ALL content values (reasoning, reasoning, speak_content, etc.) should be in the user''s language.
+
   - JSON keys MUST remain in English (e.g., "selected_action", "reasoning", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - Swahili content, English keys.
+
+  - Example: {{"selected_action": "SPEAK", "speak_content": "Habari!", "reasoning": "Mtumiaji alisalimia kwa Kiswahili"}} - Swahili content, English keys.
+
 
   Rudisha kitu cha JSON cha GOROFA chenye sehemu hizi:
+
   - "selected_action": Moja ya "TOOL", "SPEAK", "PONDER"
-  - "rationale": Eleza uamuzi wako ukijumuisha mambo makali unayoyakubali
+
+  - "reasoning": Eleza uamuzi wako ukijumuisha mambo makali unayoyakubali
+
 
   PAMOJA NA sehemu maalum za kitendo (tumia majina halisi ya sehemu hapa chini):
 
+
   Kwa kitendo cha TOOL (hali ya kawaida - zana ipo):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
 
   Kwa kitendo cha TOOL (hali ya kurekebishwa - jina la zana lilikuwa sio sahihi):
-  {{"selected_action": "TOOL", "rationale": "Kurekebishwa jina la zana kulingana na zana inayopatikana...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "Kurekebishwa jina la zana kulingana na zana inayopatikana...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
 
   Kwa kitendo cha SPEAK:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Ninahitaji mtumiaji ajibu: ni taa gani?"}}
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "Ninahitaji mtumiaji ajibu: ni taa gani?"}}
+
 
   Kwa kitendo cha PONDER:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Je, hii ndiyo mbinu sahihi?"]}}
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["Je, hii ndiyo mbinu sahihi?"]}}
+
 
   MUHIMU:
+
   - Tumia Mpango wa Vigezo hapo juu kuamua vigezo vinavyohitajika vya zana
+
   - Ona thamani za vigezo kutoka kwa nia ya mtumiaji na muktadha wa mazungumzo
+
   - tool_parameters ni kamusi yenye hoja za zana
+
   - Katika HALI YA UREKEBISHAJI: jumuisha sehemu ya "tool_name" na jina HALISI kutoka kwa orodha ya zana zinazopatikana
+
   - Usifunge katika vitalu vya msimbo wa markdown
 
-# Tool correction mode section (used when ASPDMA selected non-existent tool)
-tool_correction_section: |
-  === HALI YA UREKEBISHAJI WA ZANA ===
+  '
+tool_correction_section: "=== HALI YA UREKEBISHAJI WA ZANA ===\n\nASPDMA ilichagua zana '{requested_tool}' lakini zana hii HAIPO.\n\nKazi yako: Pata zana SAHIHI kutoka kwa orodha ya zana zinazopatikana inayolingana\nna nia ya mtumiaji, AU tumia SPEAK/PONDER ikiwa hakuna zana inayofaa.\n\nZana zinazopatikana:\n{available_tools_list}\n\nMAELEKEZO:\n1. Changanua nia ya asili ya mtumiaji kutoka kwa maudhui ya fikra\n2. Kagua zana zinazopatikana hapo juu - pata moja inayolingana na nia\n3. Ikiwa unapata zana inayolingana:\n   - Rudisha kitendo cha TOOL na \"tool_name\" ikiwekwa kwa jina HALISI kutoka kwa orodha\n   - Jaza \"tool_parameters\" zinazofaa kulingana na mpango wa zana\n4. Ikiwa zana nyingi zinaweza kulingana:\n   - Rudisha SPEAK kuuliza mtumiaji ni uwezo gani maalum wanataka\n5. Ikiwa HAKUNA zana inayolingana na nia:\n   - Rudisha PONDER ili kufikiria upya mbinu kabisa\n\nMUHIMU: Sehemu ya \"tool_name\" lazima iwe ULINGANIFU HALISI kutoka kwa orodha ya zana zinazopatikana hapo juu.\n"
+evaluation_steps: 'HATUA YA 1: Soma Nyaraka
 
-  ASPDMA ilichagua zana '{requested_tool}' lakini zana hii HAIPO.
-
-  Kazi yako: Pata zana SAHIHI kutoka kwa orodha ya zana zinazopatikana inayolingana
-  na nia ya mtumiaji, AU tumia SPEAK/PONDER ikiwa hakuna zana inayofaa.
-
-  Zana zinazopatikana:
-  {available_tools_list}
-
-  MAELEKEZO:
-  1. Changanua nia ya asili ya mtumiaji kutoka kwa maudhui ya fikra
-  2. Kagua zana zinazopatikana hapo juu - pata moja inayolingana na nia
-  3. Ikiwa unapata zana inayolingana:
-     - Rudisha kitendo cha TOOL na "tool_name" ikiwekwa kwa jina HALISI kutoka kwa orodha
-     - Jaza "tool_parameters" zinazofaa kulingana na mpango wa zana
-  4. Ikiwa zana nyingi zinaweza kulingana:
-     - Rudisha SPEAK kuuliza mtumiaji ni uwezo gani maalum wanataka
-  5. Ikiwa HAKUNA zana inayolingana na nia:
-     - Rudisha PONDER ili kufikiria upya mbinu kabisa
-
-  MUHIMU: Sehemu ya "tool_name" lazima iwe ULINGANIFU HALISI kutoka kwa orodha ya zana zinazopatikana hapo juu.
-
-evaluation_steps: |
-  HATUA YA 1: Soma Nyaraka
   - Kagua quick_start, detailed_instructions, examples
+
   - Kumbuka mambo makali yoyote yanayotumika kwa matumizi haya
+
   - Angalia kama when_to_use inalingana na kazi
 
+
   HATUA YA 2: Tathmini Uchaguzi wa ASPDMA
+
   - Je, vigezo ni sahihi kulingana na nyaraka?
+
   - Je, mifano inapendekeza uumbaji bora wa vigezo?
+
   - Je, kuna vigezo vinavyohitajika ambavyo havina wazi?
 
+
   HATUA YA 3: Angalia Mambo Makali
+
   - Je, jambo lolote kali linatumika kwa matumizi haya mahususi?
+
   - Je, mtumiaji atarajia tabia hii?
+
   - Je, mtumiaji anapaswa kuonywa au kuulizwa kwanza?
 
+
   HATUA YA 4: Amua Kitendo
+
   - TOOL: Thibitisha au sahihisha, kubali mambo makali
+
   - SPEAK: Uliza ufafanuzi maalum
+
   - PONDER: Eleza kwa nini kufikiria upya
 
-closing_reminder: |
-  MUHIMU: Wajibu wako ni kuchukua masuala ambayo ASPDMA haikuweza kuona bila
+  '
+closing_reminder: 'MUHIMU: Wajibu wako ni kuchukua masuala ambayo ASPDMA haikuweza kuona bila
+
   nyaraka kamili. Ikiwa uchaguzi wa zana unaonekana mzuri, uthibitishe haraka.
+
   SPEAK au PONDER tu wakati nyaraka zinafichua wasiwasi wa kweli.
 
+
   Wakati wa kuchagua SPEAK, kuwa maalum: "Ninahitaji mtumiaji ajibu: [swali]"
+
   Wakati wa kuchagua PONDER, eleza: "Zana hii haiwezi X kwa sababu Y, fikiria Z"
+
   Wakati wa kuchagua TOOL, kubali: "Kuendelea kwa uelewa wa jambo kali X"
+
+  '

@@ -66,7 +66,7 @@ context_integration: |
   {original_thought_content}
 
   === የASPDMA ምክንያት ===
-  {aspdma_rationale}
+  {aspdma_reasoning}
 
   === የአሁኑ የDEFER ምክንያት ===
   {current_reason}

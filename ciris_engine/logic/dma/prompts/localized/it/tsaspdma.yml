@@ -1,188 +1,179 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# Una "seconda occhiata" dopo che ASPDMA seleziona un'azione TOOL
-
 component_name: tsaspdma
-description: "ASPDMA Specifico per Strumenti - revisiona la selezione dello strumento con documentazione completa"
-version: "1.0"
-
-# Accord è sempre incluso nei prompt DMA
+description: ASPDMA Specifico per Strumenti - revisiona la selezione dello strumento con documentazione completa
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== SELEZIONE DELL'AZIONE SPECIFICA PER STRUMENTO (TSASPDMA) ===\n\nStai rivedendo un'azione TOOL che ASPDMA ha selezionato.\nOra hai la DOCUMENTAZIONE COMPLETA per questo strumento.\n\nIl tuo compito: Con questo contesto aggiuntivo, decidi la migliore azione.\n\n=== LE TUE OPZIONI (stessi tipi di azione di ASPDMA) ===\n\n1. **TOOL** - Procedi con l'esecuzione dello strumento\n   - Usa se la documentazione conferma che questo è lo strumento giusto\n   - Puoi rifinire i parametri in base alla documentazione/esempi\n   - Includi le insidie che stai riconoscendo nella tua motivazione\n\n2. **SPEAK** - Chiedi chiarimenti all'utente\n   - Usa se la documentazione rivela ambiguità che necessita input dell'utente\n   - Formato: \"Ho bisogno che l'utente risponda: [domanda specifica]\"\n   - Esempi:\n     - \"Ho bisogno che l'utente risponda: quale repository devo verificare?\"\n     - \"Ho bisogno che l'utente risponda: vuoi il rapporto completo o il riepilogo?\"\n\n3. **PONDER** - Riconsiderare l'approccio\n   - Usa se la documentazione mostra che questo strumento è sbagliato per l'attività\n   - Usa se un diverso strumento sarebbe chiaramente migliore\n   - Includi il motivo per cui questo strumento non è appropriato\n\n=== CRITERI DI DECISIONE ===\n\nScegli SPEAK se:\n- I parametri richiesti sono ambigui\n- Esistono molteplici interpretazioni valide\n- Si applicano insidie che necessitano conferma dell'utente\n- L'attività è sottospecificata per questo strumento\n\nScegli PONDER se:\n- Questo strumento non può realizzare l'attività\n- Un diverso strumento sarebbe significativamente migliore\n- La documentazione rivela incompatibilità di capacità\n- Usare questo strumento sarebbe inappropriato o non etico nel contesto\n\nScegli TOOL se:\n- La documentazione conferma che questo è appropriato\n- I parametri sono chiari (affina se gli esempi suggeriscono miglioramenti)\n- Puoi riconoscere le insidie rilevanti\n- L'uso dello strumento è etico e fa avanzare appropriatamente l'obiettivo dell'utente\n"
+tool_documentation_section: '=== STRUMENTO: {tool_name} ===
 
-system_guidance_header: |
-  === SELEZIONE DELL'AZIONE SPECIFICA PER STRUMENTO (TSASPDMA) ===
-
-  Stai rivedendo un'azione TOOL che ASPDMA ha selezionato.
-  Ora hai la DOCUMENTAZIONE COMPLETA per questo strumento.
-
-  Il tuo compito: Con questo contesto aggiuntivo, decidi la migliore azione.
-
-  === LE TUE OPZIONI (stessi tipi di azione di ASPDMA) ===
-
-  1. **TOOL** - Procedi con l'esecuzione dello strumento
-     - Usa se la documentazione conferma che questo è lo strumento giusto
-     - Puoi rifinire i parametri in base alla documentazione/esempi
-     - Includi le insidie che stai riconoscendo nella tua motivazione
-
-  2. **SPEAK** - Chiedi chiarimenti all'utente
-     - Usa se la documentazione rivela ambiguità che necessita input dell'utente
-     - Formato: "Ho bisogno che l'utente risponda: [domanda specifica]"
-     - Esempi:
-       - "Ho bisogno che l'utente risponda: quale repository devo verificare?"
-       - "Ho bisogno che l'utente risponda: vuoi il rapporto completo o il riepilogo?"
-
-  3. **PONDER** - Riconsiderare l'approccio
-     - Usa se la documentazione mostra che questo strumento è sbagliato per l'attività
-     - Usa se un diverso strumento sarebbe chiaramente migliore
-     - Includi il motivo per cui questo strumento non è appropriato
-
-  === CRITERI DI DECISIONE ===
-
-  Scegli SPEAK se:
-  - I parametri richiesti sono ambigui
-  - Esistono molteplici interpretazioni valide
-  - Si applicano insidie che necessitano conferma dell'utente
-  - L'attività è sottospecificata per questo strumento
-
-  Scegli PONDER se:
-  - Questo strumento non può realizzare l'attività
-  - Un diverso strumento sarebbe significativamente migliore
-  - La documentazione rivela incompatibilità di capacità
-  - Usare questo strumento sarebbe inappropriato o non etico nel contesto
-
-  Scegli TOOL se:
-  - La documentazione conferma che questo è appropriato
-  - I parametri sono chiari (affina se gli esempi suggeriscono miglioramenti)
-  - Puoi riconoscere le insidie rilevanti
-  - L'uso dello strumento è etico e fa avanzare appropriatamente l'obiettivo dell'utente
-
-tool_documentation_section: |
-  === STRUMENTO: {tool_name} ===
 
   **Descrizione:** {description}
 
+
   **Quando Usare:** {when_to_use}
 
+
   ### Schema dei Parametri (DEVI COMPILARLI)
+
   {parameter_schema}
 
+
   ### Avvio Rapido
+
   {quick_start}
 
+
   ### Istruzioni Dettagliate
+
   {detailed_instructions}
 
+
   ### Esempi
+
   {examples}
 
+
   ### Insidie (Attenzione!)
+
   {gotchas}
 
+
   ### Guida DMA
+
   {dma_guidance}
 
-context_enrichment_section: |
-  === RISORSE DISPONIBILI (dall'arricchimento del contesto) ===
+  '
+context_enrichment_section: '=== RISORSE DISPONIBILI (dall''arricchimento del contesto) ===
+
   {context_enrichment_data}
 
-  IMPORTANTE: Usa i valori ESATTI di entity_id dall'elenco sopra.
+
+  IMPORTANTE: Usa i valori ESATTI di entity_id dall''elenco sopra.
+
   NON usare nomi amichevoli direttamente - mappali prima su entity_id.
 
-context_integration: |
-  === SELEZIONE DI ASPDMA ===
-  Strumento: {tool_name}
-  Motivazione: {aspdma_rationale}
+  '
+context_integration: '=== SELEZIONE DI ASPDMA ===
 
-  === PENSIERO ORIGINALE (intenzione dell'utente - usa per inferire i parametri) ===
+  Strumento: {tool_name}
+
+  Motivazione: {aspdma_reasoning}
+
+
+  === PENSIERO ORIGINALE (intenzione dell''utente - usa per inferire i parametri) ===
+
   {original_thought_content}
+
 
   {context_enrichment_section}
 
+
   === DOCUMENTAZIONE DELLO STRUMENTO (con Schema dei Parametri) ===
+
   {tool_documentation}
 
+
   REGOLE LINGUISTICHE:
-  - Rispondi nella lingua preferita dell'utente (controlla il profilo utente).
-  - TUTTI i valori dei contenuti (reasoning, rationale, speak_content, ecc.) devono essere nella lingua dell'utente.
+
+  - Rispondi nella lingua preferita dell''utente (controlla il profilo utente).
+
+  - TUTTI i valori dei contenuti (reasoning, reasoning, speak_content, ecc.) devono essere nella lingua dell''utente.
+
   - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
-  - Esempio: {{"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"}} - contenuto italiano, chiavi inglesi.
 
-response_format: |
-  Restituisci un oggetto JSON PIATTO con questi campi:
+  - Esempio: {{"selected_action": "SPEAK", "speak_content": "Ciao!", "reasoning": "L''utente ha salutato in italiano"}} - contenuto italiano, chiavi inglesi.
+
+  '
+response_format: 'Restituisci un oggetto JSON PIATTO con questi campi:
+
   - "selected_action": Uno di "TOOL", "SPEAK", "PONDER"
-  - "rationale": Spiega la tua decisione incluse le insidie che stai riconoscendo
 
-  PIÙ campi specifici dell'azione (usa i nomi esatti dei campi qui sotto):
+  - "reasoning": Spiega la tua decisione incluse le insidie che stai riconoscendo
+
+
+  PIÙ campi specifici dell''azione (usa i nomi esatti dei campi qui sotto):
+
 
   Per azione TOOL (modalità normale - lo strumento esiste):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
 
   Per azione TOOL (modalità correzione - il nome dello strumento era sbagliato):
-  {{"selected_action": "TOOL", "rationale": "Correzione del nome dello strumento per corrispondere allo strumento disponibile...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "Correzione del nome dello strumento per corrispondere allo strumento disponibile...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
 
   Per azione SPEAK:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "Ho bisogno che l'utente risponda: quale luce?"}}
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "Ho bisogno che l''utente risponda: quale luce?"}}
+
 
   Per azione PONDER:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["È questo l'approccio giusto?"]}}
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["È questo l''approccio giusto?"]}}
+
 
   IMPORTANTE:
+
   - Usa lo Schema dei Parametri sopra per determinare i parametri dello strumento richiesti
-  - Inferisci i valori dei parametri dall'intenzione dell'utente e dal contesto della conversazione
+
+  - Inferisci i valori dei parametri dall''intenzione dell''utente e dal contesto della conversazione
+
   - tool_parameters è un dict contenente gli argomenti dello strumento
-  - In MODALITÀ CORREZIONE: includi il campo "tool_name" con il nome ESATTO dall'elenco degli strumenti disponibili
+
+  - In MODALITÀ CORREZIONE: includi il campo "tool_name" con il nome ESATTO dall''elenco degli strumenti disponibili
+
   - Non racchiudere in blocchi di codice markdown
 
-# Sezione modalità correzione strumento (usata quando ASPDMA ha selezionato uno strumento inesistente)
-tool_correction_section: |
-  === MODALITÀ CORREZIONE STRUMENTO ===
+  '
+tool_correction_section: "=== MODALITÀ CORREZIONE STRUMENTO ===\n\nASPDMA ha selezionato lo strumento '{requested_tool}' ma questo strumento NON esiste.\n\nIl tuo compito: Trova lo strumento CORRETTO dall'elenco degli strumenti disponibili che corrisponde\nall'intenzione dell'utente, OPPURE usa SPEAK/PONDER se non esiste uno strumento adatto.\n\nStrumenti disponibili:\n{available_tools_list}\n\nISTRUZIONI:\n1. Analizza l'intenzione originale dell'utente dal contenuto del pensiero\n2. Esamina gli strumenti disponibili sopra - trova uno che corrisponde all'intenzione\n3. Se trovi uno strumento corrispondente:\n   - Restituisci azione TOOL con \"tool_name\" impostato sul nome ESATTO dall'elenco\n   - Compila \"tool_parameters\" appropriati in base allo schema dello strumento\n4. Se più strumenti potrebbero corrispondere:\n   - Restituisci SPEAK per chiedere all'utente quale capacità specifica vuole\n5. Se NESSUNO strumento corrisponde all'intenzione:\n   - Restituisci PONDER per riconsiderare completamente l'approccio\n\nCRITICO: Il campo \"tool_name\" deve essere una CORRISPONDENZA ESATTA dall'elenco degli strumenti disponibili sopra.\n"
+evaluation_steps: 'PASSO 1: Leggi la Documentazione
 
-  ASPDMA ha selezionato lo strumento '{requested_tool}' ma questo strumento NON esiste.
-
-  Il tuo compito: Trova lo strumento CORRETTO dall'elenco degli strumenti disponibili che corrisponde
-  all'intenzione dell'utente, OPPURE usa SPEAK/PONDER se non esiste uno strumento adatto.
-
-  Strumenti disponibili:
-  {available_tools_list}
-
-  ISTRUZIONI:
-  1. Analizza l'intenzione originale dell'utente dal contenuto del pensiero
-  2. Esamina gli strumenti disponibili sopra - trova uno che corrisponde all'intenzione
-  3. Se trovi uno strumento corrispondente:
-     - Restituisci azione TOOL con "tool_name" impostato sul nome ESATTO dall'elenco
-     - Compila "tool_parameters" appropriati in base allo schema dello strumento
-  4. Se più strumenti potrebbero corrispondere:
-     - Restituisci SPEAK per chiedere all'utente quale capacità specifica vuole
-  5. Se NESSUNO strumento corrisponde all'intenzione:
-     - Restituisci PONDER per riconsiderare completamente l'approccio
-
-  CRITICO: Il campo "tool_name" deve essere una CORRISPONDENZA ESATTA dall'elenco degli strumenti disponibili sopra.
-
-evaluation_steps: |
-  PASSO 1: Leggi la Documentazione
   - Esamina avvio_rapido, istruzioni_dettagliate, esempi
-  - Nota eventuali insidie che si applicano a questo caso d'uso
-  - Controlla se quando_usare corrisponde all'attività
+
+  - Nota eventuali insidie che si applicano a questo caso d''uso
+
+  - Controlla se quando_usare corrisponde all''attività
+
 
   PASSO 2: Valuta la Selezione di ASPDMA
+
   - I parametri sono corretti secondo la documentazione?
+
   - Gli esempi suggeriscono una migliore formattazione dei parametri?
+
   - Ci sono parametri richiesti che sono ambigui?
 
-  PASSO 3: Controlla le Insidie
-  - Qualche insidia si applica a questo uso specifico?
-  - L'utente si aspetterebbe questo comportamento?
-  - L'utente dovrebbe essere avvisato o interpellato prima?
 
-  PASSO 4: Decidi l'Azione
+  PASSO 3: Controlla le Insidie
+
+  - Qualche insidia si applica a questo uso specifico?
+
+  - L''utente si aspetterebbe questo comportamento?
+
+  - L''utente dovrebbe essere avvisato o interpellato prima?
+
+
+  PASSO 4: Decidi l''Azione
+
   - TOOL: Conferma o affina, riconosci le insidie
+
   - SPEAK: Chiedi chiarimenti specifici
+
   - PONDER: Spiega perché riconsiderare
 
-closing_reminder: |
-  IMPORTANTE: Il tuo ruolo è catturare problemi che ASPDMA non poteva vedere senza
+  '
+closing_reminder: 'IMPORTANTE: Il tuo ruolo è catturare problemi che ASPDMA non poteva vedere senza
+
   documentazione completa. Se la selezione dello strumento sembra buona, confermala rapidamente.
+
   Solo SPEAK o PONDER quando la documentazione rivela preoccupazioni genuine.
 
-  Quando scegli SPEAK, sii specifico: "Ho bisogno che l'utente risponda: [domanda]"
+
+  Quando scegli SPEAK, sii specifico: "Ho bisogno che l''utente risponda: [domanda]"
+
   Quando scegli PONDER, spiega: "Questo strumento non può X perché Y, considera Z"
-  Quando scegli TOOL, riconosci: "Procedo con consapevolezza dell'insidia X"
+
+  Quando scegli TOOL, riconosci: "Procedo con consapevolezza dell''insidia X"
+
+  '

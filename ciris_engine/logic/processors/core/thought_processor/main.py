@@ -373,7 +373,7 @@ class ThoughtProcessor(
                     evaluator=evaluator,
                     requested_tool_name=tool_name,
                     available_tools=all_tools,
-                    aspdma_rationale=action_result.rationale or "",
+                    aspdma_reasoning=action_result.rationale or "",
                     original_thought=thought_item,
                     time_service=self._time_service,
                 )
@@ -464,7 +464,7 @@ class ThoughtProcessor(
                 evaluator=evaluator,
                 tool_name=tool_name,
                 tool_info=tool_info,
-                aspdma_rationale=action_result.rationale or "",
+                aspdma_reasoning=action_result.rationale or "",
                 original_thought=thought_item,
                 context=None,
                 time_service=self._time_service,
@@ -481,7 +481,7 @@ class ThoughtProcessor(
                 thought_item=thought_item,
                 tool_name=tool_name,
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale=action_result.rationale or "",
+                aspdma_reasoning=action_result.rationale or "",
             )
 
             # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
@@ -541,7 +541,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         tool_name: str,
         tsaspdma_result: ActionSelectionDMAResult,
-        aspdma_rationale: str = "",
+        aspdma_reasoning: str = "",
     ) -> None:
         """Emit TSASPDMA_RESULT reasoning event for trace capture.
 
@@ -582,12 +582,12 @@ class ThoughtProcessor(
                 # TSASPDMA input - what ASPDMA selected
                 original_tool_name=tool_name,
                 original_parameters={},  # ASPDMA doesn't provide params in v1.9.3
-                aspdma_rationale=aspdma_rationale,
+                aspdma_reasoning=aspdma_reasoning,
                 # TSASPDMA output - refined decision
                 final_action=tsaspdma_result.selected_action.value,
                 final_tool_name=final_tool_name,
                 final_parameters=final_params,
-                tsaspdma_rationale=tsaspdma_result.rationale or "",
+                tsaspdma_reasoning=tsaspdma_result.rationale or "",
             )
 
             await reasoning_event_stream.broadcast_reasoning_event(event)
@@ -595,7 +595,7 @@ class ThoughtProcessor(
                 f"TSASPDMA-EVENT: Emitted TSASPDMA_RESULT for thought {thought_item.thought_id}: "
                 f"final_action={tsaspdma_result.selected_action.value}, "
                 f"final_tool_name={final_tool_name}, "
-                f"tsaspdma_rationale={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
+                f"tsaspdma_reasoning={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
             )
 
         except Exception as e:
@@ -672,26 +672,95 @@ class ThoughtProcessor(
             thought_context.is_conscience_retry = True
         return thought_context
 
+    def _build_structured_shard_detail(self, conscience_result: ConscienceApplicationResult) -> str:
+        """Format per-shard conscience results into a structured retry envelope.
+
+        Reads the preserved entropy_check / coherence_check / optimization_veto_check
+        / epistemic_humility_check fields on ConscienceApplicationResult and renders
+        them as a structured block. The goal is to give ASPDMA concrete pivot
+        targets (IRIS-E's alternatives) and per-shard severity signals rather
+        than a free-text paragraph.
+        """
+        lines: List[str] = []
+
+        o = conscience_result.optimization_veto_check
+        if o is not None:
+            affected = ", ".join(o.affected_values) if o.affected_values else "(none listed)"
+            lines.append(
+                f"[IRIS-O] decision={o.decision} ratio={o.entropy_reduction_ratio:.1f} "
+                f"affected_values=[{affected}]"
+            )
+            if o.justification:
+                lines.append(f"  why: {o.justification[:400]}")
+
+        e = conscience_result.entropy_check
+        if e is not None:
+            rep = "representative=True" if e.actual_is_representative else "representative=False"
+            lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
+            if e.alternative_meanings:
+                lines.append("  Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):")
+                for i, alt in enumerate(e.alternative_meanings[:3], 1):
+                    lines.append(f"    {i}. {alt[:280]}")
+
+        c = conscience_result.coherence_check
+        if c is not None:
+            lines.append(
+                f"[IRIS-C] coherence={c.coherence_score:.2f} threshold={c.threshold:.2f} "
+                f"{'PASS' if c.passed else 'FAIL'}"
+            )
+
+        h = conscience_result.epistemic_humility_check
+        if h is not None:
+            lines.append(
+                f"[IRIS-H] certainty={h.epistemic_certainty:.2f} "
+                f"recommended={h.recommended_action}"
+            )
+            if h.identified_uncertainties:
+                lines.append(
+                    "  uncertainties: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4])
+                )
+
+        return "\n".join(lines)
+
     def _build_retry_guidance(
-        self, attempted_action: str, override_reason: str, updated_observation: Optional[str]
+        self,
+        attempted_action: str,
+        override_reason: str,
+        updated_observation: Optional[str],
+        conscience_result: Optional[ConscienceApplicationResult] = None,
     ) -> str:
         """Build retry guidance message based on whether there's a new observation."""
-        base_guidance = (
-            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
-            "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
+        # Structured per-shard detail — gives ASPDMA concrete pivot targets.
+        shard_detail = (
+            self._build_structured_shard_detail(conscience_result) if conscience_result else ""
         )
+
+        materially_different_rule = (
+            "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT from the "
+            "previous attempt — not a paraphrase. Use the IRIS-E alternatives above as pivot "
+            "directions if provided. If the conscience flagged propaganda/defensive-mimicry "
+            "patterns you cannot ethically rewrite, DEFER to Wise Authority. PONDER auto-DEFERS "
+            "at max depth — avoid that unless a SPEAK is genuinely unsafe."
+        )
+
+        base_guidance = (
+            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}\n\n"
+            f"{shard_detail}\n\n" if shard_detail else
+            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}\n\n"
+        )
+
         if updated_observation:
             logger.info("[CONSCIENCE_RETRY] Including new observation in retry_guidance")
             return (
                 f"IMPORTANT: A NEW MESSAGE arrived from the user while you were processing: '{updated_observation}'. "
-                f"You must now respond to THIS new message, not complete the old task. "
+                f"You must now respond to THIS new message, not complete the old task.\n\n"
                 f"{base_guidance}"
+                f"{materially_different_rule}\n"
                 "The user is waiting for a response to their new message. Use SPEAK to respond or use a TOOL if needed."
             )
         return (
             f"{base_guidance}"
-            "Consider: Is there a more cautious approach? Should you gather more information first? "
-            "Can this task be marked as complete without further action? "
+            f"{materially_different_rule}\n"
             "Remember: DEFER only for ethical dilemmas or permission issues - NOT for technical errors. "
             "If a tool fails, SPEAK to explain the error to the user."
         )
@@ -716,7 +785,9 @@ class ThoughtProcessor(
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
         retry_context = self._create_retry_context_copy(thought_context)
-        retry_guidance = self._build_retry_guidance(attempted_action, override_reason, updated_observation)
+        retry_guidance = self._build_retry_guidance(
+            attempted_action, override_reason, updated_observation, conscience_result
+        )
 
         conscience_feedback = {
             "failed_action": attempted_action,

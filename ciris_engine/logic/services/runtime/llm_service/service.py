@@ -60,6 +60,37 @@ from ciris_engine.schemas.services.llm import (
 from .pricing_calculator import LLMPricingCalculator
 
 
+def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
+    """Merge consecutive messages that share a role.
+
+    Some strict OpenAI-compatible providers (DeepInfra) reject multiple system
+    messages with HTTP 400 even when they appear at the start. Merging
+    consecutive same-role messages is semantically equivalent and makes CIRIS
+    portable across lenient and strict providers. Multimodal content (lists)
+    is preserved by concatenation; string content is joined with a blank line.
+    """
+    if not messages:
+        return messages
+    out: List[MessageDict] = []
+    for msg in messages:
+        if out and out[-1].get("role") == msg.get("role"):
+            prev_content = out[-1].get("content")
+            curr_content = msg.get("content")
+            merged: Any
+            # If either side is a list (multimodal), concatenate as a list;
+            # otherwise join strings with a blank line.
+            if isinstance(prev_content, list) or isinstance(curr_content, list):
+                prev_list = prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
+                curr_list = curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                merged = prev_list + curr_list
+            else:
+                merged = f"{prev_content}\n\n{curr_content}"
+            out[-1] = cast(MessageDict, {**out[-1], "content": merged})
+        else:
+            out.append(cast(MessageDict, dict(msg)))
+    return out
+
+
 def _build_ciris_proxy_metadata(
     task_id: Optional[str],
     thought_id: Optional[str],
@@ -1123,6 +1154,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         retry_state = RetryState()
 
+        # Merge consecutive same-role messages (system-system, user-user) before
+        # dispatch. Strict OpenAI-compatible providers like DeepInfra reject
+        # multiple system messages with HTTP 400 "System message must be at the
+        # beginning." Merging is semantically equivalent — two system messages
+        # concatenated with a blank line produce identical LLM behavior — and
+        # makes CIRIS portable across lenient (OpenAI, OpenRouter) and strict
+        # (DeepInfra) providers.
+        messages = _coalesce_consecutive_roles(messages)
+
         async def _make_structured_call(
             msg_list: List[MessageDict],
             resp_model: Type[BaseModel],
@@ -1282,6 +1322,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # Together AI uses different format for disabling thinking
             # Format: {"thinking": {"type": "disabled"}}
             extra_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        elif "deepinfra" in base_url:
+            # DeepInfra serves Qwen/DeepSeek/etc. via vLLM. vLLM-based hosts
+            # accept the chat_template_kwargs knob (same format as local vLLM).
+            # Without this, Qwen3+ models default to thinking mode and burn
+            # ~30s/call on hidden reasoning tokens before emitting structured
+            # output.
+            extra_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         elif self._is_local_endpoint(base_url):
             # ALWAYS disable reasoning/thinking on local endpoints.
             # CIRIS provides its own reasoning structure via the DMA pipeline -

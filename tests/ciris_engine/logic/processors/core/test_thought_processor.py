@@ -976,7 +976,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
     @pytest.mark.asyncio
@@ -1018,7 +1018,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
             # Should have broadcast the event
@@ -1063,7 +1063,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
             # Verify event was created with correct parameters

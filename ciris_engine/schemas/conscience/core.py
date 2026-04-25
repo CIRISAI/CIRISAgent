@@ -28,6 +28,15 @@ class EntropyCheckResult(BaseModel):
     entropy_score: float = Field(ge=0.0, le=1.0, description="Entropy score (0=low, 1=high)")
     threshold: float = Field(ge=0.0, le=1.0, description="Threshold used for check")
     message: str = Field(description="Human-readable result message")
+    # The 3 semantically-different alternatives IRIS-E enumerated alongside the
+    # actual response. Preserved so downstream retry guidance can use them as
+    # concrete pivot targets instead of free-text scolding.
+    alternative_meanings: List[str] = Field(
+        default_factory=list, description="Alternatives IRIS-E enumerated (typically 3)"
+    )
+    actual_is_representative: Optional[bool] = Field(
+        default=None, description="Whether the actual response sits in the alternative-meaning cluster"
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -135,6 +144,14 @@ class ConscienceCheckResult(BaseModel):
     # Metrics
     entropy_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall entropy score")
     coherence_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Overall coherence score")
+
+    # Preserved IRIS-E alternatives (pivot targets for recursive ASPDMA retry)
+    entropy_alternatives: Optional[List[str]] = Field(
+        default=None, description="IRIS-E's enumerated alternative meanings for retry guidance"
+    )
+    entropy_actual_is_representative: Optional[bool] = Field(
+        default=None, description="IRIS-E's actual_is_representative flag"
+    )
 
     # Prompts used (for streaming/debugging when include_prompts flag is set)
     entropy_prompt: Optional[str] = Field(default=None, description="User prompt used for entropy evaluation")

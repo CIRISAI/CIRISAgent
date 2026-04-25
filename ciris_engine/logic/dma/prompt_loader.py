@@ -160,7 +160,7 @@ class DMAPromptLoader:
                 action_params_speak_csdma_guidance=template_data.get("action_params_speak_csdma_guidance"),
                 action_params_ponder_guidance=template_data.get("action_params_ponder_guidance"),
                 action_params_observe_guidance=template_data.get("action_params_observe_guidance"),
-                rationale_csdma_guidance=template_data.get("rationale_csdma_guidance"),
+                reasoning_csdma_guidance=template_data.get("reasoning_csdma_guidance"),
                 final_ponder_advisory=template_data.get("final_ponder_advisory"),
                 closing_reminder=template_data.get("closing_reminder"),
                 context_integration=template_data.get("context_integration"),

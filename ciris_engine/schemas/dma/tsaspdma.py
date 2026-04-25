@@ -32,7 +32,7 @@ class TSASPDMAInputs(BaseModel):
     # Tool information from ASPDMA selection
     tool_name: str = Field(..., description="Name of the tool selected by ASPDMA")
     # NOTE: ASPDMA only provides tool_name. TSASPDMA extracts parameters from original_thought.
-    aspdma_rationale: str = Field(..., description="ASPDMA's rationale for selecting this tool")
+    aspdma_reasoning: str = Field(..., description="ASPDMA's rationale for selecting this tool")
 
     # Full tool metadata with documentation
     tool_info: Any = Field(..., description="Full ToolInfo with documentation, gotchas, examples")

@@ -340,8 +340,15 @@ class EntropyConscience(_BaseConscience):
                 if logger.isEnabledFor(logging.DEBUG):
                     for i, alt in enumerate(entropy_eval.alternative_meanings, 1):
                         logger.debug("  alt #%d: %s", i, alt[:200])
+                entropy_alternatives = list(entropy_eval.alternative_meanings)
+                entropy_actual_is_representative = entropy_eval.actual_is_representative
+            else:
+                entropy_alternatives = []
+                entropy_actual_is_representative = None
         except Exception as e:
             logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
+            entropy_alternatives = []
+            entropy_actual_is_representative = None
 
         passed = entropy <= self.config.entropy_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -360,6 +367,8 @@ class EntropyConscience(_BaseConscience):
             reason=reason,
             entropy_score=entropy,
             entropy_prompt=entropy_user_prompt,
+            entropy_alternatives=entropy_alternatives,
+            entropy_actual_is_representative=entropy_actual_is_representative,
             check_timestamp=ts_datetime,
         )
 

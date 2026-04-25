@@ -825,7 +825,7 @@ async def run_tsaspdma(
     evaluator: TSASPDMAEvaluator,
     tool_name: str,
     tool_info: "ToolInfo",
-    aspdma_rationale: str,
+    aspdma_reasoning: str,
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
@@ -905,7 +905,7 @@ async def run_tsaspdma(
         result = await evaluator.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
             context_enrichment=context_enrichment,
@@ -954,7 +954,7 @@ async def run_tsaspdma_correction(
     evaluator: TSASPDMAEvaluator,
     requested_tool_name: str,
     available_tools: List["ToolInfo"],
-    aspdma_rationale: str,
+    aspdma_reasoning: str,
     original_thought: ProcessingQueueItem,
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> ActionSelectionDMAResult:
@@ -1025,7 +1025,7 @@ async def run_tsaspdma_correction(
         result = await evaluator.evaluate_tool_correction(
             requested_tool_name=requested_tool_name,
             available_tools=available_tools,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=None,
         )

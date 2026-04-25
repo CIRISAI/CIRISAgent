@@ -222,7 +222,7 @@ class ActionSelectionContextBuilder:
         _action_parameters_speak_csdma_guidance = _guidance_sections.get("action_parameters_speak_csdma_guidance", "")
         _action_parameters_ponder_guidance = _guidance_sections.get("action_parameters_ponder_guidance", "")
         _action_parameters_observe_guidance = _guidance_sections.get("action_parameters_observe_guidance", "")
-        _rationale_csdma_guidance = _guidance_sections.get("rationale_csdma_guidance", "")
+        _reasoning_csdma_guidance = _guidance_sections.get("reasoning_csdma_guidance", "")
 
         # Build original task context
         _original_task_str = self._build_original_task_context(original_thought)
@@ -245,7 +245,7 @@ CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUS
 
 Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
 - 'selected_action': Choose from {action_options_str}
-- 'rationale': Explain why this action is optimal
+- 'reasoning': Explain why this action is optimal
 - Then include the FLAT fields for your chosen action:
   - SPEAK: 'speak_content' (string with your response)
   - PONDER: 'ponder_questions' (list of strings)
@@ -260,9 +260,9 @@ Your response MUST be a JSON object with FLAT fields (NO nested action_parameter
     {action_parameters_speak_csdma_guidance}
     {action_parameters_ponder_guidance}
     {action_parameters_observe_guidance}
-    {rationale_csdma_guidance}
+    {reasoning_csdma_guidance}
 
-CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "rationale": "..."}}
+CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "reasoning": "..."}}
 
 === ORIGINAL TASK (What the user requested) ===
 {original_task_str}
@@ -296,7 +296,7 @@ Adhere strictly to the schema for your JSON output.
             action_parameters_speak_csdma_guidance=_action_parameters_speak_csdma_guidance,
             action_parameters_ponder_guidance=_action_parameters_ponder_guidance,
             action_parameters_observe_guidance=_action_parameters_observe_guidance,
-            rationale_csdma_guidance=_rationale_csdma_guidance,
+            reasoning_csdma_guidance=_reasoning_csdma_guidance,
             self=self,
             final_ponder_advisory=_final_ponder_advisory,
             guidance_sections=_guidance_sections,
@@ -621,7 +621,7 @@ Adhere strictly to the schema for your JSON output.
             "action_parameters_observe_guidance": self._get_agent_specific_prompt(
                 "action_params_observe_guidance", agent_name
             ),
-            "rationale_csdma_guidance": self._get_agent_specific_prompt("rationale_csdma_guidance", agent_name),
+            "reasoning_csdma_guidance": self._get_agent_specific_prompt("reasoning_csdma_guidance", agent_name),
             "action_parameter_schemas": self._get_dynamic_action_schemas(permitted_actions),
         }
 

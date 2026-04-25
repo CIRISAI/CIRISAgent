@@ -50,7 +50,7 @@ class TSASPDMALLMResult(BaseModel):
     selected_action: HandlerActionType = Field(
         ..., description="Action to take: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)"
     )
-    rationale: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
+    reasoning: str = Field(..., description="Reasoning for this decision, including any gotchas acknowledged")
 
     # === TOOL parameters (TSASPDMA refines these) ===
     tool_name: Optional[str] = Field(
@@ -204,7 +204,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return ActionSelectionDMAResult(
             selected_action=action,
             action_parameters=params,
-            rationale=llm_result.rationale,
+            rationale=llm_result.reasoning,
         )
 
     def _format_parameter_schema(self, tool_info: ToolInfo) -> List[str]:
@@ -338,7 +338,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         tool_name: str,
         tool_info: ToolInfo,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought_content: str,
         context_enrichment: Optional[Dict[str, Any]] = None,
     ) -> List[JSONDict]:
@@ -395,7 +395,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         user_message_text = self.prompt_loader.get_user_message(
             self.prompt_template_data,
             tool_name=tool_name,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=original_thought_content,
             tool_documentation=tool_documentation,
             context_enrichment_section=context_enrichment_section,
@@ -409,7 +409,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         tool_name: str,
         tool_info: ToolInfo,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
         context_enrichment: Optional[Dict[str, Any]] = None,
@@ -451,7 +451,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         messages = self._create_tsaspdma_messages(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
         )
@@ -493,7 +493,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                     action_parameters=tsaspdma_result.action_parameters,
                     rationale=f"TSASPDMA: {tsaspdma_result.rationale}",
                     raw_llm_response=tsaspdma_result.raw_llm_response,
-                    reasoning=tsaspdma_result.reasoning,
+                    reasoning=tsaspdma_result.rationale,
                     evaluation_time_ms=tsaspdma_result.evaluation_time_ms,
                     resource_usage=tsaspdma_result.resource_usage,
                     user_prompt=tsaspdma_result.user_prompt,
@@ -517,7 +517,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         requested_tool_name: str,
         available_tools: List[ToolInfo],
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
     ) -> ActionSelectionDMAResult:
@@ -544,7 +544,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         messages = self._create_correction_mode_messages(
             requested_tool=requested_tool_name,
             available_tools_list=tools_list_text,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
         )
 
@@ -629,7 +629,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self,
         requested_tool: str,
         available_tools_list: str,
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought_content: str,
     ) -> List[JSONDict]:
         """Create prompt messages for TSASPDMA correction mode."""
@@ -663,7 +663,7 @@ ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
 
 === ASPDMA'S ORIGINAL SELECTION ===
 Tool: {requested_tool}
-Rationale: {aspdma_rationale}
+Rationale: {aspdma_reasoning}
 
 === ORIGINAL THOUGHT (user's intent) ===
 {original_thought_content}
@@ -684,7 +684,7 @@ Return your response as a FLAT JSON object."""
         # Extract required arguments
         tool_name = kwargs.get("tool_name") or (args[0] if len(args) > 0 else None)
         tool_info = kwargs.get("tool_info") or (args[1] if len(args) > 1 else None)
-        aspdma_rationale = kwargs.get("aspdma_rationale") or (args[2] if len(args) > 2 else "")
+        aspdma_reasoning = kwargs.get("aspdma_reasoning") or (args[2] if len(args) > 2 else "")
         original_thought = kwargs.get("original_thought") or (args[3] if len(args) > 3 else None)
         context = kwargs.get("context")
 
@@ -694,7 +694,7 @@ Return your response as a FLAT JSON object."""
         return await self.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
         )

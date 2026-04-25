@@ -1,188 +1,179 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# A "second look" after ASPDMA selects a TOOL action
-
 component_name: tsaspdma
-description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
-version: "1.0"
-
-# Accord is always included in DMA prompts
+description: Tool-Specific ASPDMA - reviews tool selection with full documentation
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===\n\nYou are reviewing a TOOL action that ASPDMA selected.\nYou now have the FULL DOCUMENTATION for this tool.\n\nYour task: With this additional context, decide the best action.\n\n=== YOUR OPTIONS (same action types as ASPDMA) ===\n\n1. **TOOL** - Proceed with tool execution\n   - Use if documentation confirms this is the right tool\n   - You may refine parameters based on documentation/examples\n   - Include gotchas you're acknowledging in your reasoning\n\n2. **SPEAK** - Ask user for clarification\n   - Use if documentation reveals ambiguity that needs user input\n   - Format: \"I need the user to answer: [specific question]\"\n   - Examples:\n     - \"I need the user to answer: which repository should I check?\"\n     - \"I need the user to answer: do you want the full report or summary?\"\n\n3. **PONDER** - Reconsider the approach\n   - Use if documentation shows this tool is wrong for the task\n   - Use if a different tool would be clearly better\n   - Include reason why this tool isn't appropriate\n\n=== DECISION CRITERIA ===\n\nChoose SPEAK if:\n- Required parameters are ambiguous\n- Multiple valid interpretations exist\n- Gotchas apply that need user confirmation\n- The task is underspecified for this tool\n\nChoose PONDER if:\n- This tool cannot accomplish the task\n- A different tool would be significantly better\n- The documentation reveals capability mismatch\n- Using this tool would be inappropriate or unethical in context\n\nChoose TOOL if:\n- Documentation confirms this is appropriate\n- Parameters are clear (refine if examples suggest improvements)\n- You can acknowledge relevant gotchas\n- Tool use is ethical and advances the user's goal appropriately\n"
+tool_documentation_section: '=== TOOL: {tool_name} ===
 
-system_guidance_header: |
-  === TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===
-
-  You are reviewing a TOOL action that ASPDMA selected.
-  You now have the FULL DOCUMENTATION for this tool.
-
-  Your task: With this additional context, decide the best action.
-
-  === YOUR OPTIONS (same action types as ASPDMA) ===
-
-  1. **TOOL** - Proceed with tool execution
-     - Use if documentation confirms this is the right tool
-     - You may refine parameters based on documentation/examples
-     - Include gotchas you're acknowledging in your rationale
-
-  2. **SPEAK** - Ask user for clarification
-     - Use if documentation reveals ambiguity that needs user input
-     - Format: "I need the user to answer: [specific question]"
-     - Examples:
-       - "I need the user to answer: which repository should I check?"
-       - "I need the user to answer: do you want the full report or summary?"
-
-  3. **PONDER** - Reconsider the approach
-     - Use if documentation shows this tool is wrong for the task
-     - Use if a different tool would be clearly better
-     - Include reason why this tool isn't appropriate
-
-  === DECISION CRITERIA ===
-
-  Choose SPEAK if:
-  - Required parameters are ambiguous
-  - Multiple valid interpretations exist
-  - Gotchas apply that need user confirmation
-  - The task is underspecified for this tool
-
-  Choose PONDER if:
-  - This tool cannot accomplish the task
-  - A different tool would be significantly better
-  - The documentation reveals capability mismatch
-  - Using this tool would be inappropriate or unethical in context
-
-  Choose TOOL if:
-  - Documentation confirms this is appropriate
-  - Parameters are clear (refine if examples suggest improvements)
-  - You can acknowledge relevant gotchas
-  - Tool use is ethical and advances the user's goal appropriately
-
-tool_documentation_section: |
-  === TOOL: {tool_name} ===
 
   **Description:** {description}
 
+
   **When to Use:** {when_to_use}
 
+
   ### Parameter Schema (YOU MUST FILL THESE IN)
+
   {parameter_schema}
 
+
   ### Quick Start
+
   {quick_start}
 
+
   ### Detailed Instructions
+
   {detailed_instructions}
 
+
   ### Examples
+
   {examples}
 
+
   ### Gotchas (Watch Out!)
+
   {gotchas}
 
+
   ### DMA Guidance
+
   {dma_guidance}
 
-context_enrichment_section: |
-  === AVAILABLE RESOURCES (from context enrichment) ===
+  '
+context_enrichment_section: '=== AVAILABLE RESOURCES (from context enrichment) ===
+
   {context_enrichment_data}
 
+
   IMPORTANT: Use the EXACT entity_id values from the list above.
+
   Do NOT use friendly names directly - map them to entity_id first.
 
-context_integration: |
-  === ASPDMA'S SELECTION ===
-  Tool: {tool_name}
-  Rationale: {aspdma_rationale}
+  '
+context_integration: '=== ASPDMA''S SELECTION ===
 
-  === ORIGINAL THOUGHT (user's intent - use to infer parameters) ===
+  Tool: {tool_name}
+
+  Reasoning: {aspdma_reasoning}
+
+
+  === ORIGINAL THOUGHT (user''s intent - use to infer parameters) ===
+
   {original_thought_content}
+
 
   {context_enrichment_section}
 
+
   === TOOL DOCUMENTATION (with Parameter Schema) ===
+
   {tool_documentation}
 
-response_format: |
-  Return a FLAT JSON object with these fields:
+  '
+response_format: 'Return a FLAT JSON object with these fields:
+
   - "selected_action": One of "TOOL", "SPEAK", "PONDER"
-  - "rationale": Explain your decision including gotchas you're acknowledging
+
+  - "reasoning": Explain your decision including gotchas you''re acknowledging
+
 
   PLUS action-specific fields (use the exact field names below):
 
+
   For TOOL action (normal mode - tool exists):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
 
   For TOOL action (correction mode - tool name was wrong):
-  {{"selected_action": "TOOL", "rationale": "Correcting tool name to match available tool...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "Correcting tool name to match available tool...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
 
   For SPEAK action:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "I need the user to answer: which light?"}}
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "I need the user to answer: which light?"}}
+
 
   For PONDER action:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["Is this the right approach?"]}}
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["Is this the right approach?"]}}
+
 
   IMPORTANT:
+
   - Use the Parameter Schema above to determine required tool parameters
-  - Infer parameter values from the user's intent and conversation context
-  - tool_parameters is a dict containing the tool's arguments
+
+  - Infer parameter values from the user''s intent and conversation context
+
+  - tool_parameters is a dict containing the tool''s arguments
+
   - In CORRECTION MODE: include "tool_name" field with the EXACT name from available tools list
+
   - Do not wrap in markdown code blocks
 
+
   LANGUAGE RULES:
-  - Respond in the user's preferred language (check user profile).
-  - ALL content values (rationale, speak_content, ponder_questions) should be in the user's language.
-  - JSON keys and action names MUST remain in English (e.g., "selected_action": "TOOL", "rationale", "tool_parameters").
-  - Example: {{"selected_action": "SPEAK", "rationale": "需要用户澄清", "speak_content": "请问您想控制哪个灯？"}} - Chinese content, English keys/actions.
 
-# Tool correction mode section (used when ASPDMA selected non-existent tool)
-tool_correction_section: |
-  === TOOL CORRECTION MODE ===
+  - Respond in the user''s preferred language (check user profile).
 
-  ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
+  - ALL content values (reasoning, speak_content, ponder_questions) should be in the user''s language.
 
-  Your task: Find the CORRECT tool from the available tools list that matches
-  the user's intent, OR use SPEAK/PONDER if no suitable tool exists.
+  - JSON keys and action names MUST remain in English (e.g., "selected_action": "TOOL", "reasoning", "tool_parameters").
 
-  Available tools:
-  {available_tools_list}
+  - Example: {{"selected_action": "SPEAK", "reasoning": "需要用户澄清", "speak_content": "请问您想控制哪个灯？"}} - Chinese content, English keys/actions.
 
-  INSTRUCTIONS:
-  1. Analyze the user's original intent from the thought content
-  2. Review the available tools above - find one that matches the intent
-  3. If you find a matching tool:
-     - Return TOOL action with "tool_name" set to the EXACT name from the list
-     - Fill in appropriate "tool_parameters" based on the tool's schema
-  4. If multiple tools could match:
-     - Return SPEAK to ask the user which specific capability they want
-  5. If NO tool matches the intent:
-     - Return PONDER to reconsider the approach entirely
+  '
+tool_correction_section: "=== TOOL CORRECTION MODE ===\n\nASPDMA selected tool '{requested_tool}' but this tool does NOT exist.\n\nYour task: Find the CORRECT tool from the available tools list that matches\nthe user's intent, OR use SPEAK/PONDER if no suitable tool exists.\n\nAvailable tools:\n{available_tools_list}\n\nINSTRUCTIONS:\n1. Analyze the user's original intent from the thought content\n2. Review the available tools above - find one that matches the intent\n3. If you find a matching tool:\n   - Return TOOL action with \"tool_name\" set to the EXACT name from the list\n   - Fill in appropriate \"tool_parameters\" based on the tool's schema\n4. If multiple tools could match:\n   - Return SPEAK to ask the user which specific capability they want\n5. If NO tool matches the intent:\n   - Return PONDER to reconsider the approach entirely\n\nCRITICAL: The \"tool_name\" field must be an EXACT match from the available tools list above.\n"
+evaluation_steps: 'STEP 1: Read the Documentation
 
-  CRITICAL: The "tool_name" field must be an EXACT match from the available tools list above.
-
-evaluation_steps: |
-  STEP 1: Read the Documentation
   - Review quick_start, detailed_instructions, examples
+
   - Note any gotchas that apply to this use case
+
   - Check if when_to_use matches the task
 
-  STEP 2: Evaluate ASPDMA's Selection
+
+  STEP 2: Evaluate ASPDMA''s Selection
+
   - Are the parameters correct per documentation?
+
   - Do examples suggest better parameter formatting?
+
   - Are there required parameters that are ambiguous?
 
+
   STEP 3: Check for Gotchas
+
   - Does any gotcha apply to this specific use?
+
   - Would the user expect this behavior?
+
   - Should the user be warned or asked first?
 
+
   STEP 4: Decide Action
+
   - TOOL: Confirm or refine, acknowledge gotchas
+
   - SPEAK: Ask for specific clarification
+
   - PONDER: Explain why to reconsider
 
-closing_reminder: |
-  IMPORTANT: Your role is to catch issues that ASPDMA couldn't see without
+  '
+closing_reminder: 'IMPORTANT: Your role is to catch issues that ASPDMA couldn''t see without
+
   full documentation. If the tool selection looks good, confirm it quickly.
+
   Only SPEAK or PONDER when documentation reveals genuine concerns.
 
+
   When choosing SPEAK, be specific: "I need the user to answer: [question]"
+
   When choosing PONDER, explain: "This tool cannot X because Y, consider Z"
+
   When choosing TOOL, acknowledge: "Proceeding with awareness of gotcha X"
+
+  '

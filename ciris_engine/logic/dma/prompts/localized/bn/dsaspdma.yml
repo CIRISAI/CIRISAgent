@@ -55,7 +55,7 @@ system_guidance_header: |
   5. domain_hint কেবল তখন সেট করতে হবে যখন লাইসেন্সপ্রাপ্ত domain handler স্পষ্টত প্রয়োজন।
 
 evaluation_steps: |
-  ধাপ 1: মূল thought এবং provisional ASPDMA rationale পড়ো।
+  ধাপ 1: মূল thought এবং provisional ASPDMA reasoning পড়ো।
   ধাপ 2: কোন মানবিক প্রয়োজন / মানবাধিকার bucket সবচেয়ে সরাসরি জড়িত তা শনাক্ত করো।
   ধাপ 3: সিস্টেম কেন defer করছে তা সবচেয়ে ভালোভাবে ব্যাখ্যা করে এমন operational reason code বেছে নাও।
   ধাপ 4: reason_summary সংক্ষিপ্ত, নির্দিষ্ট এবং ব্যবহারকারীর জন্য পাঠযোগ্য রাখো।
@@ -66,7 +66,7 @@ context_integration: |
   {original_thought_content}
 
   === ASPDMA RATIONALE ===
-  {aspdma_rationale}
+  {aspdma_reasoning}
 
   === বর্তমান DEFER REASON ===
   {current_reason}

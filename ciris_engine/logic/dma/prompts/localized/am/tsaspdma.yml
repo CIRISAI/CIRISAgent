@@ -1,188 +1,179 @@
-# TSASPDMA - Tool-Specific Action Selection PDMA
-# A "second look" after ASPDMA selects a TOOL action
-
 component_name: tsaspdma
-description: "Tool-Specific ASPDMA - reviews tool selection with full documentation"
-version: "1.0"
-
-# Accord is always included in DMA prompts
+description: Tool-Specific ASPDMA - reviews tool selection with full documentation
+version: '1.0'
 accord_header: true
+system_guidance_header: "=== ለመሳሪያ ተወሰነ ድርጊት ምርጫ (TSASPDMA) ===\n\nእርስዎ ASPDMA የመረጠውን TOOL ድርጊት እየገመገሙ ነዎት።\nአሁን ለዚህ መሳሪያ ሙሉ ሰነድ አሎት።\n\nተግባርዎ: በዚህ ተጨማሪ አውድ፣ የተሻለውን ድርጊት ይወስኑ።\n\n=== ምርጫዎችዎ (ከASPDMA ጋር ተመሳሳይ የድርጊት አይነቶች) ===\n\n1. **TOOL** - በመሳሪያ አፈጻጸም ቀጥል\n   - ሰነዱ ይህ ትክክለኛ መሳሪያ መሆኑን ካረጋገጠ ይጠቀሙ\n   - መለኪያዎችን በሰነድ/ምሳሌዎች መሰረት ማጣራት ይችላሉ\n   - እርስዎ እየተቀበሉ ያሉትን gotchas በምክንያትዎ ያካትቱ\n\n2. **SPEAK** - ለማብራሪያ ተጠቃሚውን ጠይቅ\n   - ሰነዱ የተጠቃሚ ግብዓት የሚያስፈልገውን አሻሚነት ካሳየ ይጠቀሙ\n   - ቅርጸት: \"ተጠቃሚው እንዲመልስ እፈልጋለሁ: [ተወሰነ ጥያቄ]\"\n   - ምሳሌዎች:\n     - \"ተጠቃሚው እንዲመልስ እፈልጋለሁ: የትኛውን ግምጃ ቤት ማረጋገጥ አለብኝ?\"\n     - \"ተጠቃሚው እንዲመልስ እፈልጋለሁ: ሙሉ ሪፖርት ወይስ ማጠቃለያ ይፈልጋሉ?\"\n\n3. **PONDER** - አቀራረቡን እንደገና አስብበት\n   - ሰነዱ ይህ መሳሪያ ለተግባሩ ስህተት መሆኑን ከሚያሳይበት ይጠቀሙ\n   - የተለየ መሳሪያ በግልጽ የተሻለ ከሚሆንበት ይጠቀሙ\n   - ይህ መሳሪያ ለምን ተገቢ እንዳልሆነ ምክንያት ያካትቱ\n\n=== የውሳኔ መመዘኛዎች ===\n\nSPEAK ይምረጡ ከሆነ:\n- የሚያስፈልጉ መለኪያዎች አሻሚ ናቸው\n- በርካታ ትክክለኛ ትርጉሞች አሉ\n- የተጠቃሚ ማረጋገጫ የሚያስፈልጋቸው Gotchas ተፈጻሚ ይሆናሉ\n- ተግባሩ ለዚህ መሳሪያ በበቂ ሁኔታ አልተገለጸም\n\nPONDER ይምረጡ ከሆነ:\n- ይህ መሳሪያ ተግባሩን ማሳካት አይችልም\n- የተለየ መሳሪያ በጣም የተሻለ ይሆናል\n- ሰነዱ የአቅም አለመመጣጠንን ያሳያል\n- ይህንን መሳሪያ መጠቀም በአውድ ውስጥ ተገቢ ያልሆነ ወይም የስነምግባር ያልሆነ ነው\n\nTOOL ይምረጡ ከሆነ:\n- ሰነዱ ይህ ተገቢ መሆኑን ያረጋግጣል\n- መለኪያዎች ግልጽ ናቸው (ምሳሌዎች መሻሻሎችን የሚጠቁሙ ከሆነ ያጣሩ)\n- ተዛማጅ gotchas ን ማመስገን ይችላሉ\n- የመሳሪያ አጠቃቀም የስነምግባር ነው እና የተጠቃሚውን ግብ በተገቢ ሁኔታ ያሳድጋል\n"
+tool_documentation_section: '=== መሳሪያ: {tool_name} ===
 
-system_guidance_header: |
-  === ለመሳሪያ ተወሰነ ድርጊት ምርጫ (TSASPDMA) ===
-
-  እርስዎ ASPDMA የመረጠውን TOOL ድርጊት እየገመገሙ ነዎት።
-  አሁን ለዚህ መሳሪያ ሙሉ ሰነድ አሎት።
-
-  ተግባርዎ: በዚህ ተጨማሪ አውድ፣ የተሻለውን ድርጊት ይወስኑ።
-
-  === ምርጫዎችዎ (ከASPDMA ጋር ተመሳሳይ የድርጊት አይነቶች) ===
-
-  1. **TOOL** - በመሳሪያ አፈጻጸም ቀጥል
-     - ሰነዱ ይህ ትክክለኛ መሳሪያ መሆኑን ካረጋገጠ ይጠቀሙ
-     - መለኪያዎችን በሰነድ/ምሳሌዎች መሰረት ማጣራት ይችላሉ
-     - እርስዎ እየተቀበሉ ያሉትን gotchas በምክንያትዎ ያካትቱ
-
-  2. **SPEAK** - ለማብራሪያ ተጠቃሚውን ጠይቅ
-     - ሰነዱ የተጠቃሚ ግብዓት የሚያስፈልገውን አሻሚነት ካሳየ ይጠቀሙ
-     - ቅርጸት: "ተጠቃሚው እንዲመልስ እፈልጋለሁ: [ተወሰነ ጥያቄ]"
-     - ምሳሌዎች:
-       - "ተጠቃሚው እንዲመልስ እፈልጋለሁ: የትኛውን ግምጃ ቤት ማረጋገጥ አለብኝ?"
-       - "ተጠቃሚው እንዲመልስ እፈልጋለሁ: ሙሉ ሪፖርት ወይስ ማጠቃለያ ይፈልጋሉ?"
-
-  3. **PONDER** - አቀራረቡን እንደገና አስብበት
-     - ሰነዱ ይህ መሳሪያ ለተግባሩ ስህተት መሆኑን ከሚያሳይበት ይጠቀሙ
-     - የተለየ መሳሪያ በግልጽ የተሻለ ከሚሆንበት ይጠቀሙ
-     - ይህ መሳሪያ ለምን ተገቢ እንዳልሆነ ምክንያት ያካትቱ
-
-  === የውሳኔ መመዘኛዎች ===
-
-  SPEAK ይምረጡ ከሆነ:
-  - የሚያስፈልጉ መለኪያዎች አሻሚ ናቸው
-  - በርካታ ትክክለኛ ትርጉሞች አሉ
-  - የተጠቃሚ ማረጋገጫ የሚያስፈልጋቸው Gotchas ተፈጻሚ ይሆናሉ
-  - ተግባሩ ለዚህ መሳሪያ በበቂ ሁኔታ አልተገለጸም
-
-  PONDER ይምረጡ ከሆነ:
-  - ይህ መሳሪያ ተግባሩን ማሳካት አይችልም
-  - የተለየ መሳሪያ በጣም የተሻለ ይሆናል
-  - ሰነዱ የአቅም አለመመጣጠንን ያሳያል
-  - ይህንን መሳሪያ መጠቀም በአውድ ውስጥ ተገቢ ያልሆነ ወይም የስነምግባር ያልሆነ ነው
-
-  TOOL ይምረጡ ከሆነ:
-  - ሰነዱ ይህ ተገቢ መሆኑን ያረጋግጣል
-  - መለኪያዎች ግልጽ ናቸው (ምሳሌዎች መሻሻሎችን የሚጠቁሙ ከሆነ ያጣሩ)
-  - ተዛማጅ gotchas ን ማመስገን ይችላሉ
-  - የመሳሪያ አጠቃቀም የስነምግባር ነው እና የተጠቃሚውን ግብ በተገቢ ሁኔታ ያሳድጋል
-
-tool_documentation_section: |
-  === መሳሪያ: {tool_name} ===
 
   **መግለጫ:** {description}
 
+
   **መቼ ይጠቀሙ:** {when_to_use}
 
+
   ### የመለኪያ ስኪማ (እነዚህን መሙላት አለብዎት)
+
   {parameter_schema}
 
+
   ### ፈጣን መጀመሪያ
+
   {quick_start}
 
+
   ### ዝርዝር መመሪያዎች
+
   {detailed_instructions}
 
+
   ### ምሳሌዎች
+
   {examples}
 
+
   ### Gotchas (ተጠንቀቅ!)
+
   {gotchas}
 
+
   ### የDMA መመሪያ
+
   {dma_guidance}
 
-context_enrichment_section: |
-  === የሚገኙ ሀብቶች (ከአውድ ማበልጸግ) ===
+  '
+context_enrichment_section: '=== የሚገኙ ሀብቶች (ከአውድ ማበልጸግ) ===
+
   {context_enrichment_data}
 
+
   አስፈላጊ: ከላይ ካለው ዝርዝር ትክክለኛ የentity_id እሴቶችን ይጠቀሙ።
+
   ወዳጅ ስሞችን በቀጥታ አይጠቀሙ - መጀመሪያ ወደ entity_id ይቀይሯቸው።
 
-context_integration: |
-  === የASPDMA ምርጫ ===
+  '
+context_integration: '=== የASPDMA ምርጫ ===
+
   መሳሪያ: {tool_name}
-  ምክንያት: {aspdma_rationale}
+
+  ምክንያት: {aspdma_reasoning}
+
 
   === ዋና ሀሳብ (የተጠቃሚው ዓላማ - መለኪያዎችን ለማውጣት ይጠቀሙ) ===
+
   {original_thought_content}
+
 
   {context_enrichment_section}
 
+
   === የመሳሪያ ሰነድ (ከመለኪያ ስኪማ ጋር) ===
+
   {tool_documentation}
 
-response_format: |
-  እነዚህን መስኮች ያለው ጠፍጣፋ JSON ነገር መመለስ:
+  '
+response_format: 'እነዚህን መስኮች ያለው ጠፍጣፋ JSON ነገር መመለስ:
+
   - "selected_action": ከ"TOOL"፣ "SPEAK"፣ "PONDER" አንዱ
-  - "rationale": እርስዎ እየተቀበሉ ያሉትን gotchas ጨምሮ ውሳኔዎን ያብራሩ
+
+  - "reasoning": እርስዎ እየተቀበሉ ያሉትን gotchas ጨምሮ ውሳኔዎን ያብራሩ
+
 
   ለድርጊት ተወሰኑ መስኮች PLUS (ከታች ያሉትን ትክክለኛ የመስክ ስሞች ይጠቀሙ):
 
+
   ለTOOL ድርጊት (መደበኛ ሁነታ - መሳሪያ አለ):
-  {{"selected_action": "TOOL", "rationale": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "...", "tool_parameters": {{"entity_id": "light.living_room", "action": "turn_on"}}}}
+
 
   ለTOOL ድርጊት (የማረም ሁነታ - የመሳሪያ ስም ስህተት ነበር):
-  {{"selected_action": "TOOL", "rationale": "የመሳሪያ ስምን ከሚገኙ መሳሪያዎች ጋር እያረመ...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
+  {{"selected_action": "TOOL", "reasoning": "የመሳሪያ ስምን ከሚገኙ መሳሪያዎች ጋር እያረመ...", "tool_name": "ha_device_control", "tool_parameters": {{"entity_id": "light.bedroom", "action": "turn_off"}}}}
+
 
   ለSPEAK ድርጊት:
-  {{"selected_action": "SPEAK", "rationale": "...", "speak_content": "ተጠቃሚው እንዲመልስ እፈልጋለሁ: የትኛው መብራት?"}}
+
+  {{"selected_action": "SPEAK", "reasoning": "...", "speak_content": "ተጠቃሚው እንዲመልስ እፈልጋለሁ: የትኛው መብራት?"}}
+
 
   ለPONDER ድርጊት:
-  {{"selected_action": "PONDER", "rationale": "...", "ponder_questions": ["ይህ ትክክለኛው አቀራረብ ነው?"]}}
+
+  {{"selected_action": "PONDER", "reasoning": "...", "ponder_questions": ["ይህ ትክክለኛው አቀራረብ ነው?"]}}
+
 
   አስፈላጊ:
+
   - የሚያስፈልጉትን የመሳሪያ መለኪያዎች ለመወሰን ከላይ ያለውን የመለኪያ ስኪማ ይጠቀሙ
+
   - የመለኪያ እሴቶችን ከተጠቃሚው ዓላማ እና የንግግር አውድ ያውጡ
+
   - tool_parameters የመሳሪያውን ክርክሮች የያዘ dict ነው
+
   - በማረም ሁነታ: ከሚገኙ መሳሪያዎች ዝርዝር ትክክለኛ ስም ያለው "tool_name" መስክ ያካትቱ
+
   - በmarkdown code blocks ውስጥ አታጠቃልሉ
 
+
   የቋንቋ ደንቦች:
+
   - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
-  - ሁሉም የይዘት እሴቶች (rationale፣ speak_content፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
-  - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "selected_action"፣ "rationale"፣ "tool_parameters")።
-  - ምሳሌ: {{"selected_action": "SPEAK", "speak_content": "ሰላም!", "rationale": "ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል"}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
-# Tool correction mode section (used when ASPDMA selected non-existent tool)
-tool_correction_section: |
-  === የመሳሪያ ማረም ሁነታ ===
+  - ሁሉም የይዘት እሴቶች (reasoning፣ speak_content፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
 
-  ASPDMA መሳሪያውን '{requested_tool}' መረጠ ግን ይህ መሳሪያ አይኖርም።
+  - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "selected_action"፣ "reasoning"፣ "tool_parameters")።
 
-  ተግባርዎ: ከሚገኙ መሳሪያዎች ዝርዝር የተጠቃሚውን ዓላማ የሚመጥን ትክክለኛ መሳሪያ ያግኙ፣
-  ወይም ምንም ተስማሚ መሳሪያ የሌለ ከሆነ SPEAK/PONDER ይጠቀሙ።
+  - ምሳሌ: {{"selected_action": "SPEAK", "speak_content": "ሰላም!", "reasoning": "ተጠቃሚው በአማርኛ ሰላምታ ሰጥቷል"}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
-  የሚገኙ መሳሪያዎች:
-  {available_tools_list}
+  '
+tool_correction_section: "=== የመሳሪያ ማረም ሁነታ ===\n\nASPDMA መሳሪያውን '{requested_tool}' መረጠ ግን ይህ መሳሪያ አይኖርም።\n\nተግባርዎ: ከሚገኙ መሳሪያዎች ዝርዝር የተጠቃሚውን ዓላማ የሚመጥን ትክክለኛ መሳሪያ ያግኙ፣\nወይም ምንም ተስማሚ መሳሪያ የሌለ ከሆነ SPEAK/PONDER ይጠቀሙ።\n\nየሚገኙ መሳሪያዎች:\n{available_tools_list}\n\nመመሪያዎች:\n1. ከሀሳብ ይዘት የተጠቃሚውን ዋና ዓላማ ይተንትኑ\n2. ከላይ ያሉትን የሚገኙ መሳሪያዎች ይገምግሙ - ከዓላማው ጋር የሚመጥን ያግኙ\n3. የሚመጥን መሳሪያ ካገኙ:\n   - ከዝርዝሩ ትክክለኛ ስም ጋር \"tool_name\" የተቀመጠ TOOL ድርጊት ይመልሱ\n   - በመሳሪያው ስኪማ መሰረት ተገቢ \"tool_parameters\" ይሙሉ\n4. በርካታ መሳሪያዎች ሊመጥኑ ከቻሉ:\n   - ተጠቃሚው የትኛውን ተወሰነ አቅም እንደሚፈልግ ለመጠየቅ SPEAK ይመልሱ\n5. ምንም መሳሪያ ከዓላማው ጋር የማይመጥን ከሆነ:\n   - አቀራረቡን ሙሉ በሙሉ እንደገና ለማሰብ PONDER ይመልሱ\n\nወሳኝ: \"tool_name\" መስክ ከላይ ካለው የሚገኙ መሳሪያዎች ዝርዝር ጋር ትክክለኛ ተመጣጣኝ መሆን አለበት።\n"
+evaluation_steps: 'ደረጃ 1: ሰነዱን ያንብቡ
 
-  መመሪያዎች:
-  1. ከሀሳብ ይዘት የተጠቃሚውን ዋና ዓላማ ይተንትኑ
-  2. ከላይ ያሉትን የሚገኙ መሳሪያዎች ይገምግሙ - ከዓላማው ጋር የሚመጥን ያግኙ
-  3. የሚመጥን መሳሪያ ካገኙ:
-     - ከዝርዝሩ ትክክለኛ ስም ጋር "tool_name" የተቀመጠ TOOL ድርጊት ይመልሱ
-     - በመሳሪያው ስኪማ መሰረት ተገቢ "tool_parameters" ይሙሉ
-  4. በርካታ መሳሪያዎች ሊመጥኑ ከቻሉ:
-     - ተጠቃሚው የትኛውን ተወሰነ አቅም እንደሚፈልግ ለመጠየቅ SPEAK ይመልሱ
-  5. ምንም መሳሪያ ከዓላማው ጋር የማይመጥን ከሆነ:
-     - አቀራረቡን ሙሉ በሙሉ እንደገና ለማሰብ PONDER ይመልሱ
-
-  ወሳኝ: "tool_name" መስክ ከላይ ካለው የሚገኙ መሳሪያዎች ዝርዝር ጋር ትክክለኛ ተመጣጣኝ መሆን አለበት።
-
-evaluation_steps: |
-  ደረጃ 1: ሰነዱን ያንብቡ
   - quick_start፣ detailed_instructions፣ examples ይገምግሙ
+
   - ለዚህ አጠቃቀም ጉዳይ የሚተገበሩ ማንኛቸውም gotchas ይመልከቱ
+
   - when_to_use ከተግባሩ ጋር የሚመጣጠን መሆኑን ያረጋግጡ
 
+
   ደረጃ 2: የASPDMA ምርጫን ይገምግሙ
+
   - መለኪያዎቹ በሰነድ መሰረት ትክክል ናቸው?
+
   - ምሳሌዎች የተሻለ የመለኪያ ቅርጸት ያጠቁሙ?
+
   - አሻሚ የሚያስፈልጉ መለኪያዎች አሉ?
 
+
   ደረጃ 3: Gotchas ን ይፈትሹ
+
   - ለዚህ ተወሰነ አጠቃቀም ማንኛውም gotcha ተፈጻሚ ይሆናል?
+
   - ተጠቃሚው ይህንን ባህሪ ይጠብቃል?
+
   - ተጠቃሚው መጀመሪያ መጠንቀቅ ወይም መጠየቅ አለበት?
 
+
   ደረጃ 4: ድርጊት ይወስኑ
+
   - TOOL: ያረጋግጡ ወይም ያጣሩ፣ gotchas ን ይቀበሉ
+
   - SPEAK: ተወሰነ ማብራሪያ ጠይቅ
+
   - PONDER: ለምን እንደገና ማሰብ እንደሚገባ ያብራሩ
 
-closing_reminder: |
-  አስፈላጊ: ሚናዎ ASPDMA ሙሉ ሰነድ ሳይኖረው ማየት የማይችላቸውን ጉዳዮች መያዝ ነው።
+  '
+closing_reminder: 'አስፈላጊ: ሚናዎ ASPDMA ሙሉ ሰነድ ሳይኖረው ማየት የማይችላቸውን ጉዳዮች መያዝ ነው።
+
   የመሳሪያ ምርጫው ጥሩ ከሆነ፣ በፍጥነት ያረጋግጡት።
+
   ሰነዱ እውነተኛ ስጋቶችን በሚያሳይበት ጊዜ ብቻ SPEAK ወይም PONDER።
 
+
   SPEAK በሚመርጡበት ጊዜ፣ ተወሰነ ይሁኑ: "ተጠቃሚው እንዲመልስ እፈልጋለሁ: [ጥያቄ]"
+
   PONDER በሚመርጡበት ጊዜ፣ ያብራሩ: "ይህ መሳሪያ X ማድረግ አይችልም ምክንያቱም Y፣ Z አስብበት"
+
   TOOL በሚመርጡበት ጊዜ፣ ይቀበሉ: "ስለ gotcha X ግንዛቤ ይዘው እየቀጠሉ"
+
+  '

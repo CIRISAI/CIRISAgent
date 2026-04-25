@@ -66,7 +66,7 @@ context_integration: |
   {original_thought_content}
 
   === ASPDMA कारण ===
-  {aspdma_rationale}
+  {aspdma_reasoning}
 
   === सध्याचे DEFER कारण ===
   {current_reason}

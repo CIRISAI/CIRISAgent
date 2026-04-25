@@ -214,14 +214,14 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         )
         context_block = self._get_prompt_value("context_integration") or (
             "Original thought:\n{original_thought_content}\n\n"
-            "ASPDMA rationale:\n{aspdma_rationale}\n\n"
+            "ASPDMA reasoning:\n{aspdma_reasoning}\n\n"
             "Current deferral reason:\n{current_reason}\n\n"
             "Current context:\n{current_context}\n\n"
             "{taxonomy_text}"
         )
         user_message = context_block.format(
             original_thought_content=original_thought_content,
-            aspdma_rationale=aspdma_result.rationale,
+            aspdma_reasoning=aspdma_result.rationale,
             current_reason=current_params.reason,
             current_context=self._format_original_context(current_params),
             current_defer_until=current_params.defer_until or "none",

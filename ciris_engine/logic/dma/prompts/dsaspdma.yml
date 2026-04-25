@@ -55,7 +55,7 @@ system_guidance_header: |
   5. Set domain_hint only when a licensed domain handler is clearly required.
 
 evaluation_steps: |
-  STEP 1: Read the original thought and the provisional ASPDMA rationale.
+  STEP 1: Read the original thought and the provisional ASPDMA reasoning.
   STEP 2: Identify which human need / human-rights bucket is most directly implicated.
   STEP 3: Choose the operational reason code that best explains WHY the system is deferring.
   STEP 4: Keep the reason summary short, specific, and user-legible.
@@ -66,7 +66,7 @@ context_integration: |
   {original_thought_content}
 
   === ASPDMA RATIONALE ===
-  {aspdma_rationale}
+  {aspdma_reasoning}
 
   === CURRENT DEFER REASON ===
   {current_reason}

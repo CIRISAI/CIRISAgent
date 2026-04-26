@@ -395,6 +395,83 @@ class TestServiceInitializer:
         assert service_initializer.tsdb_consolidation_service is not None
 
     @pytest.mark.asyncio
+    async def test_authentication_service_registered_under_wise_authority(
+        self, service_initializer, mock_essential_config
+    ):
+        """REGRESSION: AuthenticationService MUST be registered under
+        ServiceType.WISE_AUTHORITY alongside WiseAuthorityService.
+
+        Without this registration, batch_context.prefetch_for_batch's strict
+        attestation gate raises CRITICAL on every thought because no service
+        in the registry exposes `await_attestation_ready` (WiseAuthorityService
+        carries the deferral/guidance surface; AuthenticationService carries
+        the attestation surface). Both services legitimately serve the
+        WISE_AUTHORITY type — consumers disambiguate via attribute presence.
+
+        This test would have caught the production regression where
+        AuthenticationService was created and started but only assigned to
+        `service_initializer.auth_service` and never registered, leaving the
+        gate unable to find any await_attestation_ready provider.
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Mock the heavy bits so we can exercise the registration path.
+        # Note: initialize_all_services REPLACES self.service_registry with
+        # get_global_registry() at line ~530, so we patch get_global_registry
+        # itself to return our Mock, otherwise our injection is silently
+        # discarded.
+        captured_registry = Mock()
+        captured_registry.register_service = Mock()
+
+        service_initializer.bus_manager = Mock()
+        service_initializer.bus_manager.memory = Mock()
+        service_initializer.memory_service = Mock()
+        service_initializer.time_service = Mock()
+        service_initializer.telemetry_service = Mock()
+        service_initializer.config_service = Mock()
+        service_initializer.llm_service = Mock()
+
+        # Pre-set both services so the registration branch can register them.
+        # In production both come out of initialize_security_services; we
+        # bypass that here and inject directly because the assertion is
+        # specifically about the registration step.
+        service_initializer.auth_service = Mock(
+            spec=["await_attestation_ready", "get_cached_attestation", "run_attestation", "start"]
+        )
+        service_initializer.wa_auth_system = Mock(
+            spec=["send_deferral", "get_pending_deferrals", "resolve_deferral", "start"]
+        )
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=captured_registry,
+        ):
+            with patch.object(service_initializer, "_initialize_llm_services"):
+                with patch.object(service_initializer, "_initialize_audit_services"):
+                    await service_initializer.initialize_all_services(
+                        mock_essential_config, mock_essential_config, "test_agent", None, []
+                    )
+
+        # Collect every register_service call's (service_type, provider) pair.
+        wa_registrations = []
+        for call in captured_registry.register_service.call_args_list:
+            kwargs = call.kwargs
+            if kwargs.get("service_type") == ServiceType.WISE_AUTHORITY:
+                wa_registrations.append(kwargs.get("provider"))
+
+        # Both services MUST appear under WISE_AUTHORITY.
+        assert service_initializer.wa_auth_system in wa_registrations, (
+            "WiseAuthorityService missing from WISE_AUTHORITY registrations — "
+            "deferral/guidance path will be broken"
+        )
+        assert service_initializer.auth_service in wa_registrations, (
+            "AuthenticationService missing from WISE_AUTHORITY registrations — "
+            "the strict attestation gate in batch_context will raise CRITICAL "
+            "on every thought because no registered service exposes "
+            "await_attestation_ready"
+        )
+
+    @pytest.mark.asyncio
     async def test_initialization_order_dependencies(self, service_initializer, mock_essential_config):
         """Test that services are initialized in correct dependency order."""
         calls = []

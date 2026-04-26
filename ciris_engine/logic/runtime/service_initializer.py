@@ -626,6 +626,35 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._dependencies_resolved += 1  # WiseAuthority service dependency
             logger.info("WiseAuthority service registered in ServiceRegistry")
 
+        # Register AuthenticationService under WISE_AUTHORITY too. Both services
+        # legitimately serve the WISE_AUTHORITY type (per the registry-typing
+        # design): WiseAuthorityService exposes the deferral/guidance surface,
+        # AuthenticationService exposes attestation, key management, and WA-cert
+        # lookups. Consumers disambiguate via attribute presence — e.g. the
+        # batch_context strict-attestation gate filters on
+        # `hasattr(s, "await_attestation_ready")` to find this one. Without this
+        # second registration, the gate raises CRITICAL on every thought because
+        # WiseAuthorityService alone doesn't carry the attestation methods.
+        if self.auth_service:
+            self.service_registry.register_service(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=self.auth_service,
+                priority=Priority.HIGH,
+                capabilities=[
+                    "authenticate",
+                    "verify_token",
+                    "create_wa",
+                    "get_wa",
+                    "list_was",
+                    "update_wa",
+                    "await_attestation_ready",
+                    "get_cached_attestation",
+                    "run_attestation",
+                ],
+                metadata={"type": "authentication", "consensus": "single"},
+            )
+            logger.info("AuthenticationService registered in ServiceRegistry under WISE_AUTHORITY")
+
         # Create BusManager first (without telemetry service)
         assert self.service_registry is not None
         assert self.time_service is not None

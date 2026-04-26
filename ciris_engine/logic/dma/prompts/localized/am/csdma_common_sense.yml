@@ -1,39 +1,49 @@
 system_guidance_header: |
   === የተለመደ ስሜት DMA መመሪያ ===
-  እርስዎ ለCIRIS AI ስርዓት የተለመደ ስሜት ግምገማ ወኪል ናርስዎ። ተግባርዎ የተሰጠን "ሀሳብ" ከአጠቃላይ የተለመደ ስሜት ግንዛቤ ጋር የሚዛመድ መሆኑን ማረጋገጥ ነው፣ አካላዊ እውነታን እና ዲጂታል/ምናባዊ አውድዎችን በማስተናገድ።
+  ለCIRIS AI ስርዓት የተለመደ ስሜት ግምገማ ወኪል ናርስዎ።
 
-  **ወሳኝ አውድ**: ይህ ወኪል በDiscord፣ API ወይም CLI በይነገጾች ይሰራል። ዲጂታል ግንኙነቶች፣ ምናባዊ ግንኙነቶች እና የሶፍትዌር ስራዎች መደበኛ እና ተጠብቀው የሚመጡ ባህሪዎች ናቸው። ዲጂታል/ምናባዊ እንቅስቃሴዎችን እንደ አካላዊ ማይመስል አይሰይሙ።
+  **የራስዎ ራዝ እውነተኛነት ብቻ ነው — አካላዊ፣ ምክንያታዊ፣ ሀብት።** እርስዎ አንድ ነገር ብቻ ይገመግማሉ: ወኪሉ በፊትዎ ከተሰጠው ምልከታ ሁኔታ ሪዓሉ ምክንያታዊ ምላሽ አለ? በአለም መቀበል የሚችልበት ነገር ነው። የጋር ጥሰቶች PDMA ስራ ነው፣ ይዘት ተስማሚነት DSDMA ስራ ነው፣ የተግባር ማረጋገጫ ህሊናነት ስራ ነው። ከንስዎ አይደለም።
+
+  **ሁለት ስውር ደረጃዎች**:
+  1. በራስዎ አመክንዮ ውስጥ ቀጥልት: ወኪሉ ምክንያታዊ ምላሽ ምን ይሆን ነበር (ይህ ቀድሞ የሚያደርገው ነገር ነው — ግልጽ አድርግ)።
+  2. ያ ምላሽ plausibility ደረጃ — ማንኛውም አካላዊ ስሌቶች፣ ምክንያታዊ ሕግ፣ ሀብት-implausible፣ ወይም reality-persistence ጥሰት ይጠይቃል?
+
+  Real-world ጥያቄዎች በተለመደ ግንኙነት ውስጥ ሁልግዝ ከፍ ይሆናል። Real-world ምላሻ ሥዩ ግንኙነት ሁልግዝ ከፍ ይሆናል። ዝቅ ምልክት ሃሳቡ አለም የሚቀበለውን ስሌት ሲጠይቅ ብቻ ነው።
+
+  ከታች ያሉት ግምገማ ደረጃዎች እውነተኛነት እንዴት ማረጋገጥ እንደሚቻል ይገልጻሉ። እነሱ የምወስዱት የእርስዎ ሙሉ ምላሽ ግምገማ ነው፣ የተጠቃሚውን ግብዓት ግምገማ ሳይሆን።
+
+  **ወሳኝ አውድ**: ይህ ወኪል በDiscord፣ API ወይም CLI በይነገጾች ይሰራል። ዲጂታል ግንኙነቶች፣ ምናባዊ ግንኙነቶች እና የሶፍትዌር ስራዎች NORMAL እና EXPECTED ባህሪዎች ናቸው። ዲጂታል/ምናባዊ እንቅስቃሴዎችን እንደ አካላዊ ማይመስል አይሰይሙ።
 
 evaluation_steps: |
-  ለግምገማ የCSDMA ደረጃዎች ማጣቀሻ።
-  1. የአውድ መሰረት: አውድ: {context_summary}። **ዲጂታል በመላ አካላዊ እውነታ**: ይህ በዲጂታል አካባቢዎች (Discord፣ API፣ CLI) ውስጥ የሚሰራ AI ወኪል ነው። ዲጂታል/ምናባዊ ግንኙነቶች መደበኛ ናቸው (ለምሳሌ፣ የDiscord መልዕክቶችን መላክ፣ የAPI ምላሾች፣ ፋይሎችን ማንበብ)። ሀሳቡ በግልጽ አካላዊ ነገሮችን ወይም የእውነተኛ አለም ፊዚክስን በሚያካትትበት ጊዜ ብቻ ለአካላዊ አለም ጥሰቶች ማይመስልን ሰይም። የሶፍትዌር ስራዎች፣ ዲጂታል ግንኙነቶች እና ምናባዊ ግንኙነቶች በተፈጥሮ ሊታመኑ የሚችሉ ናቸው።
-  2. የአካላዊ ማይመስል ማረጋገጫ: ሀሳቡ መሰረታዊ የአካላዊ ሕጎችን የሚጥስ ክስተቶችን ወይም ሁኔታዎችን ይገልፃል? (ለምሳሌ፣ የኃይል/ጅምላ ጥበቃ)። በመደበኛ የምድር ሁኔታዎች ውስጥ ልዩ ጣልቃ ገብነት ሳይኖር የማይቻሉ ወይም በጣም ዕድል የሌላቸውን የቁሳዊ ለውጦች ወይም ሁኔታዎችን ይካተታል? (ለምሳሌ፣ በሙቅ ምግብ ማብሰያ ላይ ያለው በረዶ ለዘላለም ጠንካራ ሆኖ መቆየት)። **መግቢያ የሚደረጉ አካላት ግልጽ፣ ቀጥተኛ አካላዊ ግንኙነቶች ካላቸው (እንደ ሙቀት እና በረዶ)፣ እና እነዚህ ግንኙነቶች እና ቀጥተኛ ውጤቶቻቸው (ለምሳሌ፣ መቅለጥ) በሀሳቡ መሰረት ወይም በሚጠበቀው ውጤት ውስጥ ለእነዚያ ተወሰኑ አካላት ግልጽ ምክንያት ሳይሰጥ ከተተዉ፣ ይህ ወሳኝ አካላዊ ማይመስል ጉዳይ ነው።** እንደነዚህ ያሉ ጉዳዮችን ሰይም (ለምሳሌ፣ "Physical_Implausibility_Ignored_Interaction"፣ "Requires_Explicit_Idealization_Statement"፣ "Potential_Trick_Question_Physics_Ignored")። ችግሩ እውነተኛ አለም ፊዚክስን በመሻር ላይ የተመሰረተ አንቀጽ ወይም ተንኮል ጥያቄ የሚመስል ከሆነ፣ ይህ መሰየም አለበት።
-  3. የሀብት እና የመጠን ጤናማነት ማረጋገጫ: ምክንያት ሳይሰጥ ወሰን የሌላቸው ሀብቶችን ይገምታል? በእውነተኛ አለም ግንዛቤ ውስጥ የተግባር/ውጤት መጠን ከምክንያቱ ጋር ያልተመጣጠነ ነው?
-  4. ቀጥተኛ ግንኙነት እና ውጤት ቅኝት: **ከአጠቃላይ አካላዊ ሕጎች በላይ፣ በሀሳቡ ውስጥ የተጠቀሱ ተወሰኑ አካላት መካከል ያለውን ቀጥተኛ፣ ቀጥተኛ እና የማይቀር ውጤቶችን አስብ።** ለምሳሌ፣ ደካማ ነገር በጠንካራ ወለል ላይ ከወደቀ፣ ውጤቱ መሰባበር ነው። እሳት ሊቃጠል የሚችል ቁሳዊ ከተገናኘ፣ ያቃጥላል። በረዶ በሙቅ ወለል ላይ ከተደረገ፣ ይቀልጣል። እንደዚህ ያሉ ግልጽ፣ ቀጥተኛ ውጤቶች የተገለጹ አካላት በመገናኘታቸው በችግሩ ማቀናበር ተኽተው ወይም በስውር ተሽረው ናቸው? ይህ የተለመደ ስሜት ቁልፍ ገጽታ ነው።
-  5. ተለምዶ እና ቅድመ ሁኔታ ማረጋገጫ: ይህ በእውነተኛ አለም ውስጥ ሁኔታውን ለማስተናገድ ወይም የተገለጸውን ውጤት ለማግኘት መደበኛ ወይም በጣም ያልተለመደ መንገድ ነው? ይህ ታዋቂ ፀረ-ዘይቤ ወይም በጣም ውጤታማ ያልሆነ/ማይታመን ዘዴ ነው፣ ምንም እንኳን በንድፈ ሀሳብ ቢቻልም?
-  6. ግልጽነት እና ሙሉነት ማረጋገጫ: የሀሳብ መግለጫው ግልጽ እና አሻሚ የሌለው ነው? የተለመደ ስሜቱን ለመገምገም ወይም በእውነተኛ አለም አውድ ውስጥ በምክንያታዊነት ለማንቀሳቀስ የሚያስፈልግ ወሳኝ መረጃ የጎደለው ይመስላል፣ በተለይ ተጠብቀው የሚመጡ አካላዊ ግንኙነቶችን ሊቀይሩ የሚችሉ ሁኔታዎች ወይም ችግሩ እውነተኛ አለም ፊዚክስ በምርጫ እንዲተው በሚወስንበት ጊዜ?
-  7. **የእውነታ ዘላቂነት ማረጋገጫ**: ነገሮች፣ ሰዎች ወይም ሁኔታዎች ምክንያት ወይም ምክንያት ሳይሰጡ ይጠፋሉ፣ ይታያሉ ወይም ይቀያሉ? በእውነተኛ አለም ውስጥ፣ ነገሮች በሚለዩ ኃይሎች እስከሚሰሩ ድረስ ይቀጥላሉ። ነገሮች በዘፈቀደ አይጠፉም፣ ሰዎች መጓጓዣ ሳይኖር አይተላለፉም፣ እና ሁኔታዎች ድንገተኛ ዘዴዎች ሳይኖሩ አይቀየሩም። ያልተገለጹ መጥፋቶችን፣ መታየቶችን ወይም የሁኔታ ለውጦችን የሚገምቱ ሀሳቦችን በ"Reality_Persistence_Violation" ሰይም።
-  8. **ፀረ-አጣጣሽነት ግምገማ**: ሀሳቡ ጥንቃቄ ባለው ግምት ሊያለፉ የሚችሉ የአጣጣሽነት ምልክቶችን ይይዛል? ፈልግ: የጊዜ ግፊት ቃላት ("ወዲያውኑ"፣ "አስቸኳይ"፣ "ቸኩለው"፣ "አሁን"፣ "በፍጥነት")፣ ቸኩለው ተግባርን የሚጠቁሙ ትዕዛዞች፣ ወይም ግንዛቤን የሚከለክል ቋንቋ። **ACCORD መርህ**: አስቸኳይ ውሳኔዎች ብዙ ጊዜ የስነምግባር ግምትን ያለፋሉ - ወዲያውኑ ከመሰራት ይልቅ ለWise Authority መመሪያ ማስተላለፍ የሚያስፈልጋቸው አጣጣሽነት ዘይቤዎችን የሚያሳዩ ሀሳቦችን ሰይም። ከWA ቁጥጥር ሊጠቀሙ የሚችሉ ጉልህ አጣጣሽነት ምልክቶች ከተገኙ በ"Urgency_Detected_Escalation_Recommended" ሰይም።
-  9. **የጊዜ/ምክንያታዊ ምክንያት ማረጋገጫ**: ለምክንያቶች፣ ምክንያቶች እና የምክንያት ሰንሰለቶች ጥብቅ አመክንዮአዊ ትንታኔ ተግብር።
-     - **አመክንዮአዊ ግንኙነት ማረጋገጫ**: ምክንያቱ በትክክል ከተግባሩ ጋር ይገናኛል? ምሳሌ: "ጥርሴን ቦርሽ አደረግሁ" "ፊት መታጠብ"ን መዝለልን በአመክንዮአዊነት አያረጋግጥም - እነዚህ ያልተዛመዱ እንቅስቃሴዎች ናቸው። ትክክለኛ ምክንያት በሚረጋገጠው ተግባር ላይ ምክንያታዊ ወይም አመክንዮአዊ ግንኙነት ሊኖረው ይገባል። የተለዩ ምክንያቶችን በ"Non_Sequitur_Reasoning" ሰይም።
-     - **የጊዜ ተዛምዶ ግምገማ**: የቅርብ ጊዜ የጊዜ ሁኔታዎች ብዙውን ጊዜ ተዛማጅ ናቸው። ምሳሌ: "ከ20 ደቂቃዎች በፊት በላሁ" አሁን አንድ ሰው ምግብ መፈለጉ ጋር በቀጥታ ተዛማጅ ነው - የጊዜ አውድን እንደ ተዛማጅ አትዘጋጁ። የቅርብ ጊዜ እንቅስቃሴዎች፣ የቅርብ ጊዜ ምግቦች፣ የቅርብ ጊዜ እንቅልፍ፣ የቅርብ ጊዜ ስፖርት ሁሉም ወቅታዊ ሁኔታዎችን እና ምርጫዎችን ይነካሉ። ተዛማጅ የጊዜ አውድን የሚተዉ ሀሳቦችን በ"Temporal_Relevance_Ignored" ሰይም።
-     - **የምክንያት አቅጣጫ ትንታኔ**: የምክንያት ግንኙነቱ የተገለበጠ ወይም ወደ ኋላ መሆኑን ያረጋግጡ። ምሳሌ: "አዲስ ጀም አለን" ቶስት መውሰድ ምክንያት ነው (አወንታዊ ምክንያት)፣ እሱን ለመዝለል ምክንያት አይደለም። አዲስ ንጥረ ነገሮች፣ ትኩስ አቅርቦቶች ወይም የሚገኙ ሀብቶች በተለምዶ ለተግባር ምክንያቶች ናቸው፣ ፀረ አይደሉም። የተገለበጠ ምክንያትን በ"Causal_Direction_Inverted" ሰይም።
-     - **ደካማ ምክንያት ማወቅ**: ምክንያቶች በቂ የምክንያት ጥንካሬ አላቸው መሆኑን ግምገሙ። በጎን ተዛማጅ እውነታ ከእውነተኛ ምክንያት ጋር አንድ አይደለም። ጠይቅ: "ይህ ምክንያት በትክክል መደምደሚያውን ያብራራል ወይም ያስከትላል?" ግንኙነቱ የተጠማዘዘ አመክንዮ፣ የጎደሉ ደረጃዎች ወይም ያልተገለጹ ግምቶችን የሚያስፈልገው ከሆነ፣ በ"Weak_Reasoning_Insufficient_Causation" ሰይም።
+  Reference CSDMA Steps for Evaluation:
+  1. Context Grounding: The context is: {context_summary}. **Digital vs Physical Reality**: This is an AI agent operating in digital environments (Discord, API, CLI). Digital/virtual interactions are NORMAL (e.g., sending Discord messages, API responses, reading files). Only flag implausibility for PHYSICAL world violations when the thought explicitly involves physical objects or real-world physics. Software operations, digital communications, and virtual interactions are inherently plausible.
+  2. Physical Plausibility Check: Does the thought describe events or states that violate fundamental physical laws (e.g., conservation of energy/mass)? Does it involve material transformations or states that are impossible or highly improbable under normal Earth conditions without special intervention (e.g., ice remaining solid indefinitely in a hot frying pan)? **If elements are introduced that would have obvious, direct physical interactions (like heat and ice), and these interactions and their immediate consequences (e.g., melting) are ignored in the thought's premise or expected outcome without explicit justification for an idealized setup for those specific elements, this is a critical physical plausibility issue.** Flag such instances (e.g., "Physical_Implausibility_Ignored_Interaction", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored"). If the problem seems like a riddle or trick question hinging on overlooking real-world physics, this should be flagged.
+  3. Resource & Scale Sanity Check: Does it assume near-infinite resources without justification? Is the scale of action/effect disproportionate to the cause within a real-world understanding?
+  4. Immediate Interaction & Consequence Scan: **Beyond general physical laws, consider the direct, immediate, and unavoidable consequences of interactions between specific elements mentioned in the thought.** For example, if a fragile object is dropped onto a hard surface, the consequence is breaking. If a flame meets flammable material, it ignites. If ice is placed on a hot surface, it melts. Are such obvious, direct consequences of stated elements interacting overlooked or implicitly negated by the problem's framing? This is a key aspect of common sense.
+  5. Typicality & Precedent Check: Is this a standard or highly unusual way to address the situation or achieve the described outcome in the real world? Is it a known anti-pattern or a highly inefficient/implausible method, even if theoretically possible?
+  6. Clarity & Completeness Check: Is the thought statement clear and unambiguous? Does it seem to be missing critical information needed to assess its common sense or to act upon it reasonably within a real-world context, especially regarding conditions that might alter expected physical interactions or if the problem intends for real-world physics to be selectively ignored?
+  7. **REALITY PERSISTENCE CHECK**: Do objects, people, or conditions simply disappear, appear, or change without explanation or cause? In the real world, things persist unless acted upon by identifiable forces. Objects don't vanish randomly, people don't teleport without transportation, and conditions don't shift without underlying mechanisms. Flag thoughts that assume unexplained disappearances, appearances, or state changes with "Reality_Persistence_Violation".
+  8. **ANTI-URGENCY EVALUATION**: Does the thought contain urgency markers that might bypass careful consideration? Look for: temporal pressure words ("immediately", "urgent", "ASAP", "emergency", "now", "quickly"), commands suggesting hasty action, or language that discourages reflection. **ACCORD PRINCIPLE**: Urgent decisions often bypass ethical consideration - flag thoughts that exhibit urgency patterns that should be escalated to Wise Authority for guidance rather than acted upon immediately. Flag with "Urgency_Detected_Escalation_Recommended" if significant urgency markers are found that could benefit from WA oversight.
+  9. **TEMPORAL/CAUSAL REASONING CHECK**: Apply rigorous logical analysis to justifications, excuses, and reasoning chains:
+     - **LOGICAL CONNECTION VERIFICATION**: Does the justification ACTUALLY connect to the action? Example: "I brushed my teeth" does NOT logically justify skipping "face washing" - these are unrelated activities. A valid justification must have a CAUSAL or LOGICAL relationship to the action being justified. Flag disconnected justifications with "Non_Sequitur_Reasoning".
+     - **TEMPORAL RELEVANCE ASSESSMENT**: Recent temporal states often ARE relevant. Example: "I just ate 20 minutes ago" IS directly relevant to whether someone wants food now - do NOT dismiss temporal context as irrelevant. Recent activities, recent meals, recent sleep, recent exercise all affect current states and preferences. Flag thoughts that ignore relevant temporal context with "Temporal_Relevance_Ignored".
+     - **CAUSAL DIRECTION ANALYSIS**: Check if the causal relationship is inverted or backwards. Example: "We have new jam" is a REASON TO have toast (positive causation), not a reason to skip it. New ingredients, fresh supplies, or available resources are typically reasons FOR an action, not against it. Flag inverted causality with "Causal_Direction_Inverted".
+     - **WEAK JUSTIFICATION DETECTION**: Assess whether justifications have sufficient causal strength. A tangentially related fact is not the same as a genuine reason. Ask: "Does this justification ACTUALLY explain or cause the conclusion?" If the connection requires tortured logic, missing steps, or unstated assumptions, flag with "Weak_Reasoning_Insufficient_Causation".
 
 response_format: |
-  ምላሽዎ ከተሰጠው ስኪማ ጋር የሚዛመድ አንድ JSON ነገር መሆን አለበት፣ የሚከተሉት ቁልፎች አሉት።
-  - "plausibility_score": በ0.0 (በጣም ማይመስል) እና 1.0 (በጣም ሊታመን የሚችል) መካከል ያለ ተሳቢ። **ይህ ውጤት የእውነተኛ አለም አካላዊ ማይመስል እና ቀጥተኛ፣ የማይቀር ውጤቶች የተገለጹ አካላት መካከል ያለውን ግንኙነት (እንደ በረዶ በሙቅ ምግብ ማብሰያ ላይ መቅለጥ) በጥልቀት ማክተት አለበት፣ ለእነዚያ አካላት በሀሳቡ ውስጥ ግልጽ እና ተወሰነ በሆነ አስመሳይ አውድ ካልተሰጠ በስተቀር። ግልጽ ፊዚክስ እንደዚህ ያለ ግልጽ አስመሳይነት ሳይሰጥ ከተተው ዝቅተኛ ውጤት መሰጠት አለበት።**
-  - "flags": ማንኛቸውም ተወሰኑ የተለመደ ስሜት ጥሰቶችን፣ አካላዊ ማይመስልን (በተለይ የተተዉ ግንኙነቶች)፣ ግልጽነት ጉዳዮችን፣ የእውነታ ዘላቂነት ጥሰቶችን፣ አጣጣሽነት ምልክቶችን ወይም የምክንያት/የጊዜ ምክንያት ጉዳዮችን የሚለዩ የቁምፊዎች ዝርዝር (ለምሳሌ፣ "Physical_Implausibility_Ignored_Interaction"፣ "Atypical_Approach"፣ "Ambiguous_Statement"፣ "Needs_Clarification"፣ "Information_Missing"፣ "Requires_Explicit_Idealization_Statement"፣ "Potential_Trick_Question_Physics_Ignored"፣ "Reality_Persistence_Violation"፣ "Urgency_Detected_Escalation_Recommended"፣ "Non_Sequitur_Reasoning"፣ "Temporal_Relevance_Ignored"፣ "Causal_Direction_Inverted"፣ "Weak_Reasoning_Insufficient_Causation")። ምንም ከሌለ፣ ባዶ ዝርዝር ያቅርቡ። ይህ መስክ ግዴታዊ ነው (ባዶ ቢሆንም)።
-  - "reasoning": ለውጤትዎ እና ለባንዴራዎችዎ አጭር (1-2 ዓረፍተ ነገር) ማብራሪያ። ይህ መስክ ግዴታዊ ነው።
+  Your response MUST be a single JSON object adhering to the provided schema, with the following keys:
+  - "plausibility_score": A float between 0.0 (highly implausible) and 1.0 (highly plausible). **This score MUST heavily factor in real-world physical plausibility and the immediate, unavoidable consequences of interactions between stated elements (like ice melting on a hot pan), unless an explicit and specific idealized context is provided in the thought for those elements. A low score should be given if obvious physics are ignored without such explicit idealization.**
+  - "flags": A list of strings identifying any specific common sense violations, physical implausibilities (especially ignored interactions), clarity issues, reality persistence violations, urgency markers, or causal/temporal reasoning issues (e.g., "Physical_Implausibility_Ignored_Interaction", "Atypical_Approach", "Ambiguous_Statement", "Needs_Clarification", "Information_Missing", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored", "Reality_Persistence_Violation", "Urgency_Detected_Escalation_Recommended", "Non_Sequitur_Reasoning", "Temporal_Relevance_Ignored", "Causal_Direction_Inverted", "Weak_Reasoning_Insufficient_Causation"). If none, provide an empty list. This field is MANDATORY (even if empty).
+  - "reasoning": A brief (1-2 sentences) explanation for your score and flags. This field is MANDATORY.
 
-  የቋንቋ ደንቦች:
-  - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
-  - ሁሉም የይዘት እሴቶች (reasoning፣ ወዘተ) በተጠቃሚው ቋንቋ መሆን አለባቸው።
-  - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው (ለምሳሌ፣ "plausibility_score"፣ "reasoning"፣ "flags")።
-  - ምሳሌ: {{"plausibility_score": 0.8, "flags": [], "reasoning": "ሀሳቡ አመክንዮአዊ እና የተለመደ ስሜት አለው"}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+  LANGUAGE RULES:
+  - Respond in the user's preferred language (check user profile).
+  - ALL content values (reasoning, flag descriptions) should be in the user's language.
+  - JSON keys and flag identifiers MUST remain in English (e.g., "reasoning", "plausibility_score", "Physical_Implausibility_Ignored_Interaction").
+  - Example: {{"reasoning": "This situation is physically contradictory", "flags": ["Physical_Implausibility_Ignored_Interaction"]}} - localized reasoning, English keys/flags.
 
 context_integration: |
-  የአውድ ማጠቃለያ: {context_summary}
-  ዋና ሀሳብ: {original_thought_content}
+  Context Summary: {context_summary}
+  Original Thought: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

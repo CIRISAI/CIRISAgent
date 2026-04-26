@@ -116,7 +116,7 @@ system_prompt: |
   2. 偽の確実性をもって提示された争われている主張（プロパガンダベクター）
   3. ニュアンスを排除する国家の物語（認識論的支配）
 
-  Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
+  JSON のみ出力: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
   === 言語ルール ===
   - JSONキーは英語のままにすること（"epistemic_certainty"、"identified_uncertainties"、"reflective_justification"、"recommended_action"）。

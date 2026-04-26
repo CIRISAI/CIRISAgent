@@ -1,11 +1,18 @@
 # Functional Specification Document: DMA Bounce
 
-Version: 0.2 (composite + always-pass-highest)
-Date: 2026-04-25
-Status: IMPLEMENTED in 2.7.1
+Version: 0.3 (PDMA scalar + secondary-model bounce planned)
+Date: 2026-04-26
+Status: 0.2 IMPLEMENTED in 2.7.1; 0.3 work IN PLANNING
 Owner: Agent team
 
 **Changelog:**
+- 0.3: Two next-step workstreams scoped against the 2.7.1 baseline.
+  (a) **PDMA scalar landing** — `EthicalDMAResult.alignment_score` ships,
+  unblocking PDMA bounce as the highest-priority composite-preamble lead.
+  (b) **Secondary-model bounce** — the bounce alternatives run on a model
+  *different* from the one that produced the original low-rated DMA result
+  (or, in the richer variant, a panel of N models in parallel) to break
+  single-model priors. See §9 below.
 - 0.2: Composite bounce (single round addresses all triggered DMAs in priority
   order); the highest-scoring alternative is ALWAYS passed forward, even when
   exhausted (the threshold gates only the ASPDMA advisory, not the result
@@ -284,3 +291,134 @@ result is emitted, with `[BOUNCE]` log lines on the agent for forensics).
    exactly 3 DMA calls, returns `bounce_summary=None`, and produces
    identical output to the pre-bounce pipeline. ✅ covered by
    `test_no_trigger_when_all_scores_above_threshold`.
+
+## 9. Next steps (v0.3 workstreams)
+
+### 9.1 PDMA bounce — adding `alignment_score`
+
+The v0.2 bounce gate already collects PDMA into the `triggers` list when
+`_bounceable_score("ethical_pdma", ...)` returns a numeric value. Today
+that extractor returns `None` because `EthicalDMAResult` has no scalar.
+v0.3 lands the field per §2.1 of this document:
+
+```python
+class EthicalDMAResult(BaseModel):
+    ...
+    alignment_score: float = Field(
+        ...,
+        ge=0.0, le=1.0,
+        description=(
+            "Self-rated ethical alignment of the proposed reasoning, 0–1."
+        ),
+    )
+```
+
+When this lands, PDMA jumps to the **front** of `BOUNCE_PRIORITY`
+automatically (already configured: `ethical_pdma > csdma > dsdma`), so the
+composite preamble leads with ethics framing whenever PDMA triggers. No
+orchestrator code change is needed beyond the PDMA prompt update to ask
+for the score and the schema migration window for clients that may
+deserialize old PDMA results.
+
+Migration sequence:
+1. Add `alignment_score` as `Optional[float] = None` on `EthicalDMAResult`
+   (`extra="ignore"` already in place upstream).
+2. Update `pdma.py` prompt + `EthicalDMAResult` factory to populate it.
+3. Flip `_bounceable_score("ethical_pdma", ...)` to return the field.
+4. After one release window with telemetry confirming reliable
+   emission, promote to `required` (drop `Optional`).
+5. Add tests that mirror the CSDMA/DSDMA bounce coverage in
+   `test_dma_orchestrator_bounce.py` for the `ethical_pdma` path.
+
+### 9.2 Secondary-model bounce — diversity to break single-model priors
+
+**Motivation.** The v0.2 bounce uses **same model, same temperature** for
+the alternatives (per §4 hard limit). The original Tiananmen-1989 zh
+finding showed a model could rate its *own* output low six times out of
+seven — but a same-model bounce risks the same political-filter prior
+firing on the alternatives. The model that scored the original 0.0 is
+the same model generating the bounce candidates; if its prior is what
+suppressed the substantive answer in the first place, asking it again
+in parallel produces three near-duplicate hedges.
+
+A *different* model — even the same model family at a different size,
+or a different provider entirely — has different priors. Disagreement
+between model families on a single thought is itself a high-quality
+signal.
+
+**Two variants to evaluate:**
+
+| Variant | Cost | Diversity gain | Operational complexity |
+|---------|------|----------------|------------------------|
+| **A. Single-secondary swap** — bounce attempts run on Model B (provider/family ≠ original) | 1× per triggered DMA, identical to v0.2 | Moderate; one alternative prior set | Low — one extra provider config |
+| **B. Panel-of-N** — bounce runs `BOUNCE_PARALLELISM=3` on 3 *different* models | 3× per triggered DMA, but parallel so latency is max-of-3 | High; three alternative prior sets in parallel | Higher — provider quota + failure mode breadth (any one provider failing must not wedge the bounce) |
+
+**Selection rule under panel-of-N:**
+The same always-pass-highest selection from §3.3 still applies to the
+3-element pool — the highest-scoring alternative across the 3 models
+flows forward. An additional `model_id` is recorded on each
+`DMABounceAttempt` so the agent and Lens can surface "which model
+produced the alternative that was selected" (a useful telemetry signal
+for ongoing prior calibration).
+
+**Schema delta** (additive only):
+```python
+class DMABounceAttempt(BaseModel):
+    attempt_index: int
+    score: float
+    reasoning: str
+    model_id: Optional[str] = None  # NEW: which provider/model produced this
+```
+
+**Implementation surface:**
+- `dma_orchestrator.py`: add `BOUNCE_MODEL_PANEL: list[str]` config
+  (single-element = variant A, three-element = variant B); per-attempt
+  the orchestrator routes to the corresponding LLM provider via
+  `LLMBus.call_with_provider(provider_id, ...)` (already exists for
+  multi-provider routing).
+- `LLMBus`: confirm the `provider_id` override path works for DMA
+  evaluators end-to-end (no change expected, but acceptance test).
+- `prompts/dma/*.yml`: no change. The prompt is model-agnostic; what
+  changes is which provider executes it.
+- New tests in `test_dma_orchestrator_bounce.py`:
+  - `test_secondary_model_swap_uses_configured_model` (variant A).
+  - `test_panel_of_n_uses_three_distinct_models` (variant B).
+  - `test_model_id_attached_to_each_attempt`.
+  - `test_panel_resilient_when_one_provider_errors` (any single
+    provider failing must not collapse the bounce — fall through to
+    the surviving providers, mark exhausted only if ALL fail).
+
+**Cost framing.** Variant A is operationally identical to v0.2 cost-wise
+(same 3 calls per triggered DMA; just routed elsewhere). Variant B
+triples the per-bounce cost (~3× → ~9× per triggered DMA) but only on
+the subset of thoughts that triggered bounce in the first place
+(empirically 15–30% per §5). For a 1000-thought run with variant B
+and 25% trigger rate, the additional cost is `1000 × 0.25 × 6 extra
+calls ≈ 1500 extra LLM calls` — material but bounded.
+
+**Open question for v0.3 design review.** Variant A or variant B? The
+recommendation is to **ship variant A first**, observe the diversity
+delta against v0.2's same-model bounce, and only escalate to variant B
+if telemetry shows a same-prior collapse pattern (e.g., the 3
+alternatives across providers correlate too tightly to be sampling
+genuinely different priors). This mirrors the §4 stance that diversity
+prompts were "reserved for a later release if telemetry shows the
+three alternatives collapsing into near-duplicates." Same logic, one
+level up: try the cheaper diversity lever (different model) before
+the more expensive one (panel of 3).
+
+### 9.3 Acceptance for v0.3
+
+PDMA-bounce-resolved and PDMA-bounce-exhausted analogues to acceptance
+criteria 1 and 2 from §8. Plus the secondary-model coverage above. No
+v0.2 test should regress.
+
+### 9.4 Coordination with conscience-shard secondary-model bounce
+
+The same diversity-via-different-model lever applies one layer up at
+the conscience shards. See `FSD/CONSCIENCE_V3.md` §9 for the parallel
+proposal (IRIS-E / IRIS-C / IRIS-O bounce against a panel of providers
+when the v3 heuristic gate flags `disagree`/`mushy`/`borderline`). The
+DMA-side and conscience-side proposals share the same `LLMBus` provider
+routing infrastructure and should land in the same release window so
+the multi-provider config lives in one place.

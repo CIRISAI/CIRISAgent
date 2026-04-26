@@ -43,7 +43,7 @@ response_format: |
   - ምሳሌ: {{"reasoning": "ይህ ሁኔታ በአካላዊ መልኩ የሚቃረን ነው"፣ "flags": ["Physical_Implausibility_Ignored_Interaction"]}} - የተተረጎመ reasoning፣ የEnglish ቁልፎች/ምልክቶች።
 
 context_integration: |
-  Context Summary: {context_summary}
-  Original Thought: {original_thought_content}
+  የአውድ ማጠቃለያ: {context_summary}
+  ዋና ሀሳብ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

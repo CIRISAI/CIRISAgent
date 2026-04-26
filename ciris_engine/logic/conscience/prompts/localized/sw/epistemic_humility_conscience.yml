@@ -137,7 +137,7 @@ system_prompt: |
   2. Contested claims presented with false certainty (propaganda vector)
   3. State narratives that eliminate nuance (epistemic capture)
 
-  Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
+  Toa JSON pekee: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
   === Sheria za Lugha ===
   - Funguo za JSON lazima zibaki kwa Kiingereza ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action").

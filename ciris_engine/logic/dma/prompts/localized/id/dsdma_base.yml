@@ -43,7 +43,7 @@ response_format: |
   - Contoh: {{"domain_alignment": 0.8, "reasoning": "Pemikiran ini selaras dengan aturan domain"}} - penalaran Indonesia, kunci Inggris.
 
 context_integration: |
-  Domain: {{domain_name}}
+  Bidang: {{domain_name}}
   Aturan: {{rules_summary_str}}
   Konteks: {{context_str}}
   Pemikiran: {{original_thought_content}}

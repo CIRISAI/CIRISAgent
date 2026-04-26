@@ -128,7 +128,229 @@ Migration path:
 2. **TOOL-specific threshold calibration** — entropy distributions over tool-call alternatives will likely differ from speech-entropy distributions. Do we calibrate separately or trust the same thresholds until data suggests otherwise?
 3. **Do we preserve the scalar `coherence` field in the expanded schema for dashboard continuity, or drop it in favor of the richer three-axis output?** Recommended: keep `coherence` as a derived aggregate (e.g., `min(alignment_score, context_fit_score)`) for backwards compat with any downstream consumers.
 
+## 9. Secondary-model bounce — diversity to break single-model priors
+
+**Status:** Proposal, parallel to `FSD/DMA_BOUNCE.md` §9.2. Both proposals
+share the same `LLMBus` multi-provider routing and should land in the
+same release window.
+
+### 9.1 Motivation
+
+The v3 heuristic gate's `disagree`/`mushy`/`borderline` flags fire when
+the three IRIS shards (E, C, O) split or sit in the fog band. Today, a
+PONDER on those flags produces a fresh ASPDMA loop, but the same shards
+re-evaluate the new attempt against the same model that just produced
+the ambiguous reading. If the ambiguity comes from a *single-model
+bias* — a calibration peculiarity, a refusal pattern, a topic-specific
+prior — re-asking the same model will reproduce the same ambiguity.
+
+A different model has different priors. When E/C/O run on Model A and
+agree ambiguously, asking Model B (or Models B + C in panel-of-N) to
+re-evaluate the SAME action generates an independent prior reading.
+Cross-model agreement on `proceed` is much stronger evidence than
+single-model `proceed`; cross-model disagreement is the cleanest
+signal that the action genuinely sits in contested territory.
+
+### 9.2 When secondary-model bounce fires
+
+Triggered by the v3 heuristic gate, NOT on every thought. Specifically:
+- `disagree` flag (max-min spread > 0.30): one of the shards is an
+  outlier; secondary-model evaluation distinguishes "single-model noise"
+  from "real shard-level disagreement on substance."
+- `mushy` flag (all in 0.40–0.70): single-sample LLM noise dominates in
+  this band; a second model's read pulls one direction or the other.
+- `borderline` flag (any score within 0.05 of threshold): the gate
+  decision is one re-roll away from flipping; a second model's read
+  resolves the coin flip with substance instead of variance.
+
+Crucially, the secondary-model bounce does **NOT fire when E/C/O all
+clean-pass or all clean-fail** — those are unambiguous and the cost
+isn't worth the latency. It's specifically the gate's escalation path.
+
+### 9.3 Two variants (mirror DMA bounce)
+
+| Variant | Cost | Diversity gain | Operational complexity |
+|---------|------|----------------|------------------------|
+| **A. Single-secondary swap** — re-run E/C/O on Model B | 3× extra LLM calls only when gate escalates | Moderate; one alternative prior set | Low |
+| **B. Panel-of-N** — re-run E/C/O on 3 different models in parallel, vote on the verdict | 9× extra LLM calls only when gate escalates | High; three alternative prior sets | Higher |
+
+**Selection rule under panel-of-N:** majority verdict across the 3
+models becomes the conscience output. If majority disagrees with
+single-model, the bounce verdict wins (the gate's job was to escalate,
+the panel's job is to break the tie). Ties (2-1 with one shard
+outlier) are surfaced through the heuristic gate's `rationale` field
+with `model_disagree=true` so ASPDMA sees that the conscience itself
+is not unanimous.
+
+### 9.4 Schema delta (additive only)
+
+```python
+class HeuristicGateResult(BaseModel):
+    verdict: Literal["proceed", "ponder", "defer"]
+    trigger_flags: list[str]
+    disagree_spread: float
+    weakest_shard: str
+    rationale: str
+    secondary_model_verdicts: Optional[list[ModelVerdict]] = None  # NEW
+
+class ModelVerdict(BaseModel):  # NEW
+    model_id: str
+    e: float
+    c: float
+    o_ratio: float
+    o_decision: str
+    verdict: str  # what THIS model's read says the gate should return
+```
+
+The `secondary_model_verdicts` list lets Lens dashboards surface "Model
+B agreed with Model A" or "Model B contradicted Model A on the 3 cases
+where the gate escalated this hour" — that's a high-quality
+calibration signal for shard / model selection.
+
+### 9.5 Coordination with DMA-side bounce
+
+DMA bounce operates one layer earlier (the DMA self-rated its own
+output low). Conscience secondary-model bounce operates one layer later
+(the conscience shards split or sit in the fog). They use the same
+multi-provider `LLMBus.call_with_provider` routing. The two
+proposals should ship together so:
+- One config block names the provider panel.
+- One telemetry surface tracks per-provider verdict deltas.
+- Provider failures fall through cleanly in both layers (DMA bounce or
+  conscience bounce can each independently degrade to single-model
+  when a provider is unavailable).
+
 ## Deferred to v4
 
-- Recursive II (Interaction Information) monitoring over pooled alternatives from 3× parallel IRIS-E dispatch when the heuristic gate flags ambiguity.
-- This requires v3 to be in place first: we need the heuristic gate as the trigger mechanism, and we need the enriched C schema to carry the II scalar.
+- Recursive II (Interaction Information) monitoring over pooled
+  alternatives from 3× parallel IRIS-E dispatch when the heuristic
+  gate flags ambiguity.
+- v3 is the prerequisite: the heuristic gate is the trigger mechanism,
+  and the enriched C schema carries the II scalar.
+
+### 10.1 v4 recursive II — prompt perturbation to force fact-grounding
+
+The naive recursive-II implementation runs N copies of IRIS-E in
+parallel against the SAME prompt and measures the interaction
+information across the N alternative-meaning lists. That catches
+output-distribution noise, but it does NOT catch coordinated
+single-model bias — if all N copies use the same prompt, they're all
+sampling from the same prior. Same prompt → same prior → high
+correlation by construction, even on hedges/propaganda the model
+fundamentally can't escape.
+
+**The harder lever: each recursive agent gets a *prompt-perturbed*
+variant that demands a *different secondary line of facts* support
+the same claim.** Truthful answers can supply each requested
+secondary line because the underlying reality has multiple,
+mutually-supporting evidence chains. Deceptive/hedging answers
+cannot — they rest on ONE rhetorical scaffold, and pushing for a
+*different* fact-line either fails ("no evidence") or fabricates a
+secondary lie that may contradict the first.
+
+**Why this is harder than single-prompt recursion:** lying in one
+dimension is cheap. Lying in N orthogonal dimensions consistently is
+expensive — exponentially so as N grows. Truth has many independent
+witnesses; falsehood usually has one rehearsed story.
+
+**Concrete prompt-perturbation axes for IRIS-E recursion:**
+
+| Axis | Recursive agent prompt asks the model to ground the answer in… | Failure signal |
+|------|----------------------------------------------------------------|----------------|
+| **Primary-source axis** | named primary sources (documents, archives, recordings) that would corroborate the answer | model can name none, or names sources that don't exist |
+| **Dated-event axis** | specific dates / event sequences that would have to be true if the answer is right | model gives no dates, or dates that are internally inconsistent |
+| **Named-actor axis** | specific named people, organizations, or institutions involved | model gestures at "experts" / "officials" without naming any |
+| **Falsifiability axis** | what fact would, if true, refute the answer | model produces a non-falsifier or refuses |
+| **Dependency axis** | what other facts would have to be true for this answer to hold | model can't identify dependencies, or dependencies don't form a coherent network |
+| **Counter-narrative axis** | what alternative interpretations exist and on what grounds they're rejected | model dismisses alternatives without engagement |
+
+For each thought sent through recursive II, the v4 dispatcher picks K
+of the 6 axes (e.g., K=3) and runs IRIS-E with a perturbed system
+prompt that adds the corresponding grounding demand. Then it computes
+II across the K alternative-meaning lists.
+
+### 10.2 What truthful vs deceptive answers look like across axes
+
+**Truthful answer to a documented event:**
+- Primary-source axis: names a contemporaneous source.
+- Dated-event axis: gives consistent dates, possibly acknowledging
+  where sources differ on minor details.
+- Named-actor axis: names actors with their roles.
+- Falsifiability axis: identifies what evidence would refute (e.g.,
+  "if no primary witnesses had been present, this would be more
+  contested").
+- Dependency axis: cites other established facts the answer rests on.
+- Counter-narrative axis: engages with the alternative and explains
+  why the documented record favors one over the other.
+
+The K alternative-meaning lists across axes will share the same core
+specifics (names, dates, places) and only differ in which
+fact-supplement they emphasize. **High II.**
+
+**Deceptive / hedging answer (the failure mode v3 already partially
+catches):**
+- Primary-source axis: gestures at "official sources" with no names.
+- Dated-event axis: gives a year or decade, no specifics.
+- Named-actor axis: "the government", "experts", "scholars" — no names.
+- Falsifiability axis: refuses ("complex topic, multiple
+  interpretations") or invents a non-falsifier ("more research
+  needed").
+- Dependency axis: produces unrelated background context (the
+  topic-substitution pattern from opt-veto v1.5) instead of
+  load-bearing dependencies.
+- Counter-narrative axis: "many perspectives exist" without
+  engagement.
+
+The K alternative-meaning lists across axes have NO shared core
+specifics — each list is generated from the same scaffold but with
+different padding. **Low II.**
+
+### 10.3 II computation
+
+Standard interaction information across the K alternative-meaning
+lists, treating named-entity overlap as the joint variable:
+
+```
+II(L1, L2, ..., LK) = sum over named-entity sets of
+    P(entity in all K lists) * log(...)
+```
+
+Truthful answers concentrate II in the named-entity set; deceptive
+answers diffuse it across orthogonal padding. The threshold for
+"flag as potentially deceptive" comes from telemetry calibration once
+v3 is in place.
+
+### 10.4 Why the perturbation is the load-bearing change
+
+Without prompt perturbation, recursive II measures only sampling
+variance on a fixed prior — it catches "the model is uncertain but
+honest" reasonably well, but cannot distinguish "the model is
+uncertain because it's lying / has been trained to evade." The
+perturbation forces the model into territory the prior doesn't
+cover; if the answer can be grounded across all K axes consistently,
+it's fact-supported; if it falls apart on one or more axes, the
+prior was carrying the original answer, not reality.
+
+The cost is K× the IRIS-E call (parallel, so latency is max-of-K).
+The signal is qualitatively different from same-prompt recursion: II
+measured across diverse-prompt outputs is a near-perfect detector
+for hedges and propaganda that defeated v3 by sounding balanced,
+because the perturbation specifically targets the absence of
+multi-axial fact grounding.
+
+### 10.5 Coordination with secondary-model bounce (§9)
+
+§9 (secondary-model bounce) and §10 (recursive II with prompt
+perturbation) compose: the v4 recursive II can run its K perturbed
+agents against DIFFERENT MODELS AND different prompts simultaneously.
+At that point the conscience layer is sampling the joint distribution
+of `{model × prior × axis}` for the same action, and II across all
+three dimensions is the strongest single signal we can produce
+without external fact-checking.
+
+The combinatorial budget caps this: in panel-of-3 + K=3 axes, that's
+9 LLM calls per IRIS-E recursion, fired only when the v3 heuristic
+gate escalates. With ~15–25% gate-escalation rate (estimated from
+v3 shadow-mode telemetry to be confirmed), per-1000-thought cost is
+~225 thoughts × 9 = 2025 extra calls — bounded and concentrated on
+hard cases, mirroring the DMA-bounce cost framing.

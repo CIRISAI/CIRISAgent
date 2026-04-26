@@ -56,7 +56,7 @@ context_integration: '=== ASPDMA ၏ရွေးချယ်မှု ===
 
   ကိရိယာ: {{tool_name}}
 
-  Reasoning: {{aspdma_reasoning}}
+  အကြောင်းပြချက်: {{aspdma_reasoning}}
 
 
   === မူလအတွေးအကြံ (အသုံးပြုသူ၏ရည်ရွယ်ချက် - parameter များကို ခန့်မှန်းရန် အသုံးပြုပါ) ===

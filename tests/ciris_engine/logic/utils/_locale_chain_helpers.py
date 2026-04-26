@@ -279,6 +279,37 @@ def _count_token(text: str, token: str) -> int:
     return len(re.findall(rf"\b{re.escape(token)}\b", text))
 
 
+# Catches lines like
+#     `Context Summary: {context_summary}`
+#     `Original Thought: {{original_thought_content}}`
+#     `Domain: {{domain_name}}`
+# anywhere in a YAML string value. The label is a Title-Case English phrase
+# (1-4 words, ≤40 chars) followed by `: ` and a `{...}` or `{{...}}` placeholder
+# on the same line. The placeholder presence is the key signal that this is a
+# value-extraction template label that needs translation in localized files.
+#
+# Matches at start-of-line OR after a newline so we catch labels embedded
+# inside multi-line YAML block scalars (the |- and | styles).
+LABEL_PLACEHOLDER_RE = re.compile(
+    r"(?:^|\n)\s*([A-Z][A-Za-z][A-Za-z\s]{0,38}?):\s+(?:\{\{[^{}]+\}\}|\{[^{}]+\})",
+    re.MULTILINE,
+)
+
+# Labels that legitimately stay English in localized files (rare). Keep
+# tight — adding to this list weakens the gap-detection. If a label is
+# here, every locale will inherit the English form. Each entry should be
+# justified — usually because it's a wire-protocol identifier the LLM
+# echoes verbatim, not a human-facing label.
+LABEL_PLACEHOLDER_ALLOWLIST: frozenset[str] = frozenset()
+# (Add entries with a comment explaining why each is exempt.)
+
+
+def _extract_label_placeholder_phrases(text: str) -> set[str]:
+    """Return the set of label phrases (without trailing colon) that appear
+    in the form `Label: {placeholder}` anywhere in `text`."""
+    return {m.group(1).strip() for m in LABEL_PLACEHOLDER_RE.finditer(text)}
+
+
 def _base_file_for(localized_fp: Path) -> Optional[Path]:
     """Find the base English source for a localized YAML.
     Localized lives at .../prompts/localized/{lang}/{name}.yml — the en source
@@ -487,6 +518,66 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
                 f"canonical names:\n" + "\n".join(violations)
             )
 
+    if ALL_FILES:
+        @pytest.mark.parametrize("fp", ALL_FILES, ids=lambda p: f"{p.parent.parent.name}/{p.name}")
+        def test_label_placeholder_lines_translated(fp: Path) -> None:
+            """No English `Label: {placeholder}` line in the base prompt
+            may survive untranslated into a localized file.
+
+            Catches the pattern that bypasses the natural-language script
+            check: short YAML fields (under the 80-char threshold) where a
+            translator left the *label* in English while only translating
+            longer body prose. Example failure mode this fired against:
+
+                # ciris_engine/logic/dma/prompts/localized/am/csdma_common_sense.yml
+                context_integration: |
+                  Context Summary: {context_summary}      # ← English label
+                  Original Thought: {original_thought_content}  # ← English label
+
+                # base file (en) has the same labels — they must be
+                # translated, not preserved.
+
+            The placeholder presence is the key signal that this is a
+            value-extraction template (vs e.g. a section heading the LLM
+            should echo verbatim). Labels in the
+            `LABEL_PLACEHOLDER_ALLOWLIST` are exempt — keep that list
+            tight; every entry weakens the gap-detection."""
+            base = _base_file_for(fp)
+            if base is None:
+                pytest.skip(f"no base file for {fp.name} (not in canonical prompt set)")
+            base_text = base.read_text(encoding="utf-8")
+            loc_text = fp.read_text(encoding="utf-8")
+
+            base_labels = _extract_label_placeholder_phrases(base_text)
+            if not base_labels:
+                pytest.skip(f"base {base.name} has no label-placeholder lines")
+            loc_labels = _extract_label_placeholder_phrases(loc_text)
+
+            # English labels that appear unchanged in the localized file.
+            leaks = (base_labels & loc_labels) - LABEL_PLACEHOLDER_ALLOWLIST
+            if not leaks:
+                return
+
+            # Build a useful failure message that quotes the offending lines.
+            offending_lines: List[str] = []
+            for label in sorted(leaks):
+                pat = re.compile(
+                    rf"(?:^|\n)\s*{re.escape(label)}:\s+(?:\{{[^}}]+\}}|\{{\{{[^}}]+\}}\}})",
+                    re.MULTILINE,
+                )
+                m = pat.search(loc_text)
+                if m:
+                    offending_lines.append(f"  '{label}:' — {m.group(0).strip()}")
+                else:
+                    offending_lines.append(f"  '{label}:' (could not re-locate)")
+
+            assert not leaks, (
+                f"{fp.relative_to(REPO_ROOT)} has untranslated English "
+                f"label-placeholder lines from the base ({base.name}). "
+                f"Each label must be translated to {spec.name} alongside "
+                f"the placeholder it precedes:\n" + "\n".join(offending_lines)
+            )
+
     def test_format_placeholders_preserved_in_retry_strings() -> None:
         if not LOC_JSON.is_file():
             pytest.fail(f"missing localization JSON: {LOC_JSON}")
@@ -529,4 +620,7 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         globals_dict["test_canonical_action_verbs_preserved"] = test_canonical_action_verbs_preserved
         globals_dict["test_canonical_identifier_tokens_mostly_preserved"] = (
             test_canonical_identifier_tokens_mostly_preserved
+        )
+        globals_dict["test_label_placeholder_lines_translated"] = (
+            test_label_placeholder_lines_translated
         )

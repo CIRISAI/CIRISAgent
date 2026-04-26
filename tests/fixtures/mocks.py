@@ -333,26 +333,35 @@ class MockSecretsService:
 
 
 class MockServiceRegistry:
-    """Mock service registry.
+    """Mock service registry that mirrors the production surface.
 
-    Includes a built-in attestation-aware auth service via
-    `get_authentication()` so consumers like `prefetch_batch_context()`
-    that call `service_registry.get_authentication().await_attestation_ready()`
-    clear the strict attestation gate added in 2.7.1 by default. Tests
-    that want to exercise the failure paths can replace
-    `self._auth_service` with a MagicMock that has overridden methods.
+    Production `ciris_engine.logic.registries.base.ServiceRegistry` exposes
+    typed lookups (`get_services_by_type`) — there is no
+    `get_authentication()` shortcut. This mock follows the same shape so a
+    test passing it to `prefetch_batch_context()` exercises the same code
+    path production runs; if a future change to the production lookup
+    silently regresses the test surface, every test that relies on this
+    mock fails together rather than passing while production crashes.
+
+    The attestation-aware auth service is registered under
+    `ServiceType.WISE_AUTHORITY` (matching the real
+    `AuthenticationService.get_service_type()` return value) so the strict
+    attestation gate added in 2.7.1 clears by default. Tests that want to
+    exercise the failure path can mutate the returned auth service's
+    `await_attestation_ready` / `get_cached_attestation` mocks directly.
     """
 
     def __init__(self):
         self.services = {}
         self._auth_service = self._build_attestation_auth_service()
-        # Surface the lookup methods system-snapshot helpers reach for.
-        # Pre-create them as MagicMocks so tests can `.return_value = ...`
-        # them directly without having to know we're a real class
-        # underneath. The defaults emit empty results.
+        # Production-like typed lookup. Default returns empty list; the
+        # WISE_AUTHORITY entry returns the attestation-aware auth service.
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        self._services_by_type: Dict[Any, list] = {ServiceType.WISE_AUTHORITY: [self._auth_service]}
+        # Surface system-snapshot helpers as MagicMocks for direct override.
         self.get_provider_info = MagicMock(return_value={"handlers": {}, "global_services": {}})
         self.get_circuit_breaker_states = MagicMock(return_value={})
-        self.get_services_by_type = MagicMock(return_value=[])
         self._services: Dict[Any, Any] = {}
 
     def get_all(self) -> dict:
@@ -363,9 +372,10 @@ class MockServiceRegistry:
         """Register a service."""
         self.services[service_id] = service
 
-    def get_authentication(self):
-        """Return the attestation-aware auth service stand-in."""
-        return self._auth_service
+    def get_services_by_type(self, service_type) -> list:
+        """Mirror of `ServiceRegistry.get_services_by_type` — the only
+        path the production registry exposes for finding services."""
+        return list(self._services_by_type.get(service_type, []))
 
     @staticmethod
     def _build_attestation_auth_service():

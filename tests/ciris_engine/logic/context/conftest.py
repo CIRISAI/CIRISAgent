@@ -79,17 +79,19 @@ def mock_resource_monitor():
 def mock_service_registry():
     """Create a proper service registry mock.
 
-    Delegates to centralized MockServiceRegistry which carries the
-    attestation-aware get_authentication() required by the strict
-    attestation gate added in 2.7.1. Adds the system-snapshot-specific
-    return-value shims (`get_provider_info`, `get_services_by_type`)
-    on top so this fixture is a strict superset of the prior local mock.
+    Delegates to centralized MockServiceRegistry, which mirrors the
+    production registry surface: typed-only lookups via
+    `get_services_by_type` with the attestation-aware auth service
+    pre-registered under ServiceType.WISE_AUTHORITY. Required for the
+    strict attestation gate added in 2.7.1. The only override is
+    `get_provider_info` (system-snapshot helper consumes it) — note we
+    do NOT override `get_services_by_type` because that would erase
+    the auth service registration.
     """
     from tests.fixtures.mocks import MockServiceRegistry
 
     registry = MockServiceRegistry()
     registry.get_provider_info = Mock(return_value={"handlers": {}, "global_services": {}})
-    registry.get_services_by_type = Mock(return_value=[])
     return registry
 
 

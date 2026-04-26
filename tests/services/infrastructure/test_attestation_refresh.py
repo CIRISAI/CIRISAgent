@@ -16,6 +16,11 @@ import pytest
 
 from ciris_engine.schemas.services.attestation import AttestationResult
 
+# This file tests the real bodies of run_startup_attestation and
+# _attestation_refresh_loop, which the global autouse fixture in
+# tests/conftest.py would otherwise stub out for performance/safety.
+pytestmark = pytest.mark.real_attestation
+
 
 def _make_result(
     binary_ok: bool = True,

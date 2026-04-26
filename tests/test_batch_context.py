@@ -163,6 +163,96 @@ class TestPrefetchBatchContext:
             )
 
     @patch("ciris_engine.logic.context.batch_context.persistence")
+    async def test_prefetch_uses_registry_service_type_lookup_for_authentication(
+        self, mock_persistence, mock_runtime
+    ):
+        """The auth service is found via `get_services_by_type(WISE_AUTHORITY)`.
+
+        Production `ServiceRegistry` exposes typed lookups only — there is
+        no `get_authentication()` shortcut. AuthenticationService and
+        WiseAuthorityService both register under WISE_AUTHORITY (deepwiki:
+        "intentional architecture"); we disambiguate by presence of
+        `await_attestation_ready`, the method unique to the auth service.
+
+        This test registers TWO services under WISE_AUTHORITY — a
+        wise-authority-shaped one and an auth-shaped one — and asserts
+        the auth-shaped one is picked. Regression for the P0 Codex
+        flagged on commit 34e638621 where we called `get_authentication()`
+        directly and would have AttributeError'd in production.
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+        from ciris_engine.schemas.services.attestation import AttestationResult
+
+        mock_persistence.get_recent_completed_tasks.return_value = []
+        mock_persistence.get_top_tasks.return_value = []
+
+        # Wise-authority-shaped service: NO await_attestation_ready, NO
+        # get_cached_attestation. Picks up _get_wa_by_kid like the real one.
+        wa_only = MagicMock(spec=["_get_wa_by_kid"])
+
+        # Auth-shaped service: has the attestation gate.
+        auth_shaped = MagicMock()
+        auth_shaped.await_attestation_ready = AsyncMock(return_value=None)
+        auth_shaped.get_cached_attestation.return_value = AttestationResult(
+            loaded=True,
+            key_status="ephemeral",
+            attestation_status="verified",
+            binary_ok=True,
+            env_ok=True,
+            file_integrity_ok=True,
+            registry_ok=True,
+            audit_ok=True,
+            max_level=4,
+            cached_at=datetime.now(timezone.utc),
+            cache_ttl_seconds=3600,
+        )
+
+        class TypedOnlyRegistry:
+            """Mirror of production ServiceRegistry surface — no shortcuts."""
+
+            def get_services_by_type(self, service_type):
+                if service_type == ServiceType.WISE_AUTHORITY:
+                    return [wa_only, auth_shaped]
+                return []
+
+        batch_data = await prefetch_batch_context(
+            runtime=mock_runtime,
+            service_registry=TypedOnlyRegistry(),
+        )
+
+        # Auth-shaped service was found and gated on, NOT the wa-only one.
+        auth_shaped.await_attestation_ready.assert_awaited_once()
+        assert batch_data.verify_attestation is not None
+        assert batch_data.verify_attestation.attestation_status == "verified"
+
+    @patch("ciris_engine.logic.context.batch_context.persistence")
+    async def test_prefetch_raises_when_only_wise_authority_governance_service_registered(
+        self, mock_persistence, mock_runtime
+    ):
+        """If only the governance WiseAuthorityService is registered (no
+        AuthenticationService), prefetch must raise — cannot resolve
+        attestation. Pins that we don't accidentally call
+        `await_attestation_ready` on the wrong service."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_persistence.get_recent_completed_tasks.return_value = []
+        mock_persistence.get_top_tasks.return_value = []
+
+        wa_only = MagicMock(spec=["_get_wa_by_kid"])
+
+        class TypedOnlyRegistry:
+            def get_services_by_type(self, service_type):
+                if service_type == ServiceType.WISE_AUTHORITY:
+                    return [wa_only]
+                return []
+
+        with pytest.raises(RuntimeError, match="await_attestation_ready"):
+            await prefetch_batch_context(
+                runtime=mock_runtime,
+                service_registry=TypedOnlyRegistry(),
+            )
+
+    @patch("ciris_engine.logic.context.batch_context.persistence")
     async def test_prefetch_resilience_with_minimal_services(
         self, mock_persistence, mock_runtime, mock_service_registry
     ):

@@ -980,11 +980,26 @@ class TestToolServiceValidation:
 
     @pytest.mark.asyncio
     async def test_tool_services_non_iterable(self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
-        """Test handling when get_services_by_type returns non-iterable."""
-        mock_registry = mock_service_registry
-        # Return non-iterable (single object instead of list)
-        mock_registry.get_services_by_type.return_value = MagicMock()  # Not iterable!
+        """Test handling when get_services_by_type returns non-iterable for TOOL.
 
+        Wraps the centralized registry's `get_services_by_type` so the
+        TOOL service-type lookup returns a non-iterable, while
+        WISE_AUTHORITY still returns the attestation-aware auth service
+        the strict gate (2.7.1) requires. Without that side-effect split
+        the strict gate would short-circuit before tool discovery and we'd
+        never exercise the branch this test is for.
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_registry = mock_service_registry
+        original = mock_registry.get_services_by_type
+
+        def lookup(service_type):
+            if service_type == ServiceType.TOOL:
+                return MagicMock()  # Not iterable!
+            return original(service_type)
+
+        mock_registry.get_services_by_type = MagicMock(side_effect=lookup)
         mock_runtime.service_registry = mock_registry
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.current_shutdown_context = None

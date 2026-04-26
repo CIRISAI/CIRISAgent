@@ -2456,11 +2456,18 @@ class TestNativeAppleTokenExchange:
             assert _get_apple_platform_default_audiences() is None
 
     def test_get_allowed_apple_audiences_falls_back_on_apple_when_oauth_missing(self):
-        """Missing oauth.json + Apple platform → return bundle-ID defaults."""
+        """Missing oauth.json file + Apple platform → return bundle-ID defaults.
+
+        Crucially, the fallback is gated on the FILE actually being absent
+        (`_oauth_config_file_exists` returns False), not just on the
+        provider-not-configured 404. See the next test for the
+        file-present-but-no-apple-provider path which must NOT fall back.
+        """
         from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._oauth_config_file_exists", return_value=False),
             patch("sys.platform", "darwin"),
         ):
             mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
@@ -2468,12 +2475,33 @@ class TestNativeAppleTokenExchange:
 
         assert audiences == {"ai.ciris.mobile", "ai.ciris.mobile.debug"}
 
+    def test_get_allowed_apple_audiences_raises_503_when_oauth_json_present_but_no_apple_provider(self):
+        """oauth.json EXISTS but doesn't list apple → operator explicitly
+        disabled apple sign-in; we must NOT silently re-enable it via the
+        bundle-ID fallback. This is the regression Codex flagged on
+        commit 34e638621: the original guard fired on any 404 from
+        `_load_oauth_config`, not just file-absent 404s."""
+        from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._oauth_config_file_exists", return_value=True),
+            patch("sys.platform", "darwin"),
+        ):
+            mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")
+
+            with pytest.raises(HTTPException) as exc_info:
+                _get_allowed_apple_audiences_from_config()
+
+            assert exc_info.value.status_code == 503
+
     def test_get_allowed_apple_audiences_raises_503_on_non_apple_when_oauth_missing(self):
         """Missing oauth.json + non-Apple platform → 503 (existing behavior)."""
         from ciris_engine.logic.adapters.api.routes.auth import _get_allowed_apple_audiences_from_config
 
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._oauth_config_file_exists", return_value=False),
             patch("sys.platform", "linux"),
         ):
             mock_load_config.side_effect = HTTPException(status_code=404, detail="OAuth provider 'apple' not configured")

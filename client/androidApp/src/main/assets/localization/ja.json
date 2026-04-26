@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "PONDER - アプローチを再考します。ドキュメントがこのツールがタスクに不適切であることを示している場合に使用します。",
       "tsaspdma_closing": "あなたの役割は、ASPDMAが完全なドキュメントなしでは見られなかった問題をキャッチすることです。ツールの選択が適切に見える場合は、迅速に確認してください。",
       "tsaspdma_correction_header": "ツール修正モード",
-      "tsaspdma_correction_text": "ASPDMAは存在しないツールを選択しました。利用可能なツールリストからユーザーの意図に一致する正しいツールを見つけてください。"
+      "tsaspdma_correction_text": "ASPDMAは存在しないツールを選択しました。利用可能なツールリストからユーザーの意図に一致する正しいツールを見つけてください。",
+      "bounce_header": "[BOUNCE — 前回の評価でこの思考が閾値を下回りました:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (閾値 {threshold})",
+      "bounce_instruction": "より高く評価する代替評価を生成してください。上記の最低評価の側面に対処してください。原則的な代替案がない場合は、スコアをそのままにして、`reasoning` を使用して質問が構造的に難しい理由を説明してください。",
+      "bounce_original_marker": "[元の思考が続きます]",
+      "bounce_advisory_aspdma": "\n[DMAバウンス助言] 1つ以上の初期DMAがこの思考を閾値を下回ると評価し、バウンスラウンドは合格代替案を生成しませんでした。難易度の理由: {rationale}。サイレント完了より、SPEAK-注意付きまたはDEFERを優先してください。\n"
     },
     "formatters": {
       "system_snapshot_header": "システムスナップショット",

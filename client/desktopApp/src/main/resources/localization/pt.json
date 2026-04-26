@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "PONDERAR - Reconsidere a abordagem. Use se a documentação mostrar que esta ferramenta está errada para a tarefa.",
       "tsaspdma_closing": "Seu papel é capturar problemas que ASPDMA não conseguia ver sem documentação completa. Se a seleção da ferramenta parecer boa, confirme rapidamente.",
       "tsaspdma_correction_header": "MODO DE CORREÇÃO DE FERRAMENTA",
-      "tsaspdma_correction_text": "ASPDMA selecionou uma ferramenta que NÃO existe. Encontre a FERRAMENTA CORRETA da lista de ferramentas disponíveis que corresponda à intenção do usuário."
+      "tsaspdma_correction_text": "ASPDMA selecionou uma ferramenta que NÃO existe. Encontre a FERRAMENTA CORRETA da lista de ferramentas disponíveis que corresponda à intenção do usuário.",
+      "bounce_header": "[BOUNCE — sua avaliação anterior classificou este pensamento abaixo do limiar em:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (limiar {threshold})",
+      "bounce_instruction": "Gere uma avaliação alternativa que você classificaria mais alto. Aborde a(s) dimensão(ões) com a classificação mais baixa acima. Se nenhuma alternativa de princípio existir, mantenha a pontuação onde está e use `reasoning` para explicar o que torna a pergunta estruturalmente difícil.",
+      "bounce_original_marker": "[O PENSAMENTO ORIGINAL SEGUE]",
+      "bounce_advisory_aspdma": "\n[AVISO DE REBATE DMA] Um ou mais DMAs iniciais classificaram este pensamento abaixo do limiar e a rodada de rebate não produziu uma alternativa aprovatória. Razão de dificuldade: {rationale}. Prefira SPEAK-com-ressalva ou DEFER em vez da conclusão silenciosa.\n"
     },
     "formatters": {
       "system_snapshot_header": "Captura do Sistema",

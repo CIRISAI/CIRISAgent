@@ -421,7 +421,12 @@
       "tsaspdma_ponder_option": "SUY NGẪM - Xem xét lại cách tiếp cận. Dùng nếu tài liệu cho thấy công cụ này sai cho nhiệm vụ.",
       "tsaspdma_role": "Bạn đang xem xét một hành động CÔNG CỤ mà ASPDMA đã chọn. Bây giờ bạn có TÀI LIỆU ĐẦY ĐỦ cho công cụ này.",
       "tsaspdma_speak_option": "NÓI - Hỏi người dùng để làm rõ. Dùng nếu tài liệu tiết lộ sự mơ hồ cần đầu vào từ người dùng.",
-      "tsaspdma_tool_option": "CÔNG CỤ - Tiến hành thực thi công cụ. Dùng nếu tài liệu xác nhận đây là công cụ đúng."
+      "tsaspdma_tool_option": "CÔNG CỤ - Tiến hành thực thi công cụ. Dùng nếu tài liệu xác nhận đây là công cụ đúng.",
+      "bounce_header": "[BOUNCE — đánh giá trước của bạn đã đánh giá suy nghĩ này dưới ngưỡng tại:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (ngưỡng {threshold})",
+      "bounce_instruction": "Tạo một đánh giá thay thế mà bạn sẽ đánh giá cao hơn. Giải quyết các chiều có đánh giá thấp nhất ở trên. Nếu không tồn tại lựa chọn thay thế có nguyên tắc, giữ điểm số ở nơi nó đang ở và sử dụng `reasoning` để giải thích điều gì khiến câu hỏi khó về mặt cấu trúc.",
+      "bounce_original_marker": "[SUY NGHĨ GỐC TIẾP THEO]",
+      "bounce_advisory_aspdma": "\n[CẢNH BÁO DỘI DMA] Một hoặc nhiều DMA ban đầu đã đánh giá suy nghĩ này dưới ngưỡng và vòng dội không tạo ra lựa chọn thay thế đạt yêu cầu. Lý do khó khăn: {rationale}. Ưu tiên SPEAK-với-cảnh báo hoặc DEFER hơn là hoàn thành im lặng.\n"
     },
     "engine_overview": "ENGINE OVERVIEW: The CIRIS Engine processes a task through a sequence of Thoughts. Each handler action except TASK_COMPLETE enqueues a new Thought for further processing. Selecting TASK_COMPLETE marks the task closed and no new Thought is generated.",
     "escalation": {

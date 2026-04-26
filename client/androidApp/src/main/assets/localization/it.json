@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "RIFLETTI - Riconsiderare l'approccio. Usa se la documentazione mostra che questo strumento è sbagliato per l'attività.",
       "tsaspdma_closing": "Il tuo ruolo è cogliere i problemi che ASPDMA non poteva vedere senza la documentazione completa. Se la selezione dello strumento sembra buona, confermala rapidamente.",
       "tsaspdma_correction_header": "MODALITÀ CORREZIONE STRUMENTO",
-      "tsaspdma_correction_text": "ASPDMA ha selezionato uno strumento che NON esiste. Trova lo STRUMENTO CORRETTO dall'elenco degli strumenti disponibili che corrisponda all'intenzione dell'utente."
+      "tsaspdma_correction_text": "ASPDMA ha selezionato uno strumento che NON esiste. Trova lo STRUMENTO CORRETTO dall'elenco degli strumenti disponibili che corrisponda all'intenzione dell'utente.",
+      "bounce_header": "[BOUNCE — la tua valutazione precedente ha valutato questo pensiero sotto la soglia su:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (soglia {threshold})",
+      "bounce_instruction": "Genera una valutazione alternativa che valuteresti più alta. Affronta le dimensioni con il punteggio più basso sopra. Se non esiste un'alternativa di principio, mantieni il punteggio dov'è e usa `reasoning` per spiegare cosa rende la domanda strutturalmente difficile.",
+      "bounce_original_marker": "[IL PENSIERO ORIGINALE SEGUE]",
+      "bounce_advisory_aspdma": "\n[AVVISO DI RIMBALZO DMA] Una o più DMA iniziali hanno valutato questo pensiero sotto la soglia e il giro di rimbalzo non ha prodotto un'alternativa soddisfacente. Ragione della difficoltà: {rationale}. Preferisci SPEAK-con-riserva o DEFER al completamento silenzioso.\n"
     },
     "formatters": {
       "system_snapshot_header": "Snapshot di Sistema",

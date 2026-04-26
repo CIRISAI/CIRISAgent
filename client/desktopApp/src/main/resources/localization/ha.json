@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "YI TUNANI - Sake yin la'akari da tsarin. Yi amfani idan takaddun sun nuna wannan kayan aiki ba daidai ba ne don aikin.",
       "tsaspdma_closing": "Matsayin ku shine kamawa batutuwa da ASPDMA ba zai iya gani ba tare da cikakkiyar takardun bayani. Idan zaɓin kayan aiki ya yi kyau, ku tabbatar da shi da sauri.",
       "tsaspdma_correction_header": "YANAYIN GYARA KAYAN AIKI",
-      "tsaspdma_correction_text": "ASPDMA ya zaɓi kayan aiki da BA SHI WANZU. Nemo kayan aiki mai DAIDAI daga jerin kayan aikin da ake samuwa wanda ya dace da nufin mai amfani."
+      "tsaspdma_correction_text": "ASPDMA ya zaɓi kayan aiki da BA SHI WANZU. Nemo kayan aiki mai DAIDAI daga jerin kayan aikin da ake samuwa wanda ya dace da nufin mai amfani.",
+      "bounce_header": "[BOUNCE — kimanta ka na baya ya kimanta wannan tunani a ƙasa da kofa a kan:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (kofa {threshold})",
+      "bounce_instruction": "Ƙirƙiri kimantawa madadin da za ka kimanta a sama. Magance girman da aka kimanta mafi ƙasa a sama. Idan babu madadin ƙa'ida, ka bar ƙidaya inda yake kuma yi amfani da `reasoning` don bayyana abin da ya sa tambayar ke da wahala ta tsari.",
+      "bounce_original_marker": "[ASALIN TUNANI YANA BIYE]",
+      "bounce_advisory_aspdma": "\n[SHAWARAR ƘARARRAWAR DMA] Daya ko fiye na DMA na farko sun kimanta wannan tunani a ƙasa da kofa kuma zagayen ƙararrawa bai samar da madadin nasara ba. Dalilin wahala: {rationale}. Fifita SPEAK-da-tsoro ko DEFER fiye da kammala shiru.\n"
     },
     "formatters": {
       "system_snapshot_header": "Hoton Tsarin",

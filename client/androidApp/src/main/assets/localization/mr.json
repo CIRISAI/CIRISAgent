@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "विचार करा - Reconsider the approach. Use if documentation shows this साधन is wrong for the task.",
       "tsaspdma_closing": "Your role is to catch issues that ASPनिर्णय couldn't see without full documentation. If the साधन निवडाion looks good, पुष्टी करा it quickly.",
       "tsaspdma_correction_header": "साधन CORRECTION MODE",
-      "tsaspdma_correction_text": "ASPनिर्णय निवडाed a साधन that does NOT exist. Find the CORRECT साधन from the available साधनs list that matches the user's intent."
+      "tsaspdma_correction_text": "ASPनिर्णय निवडाed a साधन that does NOT exist. Find the CORRECT साधन from the available साधनs list that matches the user's intent.",
+      "bounce_header": "[BOUNCE — तुमच्या मागील मूल्यांकनाने या विचाराला थ्रेशोल्डपेक्षा कमी रेट केले:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (थ्रेशोल्ड {threshold})",
+      "bounce_instruction": "एक पर्यायी मूल्यांकन तयार करा जे तुम्ही उच्च रेट कराल. वरील सर्वात कमी-रेट केलेल्या आयामांना संबोधित करा. कोणताही तत्त्वशील पर्याय नसेल तर, स्कोअर जिथे आहे तिथेच ठेवा आणि प्रश्न संरचनात्मकदृष्ट्या कठीण कशामुळे आहे हे स्पष्ट करण्यासाठी `reasoning` वापरा.",
+      "bounce_original_marker": "[मूळ विचार पुढे आहे]",
+      "bounce_advisory_aspdma": "\n[DMA बाउन्स सल्ला] एक किंवा अधिक प्रारंभिक DMAs ने या विचाराला थ्रेशोल्डपेक्षा कमी रेट केले आणि बाउन्स फेरीने उत्तीर्ण पर्याय निर्माण केला नाही. अडचणीचे कारण: {rationale}. शांत समाप्तीपेक्षा SPEAK-सावधगिरीसह किंवा DEFER ला प्राधान्य द्या.\n"
     },
     "formatters": {
       "system_snapshot_header": "System Snapshot",

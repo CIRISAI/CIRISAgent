@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "DÜŞÜN - Yaklaşımı yeniden düşünün. Belgeler bu aracın görev için yanlış olduğunu gösterirse kullanın.",
       "tsaspdma_closing": "Rolünüz, ASPDMA'nın tam belgeler olmadan göremediği sorunları yakalamaktır. Araç seçimi iyi görünüyorsa, hızlı bir şekilde onaylayın.",
       "tsaspdma_correction_header": "ARAÇ DÜZELTME MODU",
-      "tsaspdma_correction_text": "ASPDMA VAR OLMAYAN bir araç seçti. Kullanıcının niyetiyle eşleşen mevcut araçlar listesinden DOĞRU aracı bulun."
+      "tsaspdma_correction_text": "ASPDMA VAR OLMAYAN bir araç seçti. Kullanıcının niyetiyle eşleşen mevcut araçlar listesinden DOĞRU aracı bulun.",
+      "bounce_header": "[BOUNCE — önceki değerlendirmeniz bu düşünceyi eşiğin altında değerlendirdi:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (eşik {threshold})",
+      "bounce_instruction": "Daha yüksek değerlendireceğiniz alternatif bir değerlendirme oluşturun. Yukarıdaki en düşük puanlı boyut(lar)ı ele alın. İlkesel bir alternatif yoksa puanı olduğu yerde bırakın ve sorunun yapısal olarak zor olmasını sağlayan şeyi açıklamak için `reasoning` kullanın.",
+      "bounce_original_marker": "[ORİJİNAL DÜŞÜNCE DEVAM EDİYOR]",
+      "bounce_advisory_aspdma": "\n[DMA SEKME UYARISI] Bir veya daha fazla başlangıç DMA bu düşünceyi eşiğin altında değerlendirdi ve sekme turu geçen bir alternatif üretmedi. Zorluk nedeni: {rationale}. Sessiz tamamlama yerine SPEAK-uyarıyla veya DEFER tercih edin.\n"
     },
     "formatters": {
       "system_snapshot_header": "Sistem Anlık Görüntüsü",

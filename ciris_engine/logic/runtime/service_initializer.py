@@ -73,6 +73,13 @@ class ServiceInitializer:
         self.memory_service: Optional[LocalGraphMemoryService] = None
         self.secrets_service: Optional[SecretsService] = None
         self.wa_auth_system: Optional[WiseAuthorityService] = None
+        # AuthenticationService is created in initialize_security_services and
+        # ALSO registered under WISE_AUTHORITY in initialize_all_services so the
+        # batch_context strict attestation gate can find it via the registry.
+        # Default to None at construction time so register-only paths (or tests
+        # that mock-skip the security init phase) can read self.auth_service
+        # without AttributeError.
+        self.auth_service: Optional[Any] = None  # AuthenticationService — Any avoids fwd-ref cycle
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
         self.audit_service: Optional[AuditService] = None

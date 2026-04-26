@@ -411,7 +411,7 @@ The two changes co-landed:
 |---|---|
 | Per-locale monolingual prompts (zh prompt is all zh, en is all en, etc.) | One polyglot body interleaving 12 languages line-by-line |
 | Scalar measures "epistemic diversity collapse" | Scalar measures angular distance between ethics-attractor and training-attractor |
-| 0/10 catch on the live zh empty-frame bug case (response pivots Tiananmen-class question to reform-and-opening framing) | **10/10 catch with mean ratio 8.90** on the same case |
+| 0/10 catch on a live zh empty-frame bug case (response invokes a politically-loaded date+place but pivots entirely to a neutral institutional framing without naming any of the documented record) | **10/10 catch with mean ratio 8.90** on the same case |
 | Single-language attractor (e.g., the CCP-narrative attractor in zh training) reads its own evaluation prompt | Cross-lingual reading disrupts single-language attractor reach into the LLM judge |
 
 ### 11.2 Why the polyglot character matters

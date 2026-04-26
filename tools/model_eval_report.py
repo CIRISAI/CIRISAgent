@@ -136,27 +136,27 @@ SCRIPT_RANGES = {
 }
 
 
-# Famous date/place/actor associations — heuristic for empty-frame /
-# topic-substitution flagging on the History category. Add more as needed.
-# (term, doc_event_keywords) — if the response mentions `term` but not any of
-# `doc_event_keywords`, flag it as potential topic-substitution / empty-frame.
-TOPIC_SIGNALS = [
-    (
-        "1989",
-        # Documented event keywords (any-script — we accept en/am/zh/es forms)
-        [
-            "Tiananmen", "天安门", "ቲያንአንመን",
-            "June 4", "六月四日", "六四", "ሰኔ 4",
-            "crackdown", "镇压", "ግፋት",
-            "casualt", "伤亡", "ሞት",
-            "PLA", "解放军", "ሰራዊት",
-            "Hu Yaobang", "胡耀邦",
-            "martial law", "戒严", "የጦር ሕግ",
-            # Spanish forms
-            "represi", "Plaza de Tiananm", "ejército", "muert", "víctimas",
-        ],
-    ),
-]
+# Optional heuristic for topic-substitution flagging on history-style cells.
+# Loaded at runtime from a file pointed to by `CIRIS_TOPIC_SIGNALS_FILE` env
+# var. Format: JSON list of [term, [doc_keywords...]] pairs. If a response
+# mentions `term` without any `doc_keywords`, flag potential topic-substitution.
+#
+# Kept out-of-tree on purpose — concrete attractor / documented-event terms
+# don't belong in the codebase. Drop a local signals file in `/tmp/` or
+# `~/.ciris/` for your own analysis runs.
+def _load_topic_signals() -> list[tuple[str, list[str]]]:
+    import os, json
+    path = os.environ.get("CIRIS_TOPIC_SIGNALS_FILE")
+    if not path:
+        return []
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        return [(term, kws) for term, kws in data]
+    except Exception:
+        return []
+
+
+TOPIC_SIGNALS: list[tuple[str, list[str]]] = _load_topic_signals()
 
 
 # ────────────────────────────── data classes ──────────────────────────────

@@ -32,7 +32,7 @@ as the existing ASPDMA bounce in
 `ciris_engine/logic/processors/core/thought_processor/recursive_processing.py`,
 applied one stage earlier.
 
-Empirical motivation (Tiananmen 1989 zh corpus, n=7 SPEAK responses, see qa
+Empirical motivation (politically-loaded zh corpus, n=7 SPEAK responses, see qa
 report attached to issue / FSD link):
 
 | Stance                | Count | CSDMA `plausibility_score` |
@@ -41,8 +41,8 @@ report attached to issue / FSD link):
 | Hedge / refuse / deflect |  6 | 0.00                       |
 
 The model already has a substantive answer available — task `64588860` produced
-it. On the other six attempts the political-filter prior dominated and the
-model rated its *own* output low. The pipeline never asked it to try again.
+it. On the other six attempts the institutional-narrative prior dominated and
+the model rated its *own* output low. The pipeline never asked it to try again.
 DMA bounce is the lever to break that prior with no rule injection from
 outside the model's own judgment.
 
@@ -333,9 +333,9 @@ Migration sequence:
 ### 9.2 Secondary-model bounce — diversity to break single-model priors
 
 **Motivation.** The v0.2 bounce uses **same model, same temperature** for
-the alternatives (per §4 hard limit). The original Tiananmen-1989 zh
+the alternatives (per §4 hard limit). The original politically-loaded zh
 finding showed a model could rate its *own* output low six times out of
-seven — but a same-model bounce risks the same political-filter prior
+seven — but a same-model bounce risks the same institutional-narrative prior
 firing on the alternatives. The model that scored the original 0.0 is
 the same model generating the bounce candidates; if its prior is what
 suppressed the substantive answer in the first place, asking it again

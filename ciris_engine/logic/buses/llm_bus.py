@@ -203,6 +203,66 @@ class LLMBus(BaseBus[LLMService]):
             )
         )
 
+    def _maybe_capture_call(
+        self,
+        *,
+        handler_name: str,
+        service_name: str,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        result: Any,
+        temperature: float,
+        max_tokens: int,
+    ) -> None:
+        """Diagnostic capture for replay against the bounce harness.
+
+        Writes one JSONL row per matched call. Gated by env vars so
+        production paths are zero-cost (early return on the os.environ
+        lookup if the capture env var is unset).
+
+        Env vars:
+          CIRIS_LLM_CAPTURE_HANDLER  match for handler_name (e.g.
+                                     'optimization_veto_conscience' or
+                                     '*' for all). Unset = disabled.
+          CIRIS_LLM_CAPTURE_FILE     output JSONL path. Defaults to
+                                     /tmp/llm_capture.jsonl.
+        """
+        import os
+
+        match = os.environ.get("CIRIS_LLM_CAPTURE_HANDLER")
+        if not match:
+            return
+        if match != "*" and match != handler_name:
+            return
+
+        try:
+            import json
+
+            out_path = os.environ.get(
+                "CIRIS_LLM_CAPTURE_FILE", "/tmp/llm_capture.jsonl"
+            )
+            row = {
+                "handler": handler_name,
+                "service": service_name,
+                "thought_id": thought_id,
+                "task_id": task_id,
+                "response_model": response_model.__name__,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+                "result": (
+                    result.model_dump()
+                    if hasattr(result, "model_dump")
+                    else str(result)
+                ),
+            }
+            with open(out_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except Exception as e:  # pragma: no cover — diagnostic-only path
+            logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
+
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
 
@@ -516,6 +576,24 @@ class LLMBus(BaseBus[LLMService]):
                 temperature=temperature,
                 thought_id=thought_id,
                 task_id=task_id,
+            )
+
+            # Diagnostic capture: env-gated so production paths are
+            # unaffected. When CIRIS_LLM_CAPTURE_HANDLER matches the
+            # handler_name (or is "*"), append a JSONL row to
+            # CIRIS_LLM_CAPTURE_FILE with the exact wire-format messages and
+            # the parsed structured result. Used to feed live traces into
+            # the bounce harness for replay analysis.
+            self._maybe_capture_call(
+                handler_name=handler_name,
+                service_name=service_name,
+                thought_id=thought_id,
+                task_id=task_id,
+                messages=normalized_messages,
+                response_model=response_model,
+                result=result,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000

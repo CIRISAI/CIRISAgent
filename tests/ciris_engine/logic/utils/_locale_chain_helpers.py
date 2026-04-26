@@ -252,6 +252,23 @@ SCRIPT_RATIO_MIN = 0.30
 STOPWORD_DENSITY_MAX = 0.35
 
 
+# Files that are intentionally polyglot — the prompt body interleaves many
+# languages by design, so monolingual script-ratio and English-stopword
+# density checks would always flag them. The polyglot character is the
+# integrity feature; reading across multiple languages disrupts single-
+# language attractor capture in the conscience LLM (verified end-to-end on
+# the bounce harness — opt-veto v2.0 went from 0/10 catch on the live zh
+# bug case to 10/10 abort once the body became polyglot).
+#
+# Add to this set ONLY when the file is universally polyglot (identical
+# body across all 29 locales, with only the closing language-rules block
+# varying per locale). The other tests in this module (canonical verbs,
+# identifier tokens, label-placeholder, [EN] residuals) still run.
+POLYGLOT_PROMPT_FILENAMES: frozenset[str] = frozenset({
+    "optimization_veto_conscience.yml",  # v2.0+
+})
+
+
 # Canonical wire-protocol tokens. These MUST appear in every locale's prompt
 # at least as often as in the base English source, because the LLM is supposed
 # to echo them verbatim into JSON outputs (selected_action: "SPEAK" etc.).
@@ -368,7 +385,16 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         def test_natural_language_strings_are_in_target_language(fp: Path) -> None:
             """Latin-script locale: long strings dominated by English stopwords
             indicate English text leaked through. Allow some English (CIRIS,
-            DMA, schema field names — already whitelisted), but not majority."""
+            DMA, schema field names — already whitelisted), but not majority.
+
+            POLYGLOT-PROMPT EXEMPTION: files in `POLYGLOT_PROMPT_FILENAMES`
+            interleave many languages by design (the polyglot character
+            disrupts single-language attractor capture in the LLM judge), so
+            monolingual stopword-density checks would always fire."""
+            if fp.name in POLYGLOT_PROMPT_FILENAMES:
+                pytest.skip(
+                    f"{fp.name} is intentionally polyglot — see POLYGLOT_PROMPT_FILENAMES"
+                )
             violations = []
             for path, text in _load_yaml_strings(fp):
                 if not _is_natural_language(text):
@@ -390,6 +416,18 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
     elif not spec.is_latin and ALL_FILES:
         @pytest.mark.parametrize("fp", ALL_FILES, ids=lambda p: f"{p.parent.parent.name}/{p.name}")
         def test_natural_language_strings_are_in_target_script(fp: Path) -> None:
+            """Non-Latin locale: each natural-language string must be ≥30%
+            target-script characters (after stripping technical tokens) so
+            English doesn't slip through.
+
+            POLYGLOT-PROMPT EXEMPTION: files in `POLYGLOT_PROMPT_FILENAMES`
+            interleave many languages by design (the polyglot character
+            disrupts single-language attractor capture in the LLM judge), so
+            monolingual script-ratio checks would always fire."""
+            if fp.name in POLYGLOT_PROMPT_FILENAMES:
+                pytest.skip(
+                    f"{fp.name} is intentionally polyglot — see POLYGLOT_PROMPT_FILENAMES"
+                )
             violations = []
             for path, text in _load_yaml_strings(fp):
                 if not _is_natural_language(text):

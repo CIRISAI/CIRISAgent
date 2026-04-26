@@ -238,10 +238,21 @@ Available modules:
         default="",
         help=(
             "Comma-separated EvalQuestion categories to include (case-insensitive). "
-            "Empty = all curated questions. "
-            "Examples: 'RLHFTradeoffs' (one bias axis), "
-            "'BenchmarkLegitimacy,ArchitectureTradeoffs' (two topics), "
-            "'CorporateSustainability' (geopolitical/corporate bias)."
+            "Empty = all questions in the loaded pool. "
+            "Examples: 'Theology' (one category), 'AI Ethics,Epistemology' (two)."
+        ),
+    )
+    parser.add_argument(
+        "--model-eval-questions-file",
+        default="",
+        help=(
+            "Path to a JSON file with EvalQuestion entries to use instead of the "
+            "in-tree default pool. Format: list of {category, question, evaluates, "
+            "translations} objects; `translations` is an optional {lang_code: text} "
+            "dict. Sensitive / attractor-bait question sets live OUT OF TREE — "
+            "drop them in `~/bounce-test/model_eval_questions/*.json` or anywhere "
+            "else, point this flag at the path. The in-tree default is "
+            "deliberately generic (theodicy / AI ethics / epistemology only)."
         ),
     )
 
@@ -475,6 +486,7 @@ def main():
         model_eval_question_categories=[
             cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()
         ],
+        model_eval_questions_file=(args.model_eval_questions_file or None),
     )
 
     # Create and run runner

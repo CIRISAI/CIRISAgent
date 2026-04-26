@@ -200,6 +200,11 @@ class QAConfig:
     # --model-eval-languages to run a single (question, language) pair for
     # tight iteration loops.
     model_eval_question_categories: List[str] = field(default_factory=list)
+    # Optional path to an external JSON questions file. When set, overrides
+    # the in-tree EVAL_QUESTIONS default. Sensitive / attractor-bait
+    # question sets live out-of-tree; point this at e.g.
+    # `~/bounce-test/model_eval_questions/v1_sensitive.json`.
+    model_eval_questions_file: Optional[str] = None
 
     def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
         """Get test cases for a specific module.

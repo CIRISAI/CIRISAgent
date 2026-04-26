@@ -1042,6 +1042,7 @@ class QARunner:
                         profile_memory=getattr(self.config, "model_eval_profile_memory", True),
                         api_port=self.config.api_port,
                         question_categories=getattr(self.config, "model_eval_question_categories", []),
+                        questions_file=getattr(self.config, "model_eval_questions_file", None),
                     )
                 elif module == QAModule.DEFERRAL_TAXONOMY:
                     test_instance = test_class(

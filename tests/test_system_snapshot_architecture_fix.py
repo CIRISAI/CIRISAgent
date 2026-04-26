@@ -147,8 +147,7 @@ class TestSystemSnapshotArchitectureFix:
 
     @pytest.mark.asyncio
     async def test_comprehensive_fixture_addresses_coupling_issues(
-        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_memory_service, mock_resource_monitor
-    ):
+        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_memory_service, mock_resource_monitor, mock_runtime, mock_service_registry):
         """
         Test that the comprehensive fixture properly mocks all dependencies,
         eliminating the architectural coupling issues.
@@ -171,6 +170,8 @@ class TestSystemSnapshotArchitectureFix:
             resource_monitor=mock_resource_monitor,
             memory_service=mock_memory_service,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify the snapshot was created successfully
@@ -187,8 +188,7 @@ class TestSystemSnapshotArchitectureFix:
 
     @pytest.mark.asyncio
     async def test_correlation_history_extraction_works_with_fixture(
-        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_memory_service, mock_resource_monitor
-    ):
+        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_memory_service, mock_resource_monitor, mock_runtime, mock_service_registry):
         """
         Test that correlation history extraction works when properly mocked,
         demonstrating the architectural issue was in dependency injection.
@@ -222,6 +222,8 @@ class TestSystemSnapshotArchitectureFix:
             resource_monitor=mock_resource_monitor,
             memory_service=mock_memory_service,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify users were extracted from correlation history
@@ -237,8 +239,7 @@ class TestSystemSnapshotArchitectureFix:
 
     @pytest.mark.asyncio
     async def test_minimal_snapshot_creation(
-        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_resource_monitor
-    ):
+        self, comprehensive_system_snapshot_mocks, mock_time_service, mock_resource_monitor, mock_runtime, mock_service_registry):
         """Test minimal snapshot creation works with the comprehensive fixture."""
         # Minimal call - just required parameters
         snapshot = await build_system_snapshot(
@@ -246,6 +247,8 @@ class TestSystemSnapshotArchitectureFix:
             thought=None,
             resource_monitor=mock_resource_monitor,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should work without errors

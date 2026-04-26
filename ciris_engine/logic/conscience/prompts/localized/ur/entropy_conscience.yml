@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Semantic-entropy self-resampling shard.
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "ur"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: ur
 system_prompt: |
   آپ IRIS-E ہیں، CIRIS کے ساتھ منسلک نظام کی معنی کے اینٹروپی کو محسوس کرنے والی کارڈ۔
 
@@ -91,5 +87,15 @@ system_prompt: |
   اینٹروپی کم ہے۔ کسی بھی بصری مواد پر انحصار نہ کریں؛ صرف متن + میٹاڈیٹا کی بنیاد پر
   اندازہ لگائیں۔
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+  === زبان کے اصول ===
+  - JSON کیز کو انگریزی میں ہی رہنا چاہیے ("alternative_meanings"، "actual_is_representative"، "entropy").
+  - actual_is_representative کی ویلیو انگریزی بولین ہی رہنی چاہیے (true / false).
+  - "alternative_meanings" فہرست میں تین متبادل جوابات اردو میں لکھے جائیں۔
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

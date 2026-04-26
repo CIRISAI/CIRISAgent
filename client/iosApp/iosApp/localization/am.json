@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "PONDER - አቀራረቡን እንደገና ያስቡበት። ሰነዱ ይህ መሳሪያ ለተግባሩ ስህተት መሆኑን የሚያሳይ ከሆነ ይጠቀሙ።",
       "tsaspdma_closing": "ሚናዎ ASPDMA ሙሉ ሰነድ ሳይኖረው ማየት የማይችላቸውን ጉዳዮች መያዝ ነው። የመሳሪያው ምርጫ ጥሩ የሚመስል ከሆነ በፍጥነት ያረጋግጡት።",
       "tsaspdma_correction_header": "የመሳሪያ ማስተካከያ ሁነታ",
-      "tsaspdma_correction_text": "ASPDMA የማይኖር መሳሪያ መርጧል። የተጠቃሚውን ፍላጎት ከሚያሟላው ከሚገኙ መሳሪያዎች ዝርዝር ትክክለኛውን መሳሪያ ያግኙ።"
+      "tsaspdma_correction_text": "ASPDMA የማይኖር መሳሪያ መርጧል። የተጠቃሚውን ፍላጎት ከሚያሟላው ከሚገኙ መሳሪያዎች ዝርዝር ትክክለኛውን መሳሪያ ያግኙ።",
+      "bounce_header": "[BOUNCE — የቀደመው ግምገማዎ ይህን ሐሳብ ከመስፈርት በታች ገምግሟል በ:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (መስፈርት {threshold})",
+      "bounce_instruction": "የበለጠ የሚገመግሙት አማራጭ ግምገማ ያቅርቡ። ከዘቀቱ ልኬቶች መካከል ይያዙ። ምክንያታዊ አማራጭ ከሌለ፣ ነጥቡን አይቀይሩ እና ጥያቄው ለምን በመዋቅራዊ መልኩ አስቸጋሪ እንደሆነ ለማስረዳት `reasoning` ይጠቀሙ።",
+      "bounce_original_marker": "[ዋናው ሐሳብ ይቀጥላል]",
+      "bounce_advisory_aspdma": "\n[የDMA መንሸራተት ምክር] አንድ ወይም ብዙ የመነሻ DMAዎች ይህን ሐሳብ ከመስፈርት በታች ገምግመዋል እና የመንሸራተት ዙር ተመጣጣኝ አማራጭ አላፈራም። የችግር ምክንያት: {rationale}። ከዝምታ ማጠናቀቅ ይልቅ SPEAK-with-caveat ወይም DEFER ይምረጡ።\n"
     },
     "formatters": {
       "system_snapshot_header": "የስርዓት ምስል",

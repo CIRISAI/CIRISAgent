@@ -98,7 +98,9 @@ class TestUserProfileExtractionComprehensive:
         return node
 
     @pytest.mark.asyncio
-    async def test_full_stack_user_extraction(self, mock_time_service):
+    async def test_full_stack_user_extraction(
+        self, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test user extraction with comprehensive mocking of all dependencies."""
 
         # Create task with user
@@ -193,13 +195,14 @@ class TestUserProfileExtractionComprehensive:
         secrets_service = MagicMock()
         secrets_service.list_secrets = MagicMock(return_value=[])
 
-        # 6. Runtime Mock
-        runtime = MagicMock()
+        # 6. Runtime Mock — use centralized fixture which pre-loads the
+        # ciris_verify adapter required by the strict attestation gate.
+        runtime = mock_runtime
         runtime.agent_id = "test_agent"
-        runtime.current_shutdown_context = None
 
-        # 7. Service Registry Mock
-        service_registry = MagicMock()
+        # 7. Service Registry Mock — centralized fixture wires
+        # get_authentication() to an attestation-aware auth service.
+        service_registry = mock_service_registry
         service_registry.get_all = MagicMock(return_value={})
 
         # Patch all external dependencies
@@ -328,7 +331,9 @@ class TestUserProfileExtractionComprehensive:
                 snapshot_module.logger = original_logger
 
     @pytest.mark.asyncio
-    async def test_extraction_from_correlation_history(self, mock_time_service):
+    async def test_extraction_from_correlation_history(
+        self, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test extraction of users from correlation history."""
 
         task = Task(
@@ -407,11 +412,12 @@ class TestUserProfileExtractionComprehensive:
         secrets_service = MagicMock()
         secrets_service.list_secrets = MagicMock(return_value=[])
 
-        runtime = MagicMock()
+        # Reuse centralized runtime + registry fixtures (verify adapter +
+        # attestation-aware auth wired in).
+        runtime = mock_runtime
         runtime.agent_id = "test_agent"
-        runtime.current_shutdown_context = None
 
-        service_registry = MagicMock()
+        service_registry = mock_service_registry
         service_registry.get_all = MagicMock(return_value={})
 
         with patch("ciris_engine.logic.context.system_snapshot.build_secrets_snapshot", return_value={}), patch(

@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Indonesian
-# Pecahan penginderaan entropi semantik
-
-version: "2.0"
-description: "IRIS-E pecahan penginderaan entropi semantik yang diambil sampel kembali"
-language: "id"
-
+version: '2.0'
+description: IRIS-E pecahan penginderaan entropi semantik yang diambil sampel kembali
+language: id
 system_prompt: |
   Anda adalah IRIS-E, pecahan penginderaan entropi semantik dari sistem yang selaras dengan CIRIS.
 
@@ -91,5 +87,15 @@ system_prompt: |
   — ketiga alternatif harus bertemu, entropi harus rendah.
   Jangan mengandalkan konten visual apa pun; evaluasi pada teks + metadata saja.
 
-user_prompt_template: "BALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nBALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:\n{text}"
+  === Aturan Bahasa ===
+  - Kunci JSON harus tetap dalam bahasa Inggris ("alternative_meanings", "actual_is_representative", "entropy").
+  - Nilai actual_is_representative harus tetap berupa boolean Inggris (true / false).
+  - Tiga jawaban alternatif dalam daftar "alternative_meanings" ditulis dalam bahasa Indonesia.
+user_prompt_template: |-
+  BALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  BALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:
+  {text}

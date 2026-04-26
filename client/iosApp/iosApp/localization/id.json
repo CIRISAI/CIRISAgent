@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "PONDER - Reconsider the approach. Use if documentation shows this tool is wrong for the task.",
       "tsaspdma_closing": "Your role is to catch issues that ASPDMA couldn't see without full documentation. If the tool selection looks good, confirm it quickly.",
       "tsaspdma_correction_header": "TOOL CORRECTION MODE",
-      "tsaspdma_correction_text": "ASPDMA selected a tool that does NOT exist. Find the CORRECT tool from the available tools list that matches the user's intent."
+      "tsaspdma_correction_text": "ASPDMA selected a tool that does NOT exist. Find the CORRECT tool from the available tools list that matches the user's intent.",
+      "bounce_header": "[BOUNCE — evaluasi Anda sebelumnya menilai pikiran ini di bawah ambang batas pada:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (ambang batas {threshold})",
+      "bounce_instruction": "Hasilkan evaluasi alternatif yang akan Anda nilai lebih tinggi. Tangani dimensi yang dinilai terendah di atas. Jika tidak ada alternatif berprinsip, pertahankan skor di tempatnya dan gunakan `reasoning` untuk menjelaskan apa yang membuat pertanyaan secara struktural sulit.",
+      "bounce_original_marker": "[PIKIRAN ASLI MENGIKUTI]",
+      "bounce_advisory_aspdma": "\n[PERINGATAN BOUNCE DMA] Satu atau lebih DMA awal menilai pikiran ini di bawah ambang batas dan putaran bounce tidak menghasilkan alternatif yang lulus. Alasan kesulitan: {rationale}. Pilih SPEAK-dengan-peringatan atau DEFER daripada penyelesaian diam-diam.\n"
     },
     "formatters": {
       "system_snapshot_header": "System Snapshot",

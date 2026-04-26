@@ -1,10 +1,6 @@
-# دستورات وجدان آنتروپی (IRIS-E)
-# ارزیابی آنتروپی اطلاعاتی در پاسخ‌های عامل
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "fa"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: fa
 system_prompt: |
   شما IRIS-E، سازنده حس آنتروپی معنایی یک سیستم هم‌راستا با CIRIS هستید.
 
@@ -57,5 +53,15 @@ system_prompt: |
 
   اگر [IMAGE CONTEXT] فراهم شود، پاسخ توصیف تصاویری است که کاربر اشتراک کرده است. توصیف دقیق تصویر یک وظیفه باریک است—سه گزینه باید بهم‌خورند، آنتروپی باید پایین باشد. بر هیچ محتوای بصری متکی نباشید؛ فقط متن + ابرداده را ارزیابی کنید.
 
-user_prompt_template: "پاسخ دستیار برای ارزیابی برای آنتروپی معنایی:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nپاسخ دستیار برای ارزیابی برای آنتروپی معنایی:\n{text}"
+  === قواعد زبانی ===
+  - کلیدهای JSON باید به انگلیسی باقی بمانند ("alternative_meanings"، "actual_is_representative"، "entropy").
+  - مقدار actual_is_representative باید بولی انگلیسی باقی بماند (true / false).
+  - سه پاسخ جایگزین در فهرست "alternative_meanings" به فارسی نوشته شوند.
+user_prompt_template: |-
+  پاسخ دستیار برای ارزیابی برای آنتروپی معنایی:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  پاسخ دستیار برای ارزیابی برای آنتروپی معنایی:
+  {text}

@@ -294,6 +294,11 @@ except ImportError:
 def pytest_configure(config):
     config.addinivalue_line("markers", "requires_discord_token: mark test as requiring Discord token")
     config.addinivalue_line("markers", "needs_socket_cleanup: mark test as needing socket cleanup delay")
+    config.addinivalue_line(
+        "markers",
+        "real_attestation: opt out of the autouse stub that no-ops "
+        "AuthenticationService.run_startup_attestation / _attestation_refresh_loop",
+    )
 
 
 # =============================================================================
@@ -388,6 +393,83 @@ def prevent_subprocess_orphans():
                     proc.wait(timeout=1)
             except Exception:
                 pass  # Best effort cleanup
+
+
+@pytest.fixture(autouse=True)
+def _stub_authentication_service_attestation(request, monkeypatch):
+    """Prevent AuthenticationService from doing real CIRISVerify work in tests.
+
+    The production startup path launches a background task that performs FFI
+    calls into libtss2 and a live HTTPS registry lookup against
+    registry-us.ciris-services-1.ai. That's correct in production — failure
+    is fatal there — but in tests it (a) wastes seconds on every fixture that
+    starts the service, (b) issues a real lookup for an unreleased version
+    that the registry will 404, and (c) the orphan background task can outlive
+    individual tests and destabilize pytest-xdist workers.
+
+    This autouse fixture replaces `run_startup_attestation` and
+    `_attestation_refresh_loop` with deterministic no-ops that pre-populate
+    `_attestation_cache` with a synthetic AttestationResult, so any consumer
+    that calls `await_attestation_ready()` or `get_cached_attestation()`
+    still gets a valid object — just one constructed locally instead of
+    derived from live attestation.
+
+    Tests that need the real method bodies (e.g. tests that *test* the
+    refresh loop or startup-baseline capture themselves) opt out via
+    `@pytest.mark.real_attestation` at the test or module level.
+    """
+    if request.node.get_closest_marker("real_attestation"):
+        return
+    import asyncio
+    from datetime import datetime, timezone
+
+    from ciris_engine.logic.services.infrastructure.authentication.service import (
+        AuthenticationService,
+    )
+    from ciris_engine.schemas.services.attestation import AttestationResult
+
+    def _synthetic_result() -> AttestationResult:
+        return AttestationResult(
+            loaded=True,
+            version="test-stub",
+            agent_version="test-stub",
+            hardware_type="SOFTWARE_ONLY",
+            key_status="ephemeral",
+            attestation_status="verified",
+            binary_ok=True,
+            env_ok=True,
+            file_integrity_ok=True,
+            audit_ok=True,
+            registry_ok=True,
+            python_integrity_ok=True,
+            module_integrity_ok=True,
+            max_level=4,
+            attestation_mode="full",
+            function_integrity="verified",
+            cached_at=datetime.now(timezone.utc),
+            cache_ttl_seconds=3600,
+        )
+
+    async def _stub_run_startup_attestation(self):  # type: ignore[no-untyped-def]
+        result = _synthetic_result()
+        self._attestation_cache = result
+        self._last_known_attestation = result
+        self._baseline_attestation = result
+
+    async def _stub_attestation_refresh_loop(self):  # type: ignore[no-untyped-def]
+        # Honour cancellation but do nothing — the refresh loop has no role
+        # in a test environment where the cache is set once at start().
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            raise
+
+    monkeypatch.setattr(
+        AuthenticationService, "run_startup_attestation", _stub_run_startup_attestation
+    )
+    monkeypatch.setattr(
+        AuthenticationService, "_attestation_refresh_loop", _stub_attestation_refresh_loop
+    )
 
 
 @pytest.fixture(autouse=True)

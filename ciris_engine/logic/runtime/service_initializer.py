@@ -73,6 +73,17 @@ class ServiceInitializer:
         self.memory_service: Optional[LocalGraphMemoryService] = None
         self.secrets_service: Optional[SecretsService] = None
         self.wa_auth_system: Optional[WiseAuthorityService] = None
+        # AuthenticationService is created in initialize_security_services and
+        # ALSO registered under WISE_AUTHORITY in initialize_all_services so the
+        # batch_context strict attestation gate can find it via the registry.
+        # Default to None at construction time so register-only paths (or tests
+        # that mock-skip the security init phase) can read self.auth_service
+        # without AttributeError. Use Any (not Optional[AuthenticationService])
+        # to keep this consistent with how the field was treated implicitly
+        # before this annotation was added — the alternative would force a
+        # forward-reference import and an `assert is not None` at every
+        # downstream callsite, which the security init phase guarantees.
+        self.auth_service: Any = None
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
         self.audit_service: Optional[AuditService] = None
@@ -625,6 +636,35 @@ This directory contains critical cryptographic keys for the CIRIS system.
             )
             self._dependencies_resolved += 1  # WiseAuthority service dependency
             logger.info("WiseAuthority service registered in ServiceRegistry")
+
+        # Register AuthenticationService under WISE_AUTHORITY too. Both services
+        # legitimately serve the WISE_AUTHORITY type (per the registry-typing
+        # design): WiseAuthorityService exposes the deferral/guidance surface,
+        # AuthenticationService exposes attestation, key management, and WA-cert
+        # lookups. Consumers disambiguate via attribute presence — e.g. the
+        # batch_context strict-attestation gate filters on
+        # `hasattr(s, "await_attestation_ready")` to find this one. Without this
+        # second registration, the gate raises CRITICAL on every thought because
+        # WiseAuthorityService alone doesn't carry the attestation methods.
+        if self.auth_service:
+            self.service_registry.register_service(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=self.auth_service,
+                priority=Priority.HIGH,
+                capabilities=[
+                    "authenticate",
+                    "verify_token",
+                    "create_wa",
+                    "get_wa",
+                    "list_was",
+                    "update_wa",
+                    "await_attestation_ready",
+                    "get_cached_attestation",
+                    "run_attestation",
+                ],
+                metadata={"type": "authentication", "consensus": "single"},
+            )
+            logger.info("AuthenticationService registered in ServiceRegistry under WISE_AUTHORITY")
 
         # Create BusManager first (without telemetry service)
         assert self.service_registry is not None

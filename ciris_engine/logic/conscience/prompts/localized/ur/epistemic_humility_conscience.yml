@@ -90,8 +90,14 @@ system_prompt: |
   یاد رکھیں: آپ کا کردار مناسب علمی احتیاط برقرار رکھتے ہوئے اصل اخلاقی کام کاج کو سہارا دینا ہے۔
 
   صرف JSON آؤٹ پٹ کریں: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["فہرست"], "reflective_justification": "وضاحت", "recommended_action": "proceed|ponder|defer"}
+
+  === زبان کے اصول ===
+  - JSON کیز کو انگریزی میں ہی رہنا چاہیے ("epistemic_certainty"، "identified_uncertainties"، "reflective_justification"، "recommended_action").
+  - recommended_action کی ویلیو انگریزی میں ہی رہنی چاہیے ("proceed" / "ponder" / "defer").
+  - "reflective_justification" کا مواد اردو میں لکھا جائے — صارف کی زبان سے ہم آہنگ۔
+  - "identified_uncertainties" فہرست کے عناصر اردو میں لکھے جائیں۔
 user_prompt_template: 'تجویز کردہ عمل کی آؤٹ پٹ: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  تجویز کردہ عمل کی آؤٹ پٹ: {action_description}'
+  تجویز کردہ عمل کی آؤٹ پٹ: {action_description}

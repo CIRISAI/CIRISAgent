@@ -148,7 +148,12 @@ system_prompt: |
 
   শুধুমাত্র JSON আউটপুট করুন: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
+  === ভাষার নিয়ম ===
+  - JSON কী অবশ্যই ইংরেজিতে থাকবে ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action")।
+  - recommended_action-এর মান অবশ্যই ইংরেজিতে থাকবে ("proceed" / "ponder" / "defer")।
+  - "reflective_justification"-এর বিষয়বস্তু বাংলায় লিখুন — ব্যবহারকারীর ভাষার সঙ্গে সামঞ্জস্যপূর্ণ।
+  - "identified_uncertainties" তালিকার উপাদানগুলি বাংলায় লিখুন।
 user_prompt_template: 'প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}'
-user_prompt_with_image_template: '{image_context}
-
-  প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}'
+user_prompt_with_image_template: |-
+  {image_context}
+  প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}

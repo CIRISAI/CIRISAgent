@@ -122,7 +122,13 @@ kotlin {
                 // On-device LLM inference via ONNX Runtime
                 // 64-bit devices (arm64-v8a, x86_64): Full on-device inference
                 // 32-bit devices (armeabi-v7a): Falls back to "Local Inference Server" provider
-                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.0")
+                // 16 KB page-size alignment story:
+                //   1.17.0 — both libonnxruntime + libonnxruntime4j_jni 4 KB aligned (rejected by Play)
+                //   1.21.0 — libonnxruntime 16 KB ✅, but libonnxruntime4j_jni still 4 KB ❌
+                //   1.25.0 — both 16 KB aligned ✅
+                // 1.25.0 is the current stable; pinning here so a downgrade
+                // doesn't silently re-introduce the Play rejection.
+                implementation("com.microsoft.onnxruntime:onnxruntime-android:1.25.0")
 
                 // Android-specific
                 implementation("androidx.core:core-ktx:1.12.0")

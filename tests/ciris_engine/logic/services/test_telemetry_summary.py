@@ -313,7 +313,7 @@ class TestSystemSnapshotIntegration:
         return mock
 
     @pytest.mark.asyncio
-    async def test_system_snapshot_includes_telemetry(self, mock_time_service) -> None:
+    async def test_system_snapshot_includes_telemetry(self, mock_time_service, mock_runtime, mock_service_registry) -> None:
         """Test that build_system_snapshot includes telemetry summary."""
         from ciris_engine.logic.context.system_snapshot import build_system_snapshot
 
@@ -341,6 +341,8 @@ class TestSystemSnapshotIntegration:
             resource_monitor=mock_resource_monitor,
             telemetry_service=mock_telemetry_service,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify telemetry is included

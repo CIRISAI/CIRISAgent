@@ -29,7 +29,18 @@ def map_row_to_task(row: Any) -> Task:
                     correlation_id=ctx_data.get("correlation_id", str(uuid.uuid4())),
                     parent_task_id=ctx_data.get("parent_task_id"),
                     agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
+                    # Persisted preferred_language must round-trip — see same
+                    # fix in map_row_to_thought below for the production
+                    # impact (every conscience falling through to env-default
+                    # locale regardless of the user's actual language).
+                    preferred_language=ctx_data.get("preferred_language"),
                 )
+                # Mirror onto the Task's top-level field — Task is the record
+                # of truth for preferred_language. The schema field defaults
+                # to None so we must explicitly set it from context_json on
+                # load (no DB column for it; persistence keeps it in
+                # context_json only).
+                row_dict["preferred_language"] = ctx_data.get("preferred_language")
             else:
                 # Provide required fields for TaskContext
                 row_dict["context"] = TaskContext(
@@ -143,7 +154,18 @@ def map_row_to_thought(row: Any) -> Thought:
                         parent_thought_id=ctx_data.get("parent_thought_id"),
                         correlation_id=correlation_id,
                         agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
+                        # Critical: persisted preferred_language must round-trip
+                        # so the localization helper finds it on the loaded
+                        # thought. Dropping this here was the root cause of
+                        # every conscience falling through to env-default
+                        # CIRIS_PREFERRED_LANGUAGE regardless of the user's
+                        # actual locale.
+                        preferred_language=ctx_data.get("preferred_language"),
                     )
+                    # Mirror onto the Thought's top-level field — Task is the
+                    # record of truth, Thought inherits at creation, persistence
+                    # keeps it in context_json only (no DB column).
+                    row_dict["preferred_language"] = ctx_data.get("preferred_language")
                 else:
                     # Missing required fields, set to None
                     row_dict["context"] = None

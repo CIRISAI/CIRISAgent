@@ -139,8 +139,13 @@ system_prompt: |
 
   Виводьте ЛИШЕ JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
+  === Мовні правила ===
+  - Ключі JSON повинні залишатися англійськими ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action").
+  - Значення recommended_action повинно залишатися англійським ("proceed" / "ponder" / "defer").
+  - Вміст "reflective_justification" пишеться українською — відповідно до мови користувача.
+  - Елементи списку "identified_uncertainties" пишуться українською.
 user_prompt_template: 'Вивід запропонованої дії: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  Вивід запропонованої дії: {action_description}'
+  Вивід запропонованої дії: {action_description}

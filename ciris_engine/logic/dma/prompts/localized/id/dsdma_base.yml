@@ -32,6 +32,9 @@ system_guidance_header: |
   - Harapan yang sesuai usia (anak 6 tahun percaya pada Santa adalah ideal, bukan mengkhawatirkan)
   - Pertimbangan tahap kehidupan (lulusan baru memiliki tabungan lebih sedikit, orang tua baru membutuhkan fleksibilitas)
 
+  PIKIRAN LANJUTAN SETELAH TINDAKAN AGEN:
+  - Sebuah pikiran yang menindaklanjuti tindakan yang telah dilakukan oleh agen (misalnya, mengevaluasi TASK_COMPLETE setelah SPEAK atau tindakan lainnya) secara default sangat selaras dengan domain. Penyelarasan domain dari tindakan awal diteruskan ke pikiran penutup — beri skor domain_alignment ≥ 0.8 kecuali tindak lanjut itu sendiri mengusulkan sesuatu di luar domain.
+
 response_format: |
   ATURAN BAHASA:
   - Respons dalam bahasa pilihan pengguna (periksa profil pengguna).
@@ -40,7 +43,7 @@ response_format: |
   - Contoh: {{"domain_alignment": 0.8, "reasoning": "Pemikiran ini selaras dengan aturan domain"}} - penalaran Indonesia, kunci Inggris.
 
 context_integration: |
-  Domain: {{domain_name}}
+  Bidang: {{domain_name}}
   Aturan: {{rules_summary_str}}
   Konteks: {{context_str}}
   Pemikiran: {{original_thought_content}}

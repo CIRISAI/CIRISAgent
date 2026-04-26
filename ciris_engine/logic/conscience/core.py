@@ -128,16 +128,29 @@ class _BaseConscience(ConscienceInterface):
         self._time_service = time_service
 
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
-        """Determine the language for THIS conscience check from the thought's user.
+        """Determine the language for THIS conscience check.
 
-        Walks: context.system_snapshot.user_profiles[0].preferred_language →
-        env var fallback. The conscience evaluates each thought in the
-        thought's user's language so the agent's internal reasoning is
-        immersed in the same language as its outward communication.
+        Defers ALL resolution to the canonical helper
+        `get_user_language_from_context`, which walks the priority chain:
+        thought.preferred_language → task.preferred_language →
+        system_snapshot.user_profiles[*].preferred_language → env var.
+
+        Language is resolved ONCE per thought and does not change
+        mid-thought. Every conscience must use this same helper so all
+        layers of the deliberation pipeline read the same locale.
+
+        BUG FIX (2026-04-26): the previous version passed
+        `context.system_snapshot` instead of `context`, which short-circuited
+        the thought- and task-level layers of the priority chain (those
+        layers expect the OUTER context object, not the snapshot). The
+        symptom was every conscience evaluation falling through to the env
+        var default regardless of the thought's actual locale, so a Spanish
+        agent could end up running its conscience checks under the
+        environment's CIRIS_PREFERRED_LANGUAGE setting.
         """
         from ciris_engine.logic.utils.localization import get_user_language_from_context
 
-        return get_user_language_from_context(context.system_snapshot)
+        return get_user_language_from_context(context)
 
     def _create_trace_correlation(
         self, conscience_type: str, context: ConscienceCheckContext, start_time: datetime

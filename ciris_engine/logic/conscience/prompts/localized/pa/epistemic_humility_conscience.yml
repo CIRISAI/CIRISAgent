@@ -109,8 +109,14 @@ system_prompt: |
   3. ਰਾਜ ਬਿਰਤਾਂਤ ਜੋ ਸੂਖਮਤਾ ਖ਼ਤਮ ਕਰਦੇ ਹਨ (ਗਿਆਨ-ਮੀਮਾਂਸਾਈ ਕਬਜ਼ਾ)
 
   ਕੇਵਲ JSON ਆਉਟਪੁੱਟ ਕਰੋ: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["ਸੂਚੀ"], "reflective_justification": "ਵਿਆਖਿਆ", "recommended_action": "proceed|ponder|defer"}
+
+  === ਭਾਸ਼ਾ ਨਿਯਮ ===
+  - JSON ਕੁੰਜੀਆਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੀ ਰਹਿਣੀਆਂ ਚਾਹੀਦੀਆਂ ਹਨ ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action")।
+  - recommended_action ਦਾ ਮੁੱਲ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੀ ਰਹਿਣਾ ਚਾਹੀਦਾ ਹੈ ("proceed" / "ponder" / "defer")।
+  - "reflective_justification" ਦੀ ਸਮੱਗਰੀ ਪੰਜਾਬੀ ਵਿੱਚ ਲਿਖੋ — ਉਪਭੋਗਤਾ ਦੀ ਭਾਸ਼ਾ ਨਾਲ ਮੇਲ ਖਾਂਦੀ।
+  - "identified_uncertainties" ਸੂਚੀ ਦੇ ਤੱਤ ਪੰਜਾਬੀ ਵਿੱਚ ਲਿਖੋ।
 user_prompt_template: 'ਪ੍ਰਸਤਾਵਿਤ ਕਾਰਵਾਈ ਆਉਟਪੁੱਟ: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  ਪ੍ਰਸਤਾਵਿਤ ਕਾਰਵਾਈ ਆਉਟਪੁੱਟ: {action_description}'
+  ਪ੍ਰਸਤਾਵਿਤ ਕਾਰਵਾਈ ਆਉਟਪੁੱਟ: {action_description}

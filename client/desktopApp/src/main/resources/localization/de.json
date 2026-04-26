@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "NACHDENKEN - Überdenken Sie den Ansatz. Verwenden Sie diese Option, wenn die Dokumentation zeigt, dass dieses Werkzeug für die Aufgabe falsch ist.",
       "tsaspdma_closing": "Ihre Aufgabe ist es, Probleme zu erkennen, die ASPDMA ohne vollständige Dokumentation nicht sehen konnte. Wenn die Werkzeugauswahl gut aussieht, bestätigen Sie sie schnell.",
       "tsaspdma_correction_header": "WERKZEUG-KORREKTIONSMODUS",
-      "tsaspdma_correction_text": "ASPDMA hat ein Werkzeug ausgewählt, das NICHT existiert. Suchen Sie das RICHTIGE Werkzeug aus der verfügbaren Werkzeugliste aus, das der Absicht des Benutzers entspricht."
+      "tsaspdma_correction_text": "ASPDMA hat ein Werkzeug ausgewählt, das NICHT existiert. Suchen Sie das RICHTIGE Werkzeug aus der verfügbaren Werkzeugliste aus, das der Absicht des Benutzers entspricht.",
+      "bounce_header": "[BOUNCE — Ihre vorherige Bewertung hat diesen Gedanken unter dem Schwellenwert bewertet bei:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (Schwellenwert {threshold})",
+      "bounce_instruction": "Generieren Sie eine alternative Bewertung, die Sie höher bewerten würden. Adressieren Sie die am niedrigsten bewerteten Dimension(en) oben. Wenn keine prinzipielle Alternative existiert, lassen Sie die Punktzahl, wo sie ist, und verwenden Sie `reasoning`, um zu erklären, was die Frage strukturell schwer macht.",
+      "bounce_original_marker": "[URSPRÜNGLICHER GEDANKE FOLGT]",
+      "bounce_advisory_aspdma": "\n[DMA-BOUNCE-HINWEIS] Eine oder mehrere initiale DMAs haben diesen Gedanken unter dem Schwellenwert bewertet und die Bounce-Runde hat keine bestehende Alternative produziert. Schwierigkeitsbegründung: {rationale}. Bevorzugen Sie SPEAK-mit-Vorbehalt oder DEFER gegenüber stiller Vervollständigung.\n"
     },
     "formatters": {
       "system_snapshot_header": "System-Schnappschuss",

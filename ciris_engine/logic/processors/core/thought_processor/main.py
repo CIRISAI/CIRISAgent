@@ -624,7 +624,9 @@ class ThoughtProcessor(
         )
 
         # Prepare retry context
-        retry_context = self._prepare_conscience_retry_context(thought_item, thought_context, conscience_result)
+        retry_context = self._prepare_conscience_retry_context(
+            thought_item, thought_context, conscience_result, thought=thought
+        )
 
         try:
             # Attempt retry
@@ -821,7 +823,11 @@ class ThoughtProcessor(
         return f"{base_guidance}{materially_different_rule}\n{general_outro}"
 
     def _prepare_conscience_retry_context(
-        self, thought_item: ProcessingQueueItem, thought_context: Any, conscience_result: ConscienceApplicationResult
+        self,
+        thought_item: ProcessingQueueItem,
+        thought_context: Any,
+        conscience_result: ConscienceApplicationResult,
+        thought: Optional[Thought] = None,
     ) -> Any:
         """Prepare context for conscience retry."""
         override_reason = conscience_result.override_reason or "Action failed conscience checks"
@@ -840,12 +846,26 @@ class ThoughtProcessor(
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
         retry_context = self._create_retry_context_copy(thought_context)
-        # Resolve agent locale via the canonical chain (task/thought ->
-        # user -> system -> en). The retry guidance must be in the same
-        # language the agent was working in — an English override block
-        # injected into a non-English thought flips the model's language.
-        from ciris_engine.logic.utils.localization import get_user_language_from_context
-        retry_language = get_user_language_from_context(thought_context)
+        # Resolve agent locale via the canonical chain. The retry guidance
+        # must be in the same language the agent was working in — an
+        # English override block injected into a non-English thought flips
+        # the model's language. Prefer the actual Thought / ProcessingQueueItem
+        # because the system-level `thought_context` doesn't always carry
+        # `.thought` / `.task` pointers (the OPT_VETO_DEBUG run on
+        # 2026-04-26 confirmed retry was falling through to env="en" while
+        # opt-veto resolved correctly off the Thought).
+        from ciris_engine.logic.utils.localization import (
+            _lang_from_obj_or_inner_context,
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        retry_language = (
+            _lang_from_obj_or_inner_context(thought)
+            or _lang_from_obj_or_inner_context(thought_item)
+            or get_user_language_from_context(thought_context)
+            or get_preferred_language()
+        )
         logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
         retry_guidance = self._build_retry_guidance(
             attempted_action,
@@ -917,7 +937,7 @@ class ThoughtProcessor(
 
                 # Prepare new retry context with updated feedback
                 new_retry_context = self._prepare_conscience_retry_context(
-                    thought_item, retry_context, retry_conscience_result
+                    thought_item, retry_context, retry_conscience_result, thought=thought
                 )
 
                 try:

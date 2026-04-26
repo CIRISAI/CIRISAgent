@@ -928,6 +928,10 @@ class StreamingVerificationModule:
                                         "action_rationale",
                                         "is_recursive",
                                         "aspdma_prompt",
+                                        # Deliberation-diversity signal (added 2.7.1)
+                                        # — None when older prompts / fallback models don't emit it
+                                        "selection_confidence",
+                                        "alternatives_considered",
                                     },
                                     "conscience_result": {
                                         "conscience_passed",

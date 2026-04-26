@@ -19,12 +19,20 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 FROM python:3.12-slim
 
 # Install only runtime dependencies
-# TPM2 TSS libraries required for CIRISVerify attestation
+# TPM2 TSS libraries required for CIRISVerify attestation:
+#   - libtss2-esys: ESYS API (high-level TPM commands)
+#   - libtss2-tcti-device: TCTI for talking to /dev/tpm0
+#   - libtss2-tctildr: TCTI loader the FFI calls to discover/load TCTIs
+#                      at runtime. Without this the attestation init fails
+#                      with "Failed to load library: libtss2-tctildr.so.0"
+#                      and Lens trace events arrive with null verify fields.
 RUN apt-get update && apt-get install -y \
     curl \
     libtss2-esys-3.0.2-0t64 \
     libtss2-tcti-device0t64 \
-    && rm -rf /var/lib/apt/lists/*
+    libtss2-tctildr0t64 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -c "import ctypes; ctypes.CDLL('libtss2-tctildr.so.0')"
 
 # Create non-root user for security
 RUN useradd -m -u 1000 ciris

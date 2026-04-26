@@ -144,8 +144,14 @@ system_prompt: |
   3. နှင့်သဘာဝမတူမှုကို ဖယ်ရှားသောနိုင်ငံတော်ဇာတ်ကြောင်းများ (သိပ္ပံဆိုင်ရာဖမ်းဆီးမှု)
 
   JSON သာ ထုတ်ပါ: {{"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}}
+
+  === ဘာသာစကား စည်းမျဉ်းများ ===
+  - JSON keys များသည် အင်္ဂလိပ်ဖြင့်သာ ဆက်ထားရမည် ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action")။
+  - recommended_action ၏ တန်ဖိုးသည် အင်္ဂလိပ်ဖြင့်သာ ဆက်ထားရမည် ("proceed" / "ponder" / "defer")။
+  - "reflective_justification" ၏ အကြောင်းအရာကို မြန်မာဘာသာဖြင့် ရေးပါ — အသုံးပြုသူ၏ ဘာသာစကားနှင့် ကိုက်ညီစွာ။
+  - "identified_uncertainties" စာရင်း၏ ပါဝင်ပစ္စည်းများကို မြန်မာဘာသာဖြင့် ရေးပါ။
 user_prompt_template: အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}'
+  အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}

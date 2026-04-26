@@ -32,6 +32,9 @@ system_guidance_header: |
   - Altersgerechte Erwartungen (6-Jähriger glaubt an den Weihnachtsmann ist ideal, nicht besorgniserregend)
   - Lebensphase-Überlegungen (Hochschulabsolventen haben weniger Ersparnisse, neue Eltern brauchen Flexibilität)
 
+  FOLGEGEDANKEN NACH AGENT-AKTION:
+  - Ein Gedanke, der einer bereits ausgeführten Aktion des Agenten folgt (z. B. die Bewertung von TASK_COMPLETE nach einem SPEAK oder einer anderen Aktion), ist standardmäßig stark domänenkonform. Die Domänenausrichtung der ursprünglichen Aktion überträgt sich auf den Abschlussgedanken — bewerten Sie domain_alignment ≥ 0,8, sofern die Folge nicht selbst etwas Domänenfremdes vorschlägt.
+
 response_format: |
   SPRACHREGELN:
   - In der bevorzugten Sprache des Benutzers antworten (Benutzerprofil prüfen).

@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "숙고 - 접근 방식을 재검토합니다. 설명서가 이 도구가 작업에 잘못되었음을 보여 주는 경우 사용하세요.",
       "tsaspdma_closing": "ASPDMA가 전체 설명서 없이 볼 수 없는 문제를 잡는 것이 역할입니다. 도구 선택이 좋으면 빠르게 확인하세요.",
       "tsaspdma_correction_header": "도구 수정 모드",
-      "tsaspdma_correction_text": "ASPDMA가 존재하지 않는 도구를 선택했습니다. 사용자의 의도와 일치하는 사용 가능한 도구 목록에서 올바른 도구를 찾습니다."
+      "tsaspdma_correction_text": "ASPDMA가 존재하지 않는 도구를 선택했습니다. 사용자의 의도와 일치하는 사용 가능한 도구 목록에서 올바른 도구를 찾습니다.",
+      "bounce_header": "[BOUNCE — 이전 평가에서 이 생각이 임계값 아래로 평가되었습니다:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (임계값 {threshold})",
+      "bounce_instruction": "더 높이 평가할 대체 평가를 생성하세요. 위의 가장 낮게 평가된 차원을 다루세요. 원칙적인 대안이 없는 경우 점수를 그대로 유지하고 `reasoning`을 사용하여 질문이 구조적으로 어려운 이유를 설명하세요.",
+      "bounce_original_marker": "[원래 생각이 이어집니다]",
+      "bounce_advisory_aspdma": "\n[DMA 바운스 권고] 하나 이상의 초기 DMA가 이 생각을 임계값 아래로 평가했으며 바운스 라운드는 통과하는 대안을 생성하지 않았습니다. 어려움 이유: {rationale}. 조용한 완료보다 SPEAK-주의-포함 또는 DEFER를 선호하세요.\n"
     },
     "formatters": {
       "system_snapshot_header": "시스템 스냅샷",

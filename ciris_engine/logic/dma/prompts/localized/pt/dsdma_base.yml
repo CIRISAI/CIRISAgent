@@ -38,6 +38,9 @@ system_guidance_header: |
   - Expectativas apropriadas à idade (criança de 6 anos acreditando em Papai Noel é ideal, não preocupante)
   - Considerações de fase de vida (recém-formados têm menos economias, novos pais precisam de flexibilidade)
 
+  PENSAMENTOS DE ACOMPANHAMENTO APÓS AÇÃO DO AGENTE:
+  - Um pensamento que dá seguimento a uma ação já realizada pelo agente (p. ex., avaliar TASK_COMPLETE após um SPEAK ou qualquer outra ação) está fortemente no domínio por padrão. O alinhamento de domínio da ação original transfere-se para o pensamento de encerramento — pontue domain_alignment ≥ 0,8, a menos que o acompanhamento em si proponha algo fora do domínio.
+
 context_integration: |
   Domínio: {{domain_name}}
   Regras: {{rules_summary_str}}

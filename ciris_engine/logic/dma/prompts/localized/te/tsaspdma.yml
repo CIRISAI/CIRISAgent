@@ -56,7 +56,7 @@ context_integration: '=== ASPDMA యొక్క ఎంపిక ===
 
   సాధనం: {{tool_name}}
 
-  Reasoning: {{aspdma_reasoning}}
+  వివరణ: {{aspdma_reasoning}}
 
 
   === మూల ఆలోచన (యూజర్ ఉద్దేశం - పరామితులను అంచనా వేయడానికి ఉపయోగించండి) ===

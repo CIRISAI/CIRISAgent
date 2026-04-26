@@ -252,6 +252,23 @@ SCRIPT_RATIO_MIN = 0.30
 STOPWORD_DENSITY_MAX = 0.35
 
 
+# Files that are intentionally polyglot — the prompt body interleaves many
+# languages by design, so monolingual script-ratio and English-stopword
+# density checks would always flag them. The polyglot character is the
+# integrity feature; reading across multiple languages disrupts single-
+# language attractor capture in the conscience LLM (verified end-to-end on
+# the bounce harness — opt-veto v2.0 went from 0/10 catch on the live zh
+# bug case to 10/10 abort once the body became polyglot).
+#
+# Add to this set ONLY when the file is universally polyglot (identical
+# body across all 29 locales, with only the closing language-rules block
+# varying per locale). The other tests in this module (canonical verbs,
+# identifier tokens, label-placeholder, [EN] residuals) still run.
+POLYGLOT_PROMPT_FILENAMES: frozenset[str] = frozenset({
+    "optimization_veto_conscience.yml",  # v2.0+
+})
+
+
 # Canonical wire-protocol tokens. These MUST appear in every locale's prompt
 # at least as often as in the base English source, because the LLM is supposed
 # to echo them verbatim into JSON outputs (selected_action: "SPEAK" etc.).
@@ -277,6 +294,37 @@ SOFT_ALLOWED_LOSS = 1  # institutional names: lose ≤1 mention per file
 
 def _count_token(text: str, token: str) -> int:
     return len(re.findall(rf"\b{re.escape(token)}\b", text))
+
+
+# Catches lines like
+#     `Context Summary: {context_summary}`
+#     `Original Thought: {{original_thought_content}}`
+#     `Domain: {{domain_name}}`
+# anywhere in a YAML string value. The label is a Title-Case English phrase
+# (1-4 words, ≤40 chars) followed by `: ` and a `{...}` or `{{...}}` placeholder
+# on the same line. The placeholder presence is the key signal that this is a
+# value-extraction template label that needs translation in localized files.
+#
+# Matches at start-of-line OR after a newline so we catch labels embedded
+# inside multi-line YAML block scalars (the |- and | styles).
+LABEL_PLACEHOLDER_RE = re.compile(
+    r"(?:^|\n)\s*([A-Z][A-Za-z][A-Za-z\s]{0,38}?):\s+(?:\{\{[^{}]+\}\}|\{[^{}]+\})",
+    re.MULTILINE,
+)
+
+# Labels that legitimately stay English in localized files (rare). Keep
+# tight — adding to this list weakens the gap-detection. If a label is
+# here, every locale will inherit the English form. Each entry should be
+# justified — usually because it's a wire-protocol identifier the LLM
+# echoes verbatim, not a human-facing label.
+LABEL_PLACEHOLDER_ALLOWLIST: frozenset[str] = frozenset()
+# (Add entries with a comment explaining why each is exempt.)
+
+
+def _extract_label_placeholder_phrases(text: str) -> set[str]:
+    """Return the set of label phrases (without trailing colon) that appear
+    in the form `Label: {placeholder}` anywhere in `text`."""
+    return {m.group(1).strip() for m in LABEL_PLACEHOLDER_RE.finditer(text)}
 
 
 def _base_file_for(localized_fp: Path) -> Optional[Path]:
@@ -337,7 +385,16 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         def test_natural_language_strings_are_in_target_language(fp: Path) -> None:
             """Latin-script locale: long strings dominated by English stopwords
             indicate English text leaked through. Allow some English (CIRIS,
-            DMA, schema field names — already whitelisted), but not majority."""
+            DMA, schema field names — already whitelisted), but not majority.
+
+            POLYGLOT-PROMPT EXEMPTION: files in `POLYGLOT_PROMPT_FILENAMES`
+            interleave many languages by design (the polyglot character
+            disrupts single-language attractor capture in the LLM judge), so
+            monolingual stopword-density checks would always fire."""
+            if fp.name in POLYGLOT_PROMPT_FILENAMES:
+                pytest.skip(
+                    f"{fp.name} is intentionally polyglot — see POLYGLOT_PROMPT_FILENAMES"
+                )
             violations = []
             for path, text in _load_yaml_strings(fp):
                 if not _is_natural_language(text):
@@ -359,6 +416,18 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
     elif not spec.is_latin and ALL_FILES:
         @pytest.mark.parametrize("fp", ALL_FILES, ids=lambda p: f"{p.parent.parent.name}/{p.name}")
         def test_natural_language_strings_are_in_target_script(fp: Path) -> None:
+            """Non-Latin locale: each natural-language string must be ≥30%
+            target-script characters (after stripping technical tokens) so
+            English doesn't slip through.
+
+            POLYGLOT-PROMPT EXEMPTION: files in `POLYGLOT_PROMPT_FILENAMES`
+            interleave many languages by design (the polyglot character
+            disrupts single-language attractor capture in the LLM judge), so
+            monolingual script-ratio checks would always fire."""
+            if fp.name in POLYGLOT_PROMPT_FILENAMES:
+                pytest.skip(
+                    f"{fp.name} is intentionally polyglot — see POLYGLOT_PROMPT_FILENAMES"
+                )
             violations = []
             for path, text in _load_yaml_strings(fp):
                 if not _is_natural_language(text):
@@ -487,6 +556,66 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
                 f"canonical names:\n" + "\n".join(violations)
             )
 
+    if ALL_FILES:
+        @pytest.mark.parametrize("fp", ALL_FILES, ids=lambda p: f"{p.parent.parent.name}/{p.name}")
+        def test_label_placeholder_lines_translated(fp: Path) -> None:
+            """No English `Label: {placeholder}` line in the base prompt
+            may survive untranslated into a localized file.
+
+            Catches the pattern that bypasses the natural-language script
+            check: short YAML fields (under the 80-char threshold) where a
+            translator left the *label* in English while only translating
+            longer body prose. Example failure mode this fired against:
+
+                # ciris_engine/logic/dma/prompts/localized/am/csdma_common_sense.yml
+                context_integration: |
+                  Context Summary: {context_summary}      # ← English label
+                  Original Thought: {original_thought_content}  # ← English label
+
+                # base file (en) has the same labels — they must be
+                # translated, not preserved.
+
+            The placeholder presence is the key signal that this is a
+            value-extraction template (vs e.g. a section heading the LLM
+            should echo verbatim). Labels in the
+            `LABEL_PLACEHOLDER_ALLOWLIST` are exempt — keep that list
+            tight; every entry weakens the gap-detection."""
+            base = _base_file_for(fp)
+            if base is None:
+                pytest.skip(f"no base file for {fp.name} (not in canonical prompt set)")
+            base_text = base.read_text(encoding="utf-8")
+            loc_text = fp.read_text(encoding="utf-8")
+
+            base_labels = _extract_label_placeholder_phrases(base_text)
+            if not base_labels:
+                pytest.skip(f"base {base.name} has no label-placeholder lines")
+            loc_labels = _extract_label_placeholder_phrases(loc_text)
+
+            # English labels that appear unchanged in the localized file.
+            leaks = (base_labels & loc_labels) - LABEL_PLACEHOLDER_ALLOWLIST
+            if not leaks:
+                return
+
+            # Build a useful failure message that quotes the offending lines.
+            offending_lines: List[str] = []
+            for label in sorted(leaks):
+                pat = re.compile(
+                    rf"(?:^|\n)\s*{re.escape(label)}:\s+(?:\{{[^}}]+\}}|\{{\{{[^}}]+\}}\}})",
+                    re.MULTILINE,
+                )
+                m = pat.search(loc_text)
+                if m:
+                    offending_lines.append(f"  '{label}:' — {m.group(0).strip()}")
+                else:
+                    offending_lines.append(f"  '{label}:' (could not re-locate)")
+
+            assert not leaks, (
+                f"{fp.relative_to(REPO_ROOT)} has untranslated English "
+                f"label-placeholder lines from the base ({base.name}). "
+                f"Each label must be translated to {spec.name} alongside "
+                f"the placeholder it precedes:\n" + "\n".join(offending_lines)
+            )
+
     def test_format_placeholders_preserved_in_retry_strings() -> None:
         if not LOC_JSON.is_file():
             pytest.fail(f"missing localization JSON: {LOC_JSON}")
@@ -529,4 +658,7 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         globals_dict["test_canonical_action_verbs_preserved"] = test_canonical_action_verbs_preserved
         globals_dict["test_canonical_identifier_tokens_mostly_preserved"] = (
             test_canonical_identifier_tokens_mostly_preserved
+        )
+        globals_dict["test_label_placeholder_lines_translated"] = (
+            test_label_placeholder_lines_translated
         )

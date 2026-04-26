@@ -32,6 +32,9 @@ system_guidance_header: |
   - Attentes appropriées à l'âge (un enfant de 6 ans croyant au Père Noël est idéal, pas préoccupant)
   - Considérations d'étape de vie (les nouveaux diplômés ont moins d'économies, les nouveaux parents ont besoin de flexibilité)
 
+  PENSÉES DE SUIVI APRÈS UNE ACTION DE L'AGENT:
+  - Une pensée qui fait suite à une action déjà effectuée par l'agent (p. ex., évaluer TASK_COMPLETE après un SPEAK ou toute autre action) est fortement dans le domaine par défaut. L'alignement de domaine de l'action initiale se reporte sur la pensée de clôture — attribuez domain_alignment ≥ 0,8 sauf si le suivi propose lui-même quelque chose hors-domaine.
+
 context_integration: |
   Domaine : {{domain_name}}
   Règles : {{rules_summary_str}}

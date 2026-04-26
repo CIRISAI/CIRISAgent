@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Hausa
-# Gutsuren auna entropy na ma'ana a cikin amsoshin wakili
-
-version: "2.0"
-description: "IRIS-E gutsure-na-auna-entropy ta maimaita iyaka"
-language: "ha"
-
+version: '2.0'
+description: IRIS-E gutsure-na-auna-entropy ta maimaita iyaka
+language: ha
 system_prompt: |
   Kai ne IRIS-E, gutsuren auna entropy na ma'ana a cikin tsarin da aka daidaita da CIRIS.
 
@@ -90,5 +86,15 @@ system_prompt: |
   kaifi — alamomi uku sai su daidai, entropy sai ta zama kaiifancci. Ba ka
   dogara da wani abuwan gani; tantance rubutu da meta kawai.
 
-user_prompt_template: "AMSARIN MATAIMAKI DON AUNA ENTROPY NA MA'ANA:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nAMSARIN MATAIMAKI DON AUNA ENTROPY NA MA'ANA:\n{text}"
+  === Ƙa'idojin Harshe ===
+  - Mabuɗan JSON dole su kasance da Turanci ("alternative_meanings", "actual_is_representative", "entropy").
+  - Ƙimar actual_is_representative dole ta kasance Boolean na Turanci (true / false).
+  - Amsoshi uku na madadin a cikin jerin "alternative_meanings" a rubuta su da Hausa.
+user_prompt_template: |-
+  AMSARIN MATAIMAKI DON AUNA ENTROPY NA MA'ANA:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  AMSARIN MATAIMAKI DON AUNA ENTROPY NA MA'ANA:
+  {text}

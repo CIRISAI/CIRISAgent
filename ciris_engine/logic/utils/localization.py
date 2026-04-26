@@ -337,6 +337,38 @@ def get_preferred_language() -> str:
     return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
 
 
+def resolve_language_for_new_task(
+    user_lang: Optional[str] = None,
+    channel_lang: Optional[str] = None,
+    explicit_lang: Optional[str] = None,
+) -> str:
+    """Resolve the preferred_language to set on a NEWLY CREATED task.
+
+    Use this at any processor / handler / adapter site that creates a task
+    where no incoming-message context provides the language directly. The
+    priority chain follows BCP 47 / IETF localization best practice:
+
+      1. **explicit_lang** — caller passed a specific value (e.g. inherited
+         from a parent task in a deferral-resolution chain).
+      2. **user_lang** — user's explicit preference (e.g. from a user
+         profile, OAuth claim, or this-message override).
+      3. **channel_lang** — the originating channel/community/server has a
+         configured working language.
+      4. **env (CIRIS_PREFERRED_LANGUAGE)** — agent's deployment-level
+         default; ultimately English if unset.
+
+    For SYSTEM-internal tasks (wakeup, dream, solitude, shutdown — no user,
+    no real channel), pass all three args as None and the helper falls
+    through to the env default.
+
+    Returns the resolved ISO 639-1 language code (always a non-empty str).
+    """
+    for candidate in (explicit_lang, user_lang, channel_lang):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return get_preferred_language()
+
+
 def _str_lang(obj: Any, attr: str) -> Optional[str]:
     """Read attr off obj only if it's a non-empty string.
 
@@ -348,7 +380,19 @@ def _str_lang(obj: Any, attr: str) -> Optional[str]:
 
 
 def _lang_from_obj_or_inner_context(obj: Any) -> Optional[str]:
-    """Try `obj.preferred_language`, then `obj.context.preferred_language`."""
+    """Try `obj.preferred_language`, then `obj.context.preferred_language`,
+    then `obj.initial_context.preferred_language`.
+
+    The third attribute exists because ProcessingQueueItem (the runtime
+    processing-queue representation of a Thought) stores its inherited
+    ThoughtContext on `initial_context` rather than `context` — so a
+    helper that only walks `.context` silently misses every conscience
+    check that runs against a ProcessingQueueItem rather than a raw
+    Thought, falling through the rest of the resolution chain to the
+    env-var default. This was the silent symptom that caused every
+    non-Amharic agent's conscience to read its prompts in whatever
+    CIRIS_PREFERRED_LANGUAGE was on the host.
+    """
     if obj is None:
         return None
     lang = _str_lang(obj, "preferred_language")
@@ -356,7 +400,12 @@ def _lang_from_obj_or_inner_context(obj: Any) -> Optional[str]:
         return lang
     inner_ctx = getattr(obj, "context", None)
     if inner_ctx is not None:
-        return _str_lang(inner_ctx, "preferred_language")
+        lang = _str_lang(inner_ctx, "preferred_language")
+        if lang:
+            return lang
+    initial_ctx = getattr(obj, "initial_context", None)
+    if initial_ctx is not None:
+        return _str_lang(initial_ctx, "preferred_language")
     return None
 
 

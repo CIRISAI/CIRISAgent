@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "FIKIRIA - Fikiria tena mbinu. Tumia ikiwa nyaraka zinaonyesha zana hii si sahihi kwa kazi.",
       "tsaspdma_closing": "Jukumu lako ni kushika matatizo ambayo ASPDMA haikuweza kuona bila nyaraka kamili. Ikiwa uchaguzi wa zana unaonekana mzuri, thibitisha haraka.",
       "tsaspdma_correction_header": "HALI YA KUREKEBISHA ZANA",
-      "tsaspdma_correction_text": "ASPDMA ilichagua zana ambayo HAIPATIKANI. Tafuta zana SAHIHI kutoka orodha ya zana zinazopatikana inayolingana na nia ya mtumiaji."
+      "tsaspdma_correction_text": "ASPDMA ilichagua zana ambayo HAIPATIKANI. Tafuta zana SAHIHI kutoka orodha ya zana zinazopatikana inayolingana na nia ya mtumiaji.",
+      "bounce_header": "[BOUNCE — tathmini yako ya awali ilikadiria wazo hili chini ya kizingiti kwenye:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (kizingiti {threshold})",
+      "bounce_instruction": "Tengeneza tathmini mbadala ambayo ungeikadiria juu zaidi. Shughulikia vipimo vyenye alama za chini zaidi hapo juu. Ikiwa hakuna mbadala wa kanuni, weka alama mahali ilipo na utumie `reasoning` kueleza kinachofanya swali kuwa gumu kimuundo.",
+      "bounce_original_marker": "[WAZO LA AWALI LINAFUATA]",
+      "bounce_advisory_aspdma": "\n[USHAURI WA KURUDI DMA] DMA moja au zaidi za awali zilikadiria wazo hili chini ya kizingiti na duara la kurudi halikutoa mbadala uliopita. Sababu ya ugumu: {rationale}. Pendelea SPEAK-pamoja-na-tahadhari au DEFER kuliko kukamilisha kimya.\n"
     },
     "formatters": {
       "system_snapshot_header": "Picha ya Mfumo",

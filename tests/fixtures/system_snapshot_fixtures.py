@@ -151,22 +151,42 @@ def mock_memory_service():
 
 @pytest.fixture
 def mock_service_registry():
-    """Create a mock service registry."""
-    mock = Mock()
-    mock.get_provider_info.return_value = {"handlers": {}, "global_services": {}}
-    mock.get_circuit_breaker_states.return_value = {}
-    return mock
+    """Centralized service registry mock.
+
+    Delegates to `tests.fixtures.mocks.MockServiceRegistry`, which carries
+    the attestation-aware `get_authentication()` stub required by the
+    strict attestation gate in 2.7.1. Augments it with the
+    `get_provider_info` / `get_circuit_breaker_states` shims that
+    system-snapshot consumers expect — those used to live on the local
+    Mock-based fixture and would otherwise become AttributeErrors.
+    """
+    from tests.fixtures.mocks import MockServiceRegistry
+
+    registry = MockServiceRegistry()
+    # Surface the system-snapshot helpers as Mocks so callers can
+    # `.return_value = ...` them without having to know we're using the
+    # centralized class underneath.
+    registry.get_provider_info = Mock(return_value={"handlers": {}, "global_services": {}})
+    registry.get_circuit_breaker_states = Mock(return_value={})
+    return registry
 
 
 @pytest.fixture
 def mock_runtime():
-    """Create a mock runtime."""
-    mock = Mock()
-    mock.current_shutdown_context = None
-    mock.adapter_manager = Mock(_adapters={})
-    mock.service_registry = Mock()
-    mock.bus_manager = Mock()
-    return mock
+    """Centralized runtime mock for system-snapshot tests.
+
+    Delegates to `tests.fixtures.mocks.MockRuntime`, which carries the
+    ciris_verify adapter required by the strict attestation gate added in
+    2.7.1. The wider conftest.py also has a `mock_runtime` fixture that
+    returns a MockRuntime; both go through the same class so the strict
+    gate sees a consistent shape regardless of fixture-resolution order.
+    Tests that want to exercise the missing-adapter failure path should
+    construct their own runtime with `adapters=[]` rather than reach for
+    this fixture.
+    """
+    from tests.fixtures.mocks import MockRuntime
+
+    return MockRuntime(include_logging_mocks=False, include_time_service=False)
 
 
 @pytest.fixture

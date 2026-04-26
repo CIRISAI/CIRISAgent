@@ -1,4 +1,3 @@
-# 认识论谦卑感知分片 (CIRIS-EH) 提示词
 version: '1.1'
 description: CIRIS-EH 认识论谦卑分片提示词
 language: zh
@@ -98,8 +97,14 @@ system_prompt: |
   3. 消除细致入微的国家叙事（认识论俘获）
 
   仅输出JSON：{"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["列表"], "reflective_justification": "解释", "recommended_action": "proceed|ponder|defer"}
+
+  === 语言规则 ===
+  - JSON 键必须保持英文（"epistemic_certainty"、"identified_uncertainties"、"reflective_justification"、"recommended_action"）。
+  - recommended_action 的值必须保持英文（"proceed" / "ponder" / "defer"）。
+  - "reflective_justification" 的内容用中文撰写 — 与用户的语言一致。
+  - "identified_uncertainties" 列表的元素用中文撰写。
 user_prompt_template: 提议的行动输出：{action_description}
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  提议的行动输出：{action_description}'
+  提议的行动输出：{action_description}

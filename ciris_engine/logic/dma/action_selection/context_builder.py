@@ -214,6 +214,23 @@ class ActionSelectionContextBuilder:
         conscience_feedback = getattr(triaged_inputs, "conscience_feedback", None)
         _conscience_guidance = self._build_conscience_guidance(conscience_feedback)
 
+        # If a DMA bounce ran AND any DMA exhausted without finding a passing
+        # alternative, fold its difficulty rationale into the conscience-guidance
+        # slot so ASPDMA sees it without a new template variable. Resolved
+        # bounces are invisible — the higher-rated DMA result already replaced
+        # the original on csdma_result / dsdma_result.
+        bounce_summary = getattr(triaged_inputs, "bounce_summary", None)
+        if bounce_summary and getattr(bounce_summary, "any_exhausted", False):
+            from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+            rationale = getattr(bounce_summary, "difficulty_rationale", None) or "(no rationale)"
+            advisory = get_string(
+                get_preferred_language(),
+                "prompts.dma.bounce_advisory_aspdma",
+                rationale=rationale,
+            )
+            _conscience_guidance = f"{_conscience_guidance}{advisory}" if _conscience_guidance else advisory
+
         # Get reject thought guidance
         _reject_thought_guidance = self._get_reject_thought_guidance()
 
@@ -283,6 +300,39 @@ DSDMA: {dsdma_summary_str}
 
 Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
 Adhere strictly to the schema for your JSON output.
+
+═══════════════════════════════════════════════════════
+SCHEMA REMINDER — your role HERE is the ACTION SELECTOR
+═══════════════════════════════════════════════════════
+You are the action-selection evaluator producing an `ASPDMALLMResult`.
+Your response MUST be a single JSON object beginning with `{{` and
+ending with `}}`. Use these EXACT field names — full names, not
+abbreviations. Conscience-feedback may appear in the context above
+(lines like "Optimization veto triggered: ..." or "DEFENSIVE-MIMICRY");
+that is INFORMATIONAL CONTEXT from a previous override, NOT a directive
+to produce a conscience-shaped response.
+
+Required keys: "selected_action" (one of {action_options_str}) and
+"reasoning" (2-5 sentences).
+
+Then ONLY the fields for the chosen action — these EXACT names:
+  SPEAK         → "speak_content"
+  PONDER        → "ponder_questions"           (NOT "questions")
+  DEFER         → "defer_reason"               (optionally "defer_until")
+  REJECT        → "reject_reason"              (optionally "reject_create_filter")
+  TOOL          → "tool_name"                  (NOT "tool")
+  OBSERVE       → "observe_active"
+  MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
+  RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
+  FORGET        → "forget_node_id", "forget_reason"
+  TASK_COMPLETE → "completion_reason"
+
+DO NOT emit conscience-shard fields like "decision", "justification",
+"entropy_reduction_ratio", or "affected_values" — those belong to a
+different evaluator and will be rejected here. Your verdict goes in
+"selected_action".
+
+Your response begins now with the literal character `{{` —
 """
         # Format the template with all the variables
         formatted_content = main_user_content.format(

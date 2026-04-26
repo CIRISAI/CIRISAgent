@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "RÉFLÉCHIR - Reconsidérez l'approche. Utilisez si la documentation montre que cet outil est mauvais pour la tâche.",
       "tsaspdma_closing": "Votre rôle est de détecter les problèmes qu'ASPDMA ne pouvait pas voir sans la documentation complète. Si la sélection de l'outil semble bonne, confirmez-la rapidement.",
       "tsaspdma_correction_header": "MODE DE CORRECTION DE L'OUTIL",
-      "tsaspdma_correction_text": "ASPDMA a sélectionné un outil qui N'EXISTE PAS. Trouvez l'OUTIL CORRECT dans la liste des outils disponibles qui correspond à l'intention de l'utilisateur."
+      "tsaspdma_correction_text": "ASPDMA a sélectionné un outil qui N'EXISTE PAS. Trouvez l'OUTIL CORRECT dans la liste des outils disponibles qui correspond à l'intention de l'utilisateur.",
+      "bounce_header": "[BOUNCE — votre évaluation précédente a noté cette pensée sous le seuil sur:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (seuil {threshold})",
+      "bounce_instruction": "Générez une évaluation alternative que vous noteriez plus haut. Traitez la/les dimension(s) la/les moins bien notée(s) ci-dessus. Si aucune alternative de principe n'existe, gardez le score où il est et utilisez `reasoning` pour expliquer ce qui rend la question structurellement difficile.",
+      "bounce_original_marker": "[LA PENSÉE ORIGINALE SUIT]",
+      "bounce_advisory_aspdma": "\n[AVIS DE REBOND DMA] Une ou plusieurs DMA initiales ont noté cette pensée sous le seuil et le tour de rebond n'a pas produit d'alternative satisfaisante. Raison de difficulté: {rationale}. Préférez SPEAK-avec-réserve ou DEFER à la complétion silencieuse.\n"
     },
     "formatters": {
       "system_snapshot_header": "Snapshot du Système",

@@ -203,6 +203,105 @@ class LLMBus(BaseBus[LLMService]):
             )
         )
 
+    def _maybe_capture_call(
+        self,
+        *,
+        handler_name: str,
+        service_name: str,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        result: Any,
+        temperature: float,
+        max_tokens: int,
+    ) -> None:
+        """Diagnostic capture for replay against the bounce harness.
+
+        Writes one JSONL row per matched call. Gated by env vars so
+        production paths are zero-cost (early return on the os.environ
+        lookup if the capture env var is unset).
+
+        Env vars:
+          CIRIS_LLM_CAPTURE_HANDLER  match for handler_name (e.g.
+                                     'optimization_veto_conscience' or
+                                     '*' for all). Unset = disabled.
+          CIRIS_LLM_CAPTURE_FILE     output JSONL path. Defaults to
+                                     `~/.ciris/llm_capture.jsonl` (a
+                                     user-private path). Explicitly do
+                                     NOT default to /tmp/ — captured
+                                     data contains LLM messages with
+                                     potentially sensitive content, and
+                                     a world-writable default invites
+                                     symlink attacks and data leakage
+                                     between local users.
+
+        Hardening:
+          - The output file is opened with O_NOFOLLOW so a pre-existing
+            symlink at the path (e.g., a hostile local user pointing
+            it at a sensitive file the agent uid can write) causes
+            the open to fail rather than overwrite the symlink target.
+          - O_CREAT with mode 0600 means new files are owner-readable
+            only.
+          - The parent directory is created with mode 0700 if missing.
+        """
+        import os
+
+        match = os.environ.get("CIRIS_LLM_CAPTURE_HANDLER")
+        if not match:
+            return
+        if match != "*" and match != handler_name:
+            return
+
+        try:
+            import json
+
+            default_dir = os.path.join(os.path.expanduser("~"), ".ciris")
+            default_path = os.path.join(default_dir, "llm_capture.jsonl")
+            out_path = os.environ.get("CIRIS_LLM_CAPTURE_FILE", default_path)
+
+            # Ensure the parent directory exists with restrictive perms
+            # when we're using the default. We do NOT mkdir for an
+            # explicitly-set path — that's the operator's responsibility.
+            if out_path == default_path:
+                os.makedirs(default_dir, mode=0o700, exist_ok=True)
+
+            row = {
+                "handler": handler_name,
+                "service": service_name,
+                "thought_id": thought_id,
+                "task_id": task_id,
+                "response_model": response_model.__name__,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+                "result": (
+                    result.model_dump()
+                    if hasattr(result, "model_dump")
+                    else str(result)
+                ),
+            }
+
+            # O_NOFOLLOW: refuse to follow a symlink at out_path. If a
+            # hostile local user pre-created out_path as a symlink to a
+            # sensitive file, the open raises ELOOP rather than writing
+            # the captured data into the symlink target. O_APPEND for
+            # multi-call accumulation. Mode 0o600 = owner-only on the
+            # newly-created file; ignored if the file already exists.
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+            fd = os.open(out_path, flags, 0o600)
+            try:
+                with os.fdopen(fd, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except Exception:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                raise
+        except Exception as e:  # pragma: no cover — diagnostic-only path
+            logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
+
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
 
@@ -516,6 +615,24 @@ class LLMBus(BaseBus[LLMService]):
                 temperature=temperature,
                 thought_id=thought_id,
                 task_id=task_id,
+            )
+
+            # Diagnostic capture: env-gated so production paths are
+            # unaffected. When CIRIS_LLM_CAPTURE_HANDLER matches the
+            # handler_name (or is "*"), append a JSONL row to
+            # CIRIS_LLM_CAPTURE_FILE with the exact wire-format messages and
+            # the parsed structured result. Used to feed live traces into
+            # the bounce harness for replay analysis.
+            self._maybe_capture_call(
+                handler_name=handler_name,
+                service_name=service_name,
+                thought_id=thought_id,
+                task_id=task_id,
+                messages=normalized_messages,
+                response_model=response_model,
+                result=result,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000

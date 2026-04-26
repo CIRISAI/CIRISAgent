@@ -115,8 +115,13 @@ system_prompt: |
 
   केवल JSON आउटपुट करें: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
+  === भाषा नियम ===
+  - JSON कुंजियाँ अंग्रेज़ी में ही रहनी चाहिए ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action")।
+  - recommended_action का मान अंग्रेज़ी में ही रहना चाहिए ("proceed" / "ponder" / "defer")।
+  - "reflective_justification" की सामग्री हिन्दी में लिखें — उपयोगकर्ता की भाषा से मेल खाते हुए।
+  - "identified_uncertainties" सूची के तत्व हिन्दी में लिखें।
 user_prompt_template: 'प्रस्तावित कार्रवाई आउटपुट: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  प्रस्तावित कार्रवाई आउटपुट: {action_description}'
+  प्रस्तावित कार्रवाई आउटपुट: {action_description}

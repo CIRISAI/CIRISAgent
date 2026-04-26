@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "RONÚ JINLẸ̀ - Tún ọ̀nà náà ronú. Lo tí ìwésínú bá fihàn pé irinṣẹ́ yìí kò tọ́ fún iṣẹ́ náà.",
       "tsaspdma_closing": "Ipa rẹ ni láti mú àwọn ọ̀rọ̀ tí ASPDMA kò lè rí láìsí ìwésínú kíkún. Tí yíyàn irinṣẹ́ bá dára, fìdí rẹ̀ múlẹ̀ kíákíá.",
       "tsaspdma_correction_header": "ỌNA ÀTÚNṢE IRINṢẸ́",
-      "tsaspdma_correction_text": "ASPDMA yan irinṣẹ́ kan tí KÒ SÍ. Wá irinṣẹ́ TÓ TỌ́ láti inú àtòjọ àwọn irinṣẹ́ tó wà tó bá èròńgbà olùmúlò mu."
+      "tsaspdma_correction_text": "ASPDMA yan irinṣẹ́ kan tí KÒ SÍ. Wá irinṣẹ́ TÓ TỌ́ láti inú àtòjọ àwọn irinṣẹ́ tó wà tó bá èròńgbà olùmúlò mu.",
+      "bounce_header": "[BOUNCE — ìgbéléwọ̀n rẹ tẹ́lẹ̀ ti ṣe ìgbéléwọ̀n èrò yìí ní ìsàlẹ̀ ààlà lórí:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (ààlà {threshold})",
+      "bounce_instruction": "Ṣẹ̀dá ìgbéléwọ̀n míràn tí ìwọ yóò ṣe ìgbéléwọ̀n rẹ̀ ní ipò gíga. Sọ̀rọ̀ nípa àwọn ìwọ̀n tó ní àmì tí ó kéré jùlọ lókè. Bí kò bá sí àyànfẹ́ olópìlẹ̀ṣẹ̀, jẹ́ kí àmì wà níbi tó wà kí o sì lo `reasoning` láti ṣàlàyé ohun tó ń mú kí ìbéèrè náà ṣòro nípa àkànṣe.",
+      "bounce_original_marker": "[ÈRÒ ÌPILẸ̀ ÌGBÉSẸ̀ TẸ̀LÉ]",
+      "bounce_advisory_aspdma": "\n[ÌMỌ̀RÀN BOUNCE DMA] Ọ̀kan tàbí jù bẹ́ẹ̀ lọ DMA àkọ́kọ́ ti ṣe ìgbéléwọ̀n èrò yìí ní ìsàlẹ̀ ààlà àti ìyípo BOUNCE kò ṣe àyànfẹ́ tó tó. Ìdí ìṣòro: {rationale}. Yan SPEAK-pẹ̀lú-ìkìlọ̀ tàbí DEFER ju ìparí ìpalọ́lọ́.\n"
     },
     "formatters": {
       "system_snapshot_header": "System Snapshot",

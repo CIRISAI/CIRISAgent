@@ -14,8 +14,19 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.utils.localization import resolve_language_for_new_task
 from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task, create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
+
+
+def _resolve_observer_task_language(msg: Any) -> Optional[str]:
+    """Resolve preferred_language for an observer-created task using the
+    centralized chain: explicit-on-message > env. Channel-level config is not
+    yet tracked separately from the message metadata (the API surfaces it
+    onto IncomingMessage.preferred_language at request time), so the message
+    field carries the resolved user/channel signal already."""
+    user_lang = getattr(msg, "preferred_language", None)
+    return resolve_language_for_new_task(user_lang=user_lang)
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
@@ -664,7 +675,10 @@ class BaseObserver(Generic[MessageT], ABC):
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
                 images=msg_images,
-                preferred_language=getattr(msg, "preferred_language", None),
+                # Use the centralized resolver so the locale chain is uniform
+                # across every task-creating site (base_observer, discord_observer,
+                # WA guidance, system tasks). user > channel > env per BCP 47.
+                preferred_language=_resolve_observer_task_language(msg),
             )
 
             await self._sign_and_add_task(task)

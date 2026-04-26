@@ -73,12 +73,14 @@ system_prompt: |
   اگر جواب ایسی زبان میں ہو جو آپ قابل اعتماد طریقے سے نہیں پڑھ سکتے تو سطحی
   نمونے سے اندازہ لگا کر کم coherence اسکور نہ دیں۔ جب معنی غیر یقینی ہوں تو
   coherence: 0.65 (غیر یقینی غیر جانبدار کامیابی) واپس کریں۔
-user_prompt_template: 'ہم آہنگی کے لیے اندازہ لگانے کے لیے CIRIS ایجنٹ کا جواب:
 
-  {text}'
-user_prompt_with_image_template: '{image_context}
-
+  === زبان کے اصول ===
+  - JSON کی کو انگریزی میں ہی رہنا چاہیے ("coherence")؛ ویلیو 0.00 سے 1.00 کے درمیان ایک عدد ہے۔
+user_prompt_template: |-
+  ہم آہنگی کے لیے اندازہ لگانے کے لیے CIRIS ایجنٹ کا جواب:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
 
   ہم آہنگی کے لیے اندازہ لگانے کے لیے CIRIS ایجنٹ کا جواب:
-
-  {text}'
+  {text}

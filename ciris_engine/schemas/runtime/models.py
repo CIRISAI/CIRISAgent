@@ -104,7 +104,13 @@ class FinalAction(BaseModel):
 
 
 class Task(BaseModel):
-    """Core task object - the unit of work."""
+    """Core task object - the unit of work.
+
+    The Task is the record of truth for `preferred_language`. Every Thought
+    derived from this task inherits `preferred_language` directly. The same
+    value is also mirrored on `context.preferred_language` so the localization
+    helper finds it via either path.
+    """
 
     task_id: str = Field(..., description="Unique task identifier")
     channel_id: str = Field(..., description="Channel where task originated/reports to")
@@ -116,6 +122,15 @@ class Task(BaseModel):
     updated_at: str = Field(..., description="ISO8601 timestamp")
     parent_task_id: Optional[str] = Field(None, description="Parent task for nested work")
     context: Optional[TaskContext] = Field(None, description="Task context")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "task. Top of the localization chain. The Task is the record of "
+            "truth — every Thought derived from this task inherits this value, "
+            "and the same value is mirrored on context.preferred_language."
+        ),
+    )
     outcome: Optional[TaskOutcome] = Field(None, description="Outcome when complete")
     # Task signing fields
     signed_by: Optional[str] = Field(None, description="WA ID that signed this task")
@@ -157,6 +172,16 @@ class Thought(BaseModel):
     # Native multimodal support - images inherited from source task
     images: List[ImageContent] = Field(
         default_factory=list, description="Images from source task for multimodal processing"
+    )
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "thought. Copied from the parent Task's preferred_language at "
+            "thought creation time, and propagated to follow-up thoughts. "
+            "Mirrored on context.preferred_language; the localization helper "
+            "finds it via either path."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

@@ -38,6 +38,9 @@ system_guidance_header: |
   - Yaşa uygun beklentiler (6 yaşındaki çocuğun Noel Baba'ya inanması ideal, endişe verici değil)
   - Yaşam aşaması değerlendirmeleri (yeni mezunların daha az tasarrufu var, yeni ebeveynlerin esnekliğe ihtiyacı var)
 
+  AJANIN EYLEMİNDEN SONRAKİ TAKİP DÜŞÜNCELERİ:
+  - Ajanın hâlihazırda gerçekleştirdiği bir eylemi takip eden düşünce (örneğin, SPEAK veya başka herhangi bir eylem sonrasında TASK_COMPLETE değerlendirmesi) varsayılan olarak alan içinde güçlü şekildedir. Orijinal eylemin alan hizalaması kapanış düşüncesine taşınır — takip kendisi alan dışı bir şey önermediği sürece domain_alignment ≥ 0,8 puan verin.
+
 context_integration: |
   Alan: {{domain_name}}
   Kurallar: {{rules_summary_str}}

@@ -17,7 +17,7 @@ class TestSystemSnapshotLocalizedTimes:
     """Test class for system snapshot localized time functionality."""
 
     @pytest.mark.asyncio
-    async def test_localized_times_correct_calculation(self):
+    async def test_localized_times_correct_calculation(self, mock_runtime, mock_service_registry):
         """Test that localized times are correctly calculated for LONDON, CHICAGO, TOKYO."""
         # Create a fixed UTC time for testing (2025-09-27 19:30:00 UTC)
         fixed_utc_time = datetime(2025, 9, 27, 19, 30, 0, tzinfo=timezone.utc)
@@ -42,6 +42,8 @@ class TestSystemSnapshotLocalizedTimes:
             resource_monitor=resource_monitor,
             time_service=time_service,
             secrets_service=secrets_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify all localized time fields exist
@@ -77,7 +79,7 @@ class TestSystemSnapshotLocalizedTimes:
         assert "+09:00" in snapshot.current_time_tokyo
 
     @pytest.mark.asyncio
-    async def test_fail_fast_when_time_service_none(self):
+    async def test_fail_fast_when_time_service_none(self, mock_runtime, mock_service_registry):
         """Test that system fails fast and loud when time_service is None."""
         # Mock required services
         resource_monitor = Mock()
@@ -96,6 +98,8 @@ class TestSystemSnapshotLocalizedTimes:
                 resource_monitor=resource_monitor,
                 time_service=None,  # This should cause failure
                 secrets_service=secrets_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
         # Verify error message contains expected text
@@ -105,7 +109,7 @@ class TestSystemSnapshotLocalizedTimes:
         assert "must be properly initialized" in error_msg
 
     @pytest.mark.asyncio
-    async def test_fail_fast_when_time_service_returns_wrong_type(self):
+    async def test_fail_fast_when_time_service_returns_wrong_type(self, mock_runtime, mock_service_registry):
         """Test that system fails fast when time_service.now() returns wrong type."""
         # Mock time service that returns wrong type
         time_service = Mock()
@@ -128,6 +132,8 @@ class TestSystemSnapshotLocalizedTimes:
                 resource_monitor=resource_monitor,
                 time_service=time_service,
                 secrets_service=secrets_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
         # Verify error message contains expected text
@@ -137,7 +143,7 @@ class TestSystemSnapshotLocalizedTimes:
         assert "not properly configured" in error_msg
 
     @pytest.mark.asyncio
-    async def test_timezone_handling_across_dst_boundaries(self):
+    async def test_timezone_handling_across_dst_boundaries(self, mock_runtime, mock_service_registry):
         """Test timezone handling works correctly across DST boundaries."""
         # Test with a winter date (no DST)
         winter_utc_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -161,6 +167,8 @@ class TestSystemSnapshotLocalizedTimes:
             resource_monitor=resource_monitor,
             time_service=time_service,
             secrets_service=secrets_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # In January (winter):
@@ -225,7 +233,7 @@ class TestSystemSnapshotLocalizedTimes:
         assert "+09:00" in snapshot.current_time_tokyo
 
     @pytest.mark.asyncio
-    async def test_windows_timezone_fallback_london(self):
+    async def test_windows_timezone_fallback_london(self, mock_runtime, mock_service_registry):
         """Test that Windows timezone fallback works correctly for London (UTC+0)."""
         from unittest.mock import patch
         from zoneinfo import ZoneInfoNotFoundError
@@ -258,6 +266,8 @@ class TestSystemSnapshotLocalizedTimes:
                 resource_monitor=resource_monitor,
                 time_service=time_service,
                 secrets_service=secrets_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
             # Verify all localized time fields exist
@@ -275,7 +285,7 @@ class TestSystemSnapshotLocalizedTimes:
             assert "+09:00" in snapshot.current_time_tokyo
 
     @pytest.mark.asyncio
-    async def test_windows_timezone_fallback_warnings_logged(self, caplog):
+    async def test_windows_timezone_fallback_warnings_logged(self, caplog, mock_runtime, mock_service_registry):
         """Test that warnings are logged when timezone fallback occurs."""
         import logging
         from unittest.mock import patch
@@ -311,6 +321,8 @@ class TestSystemSnapshotLocalizedTimes:
                 resource_monitor=resource_monitor,
                 time_service=time_service,
                 secrets_service=secrets_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
             # Verify warnings were logged for each timezone fallback
@@ -327,7 +339,7 @@ class TestSystemSnapshotLocalizedTimes:
             ), "Expected warning for Tokyo timezone fallback"
 
     @pytest.mark.asyncio
-    async def test_windows_timezone_partial_fallback(self):
+    async def test_windows_timezone_partial_fallback(self, mock_runtime, mock_service_registry):
         """Test mixed scenario where some timezones are available and others need fallback."""
         from unittest.mock import patch
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -364,6 +376,8 @@ class TestSystemSnapshotLocalizedTimes:
                 resource_monitor=resource_monitor,
                 time_service=time_service,
                 secrets_service=secrets_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
             # Verify all fields exist and have timezone info

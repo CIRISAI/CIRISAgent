@@ -1072,7 +1072,12 @@ class CIRISRuntime(ServicePropertyMixin):
         if not auth_service:
             return None
 
-        auth_token = await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
+        # auth_service is `Any` (see service_initializer.py), so the call
+        # returns Any — annotate locally so the function honours its
+        # declared `Optional[str]` return type.
+        auth_token: Optional[str] = await auth_service._create_channel_token_for_adapter(
+            adapter_type, adapter_info
+        )
 
         if hasattr(adapter, "set_auth_token") and auth_token:
             adapter.set_auth_token(auth_token)

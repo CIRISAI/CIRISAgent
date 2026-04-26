@@ -72,7 +72,20 @@ class SecurityConfig(BaseModel):
         description="Key storage mode: 'software' (file-based), 'hardware' (CIRISVerify), 'auto' (hardware if available)",
     )
     enable_signed_audit: bool = Field(True, description="Enable cryptographic signing of audit entries")
-    max_thought_depth: int = Field(7, description="Maximum thought chain depth before auto-defer")
+    max_thought_depth: int = Field(
+        5,
+        description=(
+            "Maximum thought chain depth before auto-defer. Reduced from 7 to 5 in 2.7.1 "
+            "based on signed-trace analysis from CIRISLens against 2.7.0-stable: successful "
+            "resolutions (SPEAK + TASK_COMPLETE) cap at depth 5, depth 6 chains spoke "
+            "without completing (anomalous), and depth 7 chains all DEFERred anyway. "
+            "Setting the ceiling at 5 means the agent DEFERs ~30% sooner on the genuinely "
+            "hard cases and the d=6 'spoke without closing' anomaly disappears. See "
+            "FSD/DMA_BOUNCE.md for the bounce gate that lands in the same release. The "
+            "schema still accepts thoughts with depth up to 7 so in-flight chains from "
+            "earlier agent versions can drain cleanly during the rollout window."
+        ),
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 

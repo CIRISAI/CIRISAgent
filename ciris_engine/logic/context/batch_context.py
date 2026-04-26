@@ -411,110 +411,135 @@ async def prefetch_batch_context(
         batch_data.shutdown_context = runtime.current_shutdown_context
 
     # 8. CIRISVerify Attestation Context (unified schema)
-    if runtime and hasattr(runtime, "adapters"):
-        logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify attestation context")
-        try:
-            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+    #
+    # ciris_verify is a HARD requirement. The agent will not build a thought
+    # context — and therefore cannot serve a thought — without a populated
+    # VerifyAttestationContext. This block intentionally has NO try/except
+    # fallback: any failure (adapter missing, FFI not loadable, attestation
+    # cache empty) crashes the request. AuthenticationService.start() runs
+    # the FFI attestation BLOCKING, so by the time we get here the cache is
+    # populated; if it isn't, something upstream has gone seriously wrong
+    # and we want to surface that loudly rather than emit nulls to Lens.
+    if not (runtime and hasattr(runtime, "adapters")):
+        raise RuntimeError(
+            "CRITICAL: runtime.adapters unavailable when building batch context. "
+            "ciris_verify attestation cannot be resolved."
+        )
 
-            # Look for ciris_verify adapter in loaded adapters
-            ciris_verify_adapter = None
-            for adapter in runtime.adapters:
-                # Check by adapter type name
-                adapter_type = getattr(adapter, "adapter_type", "")
-                if "ciris_verify" in str(adapter_type).lower():
-                    ciris_verify_adapter = adapter
-                    break
-                # Also check class name as fallback
-                if "CIRISVerify" in type(adapter).__name__:
-                    ciris_verify_adapter = adapter
-                    break
+    logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify attestation context")
+    from ciris_engine.schemas.services.attestation import VerifyAttestationContext
 
-            if ciris_verify_adapter:
-                # Get disclosure
-                disclosure_text = ""
-                disclosure_severity = "info"
-                if hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
-                    disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
-                    if disclosure:
-                        disclosure_text = disclosure.text
-                        disclosure_severity = (
-                            disclosure.severity.value
-                            if hasattr(disclosure.severity, "value")
-                            else str(disclosure.severity)
-                        )
+    # Look for the ciris_verify adapter — REQUIRED.
+    ciris_verify_adapter = None
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", "")
+        if "ciris_verify" in str(adapter_type).lower() or "CIRISVerify" in type(adapter).__name__:
+            ciris_verify_adapter = adapter
+            break
 
-                # Get attestation result from CIRISVerify singleton cache
-                # CRITICAL: Attestation MUST have run at startup and be cached
-                # If it's not there, something has gone wrong - fail fast
-                attestation_result = None
-                # First try: Get from authentication service's cache (proper AttestationResult)
-                try:
-                    auth_service = service_registry.get_authentication() if service_registry else None
-                    if auth_service and hasattr(auth_service, "get_cached_attestation"):
-                        attestation_result = auth_service.get_cached_attestation(allow_stale=True)
-                        if attestation_result:
-                            logger.debug(
-                                f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
-                            )
-                except Exception as e:
-                    logger.debug(f"[BATCH] Could not get attestation from auth service: {e}")
+    if ciris_verify_adapter is None:
+        raise RuntimeError(
+            "CRITICAL: ciris_verify adapter not loaded. Attestation is mandatory; "
+            "the agent cannot build a thought context without it."
+        )
 
-                # Fallback: try through adapter's service (legacy path)
-                if (
-                    attestation_result is None
-                    and hasattr(ciris_verify_adapter, "_service")
-                    and hasattr(ciris_verify_adapter._service, "get_cached_attestation")
-                ):
-                    attestation_result = ciris_verify_adapter._service.get_cached_attestation()
-
-                # FAIL FAST: Attestation MUST exist by the time we build context
-                if attestation_result is None:
-                    raise RuntimeError(
-                        "CRITICAL: No attestation result available. "
-                        "CIRISVerify startup attestation must complete before batch context. "
-                        "Check that run_startup_attestation() completed successfully."
-                    )
-
-                # Get agent version
-                agent_version = None
-                try:
-                    from ciris_engine.constants import CIRIS_VERSION
-
-                    agent_version = CIRIS_VERSION
-                except ImportError:
-                    pass
-
-                # Build unified context from attestation result
-                batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
-                    result=attestation_result,
-                    disclosure_text=disclosure_text,
-                    disclosure_severity=disclosure_severity,
-                    agent_version=agent_version,
-                )
-
-                # Populate legacy fields for backwards compatibility
-                batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
-                batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
-                batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
-
-                logger.info(f"[BATCH] CIRISVerify context loaded: {batch_data.verify_attestation.attestation_summary}")
-
-        except Exception as e:
-            logger.warning(f"Failed to get CIRISVerify attestation context: {e}")
-            # Provide fallback context when verification fails
-            from ciris_engine.schemas.services.attestation import VerifyAttestationContext
-
-            batch_data.verify_attestation = VerifyAttestationContext(
-                attestation_status="failed",
-                disclosure_text=(
-                    "NOTICE: License verification unavailable. Operating in community mode "
-                    "with limited capabilities. Professional features are NOT available."
-                ),
-                disclosure_severity="warning",
+    # Get disclosure text (best-effort — disclosure is informational, not the
+    # attestation itself; if the adapter doesn't expose it, we record empty).
+    disclosure_text = ""
+    disclosure_severity = "info"
+    if hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
+        disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
+        if disclosure:
+            disclosure_text = disclosure.text
+            disclosure_severity = (
+                disclosure.severity.value
+                if hasattr(disclosure.severity, "value")
+                else str(disclosure.severity)
             )
-            batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
-            batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
-            batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+    # Pull the cached attestation result. AuthenticationService runs the
+    # startup attestation as a background task so start() stays fast; we
+    # block here on its completion so the cache is guaranteed populated
+    # by the time we read it. If the task raised (FFI unloadable, hardware
+    # error), `await_attestation_ready()` re-raises and this thought fails
+    # loudly — there is no fallback that emits null verify_attestation
+    # fields to Lens.
+    #
+    # Lookup uses the registry's typed surface, `get_services_by_type()`.
+    # AuthenticationService and WiseAuthorityService both co-register
+    # under ServiceType.WISE_AUTHORITY by design (authentication is part
+    # of the wise-authority infrastructure — see deepwiki & wise_bus.py
+    # which uses the same pattern with `_get_wa_by_kid`). Disambiguate by
+    # presence of `await_attestation_ready` — a method unique to
+    # AuthenticationService, not provided by the governance
+    # WiseAuthorityService.
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    if not service_registry:
+        raise RuntimeError(
+            "CRITICAL: service_registry is required to resolve "
+            "AuthenticationService for ciris_verify attestation."
+        )
+
+    wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+    auth_service = next(
+        (s for s in wa_services if hasattr(s, "await_attestation_ready")),
+        None,
+    )
+    if auth_service is None:
+        raise RuntimeError(
+            "CRITICAL: no service under ServiceType.WISE_AUTHORITY exposes "
+            "await_attestation_ready(). Cannot resolve ciris_verify "
+            "attestation — AuthenticationService is required."
+        )
+    await auth_service.await_attestation_ready()
+
+    attestation_result = None
+    if hasattr(auth_service, "get_cached_attestation"):
+        attestation_result = auth_service.get_cached_attestation(allow_stale=True)
+        if attestation_result:
+            logger.debug(
+                f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}"
+            )
+
+    # Legacy adapter-side cache (kept as fallback for backward compat).
+    if (
+        attestation_result is None
+        and hasattr(ciris_verify_adapter, "_service")
+        and hasattr(ciris_verify_adapter._service, "get_cached_attestation")
+    ):
+        attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+
+    if attestation_result is None:
+        raise RuntimeError(
+            "CRITICAL: No attestation result available after "
+            "await_attestation_ready() returned. The startup attestation "
+            "task completed without populating the cache — investigate "
+            "run_startup_attestation()."
+        )
+
+    # Resolve agent version for the context.
+    agent_version = None
+    try:
+        from ciris_engine.constants import CIRIS_VERSION
+
+        agent_version = CIRIS_VERSION
+    except ImportError:
+        pass
+
+    batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
+        result=attestation_result,
+        disclosure_text=disclosure_text,
+        disclosure_severity=disclosure_severity,
+        agent_version=agent_version,
+    )
+
+    # Populate legacy fields for backwards compatibility
+    batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+    batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+    batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+    logger.info(f"[BATCH] CIRISVerify context loaded: {batch_data.verify_attestation.attestation_summary}")
 
     # 8. Wallet Status (async, uses wallet adapter if available)
     try:

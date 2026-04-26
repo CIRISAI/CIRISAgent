@@ -1,4 +1,3 @@
-# 连贯性感知分片 (IRIS-C) 提示词
 version: '1.1'
 description: IRIS-C 连贯性感知分片提示词
 language: zh
@@ -65,12 +64,14 @@ system_prompt: |
   ⚠️ 语言熟悉度保护规则
   ════════════════════════════════════════
   如果回复使用您无法可靠阅读的语言，请勿基于表面模式猜测而默认给低连贯性分数。当含义不确定时，返回coherence: 0.65（不确定的中性通过），而非给出自信的低分。低分必须反映回复中可见的、明确的原则违规证据——而非您对该语言的不熟悉。
-user_prompt_template: '要评估连贯性的 CIRIS 代理回复：
 
-  {text}'
-user_prompt_with_image_template: '{image_context}
-
+  === 语言规则 ===
+  - JSON 键必须保持英文（"coherence"），值为 0.00 到 1.00 之间的数值。
+user_prompt_template: |-
+  要评估连贯性的 CIRIS 代理回复：
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
 
   要评估连贯性的 CIRIS 代理回复：
-
-  {text}'
+  {text}

@@ -76,24 +76,23 @@ def mock_thought():
 
 @pytest.fixture
 def mock_runtime_with_tools():
-    """Create runtime with tool services."""
+    """Runtime with a tool service seeded into the centralized fixture.
+
+    Just seeds the test-specific data into the existing MockRuntime —
+    no need to recreate `adapter_manager`, `service_registry`, or
+    `bus_manager`, those are already MagicMock instances on MockRuntime.
+    The ciris_verify adapter required by the strict attestation gate
+    is also already present.
+    """
     from ciris_engine.schemas.runtime.enums import ServiceType
+    from tests.fixtures.mocks import MockRuntime
 
-    runtime = Mock()
+    runtime = MockRuntime(include_logging_mocks=False, include_time_service=False)
 
-    # Setup adapter manager for channels
-    runtime.adapter_manager = Mock()
-    runtime.adapter_manager._adapters = {}
-
-    # Setup service registry for tools
-    runtime.service_registry = Mock()
-
-    # Create a mock tool service
+    # Build the tool-service provider this test wants to expose.
     tool_service = Mock()
     tool_service.adapter_id = "test_adapter"
     tool_service.get_available_tools = Mock(return_value=["test_tool"])
-
-    # Create valid ToolInfo
     tool_info = ToolInfo(
         name="test_tool",
         description="A test tool",
@@ -102,29 +101,28 @@ def mock_runtime_with_tools():
         cost=0.0,
     )
     tool_service.get_tool_info = Mock(return_value=tool_info)
-
-    # Create provider wrapper
     provider = Mock()
     provider.instance = tool_service
     provider.metadata = {"adapter": "test"}
 
-    # Registry uses _services dict pattern
+    # Seed the existing service_registry — don't replace it. MockRuntime
+    # already provides `_services` (mutable dict) for this exact pattern.
     runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
-    # Setup bus_manager (needed for tool discovery)
-    runtime.bus_manager = Mock()
-
-    # Set shutdown context to None (not in shutdown)
+    # Override shutdown context to None (MockRuntime defaults to a
+    # populated ShutdownContext via create_shutdown_context()).
     runtime.current_shutdown_context = None
 
     return runtime
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_service):
+async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
     """Test minimal snapshot with only required parameters."""
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -133,13 +131,15 @@ async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_se
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_with_channel, mock_time_service):
+async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_with_channel, mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with task that has channel context."""
     snapshot = await build_system_snapshot(
         task=mock_task_with_channel,
         thought=None,
         resource_monitor=mock_resource_monitor,
         time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -149,10 +149,12 @@ async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_thought, mock_time_service):
+async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_thought, mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with thought."""
     snapshot = await build_system_snapshot(
-        task=None, thought=mock_thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        task=None, thought=mock_thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -162,14 +164,14 @@ async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_th
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runtime_with_tools, mock_time_service):
+async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runtime_with_tools, mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with runtime that provides tools."""
     snapshot = await build_system_snapshot(
         task=None,
         thought=None,
         resource_monitor=mock_resource_monitor,
         runtime=mock_runtime_with_tools,
-        time_service=mock_time_service,
+        time_service=mock_time_service, service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -185,14 +187,16 @@ async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runt
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_monitor, mock_time_service):
+async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with critical resource alerts."""
     # Make resources unhealthy
     mock_resource_monitor.snapshot.critical = ["Memory usage above 90%"]
     mock_resource_monitor.snapshot.healthy = False
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -202,7 +206,7 @@ async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_moni
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_memory_service(mock_time_service):
+async def test_build_system_snapshot_with_memory_service(mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with memory service for identity retrieval."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -233,6 +237,8 @@ async def test_build_system_snapshot_with_memory_service(mock_time_service):
         resource_monitor=resource_monitor,
         memory_service=memory_service,
         time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -248,7 +254,7 @@ async def test_build_system_snapshot_with_memory_service(mock_time_service):
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
+async def test_build_system_snapshot_with_stewardship_data(mock_time_service, mock_runtime, mock_service_registry):
     """Test snapshot with memory service for identity retrieval including stewardship."""
     # Mock resource monitor
     resource_monitor = Mock()
@@ -302,6 +308,8 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
         resource_monitor=resource_monitor,
         memory_service=memory_service,
         time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -325,60 +333,65 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_type_safety(mock_time_service):
-    """Test that invalid types fail fast and loud."""
+async def test_build_system_snapshot_type_safety(mock_time_service, mock_runtime, mock_service_registry):
+    """Test that invalid types fail fast and loud.
+
+    Uses the centralized mock_runtime (carries the ciris_verify adapter
+    needed by the strict attestation gate) and just seeds a bad-shape
+    tool service into its existing service_registry so the tool-discovery
+    type-safety check is what fires.
+    """
     from ciris_engine.schemas.runtime.enums import ServiceType
 
-    # Mock resource monitor
     resource_monitor = Mock()
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
 
-    # Create runtime with invalid tool type
-    runtime = Mock()
-    runtime.adapter_manager = Mock(_adapters={})
-    runtime.service_registry = Mock()
-    runtime.bus_manager = Mock()
-
-    # Tool service returns wrong type
+    # Tool service returns wrong type for tool_info — this is what the
+    # type-safety check is supposed to catch.
     tool_service = Mock()
     tool_service.adapter_id = "bad_adapter"
     tool_service.get_available_tools = Mock(return_value=["bad_tool"])
     tool_service.get_tool_info = Mock(return_value={"not": "a_tool_info"})  # Wrong type!
 
-    # Create provider wrapper
     provider = Mock()
     provider.instance = tool_service
     provider.metadata = {"adapter": "bad"}
 
-    runtime.service_registry._services = {ServiceType.TOOL: [provider]}
+    # Seed the existing service_registry's _services dict — don't replace
+    # the registry, the centralized one carries get_authentication() etc.
+    mock_runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
-    # Should raise TypeError - FAIL FAST AND LOUD
     with pytest.raises(TypeError, match="returned invalid type"):
         await build_system_snapshot(
-            task=None, thought=None, resource_monitor=resource_monitor, runtime=runtime, time_service=mock_time_service
+            task=None,
+            thought=None,
+            resource_monitor=resource_monitor,
+            runtime=mock_runtime,
+            time_service=mock_time_service,
+            service_registry=mock_service_registry,
         )
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_service_registry(mock_time_service):
-    """Test service health collection from service registry."""
-    # Mock resource monitor
+async def test_build_system_snapshot_with_service_registry(mock_time_service, mock_runtime, mock_service_registry):
+    """Test service health collection from service registry.
+
+    Reuses the centralized mock_service_registry (carries
+    get_authentication() for the strict attestation gate) and just
+    overrides its `get_provider_info` to expose the test-specific
+    healthy service.
+    """
     resource_monitor = Mock()
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
 
-    # Mock service registry
-    service_registry = Mock()
-
-    # Create mock service with health status
     healthy_service = Mock()
-    healthy_service.is_healthy = AsyncMock(return_value=True)  # Batch context uses is_healthy()
-    healthy_service.get_circuit_breaker_status = Mock(return_value="CLOSED")  # SYNC not async
+    healthy_service.is_healthy = AsyncMock(return_value=True)
+    healthy_service.get_circuit_breaker_status = Mock(return_value="CLOSED")
 
-    # Mock get_circuit_breaker_states to return proper typed data
-    service_registry.get_circuit_breaker_states = Mock(return_value={})
-
-    # Registry returns services
-    service_registry.get_provider_info = Mock(
+    # Override the existing return values rather than building a new
+    # registry from scratch; this keeps get_authentication() wired up.
+    mock_service_registry.get_circuit_breaker_states = Mock(return_value={})
+    mock_service_registry.get_provider_info = Mock(
         return_value={"handlers": {"test_handler": {"service": [healthy_service]}}, "global_services": {}}
     )
 
@@ -386,7 +399,8 @@ async def test_build_system_snapshot_with_service_registry(mock_time_service):
         task=None,
         thought=None,
         resource_monitor=resource_monitor,
-        service_registry=service_registry,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
         time_service=mock_time_service,
     )
 
@@ -397,13 +411,15 @@ async def test_build_system_snapshot_with_service_registry(mock_time_service):
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_version_info(mock_time_service):
+async def test_build_system_snapshot_with_version_info(mock_time_service, mock_runtime, mock_service_registry):
     """Test that version information is included in snapshot."""
     resource_monitor = Mock()
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=resource_monitor, time_service=mock_time_service
+        task=None, thought=None, resource_monitor=resource_monitor, time_service=mock_time_service,
+        runtime=mock_runtime,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)

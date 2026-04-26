@@ -128,6 +128,7 @@ class QARunner:
                 model_eval_concurrency=self.config.model_eval_concurrency,
                 model_eval_profile_memory=self.config.model_eval_profile_memory,
                 model_eval_question_categories=self.config.model_eval_question_categories,
+                model_eval_questions_file=self.config.model_eval_questions_file,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules

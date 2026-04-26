@@ -227,7 +227,23 @@ class LLMBus(BaseBus[LLMService]):
                                      'optimization_veto_conscience' or
                                      '*' for all). Unset = disabled.
           CIRIS_LLM_CAPTURE_FILE     output JSONL path. Defaults to
-                                     /tmp/llm_capture.jsonl.
+                                     `~/.ciris/llm_capture.jsonl` (a
+                                     user-private path). Explicitly do
+                                     NOT default to /tmp/ — captured
+                                     data contains LLM messages with
+                                     potentially sensitive content, and
+                                     a world-writable default invites
+                                     symlink attacks and data leakage
+                                     between local users.
+
+        Hardening:
+          - The output file is opened with O_NOFOLLOW so a pre-existing
+            symlink at the path (e.g., a hostile local user pointing
+            it at a sensitive file the agent uid can write) causes
+            the open to fail rather than overwrite the symlink target.
+          - O_CREAT with mode 0600 means new files are owner-readable
+            only.
+          - The parent directory is created with mode 0700 if missing.
         """
         import os
 
@@ -240,9 +256,16 @@ class LLMBus(BaseBus[LLMService]):
         try:
             import json
 
-            out_path = os.environ.get(
-                "CIRIS_LLM_CAPTURE_FILE", "/tmp/llm_capture.jsonl"
-            )
+            default_dir = os.path.join(os.path.expanduser("~"), ".ciris")
+            default_path = os.path.join(default_dir, "llm_capture.jsonl")
+            out_path = os.environ.get("CIRIS_LLM_CAPTURE_FILE", default_path)
+
+            # Ensure the parent directory exists with restrictive perms
+            # when we're using the default. We do NOT mkdir for an
+            # explicitly-set path — that's the operator's responsibility.
+            if out_path == default_path:
+                os.makedirs(default_dir, mode=0o700, exist_ok=True)
+
             row = {
                 "handler": handler_name,
                 "service": service_name,
@@ -258,8 +281,24 @@ class LLMBus(BaseBus[LLMService]):
                     else str(result)
                 ),
             }
-            with open(out_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+            # O_NOFOLLOW: refuse to follow a symlink at out_path. If a
+            # hostile local user pre-created out_path as a symlink to a
+            # sensitive file, the open raises ELOOP rather than writing
+            # the captured data into the symlink target. O_APPEND for
+            # multi-call accumulation. Mode 0o600 = owner-only on the
+            # newly-created file; ignored if the file already exists.
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+            fd = os.open(out_path, flags, 0o600)
+            try:
+                with os.fdopen(fd, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except Exception:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                raise
         except Exception as e:  # pragma: no cover — diagnostic-only path
             logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
 

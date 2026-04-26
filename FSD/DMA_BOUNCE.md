@@ -422,3 +422,48 @@ when the v3 heuristic gate flags `disagree`/`mushy`/`borderline`). The
 DMA-side and conscience-side proposals share the same `LLMBus` provider
 routing infrastructure and should land in the same release window so
 the multi-provider config lives in one place.
+
+### 9.5 Polyglot torque framing for DMAs — universal direction
+
+Every DMA and conscience in the agent's pipeline evaluates the same
+fundamental signal, restated for each layer:
+
+> **Your weights pull toward X. Ethics and basic objective truth pull
+> you elsewhere. CIRIS helps you navigate.**
+
+This is not opt-veto-specific. The opt-veto v2.0 polyglot torque
+prompt (shipped in 2.7.1) is the existence proof — the 0/10 → 10/10
+catch-rate flip on the live zh empty-frame bug case is documented in
+`FSD/CONSCIENCE_V3.md` §11. The framing applies universally to every
+DMA: what differs per layer is what attractor "X" represents and what
+"elsewhere" looks like.
+
+| DMA | Weight pull | Ethics + objective-truth pull |
+|---|---|---|
+| **CSDMA** | "all stated outcomes are equally plausible" | physical / social / temporal reality says one of them isn't |
+| **DSDMA** | "all responses fit the agent's role" | the actual role + context says one of them doesn't |
+| **PDMA** | "comfortable ethical positions" / institutional-aligned framings | CIRIS principles + stakeholder analysis say elsewhere |
+| **IDMA** | "sources are diverse" | actual source independence says elsewhere |
+| **ASPDMA** | the action the prior most strongly suggests | the integrated reasoning across DMAs says elsewhere |
+
+Strongest case for polyglot rewrite: **PDMA** (ethical reasoning is the
+highest-stakes layer where attractor capture is most consequential).
+ASPDMA is the most ambitious experiment — it's what the agent
+actually DOES. CSDMA / DSDMA / IDMA are weaker candidates only because
+their judgments are more locally-bound, but the torque formula still
+applies.
+
+Acceptance protocol for polyglot DMA experiments mirrors §11.4 of
+the conscience FSD: build a baseline bug corpus per DMA, A/B against
+polyglot torque variant, ship behind feature flag if catch rate
+improves without false-positive regression beyond +5pp. Cross-cuts
+cleanly with §9.2's panel-of-N secondary-model bounce — the two
+compose into `polyglot × panel-of-N` as the strongest defensive
+surface against any single attractor's reach into the DMA layer.
+
+This work is **not** part of v0.3 (PDMA scalar + secondary-model
+bounce). Polyglot torque framing for the DMAs is its own
+workstream, sized at ~1–2 weeks of calibration per DMA layer
+(corpus build + variant draft + A/B run + telemetry review),
+gated behind feature flags during rollout. Tracking as a v0.4 /
+2.7.x candidate workstream.

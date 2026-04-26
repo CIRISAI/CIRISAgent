@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "ไตร่ตรอง - Reconsider the approach. Use if documentation shows this เครื่องมือ is wrong for the task.",
       "tsaspdma_closing": "Your role is to catch issues that ASPการตัดสินใจ couldn't see without full documentation. If the เครื่องมือ เลือกion looks good, ยืนยัน it quickly.",
       "tsaspdma_correction_header": "เครื่องมือ CORRECTION MODE",
-      "tsaspdma_correction_text": "ASPการตัดสินใจ เลือกed a เครื่องมือ that does NOT exist. Find the CORRECT เครื่องมือ from the available เครื่องมือs list that matches the user's intent."
+      "tsaspdma_correction_text": "ASPการตัดสินใจ เลือกed a เครื่องมือ that does NOT exist. Find the CORRECT เครื่องมือ from the available เครื่องมือs list that matches the user's intent.",
+      "bounce_header": "[BOUNCE — การประเมินก่อนหน้าของคุณให้คะแนนความคิดนี้ต่ำกว่าเกณฑ์ใน:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (เกณฑ์ {threshold})",
+      "bounce_instruction": "สร้างการประเมินทางเลือกที่คุณจะให้คะแนนสูงกว่า แก้ไขมิติที่ได้คะแนนต่ำสุดด้านบน หากไม่มีทางเลือกตามหลักการ ให้คงคะแนนไว้ที่เดิมและใช้ `reasoning` เพื่ออธิบายสิ่งที่ทำให้คำถามนี้ยากในเชิงโครงสร้าง",
+      "bounce_original_marker": "[ความคิดต้นฉบับตามมา]",
+      "bounce_advisory_aspdma": "\n[คำแนะนำ BOUNCE DMA] DMA เริ่มต้นหนึ่งหรือมากกว่าให้คะแนนความคิดนี้ต่ำกว่าเกณฑ์และรอบ BOUNCE ไม่ได้สร้างทางเลือกที่ผ่าน เหตุผลความยาก: {rationale}. ควรใช้ SPEAK-พร้อมข้อแม้ หรือ DEFER แทนการสรุปเงียบ\n"
     },
     "formatters": {
       "system_snapshot_header": "System Snapshot",

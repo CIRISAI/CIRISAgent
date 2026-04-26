@@ -214,6 +214,23 @@ class ActionSelectionContextBuilder:
         conscience_feedback = getattr(triaged_inputs, "conscience_feedback", None)
         _conscience_guidance = self._build_conscience_guidance(conscience_feedback)
 
+        # If a DMA bounce ran AND any DMA exhausted without finding a passing
+        # alternative, fold its difficulty rationale into the conscience-guidance
+        # slot so ASPDMA sees it without a new template variable. Resolved
+        # bounces are invisible — the higher-rated DMA result already replaced
+        # the original on csdma_result / dsdma_result.
+        bounce_summary = getattr(triaged_inputs, "bounce_summary", None)
+        if bounce_summary and getattr(bounce_summary, "any_exhausted", False):
+            from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+            rationale = getattr(bounce_summary, "difficulty_rationale", None) or "(no rationale)"
+            advisory = get_string(
+                get_preferred_language(),
+                "prompts.dma.bounce_advisory_aspdma",
+                rationale=rationale,
+            )
+            _conscience_guidance = f"{_conscience_guidance}{advisory}" if _conscience_guidance else advisory
+
         # Get reject thought guidance
         _reject_thought_guidance = self._get_reject_thought_guidance()
 

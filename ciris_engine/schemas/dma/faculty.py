@@ -190,4 +190,13 @@ class EnhancedDMAInputs(BaseModel):
     recursive_evaluation: bool = Field(False, description="Whether this is a recursive evaluation")
     conscience_context: Optional[ConscienceFailureContext] = Field(None, description="Conscience failure context")
 
+    # DMA bounce summary (set by DMAOrchestrator.run_initial_dmas when at least
+    # one initial DMA scored below threshold). ASPDMA reads the
+    # difficulty_rationale when one or more bounces exhausted to inform
+    # SPEAK-with-caveat vs DEFER decisions. See FSD/DMA_BOUNCE.md.
+    bounce_summary: Optional[Any] = Field(
+        None,
+        description="Composite DMA bounce summary; None when the bounce gate did not trigger.",
+    )
+
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow pass-through of other fields

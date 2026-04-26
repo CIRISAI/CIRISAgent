@@ -1784,7 +1784,12 @@
       "tsaspdma_ponder_option": "思考 - 重新考虑该方法。如果文档显示该工具对任务不正确，则使用。",
       "tsaspdma_closing": "您的角色是捕捉ASPDMA在没有完整文档情况下无法看到的问题。如果工具选择看起来不错，请快速确认。",
       "tsaspdma_correction_header": "工具更正模式",
-      "tsaspdma_correction_text": "ASPDMA选择了不存在的工具。从可用工具列表中找到与用户意图匹配的正确工具。"
+      "tsaspdma_correction_text": "ASPDMA选择了不存在的工具。从可用工具列表中找到与用户意图匹配的正确工具。",
+      "bounce_header": "[BOUNCE — 您之前的评估将此想法评为低于阈值:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (阈值 {threshold})",
+      "bounce_instruction": "生成一个您会评分更高的替代评估。解决上面评分最低的维度。如果没有原则性的替代方案,请将分数保持原样,并使用 `reasoning` 来解释是什么使问题在结构上具有难度。",
+      "bounce_original_marker": "[原始想法如下]",
+      "bounce_advisory_aspdma": "\n[DMA 反弹建议] 一个或多个初始 DMA 将此想法评为低于阈值,反弹轮次未产生通过的替代方案。难度原因:{rationale}。比起静默完成,优先选择 SPEAK-带警告 或 DEFER。\n"
     },
     "formatters": {
       "system_snapshot_header": "系统快照",

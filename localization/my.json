@@ -151,7 +151,12 @@
       "tsaspdma_ponder_option": "စဉ်းစားပါ - Reconsider the approach. Use if documentation shows this ကိရိယာ is wrong for the task.",
       "tsaspdma_closing": "Your role is to catch issues that ASPဆုံးဖြတ်ချက် couldn't see without full documentation. If the ကိရိယာ ရွေးချယ်ion looks good, အတည်ပြု it quickly.",
       "tsaspdma_correction_header": "ကိရိယာ CORRECTION MODE",
-      "tsaspdma_correction_text": "ASPဆုံးဖြတ်ချက် ရွေးချယ်ed a ကိရိယာ that does NOT exist. Find the CORRECT ကိရိယာ from the available ကိရိယာs list that matches the user's intent."
+      "tsaspdma_correction_text": "ASPဆုံးဖြတ်ချက် ရွေးချယ်ed a ကိရိယာ that does NOT exist. Find the CORRECT ကိရိယာ from the available ကိရိယာs list that matches the user's intent.",
+      "bounce_header": "[BOUNCE — သင်၏ ယခင်အကဲဖြတ်မှုက ဤအတွေးကို သတ်မှတ်ချက်အောက် အကဲဖြတ်ခဲ့သည်:]",
+      "bounce_trigger_line": "  - {dma_name} {field} = {score} (သတ်မှတ်ချက် {threshold})",
+      "bounce_instruction": "သင်က ပိုမြင့်စွာ အကဲဖြတ်မည့် အခြားရွေးချယ်စရာ အကဲဖြတ်မှုတစ်ခု ထုတ်လုပ်ပါ။ အထက်ပါ အနိမ့်ဆုံးအကဲဖြတ်ထားသော အတိုင်းအတာများကို ဖြေရှင်းပါ။ မူရင်းအခြားရွေးချယ်စရာ မရှိပါက ရမှတ်ကို ရှိရင်းအတိုင်းထား၍ မေးခွန်းမှာ ဖွဲ့စည်းပုံအရ ခက်ခဲသည့်အရာကို ရှင်းပြရန် `reasoning` ကို အသုံးပြုပါ။",
+      "bounce_original_marker": "[မူရင်းအတွေး ဆက်လက်ဖြစ်သည်]",
+      "bounce_advisory_aspdma": "\n[DMA BOUNCE အကြံပြုချက်] ပထမ DMA တစ်ခု သို့မဟုတ် ထို့ထက်ပိုသည် ဤအတွေးကို သတ်မှတ်ချက်အောက် အကဲဖြတ်ခဲ့ပြီး BOUNCE အပတ်က ကျော်လွန်သော အခြားရွေးချယ်စရာတစ်ခု မထုတ်လုပ်ခဲ့ပါ။ ခက်ခဲမှု အကြောင်းရင်း: {rationale}။ တိတ်ဆိတ်ပြီးဆုံးခြင်းထက် SPEAK-သတိပေးချက်ပါ သို့မဟုတ် DEFER ကို ပိုမိုနှစ်သက်ပါ။\n"
     },
     "formatters": {
       "system_snapshot_header": "System Snapshot",

@@ -4,6 +4,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.dma.bounce import BounceSummary
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.types import ConfigMapping
 
@@ -39,6 +40,17 @@ class InitialDMAResults(BaseModel):
     csdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to CSDMA")
     dsdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to DSDMA")
     idma_system_prompt: Optional[str] = Field(None, description="System prompt passed to IDMA")
+
+    # DMA bounce summary — None when the bounce gate did not trigger.
+    # See ciris_engine.schemas.dma.bounce.BounceSummary and FSD/DMA_BOUNCE.md.
+    bounce_summary: Optional[BounceSummary] = Field(
+        None,
+        description=(
+            "Composite bounce record. None means no DMA scored below threshold and "
+            "no bounce ran. Non-None means at least one DMA was bounced; the records "
+            "list captures attempts, chosen alternatives, and exhaustion state per DMA."
+        ),
+    )
 
     model_config = ConfigDict(defer_build=True)
 

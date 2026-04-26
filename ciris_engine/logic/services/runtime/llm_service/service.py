@@ -175,6 +175,54 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     return config
 
 
+def _try_recover_missing_brace(
+    exc: Exception, resp_model: Type[BaseModel]
+) -> Optional[Tuple[BaseModel, Any]]:
+    """Recover from the Llama-family JSON-mode bug: model emits a JSON body
+    missing its leading `{`.
+
+    Concrete failure mode (observed on `meta-llama/llama-4-scout` via
+    OpenRouter, both Groq and other backend routings, instructor JSON mode):
+    the response content is e.g.
+        `"selected_action": "speak", "speak_content": "...", ...}`
+    Note the missing leading `{`. The closing `}` is usually present. The
+    body parses fine if we prepend `{`. Bypasses the entire failure cascade
+    that otherwise opens the circuit breaker.
+
+    Returns (parsed_model, completion) on successful recovery, None when
+    the exception isn't this specific bug pattern (so the caller re-raises).
+    """
+    import re as _re
+
+    last = getattr(exc, "last_completion", None)
+    if last is None:
+        return None
+    try:
+        content = last.choices[0].message.content
+    except Exception:
+        return None
+    if not content or not isinstance(content, str):
+        return None
+
+    stripped = content.lstrip()
+    if stripped.startswith("{"):
+        # Already valid-shaped — different bug, not ours to fix here.
+        return None
+
+    # Pattern: response opens with `"<key>":` (optionally with leading
+    # whitespace). This is exactly the Llama JSON-mode dropped-brace bug.
+    if not _re.match(r'^"\w+"\s*:', stripped):
+        return None
+
+    candidate = "{" + content
+    try:
+        parsed = resp_model.model_validate_json(candidate)
+    except Exception:
+        return None
+
+    return parsed, last
+
+
 def _count_images_in_content(content: Any) -> Tuple[int, int]:
     """Count images and their size in a message content block.
 
@@ -1209,15 +1257,35 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 _call_start = _time.monotonic()
                 logger.debug("[LLM_REQUEST] Starting instructor call...")
 
-                response, completion = await self.instruct_client.chat.completions.create_with_completion(
-                    model=self.model_name,
-                    messages=cast(Any, msg_list),
-                    response_model=resp_model,
-                    max_retries=0,
-                    **temp_param,
-                    **token_param,
-                    **extra_kwargs,
-                )
+                try:
+                    response, completion = await self.instruct_client.chat.completions.create_with_completion(
+                        model=self.model_name,
+                        messages=cast(Any, msg_list),
+                        response_model=resp_model,
+                        max_retries=0,
+                        **temp_param,
+                        **token_param,
+                        **extra_kwargs,
+                    )
+                except Exception as inst_exc:
+                    # Llama-family JSON-mode bug recovery: scout/llama-4 in
+                    # JSON mode on OpenRouter routinely emit a JSON body
+                    # missing the leading `{` — content like
+                    #   `"selected_action": "speak", ...}`
+                    # Instructor parses this as `Invalid JSON: expected
+                    # value at line 1 column 1`. The fix is purely a
+                    # parsing-layer concern — prepend `{` and re-parse with
+                    # Pydantic. We do this BEFORE the general exception
+                    # handler so a clean recovery doesn't get swallowed.
+                    recovered = _try_recover_missing_brace(inst_exc, resp_model)
+                    if recovered is not None:
+                        response, completion = recovered
+                        logger.info(
+                            f"[LLM_RECOVERY] Recovered from missing-leading-brace JSON "
+                            f"for {resp_model.__name__} (thought_id={thought_id})"
+                        )
+                    else:
+                        raise
 
                 _call_duration = _time.monotonic() - _call_start
                 logger.info(f"[LLM_REQUEST] Instructor call completed in {_call_duration:.2f}s")

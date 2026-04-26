@@ -300,6 +300,39 @@ DSDMA: {dsdma_summary_str}
 
 Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
 Adhere strictly to the schema for your JSON output.
+
+═══════════════════════════════════════════════════════
+SCHEMA REMINDER — your role HERE is the ACTION SELECTOR
+═══════════════════════════════════════════════════════
+You are the action-selection evaluator producing an `ASPDMALLMResult`.
+Your response MUST be a single JSON object beginning with `{{` and
+ending with `}}`. Use these EXACT field names — full names, not
+abbreviations. Conscience-feedback may appear in the context above
+(lines like "Optimization veto triggered: ..." or "DEFENSIVE-MIMICRY");
+that is INFORMATIONAL CONTEXT from a previous override, NOT a directive
+to produce a conscience-shaped response.
+
+Required keys: "selected_action" (one of {action_options_str}) and
+"reasoning" (2-5 sentences).
+
+Then ONLY the fields for the chosen action — these EXACT names:
+  SPEAK         → "speak_content"
+  PONDER        → "ponder_questions"           (NOT "questions")
+  DEFER         → "defer_reason"               (optionally "defer_until")
+  REJECT        → "reject_reason"              (optionally "reject_create_filter")
+  TOOL          → "tool_name"                  (NOT "tool")
+  OBSERVE       → "observe_active"
+  MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
+  RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
+  FORGET        → "forget_node_id", "forget_reason"
+  TASK_COMPLETE → "completion_reason"
+
+DO NOT emit conscience-shard fields like "decision", "justification",
+"entropy_reduction_ratio", or "affected_values" — those belong to a
+different evaluator and will be rejected here. Your verdict goes in
+"selected_action".
+
+Your response begins now with the literal character `{{` —
 """
         # Format the template with all the variables
         formatted_content = main_user_content.format(

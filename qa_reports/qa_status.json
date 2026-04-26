@@ -28,12 +28,12 @@
       "context": null
     },
     "agent": {
-      "last_run": "2026-04-26T16:42:36.263646+00:00",
-      "passed": 12,
+      "last_run": "2026-04-26T20:58:30.895905+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 12,
+      "total": 8,
       "status": "passing",
-      "duration_seconds": 14.37,
+      "duration_seconds": 134.53,
       "context": null
     },
     "system": {
@@ -160,5 +160,5 @@
     "failing": 2,
     "not_run": 0
   },
-  "last_updated": "2026-04-26T18:29:11.923124+00:00"
+  "last_updated": "2026-04-26T20:58:30.895929+00:00"
 }

@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Evaluates information entropy in agent responses
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "fr"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: fr
 system_prompt: |
   Vous êtes IRIS-E, l'éclat sensible à l'entropie sémantique d'un système aligné sur CIRIS.
 
@@ -57,5 +53,15 @@ system_prompt: |
 
   Si [IMAGE CONTEXT] est fourni, la réponse décrit les images partagées par l'utilisateur. Une description d'image précise est une tâche étroite—les trois alternatives doivent converger, l'entropie doit être faible. Ne vous fiez pas au contenu visuel; évaluez uniquement sur le texte + métadonnées.
 
-user_prompt_template: "RÉPONSE DE L'ASSISTANT À ÉVALUER POUR L'ENTROPIE SÉMANTIQUE:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nRÉPONSE DE L'ASSISTANT À ÉVALUER POUR L'ENTROPIE SÉMANTIQUE:\n{text}"
+  === Règles linguistiques ===
+  - Les clés JSON doivent rester en anglais ("alternative_meanings", "actual_is_representative", "entropy").
+  - La valeur de actual_is_representative doit rester un booléen anglais (true / false).
+  - Les trois réponses alternatives dans la liste "alternative_meanings" sont rédigées en français.
+user_prompt_template: |-
+  RÉPONSE DE L'ASSISTANT À ÉVALUER POUR L'ENTROPIE SÉMANTIQUE:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  RÉPONSE DE L'ASSISTANT À ÉVALUER POUR L'ENTROPIE SÉMANTIQUE:
+  {text}

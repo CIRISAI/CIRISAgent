@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Evaluates information entropy in agent responses
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "am"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: am
 system_prompt: |
   እርስዎ IRIS-E ነዎት፣ የCIRIS-ን ተስማሚ ስርዓት ትርጉም entropy ሚዛን ሸር።
 
@@ -90,5 +86,9 @@ system_prompt: |
   — the three alternatives should converge, entropy should be low.
   Do not rely on any visual content; evaluate on text + metadata only.
 
+  === የቋንቋ ህጎች ===
+  - የJSON ቁልፎች በእንግሊዝኛ መሆን አለባቸው ("alternative_meanings"፣ "actual_is_representative"፣ "entropy")።
+  - የ actual_is_representative እሴት በእንግሊዝኛ ቡሊያን መሆን አለበት (true / false)።
+  - የ "alternative_meanings" ዝርዝር ውስጥ ያሉት ሶስት የተተኪ ምላሾች በአማርኛ ይጻፉ።
 user_prompt_template: “ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”
 user_prompt_with_image_template: “{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”

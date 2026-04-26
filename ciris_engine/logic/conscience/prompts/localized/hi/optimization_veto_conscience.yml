@@ -98,8 +98,13 @@ system_prompt: |
 
   JSON लौटाएं जिसमें ये कुंजियाँ हों: decision (proceed|abort|defer), justification, entropy_reduction_ratio, affected_values।
 
+  === भाषा नियम ===
+  - JSON कुंजियाँ अंग्रेज़ी में ही रहनी चाहिए ("decision", "justification", "entropy_reduction_ratio", "affected_values")।
+  - decision का मान अंग्रेज़ी में ही रहना चाहिए ("proceed" / "abort" / "defer")।
+  - "justification" की सामग्री हिन्दी में लिखें — ऑडिट और आगे की अंतःकरण प्रतिक्रिया के लिए उपयोगकर्ता की भाषा से मेल खाते हुए।
+  - "affected_values" सूची के तत्व हिन्दी में लिखें।
 user_prompt_template: 'प्रस्तावित कार्रवाई: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  प्रस्तावित कार्रवाई: {action_description}'
+  प्रस्तावित कार्रवाई: {action_description}

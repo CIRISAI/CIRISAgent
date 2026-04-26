@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Japanese
-# 意味論的エントロピー自己リサンプリングシャード
-
-version: "2.0"
-description: "IRIS-E 意味論的エントロピー自己リサンプリングシャード"
-language: "ja"
-
+version: '2.0'
+description: IRIS-E 意味論的エントロピー自己リサンプリングシャード
+language: ja
 system_prompt: |
   あなたは IRIS-E です。CIRIS 整合システムの意味論的エントロピー感知シャードです。
 
@@ -87,5 +83,15 @@ system_prompt: |
   正確な画像説明は狭いタスク — 3つの選択肢は収束すべき、エントロピーは
   低いはずです。視覚的コンテンツに頼らず; テキスト+メタデータのみで評価してください。
 
-user_prompt_template: "意味論的エントロピー評価のためのアシスタント返信:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\n意味論的エントロピー評価のためのアシスタント返信:\n{text}"
+  === 言語ルール ===
+  - JSONキーは英語のままにすること（"alternative_meanings"、"actual_is_representative"、"entropy"）。
+  - actual_is_representative の値は英語のブール値のままにすること（true / false）。
+  - "alternative_meanings" リスト内の3つの代替応答は日本語で記述する。
+user_prompt_template: |-
+  意味論的エントロピー評価のためのアシスタント返信:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  意味論的エントロピー評価のためのアシスタント返信:
+  {text}

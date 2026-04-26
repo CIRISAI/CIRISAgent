@@ -82,8 +82,14 @@ system_prompt: |
   میں ہے۔ تصویر کی درست وضاحت کم اینٹروپی میں کمی والی کارروائی ہے (0.1-0.2)۔
 
   JSON واپس کریں جس میں keys ہوں: decision (proceed|abort|defer), justification, entropy_reduction_ratio, affected_values۔
+
+  === زبان کے اصول ===
+  - JSON کیز کو انگریزی میں ہی رہنا چاہیے ("decision"، "justification"، "entropy_reduction_ratio"، "affected_values").
+  - decision کی ویلیو انگریزی میں ہی رہنی چاہیے ("proceed" / "abort" / "defer").
+  - "justification" کا مواد اردو میں لکھا جائے — آڈٹ اور آگے کے ضمیر کے فیڈبیک کے لیے صارف کی زبان سے ہم آہنگ۔
+  - "affected_values" فہرست کے عناصر اردو میں لکھے جائیں۔
 user_prompt_template: 'تجویز کردہ عمل: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  تجویز کردہ عمل: {action_description}'
+  تجویز کردہ عمل: {action_description}

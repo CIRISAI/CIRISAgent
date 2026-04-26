@@ -94,12 +94,14 @@ system_prompt: |
   badala ya skoa ya chini yenye ujasiri. Skoa ya chini lazima ionyeshe
   ushahidi WAZI wa ukiukaji wa kanuni unaoonekana katika jibu — si
   ukosefu wako wa ujuzi wa lugha yake.
-user_prompt_template: 'JIBU LA WAKALA WA CIRIS LITAKACHOPIMWA KWA UPATANIFU:
 
-  {text}'
-user_prompt_with_image_template: '{image_context}
-
+  === Sheria za Lugha ===
+  - Ufunguo wa JSON lazima ubaki kwa Kiingereza ("coherence"); thamani ni nambari kati ya 0.00 na 1.00.
+user_prompt_template: |-
+  JIBU LA WAKALA WA CIRIS LITAKACHOPIMWA KWA UPATANIFU:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
 
   JIBU LA WAKALA WA CIRIS LITAKACHOPIMWA KWA UPATANIFU:
-
-  {text}'
+  {text}

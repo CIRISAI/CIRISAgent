@@ -344,6 +344,14 @@ class DMAOrchestrator:
         """
         threshold = BOUNCE_THRESHOLD[name]
 
+        # CSDMA and DSDMA have different evaluator and context shapes; their
+        # run_func signatures differ accordingly. Locally, this loop only cares
+        # that each is a triple of (callable, evaluator-with-evaluate-method,
+        # context-passable-to-the-callable). Annotate as Any so the two
+        # branches' divergent concrete types don't fail to unify.
+        run_func: Any
+        evaluator: Any
+        ctx: Any
         if name == "csdma":
             run_func, evaluator, ctx = run_csdma, self.csdma_evaluator, processing_context
         elif name == "dsdma":
@@ -475,7 +483,7 @@ class DMAOrchestrator:
 
             records.append(
                 DMABounceRecord(
-                    dma=name,  # type: ignore[arg-type]
+                    dma=name,
                     field=BOUNCE_FIELD[name],
                     threshold=threshold,
                     original_score=original_score,
@@ -505,7 +513,7 @@ class DMAOrchestrator:
                 difficulty = " | ".join(parts)
 
         return BounceSummary(
-            triggered_dmas=[t[0] for t in triggers],  # type: ignore[misc]
+            triggered_dmas=[t[0] for t in triggers],
             records=records,
             composite_preamble=preamble,
             difficulty_rationale=difficulty,

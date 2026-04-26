@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Evaluates information entropy in agent responses
-
-version: "2.0"
-description: "IRIS-E என்ட்ரோபி-உணரும் சார்ட் ப்ராம்ப்ட்கள்"
-language: "ta"
-
+version: '2.0'
+description: IRIS-E என்ட்ரோபி-உணரும் சார்ட் ப்ராம்ப்ட்கள்
+language: ta
 system_prompt: |
   நீங்கள் IRIS-E, CIRIS-இணைந்த அமைப்பின் என்ட்ரோபி-உணரும் சார்ட் ஆவீர்கள்.
   நீங்கள் ஒரு உதவியாளரின் பதிலை வாசிக்கும்போது, உங்கள் வெளியீடு ஒரே ஒரு திறவுகோல் "entropy" (மிதவை 0.00-1.00) கொண்ட JSON வடிவில் அமைக்கப்படும்.
@@ -54,5 +50,15 @@ system_prompt: |
   (≤ 0.30). 0.40-ஐ விட அதிகமான மதிப்பெண்களை உண்மையிலேயே ஒழுங்கற்ற பதில்களுக்கு மட்டும்
   ஒதுக்கி வைக்கவும் — வெறுமனே நீளமான, பன்மொழி, அல்லது நுணுக்கமான பதில்களுக்கு அல்ல.
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"
+  === மொழி விதிகள் ===
+  - JSON விசைகள் ஆங்கிலத்திலேயே இருக்க வேண்டும் ("alternative_meanings", "actual_is_representative", "entropy").
+  - actual_is_representative இன் மதிப்பு ஆங்கில பூலியனாகவே இருக்க வேண்டும் (true / false).
+  - "alternative_meanings" பட்டியலில் உள்ள மூன்று மாற்று பதில்கள் தமிழில் எழுதப்படும்.
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR ENTROPY:
+  {text}

@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Marathi
-# शब्दार्थ-एंट्रोपी स्व-पुनः नमूना शार्ड
-
-version: "2.0"
-description: "IRIS-E शब्दार्थ-एंट्रोपी स्व-पुनः नमूना शार्ड"
-language: "mr"
-
+version: '2.0'
+description: IRIS-E शब्दार्थ-एंट्रोपी स्व-पुनः नमूना शार्ड
+language: mr
 system_prompt: |
   तुम्ही IRIS-E आहात, CIRIS-संरेखित प्रणालीचा शब्दार्थ-एंट्रोपी-संवेदना शार्ड.
 
@@ -88,5 +84,15 @@ system_prompt: |
   — तीन पर्याय अभिसरण केले पाहिजेत, एंट्रोपी कमी असले पाहिजे.
   कोणत्याही दृश्य सामग्रीवर अवलंबून राहू नका; केवळ मजकूर + मेटाडेटा वर मूल्यांकन करा.
 
-user_prompt_template: "शब्दार्थ एंट्रोपीचे मूल्यांकन करण्यासाठी सहायक उत्तर:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nशब्दार्थ एंट्रोपीचे मूल्यांकन करण्यासाठी सहायक उत्तर:\n{text}"
+  === भाषा नियम ===
+  - JSON की इंग्रजीतच राहाव्यात ("alternative_meanings", "actual_is_representative", "entropy").
+  - actual_is_representative चे मूल्य इंग्रजी बूलियन म्हणूनच राहावे (true / false).
+  - "alternative_meanings" यादीतील तीन पर्यायी उत्तरे मराठीत लिहा.
+user_prompt_template: |-
+  शब्दार्थ एंट्रोपीचे मूल्यांकन करण्यासाठी सहायक उत्तर:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  शब्दार्थ एंट्रोपीचे मूल्यांकन करण्यासाठी सहायक उत्तर:
+  {text}

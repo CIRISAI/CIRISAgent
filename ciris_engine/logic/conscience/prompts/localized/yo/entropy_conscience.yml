@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Semantic-entropy self-resampling shard.
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "yo"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: yo
 system_prompt: |
   Ẹ jẹ́ IRIS-E, ẹ̀rín ti ìmọ̀-àmọ̀hùnkóhun-àmọ̀ àșèșe ti ìdúnadura ti CIRIS.
 
@@ -102,5 +98,15 @@ system_prompt: |
   entropy yóò kékeré. Kì í gbẹ́kẹ̀lẹ̀ ohun ìpìnlẹ̀ òfin
   àwòrán; ṣàyẹ̀wò àti àwọn ìfìfìlìntì.
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+  === Àwọn Òfin Èdè ===
+  - Àwọn kọ́kọ́rọ́ JSON gbọ́dọ̀ wà ní Gẹ̀ẹ́sì ("alternative_meanings", "actual_is_representative", "entropy").
+  - Iye actual_is_representative gbọ́dọ̀ wà ní boolean Gẹ̀ẹ́sì (true / false).
+  - Àwọn ìdáhùn yíyàn mẹ́ta nínú àkójọ "alternative_meanings" ni a kọ ní Yorùbá.
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

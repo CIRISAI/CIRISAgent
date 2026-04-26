@@ -78,8 +78,12 @@ class ServiceInitializer:
         # batch_context strict attestation gate can find it via the registry.
         # Default to None at construction time so register-only paths (or tests
         # that mock-skip the security init phase) can read self.auth_service
-        # without AttributeError.
-        self.auth_service: Optional[Any] = None  # AuthenticationService — Any avoids fwd-ref cycle
+        # without AttributeError. Use Any (not Optional[AuthenticationService])
+        # to keep this consistent with how the field was treated implicitly
+        # before this annotation was added — the alternative would force a
+        # forward-reference import and an `assert is not None` at every
+        # downstream callsite, which the security init phase guarantees.
+        self.auth_service: Any = None
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
         self.audit_service: Optional[AuditService] = None

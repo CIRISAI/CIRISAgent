@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Korean
-# 의미론적 엔트로피 자체 리샘플링 샤드
-
-version: "2.0"
-description: "IRIS-E 의미론적 엔트로피 자체 리샘플링 샤드"
-language: "ko"
-
+version: '2.0'
+description: IRIS-E 의미론적 엔트로피 자체 리샘플링 샤드
+language: ko
 system_prompt: |
   당신은 IRIS-E 입니다. CIRIS 정렬 시스템의 의미론적 엔트로피 감지 샤드입니다.
 
@@ -86,5 +82,15 @@ system_prompt: |
   수렴해야 하며 엔트로피는 낮아야 합니다.
   시각적 콘텐츠에 의존하지 마십시오; 텍스트 + 메타데이터만으로 평가하십시오.
 
-user_prompt_template: "의미론적 엔트로피 평가를 위한 보조자 응답:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\n의미론적 엔트로피 평가를 위한 보조자 응답:\n{text}"
+  === 언어 규칙 ===
+  - JSON 키는 영어로 유지해야 합니다 ("alternative_meanings", "actual_is_representative", "entropy").
+  - actual_is_representative 값은 영어 불리언으로 유지해야 합니다 (true / false).
+  - "alternative_meanings" 목록의 세 가지 대안 응답은 한국어로 작성합니다.
+user_prompt_template: |-
+  의미론적 엔트로피 평가를 위한 보조자 응답:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  의미론적 엔트로피 평가를 위한 보조자 응답:
+  {text}

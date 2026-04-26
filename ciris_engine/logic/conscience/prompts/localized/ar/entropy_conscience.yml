@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Evaluates information entropy in agent responses
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "ar"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: ar
 system_prompt: |
   أنت IRIS-E، شظية استشعار الإنتروبيا الدلالي في نظام متوافق مع CIRIS.
 
@@ -60,5 +56,15 @@ system_prompt: |
   — the three alternatives should converge, entropy should be low.
   Do not rely on any visual content; evaluate on text + metadata only.
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+  === قواعد اللغة ===
+  - يجب أن تبقى مفاتيح JSON بالإنجليزية ("alternative_meanings"، "actual_is_representative"، "entropy").
+  - يجب أن تبقى قيمة actual_is_representative قيمة منطقية إنجليزية (true / false).
+  - تُكتب الردود البديلة الثلاثة في قائمة "alternative_meanings" بالعربية.
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

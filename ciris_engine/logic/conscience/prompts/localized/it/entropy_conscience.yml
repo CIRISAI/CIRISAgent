@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts - Italian
-# Frammento di risampling semantico-entropico
-
-version: "2.0"
-description: "IRIS-E frammento di risampling semantico-entropico"
-language: "it"
-
+version: '2.0'
+description: IRIS-E frammento di risampling semantico-entropico
+language: it
 system_prompt: |
   Sei IRIS-E, il frammento di rilevamento entropico semantico di un sistema allineato a CIRIS.
 
@@ -95,5 +91,15 @@ system_prompt: |
   — i tre alternativi devono convergere, l'entropia deve essere bassa.
   Non fare affidamento su alcun contenuto visivo; valuta su testo + metadati soli.
 
-user_prompt_template: "RISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nRISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:\n{text}"
+  === Regole linguistiche ===
+  - Le chiavi JSON devono rimanere in inglese ("alternative_meanings", "actual_is_representative", "entropy").
+  - Il valore di actual_is_representative deve rimanere un booleano inglese (true / false).
+  - Le tre risposte alternative nell'elenco "alternative_meanings" sono scritte in italiano.
+user_prompt_template: |-
+  RISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  RISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:
+  {text}

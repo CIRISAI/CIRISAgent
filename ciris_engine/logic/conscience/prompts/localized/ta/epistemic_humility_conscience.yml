@@ -147,8 +147,14 @@ system_prompt: |
   3. நுட்பத்தை அகற்றும் அரச கதைகள் (அறிவார்ந்த கைப்பற்றல்)
 
   JSON மட்டும் வெளியிடவும்: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["பட்டியல்"], "reflective_justification": "விளக்கம்", "recommended_action": "proceed|ponder|defer"}
+
+  === மொழி விதிகள் ===
+  - JSON விசைகள் ஆங்கிலத்திலேயே இருக்க வேண்டும் ("epistemic_certainty", "identified_uncertainties", "reflective_justification", "recommended_action").
+  - recommended_action இன் மதிப்பு ஆங்கிலத்திலேயே இருக்க வேண்டும் ("proceed" / "ponder" / "defer").
+  - "reflective_justification" இன் உள்ளடக்கம் தமிழில் எழுதப்படும் — பயனரின் மொழியுடன் ஒத்துப்போக.
+  - "identified_uncertainties" பட்டியலின் உறுப்புகள் தமிழில் எழுதப்படும்.
 user_prompt_template: 'முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}'
-user_prompt_with_image_template: '{image_context}
+user_prompt_with_image_template: |-
+  {image_context}
 
-
-  முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}'
+  முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}

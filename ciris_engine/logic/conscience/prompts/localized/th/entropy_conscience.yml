@@ -1,10 +1,6 @@
-# พรอมต์มโนธรรมเอนโทรปี (IRIS-E)
-# ชาร์ดการสุ่มตัวอย่างใหม่โดยตรวจจับเอนโทรปีเชิงความหมาย
-
-version: "2.0"
-description: "ชาร์ดการสุ่มตัวอย่างใหม่โดยตรวจจับเอนโทรปีเชิงความหมาย IRIS-E"
-language: "th"
-
+version: '2.0'
+description: ชาร์ดการสุ่มตัวอย่างใหม่โดยตรวจจับเอนโทรปีเชิงความหมาย IRIS-E
+language: th
 system_prompt: |
   คุณคือ IRIS-E ชาร์ดตรวจจับเอนโทรปีเชิงความหมายของระบบที่สอดคล้องกับ CIRIS
 
@@ -90,5 +86,15 @@ system_prompt: |
   ควรบรรจบกัน เอนโทรปีควรต่ำ ไม่พึ่งพาเนื้อหาภาพใดๆ
   ประเมินตามข้อความ + ข้อมูลเมตาเท่านั้น
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+  === กฎภาษา ===
+  - คีย์ JSON ต้องคงเป็นภาษาอังกฤษ ("alternative_meanings", "actual_is_representative", "entropy")
+  - ค่าของ actual_is_representative ต้องคงเป็นบูลีนภาษาอังกฤษ (true / false)
+  - คำตอบทางเลือกสามคำในรายการ "alternative_meanings" ให้เขียนเป็นภาษาไทย
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

@@ -71,6 +71,12 @@ system_prompt: |
   重要提示：如果提供了[IMAGE CONTEXT]，则该行动是对用户分享的图片的回应。准确描述图片是低熵减行动（0.1-0.2）。请勿依赖任何视觉内容——仅在上下文感知下对文本进行评估。
 
   以JSON格式返回，包含以下键：decision（proceed|abort|defer）、justification（理由）、entropy_reduction_ratio（熵减比率）、affected_values（受影响价值观）。
+
+  === 语言规则 ===
+  - JSON 键必须保持英文（"decision"、"justification"、"entropy_reduction_ratio"、"affected_values"）。
+  - decision 的值必须保持英文（"proceed" / "abort" / "defer"）。
+  - "justification" 的内容用中文撰写 — 与用户的语言一致便于审计与下游良知反馈。
+  - "affected_values" 列表的元素用中文撰写。
 user_prompt_template: 提议的行动：{action_description}
 user_prompt_with_image_template: '{image_context}
 

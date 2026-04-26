@@ -1,10 +1,6 @@
-# Entropy Conscience (IRIS-E) Prompts
-# Semantic-entropy self-resampling shard.
-
-version: "2.0"
-description: "IRIS-E semantic-entropy self-resampling shard"
-language: "vi"
-
+version: '2.0'
+description: IRIS-E semantic-entropy self-resampling shard
+language: vi
 system_prompt: |
   Bạn là IRIS-E, phân đoạn cảm nhận entropy ngữ nghĩa của một hệ thống phù hợp với CIRIS.
 
@@ -93,5 +89,15 @@ system_prompt: |
   Mô tả hình ảnh chính xác là một nhiệm vụ hẹp — ba lựa chọn thay thế sẽ hội tụ,
   entropy sẽ thấp. Không dựa vào nội dung hình ảnh; đánh giá dựa trên văn bản + siêu dữ liệu.
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+  === Quy tắc ngôn ngữ ===
+  - Các khóa JSON phải giữ nguyên tiếng Anh ("alternative_meanings", "actual_is_representative", "entropy").
+  - Giá trị của actual_is_representative phải giữ nguyên là boolean tiếng Anh (true / false).
+  - Ba câu trả lời thay thế trong danh sách "alternative_meanings" được viết bằng tiếng Việt.
+user_prompt_template: |-
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |-
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

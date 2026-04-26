@@ -681,6 +681,43 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Update context with new correlation_id to avoid UNIQUE constraint violation
                 guidance_context_dict["correlation_id"] = correlation_id
 
+                # Inherit preferred_language from the original deferred task so
+                # the WA-guidance follow-up task continues the same locale as
+                # the user's original interaction. Without this, a Spanish
+                # user's WA-resolved task would create an English-locale
+                # guidance task, breaking the locale-coherent reasoning chain
+                # the localization helper depends on.
+                original_preferred_language: Optional[str] = None
+                try:
+                    from ciris_engine.logic.persistence.models.tasks import get_task_by_id
+
+                    original_task = get_task_by_id(original_task_id, agent_occurrence_id)
+                    if original_task is not None:
+                        # Prefer the top-level field (Task is record of truth);
+                        # fall back to context for older records.
+                        original_preferred_language = (
+                            getattr(original_task, "preferred_language", None)
+                            or (
+                                getattr(original_task.context, "preferred_language", None)
+                                if original_task.context is not None
+                                else None
+                            )
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        f"WA guidance task: could not load original task {original_task_id} "
+                        f"for preferred_language inheritance: {exc}"
+                    )
+
+                # Resolve via the centralized chain (explicit > user > channel > env)
+                # so the guidance task always lands with a known locale, even
+                # when the original task lookup fails.
+                from ciris_engine.logic.utils.localization import resolve_language_for_new_task
+
+                resolved_language = resolve_language_for_new_task(
+                    explicit_lang=original_preferred_language,
+                )
+
                 # Build TaskContext from the guidance context dict
                 task_context = TaskContext(
                     channel_id=channel_id,
@@ -688,6 +725,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     correlation_id=correlation_id,
                     parent_task_id=original_task_id,
                     agent_occurrence_id=agent_occurrence_id,
+                    preferred_language=resolved_language,
                 )
 
                 # Create new task description incorporating WA guidance

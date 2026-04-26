@@ -563,6 +563,15 @@ class WakeupProcessor(BaseProcessor):
             else:
                 enhanced_sequence.append((step_type, content))
 
+        # Wakeup tasks are system-internal — no user, no real channel locale —
+        # so the resolver falls through to the deployment env default. Use the
+        # centralized helper instead of letting create_task default to None,
+        # so all locale-coherent downstream paths (DMA prompts, conscience
+        # justifications) read the same value.
+        from ciris_engine.logic.utils.localization import resolve_language_for_new_task
+
+        wakeup_lang = resolve_language_for_new_task()
+
         for step_type, content in enhanced_sequence:
             # Create task with proper context using the default channel
             step_task = create_task(
@@ -576,6 +585,7 @@ class WakeupProcessor(BaseProcessor):
                 task_id=f"{step_type}_{uuid.uuid4()}",
                 user_id="system",
                 parent_task_id=root_task.task_id,
+                preferred_language=wakeup_lang,
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)

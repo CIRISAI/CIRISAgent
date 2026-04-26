@@ -1,7 +1,7 @@
-# Entropy Conscience (IRIS-E) Prompts
+# Entropy Conscience (IRIS-E) Prompts.
 # Semantic-entropy self-resampling shard.
 #
-# IRIS-E no longer measures surface-level "word salad" — modern models
+# Does not measure surface-level "word salad" — modern models
 # don't produce that. Instead it estimates the SEMANTIC entropy of the
 # response: could the model have plausibly said many different things,
 # and if so did the actual response anchor on one of them or drift

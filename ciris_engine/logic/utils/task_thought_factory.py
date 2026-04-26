@@ -109,6 +109,9 @@ def create_task(
                 preferred_language=context.preferred_language or preferred_language,
             )
 
+    # Task is the record of truth for preferred_language. Mirror the value
+    # from context (where it lives in the persisted JSON) onto the Task's
+    # own field so the localization helper can find it via either path.
     task = Task(
         task_id=task_id,
         channel_id=channel_id,
@@ -121,6 +124,7 @@ def create_task(
         parent_task_id=parent_task_id,
         context=context,
         images=images or [],
+        preferred_language=context.preferred_language if context else preferred_language,
     )
 
     image_count = len(images) if images else 0
@@ -150,6 +154,7 @@ def create_thought(
     context: Optional[ThoughtContext] = None,
     is_seed: bool = False,
     images: Optional[List[ImageContent]] = None,
+    preferred_language: Optional[str] = None,
 ) -> Thought:
     """
     Create a Thought with proper occurrence_id handling.
@@ -229,6 +234,12 @@ def create_thought(
                 agent_occurrence_id=agent_occurrence_id,  # Override with correct one
             )
 
+    # Mirror preferred_language onto the Thought's top-level field so the
+    # localization helper finds it via either thought.preferred_language or
+    # thought.context.preferred_language.
+    effective_lang = preferred_language
+    if effective_lang is None and context is not None:
+        effective_lang = getattr(context, "preferred_language", None)
     thought = Thought(
         thought_id=thought_id,
         source_task_id=source_task_id,
@@ -244,6 +255,7 @@ def create_thought(
         parent_thought_id=parent_thought_id,
         context=context,
         images=images or [],
+        preferred_language=effective_lang,
     )
 
     image_count = len(images) if images else 0
@@ -294,10 +306,13 @@ def create_seed_thought_for_task(
     if task.context and hasattr(task.context, "correlation_id"):
         correlation_id = task.context.correlation_id
 
-    # Inherit preferred_language from task context (if set)
-    inherited_language: Optional[str] = None
-    if task.context and hasattr(task.context, "preferred_language"):
-        inherited_language = task.context.preferred_language
+    # Inherit preferred_language from task — Task is the record of truth.
+    # Prefer the top-level field; fall back to context for older records that
+    # only had it nested.
+    inherited_language: Optional[str] = (
+        getattr(task, "preferred_language", None)
+        or (getattr(task.context, "preferred_language", None) if task.context else None)
+    )
 
     # Build thought context from task context
     thought_context = ThoughtContext(
@@ -326,6 +341,7 @@ def create_seed_thought_for_task(
         context=thought_context,
         is_seed=True,
         images=task.images,  # Inherit images from task
+        preferred_language=inherited_language,  # Top-level too — Task is record of truth
     )
 
 
@@ -390,6 +406,11 @@ def create_follow_up_thought(
     # Extract correlation_id from parent
     correlation_id = parent_thought.context.correlation_id if parent_thought.context else str(uuid.uuid4())
 
+    # Inherit preferred_language from parent thought (which inherited from task).
+    parent_lang = (
+        getattr(parent_thought, "preferred_language", None)
+        or (getattr(parent_thought.context, "preferred_language", None) if parent_thought.context else None)
+    )
     return create_thought(
         source_task_id=parent_thought.source_task_id,
         agent_occurrence_id=parent_thought.agent_occurrence_id,  # Inherit from parent
@@ -404,6 +425,7 @@ def create_follow_up_thought(
         parent_thought_id=parent_thought.thought_id,
         context=follow_up_context,
         is_seed=False,
+        preferred_language=parent_lang,
         images=parent_thought.images,  # Inherit images from parent thought
     )
 

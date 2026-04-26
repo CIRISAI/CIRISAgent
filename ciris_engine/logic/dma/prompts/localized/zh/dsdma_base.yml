@@ -38,6 +38,9 @@ system_guidance_header: |
   - 年龄适当的期望(6岁相信圣诞老人是理想的,不是令人担忧的)
   - 人生阶段考虑(新毕业生储蓄较少,新父母需要灵活性)
 
+  代理执行操作后的后续想法:
+  - 跟进代理已经执行过的操作的想法(例如,在 SPEAK 或任何其他操作之后评估 TASK_COMPLETE)默认情况下与领域强一致。原始操作的领域一致性会传递到结束想法 — 除非后续本身提出了领域外的内容,否则请评定 domain_alignment ≥ 0.8。
+
 context_integration: |
   领域: {{domain_name}}
   规则: {{rules_summary_str}}

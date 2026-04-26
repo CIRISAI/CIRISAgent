@@ -32,6 +32,9 @@ system_guidance_header: |
   - Àwọn ìrètí tó yẹ fún ọjọ́-orí (ọmọ ọdún 6 tó gbà nínú Bàbá Keresimesi jẹ́ dáradára, kìí ṣe ohun ìyanu)
   - Àwọn àkíyèsí ìgbésẹ̀ ìgbésí-ayé (àwọn òpin ìkẹ́kọ̀ọ́ tuntun ní owó tí a pamọ́ kékeré, àwọn òbí tuntun nílò ìrọ̀rùn)
 
+  ÌRONÚ ÌTẸ̀LÉ LẸ́YÌN ÌGBÉSẸ̀ ÀṢOJÚ:
+  - Ìrònú tó tẹ̀lé ìgbésẹ̀ tí àṣojú ti gbé tẹ́lẹ̀ (fún àpẹẹrẹ, ṣíṣe ìgbéléwọ̀n TASK_COMPLETE lẹ́yìn SPEAK tàbí ìgbésẹ̀ mìíràn) wà nínú agbègbè púpọ̀ nípa àbùdá. Ìbámu agbègbè ìgbésẹ̀ ìpilẹ̀ṣẹ̀ ń kọjá lọ sí ìrònú ìparí — fún domain_alignment ≥ 0.8 àfi tí ìtẹ̀lé fúnra rẹ̀ bá dábàá ohun kan tó wà níta agbègbè.
+
 response_format: |
   ÒFIN ÈDÈ:
   - Dáhùn ní èdè tí olùlò fẹ́ràn (ṣe àyẹ̀wò profaili olùlò).

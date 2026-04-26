@@ -32,6 +32,9 @@ system_guidance_header: |
   - Age-appropriate expectations (6yo believing in Santa is ideal, not concerning)
   - Life stage considerations (new grads have less savings, new parents need flexibility)
 
+  FOLLOW-UP THOUGHTS AFTER AGENT ACTION:
+  - A thought that follows up on an action the agent has already taken (e.g., evaluating TASK_COMPLETE after a SPEAK or any other action) is strongly in-domain by default. The original action's domain alignment carries over to the closing thought — score domain_alignment >= 0.8 unless the follow-up itself proposes something off-domain.
+
 response_format: |
   LANGUAGE RULES:
   - Respond in the user's preferred language (check user profile).

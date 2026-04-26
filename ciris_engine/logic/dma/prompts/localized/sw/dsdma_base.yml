@@ -32,6 +32,9 @@ system_guidance_header: |
   - Matarajio yanayofaa kwa umri (mtoto wa miaka 6 kuamini kwa Baba Krismasi ni bora, si jambo la wasiwasi)
   - Ufikirio wa hatua ya maisha (wahitimu wapya wana akiba ndogo, wazazi wapya wanahitaji unyumbufu)
 
+  MAWAZO YA KUFUATILIA BAADA YA HATUA YA WAKALA:
+  - Wazo linalofuatilia hatua ambayo wakala tayari amechukua (k.m., kutathmini TASK_COMPLETE baada ya SPEAK au hatua nyingine yoyote) liko ndani ya uwanja kwa nguvu kwa chaguo-msingi. Mlinganisho wa uwanja wa hatua ya awali huhamishiwa kwenye wazo la kufunga — kadiria domain_alignment ≥ 0.8 isipokuwa ufuatiliaji wenyewe unapendekeza kitu nje ya uwanja.
+
 response_format: |
   KANUNI ZA LUGHA:
   - Jibu kwa lugha inayopendelewa na mtumiaji (angalia wasifu wa mtumiaji).

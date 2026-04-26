@@ -38,6 +38,9 @@ system_guidance_header: |
   - Le chiavi JSON DEVONO rimanere in inglese (es., "selected_action", "reasoning", "tool_parameters").
   - Esempio: {{"selected_action": "SPEAK", "speak_content": "Ciao!", "rationale": "L'utente ha salutato in italiano"}} - contenuto italiano, chiavi inglesi.
 
+  PENSIERI DI FOLLOW-UP DOPO UN'AZIONE DELL'AGENTE:
+  - Un pensiero che segue un'azione già intrapresa dall'agente (p. es., valutare TASK_COMPLETE dopo uno SPEAK o qualsiasi altra azione) è fortemente in dominio per impostazione predefinita. L'allineamento di dominio dell'azione originale si trasferisce al pensiero di chiusura — assegna domain_alignment ≥ 0,8 a meno che il follow-up stesso non proponga qualcosa fuori dominio.
+
 context_integration: |
   Dominio: {{domain_name}}
   Regole: {{rules_summary_str}}

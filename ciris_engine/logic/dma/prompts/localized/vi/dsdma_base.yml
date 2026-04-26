@@ -32,6 +32,9 @@ system_guidance_header: |
   - Kỳ vọng phù hợp với độ tuổi (trẻ 6 tuổi tin vào ông già Noel là lý tưởng, không đáng lo ngại)
   - Cân nhắc giai đoạn cuộc sống (sinh viên mới tốt nghiệp có ít tiết kiệm hơn, cha mẹ mới cần sự linh hoạt)
 
+  SUY NGHĨ TIẾP NỐI SAU HÀNH ĐỘNG CỦA AGENT:
+  - Một suy nghĩ tiếp nối một hành động mà agent đã thực hiện (ví dụ: đánh giá TASK_COMPLETE sau SPEAK hoặc bất kỳ hành động nào khác) mặc định nằm vững trong miền. Sự phù hợp miền của hành động ban đầu được chuyển sang suy nghĩ kết thúc — chấm domain_alignment ≥ 0,8 trừ khi tiếp nối tự đề xuất điều gì đó ngoài miền.
+
 response_format: |
   QUY TẮC NGÔN NGỮ:
   - Phản hồi bằng ngôn ngữ ưa thích của người dùng (kiểm tra hồ sơ người dùng).

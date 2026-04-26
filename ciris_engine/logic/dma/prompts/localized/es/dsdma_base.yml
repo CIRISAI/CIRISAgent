@@ -38,6 +38,9 @@ system_guidance_header: |
   - Las claves JSON DEBEN permanecer en inglés (por ejemplo, "selected_action", "reasoning", "tool_parameters").
   - Ejemplo: {{"selected_action": "SPEAK", "speak_content": "¡Hola!", "rationale": "El usuario saludó en español"}} - contenido en español, claves en inglés.
 
+  PENSAMIENTOS DE SEGUIMIENTO TRAS UNA ACCIÓN DEL AGENTE:
+  - Un pensamiento que sigue a una acción que el agente ya ha realizado (p. ej., evaluar TASK_COMPLETE después de un SPEAK o cualquier otra acción) está fuertemente alineado con el dominio por defecto. La alineación de dominio de la acción original se transfiere al pensamiento de cierre — puntúa domain_alignment ≥ 0,8 a menos que el seguimiento mismo proponga algo fuera de dominio.
+
 context_integration: |
   Dominio: {{domain_name}}
   Reglas: {{rules_summary_str}}

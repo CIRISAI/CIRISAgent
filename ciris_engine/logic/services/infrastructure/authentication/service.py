@@ -1799,15 +1799,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     async def stop(self) -> None:
         """Stop the service."""
         try:
-            # Cancel the periodic refresh task and await its completion.
-            if self._attestation_refresh_task and not self._attestation_refresh_task.done():
-                self._attestation_refresh_task.cancel()
-                try:
-                    await self._attestation_refresh_task
-                except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
-                    # Expected: we just cancelled this child task on line above.
-                    # Do NOT re-raise - this is OUR cancellation, not external.
-                    pass
+            # Cancel both attestation tasks and await their completion so they
+            # don't outlive the service. Without this, the startup attestation
+            # task (live FFI + registry lookup) can survive teardown — fine in
+            # production where the process exits, but under pytest-xdist the
+            # orphan task corrupts worker state and crashes neighbouring tests.
+            for task in (self._attestation_refresh_task, self._attestation_task):
+                if task and not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
+                        # Expected: we just cancelled this child task on line above.
+                        # Do NOT re-raise - this is OUR cancellation, not external.
+                        pass
             await super().stop()
             self._started = False
             # Clear caches

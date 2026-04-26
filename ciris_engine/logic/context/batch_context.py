@@ -459,17 +459,38 @@ async def prefetch_batch_context(
 
     # Pull the cached attestation result. AuthenticationService runs the
     # startup attestation as a background task so start() stays fast; we
-    # block here on its completion so the cache is guaranteed populated by
-    # the time we read it. If the task raised (FFI unloadable, hardware
+    # block here on its completion so the cache is guaranteed populated
+    # by the time we read it. If the task raised (FFI unloadable, hardware
     # error), `await_attestation_ready()` re-raises and this thought fails
     # loudly — there is no fallback that emits null verify_attestation
     # fields to Lens.
-    auth_service = service_registry.get_authentication() if service_registry else None
-    if auth_service is None or not hasattr(auth_service, "await_attestation_ready"):
+    #
+    # Lookup uses the registry's typed surface, `get_services_by_type()`.
+    # AuthenticationService and WiseAuthorityService both co-register
+    # under ServiceType.WISE_AUTHORITY by design (authentication is part
+    # of the wise-authority infrastructure — see deepwiki & wise_bus.py
+    # which uses the same pattern with `_get_wa_by_kid`). Disambiguate by
+    # presence of `await_attestation_ready` — a method unique to
+    # AuthenticationService, not provided by the governance
+    # WiseAuthorityService.
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    if not service_registry:
         raise RuntimeError(
-            "CRITICAL: AuthenticationService not available (or pre-2.7.1 "
-            "version without await_attestation_ready). Cannot resolve "
-            "ciris_verify attestation."
+            "CRITICAL: service_registry is required to resolve "
+            "AuthenticationService for ciris_verify attestation."
+        )
+
+    wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+    auth_service = next(
+        (s for s in wa_services if hasattr(s, "await_attestation_ready")),
+        None,
+    )
+    if auth_service is None:
+        raise RuntimeError(
+            "CRITICAL: no service under ServiceType.WISE_AUTHORITY exposes "
+            "await_attestation_ready(). Cannot resolve ciris_verify "
+            "attestation — AuthenticationService is required."
         )
     await auth_service.await_attestation_ready()
 

@@ -1794,14 +1794,21 @@ class AppleNativeTokenRequest(BaseModel):
     provider: str = Field(default="apple", description="OAuth provider (always 'apple')")
 
 
+def _oauth_config_file_exists() -> bool:
+    """Check whether an oauth.json exists at either of the documented paths."""
+    if OAUTH_CONFIG_PATH.exists():
+        return True
+    return (Path.home() / OAUTH_CONFIG_DIR / OAUTH_CONFIG_FILE).exists()
+
+
 def _get_apple_platform_default_audiences() -> Optional[Set[str]]:
-    """Return default Apple audiences for iOS/macOS if no oauth.json exists.
+    """Return default Apple audiences for iOS/macOS when no oauth.json exists.
 
     On Apple platforms the Sign in with Apple token always uses the app's
     bundle ID as the audience. This fallback allows native auth to work
     on standalone iOS/macOS deployments without requiring an oauth.json file.
 
-    Returns None on non-Apple platforms (where oauth.json is required).
+    Returns None on non-Apple platforms (oauth.json is required there).
     """
     import sys
 
@@ -1819,14 +1826,21 @@ def _get_allowed_apple_audiences_from_config() -> Set[str]:
         provider_config = _load_oauth_config("apple")
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
-            # No oauth.json — fall back to platform defaults on Apple devices
-            defaults = _get_apple_platform_default_audiences()
-            if defaults:
-                logger.info(
-                    "[AppleNativeAuth] No oauth.json — using Apple platform defaults: %s",
-                    defaults,
-                )
-                return defaults
+            # _load_oauth_config raises 404 in two cases — file missing, OR
+            # file present but lacking the "apple" provider. Only the first
+            # case should fall back to platform-default audiences. If the
+            # operator deployed an oauth.json without apple, that is an
+            # explicit decision to disable apple sign-in and we MUST honor
+            # it (returning bundle-ID defaults would silently re-enable a
+            # provider the operator turned off).
+            if not _oauth_config_file_exists():
+                defaults = _get_apple_platform_default_audiences()
+                if defaults:
+                    logger.info(
+                        "[AppleNativeAuth] No oauth.json — using Apple platform defaults: %s",
+                        defaults,
+                    )
+                    return defaults
             logger.error("[AppleNativeAuth] Apple OAuth config missing; native Apple auth disabled")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

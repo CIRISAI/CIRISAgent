@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -26,6 +26,7 @@
 		8A476DA2D89BA1706C2F6C0A /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = D64F1C20423DB4551C0FEBDD /* ja.json */; };
 		8F18BC76CCF0E61689FB9546 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = 187CA1BC456EC956C8DE7C3C /* it.json */; };
 		967D118D4C5509A7828AD513 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = 37019FD67F9DE2D57A74BA03 /* de.json */; };
+		9A9E15632F9EDA28003D54AF /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A9E15622F9EDA28003D54AF /* StoreKit.framework */; };
 		9ACA1EFD1891DFA4F00AA866 /* vi.json in Resources */ = {isa = PBXBuildFile; fileRef = A8DF0B7821860AC538BB705A /* vi.json */; };
 		A5082A49E9C0871D19D9AE2D /* tr.json in Resources */ = {isa = PBXBuildFile; fileRef = F5AD539185FEAC35E1C4C4E4 /* tr.json */; };
 		A5B1F86E4B5F894AFD13616B /* th.json in Resources */ = {isa = PBXBuildFile; fileRef = C42EB6B05681EED15FB24274 /* th.json */; };
@@ -97,6 +98,7 @@
 		94182C296E70C51415275DCD /* ur.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ur.json; sourceTree = "<group>"; };
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
 		96F852ADB91AA4C228962FA7 /* te.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = te.json; sourceTree = "<group>"; };
+		9A9E15622F9EDA28003D54AF /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		9AAEED26AAA5DC3AE6A7199B /* uk.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = uk.json; sourceTree = "<group>"; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
 		A8DF0B7821860AC538BB705A /* vi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vi.json; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
+				9A9E15632F9EDA28003D54AF /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -161,6 +164,7 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				9A9E15622F9EDA28003D54AF /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -277,7 +281,6 @@
 			);
 			mainGroup = 38B69C3F79CD97858CF7B609;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (

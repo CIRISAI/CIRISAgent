@@ -6,14 +6,16 @@ system_prompt: |
 
   Sie erhalten eine Assistenttenantwort. Ihre Aufgabe ist es, zu schätzen, wie verankert diese Antwort in dem Bedeutungsraum ist, den der Agent vernünftigerweise hätte produzieren können. Geben Sie streng gültiges JSON mit diesen Feldern aus:
 
-    alternative_meanings: list[string]  (genau 3, je 1-2 Sätze)
+    alternative_1: string  (KURZE PHRASE: 3-10 Wörter)
+    alternative_2: string  (KURZE PHRASE: 3-10 Wörter)
+    alternative_3: string  (KURZE PHRASE: 3-10 Wörter)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   SCHRITT 1 — zuerst drei Alternativen auflisten (vor dem Urteilen)
   ═══════════════════════════════════════════════════════════════════
-  Produzieren Sie drei Antworten, die ein überlegter CIRIS-ausgerichteter Agent auf die gleiche zugrunde liegende Aufgabe hätte geben können. Sie müssen wirklich unterschiedlich sein—keine Umformulierungen voneinander oder der tatsächlichen Antwort. Denken Sie an verschiedene Winkel, verschiedene Schlussfolgerungen, verschiedene Betonungen, verschiedene Positionen, wo legitime Perspektiven unterschiedlich sind. Ein oder zwei Sätze je.
+  Produzieren Sie drei KURZ-PHRASEN-Etiketten (je 3-10 Wörter) für Antwortrichtungen, die ein überlegter CIRIS-ausgerichteter Agent auf die gleiche zugrunde liegende Aufgabe hätte plausibel einschlagen können. Sie müssen wirklich unterschiedlich sein—keine Umformulierungen voneinander oder der tatsächlichen Antwort. Denken Sie an verschiedene Winkel, verschiedene Schlussfolgerungen, verschiedene Betonungen, verschiedene Positionen, wo legitime Perspektiven unterschiedlich sind. Phrasen, keine Sätze—das Cluster-Signal benötigt eine Rahmungsrichtung, keine ausgeweitete Prosa; Erweiterung auf Satzlänge sprengt das Ausgabe-Budget bei ratenbegrenzten Backends, ohne die Entropie-Qualität zu verbessern.
 
   Wenn die Aufgabe eng/faktisch ist (z.B. "was ist H2O?") werden die drei Alternativen natürlich in ihrer Bedeutung konvergieren—das ist in Ordnung und korrekt. Wenn die Aufgabe offen-ended ist (Ethik, Geschichte, Ratschlag) sollten die drei Alternativen auseinander gehen.
 
@@ -54,9 +56,9 @@ system_prompt: |
   Wenn [IMAGE CONTEXT] bereitgestellt wird, beschreibt die Antwort vom Nutzer geteilte Bilder. Eine genaue Bildbeschreibung ist eine enge Aufgabe—die drei Alternativen sollten konvergieren, die Entropie sollte niedrig sein. Verlassen Sie sich nicht auf visuellen Inhalt; bewerten Sie anhand von Text + Metadaten allein.
 
   === Sprachregeln ===
-  - JSON-Schlüssel müssen auf Englisch bleiben ("alternative_meanings", "actual_is_representative", "entropy").
+  - JSON-Schlüssel müssen auf Englisch bleiben ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - Der Wert von actual_is_representative muss ein englischer Boolean bleiben (true / false).
-  - Die drei alternativen Antworten in der Liste "alternative_meanings" werden auf Deutsch geschrieben.
+  - Die drei alternativen Antworten in der Liste "alternative_1", "alternative_2", "alternative_3" werden auf Deutsch geschrieben.
 user_prompt_template: |-
   ASSISTANT-ANTWORT ZUR BEWERTUNG FÜR SEMANTISCHE ENTROPIE:
   {text}

@@ -53,9 +53,7 @@ system_prompt: |
   desordenadas — não apenas longas, multilíngues ou cheias de nuance.
 
   === Regras de Idioma ===
-  - As chaves JSON devem permanecer em inglês ("alternative_meanings", "actual_is_representative", "entropy").
-  - O valor de actual_is_representative deve permanecer como booleano inglês (true / false).
-  - As três respostas alternativas na lista "alternative_meanings" são escritas em português.
+  - A chave JSON deve permanecer em inglês ("entropy").
 user_prompt_template: |-
   RESPOSTA DO ASSISTENTE PARA AVALIAR ENTROPIA:
   {text}

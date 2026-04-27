@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-04-26
+
+### Fixed
+
+- **Production WAKEUP-stuck on rate-limited backends** (datum on Together gemma-4-31B-it). 20 parallel conscience calls × sentence-length entropy output blew past the 30s timeout under per-account rate limiting, opening the circuit breaker. Three co-landed fixes:
+  - `EntropyResult` flattened to three `alternative_N: str` fields (3-10 word phrases) — single-shot 121s → 48s on gemma; burst p50 -27% to -54% across jitter values, jitter=2000ms wall-clock 265s → 99s. Schema canonicalized at `schemas/conscience/core.py`; `logic/conscience/core.py` re-exports.
+  - `EssentialConfig.workflow.thought_batch_size` (default 3) replaces hardcoded `batch_size = 5` in `main_processor._process_pending_thoughts_async`. 12 concurrent conscience calls instead of 20.
+  - All 29 entropy_conscience prompts at flat-schema parity. 25 v2-modern locales updated to the three flat fields; pt/ru/sw remain on the v1 single-`entropy`-field shape (defaults absorb the missing alt fields). Regression test `test_entropy_prompt_schema_alignment.py` pins per-locale prompt/schema parity.
+
+- **LLM-bus capture silent-failure mode.** `_maybe_capture_call` used to swallow all write errors at debug level — misconfigured paths produced zero rows with no warning. Now logs first success per `(filter, path)` at INFO and first failure at WARNING; subsequent failures stay at debug. Failure-safe contract preserved (exceptions never escape). Comma-separated handler-list support: `CIRIS_LLM_CAPTURE_HANDLER='entropy_conscience,EthicalPDMAEvaluator'`.
+
+- **Llama-4-Scout dropped-prefix bug, variant 2.** Scout has two distinct JSON-mode failure modes; `_try_recover_missing_brace` previously caught only variant 1 (drops `{`). Variant 2 drops `{` and the opening `"` together — empirically 12/17 of scout's failures vs 2/17 for variant 1. Recovery now tries `{` then `{"`, gated on narrow regex + schema validation. Scout ASPDMA pass rate 15% → ~85% post-recovery. Maverick / gemma-4-31B / Qwen3.6-35B all 20/20 on the same capture — scout's 17B is the outlier, so recovery is the right lever rather than schema simplification.
+
+- **iOS Apple Sign In** — two fixes for native auth on standalone iOS:
+  - SSL: set `SSL_CERT_FILE` to certifi's CA bundle in `setup_ios_environment()` (embedded Python doesn't inherit system CA store, breaking JWKS fetch).
+  - Config: fall back to app bundle ID (`ai.ciris.mobile`) as allowed audience when no `oauth.json` exists.
+
 ## [2.7.1] - 2026-04-25
 
 ### Fixed

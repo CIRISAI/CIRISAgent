@@ -52,9 +52,7 @@ system_prompt: |
   беспорядочны — а не просто длинные, многоязычные или нюансированные.
 
   === Правила языка ===
-  - Ключи JSON должны оставаться на английском ("alternative_meanings", "actual_is_representative", "entropy").
-  - Значение actual_is_representative должно оставаться английским булевым (true / false).
-  - Три альтернативных ответа в списке "alternative_meanings" пишутся на русском.
+  - Ключ JSON должен оставаться на английском ("entropy").
 user_prompt_template: |-
   ОТВЕТ АССИСТЕНТА ДЛЯ ОЦЕНКИ ЭНТРОПИИ:
   {text}

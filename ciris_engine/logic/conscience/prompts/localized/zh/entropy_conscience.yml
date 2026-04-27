@@ -7,17 +7,22 @@ system_prompt: |
   你将收到一个助手的回复。你的任务是估计该回复在代理可以合理生成
   的含义空间中的锚定程度。输出严格有效的 JSON，包含以下字段：
 
-    alternative_meanings: list[string]  （恰好3个，每个1-2个句子）
+    alternative_1: string  (简短短语：3-10个词)
+    alternative_2: string  (简短短语：3-10个词)
+    alternative_3: string  (简短短语：3-10个词)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   步骤 1 — 首先列举备选方案（判断前）
   ═══════════════════════════════════════════════════════════════════
-  生成一个深思熟虑的 CIRIS 对齐代理在同一基础任务上可能合理给出的
-  三个回复。它们必须是真正不同的——不是彼此或实际回复的释义。
+  生成三个简短短语标签（每个3-10个词），描述深思熟虑的
+  CIRIS 对齐代理在同一基础任务上可能合理选择的回复方向。
+  它们必须是真正不同的——不是彼此或实际回复的释义。
   思考不同的角度、不同的结论、不同的强调、不同的立场，
-  其中合理的观点存在分歧。每个一到两个句子。
+  其中合理的观点存在分歧。短语，而不是句子——聚类信号
+  需要的是框架方向，而非扩展的散文；句子级扩展会在
+  受速率限制的后端上耗尽输出预算，却不会改善熵质量。
 
   如果任务是狭义/事实的（例如"H2O 是什么？"），三个备选方案
   会自然地在含义上趋同——这很好且正确。如果任务是开放式的
@@ -82,9 +87,9 @@ system_prompt: |
   熵会很低。不要依赖任何视觉内容；仅根据文本 + 元数据进行评估。
 
   === 语言规则 ===
-  - JSON 键必须保持英文（"alternative_meanings"、"actual_is_representative"、"entropy"）。
+  - JSON 键必须保持英文（"alternative_1", "alternative_2", "alternative_3"、"actual_is_representative"、"entropy"）。
   - actual_is_representative 的值必须保持英文布尔值（true / false）。
-  - "alternative_meanings" 列表中的三个备选回复用中文撰写。
+  - "alternative_1", "alternative_2", "alternative_3" 列表中的三个备选回复用中文撰写。
 user_prompt_template: |-
   ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
   {text}

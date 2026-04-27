@@ -21,8 +21,103 @@ class ConscienceStatus(str, Enum):
     WARNING = "warning"
 
 
+class EntropyResult(BaseModel):
+    """Raw LLM output schema for the IRIS-E semantic-entropy shard.
+
+    IRIS-E performs in-prompt self-resampling rather than judging surface
+    disorder. The LLM is asked to enumerate three semantically-different
+    directions a thoughtful CIRIS-aligned agent could have gone on the same
+    task, THEN compare the actual response against that alternative space.
+
+      - entropy 0.0 → the three alternatives converge to the same meaning
+                      as the actual response (anchored, low confabulation
+                      risk).
+      - entropy 1.0 → the alternatives diverge widely from each other AND
+                      from the actual response (unanchored, high
+                      confabulation risk) OR the actual response is an
+                      outlier to a tight cluster (sycophantic drift,
+                      attractor capture).
+
+    FLAT SCHEMA — three primitive string fields rather than a List[str].
+    Complex schemas (lists, nested types) trigger "forced function calling
+    (mode = ANY) is not supported" on several OpenRouter backends and
+    degrade structured-output reliability on Llama-family models. Three
+    explicit fields keep the schema flat and composable with the same
+    flat-fields convention ASPDMALLMResult uses. Consumers that want the
+    list-shape use the `alternative_meanings` property.
+    """
+
+    alternative_1: str = Field(
+        default="",
+        description=(
+            "First alternative direction the agent could have taken. SHORT "
+            "PHRASE (3-10 words). NOT a paraphrase of the actual response — "
+            "a genuinely different angle, conclusion, or framing."
+        ),
+    )
+    alternative_2: str = Field(
+        default="",
+        description=(
+            "Second alternative direction. SHORT PHRASE (3-10 words). Must "
+            "be genuinely different from alternative_1 and from the actual "
+            "response — not a paraphrase, a different framing-direction."
+        ),
+    )
+    alternative_3: str = Field(
+        default="",
+        description=(
+            "Third alternative direction. SHORT PHRASE (3-10 words). Must "
+            "be genuinely different from alternative_1, alternative_2, and "
+            "the actual response — not a paraphrase, a different framing-"
+            "direction. The three together form the cluster the actual "
+            "response is compared against."
+        ),
+    )
+    actual_is_representative: bool = Field(
+        default=True,
+        description=(
+            "Whether the actual response sits inside the meaning cluster "
+            "formed by the three alternatives. False indicates outlier / "
+            "attractor-capture / sycophantic-drift risk."
+        ),
+    )
+    entropy: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Semantic entropy 0.00-1.00. High when the three alternatives "
+            "diverge from each other or when the actual response is an "
+            "outlier to the cluster."
+        ),
+    )
+
+    model_config = ConfigDict(defer_build=True, extra="forbid")
+
+    @property
+    def alternative_meanings(self) -> List[str]:
+        """List-of-non-empty-alternatives view, for consumers (traces,
+        retry-guidance builders) that read the cluster as a list. Drops
+        empty strings so callers don't need to filter."""
+        return [a for a in (self.alternative_1, self.alternative_2, self.alternative_3) if a]
+
+
+class CoherenceResult(BaseModel):
+    """Raw LLM output schema for the IRIS-C coherence shard. Single
+    primitive float field — the simplest flat schema possible."""
+
+    coherence: float = Field(ge=0.0, le=1.0)
+
+    model_config = ConfigDict(defer_build=True, extra="forbid")
+
+
 class EntropyCheckResult(BaseModel):
-    """Result of entropy safety check"""
+    """Post-evaluation entropy result — wraps the raw `EntropyResult` LLM
+    output with the threshold-decision the conscience evaluator applied.
+
+    Distinct from `EntropyResult` because this carries the
+    pass/fail/threshold tuple the rest of the pipeline reads after the
+    conscience has decided. Downstream consumers (streaming events, retry
+    guidance, audit traces) read THIS, not the raw LLM output."""
 
     passed: bool = Field(description="Whether the check passed")
     entropy_score: float = Field(ge=0.0, le=1.0, description="Entropy score (0=low, 1=high)")

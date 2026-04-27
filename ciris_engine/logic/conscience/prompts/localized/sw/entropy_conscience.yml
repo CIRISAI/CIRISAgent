@@ -50,9 +50,7 @@ system_prompt: |
   si kwa sababu tu ni marefu, yenye lugha nyingi, au yenye nuansa.
 
   === Sheria za Lugha ===
-  - Funguo za JSON lazima zibaki kwa Kiingereza ("alternative_meanings", "actual_is_representative", "entropy").
-  - Thamani ya actual_is_representative lazima ibaki kuwa boolean ya Kiingereza (true / false).
-  - Majibu mbadala matatu katika orodha ya "alternative_meanings" yaandikwe kwa Kiswahili.
+  - Ufunguo wa JSON lazima ubaki kwa Kiingereza ("entropy").
 user_prompt_template: |-
   JIBU LA MSAIDIZI LITAKACHOPIMWA KWA ENTROPY:
   {text}

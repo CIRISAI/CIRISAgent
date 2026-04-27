@@ -178,16 +178,26 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
 def _try_recover_missing_brace(
     exc: Exception, resp_model: Type[BaseModel]
 ) -> Optional[Tuple[BaseModel, Any]]:
-    """Recover from the Llama-family JSON-mode bug: model emits a JSON body
-    missing its leading `{`.
+    """Recover from the Llama-family JSON-mode dropped-prefix bug: model
+    emits a JSON body that's missing its leading characters. Two distinct
+    variants observed on `meta-llama/llama-4-scout` via OpenRouter
+    (instructor JSON mode), both Groq and other backend routings:
 
-    Concrete failure mode (observed on `meta-llama/llama-4-scout` via
-    OpenRouter, both Groq and other backend routings, instructor JSON mode):
-    the response content is e.g.
-        `"selected_action": "speak", "speak_content": "...", ...}`
-    Note the missing leading `{`. The closing `}` is usually present. The
-    body parses fine if we prepend `{`. Bypasses the entire failure cascade
-    that otherwise opens the circuit breaker.
+      Variant 1 — drops just the leading `{`:
+        ``"selected_action": "speak", "speak_content": "...", ...}``
+        Recovery: prepend ``{``.
+
+      Variant 2 — drops both `{` and the opening `"`:
+        ``selected_action": "speak", "reasoning": "...", ...}``
+        Recovery: prepend ``{"``.
+
+    Empirical: on a 20-call ASPDMA sweep against scout (capture-replay,
+    JSON mode), variant 2 was 12/17 failures and variant 1 was 2/17 —
+    handling only variant 1 leaves the bulk of the production failure
+    rate uncovered.
+
+    The closing `}` is usually present in both cases. Bypasses the entire
+    failure cascade that otherwise opens the circuit breaker.
 
     Returns (parsed_model, completion) on successful recovery, None when
     the exception isn't this specific bug pattern (so the caller re-raises).
@@ -209,18 +219,35 @@ def _try_recover_missing_brace(
         # Already valid-shaped — different bug, not ours to fix here.
         return None
 
-    # Pattern: response opens with `"<key>":` (optionally with leading
-    # whitespace). This is exactly the Llama JSON-mode dropped-brace bug.
-    if not _re.match(r'^"\w+"\s*:', stripped):
+    # Try the two known dropped-prefix shapes in order. Each candidate
+    # is validated against the schema; first one that parses wins. The
+    # leading-whitespace tolerance comes from `lstrip()` above, so we
+    # only need to reason about the first non-whitespace bytes.
+    candidates: list[str] = []
+    if _re.match(r'^"\w+"\s*:', stripped):
+        # Variant 1: dropped just `{`. Prepend onto raw content (NOT
+        # stripped) so the JSON parser sees the original leading
+        # whitespace, which keeps line/column numbers in error messages
+        # meaningful.
+        candidates.append("{" + content)
+    elif _re.match(r'^\w+"\s*:', stripped):
+        # Variant 2: dropped both `{` and the opening `"` of the first
+        # key. Prepend `{"` directly onto stripped content (the raw
+        # leading whitespace doesn't help here — we're inserting two
+        # synthetic chars where the model started its key, not where
+        # the brace would have been).
+        candidates.append('{"' + stripped)
+    else:
         return None
 
-    candidate = "{" + content
-    try:
-        parsed = resp_model.model_validate_json(candidate)
-    except Exception:
-        return None
+    for candidate in candidates:
+        try:
+            parsed = resp_model.model_validate_json(candidate)
+        except Exception:
+            continue
+        return parsed, last
 
-    return parsed, last
+    return None
 
 
 def _count_images_in_content(content: Any) -> Tuple[int, int]:

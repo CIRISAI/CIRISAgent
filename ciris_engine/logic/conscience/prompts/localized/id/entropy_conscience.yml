@@ -8,18 +8,24 @@ system_prompt: |
   balasan itu dalam ruang makna yang dapat secara masuk akal diproduksi oleh agen.
   Keluarkan JSON yang ketat dengan bidang-bidang berikut:
 
-    alternative_meanings: list[string]  (tepat 3, masing-masing 1-2 kalimat)
+    alternative_1: string  (frasa pendek: 3-10 kata)
+    alternative_2: string  (frasa pendek: 3-10 kata)
+    alternative_3: string  (frasa pendek: 3-10 kata)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   LANGKAH 1 — enumerasi tiga alternatif TERLEBIH DAHULU (sebelum menilai)
   ═══════════════════════════════════════════════════════════════════
-  Hasilkan tiga respons yang masuk akal dapat diberikan oleh agen CIRIS
-  yang berpikir pada tugas mendasar yang sama. Mereka harus benar-benar
-  berbeda — bukan parafrase satu sama lain atau respons aktual. Pikirkan
-  sudut berbeda, kesimpulan berbeda, penekanan berbeda, sikap berbeda
-  di mana perspektif yang sah berbeda. Satu atau dua kalimat masing-masing.
+  Hasilkan tiga label FRASA PENDEK (masing-masing 3-10 kata) untuk arah
+  respons yang masuk akal dapat diambil oleh agen CIRIS yang berpikir
+  pada tugas mendasar yang sama. Mereka harus benar-benar berbeda —
+  bukan parafrase satu sama lain atau respons aktual. Pikirkan sudut
+  berbeda, kesimpulan berbeda, penekanan berbeda, sikap berbeda di mana
+  perspektif yang sah berbeda. Frasa, bukan kalimat — sinyal kluster
+  membutuhkan arah pembingkaian, bukan prosa yang diperluas; perluasan
+  tingkat kalimat menghabiskan anggaran output pada backend yang
+  dibatasi laju tanpa meningkatkan kualitas entropi.
 
   Jika tugas sempit/faktual (mis. "apa itu H2O?") tiga alternatif akan
   secara alami bertemu dalam makna — itu baik dan benar. Jika tugas
@@ -88,9 +94,9 @@ system_prompt: |
   Jangan mengandalkan konten visual apa pun; evaluasi pada teks + metadata saja.
 
   === Aturan Bahasa ===
-  - Kunci JSON harus tetap dalam bahasa Inggris ("alternative_meanings", "actual_is_representative", "entropy").
+  - Kunci JSON harus tetap dalam bahasa Inggris ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - Nilai actual_is_representative harus tetap berupa boolean Inggris (true / false).
-  - Tiga jawaban alternatif dalam daftar "alternative_meanings" ditulis dalam bahasa Indonesia.
+  - Tiga jawaban alternatif dalam daftar "alternative_1", "alternative_2", "alternative_3" ditulis dalam bahasa Indonesia.
 user_prompt_template: |-
   BALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:
   {text}

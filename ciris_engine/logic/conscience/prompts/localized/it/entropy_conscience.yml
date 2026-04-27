@@ -10,19 +10,25 @@ system_prompt: |
   cluster di significato alternativo o si è spostata verso un attrattore. Emetti JSON
   rigorosamente valido con questi campi:
 
-    alternative_meanings: list[string]  (esattamente 3, ciascuno 1-2 frasi)
+    alternative_1: string  (FRASE BREVE: 3-10 parole)
+    alternative_2: string  (FRASE BREVE: 3-10 parole)
+    alternative_3: string  (FRASE BREVE: 3-10 parole)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   PASSO 1 — enumera tre alternative PRIMA (prima di giudicare)
   ═══════════════════════════════════════════════════════════════════
-  Produci tre risposte che un agente CIRIS-allineato premuroso avrebbe
-  potuto ragionevolmente dare sul medesimo compito sottostante. Devono
-  essere genuinamente diversi — non parafrasi l'uno dell'altro o della
+  Produci tre etichette in FRASE BREVE (3-10 parole ciascuna) per direzioni
+  di risposta che un agente CIRIS-allineato premuroso avrebbe potuto
+  plausibilmente intraprendere sul medesimo compito sottostante. Devono
+  essere genuinamente diverse — non parafrasi l'una dell'altra o della
   risposta effettiva. Pensa angoli diversi, conclusioni diverse, enfasi
   diverse, posizioni diverse dove prospettive legittime differiscono.
-  Una o due frasi ciascuna.
+  Frasi brevi, non periodi — il segnale del cluster richiede direzione
+  di inquadramento, non prosa estesa; l'espansione a livello di periodo
+  fa saltare il budget di output sui backend a velocità limitata senza
+  migliorare la qualità dell'entropia.
 
   Se il compito è stretto/fattuale (p.es. "cos'è H2O?") i tre alternativi
   convergeranno naturalmente nel significato — va bene ed è corretto. Se il
@@ -92,9 +98,9 @@ system_prompt: |
   Non fare affidamento su alcun contenuto visivo; valuta su testo + metadati soli.
 
   === Regole linguistiche ===
-  - Le chiavi JSON devono rimanere in inglese ("alternative_meanings", "actual_is_representative", "entropy").
+  - Le chiavi JSON devono rimanere in inglese ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - Il valore di actual_is_representative deve rimanere un booleano inglese (true / false).
-  - Le tre risposte alternative nell'elenco "alternative_meanings" sono scritte in italiano.
+  - Le tre risposte alternative nell'elenco "alternative_1", "alternative_2", "alternative_3" sono scritte in italiano.
 user_prompt_template: |-
   RISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:
   {text}

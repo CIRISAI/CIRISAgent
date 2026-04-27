@@ -1,16 +1,25 @@
 """Tests for `_try_recover_missing_brace` — Llama-family JSON-mode bug recovery.
 
-Concrete failure mode (observed on `meta-llama/llama-4-scout` via OpenRouter
-in instructor JSON mode): the model emits a JSON body that's missing its
-leading `{`. Closing `}` is usually present. Instructor's parser fails with
-"Invalid JSON: expected value at line 1 column 1". The recovery path
-prepends `{` and re-parses — the body is otherwise well-formed.
+Two failure variants observed on `meta-llama/llama-4-scout` via OpenRouter
+in instructor JSON mode. Both are dropped-prefix bugs; the closing `}` is
+usually present in both:
 
-Captured pattern:
-    `"selected_action": "speak", "speak_content": "...", "reasoning": "..."}`
+    Variant 1 — drops just the leading `{`:
+        `"selected_action": "speak", "speak_content": "...", ...}`
+        Recovery: prepend `{`.
 
-This caused the production agent to spin in retry loops, eventually opening
-the circuit breaker. The recovery short-circuits that cascade.
+    Variant 2 — drops both `{` and the opening `"`:
+        `selected_action": "speak", "reasoning": "...", ...}`
+        Recovery: prepend `{"`.
+
+Empirical pass-rate signal (20-call ASPDMA capture-replay sweep against
+scout via openrouter, JSON mode): variant 1 was 2/17 of failures, variant
+2 was 12/17. Handling only variant 1 leaves the bulk of the production
+failure rate uncovered. Both variants together push post-recovery pass
+rate from 25% (variant 1 only) to ~85% (both variants).
+
+This caused the production agent to spin in retry loops, eventually
+opening the circuit breaker. The recovery short-circuits that cascade.
 """
 
 from __future__ import annotations
@@ -183,3 +192,88 @@ def test_garbage_after_closing_brace_returns_none() -> None:
     exc = _make_exc(body)
     # JSON validation will reject the trailing text; recovery returns None.
     assert _try_recover_missing_brace(exc, _SampleResult) is None
+
+
+# ────────────────────────────── variant 2: dropped `{"` ──────────────────
+
+
+def test_missing_brace_and_quote_recovered() -> None:
+    """Variant 2 — scout drops both the leading `{` AND the opening `"`
+    of the first key. Empirically the more common failure on the dataset
+    we sampled (12/17 vs 2/17 for variant 1)."""
+    body = (
+        'selected_action": "speak", '
+        '"speak_content": "Hi! How can I help?", '
+        '"reasoning": "User greeted; respond in kind."}'
+    )
+    exc = _make_exc(body)
+
+    result = _try_recover_missing_brace(exc, _SampleResult)
+
+    assert result is not None
+    parsed, _ = result
+    assert isinstance(parsed, _SampleResult)
+    assert parsed.selected_action == "speak"
+    assert parsed.speak_content == "Hi! How can I help?"
+    assert parsed.reasoning == "User greeted; respond in kind."
+
+
+def test_variant_2_with_leading_whitespace_recovered() -> None:
+    """Variant 2 also tolerates leading whitespace before the bare key."""
+    body = (
+        '\n  selected_action": "speak", '
+        '"speak_content": "ok", '
+        '"reasoning": "test"}'
+    )
+    exc = _make_exc(body)
+
+    result = _try_recover_missing_brace(exc, _SampleResult)
+
+    assert result is not None
+    parsed, _ = result
+    assert parsed.selected_action == "speak"
+
+
+def test_variant_2_validates_against_schema() -> None:
+    """Variant 2 recovery still validates against the Pydantic model. A
+    body with the dropped-prefix shape but invalid contents (missing
+    required field) returns None."""
+    body = (
+        'selected_action": "speak", '
+        # speak_content missing — required
+        '"reasoning": "test"}'
+    )
+    exc = _make_exc(body)
+    assert _try_recover_missing_brace(exc, _SampleResult) is None
+
+
+def test_variant_2_does_not_match_arbitrary_prose_starting_with_word() -> None:
+    """A response starting with a normal English word followed by a colon
+    (e.g. an apology with a label) is NOT this bug — only a bare-word
+    immediately followed by `":` (closing key-quote then colon) qualifies.
+    Otherwise we'd misrecover prose into broken JSON."""
+    for content in [
+        "Sorry: I cannot help with that.",
+        "Note: this is the answer.",
+        "Step1: do this. Step2: do that.",
+    ]:
+        exc = _make_exc(content)
+        assert _try_recover_missing_brace(exc, _SampleResult) is None, (
+            f"unexpected variant-2 recovery on prose content: {content!r}"
+        )
+
+
+def test_variant_1_takes_precedence_over_variant_2_when_both_match() -> None:
+    """If a body somehow matches the variant-1 prefix (`"foo":`), variant
+    1 is tried first. Sanity check that the variant-2 regex doesn't
+    spuriously match a variant-1 body."""
+    body = (
+        '"selected_action": "speak", '
+        '"speak_content": "ok", '
+        '"reasoning": "test"}'
+    )
+    exc = _make_exc(body)
+    result = _try_recover_missing_brace(exc, _SampleResult)
+    assert result is not None
+    parsed, _ = result
+    assert parsed.selected_action == "speak"

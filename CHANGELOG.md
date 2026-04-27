@@ -5,6 +5,14 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-04-26
+
+### Fixed
+
+- **iOS Apple Sign In** - Two fixes for native auth on iOS standalone deployments
+  - SSL: set `SSL_CERT_FILE` to certifi's CA bundle in `setup_ios_environment()` — embedded Python doesn't inherit system CA store, causing `ClientConnectorCertificateError` on JWKS fetch
+  - Config: fall back to app bundle ID (`ai.ciris.mobile`) as allowed audience on Apple platforms when no `oauth.json` exists — standalone iOS doesn't need external OAuth config
+
 ## [2.7.1] - 2026-04-25
 
 ### Fixed

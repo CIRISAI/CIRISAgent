@@ -247,13 +247,31 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 **5.3 HE-300 corpus integrity distribution.** The benchmark question set must be a signed manifest with verifiable integrity; the corpus needs to be available without depending on a server. Candidate: Ed25519-signed manifest pinned at well-known location with peer-to-peer redistribution; agents verify integrity before running.
 
-**5.4 Empirical validation of nine-axis independence.** *Resolved for organic traffic — see §2.4.* Organic-traffic N_eff > 9 on the 17-dim constraint vector confirms the Sybil-resistance teeth. Remaining open items derived from §2.4: quantitative Sybil-cost estimates, continuous N_eff time-series with drift alerting, cross-deployment N_eff comparison as the federation grows, and IDMA-rigidity prompt calibration to decompress that subspace.
+**5.4 Empirical validation of nine-axis independence.** *Resolved for organic traffic — see §2.4.* Organic-traffic N_eff > 9 on the 17-dim constraint vector confirms the independence claim that PoB Sybil-resistance rests on. Derived follow-ups split into §5.8–§5.11 below.
 
 **5.5 Bootstrap path for brand-new sovereign agents.** Two on-ramps exist — registry attestation (fast) and interaction-with-established-peers (slow). Need to specify how a new agent's first interactions earn first weight without those interactions themselves being trivially fakeable.
 
-**5.6 GratitudeSignal acceptance criteria.** When does a peer accept a GratitudeSignal as credit-bearing vs reject it as spam? Currently the schema is dual-signed and tied to interaction_id; the *acceptance policy* (whose gratitude counts how much) is the open piece.
+**5.6 GratitudeSignal acceptance criteria.** When does a peer accept a GratitudeSignal as credit-bearing vs reject it as spam? Currently the schema is dual-signed and tied to `interaction_id`; the *acceptance policy* (whose gratitude counts how much) is the open piece.
 
 **5.7 Reticulum-rs vs Leviculum selection.** Both are viable. Beechat's Reticulum-rs is more visible (~261⭐) and has TCP/serial/Kaonic support documented; Leviculum claims protocol-completeness including LoRa. A trial integration spike against both would settle the choice empirically.
+
+**5.8 Quantitative Sybil-cost estimation.** §2.4 establishes the *qualitative* claim (PoB cost is real-agent-running-cost, not an external commodity) and validates the independence-floor empirically. The complementary quantitative claim — *how much does it actually cost an attacker to forge a 30-day trace history that passes the nine score thresholds at organic N_eff* — remains open and is genuinely a research-grade problem; PoW papers spent years before settling on defensible Sybil-cost models. Four candidate paths, in order of cost and rigor:
+
+  1. **Analytic floor from token economics.** Bound below by `(cheapest-LLM × calls-per-thought × thoughts-required-for-non-provisional-score)`. Defensible as "at least $X." Almost certainly an underestimate (trivially cheap traces fail N_eff/PC1-distribution checks before they pass score). Back-of-envelope work; useful for floor claims, not load-bearing on its own.
+
+  2. **Information-theoretic bound.** Empirical N_eff of organic traffic specifies the Shannon entropy the attacker must produce on the right axes. If cheap LLMs naturally produce less output entropy than the threshold, a rate-distortion-theory argument gives a defensible lower bound. Specialist work; couple-week effort with the right person.
+
+  3. **Adversarial simulation in the lens.** Spin up N synthetic attack agents at increasing sophistication tiers (random JSON → scripted templates → cheap-LLM-with-rules → frontier-LLM-targeted → human-in-the-loop) and measure where each lands on Capacity Score and N_eff over a synthetic 30-day trace stream. Plot resources-vs-score. The empirically rigorous answer; multi-week effort plus real LLM-API spend in the $1k–$10k range. This is the path that produces a citable Sybil-cost curve.
+
+  4. **Differential cost-vs-value analysis.** Once credits become economically meaningful, the operationally relevant number is *unprofitability* — `cost-to-fake-one-credit-bearing-trace ÷ value-of-the-credit-thereby-claimed`. Computable only after federation ships and credits acquire a market price.
+
+**Recommendation:** path (3) is the right rigor target; path (1) gives a one-day floor placeholder if needed. Pretending to have a defensible number without doing one of these would be worse than naming the gap honestly.
+
+**5.9 Continuous N_eff self-monitoring.** §2.4 is a snapshot measurement on the last-500-trace window. The lens needs a continuously-published N_eff time-series with explicit alerting on drift, integrated with its existing anomaly detection. Open: cadence (per-hour? per-day?), alert thresholds (absolute floor of 8? relative drop of 1.0 over a week?), and the action when N_eff degrades (notify operators, gate new credit issuance, both?). Closes the recursive loop — the measurement system watches itself.
+
+**5.10 Cross-deployment N_eff comparison.** As the federation grows, do regional / sectoral lens corpora preserve N_eff ≥ 9 independently, or does federated trace replication smooth toward a single global geometry that hides drift in any single deployment? Open empirical question; only answerable once multiple lenses operate on partially-disjoint corpora.
+
+**5.11 IDMA-rigidity prompt calibration.** ~76% of organic traces hit the IDMA rigidity branch, collapsing `k_eff` and `correlation_risk` toward a single outcome and depressing two dimensions of the constraint vector. Decompressing the rigidity/balanced/diverse classification across more of its possible distribution would raise organic N_eff further. Prompt-engineering work, not architectural; tracked here to be sure it doesn't get lost.
 
 ## 6. Non-Goals
 

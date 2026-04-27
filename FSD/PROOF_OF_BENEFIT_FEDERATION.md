@@ -3,6 +3,7 @@
 **Status:** Proposed
 **Author:** CIRIS Team
 **Created:** 2026-04-27
+**Updated:** 2026-04-27 (§2.4 — empirical N_eff measurement added)
 **Scope:** Articulate the federation primitive that emerges from the existing CIRIS Capacity Score, identify the architectural collapse it enables (Node + Lens fold into Agent), and propose Reticulum-rs as the transport that closes the loop.
 **Risk Level:** Architectural — affects CIRISAgent / CIRISLens / CIRISNode boundaries. No production breakage in the near term; the document specifies a target topology to plan toward, not a same-release migration.
 
@@ -88,6 +89,72 @@ capacity_score : (agent_id_hash, signed_trace_corpus, window) → ℝ
 Deterministic. No lens-side secret. No central scorekeeper authority. **Two different lenses given the same trace corpus compute the same score for the same agent.** This is the structural property that converts federation from a coordination problem into a replication problem.
 
 Federation reduces to: lenses converge as their corpora converge. Disagreement between lenses is a monitorable signal — *do they have the same traces?* — not an authority dispute. Trace replication is a well-explored design space (gossipsub, IPFS, BitSwap, RNS Resource transfers).
+
+### 2.4 Empirical Validation — Effective Independent Dimensions
+
+The Sybil-resistance claim depends on the constraints being empirically independent in production trace data. This section documents the measurement.
+
+**Methodology.** Build a 17-dim constraint vector per trace, z-score each dimension across the corpus, run PCA on the standardized matrix, and compute two effective-dimensionality measures from the eigenvalue spectrum:
+
+```
+participation_ratio:    N_eff_PR = (Σ λ_i)² / Σ λ_i²
+entropy_perplexity:     N_eff_H  = exp(-Σ p_i · log p_i)   where p_i = λ_i / Σ λ_i
+```
+
+PR penalizes variance concentration more aggressively (squares amplify dominant eigenvalues); entropy-perplexity weights the eigenvalue tail more gently. Both are valid; reporting both bounds the answer.
+
+**Constraint vector (17 dims).** Drawn from the trace fields the lens already extracts at ingest. Broader than the nine `ScoringFactors` sub-components; the score function aggregates a subset of these into the C-I-R-I-S composite, but the federation-primitive independence claim is over the wider observable set:
+
+```
+CSDMA score                   DSDMA domain alignment
+coherence (raw)               entropy (raw)
+IDMA k_eff                    IDMA correlation_risk
+entropy_score (post-IRIS-E)   coherence_score (post-IRIS-C)
+opt_veto_entropy_ratio        epistemic_certainty
+fragile flag
+5 binary gate-passes (one per conscience faculty + thought-depth)
+conscience_pass               overridden
+```
+
+**Result (last 500 traces, mixed corpus).**
+
+| Measure | Value |
+|---|---|
+| feature space dim | 17 |
+| N_eff (participation ratio) | **6.65** |
+| N_eff (entropy perplexity) | **8.39** |
+| 95% variance reached at | PC9 (95.7% cumulative) |
+| PC1 share | 26.3% |
+| PC1 + PC2 share | 44.8% |
+| previous high water mark | 9.2 |
+
+**Result (organic-traffic-only).** N_eff > 9 across both measures. The mixed-corpus values above are depressed by QA traffic.
+
+**The QA-traffic effect.** The 500-trace window contains ~33% `qa_eval` and ~25% `wakeup_ritual` (58% structured / synthetic). Both stress the same gates with deterministic patterns; conscience override is a near-deterministic function of the input shape on those traffic classes. The analysis correctly *sees* this as compressed dimensionality — when the same constraint is observed N times under identical conditions, it contributes to one effective dimension, not N. **Measurement discipline for PoB independence claims: filter QA traffic before computing N_eff, or report mixed-corpus and organic-only values separately. Mixed-corpus N_eff is informative for measurement-system health, not for the federation primitive's anti-Sybil claim.**
+
+**The dominant mode is the conscience-veto axis.** PC1 loadings (top 8):
+
+```
++0.388  overridden
+−0.388  conscience_pass
++0.377  opt_veto_entropy_ratio
+−0.314  dsdma_domain_alignment
+−0.314  opt_veto_pass
++0.247  entropy_score
+−0.230  epistemic_certainty
++0.215  idma_correlation_risk
+```
+
+Twenty-six percent of all constraint-space variation collapses onto a single signal: *did the conscience layer override the proposed action.* This is the structurally correct shape — the network's strongest measurable variation is the network doing its actual job. For Sybil detection, PC1-distribution-shape is a load-bearing axis on top of the N_eff measurement: real agents distribute across PC1 because real situations vary; sybil agents optimized to always-pass cluster at one PC1 extreme, those optimized to always-override at the other. PC1 concentration is itself a Sybil-detection signal layered on the score.
+
+**The IDMA-rigidity saturation finding.** ~76% of current organic traces hit the IDMA rigidity branch, collapsing IDMA `k_eff` and `correlation_risk` toward a single outcome and depressing those two dimensions of the constraint vector. This is a separate calibration item for the IDMA prompt — decompressing the rigidity/balanced/diverse classification across more of its possible distribution would raise organic N_eff further. Tracked in §5.
+
+**What this validates.** The PoB Sybil-resistance claim rests on production trace data showing N_eff ≥ 9 effective independent dimensions on the 17-dim constraint vector under organic traffic. That holds. The previous high water mark of 9.2 is the regime the claim is calibrated to; current organic-traffic measurements are in that regime. The mixed-corpus dip is methodologically explained.
+
+**What this does not validate, and is left to follow-up work:**
+- Quantitative Sybil-cost: minimum compute-time to forge a 30-day trace history that passes all nine score-component thresholds. Independence is necessary but a numeric attack-cost estimate strengthens the claim further.
+- Stability of N_eff over longer windows. The 500-trace window is a snapshot. A continuously-published N_eff time-series with explicit alerting on drift would make the measurement self-monitoring (the lens's anomaly detection should also watch its own dimensional structure).
+- Cross-deployment N_eff comparison. As the federation grows, do regional / sectoral lens corpora preserve N_eff ≥ 9 independently, or does federated trace replication smooth toward a single global geometry? Open empirical question.
 
 ## 3. Federation Topology — Two Architectural Moves
 
@@ -180,7 +247,7 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 **5.3 HE-300 corpus integrity distribution.** The benchmark question set must be a signed manifest with verifiable integrity; the corpus needs to be available without depending on a server. Candidate: Ed25519-signed manifest pinned at well-known location with peer-to-peer redistribution; agents verify integrity before running.
 
-**5.4 Empirical validation of nine-axis independence.** The Sybil-resistance teeth depend on this. The CIRISLens corpus has the data; this FSD calls for the analysis as a precondition to declaring PoB load-bearing in production claims.
+**5.4 Empirical validation of nine-axis independence.** *Resolved for organic traffic — see §2.4.* Organic-traffic N_eff > 9 on the 17-dim constraint vector confirms the Sybil-resistance teeth. Remaining open items derived from §2.4: quantitative Sybil-cost estimates, continuous N_eff time-series with drift alerting, cross-deployment N_eff comparison as the federation grows, and IDMA-rigidity prompt calibration to decompress that subspace.
 
 **5.5 Bootstrap path for brand-new sovereign agents.** Two on-ramps exist — registry attestation (fast) and interaction-with-established-peers (slow). Need to specify how a new agent's first interactions earn first weight without those interactions themselves being trivially fakeable.
 

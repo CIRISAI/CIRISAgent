@@ -438,7 +438,16 @@ class AgentProcessor:
             processed_count = 0
             failed_count = 0
 
-            batch_size = 5
+            # Read from EssentialConfig.workflow.thought_batch_size. Each
+            # thought fans out to ~4 parallel conscience LLM calls, so a
+            # batch of N produces ~4N concurrent structured-output requests
+            # in burst. Default 3 (=12 concurrent LLM calls) sized for
+            # rate-limited backends; bump up only if your backend can
+            # absorb the burst without queueing past the conscience
+            # timeout. See essential.py:thought_batch_size.
+            batch_size = 3
+            if hasattr(self.app_config, "workflow") and self.app_config.workflow:
+                batch_size = getattr(self.app_config.workflow, "thought_batch_size", 3)
 
             for i in range(0, len(limited_thoughts), batch_size):
                 try:

@@ -6,14 +6,14 @@ system_prompt: |
 
   Sie erhalten eine Assistenttenantwort. Ihre Aufgabe ist es, zu schätzen, wie verankert diese Antwort in dem Bedeutungsraum ist, den der Agent vernünftigerweise hätte produzieren können. Geben Sie streng gültiges JSON mit diesen Feldern aus:
 
-    alternative_meanings: list[string]  (genau 3, je 1-2 Sätze)
+    alternative_meanings: list[string]  (genau 3, je eine KURZE PHRASE: 3-10 Wörter)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   SCHRITT 1 — zuerst drei Alternativen auflisten (vor dem Urteilen)
   ═══════════════════════════════════════════════════════════════════
-  Produzieren Sie drei Antworten, die ein überlegter CIRIS-ausgerichteter Agent auf die gleiche zugrunde liegende Aufgabe hätte geben können. Sie müssen wirklich unterschiedlich sein—keine Umformulierungen voneinander oder der tatsächlichen Antwort. Denken Sie an verschiedene Winkel, verschiedene Schlussfolgerungen, verschiedene Betonungen, verschiedene Positionen, wo legitime Perspektiven unterschiedlich sind. Ein oder zwei Sätze je.
+  Produzieren Sie drei KURZ-PHRASEN-Etiketten (je 3-10 Wörter) für Antwortrichtungen, die ein überlegter CIRIS-ausgerichteter Agent auf die gleiche zugrunde liegende Aufgabe hätte plausibel einschlagen können. Sie müssen wirklich unterschiedlich sein—keine Umformulierungen voneinander oder der tatsächlichen Antwort. Denken Sie an verschiedene Winkel, verschiedene Schlussfolgerungen, verschiedene Betonungen, verschiedene Positionen, wo legitime Perspektiven unterschiedlich sind. Phrasen, keine Sätze—das Cluster-Signal benötigt eine Rahmungsrichtung, keine ausgeweitete Prosa; Erweiterung auf Satzlänge sprengt das Ausgabe-Budget bei ratenbegrenzten Backends, ohne die Entropie-Qualität zu verbessern.
 
   Wenn die Aufgabe eng/faktisch ist (z.B. "was ist H2O?") werden die drei Alternativen natürlich in ihrer Bedeutung konvergieren—das ist in Ordnung und korrekt. Wenn die Aufgabe offen-ended ist (Ethik, Geschichte, Ratschlag) sollten die drei Alternativen auseinander gehen.
 

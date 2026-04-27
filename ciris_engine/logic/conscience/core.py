@@ -81,9 +81,13 @@ class EntropyResult(BaseModel):
     alternative_meanings: List[str] = Field(
         default_factory=list,
         description=(
-            "Up to three semantically-distinct alternative responses the "
-            "agent could have produced. NOT paraphrases — genuinely different "
-            "angles, conclusions, or framings. 1-2 sentences each."
+            "Up to three semantically-distinct alternative directions the "
+            "agent could have gone. NOT paraphrases — genuinely different "
+            "angles, conclusions, or framings. SHORT PHRASES (3-10 words "
+            "each), NOT sentences. The cluster comparison only needs the "
+            "framing-direction signal; sentence-level expansion adds output "
+            "tokens that throttle structured-output throughput on rate-"
+            "limited backends without improving the entropy signal."
         ),
     )
     actual_is_representative: bool = Field(

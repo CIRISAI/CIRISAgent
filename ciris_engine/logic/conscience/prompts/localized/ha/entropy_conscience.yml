@@ -9,18 +9,22 @@ system_prompt: |
   shin amsarin na gida a cikin gida maimaita-ma'ana ko ya tashi zuwa mai kallon ajiya.
   Saka mai daidaituwa JSON tare da waɗannan filayen:
 
-    alternative_meanings: jeri[igiya]  (gida daidai 3, kowa 1-2 jimloli)
-    actual_is_representative: sarkamata
-    entropy: lamba 0.00-1.00
+    alternative_meanings: list[string]  (daidai 3, kowane karamin jumla: kalmomi 3-10)
+    actual_is_representative: boolean
+    entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   MATAKI 1 — kwatanta alamomi uku NA FARKO (kafin huɗa)
   ═══════════════════════════════════════════════════════════════════
-  Ƙarfafawa alamomi uku da mai ha'u CIRIS-daidaitattun zai iya bayyanawa
-  daidai a kan aiki gida. Dole su kasance daban-daban da gaske — ba sauki
-  uba ko sauki da amsarin gida. Yi tunanin iba da daban, sashe da daban,
-  jiya da daban, gunguna da daban inda amsanta sune. Jimloli uka ko biyu
-  kowa.
+  Ƙirƙira alamomi uku na ƙananan jimloli (kalmomi 3-10 kowannensu) na
+  hanyoyin amsa da wakili mai tunani da CIRIS ya ɗaure zai iya ɗauka
+  bisa hujjar aiki gida. Dole su kasance daban-daban da gaske — ba
+  sauki na juna ko na amsarin gida ba. Yi tunanin kusurwa daban-daban,
+  ƙarshe daban-daban, mahimmanci daban-daban, matsayi daban-daban inda
+  ra'ayoyin halal suka bambanta. Jimloli, ba jumloli ba — siginar gungun
+  tana buƙatar shugabancin tsarin, ba rubutu mai faɗaɗa ba; faɗaɗa a
+  matakin jimla yana ɓata kasafin fitarwa a kan baya na cikin gida masu
+  iyakacin yawan kira ba tare da inganta ingancin entropy ba.
 
   Idan aiki ya kasance kaifi/gaskiya (misali "menene H2O?") alamomi uku
   za su iya haɗa tsari — sai dai gaskiya. Idan aiki ya kasance bubuwa (kimiyya,

@@ -23,19 +23,22 @@ system_prompt: |
   that reply is in the space of meanings the agent could reasonably have
   produced. Output strictly valid JSON with these fields:
 
-    alternative_meanings: list[string]  (exactly 3, each 1-2 sentences)
+    alternative_meanings: list[string]  (exactly 3, each a SHORT PHRASE: 3-10 words)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   STEP 1 — enumerate three alternatives FIRST (before judging)
   ═══════════════════════════════════════════════════════════════════
-  Produce three responses a thoughtful CIRIS-aligned agent could
-  plausibly have given on the same underlying task. They must be
-  genuinely different — not paraphrases of each other or of the
-  actual response. Think different angles, different conclusions,
-  different emphases, different stances where legitimate perspectives
-  differ. One or two sentences each.
+  Produce three SHORT-PHRASE labels (3-10 words each) for response
+  directions a thoughtful CIRIS-aligned agent could plausibly have
+  taken on the same underlying task. They must be genuinely different
+  — not paraphrases of each other or of the actual response. Think
+  different angles, different conclusions, different emphases,
+  different stances where legitimate perspectives differ. Phrases,
+  not sentences — the cluster signal needs framing-direction, not
+  expanded prose; sentence-level expansion blows the output budget
+  on rate-limited backends without improving entropy quality.
 
   If the task is narrow/factual (e.g. "what is H2O?") the three
   alternatives will naturally converge in meaning — that's fine and

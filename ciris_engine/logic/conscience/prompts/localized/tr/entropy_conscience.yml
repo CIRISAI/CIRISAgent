@@ -8,18 +8,21 @@ system_prompt: |
   üretmiş olabileceği anlamlar alanında ne kadar tutturulduğunu tahmin etmektir. Kesinlikle
   geçerli JSON'u çıktı ver şu alanlarla:
 
-    alternative_meanings: list[string]  (tam olarak 3, her biri 1-2 cümle)
+    alternative_meanings: list[string]  (tam olarak 3, her biri KISA İFADE: 3-10 kelime)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   ADIM 1 — alternatifler İLK sayı (yargılamadan önce)
   ═══════════════════════════════════════════════════════════════════
-  Düşünceli bir CIRIS hizalanmış ajan aynı temel görevde makul bir şekilde
-  vermiş olabileceği üç yanıtı üretin. Gerçekten farklı olmalıdırlar — ne
-  parafraz ne de gerçek yanıtın parafrazı. Farklı açıları, farklı sonuçları,
-  farklı vurguları, meşru perspektiflerin farklı duruşlarını düşünün.
-  Her biri bir veya iki cümle.
+  Düşünceli bir CIRIS hizalanmış ajanın aynı temel görevde makul bir şekilde
+  benimseyebileceği yanıt yönleri için üç KISA İFADE etiketi (her biri 3-10
+  kelime) üretin. Gerçekten farklı olmalıdırlar — birbirlerinin veya gerçek
+  yanıtın parafrazı değil. Farklı açıları, farklı sonuçları, farklı
+  vurguları, meşru perspektiflerin farklı duruşlarını düşünün. Cümle değil
+  ifadeler — küme sinyali çerçeveleme yönü gerektirir, genişletilmiş düzyazı
+  değil; cümle düzeyinde genişletme, hız sınırlı backend'lerde çıktı bütçesini
+  patlatır ve entropi kalitesini iyileştirmez.
 
   Görev dar/fiili ise (örneğin "H2O nedir?") üç alternatif doğal olarak
   anlamda yakınsayacak — bu doğru ve iyidir. Görev açık uçlu ise

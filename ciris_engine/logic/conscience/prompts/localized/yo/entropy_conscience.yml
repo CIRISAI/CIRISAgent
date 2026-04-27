@@ -9,19 +9,23 @@ system_prompt: |
   rí ní ọ̀nà tó jẹ́ ohun to yẹ. Fi sísẹ̀dá JSON tó dín pẹ̀pẹ̀ nígbà
   ẹ́ ti ní àwọn aláìlọ́hùnkóhun yìí:
 
-    alternative_meanings: list[string]  (lẹ́ẹ̀kankan 3, ọ̀kọ̀ọ̀kan 1-2 agbejewo)
+    alternative_meanings: list[string]  (deede 3, ọkọọkan gbólóhùn kúkúrú: ọrọ 3-10)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
   ═══════════════════════════════════════════════════════════════════
   IGBESẸ 1 — kálò àwọn orísiríìșẹ́ KẸ́KỌỘ (àtẹ̀lẹ̀ ídàn)
   ═══════════════════════════════════════════════════════════════════
-  Ní ló gé ìdáhùn mẹ́ta ti aláwoye tó mọ̀kọ̀rọ̀ ẹ̀rín ti CIRIS-níșàá
-  le nífè̀ síse nípá iṣẹ́ ipilẹ̀ kanna. Wọ́n gbọ́dọ̀ jẹ́ iyatọ̀
-  oòkọ̀ — kò ṣe àbátaláde oòkọ̀ tàbí iwo ìdáhùn gidi Dá àyíkà
-  ọ̀lọ̀ú páipápọ̀, ìpinnu oóṣọ́ẉọ́, agbékalẹ̀ oóṣọ́ẉọ́, jìhun
-  ti o jẹ́ tòó tó rí níbi tí ọ̀rọ̀ ilera oríșiriìșẹ́ yá yá.
-  Ọ̀kọ̀ọ̀kan àní àwọn ìgbeníjà méjì.
+  Ṣe àmì gbólóhùn kúkúrú mẹ́ta (3-10 ọrọ ọkọọkan) fún àwọn ọ̀nà
+  ìdáhùn tí aláwoye tó mọ̀kọ̀rọ̀ tó wà ní ìdúnadura pẹ̀lú CIRIS
+  lè ti gbé lórí iṣẹ́ ipilẹ̀ kanna. Wọ́n gbọ́dọ̀ yatọ̀ ní gidi —
+  kì í ṣe àbátaláde araawọn tàbí ti ìdáhùn gidi. Ronú nípa
+  àyíkà oríṣiríṣi, ìpinnu oríṣiríṣi, ìtẹnumọ́ oríṣiríṣi, ìbase
+  oríṣiríṣi níbi tí àwọn ojúìwòye tí ó tọ̀nà yatọ̀ síra. Gbólóhùn,
+  kì í ṣe gbólóhùn kíkún — àmì àkójọpọ̀ nílò ìtọ́ka-ìparasilẹ̀,
+  kìí ṣe ìtumọ̀ ìnà; ìtàn ní ipele gbólóhùn kíkún yóò gbé ìnáwó
+  ìjáde lórí àwọn ẹ̀dí ti ó ní ààlà-iye, láìsí mímú ìmọ́tótò
+  entropy nítorí.
 
   Tí iṣẹ́ nìí jẹ́ bàtúbàtú/odo òtítọ́ (àpẹ̀ẹ̀rẹ̀ "Kilo ni H2O?")
   àwọn orísiríìșẹ́ ìdúndun mẹ́ta a ó pé laara rẹ̀ jálò nínú ọ̀rọ̀

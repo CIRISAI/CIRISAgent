@@ -95,6 +95,19 @@ class OperationalLimitsConfig(BaseModel):
 
     max_active_tasks: int = Field(10, description="Maximum concurrent active tasks")
     max_active_thoughts: int = Field(50, description="Maximum thoughts in processing queue")
+    thought_batch_size: int = Field(
+        3,
+        description=(
+            "Maximum thoughts processed in parallel per batch in the main "
+            "processor loop. Each thought fans out to ~4 conscience LLM "
+            "calls running concurrently, so a batch of N thoughts triggers "
+            "~4N parallel LLM calls in burst. Sized to 3 (=12 concurrent "
+            "LLM calls) so rate-limited backends like Together gemma stay "
+            "within per-account throughput; bump up only if your backend "
+            "can absorb 4N parallel structured-output calls without "
+            "queueing past the conscience timeout."
+        ),
+    )
     round_delay_seconds: float = Field(5.0, description="Delay between processing rounds")
     mock_llm_round_delay: float = Field(0.1, description="Reduced delay for mock LLM testing")
     dma_retry_limit: int = Field(3, description="Maximum DMA evaluation retries")

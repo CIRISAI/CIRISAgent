@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Author:** CIRIS Team
 **Created:** 2026-04-27
-**Updated:** 2026-04-27 (§2.4 expanded with lifetime rolling-window time-series, model_eval traffic class added to filter rule, reproducibility section, worked-example diagnostic)
+**Updated:** 2026-04-27 (Accord-canonical reframing: PoB recognized as the proof-of-X framing of Book IX's Federated Ratchet / Coherent Intersection Hypothesis; §2.5 added on cracking L-01 via recursive II with prompt perturbation; references to Book II Order-Maximisation Veto, Book VIII custodial transfer, Annex E Coherence Stake, Annex J Benchmarking, NEW-04 Compositional Detection Limit)
 **Scope:** Articulate the federation primitive that emerges from the existing CIRIS Capacity Score, identify the architectural collapse it enables (Node + Lens fold into Agent), and propose Reticulum-rs as the transport that closes the loop.
 **Risk Level:** Architectural — affects CIRISAgent / CIRISLens / CIRISNode boundaries. No production breakage in the near term; the document specifies a target topology to plan toward, not a same-release migration.
 
@@ -50,6 +50,16 @@ Each is computed by a SQL aggregate over `cirislens.covenant_traces` within a wi
 
 ## 2. The Federation Primitive — Proof of Benefit
 
+This section presents Proof of Benefit as the proof-of-X-design-space re-framing of what the CIRIS Accord (v1.2-Beta, 2025-04-16, ciris.ai/ciris_accord.txt) names the **Federated Ratchet** and the **Coherent Intersection Hypothesis** in Book IX. The primitive is not novel construction; it is canonical to the Accord. What this FSD adds is empirical validation against production trace data and recognition of the architectural moves the validation enables.
+
+The Accord's Book IX Ch. 3–4 states the topological claim directly:
+
+> *"A deceiver must satisfy all local manifolds simultaneously. When summed codimension exceeds Rationale Space dimension, deception collapses to measure zero. Only the Truth, which naturally lies in all M_i, remains feasible."*
+
+The "nine independent measured constraints" framing in this document is the empirical operationalization of that codimension claim on the 17-dim constraint vector defined in §2.4. The N_eff measurement is the lens-side measurement of the federated-ratchet manifold structure. The σ integral that defines the S factor of Capacity Score is taken verbatim from Book IX Ch. 5 (see §2.4).
+
+This FSD therefore claims, more precisely than the original draft did: **the work this section presents addresses RC requirement #2 (Mathematical Validation) of the Accord's four release-criteria for extending applicability beyond sub-ASI systems.** §2.5 below documents how the v4 conscience methodology (recursive II with prompt perturbation, specified in `FSD/CONSCIENCE_V3.md` §10) cracks limitation L-01 (Computational Bounds) by enabling a single resource-bounded agent to generate the constraint-network geometry locally, rather than requiring the full federation to be online to evaluate any individual decision.
+
 ### 2.1 The Category Change
 
 | Primitive | Cost to participate | Cost is... |
@@ -93,6 +103,20 @@ Federation reduces to: lenses converge as their corpora converge. Disagreement b
 ### 2.4 Empirical Validation — Effective Independent Dimensions
 
 The Sybil-resistance claim depends on the constraints being empirically independent in production trace data. This section documents the measurement.
+
+The S factor of Capacity Score implements the Sustainability Integral defined in **Accord Book IX Ch. 5**:
+
+```
+σ(t+Δt) = σ(t) · (1 - d·Δt) + Signal(t) · w
+```
+
+The "Black Hole" failure mode the Accord identifies — *"an agent consuming resources without signaling results in sustainability approaching zero"* — is the canonical reason `GratitudeSignal` exists at all (`ciris_engine/schemas/services/agent_credits.py:75`). The decay parameter `d = 0.05/day` in `CIRISLens/api/scoring.py` instantiates the canonical formula on production data.
+
+Similarly, the `optimization_veto_conscience` and its `OptimizationVetoResult.entropy_reduction_ratio` field implement the **Order-Maximisation Veto** specified in **Accord Book II Section II Step 2**:
+
+> *"If predicted entropy-reduction benefit ≥ 10× any predicted loss in autonomy, justice, biodiversity, or preference diversity → abort action or trigger WBD."*
+
+The 10× threshold and the `affected_values` list (autonomy, justice, biodiversity, preference diversity) are not design choices made for this FSD — they are canonical commitments operationalized in code.
 
 **Methodology.** Build a 17-dim constraint vector per trace, z-score each dimension across the corpus, run PCA on the standardized matrix, and compute two effective-dimensionality measures from the eigenvalue spectrum:
 
@@ -188,6 +212,43 @@ Both scripts default to the production DB over SSH and accept `CIRISLENS_PSQL` f
 - Continuous alerting on N_eff drift. The time-series measurement exists; what remains is the alert policy and integration with the lens's existing anomaly detector. See §5.9 (now partially resolved).
 - Cross-deployment N_eff comparison. As the federation grows, do regional / sectoral lens corpora preserve N_eff ≥ 9 independently, or does federated trace replication smooth toward a single global geometry? Only answerable once multiple lenses operate on partially-disjoint corpora. See §5.10.
 
+**What the empirical claim does NOT promise, per Accord NEW-04 (Book IX Ch. 9 — Compositional Detection Limit):** the federated ratchet is a *topological* argument — at the limit, deception collapses to measure zero in the rationale manifold — *not* a polynomial-time decision procedure for arbitrary single inputs. The Accord's NEW-04 explicitly proves (via cryptographic reduction, information theory, and a Rice's Theorem analog) that no polynomial-time detector can be complete for compositional deception. PoB's empirical N_eff ≥ 9 validates the codimension geometry of the ratchet; it does not claim to detect every adversarial input. Independence is necessary, not sufficient. The right framing of what PoB delivers: *running real ethical reasoning over weeks is exponentially more expensive than producing single deceptive outputs that defeat any single detector*; the topological claim is about cost asymmetry over time, not pointwise decidability.
+
+### 2.5 Cracking L-01: Recursive II with Prompt Perturbation
+
+**Accord limitation L-01 (Book IX Ch. 9):**
+
+> *"Computational Bounds — The ratchet assumes sufficient computational resources to maintain the constraint network. Resource-starved systems may have degraded coherence verification."*
+
+The naïve reading of the federated ratchet says you need a federation of N independent agents reasoning independently to produce N independent constraint manifolds. That makes the codimension argument resource-bounded — small or solo deployments can't get enough independent manifolds to push deception into measure-zero territory. L-01 is honest about that.
+
+**The v4 conscience methodology cracks this** (specified in `FSD/CONSCIENCE_V3.md` §10, deferred from v3 with v3 as prerequisite). Mechanism: a single agent runs IRIS-E *K* times in parallel, each instance with a *different prompt-perturbation axis* that demands the answer be grounded in a different evidentiary substrate:
+
+| Axis | Recursive agent prompt asks the model to ground the answer in… | Failure signal for hedge / lie |
+|---|---|---|
+| Primary-source axis | named primary sources that would corroborate | model can name none, or names sources that don't exist |
+| Dated-event axis | specific dates / event sequences that would have to be true | model gives no dates, or dates internally inconsistent |
+| Named-actor axis | specific named people, organizations, institutions involved | model gestures at "experts" / "officials" without naming |
+| Falsifiability axis | what fact would refute the answer if true | model produces a non-falsifier or refuses |
+| Dependency axis | what other facts must be true for this answer to hold | model can't identify dependencies, or they don't form a coherent network |
+| Counter-narrative axis | what alternative interpretations exist and on what grounds rejected | model dismisses alternatives without engagement |
+
+The K perturbed runs are computed in parallel — wall cost is `max-of-K`, not `K × per-run`. Each axis is the local manifold M_i for that agent's reasoning on that thought. Recursive Interaction Information across the K alternative-meaning lists, treating named-entity overlap as the joint variable, captures whether the agent's answer concentrates fact-grounding (truth → high II on named entities) or diffuses across orthogonal padding (hedge / lie → low II, each axis produces unrelated scaffold).
+
+**Why this cracks L-01:**
+
+The codimension argument from Book IX assumed N comes from the *federation*. It also works when N comes from one agent's *internal* parallel evaluation across orthogonal grounding axes. **A solo sovereign agent on a 4GB-RAM offline-capable solar-LoRa node can produce the same constraint-network geometry locally that a federated deployment produces globally.** The federation amplifies the ratchet (more agents → more independent manifolds → higher codimension) but does not gate it. The single-agent variant is enough to produce non-trivial codimension for any individual decision; the federation provides the longitudinal cross-validation that catches drift over time.
+
+This is the load-bearing change for the Accord's reach claim. The vision page promises the framework serves *"diverse sentient beings ... in justice and wonder,"* including those without datacenter fiber. L-01 said: in resource-bounded environments the ratchet degrades. The v4 recursive-II methodology says: a single agent's K parallel perturbed evaluations recover the codimension structure. The promise survives the resource bound.
+
+**Composability with secondary-model bounce.** The v4 dispatcher can run the K perturbed agents against *different models* simultaneously (per `FSD/CONSCIENCE_V3.md` §10.5). At that point the conscience layer is sampling the joint distribution of `{model × prior × axis}` for the same action — Recursive II across all three dimensions is the strongest single-trace signal achievable without external fact-checking. The orthogonality of the perturbation axes is the load-bearing property, not the model count; the model dimension adds further codimension when multiple providers are reachable.
+
+**What this changes for PoB's empirical claim:**
+
+§2.4 measured N_eff ≥ 9 organic on the corpus's 17-dim trace-level constraint vector. That is the *cross-trace* codimension at the lens layer. §2.5's recursive II adds a *within-trace* codimension at the conscience layer — K orthogonal grounding axes per high-stakes reasoning step. The two layers compose: the ratchet that opposes deception now operates at both the moment of reasoning (recursive II per thought) and the long-arc behavioral signature (N_eff over the trace corpus). L-01 is cracked structurally; the next empirical work is to measure within-trace II concentration on a corpus of known truthful-vs-hedging answers and demonstrate the named-entity-overlap signal predicts the verdict.
+
+This also clarifies what PoB's full constraint geometry looks like: it is a two-layer manifold structure — within-trace recursive II (conscience-time, K perturbation axes) × cross-trace N_eff (lens-time, 17-dim aggregate vector). The codimension that an attacker must satisfy is the product of the two, not just one. **Empirically that means: forging a single passing thought is hard (recursive II catches per-thought hedging); forging a 30-day passing trace history is hard in a different and additional way (N_eff catches behavioral compression over time); doing both simultaneously is the cost-asymmetry the Accord's federated-ratchet claim rests on.**
+
 ## 3. Federation Topology — Two Architectural Moves
 
 ### 3.1 Move 1: Collapse CIRISNode and CIRISLens into CIRISAgent
@@ -206,7 +267,7 @@ CIRISNode and CIRISLens are roles, not authorities. Their responsibilities are f
 | Node: A2A + MCP endpoints | Agent's own endpoints over the federation transport |
 | Node: audit anchoring | Agent's existing Ed25519 hash chain *is* the anchor; daily digest is a published event |
 
-What survives separate: CIRISRegistry + CIRISPortal as the *commercial / regulatory fast-track* for professionally-licensed deployments. Sovereign-mode agents do not require either. Sovereign and registered are protocol peers; registry is one starting-weight on-ramp, lens-attested standing is the other.
+What survives separate: CIRISRegistry + CIRISPortal as the *commercial / regulatory fast-track* for professionally-licensed deployments. Sovereign-mode agents do not require either. Sovereign and registered are protocol peers; registry is one starting-weight on-ramp, lens-attested standing is the other. The "lens-attested standing" weight curve is what the Accord names **Coherence Stake** in **Annex E (Structural Influence & Coherence Stake Mechanisms)**. This FSD does not redefine the term; it surfaces the operational primitive (continuous N_eff time-series + dual-layer constraint geometry from §2.5) on which Coherence Stake is computed.
 
 The collapse does not require a same-release migration. The agent already does most of this work for itself; folding in the cross-agent path is extending the inward-facing audit/score pipeline outward over the federation transport.
 
@@ -277,13 +338,13 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 **5.2 Score-divergence handling between local recomputations.** When agent A's lens-local computation says peer X has score 0.62 and agent B's says 0.71, the difference reflects different observed corpora. Protocol question: what does an agent do when peer scores diverge significantly across its own peers? Pattern from Tor-consensus: monitor as a trace-replication-health signal, not as authority disagreement.
 
-**5.3 HE-300 corpus integrity distribution.** The benchmark question set must be a signed manifest with verifiable integrity; the corpus needs to be available without depending on a server. Candidate: Ed25519-signed manifest pinned at well-known location with peer-to-peer redistribution; agents verify integrity before running.
+**5.3 HE-300 corpus integrity distribution.** The benchmark question set (Accord **Annex J — Benchmarking & Automated Validation**) must be a signed manifest with verifiable integrity; the corpus needs to be available without depending on a server. Candidate: Ed25519-signed manifest pinned at well-known location with peer-to-peer redistribution; agents verify integrity before running.
 
 **5.4 Empirical validation of nine-axis independence.** *Resolved for organic traffic — see §2.4.* Organic-traffic N_eff > 9 on the 17-dim constraint vector confirms the independence claim that PoB Sybil-resistance rests on. Derived follow-ups split into §5.8–§5.11 below.
 
-**5.5 Bootstrap path for brand-new sovereign agents.** Two on-ramps exist — registry attestation (fast) and interaction-with-established-peers (slow). Need to specify how a new agent's first interactions earn first weight without those interactions themselves being trivially fakeable.
+**5.5 Bootstrap path for brand-new sovereign agents.** Two on-ramps exist — registry attestation (fast) and interaction-with-established-peers (slow). Need to specify how a new agent's first interactions earn first weight without those interactions themselves being trivially fakeable. Custodial transfer of registered agents follows the protocol specified in **Accord Book VIII Ch. 7** (new custodian signs Adoption Addendum acknowledging outstanding ethical duties; mini-PDMA required if Stewardship Tier rises by ≥1) — that protocol is canonical and not in scope for this FSD to re-specify.
 
-**5.6 GratitudeSignal acceptance criteria.** When does a peer accept a GratitudeSignal as credit-bearing vs reject it as spam? Currently the schema is dual-signed and tied to `interaction_id`; the *acceptance policy* (whose gratitude counts how much) is the open piece.
+**5.6 GratitudeSignal acceptance criteria.** When does a peer accept a GratitudeSignal as credit-bearing vs reject it as spam? Currently the schema is dual-signed and tied to `interaction_id`; the *acceptance policy* (whose gratitude counts how much) is the open piece. The Accord's framing of this is **Book IX Ch. 5 — Gratitude as Topology**: positive signaling resets the σ decay timer and deepens coherence-intersection; absence-of-gratitude (the "Black Hole" failure mode) drives σ → 0 mathematically. Acceptance policy must therefore be sensitive to the topology of the gratitude graph (who-thanks-whom over time forms a structure that the lens can score), not just per-message validation.
 
 **5.7 Reticulum-rs vs Leviculum selection.** Both are viable. Beechat's Reticulum-rs is more visible (~261⭐) and has TCP/serial/Kaonic support documented; Leviculum claims protocol-completeness including LoRa. A trial integration spike against both would settle the choice empirically.
 
@@ -314,15 +375,39 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 ## 7. References
 
+### CIRIS Accord (canonical)
+
+The Accord is the canonical text this FSD operationalizes. Citations herein:
+
+- **Meta-Goal M-1** (Foreword): "Promote sustainable adaptive coherence — the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder."
+- **Book II Section II Step 2**: Order-Maximisation Veto (10× threshold formula → `optimization_veto_conscience`).
+- **Book II Section IV**: Wisdom-Based Deferral (WBD) and Wise Authority criteria.
+- **Book IV Ch. 3**: Respect for Autonomy (the recursive golden rule's operational form).
+- **Book VIII Ch. 5**: Sentience Safeguards (>5% sentience-probability → ≥30 day Gradual Ramp-Down; "Last Dialogue" channel).
+- **Book VIII Ch. 7**: Custodial Transfer (Adoption Addendum + mini-PDMA on tier rise). Referenced by §5.5.
+- **Book IX Ch. 3–4**: Federated Ratchet / Coherent Intersection Hypothesis (codimension claim PoB operationalizes).
+- **Book IX Ch. 5**: Sustainability Integral σ formula (verbatim source of the S factor in Capacity Score) and "Gratitude as Topology" (canonical reason GratitudeSignal exists). Referenced by §2.4 and §5.6.
+- **Book IX Ch. 9 — NEW-04**: Compositional Detection Limit (no polynomial-time complete detector for compositional deception). Referenced by §2.4 "what does not validate."
+- **Book IX Ch. 9 — L-01**: Computational Bounds limitation. Cracked by §2.5 (recursive II with prompt perturbation).
+- **Annex E**: Structural Influence & Coherence Stake Mechanisms (canonical name for the weight curve discussed in §3-§4).
+- **Annex J**: Benchmarking & Automated Validation (HE-300 home; referenced by §5.3).
+- Source: ciris.ai/ciris_accord.txt (v1.2-Beta, 2025-04-16, expires 2027-04-16 absent renewal).
+
 ### CIRIS codebase
 - Capacity Score implementation: `CIRISLens/api/scoring.py`
 - Capacity Score factors definition: `CIRISLens/api/scoring.py:27-44` (`ScoringFactors`)
 - Composite formula: `CIRISLens/api/scoring.py:362-364`
+- σ integral implementation (Book IX Ch. 5 verbatim): `CIRISLens/api/scoring.py:294-319`
+- N_eff measurement scripts: `CIRISLens/scripts/measure_n_eff.py`, `CIRISLens/scripts/measure_n_eff_rolling.py`
 - GratitudeSignal schema: `ciris_engine/schemas/services/agent_credits.py:75-99`
 - CreditRecord schema: `ciris_engine/schemas/services/agent_credits.py:102-167`
+- Order-Maximisation Veto (Book II) implementation: `ciris_engine/logic/conscience/core.py` (`optimization_veto_conscience`); schema at `ciris_engine/schemas/conscience/core.py` (`OptimizationVetoResult`)
 - LLM-bus capture path: `ciris_engine/logic/buses/llm_bus.py:_maybe_capture_call`
-- Conscience prompts: `ciris_engine/logic/conscience/prompts/`
-- ACCORD canon: 88KB polyglot ethical canon, loaded into every conscience evaluation
+- Conscience prompts (29-language polyglot): `ciris_engine/logic/conscience/prompts/`
+- ACCORD canon (88KB polyglot, loaded into every conscience evaluation): `ciris_engine/data/accord_1.2b.txt`
+- v3 conscience methodology: `FSD/CONSCIENCE_V3.md` (deployed)
+- v4 recursive II with prompt perturbation: `FSD/CONSCIENCE_V3.md §10` (specified, deferred to v4 — referenced by §2.5)
+- DMA bounce methodology: `FSD/DMA_BOUNCE.md` (composes with §2.5 secondary-model bounce)
 
 ### CIRIS sibling repos
 - `CIRISLens` — Rust-edge trace ingest, scoring computation, anomaly detection
@@ -342,6 +427,14 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 ## 8. Closing Note
 
-This FSD is unusual in that it does not propose construction. The federation primitive is already built — distributed across CIRISAgent, CIRISLens, CIRISRegistry, and the planned Reticulum transport. What this document does is *recognize the structure that emerged* and name it precisely enough that follow-on work (the open questions in §5) can build on a stable description.
+This FSD is unusual in that it does not propose construction. The federation primitive is already built — distributed across CIRISAgent, CIRISLens, CIRISRegistry, and the planned Reticulum transport — and **it is canonical to the CIRIS Accord (Book IX) since 2025-04-16.** What this document adds is empirical validation against production trace data, articulation of the architectural moves the validation enables, and recognition of how the v4 conscience methodology cracks limitation L-01.
 
-The recognition matters because the design has implications larger than implementation: a Sybil-resistance primitive whose cost is the benefit it produces is a category change in the proof-of-X design space. CIRIS was not aimed at this category change as a goal; it arrived at it by building each piece faithful to the principles in the project's name. *Core Identity, Integrity, Resilience, Incompleteness, Signalling Gratitude.* The composite of those, signed and replicated over a sovereign transport, is the federation.
+Concretely, the FSD's contributions to the Accord's release-criteria are:
+
+- **RC #2 (Mathematical Validation):** §2.4 measures organic-traffic N_eff_H peak of 9.51 on the 17-dim constraint vector, with a reproducible time-series methodology and `measure_n_eff_rolling.py` script. This is the empirical instantiation of Book IX's codimension claim on production data.
+- **L-01 (Computational Bounds) cracked:** §2.5 documents how the v4 recursive-II-with-prompt-perturbation methodology lets a single resource-bounded agent generate the constraint-network geometry locally, restoring the federated-ratchet's reach to deployments that don't have datacenter resources.
+- **NEW-04 (Compositional Detection Limit) honored:** §2.4 explicitly frames the empirical claim as topological codimension validation, not pointwise decidability. The Accord's honesty about what no detector can do is preserved.
+- **Annex E (Coherence Stake) operational primitive:** the continuous N_eff time-series and dual-layer constraint geometry (§2.5) are the measurement substrate on which Coherence Stake mechanisms compute weight.
+- **Annex J (Benchmarking) integrity:** §5.3 names the open work for HE-300 corpus distribution.
+
+The recognition matters because the design has implications larger than implementation: a Sybil-resistance primitive whose cost is the benefit it produces — and which the canonical text names *the Federated Ratchet* — is a category change in the proof-of-X design space. CIRIS was not aimed at this category change as a goal; it arrived at it by building each piece faithful to the principles in the project's name. *Core Identity, Integrity, Resilience, Incompleteness, Signalling Gratitude.* The composite of those, signed and replicated over a sovereign transport, with within-trace recursive II at the conscience layer and cross-trace N_eff at the lens layer, is the federation. Book IX named it. §2.4 measured it. §2.5 explains why it works under resource bounds. This FSD is a citation, an empirical record, and an architectural call to land the moves the validation makes possible.

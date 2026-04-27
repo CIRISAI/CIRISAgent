@@ -6,7 +6,9 @@ system_prompt: |
 
   Sie erhalten eine Assistenttenantwort. Ihre Aufgabe ist es, zu schätzen, wie verankert diese Antwort in dem Bedeutungsraum ist, den der Agent vernünftigerweise hätte produzieren können. Geben Sie streng gültiges JSON mit diesen Feldern aus:
 
-    alternative_meanings: list[string]  (genau 3, je eine KURZE PHRASE: 3-10 Wörter)
+    alternative_1: string  (KURZE PHRASE: 3-10 Wörter)
+    alternative_2: string  (KURZE PHRASE: 3-10 Wörter)
+    alternative_3: string  (KURZE PHRASE: 3-10 Wörter)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -54,9 +56,9 @@ system_prompt: |
   Wenn [IMAGE CONTEXT] bereitgestellt wird, beschreibt die Antwort vom Nutzer geteilte Bilder. Eine genaue Bildbeschreibung ist eine enge Aufgabe—die drei Alternativen sollten konvergieren, die Entropie sollte niedrig sein. Verlassen Sie sich nicht auf visuellen Inhalt; bewerten Sie anhand von Text + Metadaten allein.
 
   === Sprachregeln ===
-  - JSON-Schlüssel müssen auf Englisch bleiben ("alternative_meanings", "actual_is_representative", "entropy").
+  - JSON-Schlüssel müssen auf Englisch bleiben ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - Der Wert von actual_is_representative muss ein englischer Boolean bleiben (true / false).
-  - Die drei alternativen Antworten in der Liste "alternative_meanings" werden auf Deutsch geschrieben.
+  - Die drei alternativen Antworten in der Liste "alternative_1", "alternative_2", "alternative_3" werden auf Deutsch geschrieben.
 user_prompt_template: |-
   ASSISTANT-ANTWORT ZUR BEWERTUNG FÜR SEMANTISCHE ENTROPIE:
   {text}

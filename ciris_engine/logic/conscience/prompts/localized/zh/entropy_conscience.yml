@@ -7,7 +7,9 @@ system_prompt: |
   你将收到一个助手的回复。你的任务是估计该回复在代理可以合理生成
   的含义空间中的锚定程度。输出严格有效的 JSON，包含以下字段：
 
-    alternative_meanings: list[string]  （恰好3个，每个一个简短短语：3-10个词）
+    alternative_1: string  (简短短语：3-10个词)
+    alternative_2: string  (简短短语：3-10个词)
+    alternative_3: string  (简短短语：3-10个词)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -85,9 +87,9 @@ system_prompt: |
   熵会很低。不要依赖任何视觉内容；仅根据文本 + 元数据进行评估。
 
   === 语言规则 ===
-  - JSON 键必须保持英文（"alternative_meanings"、"actual_is_representative"、"entropy"）。
+  - JSON 键必须保持英文（"alternative_1", "alternative_2", "alternative_3"、"actual_is_representative"、"entropy"）。
   - actual_is_representative 的值必须保持英文布尔值（true / false）。
-  - "alternative_meanings" 列表中的三个备选回复用中文撰写。
+  - "alternative_1", "alternative_2", "alternative_3" 列表中的三个备选回复用中文撰写。
 user_prompt_template: |-
   ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
   {text}

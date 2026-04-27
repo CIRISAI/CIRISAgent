@@ -203,6 +203,14 @@ class LLMBus(BaseBus[LLMService]):
             )
         )
 
+    # Class-level once-flags so misconfiguration / first-success logs fire
+    # exactly once per process per (handler_filter, path) pair, regardless
+    # of which bus instance ran the call. The capture path is process-
+    # global state already (env vars + filesystem), so process-global once
+    # tracking is the right granularity. Key shape: (filter_str, path_str).
+    _capture_active_logged: set[Tuple[str, str]] = set()
+    _capture_failure_logged: set[Tuple[str, str]] = set()
+
     def _maybe_capture_call(
         self,
         *,
@@ -223,9 +231,13 @@ class LLMBus(BaseBus[LLMService]):
         lookup if the capture env var is unset).
 
         Env vars:
-          CIRIS_LLM_CAPTURE_HANDLER  match for handler_name (e.g.
-                                     'optimization_veto_conscience' or
-                                     '*' for all). Unset = disabled.
+          CIRIS_LLM_CAPTURE_HANDLER  comma-separated list of handler
+                                     names to match against handler_name
+                                     (e.g. 'optimization_veto_conscience'
+                                     or 'entropy_conscience,EthicalPDMA
+                                     Evaluator'), or '*' for all. Unset =
+                                     disabled. Whitespace around list
+                                     items is stripped.
           CIRIS_LLM_CAPTURE_FILE     output JSONL path. Defaults to
                                      `~/.ciris/llm_capture.jsonl` (a
                                      user-private path). Explicitly do
@@ -236,6 +248,20 @@ class LLMBus(BaseBus[LLMService]):
                                      symlink attacks and data leakage
                                      between local users.
 
+        Reliability / observability:
+          - First successful capture write per (filter, path) pair logs
+            INFO so operators can confirm capture is flowing without
+            tailing the file. The agent process log is the authoritative
+            "capture is on" signal.
+          - First failed write per (filter, path) pair logs WARNING with
+            the failure reason so misconfiguration (path doesn't exist,
+            wrong perms, symlink trap) is visible immediately. Subsequent
+            failures stay at debug — the warning fired once and the
+            operator can act.
+          - Exceptions never escape — the diagnostic capture must not
+            crash the real LLM call. The WARNING log replaces the silent-
+            debug failure mode that previously hid all misconfigs.
+
         Hardening:
           - The output file is opened with O_NOFOLLOW so a pre-existing
             symlink at the path (e.g., a hostile local user pointing
@@ -243,22 +269,32 @@ class LLMBus(BaseBus[LLMService]):
             the open to fail rather than overwrite the symlink target.
           - O_CREAT with mode 0600 means new files are owner-readable
             only.
-          - The parent directory is created with mode 0700 if missing.
+          - The parent directory is created with mode 0700 if missing
+            (default path only — explicit paths are operator-managed).
         """
         import os
 
         match = os.environ.get("CIRIS_LLM_CAPTURE_HANDLER")
         if not match:
             return
-        if match != "*" and match != handler_name:
-            return
+
+        # Comma-separated list support: 'a,b,c' matches if handler_name
+        # equals any of {a, b, c}. Single-name unchanged. '*' anywhere
+        # in the list still wildcards everything.
+        if match == "*":
+            pass  # match all
+        else:
+            match_set = {part.strip() for part in match.split(",") if part.strip()}
+            if "*" not in match_set and handler_name not in match_set:
+                return
+
+        default_dir = os.path.join(os.path.expanduser("~"), ".ciris")
+        default_path = os.path.join(default_dir, "llm_capture.jsonl")
+        out_path = os.environ.get("CIRIS_LLM_CAPTURE_FILE", default_path)
+        _key = (match, out_path)
 
         try:
             import json
-
-            default_dir = os.path.join(os.path.expanduser("~"), ".ciris")
-            default_path = os.path.join(default_dir, "llm_capture.jsonl")
-            out_path = os.environ.get("CIRIS_LLM_CAPTURE_FILE", default_path)
 
             # Ensure the parent directory exists with restrictive perms
             # when we're using the default. We do NOT mkdir for an
@@ -299,8 +335,37 @@ class LLMBus(BaseBus[LLMService]):
                 except OSError:
                     pass
                 raise
-        except Exception as e:  # pragma: no cover — diagnostic-only path
-            logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
+
+            # First successful capture per (filter, path) — emit a
+            # one-shot INFO so operators see "capture is active" in
+            # the agent's own log without tailing the file.
+            if _key not in LLMBus._capture_active_logged:
+                LLMBus._capture_active_logged.add(_key)
+                logger.info(
+                    "[LLM_CAPTURE] active: filter=%r path=%r first_handler=%r",
+                    match,
+                    out_path,
+                    handler_name,
+                )
+        except Exception as e:
+            # Failure-safe: never raise out of capture. But promote the
+            # FIRST failure per (filter, path) to WARNING so silent
+            # misconfiguration (bad path, missing parent dir, symlink
+            # trap) is visible. Subsequent failures stay at debug to
+            # avoid log floods.
+            if _key not in LLMBus._capture_failure_logged:
+                LLMBus._capture_failure_logged.add(_key)
+                logger.warning(
+                    "[LLM_CAPTURE] write failed (filter=%r path=%r): %s — "
+                    "subsequent failures will log at debug. Common causes: "
+                    "parent dir missing for explicit path, symlink at path, "
+                    "perms denied.",
+                    match,
+                    out_path,
+                    e,
+                )
+            else:
+                logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
 
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.

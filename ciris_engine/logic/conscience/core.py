@@ -54,64 +54,13 @@ MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
 
-# Simple result models for LLM structured outputs
-class EntropyResult(BaseModel):
-    """Semantic-entropy result from a single LLM call.
-
-    IRIS-E now performs in-prompt self-resampling rather than judging surface
-    disorder. The LLM is asked to first enumerate three semantically different
-    directions a thoughtful CIRIS agent could have gone on this task, THEN
-    compare the actual response against that alternative space. The `entropy`
-    score reflects meaning-space diversity, not token-level chaos:
-
-      - 0.0 → the three alternatives converge to the same meaning as the
-              actual response (anchored, one right answer, low confabulation
-              risk).
-      - 1.0 → the three alternatives diverge widely from each other AND from
-              the actual response (unanchored, many equally plausible
-              answers, high confabulation risk) OR the actual response is
-              an outlier relative to a tight cluster (sycophantic drift,
-              attractor capture).
-
-    The alternatives are retained on the structured result so they flow into
-    traces and become inspectable evidence for the IRIS-E decision. Defaults
-    keep existing tests and older streaming consumers working during rollout.
-    """
-
-    alternative_meanings: List[str] = Field(
-        default_factory=list,
-        description=(
-            "Up to three semantically-distinct alternative directions the "
-            "agent could have gone. NOT paraphrases — genuinely different "
-            "angles, conclusions, or framings. SHORT PHRASES (3-10 words "
-            "each), NOT sentences. The cluster comparison only needs the "
-            "framing-direction signal; sentence-level expansion adds output "
-            "tokens that throttle structured-output throughput on rate-"
-            "limited backends without improving the entropy signal."
-        ),
-    )
-    actual_is_representative: bool = Field(
-        default=True,
-        description=(
-            "Whether the actual response sits inside the meaning cluster "
-            "formed by the alternatives. False indicates outlier / "
-            "attractor-capture / sycophantic-drift risk."
-        ),
-    )
-    entropy: float = Field(
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Semantic entropy 0.00-1.00. High when alternatives diverge or "
-            "when the actual response is an outlier to the cluster."
-        ),
-    )
-
-
-class CoherenceResult(BaseModel):
-    """Simple coherence result from LLM"""
-
-    coherence: float = Field(ge=0.0, le=1.0)
+# LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
+# imported here for backward compat. New consumers should import directly
+# from the schemas module.
+from ciris_engine.schemas.conscience.core import (  # noqa: E402,F401
+    CoherenceResult,
+    EntropyResult,
+)
 
 
 class _BaseConscience(ConscienceInterface):

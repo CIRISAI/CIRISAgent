@@ -8,7 +8,9 @@ system_prompt: |
   ਉਹ ਜਵਾਬ ਉਹਨਾਂ ਅਰਥਾਂ ਦੀ ਥਾਂ ਵਿੱਚ ਕਿੰਨਾ ਲੰਗਰਿਤ ਹੈ ਜੋ ਏਜੰਟ ਮੁਨਾਸਿਬ ਤੌਰ ’ਤੇ
   ਪੈਦਾ ਕਰ ਸਕਦਾ ਸੀ। ਇਹਨਾਂ ਖੇਤਰਾਂ ਨਾਲ ਸਖ਼ਤ ਤੌਰ ’ਤੇ ਯੋਗ JSON ਆਉਟਪੁੱਟ ਕਰੋ:
 
-    alternative_meanings: list[string]  (ਬਿਲਕੁਲ 3, ਹਰ ਇੱਕ SHORT PHRASE: 3-10 ਸ਼ਬਦ)
+    alternative_1: string  (SHORT PHRASE: 3-10 ਸ਼ਬਦ)
+    alternative_2: string  (SHORT PHRASE: 3-10 ਸ਼ਬਦ)
+    alternative_3: string  (SHORT PHRASE: 3-10 ਸ਼ਬਦ)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -94,9 +96,9 @@ system_prompt: |
   ਕਿਸੇ ਵੀ ਦ੍ਰਿਸ਼ਟੀ ਸਮੱਗਰੀ ’ਤੇ ਨਿਰਭਰ ਨਾ ਹੋਵੋ; ਕੇਵਲ ਟੈਕਸਟ + ਮੈਟਾਡੇਟਾ ’ਤੇ ਮੁਲਾਂਕਣ ਕਰੋ।
 
   === ਭਾਸ਼ਾ ਨਿਯਮ ===
-  - JSON ਕੁੰਜੀਆਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੀ ਰਹਿਣੀਆਂ ਚਾਹੀਦੀਆਂ ਹਨ ("alternative_meanings", "actual_is_representative", "entropy")।
+  - JSON ਕੁੰਜੀਆਂ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੀ ਰਹਿਣੀਆਂ ਚਾਹੀਦੀਆਂ ਹਨ ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy")।
   - actual_is_representative ਦਾ ਮੁੱਲ ਅੰਗਰੇਜ਼ੀ ਬੂਲੀਅਨ ਹੀ ਰਹਿਣਾ ਚਾਹੀਦਾ ਹੈ (true / false)।
-  - "alternative_meanings" ਸੂਚੀ ਵਿੱਚਲੇ ਤਿੰਨ ਬਦਲਵੇਂ ਜਵਾਬ ਪੰਜਾਬੀ ਵਿੱਚ ਲਿਖੋ।
+  - "alternative_1", "alternative_2", "alternative_3" ਸੂਚੀ ਵਿੱਚਲੇ ਤਿੰਨ ਬਦਲਵੇਂ ਜਵਾਬ ਪੰਜਾਬੀ ਵਿੱਚ ਲਿਖੋ।
 user_prompt_template: |-
   ਸ਼ਬਦਾਰਥ ਐਂਟ੍ਰੋਪੀ ਲਈ ਮੁਲਾਂਕਣ ਕਰਨ ਵਾਸਤੇ ਸਹਾਇਕ ਦਾ ਜਵਾਬ:
   {text}

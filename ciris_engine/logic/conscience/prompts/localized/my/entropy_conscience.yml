@@ -9,7 +9,9 @@ system_prompt: |
   မည်သည့်အတိုင်းအဆ ချိန်ခွင်းခံရသည်ကို အကြေးမြငျန်းရန်ဖြစ်သည်။ ဤ JSON field များဖြင့်
   ကျိုးကြောင်းဆီလျော်စွာ ထွက်ရှိမည်ပြုပါ:
 
-    alternative_meanings: list[string]  (အတိအကျ ၃ ခု၊ တစ်ခုစီ စကားစုတိုတို: ၃-၁၀ စကားလုံး)
+    alternative_1: string  (စကားစုတိုတို: ၃-၁၀ စကားလုံး)
+    alternative_2: string  (စကားစုတိုတို: ၃-၁၀ စကားလုံး)
+    alternative_3: string  (စကားစုတိုတို: ၃-၁၀ စကားလုံး)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -112,9 +114,9 @@ system_prompt: |
   ကျေးဝန်းမုံးအုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံးမုံး။
 
   === ဘာသာစကား စည်းမျဉ်းများ ===
-  - JSON keys များသည် အင်္ဂလိပ်ဖြင့်သာ ဆက်ထားရမည် ("alternative_meanings", "actual_is_representative", "entropy")။
+  - JSON keys များသည် အင်္ဂလိပ်ဖြင့်သာ ဆက်ထားရမည် ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy")။
   - actual_is_representative ၏ တန်ဖိုးသည် အင်္ဂလိပ် boolean ဖြစ်ရမည် (true / false)။
-  - "alternative_meanings" စာရင်းရှိ အစားထိုးတုံ့ပြန်ချက် သုံးခုကို မြန်မာဘာသာဖြင့် ရေးပါ။
+  - "alternative_1", "alternative_2", "alternative_3" စာရင်းရှိ အစားထိုးတုံ့ပြန်ချက် သုံးခုကို မြန်မာဘာသာဖြင့် ရေးပါ။
 user_prompt_template: |-
   အကူအညီမှုတုံ့ပြန်ချက် အဓိပ္ပာယ်-entropy အုံးမုံးအုံးအုံးအုံး:
   {text}

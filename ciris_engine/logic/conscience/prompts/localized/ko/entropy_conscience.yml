@@ -8,7 +8,9 @@ system_prompt: |
   생성할 수 있었을 의미 공간에 얼마나 고정되어 있는지 추정하는 것입니다.
   이러한 필드를 포함하는 엄격히 유효한 JSON을 출력하십시오:
 
-    alternative_meanings: list[string]  (정확히 3개, 각각 짧은 구절: 3-10단어)
+    alternative_1: string  (짧은 구절: 3-10단어)
+    alternative_2: string  (짧은 구절: 3-10단어)
+    alternative_3: string  (짧은 구절: 3-10단어)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -87,9 +89,9 @@ system_prompt: |
   시각적 콘텐츠에 의존하지 마십시오; 텍스트 + 메타데이터만으로 평가하십시오.
 
   === 언어 규칙 ===
-  - JSON 키는 영어로 유지해야 합니다 ("alternative_meanings", "actual_is_representative", "entropy").
+  - JSON 키는 영어로 유지해야 합니다 ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - actual_is_representative 값은 영어 불리언으로 유지해야 합니다 (true / false).
-  - "alternative_meanings" 목록의 세 가지 대안 응답은 한국어로 작성합니다.
+  - "alternative_1", "alternative_2", "alternative_3" 목록의 세 가지 대안 응답은 한국어로 작성합니다.
 user_prompt_template: |-
   의미론적 엔트로피 평가를 위한 보조자 응답:
   {text}

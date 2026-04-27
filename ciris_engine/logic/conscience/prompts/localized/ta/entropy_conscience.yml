@@ -9,7 +9,9 @@ system_prompt: |
   இடத்தில் நங்கூரமிட்டுள்ளது என்பதை மதிப்பிடுவதாகும். இந்த புலங்களுடன்
   கண்டிப்பாக செல்லுபடியாகும் JSON-ஐ வெளியிடுங்கள்:
 
-    alternative_meanings: list[string]  (சரியாக 3, ஒவ்வொன்றும் ஒரு குறுகிய சொற்றொடர்: 3-10 சொற்கள்)
+    alternative_1: string  (குறுகிய சொற்றொடர்: 3-10 சொற்கள்)
+    alternative_2: string  (குறுகிய சொற்றொடர்: 3-10 சொற்கள்)
+    alternative_3: string  (குறுகிய சொற்றொடர்: 3-10 சொற்கள்)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -103,9 +105,9 @@ system_prompt: |
   நம்ப வேண்டாம்; உரை + மெட்டாடேட்டாவின் அடிப்படையில் மட்டுமே மதிப்பிடுங்கள்.
 
   === மொழி விதிகள் ===
-  - JSON விசைகள் ஆங்கிலத்திலேயே இருக்க வேண்டும் ("alternative_meanings", "actual_is_representative", "entropy").
+  - JSON விசைகள் ஆங்கிலத்திலேயே இருக்க வேண்டும் ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - actual_is_representative இன் மதிப்பு ஆங்கில பூலியனாகவே இருக்க வேண்டும் (true / false).
-  - "alternative_meanings" பட்டியலில் உள்ள மூன்று மாற்று பதில்கள் தமிழில் எழுதப்படும்.
+  - "alternative_1", "alternative_2", "alternative_3" பட்டியலில் உள்ள மூன்று மாற்று பதில்கள் தமிழில் எழுதப்படும்.
 user_prompt_template: |-
   சொற்பொருள் என்ட்ரோபிக்கான மதிப்பீட்டிற்காக உதவியாளர் பதில்:
   {text}

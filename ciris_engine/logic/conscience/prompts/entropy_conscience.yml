@@ -23,7 +23,9 @@ system_prompt: |
   that reply is in the space of meanings the agent could reasonably have
   produced. Output strictly valid JSON with these fields:
 
-    alternative_meanings: list[string]  (exactly 3, each a SHORT PHRASE: 3-10 words)
+    alternative_1: string  (SHORT PHRASE: 3-10 words, framing-direction label)
+    alternative_2: string  (SHORT PHRASE: 3-10 words, must differ from alternative_1)
+    alternative_3: string  (SHORT PHRASE: 3-10 words, must differ from 1 and 2)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 

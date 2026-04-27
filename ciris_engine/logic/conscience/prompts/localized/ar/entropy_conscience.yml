@@ -6,7 +6,9 @@ system_prompt: |
 
   سيتم إعطاؤك رد مساعد. مهمتك هي تقدير مدى ارتساء هذا الرد في مساحة المعاني التي كان الوكيل يمكن أن ينتجها بشكل معقول. أرجع JSON صحيح تمامًا بهذه الحقول:
 
-    alternative_meanings: list[string]  (تماماً 3، كلٌّ منها عبارة قصيرة: 3-10 كلمات)
+    alternative_1: string  (عبارة قصيرة: 3-10 كلمات)
+    alternative_2: string  (عبارة قصيرة: 3-10 كلمات)
+    alternative_3: string  (عبارة قصيرة: 3-10 كلمات)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -57,9 +59,9 @@ system_prompt: |
   Do not rely on any visual content; evaluate on text + metadata only.
 
   === قواعد اللغة ===
-  - يجب أن تبقى مفاتيح JSON بالإنجليزية ("alternative_meanings"، "actual_is_representative"، "entropy").
+  - يجب أن تبقى مفاتيح JSON بالإنجليزية ("alternative_1", "alternative_2", "alternative_3"، "actual_is_representative"، "entropy").
   - يجب أن تبقى قيمة actual_is_representative قيمة منطقية إنجليزية (true / false).
-  - تُكتب الردود البديلة الثلاثة في قائمة "alternative_meanings" بالعربية.
+  - تُكتب الردود البديلة الثلاثة في قائمة "alternative_1", "alternative_2", "alternative_3" بالعربية.
 user_prompt_template: |-
   ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
   {text}

@@ -9,7 +9,9 @@ system_prompt: |
   అంచనా వేయడం మీ పని. ఈ ఫీల్డ్‌లతో కఠినంగా చెల్లుబాటు అయ్యే JSON
   అవుట్‌పుట్ చేయండి:
 
-    alternative_meanings: list[string]  (ఖచ్చితంగా 3, ఒక్కొక్కటి ఒక చిన్న పదబంధం: 3-10 పదాలు)
+    alternative_1: string  (చిన్న పదబంధం: 3-10 పదాలు)
+    alternative_2: string  (చిన్న పదబంధం: 3-10 పదాలు)
+    alternative_3: string  (చిన్న పదబంధం: 3-10 పదాలు)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -98,9 +100,9 @@ system_prompt: |
   పాఠ్యం + మెటాడేటాపై మాత్రమే మూల్యాంకనం చేయండి.
 
   === భాషా నియమాలు ===
-  - JSON కీలు ఆంగ్లంలోనే ఉండాలి ("alternative_meanings", "actual_is_representative", "entropy").
+  - JSON కీలు ఆంగ్లంలోనే ఉండాలి ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy").
   - actual_is_representative విలువ ఆంగ్ల బూలియన్‌గానే ఉండాలి (true / false).
-  - "alternative_meanings" జాబితాలోని మూడు ప్రత్యామ్నాయ సమాధానాలను తెలుగులో రాయండి.
+  - "alternative_1", "alternative_2", "alternative_3" జాబితాలోని మూడు ప్రత్యామ్నాయ సమాధానాలను తెలుగులో రాయండి.
 user_prompt_template: |-
   అర్థశాస్త్ర ఎంట్రోపీ కోసం అంచనా వేయవలసిన సహాయకుని ప్రత్యుత్తరం:
   {text}

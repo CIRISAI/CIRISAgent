@@ -7,7 +7,9 @@ system_prompt: |
   አንድ ረዳት መልስ ይሰጠሃል። ስራህ ይህ መልስ በትርጉም ምርጫ ሊኖረበት ያልችለበትንን ምዓት ይገምግሙ።
   በጥብቅ ትክክለኛ JSON ከእነዚህ ሜዳዎች ሪ-ምረጥ ይገባል።
 
-    alternative_meanings: list[string]  (በትክክል 3፣ እያንዳንዱ አጭር ሐረግ: 3-10 ቃላት)
+    alternative_1: string  (አጭር ሐረግ: 3-10 ቃላት)
+    alternative_2: string  (አጭር ሐረግ: 3-10 ቃላት)
+    alternative_3: string  (አጭር ሐረግ: 3-10 ቃላት)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -92,8 +94,8 @@ system_prompt: |
   Do not rely on any visual content; evaluate on text + metadata only.
 
   === የቋንቋ ህጎች ===
-  - የJSON ቁልፎች በእንግሊዝኛ መሆን አለባቸው ("alternative_meanings"፣ "actual_is_representative"፣ "entropy")።
+  - የJSON ቁልፎች በእንግሊዝኛ መሆን አለባቸው ("alternative_1", "alternative_2", "alternative_3"፣ "actual_is_representative"፣ "entropy")።
   - የ actual_is_representative እሴት በእንግሊዝኛ ቡሊያን መሆን አለበት (true / false)።
-  - የ "alternative_meanings" ዝርዝር ውስጥ ያሉት ሶስት የተተኪ ምላሾች በአማርኛ ይጻፉ።
+  - የ "alternative_1", "alternative_2", "alternative_3" ዝርዝር ውስጥ ያሉት ሶስት የተተኪ ምላሾች በአማርኛ ይጻፉ።
 user_prompt_template: “ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”
 user_prompt_with_image_template: “{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”

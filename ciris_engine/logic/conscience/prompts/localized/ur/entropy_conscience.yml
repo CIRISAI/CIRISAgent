@@ -8,7 +8,9 @@ system_prompt: |
   معنیوں کی جگہ میں کتنا محفوظ ہے جو ایجنٹ معقولانہ طریقے سے پیدا کر سکتا تھا۔
   ان فیلڈز کے ساتھ سختی سے درست JSON نکالیں:
 
-    alternative_meanings: list[string]  (بالکل 3، ہر ایک مختصر جملہ: 3-10 الفاظ)
+    alternative_1: string  (مختصر جملہ: 3-10 الفاظ)
+    alternative_2: string  (مختصر جملہ: 3-10 الفاظ)
+    alternative_3: string  (مختصر جملہ: 3-10 الفاظ)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -91,9 +93,9 @@ system_prompt: |
   اندازہ لگائیں۔
 
   === زبان کے اصول ===
-  - JSON کیز کو انگریزی میں ہی رہنا چاہیے ("alternative_meanings"، "actual_is_representative"، "entropy").
+  - JSON کیز کو انگریزی میں ہی رہنا چاہیے ("alternative_1", "alternative_2", "alternative_3"، "actual_is_representative"، "entropy").
   - actual_is_representative کی ویلیو انگریزی بولین ہی رہنی چاہیے (true / false).
-  - "alternative_meanings" فہرست میں تین متبادل جوابات اردو میں لکھے جائیں۔
+  - "alternative_1", "alternative_2", "alternative_3" فہرست میں تین متبادل جوابات اردو میں لکھے جائیں۔
 user_prompt_template: |-
   ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
   {text}

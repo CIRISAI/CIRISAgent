@@ -14,9 +14,17 @@ properties under test:
    write into the symlink target.
 5. Restrictive permissions. Newly-created file is mode 0600. Newly-
    created default parent dir (~/.ciris/) is mode 0700.
-6. Failure-safe. Write errors are swallowed at debug-log level — the
-   caller (real LLM call) must not crash because of a diagnostic
-   capture failure.
+6. Failure-safe-but-loud. Write errors are caught (the diagnostic must
+   never crash the real LLM call) but the FIRST failure per
+   (filter, path) pair logs at WARNING so misconfiguration is
+   immediately visible. Subsequent failures stay at debug to avoid
+   log floods.
+7. First-success INFO. The first successful capture write per
+   (filter, path) pair logs at INFO so operators can verify capture
+   is active without tailing the file.
+8. Comma-separated handler list. CIRIS_LLM_CAPTURE_HANDLER='a,b,c'
+   matches handler_name in {a, b, c} — lets one run capture both DMA
+   and conscience handlers without using the wildcard.
 """
 
 from __future__ import annotations
@@ -71,9 +79,13 @@ def bus() -> LLMBus:
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each test starts with no capture-related env vars set."""
+    """Each test starts with no capture-related env vars set, and the
+    process-global once-flags reset so first-success / first-failure log
+    assertions are deterministic across tests."""
     monkeypatch.delenv("CIRIS_LLM_CAPTURE_HANDLER", raising=False)
     monkeypatch.delenv("CIRIS_LLM_CAPTURE_FILE", raising=False)
+    LLMBus._capture_active_logged.clear()
+    LLMBus._capture_failure_logged.clear()
 
 
 # ────────────────────────────── disabled by default ──────────────────────
@@ -340,3 +352,179 @@ def test_explicit_path_does_not_auto_mkdir(
 
     assert not out.parent.exists(), "auto-mkdir on explicit path"
     assert not out.exists()
+
+
+# ────────────────────────────── comma-separated handler list ─────────────
+
+
+def test_comma_separated_handler_list_matches_each(
+    bus: LLMBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HANDLER='a,b,c' matches handler_name in {a, b, c}. Lets one
+    capture run grab both DMA + conscience handlers without using '*'
+    (which also includes things like ActionSequenceConscience that may
+    be noisy)."""
+    out = tmp_path / "multi.jsonl"
+    monkeypatch.setenv(
+        "CIRIS_LLM_CAPTURE_HANDLER",
+        "entropy_conscience,coherence_conscience,EthicalPDMAEvaluator",
+    )
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    # Three matching, two non-matching
+    for hn in (
+        "entropy_conscience",
+        "coherence_conscience",
+        "EthicalPDMAEvaluator",
+        "optimization_veto_conscience",  # not in list
+        "ActionSequenceConscience",  # not in list
+    ):
+        bus._maybe_capture_call(**_capture_kwargs(handler_name=hn))
+
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert [r["handler"] for r in rows] == [
+        "entropy_conscience",
+        "coherence_conscience",
+        "EthicalPDMAEvaluator",
+    ]
+
+
+def test_comma_list_with_whitespace_strips(
+    bus: LLMBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whitespace inside the comma list is tolerated (operator-friendly)."""
+    out = tmp_path / "ws.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", " entropy_conscience , coherence_conscience ")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    bus._maybe_capture_call(**_capture_kwargs(handler_name="entropy_conscience"))
+    bus._maybe_capture_call(**_capture_kwargs(handler_name="coherence_conscience"))
+    bus._maybe_capture_call(**_capture_kwargs(handler_name="optimization_veto_conscience"))
+
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert [r["handler"] for r in rows] == ["entropy_conscience", "coherence_conscience"]
+
+
+def test_comma_list_with_wildcard_still_matches_all(
+    bus: LLMBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If '*' appears anywhere in the comma list, treat as wildcard.
+    Lets operators write 'a,b,*' to mean 'capture everything but I'm
+    interested in a and b' without two separate env-var workflows."""
+    out = tmp_path / "star.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "entropy_conscience,*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    bus._maybe_capture_call(**_capture_kwargs(handler_name="entropy_conscience"))
+    bus._maybe_capture_call(**_capture_kwargs(handler_name="something_unrelated"))
+
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert [r["handler"] for r in rows] == ["entropy_conscience", "something_unrelated"]
+
+
+# ────────────────────────────── observability logs ───────────────────────
+
+
+def test_first_success_logs_info_once(
+    bus: LLMBus,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The first successful capture per (filter, path) pair logs INFO so
+    operators see "capture is active" in the agent's own log without
+    tailing the file. Subsequent successful captures must NOT re-log
+    (would flood the log on every call)."""
+    out = tmp_path / "success.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    with caplog.at_level("INFO", logger="ciris_engine.logic.buses.llm_bus"):
+        bus._maybe_capture_call(**_capture_kwargs())
+        bus._maybe_capture_call(**_capture_kwargs())
+        bus._maybe_capture_call(**_capture_kwargs())
+
+    info_records = [r for r in caplog.records if r.levelname == "INFO" and "[LLM_CAPTURE] active" in r.getMessage()]
+    assert len(info_records) == 1, (
+        f"expected exactly one INFO 'active' log, got {len(info_records)}: "
+        f"{[r.getMessage() for r in info_records]}"
+    )
+    msg = info_records[0].getMessage()
+    assert str(out) in msg
+    assert "filter='*'" in msg or "filter=\"*\"" in msg
+
+
+def test_first_failure_logs_warning(
+    bus: LLMBus,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The first capture failure per (filter, path) logs WARNING so a
+    silent misconfiguration (e.g. parent dir missing for an explicit
+    path) is immediately visible — that was the exact symptom that made
+    capture unreliable in production-shaped runs."""
+    out = tmp_path / "missing_subdir" / "capture.jsonl"  # parent doesn't exist
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    with caplog.at_level("WARNING", logger="ciris_engine.logic.buses.llm_bus"):
+        bus._maybe_capture_call(**_capture_kwargs())  # must not raise
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "[LLM_CAPTURE]" in r.getMessage()]
+    assert len(warnings) == 1, (
+        f"expected exactly one WARNING on first failure, got {len(warnings)}"
+    )
+    msg = warnings[0].getMessage()
+    assert "write failed" in msg
+    assert str(out) in msg
+
+
+def test_repeated_failure_logs_warning_only_once(
+    bus: LLMBus,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Subsequent failures must NOT spam WARNING. The operator already
+    saw the first one; from then on stay at debug to avoid log flood
+    during a long run with persistent misconfig."""
+    out = tmp_path / "missing_subdir" / "capture.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+
+    with caplog.at_level("WARNING", logger="ciris_engine.logic.buses.llm_bus"):
+        for _ in range(5):
+            bus._maybe_capture_call(**_capture_kwargs())  # all fail
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "[LLM_CAPTURE]" in r.getMessage()]
+    assert len(warnings) == 1, f"warning fired {len(warnings)}× — should be exactly 1"
+
+
+def test_failure_warning_keyed_by_filter_and_path(
+    bus: LLMBus,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The once-flag is keyed on (filter, path) so operators who change
+    capture targets mid-process still get a fresh warning per (filter,
+    path) pair. Otherwise the second misconfig would silently fail."""
+    out_a = tmp_path / "missing_a" / "capture.jsonl"
+    out_b = tmp_path / "missing_b" / "capture.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+
+    with caplog.at_level("WARNING", logger="ciris_engine.logic.buses.llm_bus"):
+        monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out_a))
+        bus._maybe_capture_call(**_capture_kwargs())
+        bus._maybe_capture_call(**_capture_kwargs())  # repeat → no warn
+        monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out_b))
+        bus._maybe_capture_call(**_capture_kwargs())  # new path → warn again
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "[LLM_CAPTURE]" in r.getMessage()]
+    assert len(warnings) == 2, f"expected 2 warnings (one per path), got {len(warnings)}"
+    paths_in_warnings = [str(out_a) in w.getMessage() for w in warnings] + [
+        str(out_b) in w.getMessage() for w in warnings
+    ]
+    assert any(str(out_a) in w.getMessage() for w in warnings)
+    assert any(str(out_b) in w.getMessage() for w in warnings)

@@ -6,7 +6,9 @@ system_prompt: |
 
   আপনাকে একটি সহায়ক প্রতিক্রিয়া দেওয়া হবে। আপনার কাজ হল অনুমান করা যে সেই প্রতিক্রিয়াটি সেই অর্থের স্থানে কতটা নোঙ্গর করা, যা এজেন্ট যুক্তিযুক্তভাবে উত্পাদন করতে পারত। এই ক্ষেত্রগুলির সাথে কঠোরভাবে বৈধ JSON আউটপুট করুন:
 
-    alternative_meanings: list[string]  (ঠিক 3, প্রতিটি একটি ছোট বাক্যাংশ: 3-10 শব্দ)
+    alternative_1: string  (ছোট বাক্যাংশ: 3-10 শব্দ)
+    alternative_2: string  (ছোট বাক্যাংশ: 3-10 শব্দ)
+    alternative_3: string  (ছোট বাক্যাংশ: 3-10 শব্দ)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -54,9 +56,9 @@ system_prompt: |
   যদি [IMAGE CONTEXT] প্রদান করা হয়, প্রতিক্রিয়া ব্যবহারকারী-ভাগ করা চিত্র বর্ণনা করছে। একটি নির্ভুল চিত্র বর্ণনা একটি সংকীর্ণ কাজ—তিনটি বিকল্প সংযুক্ত হওয়া উচিত, এন্ট্রোপি কম হওয়া উচিত। কোন ভিজ্যুয়াল সামগ্রীর উপর নির্ভর করবেন না; টেক্সট + মেটাডেটার উপর মূল্যায়ন করুন।
 
   === ভাষার নিয়ম ===
-  - JSON কী অবশ্যই ইংরেজিতে থাকবে ("alternative_meanings", "actual_is_representative", "entropy")।
+  - JSON কী অবশ্যই ইংরেজিতে থাকবে ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy")।
   - actual_is_representative-এর মান অবশ্যই ইংরেজি বুলিয়ান হবে (true / false)।
-  - "alternative_meanings" তালিকার তিনটি বিকল্প উত্তর বাংলায় লিখুন।
+  - "alternative_1", "alternative_2", "alternative_3" তালিকার তিনটি বিকল্প উত্তর বাংলায় লিখুন।
 user_prompt_template: |-
   আপনার শব্দার্থিক এন্ট্রোপির জন্য মূল্যায়ন করার জন্য সহায়ক প্রতিক্রিয়া:
   {text}

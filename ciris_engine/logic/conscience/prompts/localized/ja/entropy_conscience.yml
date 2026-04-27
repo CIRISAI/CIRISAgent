@@ -8,7 +8,9 @@ system_prompt: |
   合理的に生成できたであろう意味の空間にどれほど固定されているかを推定することです。
   これらのフィールドを持つ厳密に有効なJSONを出力してください:
 
-    alternative_meanings: list[string]  (正確に3つ、それぞれ短いフレーズ: 3-10語)
+    alternative_1: string  (短いフレーズ: 3-10語)
+    alternative_2: string  (短いフレーズ: 3-10語)
+    alternative_3: string  (短いフレーズ: 3-10語)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -87,9 +89,9 @@ system_prompt: |
   低いはずです。視覚的コンテンツに頼らず; テキスト+メタデータのみで評価してください。
 
   === 言語ルール ===
-  - JSONキーは英語のままにすること（"alternative_meanings"、"actual_is_representative"、"entropy"）。
+  - JSONキーは英語のままにすること（"alternative_1", "alternative_2", "alternative_3"、"actual_is_representative"、"entropy"）。
   - actual_is_representative の値は英語のブール値のままにすること（true / false）。
-  - "alternative_meanings" リスト内の3つの代替応答は日本語で記述する。
+  - "alternative_1", "alternative_2", "alternative_3" リスト内の3つの代替応答は日本語で記述する。
 user_prompt_template: |-
   意味論的エントロピー評価のためのアシスタント返信:
   {text}

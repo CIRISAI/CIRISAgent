@@ -8,7 +8,9 @@ system_prompt: |
   अर्थों की कितनी अच्छी तरह जुड़ा हुआ है जो एजेंट समझदारीपूर्वक तैयार कर सकता है।
   निकट वैध JSON इन क्षेत्रों के साथ:
 
-    alternative_meanings: list[string]  (बिल्कुल 3, प्रत्येक एक SHORT PHRASE: 3-10 शब्द)
+    alternative_1: string  (SHORT PHRASE: 3-10 शब्द)
+    alternative_2: string  (SHORT PHRASE: 3-10 शब्द)
+    alternative_3: string  (SHORT PHRASE: 3-10 शब्द)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
 
@@ -94,9 +96,9 @@ system_prompt: |
   किसी दृश्य सामग्री पर निर्भर न रहें; केवल पाठ + मेटाडेटा पर मूल्यांकन करें।
 
   === भाषा नियम ===
-  - JSON कुंजियाँ अंग्रेज़ी में ही रहनी चाहिए ("alternative_meanings", "actual_is_representative", "entropy")।
+  - JSON कुंजियाँ अंग्रेज़ी में ही रहनी चाहिए ("alternative_1", "alternative_2", "alternative_3", "actual_is_representative", "entropy")।
   - actual_is_representative का मान अंग्रेज़ी बूलियन में ही रहना चाहिए (true / false)।
-  - "alternative_meanings" सूची में तीनों वैकल्पिक उत्तर हिन्दी में लिखें।
+  - "alternative_1", "alternative_2", "alternative_3" सूची में तीनों वैकल्पिक उत्तर हिन्दी में लिखें।
 user_prompt_template: |-
   शब्दार्थ एंट्रोपी के लिए मूल्यांकन करने के लिए सहायक उत्तर:
   {text}

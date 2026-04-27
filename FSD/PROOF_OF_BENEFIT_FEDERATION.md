@@ -32,11 +32,13 @@ If you have **5 minutes**: read this section, the glossary below, and §2.1 (the
 
 If you have **20 minutes**: also read §2.4 (empirical N_eff measurement validating Book IX's codimension claim on production data) and §2.5 (cracking limitation L-01 via recursive II — how a single resource-bounded agent recovers the federated-ratchet's geometry locally).
 
-If you have **an hour**: read the whole document. §3 specifies the architectural moves, §4 explains the sovereign-vs-registered tier semantics, §5 is the honest list of open questions, §7 is the Accord-canonical citation map.
+If you have **an hour**: read the whole document. §3 specifies the architectural moves, §4 explains the sovereign-vs-registered tier semantics, §5 is the honest list of open questions, §6 situates the work against the 2026 alignment SOTA, §8 is the Accord-canonical citation map.
 
 If you are **adversarially reviewing**: §2.4's "what this does not validate" subsection and §5.8 (quantitative Sybil-cost as research-grade open) are where to push hardest. NEW-04 (Book IX Ch. 9) is the canonical honesty about what no detector can do.
 
-If you are **implementing**: §3, §4, and §5.1–§5.3 / §5.7 / §5.9 are operational. The references in §7 give you the codebase entry points.
+If you are **implementing**: §3, §4, and §5.1–§5.3 / §5.7 / §5.9 are operational. The references in §8 give you the codebase entry points.
+
+If you are **situating this against existing work**: §6 maps the proof-of-X design space, the Constitutional AI lineage, industry agent-identity standards (ERC-8004, SBTs, DIDs), and the recursive-self-improvement academic line. Names what differentiates and what's behind.
 
 ---
 
@@ -432,14 +434,93 @@ Items intentionally left unresolved here, to be addressed in follow-up FSDs:
 
 **5.11 IDMA-rigidity prompt calibration.** ~76% of organic traces hit the IDMA rigidity branch, collapsing `k_eff` and `correlation_risk` toward a single outcome and depressing two dimensions of the constraint vector. Decompressing the rigidity/balanced/diverse classification across more of its possible distribution would raise organic N_eff further. Prompt-engineering work, not architectural; tracked here to be sure it doesn't get lost.
 
-## 6. Non-Goals
+## 6. Related Work and Position in the 2026 SOTA
+
+This section maps CIRIS / PoB against the live 2026 alignment landscape: which existing programs are nearest, what differentiates this submission, and where it is honestly behind. The comparison surface is broad because the proof-of-X / agent-identity / scalable-oversight / decentralized-AI-governance threads are genuinely converging in 2026, and a serious submission should be locatable within that convergence rather than presented as an island.
+
+### 6.1 The proof-of-X design space
+
+Sybil-resistance primitives published or deployed for AI-agent contexts as of 2026:
+
+| Mechanism | Cost | Cost is | Reference |
+|---|---|---|---|
+| Proof of Work | wasted compute | external waste | classical |
+| Proof of Stake | locked capital | external lockup | classical |
+| Proof of Personhood | biometric / social verification | external claim | [Worldcoin / BrightID lineage](https://medium.com/@gwrx2005/proof-of-personhood-sybil-resistant-decentralized-identity-with-privacy-e74d750ca2a3); [PoP + smart-contract AI alignment, Springer 2025](https://link.springer.com/article/10.1007/s10586-025-05729-8) |
+| Proof of Capability / Compute Stake | compute spent on calibration test calls | external utility (intelligence quality, not ethics) | [FortyTwo, arXiv 2510.24801](https://arxiv.org/pdf/2510.24801) |
+| Soulbound non-transferable certifications | revocable on breach via smart contracts | identity attestation as binding | [RNWY Soulbound AI](https://rnwy.com/learn/soulbound-ai); [AI Rights Institute](https://airights.net/soulbound-ai-soulbound-robots) |
+| Human Challenge Oracle | AI-resistant identity-bound challenges | external (human-only solvability) | [arXiv 2601.03923](https://arxiv.org/pdf/2601.03923) |
+| **Proof of Benefit (CIRIS)** | **running a real ethical-reasoning agent producing signed traces passing 9-axis independence over ~30 days** | **the thing the network exists to enable** | this FSD; [Accord Book IX](https://ciris.ai/ciris_accord.txt) |
+
+The closest mechanical analog is FortyTwo's Compute Stake — both ask the agent to demonstrate something at compute cost. The category difference: Compute Stake measures *can-this-node-reason-well*; PoB measures *has-this-agent-reasoned-ethically-over-time*. Compute Stake's cost (calibration evaluations) is utility external to the network's purpose; PoB's cost (sustained ethical operation) is the network's purpose. As far as the surveyed literature shows, **PoB is the first proof-of-X primitive in which the cost of belonging is the value the network produces.**
+
+### 6.2 Constitutional AI lineage and the public-canon question
+
+Anthropic's Constitutional AI program is the dominant corporate alignment stack ([CAI](https://www.anthropic.com/research/constitutional-ai-harmlessness-from-ai-feedback); [Constitutional Classifiers++ shipped Jan 2026](https://www.anthropic.com/research/next-generation-constitutional-classifiers); new Claude constitution published 2026-01). The relevant comparison point for CIRIS:
+
+The 2024 [Collective Constitutional AI experiment (FAccT 2024)](https://arxiv.org/abs/2406.07814) sampled US adults to produce a public constitution alongside Anthropic's corporate one. The result: **~50% divergence between principles**; the public version emphasized objectivity, accessibility, and *prescription of desired behavior* over corporate emphasis on *avoidance of undesired behavior*. Anthropic's 2026 constitution publication did not incorporate the democratic findings. That divergence is now an empirical case study in why corporate-curated canon can drift from the population it serves.
+
+CIRIS's structural answer: **the canon is public from the start, dated with a hard 2027-04-16 expiry that forces renewal, multilingual (29 languages, every tradition in chorus rather than English-translated), AGPL-3.0, with a 12-month public comment cycle baked into Annex B §11.** The mechanism is not "make a constitution that won't drift" — it's "make drift visible and renewable on a public clock." Different theory of governance, addressing the failure mode the Collective CAI experiment empirically demonstrated.
+
+[C3AI (2025)](https://dl.acm.org/doi/10.1145/3696410.3714705) provides a framework for crafting and evaluating CAI constitutions. CIRIS Accord could plausibly be evaluated using C3AI's methodology as a peer constitution; that interop has not been done.
+
+### 6.3 Industry agent-identity standards
+
+Industry consolidation around agent identity is happening fast and large:
+
+- **[ERC-8004](https://www.geterc8004.com/)** — Ethereum standard for AI agent identity, deployed mainnet 2026-01-29. Co-authored by MetaMask, Ethereum Foundation, Google, and Coinbase. The dominant industry standard.
+- **[Soulbound Tokens for AI Agents](https://rnwy.com/blog/fingerprints-for-ai-soulbound-tokens)** — non-transferable compliance certifications; smart contracts flag/revoke on breach.
+- **[DIDs + Verifiable Credentials for Agents (arXiv 2511.02841)](https://arxiv.org/abs/2511.02841)** — self-sovereign agent identity standards.
+- **[Know Your Agent (KYA) governance frameworks](https://philpapers.org/archive/CHAKYA.pdf)** — agentic-web identity governance.
+- **[Decentralized Governance of AI Agents (arXiv 2412.17114)](https://arxiv.org/html/2412.17114v3)** — federation governance theory.
+
+What these stacks share: blockchain-anchored cryptographic identity, smart-contract gating, capital-economy interop. What they don't address: **ethics-over-time recognition**, **multi-medium reach beyond internet** (LoRa, packet radio), and the **canonical-text question** (whose ethics, encoded how, renewed how).
+
+CIRIS plausibly composes with ERC-8004 rather than competing with it: a CIRIS agent could carry both an ERC-8004 identity (for blockchain-economic interop) and a Reticulum identity with PoB standing (for sovereign federation reaching the edge). The composition has not been built; it is a clean follow-up. The market scale framing — McKinsey's $3-5T agentic commerce by 2030, Gartner's $15T B2B AI-intermediated by 2028 — suggests this composition matters for whether CIRIS-style sovereign mode remains a viable peer of the corporate-anchored mainstream.
+
+### 6.4 Recursive self-improvement and scalable oversight
+
+Academic line, kin to §2.5:
+
+- **[ICLR 2026 Workshop on AI with Recursive Self-Improvement](https://iclr.cc/virtual/2026/workshop/10000796)** — dedicated venue for the topic.
+- **[NSRSA — Neuro-Symbolic Recursive Self-Alignment (arXiv 2603.21558)](https://arxiv.org/html/2603.21558)** — symbolic verification (sympy + logical-flow consistency) gates self-training data quality at the reasoning step. Prevents recursive drift during self-training.
+- **[Scalable Oversight via Recursive Self-Critiquing (arXiv 2502.04675)](https://arxiv.org/abs/2502.04675)** — argues critique-of-critique is more tractable than direct critique, and the difficulty relationship holds recursively; offers higher-order critique as supervision pathway.
+- **[Super Co-alignment (arXiv 2504.17404)](https://arxiv.org/html/2504.17404v5)** — broader framing from weak-to-strong toward sustainable symbiotic society; vocabulary overlap with Accord M-1.
+- **[Automated Alignment Researchers, Anthropic](https://www.anthropic.com/research/automated-alignment-researchers)** — corporate program for AI-supervised alignment research.
+
+Where CIRIS sits in this line: **§2.5 (recursive II with prompt perturbation across K orthogonal grounding axes) and the v3 conscience methodology in `FSD/CONSCIENCE_V3.md` are the same family as recursive self-critiquing**, operationalized at decision-time rather than training-time. NSRSA gates data; recursive II gates decisions. The two could compose: NSRSA at training, recursive II at inference. CIRIS offers the inference-time half of a fuller stack.
+
+### 6.5 What differentiates this submission
+
+After the comparison, six properties appear genuinely novel **in combination**:
+
+1. **Cost ≡ benefit asymmetry, not extraction.** Closest analog is Compute Stake; CIRIS measures ethics-over-time, not capability-now.
+2. **Empirical N-axis independence on production data.** No other framework surveyed has measured codimension on production traces. CIRIS ships scripts + lifetime time-series + planned HF corpus.
+3. **29-language polyglot canon as load-bearing primitive.** Constitutional AI is English-corporate-curated; CIRIS Accord is multilingual-public-dated.
+4. **Survives self-application as explicit design property.** Empirical: the Collective CAI / Anthropic-2026 divergence is a case study in failure of self-application. CIRIS's recursive golden rule + AGPL-3.0 + dated expiry + public comment cycle make survival structural.
+5. **Multi-medium transport via Reticulum.** Industry standards are blockchain-anchored, internet-only. Reticulum-rs reaches LoRa / packet radio / serial — populations the blockchain stack does not.
+6. **License-locked mission preservation.** Mission-locked corporate structure + AGPL-3.0 + dated canon. The structural arrangement protects the mission from corporate capture by design.
+
+The combination is the contribution. Each piece has nearest-neighbors in the literature; the *integrated stack* is what is uniquely-shaped.
+
+### 6.6 Where CIRIS is honestly behind the SOTA
+
+1. **Industry adoption.** ERC-8004 has Big-4-coauthor backing. CIRIS does not have comparable industry buy-in publicly visible. Mass-market identity may consolidate around ERC-8004; CIRIS becomes sovereign alternative rather than default.
+2. **Formal mathematical proofs.** NSRSA has symbolic verification with formal guarantees. The Coherent Intersection Hypothesis (Book IX) has a topological argument with empirical N_eff backing, but the formal proof of codimension scaling under recursive ASI is not done. (Theoretical gap; see also the recursive-ASI section in this document's preceding-conversation context.)
+3. **Quantitative Sybil-cost.** PoW / PoS have explicit attack-cost models. PoB has §5.8's four candidate paths but no number. FortyTwo's Compute Stake has computational-cost-as-barrier formalized; CIRIS does not yet.
+4. **Industry-standard interop.** No CIRIS → ERC-8004 bridge. No DID-compatible identity shim. The stack is self-contained — for sovereign deployment that's correct; for mainstream adoption it is friction.
+5. **Capability benchmark coverage.** HE-300 covers ethical scenarios; CIRIS does not have a parallel capability story (MMLU / GPQA / ARC / etc.) for the underlying agents. Sub-ASI applicability is the right scope but means there is no story for measuring the agents toward an ASI threshold.
+
+These gaps are real and named. None invalidates the central submission; together they describe what the next two to three years of work look like if CIRIS is to remain a credible peer of the mainstream stacks rather than a curiosity.
+
+## 7. Non-Goals
 
 - **No new cryptographic primitive.** The protocol uses Ed25519 + X25519 + AES + Reticulum's existing ratchets. No invention required at the crypto layer.
 - **No new economic primitive beyond GratitudeSignal + CreditRecord.** The commons-credit accounting rides on what already exists in `agent_credits.py`. PoB is a *recognition* of existing structure, not a new schema.
 - **No replacement of CIRISRegistry.** The registry remains the bootstrap node and the commercial fast-track. It is not the federation; the federation is the score function over replicated traces.
 - **No same-release flag day.** This FSD specifies the target architecture; phased migration is a separate planning document.
 
-## 7. References
+## 8. References
 
 ### CIRIS Accord (canonical)
 
@@ -491,7 +572,7 @@ The Accord is the canonical text this FSD operationalizes. Citations herein:
 - CIRIS scoring spec: https://ciris.ai/ciris-scoring
 - CIRIS coherence ratchet: https://ciris.ai/coherence-ratchet
 
-## 8. Closing Note
+## 9. Closing Note
 
 This FSD is unusual in that it does not propose construction. The federation primitive is already built — distributed across CIRISAgent, CIRISLens, CIRISRegistry, and the planned Reticulum transport — and **it is canonical to the CIRIS Accord (Book IX) since 2025-04-16.** What this document adds is empirical validation against production trace data, articulation of the architectural moves the validation enables, and recognition of how the v4 conscience methodology cracks limitation L-01.
 

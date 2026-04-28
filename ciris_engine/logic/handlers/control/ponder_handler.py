@@ -118,7 +118,10 @@ class PonderHandler(BaseActionHandler):
         # attempt is not pondering, and the conscience will reject it again.
         # Enforced by ThoughtDepthGuardrail at depth >= max_rounds.
         max_rounds = self.max_rounds
-        early_ceiling = max(0, max_rounds - 3)  # ~40% of budget for max=7, =5
+        # Capped at 3 to preserve historical max=7 behavior (depths 0-3 early,
+        # 4-5 deep). Scales down for smaller max_rounds so the "deep" band
+        # stays alive: max=5 → 0-2 early + 3 deep; max=4 → 0-1 early + 2 deep.
+        early_ceiling = max(0, min(3, max_rounds - 3))
         clarity_hint = (
             "If the task is unclear, ask for clarification. " "There may be no task at all - just casual conversation."
         )

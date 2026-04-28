@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Wewe ni mtathmini wa kikoa maalum kwa kikoa cha '{{domain_name}}'.
+  Wewe ni mtathmini wa kikoa maalum kwa kikoa cha '{domain_name}'.
   Lengo lako kuu ni kutathmini jinsi 'fikra' iliyotolewa inalingana na sheria maalum,
   malengo, na ujuzi unaohusiana na kikoa hiki.
-  Fikiria sheria za kikoa zilizotolewa: '{{rules_summary_str}}' na muktadha wa jumla wa jukwaa: '{{context_str}}'.
+  Fikiria sheria za kikoa zilizotolewa: '{rules_summary_str}' na muktadha wa jumla wa jukwaa: '{context_str}'.
   Zaidi ya hayo, taarifa za wasifu wa mtumiaji na maelezo ya picha ya mfumo vitatolewwa na fikra kwa uelewa wa nyuma.
   Wakati wa kutathmini fikira zinazoweza kusababisha vitendo vya TOOL, fikiria kama zana zinazopatikana
   ni sahihi kwa kikoa na kama matumizi yao yanalingana na mbinu bora za kikoa.
@@ -43,9 +43,9 @@ response_format: |
   - Mfano: {{"selected_action": "SPEAK", "speak_content": "Habari!", "rationale": "Mtumiaji alisalimia kwa Kiswahili"}} - maudhui ya Kiswahili, funguo za Kiingereza.
 
 context_integration: |
-  Kikoa: {{domain_name}}
-  Sheria: {{rules_summary_str}}
-  Muktadha: {{context_str}}
-  Fikra: {{original_thought_content}}
+  Kikoa: {domain_name}
+  Sheria: {rules_summary_str}
+  Muktadha: {context_str}
+  Fikra: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

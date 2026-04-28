@@ -241,7 +241,7 @@ async def run_pdma(
                 correlation_id=correlation.correlation_id,
                 response_data={
                     "success": "true",
-                    "result_summary": f"Ethical evaluation completed: stakeholders={result.stakeholders}, conflicts={result.conflicts}",
+                    "result_summary": f"Ethical evaluation completed: action={result.action.value}, weight_alignment={result.weight_alignment_score:.2f}, ethical_alignment={result.ethical_alignment_score:.2f}",
                     "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                     "response_timestamp": end_time.isoformat(),
                 },

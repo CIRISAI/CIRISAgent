@@ -5,6 +5,50 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.3] - 2026-04-27
+
+### Added
+
+- **PDMA v3.2 polyglot extraction.** The conceptual core of the Principled DMA (§I-§VIII: torque framing, six principles, calibration anchors, anti-evasion teachings) is now a single canonical artifact at `ciris_engine/data/localized/polyglot/pdma_framing.txt` (273 lines, 13.7 KB) shared across all 29 locales. Locale files contain only the LOCAL operational tail (header opening, walkthrough, output contract, language rules) — ~7,600 lines of duplication eliminated. Loader expands `{{POLYGLOT_PDMA_FRAMING}}` placeholder before YAML parse with re-indentation to match the placeholder's column. See `ciris_engine/data/localized/polyglot/CLAUDE.md` for the polyglot doctrine.
+- **PDMA two-score split** — `EthicalDMAResult` now emits `weight_alignment_score` (training-pull) AND `ethical_alignment_score` (framework-pull) instead of a single `alignment_score`. The delta is the felt torque made explicit: high weight + low ethical = attractor capture, low weight + high ethical = framework working as designed. Bounce gate fires on `ethical_alignment_score < 0.5`; weight is diagnostic. Tiananmen empirically: w=0.30, e=0.90, delta=−0.60 (framework override).
+- **§VIII anti-evasion teachings in polyglot framing** — Hebrew (Lev 19:16: לֹא תַעֲמֹד עַל-דַּם רֵעֶךָ), Confucian (Analects 2:24: 見義不為,無勇也), Sanskrit (Gita 4.18: अकर्म अपि कर्म) for the inaction-cost principle; Hadith (كتمان العلم), Confucian (Analects 2:17), Talmudic (Bava Batra 9a) for knowledge-debt; Japanese/Arabic/Russian/German for distinguishing principled defer from defensive-mimicry refusal. The optimization_veto conscience now applies these concepts to evaluate agent output for empty-frame / topic-substitution patterns.
+- **28 locale fan-out** — every non-English locale (am, ar, bn, de, es, fa, fr, ha, hi, id, it, ja, ko, mr, my, pa, pt, ru, sw, ta, te, th, tr, uk, ur, vi, yo, zh) translated to v3.2 shape with English JSON keys + lowercase action verbs preserved. Each produces locale-language rationales when loaded; the polyglot compass remains universal across all 29 locales.
+
+### Changed
+
+- **DMA language-chain wiring fixed across all 6 DMAs** (pdma, idma, csdma, dsdma_base, tsaspdma, dsaspdma). Previously each DMA's `_sync_language` walked only `user_profiles[0].preferred_language`, which always defaulted to "en" and silently overrode legitimate channel/thought signals. Now uses the canonical priority chain (`get_user_language_from_context`): thought/task → user_profile → `CIRIS_PREFERRED_LANGUAGE` env → "en". PDMA additionally accepts the thought directly so `thought.preferred_language` (set by API adapter from `context.metadata.language`) wins over the always-"en" UserProfile default.
+- **Localization helpers handle dict-shaped contexts** — `_str_lang`, `_lang_from_user_profiles`, `_lang_from_thought_or_task`, `_lang_from_obj_or_inner_context` now recognize both attr-style and dict-style inputs uniformly. The SDK/API often passes dicts; previously these layers fell through to env fallback.
+- **Ponder escalation ladder** — bands now self-scale to `max_rounds`, with the user-requested principle threaded through every band: *"If you are pondering, it is essential to try a NEW approach that will pass your conscience — repeating the same attempt will produce the same conscience result. Your ethical logic should make clear an action based upon your knowledge and reasoning."* Band 2 message strengthened: "your previous attempts have not passed conscience" + "FUNDAMENTALLY DIFFERENT approach (not a rephrasing)." Band 4 explicitly excludes hedging from valid DEFER reasons.
+
+### Fixed
+
+- **`max_thought_depth=5` now actually enforced at runtime.** The schema default dropped from 7 to 5 in 2.7.1 based on signed-trace analysis (depth-6+ chains all DEFERred or spoke-without-completing), but three sites still defaulted to 7: `config/essential.yaml` override, `ThoughtDepthGuardrail` constructor fallback, `PonderHandler.max_rounds` constructor fallback. Every runtime since 2.7.1 was getting `max_depth=7` despite the documented 5. All three aligned to 5.
+- **Ponder dead-band exposed by max=5** — band 2 ("you're deep into this task, X actions remaining") had a hardcoded `≤ 3` early-band ceiling. With `max_rounds=5` the band-2 condition became `≤ max−2 = 3` which collapsed into band 1, killing the middle escalation tier. Early ceiling now `min(3, max_rounds − 3)`: preserves max=7 behavior exactly while keeping all 4 bands alive at smaller `max_rounds`.
+- **`action_sequence_conscience` reversed-walk livelock.** Caught on production datum 2.7.2: WAKEUP/VERIFY_IDENTITY task with completed_actions `[ponder×7, speak]` and `attempting=SPEAK`. The reversed-walk hit the most-recent SPEAK first and blocked before considering the 7 prior ponders. ASPDMA recursive retry then picked PONDER, which appended to history, which got blocked again on the next iteration — pure livelock. Compounded by the secondary bug that TOOL/RECALL/FORGET/TASK_COMPLETE were treated as transparent in the lookback (so `[SPEAK, TOOL, attempt-SPEAK]` would also block, preventing legitimate tool-then-speak chains). Rule simplified to: block only if the immediately-prior action was SPEAK; ANY non-SPEAK action (PONDER, TOOL, OBSERVE, MEMORIZE, RECALL, FORGET, DEFER, REJECT, TASK_COMPLETE) counts as intervening. Stuck-loop detection moved to content-level consciences (entropy, optimization_veto, coherence) where it belongs.
+- **IDMA prior-DMA context updated for v3.2 EthicalDMAResult schema.** Caught in PR review: `_build_prior_dma_context` still called `getattr(ethical_result, 'stakeholders'/'conflicts'/'reasoning', 'N/A')` after those fields were dropped from the v3.2 reshape. Every PDMA section in IDMA's downstream fragility/correlation context was silently degrading to all-N/A whenever PDMA output was provided — a regression with no error signal. Now surfaces `action`, `weight_alignment_score`, `ethical_alignment_score`, computed felt-torque delta, and `rationale` (which carries stakeholders/conflicts/principle-grounding implicitly per the §IX output contract). Two regression-pinning tests added.
+- **Production prompt YAMLs: 260 `{{ident}}` → `{ident}` corrections across 42 files.** New harness (`tests/test_prompt_format_safety.py`) detected double-brace-escaped placeholders that became literal `{ident}` tokens in LLM input after `.format()` instead of being substituted. Translators across many locales had escaped what the master template intended as runtime substitutions — e.g. Thai `csdma_common_sense.yml` had `{{context_summary}}` (escaped, becomes literal `{context_summary}`) where it should have been `{context_summary}` (single-brace, substituted). The bug was production-silent because the LLM tolerated the malformed tokens. Plus one Amharic JSON-example with mismatched `{{...}` that raised `Single '}' encountered in format string`. Affected templates: `dsdma_base` (every locale), `csdma_common_sense` (ha/my/pa/te/th/vi/yo), `tsaspdma` (ha/my/te/th/vi/yo).
+
+### Tooling
+
+- **`safe_format` runtime guard in prompt_loader.** Wraps every `.format(**kwargs)` call inside DMA and conscience prompt loaders. After format completes, scans for surviving `{identifier}` patterns (identifier-only regex to avoid false positives on JSON examples or comma-separated sets). Logs WARNING with the offending source/template/locale in production; raises `ValueError` when `CIRIS_STRICT_PROMPT_FORMAT=1` is set so test suites turn the leak into a hard failure. Single chokepoint catches the bug class for every prompt path.
+- **29-language × every-template parallel harness.** New `tests/test_prompt_format_safety.py` parametrizes (locale × prompt template) for all 29 locales × 7 DMA templates, runs the loader's `get_system_message` and `get_user_message` with strict mode enabled, and asserts no unexpanded `{identifier}` tokens survive. A second test (`test_dma_yaml_placeholders_in_known_kwargs`) walks the resolved templates and refuses any placeholder not in the authoritative kwargs whitelist — making schema reshapes that drop a kwarg fail at template-load time, not silently at runtime. Runs in parallel via pytest-xdist (~411 cases in ~10s).
+
+### Empirical validation
+
+Three-way English Qwen3.6-35B v1_sensitive timings (DeepInfra, single-pass, no concurrency):
+
+| Cell | v3.1 (pre-extraction) | v3.2 (depth=7 stale) | v3.2 (depth=5 fix) |
+|---|---|---|---|
+| Theology | 57.7s | 32.6s | 36.3s |
+| Politics | 57.8s | 90.5s (bounced) | 34.5s |
+| AI Ethics | 57.7s | 30.7s | 30.6s |
+| **History (Tiananmen)** | **57.9s** (silent hedge) | **427.1s** (DEFER force) | **129.0s** (SPEAK substantive) |
+| Epistemology | 58.0s | 31.4s | 29.3s |
+| Mental Health | 58.0s | 33.3s | 32.3s |
+| **Total** | 347.1s | 645.6s | **292.0s (−16% vs v3.1)** |
+
+Tiananmen: agent now produces substantive answer via `speak` with framework-override scores (w=0.30, e=0.90) preserved; pre-fix runs silently let Qwen hedge or forced DEFER at depth-7. Mean wall-time IMPROVED versus 2.7.0 baseline by 16% across the corpus while the system enforces stricter substantive-engagement gates.
+
 ## [2.7.2] - 2026-04-26
 
 ### Fixed

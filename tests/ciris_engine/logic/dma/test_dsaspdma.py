@@ -263,7 +263,17 @@ class TestDSASPDMAEvaluator:
         """Regression: a reused evaluator must not inherit the previous
         thought's language when the next thought arrives without profile
         data. Without this clear, an `am` thought followed by a
-        no-profile thought would silently keep loading Amharic prompts."""
+        no-profile thought would silently keep loading Amharic prompts.
+
+        Under the v3.2 sync-from-context behaviour, "no thought / no
+        profile" doesn't go to None — it walks the canonical chain to
+        ``CIRIS_PREFERRED_LANGUAGE`` (``"en"`` when unset). The "no bleed"
+        property is preserved: the previous thought's language never
+        carries through; the next call resolves the deployment default.
+        """
+        from ciris_engine.logic.utils.localization import get_preferred_language
+
+        env_default = get_preferred_language()  # respects CIRIS_PREFERRED_LANGUAGE if set
         evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
 
         # First thought: am profile
@@ -272,9 +282,9 @@ class TestDSASPDMAEvaluator:
         evaluator._sync_language_from_context(am_context)
         assert evaluator._explicit_language == "am"
 
-        # Second thought: no context at all
+        # Second thought: no context at all → falls back to env default, not "am"
         evaluator._sync_language_from_context(None)
-        assert evaluator._explicit_language is None, (
+        assert evaluator._explicit_language == env_default, (
             "stale language bled across thoughts"
         )
 
@@ -283,13 +293,13 @@ class TestDSASPDMAEvaluator:
         evaluator._sync_language_from_context(am_context)  # set back to am
         assert evaluator._explicit_language == "am"
         evaluator._sync_language_from_context(empty_context)
-        assert evaluator._explicit_language is None, (
+        assert evaluator._explicit_language == env_default, (
             "stale language bled across thoughts when context had no profiles"
         )
 
         # Fourth thought: dict-shaped context with no system_snapshot
         evaluator._sync_language_from_context(am_context)  # set back to am
         evaluator._sync_language_from_context({})
-        assert evaluator._explicit_language is None, (
+        assert evaluator._explicit_language == env_default, (
             "stale language bled across thoughts when context dict was empty"
         )

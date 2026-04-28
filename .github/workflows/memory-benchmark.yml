@@ -17,7 +17,13 @@ jobs:
   memory-benchmark:
     name: Memory Benchmark
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Wall-time budget (was 15m): cold-start 30s + 100-msg ~67s + setup ~90s
+    # + 1000-msg burst ~670s + 1000-msg idle 90s ≈ 15.8m on a typical runner.
+    # 15m left zero headroom; a slow runner tips into a hard cancel that
+    # destroys the in-flight `tee` buffer and we lose all benchmark output.
+    # Bump to 20m: completes comfortably on every runner observed, still
+    # well under the GitHub Actions free-tier soft ceiling.
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
@@ -32,6 +38,14 @@ jobs:
       # The default API rate limit (60/min) would throttle the 1000-message
       # burst benchmark. Match the qa_runner live-mode value.
       CIRIS_API_RATE_LIMIT_PER_MINUTE: "600"
+      # Force unbuffered Python stdout/stderr so the `python … | tee` pipeline
+      # streams print() output line-by-line. Without this, CPython block-
+      # buffers stdout when piped (not a TTY) and CI-side cancellation throws
+      # away the in-flight buffer — we get zero benchmark output and zero
+      # signal about where in the burst the run died. The 1000-msg run that
+      # failed at 25033091098 produced ZERO captured lines for 13m22s of
+      # execution; this fix makes the next failure diagnosable.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +98,7 @@ jobs:
       - name: Cold Start Benchmark
         run: |
           echo "## Cold Start Benchmark (30s)" >> $GITHUB_STEP_SUMMARY
-          python3 tools/introspect_memory.py --adapters cli --duration 30 | tee cold_start.log
+          python3 -u tools/introspect_memory.py --adapters cli --duration 30 | tee cold_start.log
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -20 cold_start.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -92,7 +106,7 @@ jobs:
       - name: 100 Message Benchmark
         run: |
           echo "## 100 Message Benchmark" >> $GITHUB_STEP_SUMMARY
-          python3 tools/memory_benchmark.py --messages 100 --adapter api | tee 100msg.log || echo "100-msg benchmark skipped"
+          python3 -u tools/memory_benchmark.py --messages 100 --adapter api | tee 100msg.log || echo "100-msg benchmark skipped"
           if [ -f 100msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -20 100msg.log >> $GITHUB_STEP_SUMMARY
@@ -102,11 +116,12 @@ jobs:
       - name: 1000 Message Benchmark
         run: |
           echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
-          # --idle-seconds 90 holds the server alive after the burst so we can
-          # see whether async task processing drains and RAM plateaus. Without
-          # it, "Final" memory in the summary is the value 2.5s after the last
-          # POST returns — well before the queued thoughts have been processed.
-          python3 tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 90 | tee 1000msg.log || echo "1000-msg benchmark skipped"
+          # --idle-seconds 30 (was 90) holds the server alive after the burst
+          # so we can sample steady-state RSS — but 30s is enough to observe
+          # plateau in CI without burning the 60s of budget that pushed the
+          # 25033091098 run past the 15-minute cap. Production weekly cron
+          # gets the longer 90s window via workflow_dispatch when needed.
+          python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 | tee 1000msg.log || echo "1000-msg benchmark skipped"
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             # Tail 30 lines instead of 20 so the failure-breakdown + idle

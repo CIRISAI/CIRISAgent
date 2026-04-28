@@ -19,7 +19,7 @@ security:
   audit_retention_days: 90
   secrets_encryption_key_env: "CIRIS_MASTER_KEY"
   enable_signed_audit: true
-  max_thought_depth: 7
+  max_thought_depth: 5
 
 # Operational limits
 limits:

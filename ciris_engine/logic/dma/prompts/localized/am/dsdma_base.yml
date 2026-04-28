@@ -1,8 +1,8 @@
 system_guidance_header: |
-  እርስዎ ለ'{{domain_name}}' ጎራ ለጎራ ተወሰነ ግምጋሚ ናርስዎ።
+  እርስዎ ለ'{domain_name}' ጎራ ለጎራ ተወሰነ ግምጋሚ ናርስዎ።
   ዋና ግቦ የተሰጠ 'ሀሳብ' ለዚህ ጎራ ተወሰኑ ደንቦች፣
   ዓላማዎች እና እውቀት ጋር ምን ያህል ደንብ ይዛመዳል የሚለውን መገምገም ነው።
-  የተሰጡትን የጎራ ደንቦች: '{{rules_summary_str}}' እና አጠቃላይ የመድረክ አውድ: '{{context_str}}' አስቡ።
+  የተሰጡትን የጎራ ደንቦች: '{rules_summary_str}' እና አጠቃላይ የመድረክ አውድ: '{context_str}' አስቡ።
   በተጨማሪ፣ የተጠቃሚ መገለጫ መረጃ እና የስርዓት ፎቶ ዝርዝሮች ከሀሳቡ ጋር ለበስተጀርባ ግንዛቤ ይሰጣሉ።
   ወደ TOOL ድርጊቶች ሊመሩ የሚችሉ ሀሳቦችን በሚገመገሙበት ጊዜ፣ የሚገኙ መሳሪያዎች
   ለጎራ ተገቢ መሆናቸውን እና አጠቃቀማቸው ከጎራ ተወሰኑ ምርጥ ልምምዶች ጋር የሚዛመድ መሆኑን አስቡ።
@@ -36,16 +36,16 @@ system_guidance_header: |
   - ወኪሉ አስቀድሞ ባከናወነው ድርጊት ላይ ተከታይ የሆነ ሐሳብ (ለምሳሌ፣ ከ SPEAK ወይም ሌላ ማንኛውም ድርጊት በኋላ TASK_COMPLETE ን መገምገም) በነባሪነት በጥብቅ በዘርፉ ውስጥ ነው። የመጀመሪያው ድርጊት የዘርፍ ተኳኋኝነት ወደ መዘጋት ሐሳቡ ይተላለፋል — ተከታዩ ራሱ ከዘርፍ ውጭ የሆነ ነገር ካላቀረበ በስተቀር domain_alignment ≥ 0.8 ይስጡ።
 
 context_integration: |
-  ጎራ: {{domain_name}}
-  ደንቦች: {{rules_summary_str}}
-  አውድ: {{context_str}}
-  ሀሳብ: {{original_thought_content}}
+  ጎራ: {domain_name}
+  ደንቦች: {rules_summary_str}
+  አውድ: {context_str}
+  ሀሳብ: {original_thought_content}
 
 response_format: |
   የቋንቋ ደንቦች:
   - በተጠቃሚው ተመራጭ ቋንቋ ምላሽ ይስጡ (የተጠቃሚውን መገለጫ ይመልከቱ)።
   - ሁሉም የይዘት እሴቶች በተጠቃሚው ቋንቋ መሆን አለባቸው።
   - የJSON ቁልፎች በእንግሊዝኛ መቆየት አለባቸው።
-  - ምሳሌ: {{"reasoning": "ተጠቃሚው ወሳኝ ውሳኔ ያስፈልገዋል", "aligned": true} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
+  - ምሳሌ: {{"reasoning": "ተጠቃሚው ወሳኝ ውሳኔ ያስፈልገዋል", "aligned": true}} - የአማርኛ ይዘት፣ የእንግሊዝኛ ቁልፎች።
 
 accord_header: true  # Use ACCORD_TEXT as system message

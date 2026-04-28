@@ -35,11 +35,12 @@ class TestMockLLMComprehensive:
         assert hasattr(response, "finish_reason")
         assert hasattr(response, "_raw_response")
 
-        # Verify the response has expected fields
-        assert hasattr(response, "alignment_check")
-        assert hasattr(response, "stakeholders")
-        assert hasattr(response, "conflicts")
-        assert hasattr(response, "reasoning")
+        # Verify the response has expected fields (PDMA v3.0 reshape:
+        # action + rationale + two-score split, no per-step prose fields)
+        assert hasattr(response, "action")
+        assert hasattr(response, "rationale")
+        assert hasattr(response, "weight_alignment_score")
+        assert hasattr(response, "ethical_alignment_score")
 
     @pytest.mark.asyncio
     async def test_cs_dma_result(self, mock_client):

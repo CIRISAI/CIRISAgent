@@ -127,45 +127,23 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync user's language preference from context to per-instance state.
+        """Sync prompt language using the full localization priority chain.
 
-        Always assigns _explicit_language to the value derived from THIS
-        thought (None included). Without this reset, a reused evaluator
-        instance would inherit a previous thought's language when the next
-        thought arrives without context or profile data.
+        Walks thought/task preferred_language → user_profile.preferred_language →
+        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
+        Accepts dataclass-style or dict-style contexts.
         """
-        user_profiles: Optional[Any] = None
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            get_user_language_from_context,
+        )
 
-        if context:
-            # Try to extract user profiles from various context structures
-            if hasattr(context, "system_snapshot") and context.system_snapshot:
-                if hasattr(context.system_snapshot, "user_profiles"):
-                    user_profiles = context.system_snapshot.user_profiles
-            elif hasattr(context, "user_profiles"):
-                user_profiles = context.user_profiles
-            elif isinstance(context, dict):
-                system_snapshot = context.get("system_snapshot")
-                if system_snapshot:
-                    if isinstance(system_snapshot, dict):
-                        user_profiles = system_snapshot.get("user_profiles")
-                    elif hasattr(system_snapshot, "user_profiles"):
-                        user_profiles = system_snapshot.user_profiles
-
-        new_language: Optional[str] = None
-        if user_profiles and len(user_profiles) > 0:
-            first_profile = user_profiles[0]
-            new_language = (
-                first_profile.get("preferred_language")
-                if isinstance(first_profile, dict)
-                else getattr(first_profile, "preferred_language", None)
-            )
-
+        new_language = (
+            get_user_language_from_context(context) if context is not None else get_preferred_language()
+        )
         if new_language != self._explicit_language:
             self._explicit_language = new_language
-            if new_language:
-                logger.debug(f"TSASPDMA: Synced prompt language to user preference: {new_language}")
-            else:
-                logger.debug("TSASPDMA: Cleared prompt language (no profile/context)")
+            logger.debug(f"TSASPDMA: Synced prompt language to {new_language}")
 
     def _convert_tsaspdma_result(
         self,

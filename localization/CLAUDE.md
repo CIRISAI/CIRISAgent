@@ -2,6 +2,12 @@
 
 Instructions for rapidly expanding CIRIS language coverage while maintaining minimum viable linguistic rigor.
 
+> **Two layers, two different concerns.** This file documents the **per-locale translation** workflow — rendering CIRIS source material (UI strings, ACCORD, guides, DMA prompts, glossaries) into each of the 29 supported languages so users can interact with the agent in their own language. That is **translation**.
+>
+> The complementary layer is **polyglot encoding** — concept transmission via *epistemic triangulation across multiple traditions' densest encodings of a concept*, loaded universally regardless of user locale. That layer is documented at `ciris_engine/data/localized/polyglot/CLAUDE.md` and exemplified by `polyglot_accord.txt`. If you are working on a master canon prompt or a load-bearing claim that is at risk of being received as a single tradition's framing rather than a cross-traditional truth, that is polyglot territory, not translation territory.
+>
+> The two layers complement each other: the agent reads polyglot canon at the system-prompt layer and produces output in the user's locale at the response layer. New DMA prompts and conscience shards may need both — a polyglot master plus per-locale wrappers. See the polyglot CLAUDE.md for when each applies.
+
 ## Mission Alignment
 
 CIRIS Meta-Goal M-1: *"Promote sustainable adaptive coherence enabling diverse sentient beings to pursue their own flourishing in justice and wonder."*

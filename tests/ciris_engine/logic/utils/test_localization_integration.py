@@ -416,9 +416,15 @@ class TestTSASPDMALocalization:
             assert tsaspdma._explicit_language == "am"
 
             # Stale-bleed regression: a follow-up call with no context must
-            # clear the language back to None, not inherit "am" from before.
+            # clear the language so "am" doesn't inherit. Under the v3.2
+            # full-chain sync_language_from_context, "no thought / no profile"
+            # falls through to CIRIS_PREFERRED_LANGUAGE (default "en") rather
+            # than None — but the bleed-prevention property is preserved.
+            from ciris_engine.logic.utils.localization import get_preferred_language
+
             tsaspdma._sync_language_from_context(None)
-            assert tsaspdma._explicit_language is None
+            assert tsaspdma._explicit_language == get_preferred_language()
+            assert tsaspdma._explicit_language != "am", "stale language bled across thoughts"
 
 
 # ============================================================================

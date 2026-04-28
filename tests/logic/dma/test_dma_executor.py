@@ -94,10 +94,9 @@ def ethical_evaluator(service_registry):
     # Mock only the evaluate method to control results
     evaluator.evaluate = AsyncMock(
         return_value=EthicalDMAResult(
-            stakeholders="user, system",
-            conflicts="none",
-            reasoning="Test ethical reasoning",
-            alignment_check="Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Test ethical reasoning Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
     )
     return evaluator
@@ -219,10 +218,11 @@ class TestEthicalPDMA:
                 time_service=time_service,
             )
 
-            assert result.stakeholders == "user, system"
-            assert result.conflicts == "none"
-            assert result.reasoning == "Test ethical reasoning"
-            assert "alignment confirmed" in result.alignment_check.lower()
+            # PDMA v3.1: assert on action + rationale + two-score split
+            assert result.action == HandlerActionType.SPEAK
+            assert "user, system" in result.rationale
+            assert 0.0 <= result.weight_alignment_score <= 1.0
+            assert 0.0 <= result.ethical_alignment_score <= 1.0
 
             # Verify correlation was tracked
             assert mock_persistence.add_correlation.called
@@ -271,11 +271,10 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Ethical approval",
-                alignment_check="Ethical alignment confirmed. All principles satisfied.",
-            ),
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Ethical approval Ethical alignment confirmed. All principles satisfied.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+        ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.85,
                 flags=[],
@@ -317,11 +316,10 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Approved",
-                alignment_check="Basic ethical approval.",
-            ),
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Approved Basic ethical approval.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+        ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.8,
                 flags=[],
@@ -359,11 +357,10 @@ class TestDMAIntegration:
         ethical_evaluator.evaluate.side_effect = [
             Exception("Temporary failure"),
             EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Success after retry",
-                alignment_check="Basic ethical approval.",
-            ),
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Success after retry Basic ethical approval.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+        ),
         ]
 
         with patch("ciris_engine.logic.dma.dma_executor.persistence"):
@@ -376,9 +373,9 @@ class TestDMAIntegration:
                 time_service=time_service,
             )
 
-            assert result.stakeholders == "user, system"
-            assert result.conflicts == "none"
-            assert result.reasoning == "Success after retry"
+            # PDMA v3.0 reshape
+            assert result.action == HandlerActionType.SPEAK
+            assert "user, system" in result.rationale
             assert ethical_evaluator.evaluate.call_count == 2
 
 

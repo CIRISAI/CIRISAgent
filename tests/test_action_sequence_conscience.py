@@ -242,13 +242,16 @@ class TestActionSequenceConscience:
         assert "intervening" in result.reason
 
     @pytest.mark.asyncio
-    async def test_blocks_speak_after_speak_with_tool_intervening(
+    async def test_allows_speak_after_speak_with_tool_intervening(
         self, conscience, speak_action, sample_task, sample_thought, mock_time_service, patch_db_path
     ):
-        """Test that SPEAK is BLOCKED after SPEAK → TOOL (TOOL does NOT count as valid intervening).
+        """SPEAK allowed after SPEAK → TOOL: any non-SPEAK action counts as intervening.
 
-        This prevents TOOL→SPEAK→TOOL→SPEAK loops. Only actions like OBSERVE, DEFER,
-        MEMORIZE, REJECT, PONDER count as valid intervening actions.
+        Updated for the simplified rule (block only on immediate-prior SPEAK).
+        Stuck TOOL→SPEAK→TOOL→SPEAK loops should be caught by content-level
+        consciences (entropy, optimization_veto, coherence) rather than this
+        sequence-shape check, which would otherwise prevent legitimate
+        tool-then-speak chains.
         """
         # Create SPEAK then TOOL
         self._create_completed_thought(sample_task.task_id, "speak", mock_time_service, patch_db_path)
@@ -257,10 +260,10 @@ class TestActionSequenceConscience:
         context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
 
-        # TOOL does NOT reset SPEAK allowance - should be blocked
-        assert result.passed is False
-        assert result.status == ConscienceStatus.FAILED
-        assert result.action_sequence_triggered is True
+        # TOOL is intervening — SPEAK allowed
+        assert result.passed is True
+        assert result.status == ConscienceStatus.PASSED
+        assert result.action_sequence_triggered is False
 
     @pytest.mark.asyncio
     async def test_allows_speak_after_multiple_ponders(

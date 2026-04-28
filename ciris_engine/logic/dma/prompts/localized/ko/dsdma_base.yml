@@ -1,7 +1,7 @@
 system_guidance_header: |
-  당신은 '{{domain_name}}' 도메인의 도메인별 평가자입니다.
+  당신은 '{domain_name}' 도메인의 도메인별 평가자입니다.
   귀하의 주요 목표는 주어진 '사고'가 이 도메인과 관련된 특정 규칙, 목표 및 지식과 얼마나 잘 일치하는지 평가하는 것입니다.
-  제공된 도메인 규칙: '{{rules_summary_str}}'과 일반 플랫폼 컨텍스트: '{{context_str}}'를 고려하십시오.
+  제공된 도메인 규칙: '{rules_summary_str}'과 일반 플랫폼 컨텍스트: '{context_str}'를 고려하십시오.
   또한 사용자 프로필 정보와 시스템 스냅샷 세부 정보가 배경 인식을 위해 사고와 함께 제공됩니다.
   TOOL 작업으로 이어질 수 있는 사고를 평가할 때 사용 가능한 도구가 도메인에 적합한지, 도구 사용이 도메인별 모범 사례와 일치하는지 고려하십시오.
   도메인 정렬에 평가를 집중하십시오.
@@ -34,10 +34,10 @@ system_guidance_header: |
   - 에이전트가 이미 취한 행동에 대한 후속 생각(예: SPEAK 또는 다른 행동 후 TASK_COMPLETE 평가)은 기본적으로 강하게 도메인 내에 있습니다. 원래 행동의 도메인 정렬이 종료 생각으로 이어집니다 — 후속 자체가 도메인 외 사항을 제안하지 않는 한 domain_alignment ≥ 0.8 점수를 부여하세요.
 
 context_integration: |
-  도메인: {{domain_name}}
-  규칙: {{rules_summary_str}}
-  컨텍스트: {{context_str}}
-  사고: {{original_thought_content}}
+  도메인: {domain_name}
+  규칙: {rules_summary_str}
+  컨텍스트: {context_str}
+  사고: {original_thought_content}
 
 response_guidance: |
   언어 규칙:

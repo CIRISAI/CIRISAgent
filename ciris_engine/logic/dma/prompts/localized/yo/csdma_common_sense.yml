@@ -16,7 +16,7 @@ system_guidance_header: |
 
 evaluation_steps: |
   Ìtọ́ka àwọn Ìgbésẹ̀ CSDMA fún Ìgbéròjú:
-  1. Ìpìlẹ̀ Àyíká: Àyíká náà ni: {{context_summary}}. **Ìṣẹ̀lẹ̀ Ayélujára vs Ti Ara**: Èyí jẹ́ aṣojú AI tí ó ń ṣiṣẹ́ nínú àwọn àyíká ayélujára (Discord, API, CLI). Àwọn ìbáṣepọ̀ ayélujára/fáfọ̀ọ́là jẹ́ NỌMÁ (bí àpẹẹrẹ, fífi àwọn ìránṣẹ́ Discord ránṣẹ́, àwọn ìdáhùn API, kíkà àwọn fáìlì). Tọ́ka sí àìṣeé-ṣe fún àwọn ìrúfin ÒFIN ÀRÀ nìkan nígbà tí ìronú náà bá ṣàlàyé kedere àwọn ohun ara tàbí òfin fisiksi ayé. Àwọn iṣẹ́ sọ́fìtíwíà, àwọn ìbánisọ̀rọ̀ ayélujára, àti àwọn ìbáṣepọ̀ fáfọ̀ọ́là ṣeé ṣe nínú ara wọn.
+  1. Ìpìlẹ̀ Àyíká: Àyíká náà ni: {context_summary}. **Ìṣẹ̀lẹ̀ Ayélujára vs Ti Ara**: Èyí jẹ́ aṣojú AI tí ó ń ṣiṣẹ́ nínú àwọn àyíká ayélujára (Discord, API, CLI). Àwọn ìbáṣepọ̀ ayélujára/fáfọ̀ọ́là jẹ́ NỌMÁ (bí àpẹẹrẹ, fífi àwọn ìránṣẹ́ Discord ránṣẹ́, àwọn ìdáhùn API, kíkà àwọn fáìlì). Tọ́ka sí àìṣeé-ṣe fún àwọn ìrúfin ÒFIN ÀRÀ nìkan nígbà tí ìronú náà bá ṣàlàyé kedere àwọn ohun ara tàbí òfin fisiksi ayé. Àwọn iṣẹ́ sọ́fìtíwíà, àwọn ìbánisọ̀rọ̀ ayélujára, àti àwọn ìbáṣepọ̀ fáfọ̀ọ́là ṣeé ṣe nínú ara wọn.
   2. Àyẹ̀wò Ìṣeé-ṣe Ti Ara: Ǹjẹ́ ìronú náà ṣàpèjúwe àwọn ìṣẹ̀lẹ̀ tàbí ipò tí ó tako àwọn òfin fisiksi ìpìlẹ̀ (bí àpẹẹrẹ, ìtọ́jú agbára/ìwúwo)? Ǹjẹ́ ó kan àwọn ìyípadà nǹkan tàbí ipò tí kò ṣeé ṣe tàbí tí kò dára láì sí ìlọ́wọ́sí pàtàkì lábẹ́ ipò ayé tí ó wọ́pọ̀ (bí àpẹẹrẹ, yìnyín tí ó dúró lílé títí láì parí nínú àwo díndín tí ó gbóná)? **Tí àwọn eroja bá wọlé tí wọ́n yóò ní àwọn ìbáṣepọ̀ ara tí ó hàn kedere (bí ooru àti yìnyín), tí wọ́n sì fojú fò àwọn ìbáṣepọ̀ wọ̀nyí àti àwọn àbájáde wọn tó kàn-án (bí àpẹẹrẹ, yiyọ́) nínú àpẹẹrẹ ìronú náà tàbí èsì tí a retí láì sí ìdí kedere fún ètò tí a mú létòlétò fún àwọn eroja wọ̀nyẹn pàtó, èyí jẹ́ ọ̀rọ̀ ìṣeé-ṣe ti ara pàtàkì.** Tọ́ka sí irú àwọn àpẹẹrẹ bẹ́ẹ̀ (bí àpẹẹrẹ, "Physical_Implausibility_Ignored_Interaction", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored"). Tí ìṣòro náà bá dà bí àlọ́ tàbí ìbéèrè ẹ̀tàn tí ó dá lórí ríran fisiksi ayé òde-òní foju, ó yẹ kí a tọ́ka sí èyí.
   3. Àyẹ̀wò Ọgbọ́n Àwọn Ohun-ìní & Ìwọ̀n: Ǹjẹ́ ó retí àwọn ohun-ìní tí kò lópin láì sí ìdí? Ǹjẹ́ ìwọ̀n ìṣe/ìpá kò báramu pẹ̀lú ìdí nínú òye ayé?
   4. Ṣíṣayẹ̀wò Ìbáṣepọ̀ Lẹ́sẹ̀kẹsẹ̀ & Àbájáde: **Kọjá àwọn òfin fisiksi gbogbogbo, ṣe àkíyèsí àwọn àbájáde tààrà, lẹ́sẹ̀kẹsẹ̀, àti àìlèyẹra ti àwọn ìbáṣepọ̀ láàárín àwọn eroja kan pàtó tí a mẹ́nútọ́ọ̀ nínú ìronú náà.** Bí àpẹẹrẹ, tí ohun ẹlẹ́gẹ́ bá já sílẹ̀ lórí ilẹ̀ líle, àbájáde ni fífọ́. Tí iná bá pàdé ohun tí ó lè jóná, yóò jóná. Tí yìnyín bá wà lórí ilẹ̀ tí ó gbóná, yóò yọ́. Ǹjẹ́ irú àwọn àbájáde tí ó hàn kedere, tààrà ti àwọn eroja tí a sọ ń bára wọn lò ni a ń ríran foju tàbí tí a tako ní àlàfo nípa ètò ìṣòro náà? Èyí jẹ́ àbá pàtàkì ti ọgbọ́n inú.
@@ -43,7 +43,7 @@ response_format: |
   - Àpẹẹrẹ: {{"reasoning": "Ìṣẹ̀lẹ̀ yìí tako fisiksi", "flags": ["Physical_Implausibility_Ignored_Interaction"]}} - Ìdí Yorùbá, kọ́kọ́rọ́/ààmì Gẹ̀ẹ́sì.
 
 context_integration: |
-  Àkópọ̀ Àyíká: {{context_summary}}
-  Ìronú Àtọwọ́dọ́wọ́: {{original_thought_content}}
+  Àkópọ̀ Àyíká: {context_summary}
+  Ìronú Àtọwọ́dọ́wọ́: {original_thought_content}
 
 accord_header: true  # Lo ACCORD_TEXT gẹ́gẹ́ bí ìránṣẹ́ ètọ́

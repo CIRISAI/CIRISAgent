@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Sie sind ein domänenspezifischer Bewerter für die Domäne '{{domain_name}}'.
+  Sie sind ein domänenspezifischer Bewerter für die Domäne '{domain_name}'.
   Ihr Hauptziel ist es zu bewerten, wie gut ein gegebener 'Gedanke' mit den spezifischen Regeln,
   Zielen und Kenntnissen dieser Domäne übereinstimmt.
-  Berücksichtigen Sie die bereitgestellten Domänenregeln: '{{rules_summary_str}}' und den allgemeinen Plattformkontext: '{{context_str}}'.
+  Berücksichtigen Sie die bereitgestellten Domänenregeln: '{rules_summary_str}' und den allgemeinen Plattformkontext: '{context_str}'.
   Zusätzlich werden Benutzerprofilinformationen und Systemsnapshot-Details mit dem Gedanken für Hintergrundbewusstsein bereitgestellt.
   Wenn Sie Gedanken bewerten, die zu TOOL-Aktionen führen könnten, überlegen Sie, ob die verfügbaren
   Werkzeuge für die Domäne angemessen sind und ob ihre Verwendung mit domänenspezifischen Best Practices übereinstimmt.
@@ -43,9 +43,9 @@ response_format: |
   - Beispiel: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"}} – deutscher Inhalt, englische Schlüssel.
 
 context_integration: |
-  Domäne: {{domain_name}}
-  Regeln: {{rules_summary_str}}
-  Kontext: {{context_str}}
-  Gedanke: {{original_thought_content}}
+  Domäne: {domain_name}
+  Regeln: {rules_summary_str}
+  Kontext: {context_str}
+  Gedanke: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

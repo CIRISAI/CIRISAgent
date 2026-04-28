@@ -3,7 +3,7 @@ description: ASPDMA Na Musamman Ga Kayan Aiki - yana sake duba zaɓin kayan aiki
 version: '1.0'
 accord_header: true
 system_guidance_header: "=== TOOL-SPECIFIC ACTION SELECTION (TSASPDMA) ===\n\nKuna nazarin aikin TOOL wanda ASPDMA ya zaɓa.\nYanzu kuna da CIKAKKIYAR TAKARDUN BAYANI don wannan kayan aiki.\n\nAikin ku: Tare da wannan mahalli na ƙari, ku yanke shawara mafi kyau.\n\n=== ZAƁUƁƁUKAN KU (irin nau'ikan aiki kamar ASPDMA) ===\n\n1. **TOOL** - Ci gaba da aiwatar da kayan aiki\n   - Yi amfani idan takardun sun tabbatar da wannan shine kayan aiki mai dacewa\n   - Zaku iya gyara sigogi dangane da takaddun bayani/misalai\n   - Haɗa abubuwan da ya kamata ku lura da su a cikin hujjar ku\n\n2. **SPEAK** - Tambayi mai amfani don bayyana\n   - Yi amfani idan takardun sun bayyana rashin fahimta da ke bukatar shigar da mai amfani\n   - Tsari: \"Ina bukatar mai amfani ya amsa: [tambaya ta musamman]\"\n   - Misalai:\n     - \"Ina bukatar mai amfani ya amsa: wane ma'ajiyar zai bincika?\"\n     - \"Ina bukatar mai amfani ya amsa: kuna son cikakken rahoto ko taƙaice?\"\n\n3. **PONDER** - Sake yin la'akari da tsarin\n   - Yi amfani idan takardun sun nuna wannan kayan aiki bai dace ba don aikin\n   - Yi amfani idan wani kayan aiki zai fi kyau a fili\n   - Haɗa dalilin me yasa wannan kayan aiki bai dace ba\n\n=== MA'AUNIN YANKE SHAWARA ===\n\nZaɓi SPEAK idan:\n- Sigogi da ake buƙata ba su da bayyana\n- Akwai fassarori masu yiwuwa masu inganci da yawa\n- Abubuwan da ya kamata a lura da su suna aiki waɗanda ke bukatar tabbatar da mai amfani\n- Aikin ba shi da cikakken bayani don wannan kayan aiki\n\nZaɓi PONDER idan:\n- Wannan kayan aiki ba zai iya cim ma aikin ba\n- Wani kayan aiki zai fi dacewa sosai\n- Takardun sun bayyana rashin daidaituwa na ƙwarewa\n- Amfani da wannan kayan aiki zai zama mara dacewa ko ba ɗabi'a a cikin mahalli\n\nZaɓi TOOL idan:\n- Takardun sun tabbatar da wannan ya dace\n- Sigogi suna bayyana (gyara idan misalai sun nuna ingantawa)\n- Zaku iya amincewa da abubuwan da ya kamata ku lura da su\n- Amfani da kayan aiki yana da ɗabi'a kuma yana ciyar da manufar mai amfani da dacewa\n"
-tool_documentation_section: '=== TOOL: {{tool_name}} ===
+tool_documentation_section: '=== TOOL: {tool_name} ===
 
 
   **Bayanin:** {{description}}
@@ -54,22 +54,22 @@ context_enrichment_section: '=== ALBARKATUN DA AKE SAMUWA (daga haɓaka mahalli)
   '
 context_integration: '=== ZAƁIN ASPDMA ===
 
-  Kayan Aiki: {{tool_name}}
+  Kayan Aiki: {tool_name}
 
-  Hujjar: {{aspdma_reasoning}}
+  Hujjar: {aspdma_reasoning}
 
 
   === TUNANI NA ASALI (nufin mai amfani - yi amfani don ƙididdigeta sigogi) ===
 
-  {{original_thought_content}}
+  {original_thought_content}
 
 
-  {{context_enrichment_section}}
+  {context_enrichment_section}
 
 
   === TOOL DOCUMENTATION (tare da Tsarin Sigogi) ===
 
-  {{tool_documentation}}
+  {tool_documentation}
 
   '
 response_format: 'Dawo da abu na JSON LALLAI tare da waɗannan filayen:

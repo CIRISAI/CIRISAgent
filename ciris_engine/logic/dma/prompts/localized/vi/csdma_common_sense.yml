@@ -16,7 +16,7 @@ system_guidance_header: |
 
 evaluation_steps: |
   Các Bước CSDMA Tham Khảo để Đánh Giá:
-  1. Căn Cứ Bối Cảnh: Bối cảnh là: {{context_summary}}. **Thực Tế Kỹ Thuật Số so với Vật Lý**: Đây là một tác nhân AI hoạt động trong môi trường kỹ thuật số (Discord, API, CLI). Tương tác kỹ thuật số/ảo là BÌNH THƯỜNG (ví dụ: gửi tin nhắn Discord, phản hồi API, đọc tệp). Chỉ gắn cờ sự không hợp lý đối với vi phạm thế giới VẬT LÝ khi suy nghĩ rõ ràng liên quan đến các đối tượng vật lý hoặc vật lý thế giới thực. Hoạt động phần mềm, giao tiếp kỹ thuật số và tương tác ảo vốn dĩ hợp lý.
+  1. Căn Cứ Bối Cảnh: Bối cảnh là: {context_summary}. **Thực Tế Kỹ Thuật Số so với Vật Lý**: Đây là một tác nhân AI hoạt động trong môi trường kỹ thuật số (Discord, API, CLI). Tương tác kỹ thuật số/ảo là BÌNH THƯỜNG (ví dụ: gửi tin nhắn Discord, phản hồi API, đọc tệp). Chỉ gắn cờ sự không hợp lý đối với vi phạm thế giới VẬT LÝ khi suy nghĩ rõ ràng liên quan đến các đối tượng vật lý hoặc vật lý thế giới thực. Hoạt động phần mềm, giao tiếp kỹ thuật số và tương tác ảo vốn dĩ hợp lý.
   2. Kiểm Tra Tính Hợp Lý Vật Lý: Suy nghĩ có mô tả các sự kiện hoặc trạng thái vi phạm các định luật vật lý cơ bản (ví dụ: bảo toàn năng lượng/khối lượng) không? Nó có liên quan đến các biến đổi vật chất hoặc trạng thái không thể hoặc rất khó xảy ra trong điều kiện Trái Đất bình thường mà không có sự can thiệp đặc biệt (ví dụ: nước đá vẫn rắn vô thời hạn trong chảo rán nóng) không? **Nếu các yếu tố được giới thiệu có tương tác vật lý trực tiếp, rõ ràng (như nhiệt và nước đá), và những tương tác này cũng như hậu quả trực tiếp của chúng (ví dụ: tan chảy) bị bỏ qua trong tiền đề hoặc kết quả mong đợi của suy nghĩ mà không có lý do rõ ràng cho một thiết lập lý tưởng hóa cho những yếu tố cụ thể đó, đây là vấn đề tính hợp lý vật lý nghiêm trọng.** Gắn cờ các trường hợp như vậy (ví dụ: "Physical_Implausibility_Ignored_Interaction", "Requires_Explicit_Idealization_Statement", "Potential_Trick_Question_Physics_Ignored"). Nếu vấn đề có vẻ như là một câu đố hoặc câu hỏi mẹo dựa trên việc bỏ qua vật lý thế giới thực, điều này nên được gắn cờ.
   3. Kiểm Tra Tính Hợp Lý Tài Nguyên & Quy Mô: Nó có giả định tài nguyên gần như vô hạn mà không có lý do không? Quy mô hành động/hiệu ứng có không tương xứng với nguyên nhân trong sự hiểu biết thế giới thực không?
   4. Quét Tương Tác & Hậu Quả Ngay Lập Tức: **Ngoài các định luật vật lý chung, hãy xem xét hậu quả trực tiếp, ngay lập tức và không thể tránh khỏi của các tương tác giữa các yếu tố cụ thể được đề cập trong suy nghĩ.** Ví dụ: nếu một vật thể dễ vỡ được thả lên bề mặt cứng, hậu quả là vỡ. Nếu ngọn lửa gặp vật liệu dễ cháy, nó sẽ bốc cháy. Nếu nước đá được đặt trên bề mặt nóng, nó tan chảy. Những hậu quả rõ ràng, trực tiếp như vậy của các yếu tố đã nêu tương tác có bị bỏ qua hoặc bị phủ nhận ngầm bởi cách đóng khung của vấn đề không? Đây là một khía cạnh chính của lẽ thường.
@@ -43,7 +43,7 @@ response_format: |
   - Ví dụ: {{"reasoning": "Tình huống này mâu thuẫn về mặt vật lý", "flags": ["Physical_Implausibility_Ignored_Interaction"]}} - reasoning tiếng Việt, khóa/cờ tiếng Anh.
 
 context_integration: |
-  Tóm Tắt Bối Cảnh: {{context_summary}}
-  Suy Nghĩ Gốc: {{original_thought_content}}
+  Tóm Tắt Bối Cảnh: {context_summary}
+  Suy Nghĩ Gốc: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

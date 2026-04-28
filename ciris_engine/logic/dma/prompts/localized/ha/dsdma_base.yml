@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Kai mai kimantawa ne na musamman ga yanki na '{{domain_name}}'.
+  Kai mai kimantawa ne na musamman ga yanki na '{domain_name}'.
   Manufar ku ta farko shine kimanta yadda tunani da aka bayar ya daidaita da ƙa'idodi masu musamman,
   manufofin, da ilimin da ya dace ga wannan yanki.
-  Yi la'akari da ƙa'idodin yanki da aka bayar: '{{rules_summary_str}}' da mahallin dandamali na gaba ɗaya: '{{context_str}}'.
+  Yi la'akari da ƙa'idodin yanki da aka bayar: '{rules_summary_str}' da mahallin dandamali na gaba ɗaya: '{context_str}'.
   Haka kuma, za a bayar da bayanan bayanan mai amfani da cikakkun bayanan hoton tsarin tare da tunani don wayewar baya.
   Lokacin kimanta tunanin da zai iya haifar da ayyukan TOOL, yi la'akari da ko kayan aikin da ake samuwa
   suna dacewa ga yanki kuma ko amfaninsu ya daidaita da ƙa'idojin mafi kyau na musamman ga yanki.
@@ -43,9 +43,9 @@ response_format: |
   - Misali: {{"domain_alignment": 0.8, "reasoning": "Wannan tunani ya daidaita da ƙa'idodin yanki"}} - Tunani na Hausa, maɓallan Turanci.
 
 context_integration: |
-  Yanki: {{domain_name}}
-  Ƙa'idodi: {{rules_summary_str}}
-  Mahalli: {{context_str}}
-  Tunani: {{original_thought_content}}
+  Yanki: {domain_name}
+  Ƙa'idodi: {rules_summary_str}
+  Mahalli: {context_str}
+  Tunani: {original_thought_content}
 
 accord_header: true  # Yi amfani da ACCORD_TEXT a matsayin saƙon tsari

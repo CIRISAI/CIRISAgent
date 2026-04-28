@@ -172,21 +172,23 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         return messages
 
-    def _sync_language(self, user_profiles: Any) -> None:
-        """Update _explicit_language from the first user profile.
+    def _sync_language_from_context(self, context: Optional[Any]) -> None:
+        """Sync prompt language using the full localization priority chain.
 
-        Always assigns (None included) so a reused evaluator instance never
-        inherits a previous thought's language when profile data is absent.
+        Walks thought/task preferred_language → user_profile.preferred_language →
+        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
         """
-        new_language: Optional[str] = None
-        if user_profiles and len(user_profiles) > 0:
-            new_language = getattr(user_profiles[0], "preferred_language", None)
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        new_language = (
+            get_user_language_from_context(context) if context is not None else get_preferred_language()
+        )
         if new_language != self._explicit_language:
             self._explicit_language = new_language
-            if new_language:
-                logger.debug(f"CSDMA: Synced prompt language to user preference: {new_language}")
-            else:
-                logger.debug("CSDMA: Cleared prompt language (no profile/context)")
+            logger.debug(f"CSDMA: Synced prompt language to {new_language}")
 
     def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
         """Extract context strings from context object.
@@ -206,7 +208,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         )
 
         if not context:
-            self._sync_language(None)
+            self._sync_language_from_context(None)
             return system_snapshot_str, user_profiles_str, context_summary
 
         user_profiles = None
@@ -223,7 +225,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             user_profiles = context.user_profiles
             user_profiles_str = format_user_profiles(user_profiles)
 
-        self._sync_language(user_profiles)
+        self._sync_language_from_context(context)
         return system_snapshot_str, user_profiles_str, context_summary
 
     def _build_context_summary(self, agent_identity: Any) -> str:

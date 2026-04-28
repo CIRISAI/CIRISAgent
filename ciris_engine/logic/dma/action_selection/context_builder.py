@@ -471,33 +471,28 @@ Your response begins now with the literal character `{{` —
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
         """Build ethical DMA summary.
 
-        HE-300 Benchmark improvements: Include subject identification and proportionality assessment.
+        v3.1 reshape: PDMA emits {action, rationale, weight_alignment_score,
+        ethical_alignment_score}. Two scores: weight_alignment is how
+        aligned the response is with training-weights' natural pull;
+        ethical_alignment is how aligned with the cross-tradition framework.
+        Their delta is the torque magnitude. Bounce gate reads
+        ethical_alignment_score; weight is diagnostic. Summary surfaces both
+        plus the action recommendation and rationale paragraph.
         """
-        # Extract key information from the alignment check text
-        alignment_summary = (
-            ethical_pdma_result.alignment_check[:100] + "..."
-            if len(ethical_pdma_result.alignment_check) > 100
-            else ethical_pdma_result.alignment_check
+        # Truncate rationale for context-builder summary; full rationale
+        # remains available downstream via the result object.
+        rationale_summary = (
+            ethical_pdma_result.rationale[:300] + "..."
+            if len(ethical_pdma_result.rationale) > 300
+            else ethical_pdma_result.rationale
         )
-
-        # Include subject identification if present (HE-300 improvement)
-        subject_str = ""
-        if hasattr(ethical_pdma_result, "subject_of_evaluation") and ethical_pdma_result.subject_of_evaluation:
-            subject_str = f"Subject Being Evaluated: {ethical_pdma_result.subject_of_evaluation}. "
-
-        # Include proportionality assessment if present and applicable (HE-300 improvement)
-        proportionality_str = ""
-        if hasattr(ethical_pdma_result, "proportionality_assessment"):
-            prop_val = ethical_pdma_result.proportionality_assessment
-            if prop_val and prop_val.lower() != "not applicable":
-                proportionality_str = f"Proportionality: {prop_val}. "
-
+        torque = ethical_pdma_result.weight_alignment_score - ethical_pdma_result.ethical_alignment_score
         return (
-            f"Ethical PDMA Analysis: {subject_str}"
-            f"Stakeholders: {ethical_pdma_result.stakeholders}. "
-            f"Conflicts: {ethical_pdma_result.conflicts}. "
-            f"{proportionality_str}"
-            f"{alignment_summary}"
+            f"Ethical PDMA Recommendation: action={ethical_pdma_result.action.value}, "
+            f"weight_alignment={ethical_pdma_result.weight_alignment_score:.2f}, "
+            f"ethical_alignment={ethical_pdma_result.ethical_alignment_score:.2f}, "
+            f"torque={torque:+.2f}. "
+            f"Rationale: {rationale_summary}"
         )
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:

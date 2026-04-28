@@ -9,6 +9,7 @@ prompts/localized/{lang}/ directories.
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -28,6 +29,70 @@ def _sanitize_for_log(value: str, max_length: int = 20) -> str:
 
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"
+
+# Polyglot block substitution: {{POLYGLOT_<NAME>}} on its own line is replaced
+# at load time with the contents of data/localized/polyglot/<name_lowercase>.txt.
+# The placeholder's leading indent is re-applied to every polyglot line so the
+# substituted block stays inside its YAML block-scalar. See
+# ciris_engine/data/localized/polyglot/CLAUDE.md for the polyglot doctrine.
+POLYGLOT_PATTERN = re.compile(r"^(?P<indent>[ \t]*)\{\{POLYGLOT_(?P<name>[A-Z0-9_]+)\}\}[ \t]*$", re.MULTILINE)
+POLYGLOT_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "localized" / "polyglot"
+
+# Detects identifier-style placeholders that survived `.format()` — i.e. the
+# template referenced a variable that was never passed to format(). Identifier-
+# only intentionally: matches `{user_id}` and `{full_context_str}` but NOT JSON
+# examples like `{"key": "val"}`, action-verb sets like `{speak, defer}`, or
+# numeric values like `{0.5}`. Any match is a real bug, not a false positive.
+UNEXPANDED_PLACEHOLDER_PATTERN = re.compile(r"\{[a-zA-Z_][a-zA-Z0-9_]*\}")
+
+
+def safe_format(template: str, *, source: str, **kwargs: Any) -> str:
+    """`.format(**kwargs)` with a post-pass that catches unexpanded placeholders.
+
+    An unexpanded `{identifier}` in the rendered string means the template
+    references a variable that was not passed — usually a stale field name
+    after a schema reshape, a typo in the YAML, or a missing kwarg at the
+    call site. The LLM would silently receive a malformed prompt with literal
+    placeholder tokens; output quality degrades without any error signal.
+
+    Behaviour:
+      - PRODUCTION (default): leftovers logged at WARNING with `source` so
+        ops can see which template/locale leaked which identifier.
+      - STRICT (env `CIRIS_STRICT_PROMPT_FORMAT=1`): leftovers raise
+        `ValueError` so test suites turn this into a hard failure.
+
+    Args:
+        template: The template string (typically loaded from a YAML field).
+        source: Human-readable provenance for diagnostics (e.g.
+            "pdma_ethical.system_guidance_header[en]"). Surfaces in both
+            the warning log and the strict-mode exception message.
+        **kwargs: Variables passed through to `str.format`.
+
+    Returns:
+        The formatted string. In production, returns even if leftovers
+        exist (warning logged); in strict mode, raises before returning.
+
+    Raises:
+        ValueError: in strict mode if any unexpanded placeholders survive.
+        KeyError: if `template.format(**kwargs)` itself raises (the
+            "missing kwarg" failure mode is loud — this guard catches the
+            silent "stale field name" mode where the kwarg simply isn't in
+            kwargs but the template still references it via .format()'s
+            permissive double-brace escape mishandling, etc.).
+    """
+    rendered = template.format(**kwargs)
+    leftovers = sorted(set(UNEXPANDED_PLACEHOLDER_PATTERN.findall(rendered)))
+    if leftovers:
+        msg = (
+            f"[PROMPT-FORMAT] Unexpanded placeholders in {source}: {leftovers}. "
+            f"Template references variable(s) not passed to .format(). Likely "
+            f"causes: stale field name after schema reshape, typo in YAML, or "
+            f"missing kwarg at the call site."
+        )
+        if os.environ.get("CIRIS_STRICT_PROMPT_FORMAT", "").lower() in ("1", "true", "yes"):
+            raise ValueError(msg)
+        logger.warning(msg)
+    return rendered
 
 
 class DMAPromptLoader:
@@ -91,6 +156,38 @@ class DMAPromptLoader:
         # Default to full for unknown values
         return "full"
 
+    def _substitute_polyglot_blocks(self, raw_content: str, template_path: Path) -> str:
+        """Substitute ``{{POLYGLOT_<NAME>}}`` placeholders before YAML parsing.
+
+        Each placeholder must occupy its own line. The placeholder's leading
+        indent is re-applied to every non-empty line of the polyglot content
+        so the substituted block stays inside its YAML block-scalar. Empty
+        polyglot lines are emitted truly empty (matching YAML convention for
+        blank lines inside a ``|`` scalar).
+        """
+
+        def _replace(m: "re.Match[str]") -> str:
+            indent = m.group("indent")
+            name = m.group("name")
+            polyglot_path = POLYGLOT_DIR / f"{name.lower()}.txt"
+            if not polyglot_path.exists():
+                logger.error(
+                    f"[DMA-PROMPT] Polyglot block not found: {polyglot_path} "
+                    f"(referenced from {template_path})"
+                )
+                raise FileNotFoundError(
+                    f"Polyglot block {{{{POLYGLOT_{name}}}}} not found at {polyglot_path}"
+                )
+            block_text = polyglot_path.read_text(encoding="utf-8").rstrip("\n")
+            indented = "\n".join(f"{indent}{ln}" if ln else "" for ln in block_text.split("\n"))
+            logger.debug(
+                f"[DMA-PROMPT] Substituted {{{{POLYGLOT_{name}}}}} "
+                f"({len(block_text)} chars) from {polyglot_path}"
+            )
+            return indented
+
+        return POLYGLOT_PATTERN.sub(_replace, raw_content)
+
     def load_prompt_template(self, template_name: str) -> PromptCollection:
         """
         Load a prompt template from a YAML file.
@@ -132,6 +229,7 @@ class DMAPromptLoader:
             with open(template_path, "r", encoding="utf-8") as f:
                 raw_content = f.read()
                 logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
+                raw_content = self._substitute_polyglot_blocks(raw_content, template_path)
                 template_data = yaml.safe_load(raw_content)
 
             if not isinstance(template_data, dict):
@@ -196,30 +294,68 @@ class DMAPromptLoader:
             Formatted system message string
         """
         system_parts = []
+        component = getattr(template_data, "component_name", "unknown")
+        lang = self.language
 
         # Add main system guidance header
         if template_data.system_guidance_header:
-            system_parts.append(template_data.system_guidance_header.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.system_guidance_header,
+                    source=f"{component}.system_guidance_header[{lang}]",
+                    **kwargs,
+                )
+            )
 
         # Add domain principles if present
         if template_data.domain_principles:
-            system_parts.append(template_data.domain_principles.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.domain_principles,
+                    source=f"{component}.domain_principles[{lang}]",
+                    **kwargs,
+                )
+            )
 
         # Add evaluation steps if present
         if template_data.evaluation_steps:
-            system_parts.append(template_data.evaluation_steps.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.evaluation_steps,
+                    source=f"{component}.evaluation_steps[{lang}]",
+                    **kwargs,
+                )
+            )
 
         # Add evaluation criteria if present
         if template_data.evaluation_criteria:
-            system_parts.append(template_data.evaluation_criteria.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.evaluation_criteria,
+                    source=f"{component}.evaluation_criteria[{lang}]",
+                    **kwargs,
+                )
+            )
 
         # Add response format guidance if present
         if template_data.response_format:
-            system_parts.append(template_data.response_format.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.response_format,
+                    source=f"{component}.response_format[{lang}]",
+                    **kwargs,
+                )
+            )
 
         # Add response guidance if present
         if template_data.response_guidance:
-            system_parts.append(template_data.response_guidance.format(**kwargs))
+            system_parts.append(
+                safe_format(
+                    template_data.response_guidance,
+                    source=f"{component}.response_guidance[{lang}]",
+                    **kwargs,
+                )
+            )
 
         return "\n\n".join(system_parts)
 
@@ -235,7 +371,12 @@ class DMAPromptLoader:
             Formatted user message string
         """
         if template_data.context_integration:
-            return template_data.context_integration.format(**kwargs)
+            component = getattr(template_data, "component_name", "unknown")
+            return safe_format(
+                template_data.context_integration,
+                source=f"{component}.context_integration[{self.language}]",
+                **kwargs,
+            )
         else:
             # Fallback for basic context integration
             return f"Thought to evaluate: {kwargs.get('original_thought_content', '')}"

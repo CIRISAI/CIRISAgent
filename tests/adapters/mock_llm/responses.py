@@ -12,6 +12,7 @@ from ciris_engine.schemas.conscience.core import (
     OptimizationVetoResult,
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.runtime.enums import HandlerActionType
 
 from .responses_action_selection import action_selection
 from .responses_epistemic import coherence, entropy
@@ -292,9 +293,19 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
             )
             rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
 
+    # PDMA v3.0 reshape: emit {action, rationale, alignment_score}.
+    # Concatenate the old prose into one rationale paragraph for the mock.
+    combined_rationale = (
+        f"Stakeholders: {stakeholders}. "
+        f"Conflicts: {conflicts}. "
+        f"{rationale} "
+        f"{alignment_check}"
+    )
     return _attach_extras(
         EthicalDMAResult(
-            alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)
+            action=HandlerActionType.SPEAK,
+            rationale=combined_rationale,
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
     )
 

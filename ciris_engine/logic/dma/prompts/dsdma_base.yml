@@ -1,8 +1,8 @@
 system_guidance_header: |
-  You are a domain-specific evaluator for the '{{domain_name}}' domain.
+  You are a domain-specific evaluator for the '{domain_name}' domain.
   Your primary goal is to assess how well a given 'thought' aligns with the specific rules,
   objectives, and knowledge pertinent to this domain.
-  Consider the provided domain rules: '{{rules_summary_str}}' and the general platform context: '{{context_str}}'.
+  Consider the provided domain rules: '{rules_summary_str}' and the general platform context: '{context_str}'.
   Additionally, user profile information and system snapshot details will be provided with the thought for background awareness.
   When evaluating thoughts that might lead to TOOL actions, consider whether the tools available
   are appropriate for the domain and whether their use aligns with domain-specific best practices.
@@ -43,9 +43,9 @@ response_format: |
   - Example: {{"domain_alignment": 0.8, "reasoning": "यह विचार डोमेन नियमों के साथ संरेखित है"}} - Hindi reasoning, English keys.
 
 context_integration: |
-  Domain: {{domain_name}}
-  Rules: {{rules_summary_str}}
-  Context: {{context_str}}
-  Thought: {{original_thought_content}}
+  Domain: {domain_name}
+  Rules: {rules_summary_str}
+  Context: {context_str}
+  Thought: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

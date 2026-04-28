@@ -184,7 +184,9 @@ class ConsciencePromptLoader:
             template = prompts.user_prompt_template
 
         try:
-            return template.format(**kwargs)
+            from ciris_engine.logic.dma.prompt_loader import safe_format
+
+            return safe_format(template, source=f"conscience.{conscience_type}[{self.language}]", **kwargs)
         except KeyError as e:
             logger.warning(f"Missing template variable {e} in {conscience_type}")
             return template

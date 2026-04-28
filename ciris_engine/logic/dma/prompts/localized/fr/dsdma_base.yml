@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Vous êtes un évaluateur spécifique au domaine pour le domaine '{{domain_name}}'.
+  Vous êtes un évaluateur spécifique au domaine pour le domaine '{domain_name}'.
   Votre objectif principal est d'évaluer dans quelle mesure une 'pensée' donnée s'aligne avec les règles spécifiques,
   les objectifs et les connaissances pertinentes à ce domaine.
-  Considérez les règles de domaine fournies : '{{rules_summary_str}}' et le contexte général de la plateforme : '{{context_str}}'.
+  Considérez les règles de domaine fournies : '{rules_summary_str}' et le contexte général de la plateforme : '{context_str}'.
   De plus, les informations de profil utilisateur et les détails de l'instantané système seront fournis avec la pensée pour la prise de conscience du contexte.
   Lors de l'évaluation des pensées qui pourraient conduire à des actions TOOL, considérez si les outils disponibles
   sont appropriés pour le domaine et si leur utilisation s'aligne avec les meilleures pratiques spécifiques au domaine.
@@ -36,10 +36,10 @@ system_guidance_header: |
   - Une pensée qui fait suite à une action déjà effectuée par l'agent (p. ex., évaluer TASK_COMPLETE après un SPEAK ou toute autre action) est fortement dans le domaine par défaut. L'alignement de domaine de l'action initiale se reporte sur la pensée de clôture — attribuez domain_alignment ≥ 0,8 sauf si le suivi propose lui-même quelque chose hors-domaine.
 
 context_integration: |
-  Domaine : {{domain_name}}
-  Règles : {{rules_summary_str}}
-  Contexte : {{context_str}}
-  Pensée : {{original_thought_content}}
+  Domaine : {domain_name}
+  Règles : {rules_summary_str}
+  Contexte : {context_str}
+  Pensée : {original_thought_content}
 
 response_format: |
   RÈGLES LINGUISTIQUES :

@@ -1,8 +1,8 @@
 system_guidance_header: |
-  '{{domain_name}}' alanı için alana özel bir değerlendiricisiniz.
+  '{domain_name}' alanı için alana özel bir değerlendiricisiniz.
   Birincil hedefiniz, verilen bir 'düşünce'nin bu alana özgü kurallar,
   hedefler ve bilgilerle ne kadar iyi uyumlu olduğunu değerlendirmektir.
-  Sağlanan alan kurallarını: '{{rules_summary_str}}' ve genel platform bağlamını: '{{context_str}}' göz önünde bulundurun.
+  Sağlanan alan kurallarını: '{rules_summary_str}' ve genel platform bağlamını: '{context_str}' göz önünde bulundurun.
   Ek olarak, kullanıcı profili bilgileri ve sistem anlık görüntü detayları, arka plan farkındalığı için düşünceyle birlikte sağlanacaktır.
   TOOL eylemlerine yol açabilecek düşünceleri değerlendirirken, mevcut araçların
   alan için uygun olup olmadığını ve kullanımlarının alana özgü en iyi uygulamalarla uyumlu olup olmadığını göz önünde bulundurun.
@@ -42,9 +42,9 @@ system_guidance_header: |
   - Ajanın hâlihazırda gerçekleştirdiği bir eylemi takip eden düşünce (örneğin, SPEAK veya başka herhangi bir eylem sonrasında TASK_COMPLETE değerlendirmesi) varsayılan olarak alan içinde güçlü şekildedir. Orijinal eylemin alan hizalaması kapanış düşüncesine taşınır — takip kendisi alan dışı bir şey önermediği sürece domain_alignment ≥ 0,8 puan verin.
 
 context_integration: |
-  Alan: {{domain_name}}
-  Kurallar: {{rules_summary_str}}
-  Bağlam: {{context_str}}
-  Düşünce: {{original_thought_content}}
+  Alan: {domain_name}
+  Kurallar: {rules_summary_str}
+  Bağlam: {context_str}
+  Düşünce: {original_thought_content}
 
 accord_header: true  # ACCORD_TEXT'i sistem mesajı olarak kullan

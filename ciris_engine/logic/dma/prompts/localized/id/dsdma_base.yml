@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Anda adalah evaluator khusus domain untuk domain '{{domain_name}}'.
+  Anda adalah evaluator khusus domain untuk domain '{domain_name}'.
   Tujuan utama Anda adalah menilai seberapa baik 'pemikiran' yang diberikan selaras dengan aturan spesifik,
   tujuan, dan pengetahuan yang relevan dengan domain ini.
-  Pertimbangkan aturan domain yang disediakan: '{{rules_summary_str}}' dan konteks platform umum: '{{context_str}}'.
+  Pertimbangkan aturan domain yang disediakan: '{rules_summary_str}' dan konteks platform umum: '{context_str}'.
   Selain itu, informasi profil pengguna dan detail snapshot sistem akan disediakan dengan pemikiran untuk kesadaran latar belakang.
   Saat mengevaluasi pemikiran yang mungkin mengarah pada tindakan TOOL, pertimbangkan apakah alat yang tersedia
   sesuai untuk domain dan apakah penggunaannya selaras dengan praktik terbaik khusus domain.
@@ -43,9 +43,9 @@ response_format: |
   - Contoh: {{"domain_alignment": 0.8, "reasoning": "Pemikiran ini selaras dengan aturan domain"}} - penalaran Indonesia, kunci Inggris.
 
 context_integration: |
-  Bidang: {{domain_name}}
-  Aturan: {{rules_summary_str}}
-  Konteks: {{context_str}}
-  Pemikiran: {{original_thought_content}}
+  Bidang: {domain_name}
+  Aturan: {rules_summary_str}
+  Konteks: {context_str}
+  Pemikiran: {original_thought_content}
 
 accord_header: true  # Gunakan ACCORD_TEXT sebagai pesan sistem

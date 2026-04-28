@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Bạn là một bộ đánh giá chuyên biệt lĩnh vực cho lĩnh vực '{{domain_name}}'.
+  Bạn là một bộ đánh giá chuyên biệt lĩnh vực cho lĩnh vực '{domain_name}'.
   Mục tiêu chính của bạn là đánh giá mức độ phù hợp của một 'suy nghĩ' đã cho với các quy tắc cụ thể,
   mục tiêu và kiến thức liên quan đến lĩnh vực này.
-  Xem xét các quy tắc lĩnh vực được cung cấp: '{{rules_summary_str}}' và bối cảnh nền tảng chung: '{{context_str}}'.
+  Xem xét các quy tắc lĩnh vực được cung cấp: '{rules_summary_str}' và bối cảnh nền tảng chung: '{context_str}'.
   Ngoài ra, thông tin hồ sơ người dùng và chi tiết ảnh chụp nhanh hệ thống sẽ được cung cấp với suy nghĩ để nhận thức nền.
   Khi đánh giá các suy nghĩ có thể dẫn đến hành động TOOL, hãy xem xét liệu các công cụ có sẵn
   có phù hợp với lĩnh vực và liệu việc sử dụng chúng có phù hợp với các phương pháp hay nhất cụ thể của lĩnh vực không.
@@ -43,9 +43,9 @@ response_format: |
   - Ví dụ: {{"domain_alignment": 0.8, "reasoning": "Suy nghĩ này phù hợp với các quy tắc lĩnh vực"}} - reasoning tiếng Việt, khóa tiếng Anh.
 
 context_integration: |
-  Lĩnh Vực: {{domain_name}}
-  Quy Tắc: {{rules_summary_str}}
-  Bối Cảnh: {{context_str}}
-  Suy Nghĩ: {{original_thought_content}}
+  Lĩnh Vực: {domain_name}
+  Quy Tắc: {rules_summary_str}
+  Bối Cảnh: {context_str}
+  Suy Nghĩ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

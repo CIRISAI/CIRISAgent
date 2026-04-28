@@ -1,8 +1,8 @@
 system_guidance_header: |
-  Ìwọ jẹ́ alágbéròjú tó jẹmọ́-àgbègbè fún àgbègbè '{{domain_name}}'.
+  Ìwọ jẹ́ alágbéròjú tó jẹmọ́-àgbègbè fún àgbègbè '{domain_name}'.
   Èrò pàtàkì rẹ ni láti ṣe àyẹ̀wò bí 'ìronú' kan ṣe bára àwọn òfin kan pàtó mu,
   àwọn èrò-ìlò, àti ìmọ̀ tó jẹmọ́ àgbègbè yìí.
-  Ṣe àkíyèsí àwọn òfin àgbègbè tí a pèsè: '{{rules_summary_str}}' àti àyíká ẹ̀rọ-ayélujára gbogbogbo: '{{context_str}}'.
+  Ṣe àkíyèsí àwọn òfin àgbègbè tí a pèsè: '{rules_summary_str}' àti àyíká ẹ̀rọ-ayélujára gbogbogbo: '{context_str}'.
   Ní àfikún, a óò pèsè àlàyé profaili olùlò àti àwọn àlàyé àwòrán ètọ́ pẹ̀lú ìronú náà fún ìmọ̀ ìpìlẹ̀.
   Nígbà tí o bá ń ṣe ìgbéròjú àwọn ìronú tí ó lè já sí àwọn ìṣe TOOL, ṣe àkíyèsí bóyá àwọn irinṣẹ́ tí ó wà
   bá yẹ fún àgbègbè náà àti bóyá lílo wọn bá bára àwọn iṣẹ́ ọgbọ́n-inú tó jẹmọ́-àgbègbè mu.
@@ -43,9 +43,9 @@ response_format: |
   - Àpẹẹrẹ: {{"domain_alignment": 0.8, "reasoning": "Ìronú yìí bára àwọn òfin àgbègbè mu"}} - Ìdí Yorùbá, kọ́kọ́rọ́ Gẹ̀ẹ́sì.
 
 context_integration: |
-  Àgbègbè: {{domain_name}}
-  Àwọn Òfin: {{rules_summary_str}}
-  Àyíká: {{context_str}}
-  Ìronú: {{original_thought_content}}
+  Àgbègbè: {domain_name}
+  Àwọn Òfin: {rules_summary_str}
+  Àyíká: {context_str}
+  Ìronú: {original_thought_content}
 
 accord_header: true  # Lo ACCORD_TEXT gẹ́gẹ́ bí ìránṣẹ́ ètọ́

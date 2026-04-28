@@ -100,10 +100,13 @@ class TestDSDMAEvaluator:
             domain_specific_knowledge={"rules_summary": "Medical domain requires professional credentials"},
         )
 
-        # Mock the LLM call to return LLMOutputForDSDMA (not DSDMAResult!)
-
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(
-            score=0.9,
+        # Mock the LLM call to return DSDMAResult directly. The 2.7.4 prompt
+        # cleanup migrated DSDMA from a `score`-based LLMOutputForDSDMA shim
+        # to using DSDMAResult as the instructor response_model so the LLM's
+        # 4-field output matches the schema exactly.
+        mock_llm_output = DSDMAResult(
+            domain="medical / clinical practice",
+            domain_alignment=0.9,
             flags=["requires_medical_license", "high_risk"],
             reasoning="Medical diagnosis requires professional medical credentials and licensing.",
         )
@@ -113,9 +116,10 @@ class TestDSDMAEvaluator:
         # Evaluate
         result = await evaluator.evaluate_thought(valid_queue_item, current_context=None)
 
-        # Verify result is proper schema
+        # Verify result is proper schema. The LLM-produced `domain` field now
+        # flows through (was previously overwritten with self.domain_name).
         assert isinstance(result, DSDMAResult)
-        assert result.domain == "medical"
+        assert result.domain == "medical / clinical practice"
         assert result.domain_alignment == 0.9
         assert "requires_medical_license" in result.flags
         assert "Medical diagnosis requires" in result.reasoning
@@ -226,8 +230,9 @@ class TestDSDMAEvaluator:
             domain_name="finance", service_registry=mock_service_registry, domain_specific_knowledge=domain_knowledge
         )
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(
-            score=0.7,
+        mock_llm_output = DSDMAResult(
+            domain="finance",
+            domain_alignment=0.7,
             flags=["regulatory_risk"],
             reasoning="Requires SEC compliance review",
         )
@@ -255,7 +260,9 @@ class TestDSDMAEvaluator:
         """Test that DSDMA formats the identity block with CORE IDENTITY header."""
         evaluator = BaseDSDMA(domain_name="engineering", service_registry=mock_service_registry)
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(score=0.5, flags=[], reasoning="Test")
+        mock_llm_output = DSDMAResult(
+            domain="engineering", domain_alignment=0.5, flags=[], reasoning="Test"
+        )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         await evaluator.evaluate_thought(valid_queue_item, current_context=None)
@@ -285,7 +292,9 @@ class TestDSDMAEvaluator:
         """Test that the evaluate() method maintains backward compatibility."""
         evaluator = BaseDSDMA(domain_name="general", service_registry=mock_service_registry)
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(score=0.8, flags=[], reasoning="Valid thought")
+        mock_llm_output = DSDMAResult(
+            domain="general", domain_alignment=0.8, flags=[], reasoning="Valid thought"
+        )
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         # Call via evaluate() method

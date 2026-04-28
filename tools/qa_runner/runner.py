@@ -5,6 +5,7 @@ Main QA Runner implementation.
 import asyncio
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -997,7 +998,18 @@ class QARunner:
             # DMA chain + conscience + SPEAK finishes, which is minutes under
             # live LLM load. Give the SDK plenty of headroom so httpx doesn't
             # cut the connection before the server responds.
-            sdk_timeout = 900.0 if module == QAModule.MODEL_EVAL else 120.0
+            #
+            # 1800s budget (raised from 900s in 2.7.4): Together gemma-4 has
+            # ~15% tail-latency at 90s per direct DMA call; a single
+            # interact() runs PDMA + CSDMA + DSDMA + IDMA + ASPDMA + conscience
+            # checks, potentially across multiple PONDER thoughts, so 5 thoughts
+            # × 5 LLM stages × tail-latency can compound past 900s on slow
+            # provider draws. Override via CIRIS_QA_SDK_TIMEOUT env if needed.
+            try:
+                _model_eval_sdk_timeout = float(os.environ.get("CIRIS_QA_SDK_TIMEOUT", "1800"))
+            except (TypeError, ValueError):
+                _model_eval_sdk_timeout = 1800.0
+            sdk_timeout = _model_eval_sdk_timeout if module == QAModule.MODEL_EVAL else 120.0
             async with CIRISClient(base_url=self.config.base_url, timeout=sdk_timeout) as client:
                 # Manually set the token (skip login since we already have it)
                 client._transport.set_api_key(token_to_use, persist=False)

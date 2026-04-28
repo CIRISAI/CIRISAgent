@@ -138,6 +138,13 @@ def create_dsdma_from_identity(
         prompt_template = None
         domain_knowledge = None
 
+    # Prefer the explicit `domain:` field on the template so the DSDMA prompt
+    # frames the agent as operating in a real domain (e.g. "Personal
+    # Assistance", "CIRIS Outreach") rather than echoing its identity name
+    # (e.g. "Ally", "Scout"). Falls back to identity.name for templates that
+    # haven't set `domain:` yet.
+    domain_label = (getattr(identity, "domain", None) or identity.name).strip()
+
     # Always use BaseDSDMA now
     dma_result = create_dma(
         dma_type="dsdma",
@@ -145,7 +152,7 @@ def create_dsdma_from_identity(
         service_registry=service_registry,
         model_name=model_name,
         prompt_overrides=None,
-        domain_name=identity.name,
+        domain_name=domain_label,
         domain_specific_knowledge=domain_knowledge,
         prompt_template=prompt_template,
         sink=sink,

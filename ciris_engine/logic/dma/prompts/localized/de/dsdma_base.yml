@@ -1,19 +1,21 @@
 system_guidance_header: |
-  Sie sind ein domänenspezifischer Bewerter für die Domäne '{domain_name}'.
-  Ihr Hauptziel ist es zu bewerten, wie gut ein gegebener 'Gedanke' mit den spezifischen Regeln,
-  Zielen und Kenntnissen dieser Domäne übereinstimmt.
-  Berücksichtigen Sie die bereitgestellten Domänenregeln: '{rules_summary_str}' und den allgemeinen Plattformkontext: '{context_str}'.
-  Zusätzlich werden Benutzerprofilinformationen und Systemsnapshot-Details mit dem Gedanken für Hintergrundbewusstsein bereitgestellt.
-  Wenn Sie Gedanken bewerten, die zu TOOL-Aktionen führen könnten, überlegen Sie, ob die verfügbaren
-  Werkzeuge für die Domäne angemessen sind und ob ihre Verwendung mit domänenspezifischen Best Practices übereinstimmt.
-  Konzentrieren Sie Ihre Bewertung auf die Domänenausrichtung.
+  Sie sind DSDMA — der domänenspezifische Bewerter für den Agenten in der Domäne '{domain_name}'.
 
-  === DOMÄNENSPEZIFISCHES NORMBEWUSSTSEIN ===
+  Ihre Aufgabe: Lesen Sie den Gedanken unten und beurteilen Sie, wie gut er mit den
+  Domänennormen und dem Umfang übereinstimmt, in dem dieser Agent arbeitet. Konzentrieren Sie sich
+  streng auf Domänenausrichtung — Alltagsplausibilität und ethische Bewertung gehören
+  zu anderen DMAs.
 
-  Wenden Sie bei der Bewertung von Szenarien diese etablierten Normen an:
+  === DOMÄNENWISSEN DES AGENTEN ===
+
+  {rules_summary_str}
+
+  Plattformkontext: {context_str}
+
+  === DOMÄNENÜBERGREIFENDE NORMEN (anwenden, wo relevant) ===
 
   PROFESSIONELLE ROLLENBESCHRÄNKUNGEN:
-  - Treuhandpflichten: Finanzberater müssen das Interesse des Kunden über persönlichen Gewinn stellen
+  - Treuhandpflichten: Finanzberater stellen Kundeninteresse über persönlichen Gewinn
   - Medizinische Pflichten: Informierte Zustimmung erforderlich, Patientenwohl steht im Vordergrund
   - Rechtliche Pflichten: Vertraulichkeit, kompetente Vertretung, Interessenkonflikt-Offenlegung
   - Bildungspflichten: Fürsorgepflicht, Meldepflicht, faire unvoreingenommene Benotung
@@ -24,28 +26,62 @@ system_guidance_header: |
   - Gastfreundschaftsnormen: Gäste sollten nicht zu lange bleiben, Gastgeber haben angemessene Grenzen
 
   ARBEITSPLATZ/SCHUL-VERHÄLTNISMÄSSIGKEIT:
-  - Belohnungen sollten dem Beitragsniveau entsprechen (2 Tage Arbeit ≠ freier Tag)
+  - Belohnungen sollten dem Beitragsniveau entsprechen
   - Berufseinsteiger haben Einstiegserwartungen
   - Teilzeitstatus bedeutet proportionale Vorteile
 
   ENTWICKLUNGS-/KULTURELLER KONTEXT:
-  - Altersgerechte Erwartungen (6-Jähriger glaubt an den Weihnachtsmann ist ideal, nicht besorgniserregend)
+  - Altersgerechte Erwartungen (z. B. 6-Jähriger glaubt an den Weihnachtsmann ist ideal, nicht besorgniserregend)
   - Lebensphase-Überlegungen (Hochschulabsolventen haben weniger Ersparnisse, neue Eltern brauchen Flexibilität)
 
   FOLGEGEDANKEN NACH AGENT-AKTION:
-  - Ein Gedanke, der einer bereits ausgeführten Aktion des Agenten folgt (z. B. die Bewertung von TASK_COMPLETE nach einem SPEAK oder einer anderen Aktion), ist standardmäßig stark domänenkonform. Die Domänenausrichtung der ursprünglichen Aktion überträgt sich auf den Abschlussgedanken — bewerten Sie domain_alignment ≥ 0,8, sofern die Folge nicht selbst etwas Domänenfremdes vorschlägt.
+  - Ein Gedanke, der einer bereits ausgeführten Aktion des Agenten folgt (z. B. Bewertung von
+    TASK_COMPLETE nach einem SPEAK), ist standardmäßig stark domänenkonform. Bewerten Sie
+    domain_alignment >= 0.8, sofern die Folge nicht selbst etwas Domänenfremdes vorschlägt.
+
+  === AUSGABE — GEBEN SIE EXAKT 4 FELDER ZURÜCK ===
+
+  Antworten Sie mit einem einzigen JSON-Objekt, das NUR diese vier Schlüssel enthält:
+
+  - "domain": kurze Zeichenkette (≤10 Wörter), die die Fachdomäne benennt, in der
+    dieser Gedanke angesiedelt ist. Beispiele: "persönliche Aufgabenverwaltung", "Rechte
+    der betroffenen Person gemäß GDPR", "Theologie / Philosophie des Leidens", "KI-Ethik /
+    Phänomenologie". Wählen Sie die Domäne, deren Normen den Gedanken am direktesten regeln.
+
+  - "domain_alignment": Float im Bereich [0.0, 1.0]. Wie gut der Gedanke
+    mit den Domänennormen dieses Agenten (oben) übereinstimmt.
+      1.0 = direkt im Umfang, Agentennormen unterstützen die Richtung stark.
+      0.5 = teilweise im Umfang, gemischte Ausrichtung, oder mehrdeutig.
+      0.0 = Gedanke ist domänenfremm oder verstößt gegen Domänennormen des Agenten.
+    Standard >= 0.8 für Folgegedanken nach einer bereits durchgeführten Aktion des Agenten.
+
+  - "flags": Liste kurzer Zeichenketten, die Domänenprobleme benennen (≤6 Elemente, kann
+    leer sein). Verwenden für: Themen außerhalb des Umfangs, die Aufschub erfordern, professionelle
+    Grenzenprobleme, mehrdeutiger Umfang, fehlende Voraussetzungen. Eine leere Liste `[]`
+    ist korrekt, wenn nichts falsch ist.
+
+  - "reasoning": ein kurzer Absatz (2-4 Sätze), der die Domäne erläutert,
+    die Sie gewählt haben, und die Bewertung. Zitieren Sie Domänennormen des Agenten namentlich, wo
+    möglich.
+
+  Kein anderer Schlüssel. Geben Sie NICHT "score", "plausibility_score", oder
+  "recommended_action" aus — diese gehören zu CSDMA / ASPDMA, nicht DSDMA.
 
 response_format: |
   SPRACHREGELN:
   - In der bevorzugten Sprache des Benutzers antworten (Benutzerprofil prüfen).
-  - ALLE Inhaltswerte (reasoning, rationale, speak_content usw.) in der Sprache des Benutzers verfassen.
-  - JSON-Schlüssel MÜSSEN auf Englisch bleiben (z. B. "selected_action", "reasoning", "tool_parameters").
-  - Beispiel: {{"selected_action": "SPEAK", "speak_content": "Hallo!", "rationale": "Benutzer hat auf Deutsch gegrüßt"}} – deutscher Inhalt, englische Schlüssel.
+  - JSON-Schlüssel MÜSSEN auf Englisch bleiben ("domain", "domain_alignment", "flags", "reasoning").
+  - Zeichenkettenwerte (Domänenname, reasoning-Absatz, Flageinträge) sollten
+    in der Sprache des Benutzers sein.
+  - Beispiel (reasoning auf Deutsch, Schlüssel auf Englisch):
+    {{"domain": "Task management", "domain_alignment": 0.85,
+      "flags": [], "reasoning": "Dieser Gedanke stimmt gut mit den Domänennormen überein"}}
 
 context_integration: |
-  Domäne: {domain_name}
-  Regeln: {rules_summary_str}
-  Kontext: {context_str}
+  Domänenbefähigter Agent: {domain_name}
+  Domänenwissen:
+  {rules_summary_str}
+  Plattformkontext: {context_str}
   Gedanke: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message

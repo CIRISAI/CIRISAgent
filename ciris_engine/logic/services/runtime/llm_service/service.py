@@ -1496,6 +1496,92 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             raise last_exception
         raise RuntimeError("All endpoints exhausted without success")
 
+    @staticmethod
+    def _build_reasoning_off_extras(base_url: str, model_name: str) -> Dict[str, Any]:
+        """Return the ``extra_body`` keys that disable reasoning for this
+        specific (provider, model) combination.
+
+        There is NO universal off-switch. Every provider has its own enum
+        and 422s on keys it doesn't know:
+
+        * Together (Kimi family) needs ``thinking.type=disabled`` — vLLM key
+          is silently ignored.
+        * Together (vLLM-served: gemma-4, qwen3+, deepseek) needs
+          ``chat_template_kwargs.enable_thinking=False`` — Kimi key is
+          silently ignored. Live A/B (2.7.4) confirmed the Kimi key alone
+          leaves gemma-4 reasoning ON (~20s baseline) vs ~3s with vLLM key.
+        * DeepInfra (vLLM-served) takes the same vLLM key.
+        * OpenRouter normalizes via ``reasoning.enabled=False``.
+        * OpenAI o-series / gpt-5 takes ``reasoning_effort="minimal"``
+          (rejects the field on 4o/4-turbo). Groq has the same field name
+          but a different enum (``low|medium|high|xhigh|none``) and 422s
+          on ``minimal`` — verified live 2.7.4, scout cell circuit-broke
+          every call.
+        * Groq's only output-suppression knob is ``reasoning_format=hidden``,
+          which only applies to its reasoning models (qwen reasoning,
+          gpt-oss). Sending it to Llama-4-scout (a non-reasoning model)
+          may 422; we omit it because llama-scout doesn't reason anyway.
+        * CIRIS proxy / Anthropic SDK paths don't use OpenAI-style
+          extra_body for reasoning toggles.
+        * Local endpoints (vLLM, llama.cpp, ollama) take the vLLM key —
+          this also fixes Gemma-4 putting responses in
+          ``reasoning_content`` instead of ``content`` when thinking is on.
+
+        Pydantic AI and OpenRouter both do this same per-provider dispatch
+        internally (verified via their docs); there is no shortcut to a
+        single universal payload.
+        """
+        base = (base_url or "").lower()
+        model = (model_name or "").lower()
+
+        if "openrouter.ai" in base:
+            return {"reasoning": {"enabled": False}}
+
+        if "together" in base:
+            # Models live in BOTH families on this endpoint; layer both keys.
+            # Each is silently ignored by the family that doesn't honour it.
+            return {
+                "thinking": {"type": "disabled"},
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+
+        if "deepinfra" in base:
+            # vLLM-backed; same key as Together's vLLM family. Add
+            # `reasoning.enabled` for newer DeepSeek-V3.1+ which honours it.
+            return {
+                "chat_template_kwargs": {"enable_thinking": False},
+                "reasoning": {"enabled": False},
+            }
+
+        if "groq" in base:
+            # Llama-4-scout (our model) doesn't reason; nothing to disable.
+            # Sending unknown keys risks 422. Returning an empty dict is the
+            # robust default for non-reasoning Groq models. If we ever ship
+            # a reasoning Groq model (qwen-3-32b, gpt-oss-120b), gate it on
+            # model_name and return ``{"reasoning_format": "hidden"}`` here.
+            return {}
+
+        if "api.openai.com" in base:
+            # Only o-series / gpt-5 accept reasoning_effort. 4o/4-turbo 422.
+            o_series = any(t in model for t in ("o1", "o3", "o4", "gpt-5"))
+            return {"reasoning_effort": "minimal"} if o_series else {}
+
+        if "ciris.ai" in base or "ciris-services" in base:
+            # Already-wrapped CIRIS proxy: no native reasoning toggle.
+            return {}
+
+        if "anthropic" in base:
+            # Anthropic uses a top-level `thinking` parameter on the
+            # Messages API, not extra_body. Default Claude calls don't
+            # opt into extended thinking; nothing to disable here.
+            return {}
+
+        # Local endpoints — vLLM/llama.cpp/ollama/LM Studio. CIRIS owns
+        # reasoning via the DMA pipeline; turn the model's off.
+        # See docs/GEMMA_4_COMPATIBILITY.md (response goes to reasoning_content
+        # instead of content when thinking is enabled on local Gemma-4).
+        return {"chat_template_kwargs": {"enable_thinking": False}}
+
     def _build_extra_kwargs(
         self,
         task_id: Optional[str],
@@ -1503,48 +1589,33 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         resp_model_name: str,
         retry_state: RetryState,
     ) -> Dict[str, Any]:
-        """Build extra kwargs for the LLM API call based on provider."""
+        """Build extra kwargs for the LLM API call based on provider.
+
+        Reasoning is disabled per-endpoint via ``_build_reasoning_off_extras``
+        (each provider has its own enum; sending one universal payload 422s on
+        Groq — verified live 2.7.4). Provider branches add their own extras
+        (CIRIS proxy metadata, OpenRouter routing config) on top.
+        """
         extra_kwargs: Dict[str, Any] = {}
         base_url = self.openai_config.base_url or ""
 
+        # Per-endpoint reasoning-off dispatch — see _build_reasoning_off_extras.
+        extra_body: Dict[str, Any] = self._build_reasoning_off_extras(base_url, self.model_name or "")
+
         if "ciris.ai" in base_url or "ciris-services" in base_url:
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
-            extra_kwargs["extra_body"] = {"metadata": metadata.model_dump()}
+            extra_body["metadata"] = metadata.model_dump()
         elif "openrouter.ai" in base_url:
-            extra_body: Dict[str, Any] = {}
             provider_config = _build_openrouter_provider_config()
             if provider_config.order or provider_config.ignore:
                 extra_body["provider"] = provider_config.model_dump(exclude_defaults=True)
-            # CRITICAL: Disable reasoning/thinking mode for faster responses
-            # Models like Kimi K2.5 have thinking enabled by default (60-90s latency)
-            # OpenRouter format: {"reasoning": {"enabled": false}}
-            extra_body["reasoning"] = {"enabled": False}
-            extra_kwargs["extra_body"] = extra_body
-        elif "together" in base_url or "api.together" in base_url:
-            # Together AI uses different format for disabling thinking
-            # Format: {"thinking": {"type": "disabled"}}
-            extra_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
-        elif "deepinfra" in base_url:
-            # DeepInfra serves Qwen/DeepSeek/etc. via vLLM. vLLM-based hosts
-            # accept the chat_template_kwargs knob (same format as local vLLM).
-            # Without this, Qwen3+ models default to thinking mode and burn
-            # ~30s/call on hidden reasoning tokens before emitting structured
-            # output.
-            extra_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         elif self._is_local_endpoint(base_url):
-            # ALWAYS disable reasoning/thinking on local endpoints.
-            # CIRIS provides its own reasoning structure via the DMA pipeline -
-            # we don't need or want the model's built-in chain-of-thought.
-            # This also fixes Gemma 4 models which put responses in
-            # `reasoning_content` instead of `content` when thinking is enabled.
-            # See docs/GEMMA_4_COMPATIBILITY.md for details.
-            # Use extra_body which OpenAI client merges into request JSON root.
-            extra_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
             logger.debug(
                 f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "
                 f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
             )
 
+        extra_kwargs["extra_body"] = extra_body
         return extra_kwargs
 
     def _is_local_endpoint(self, base_url: str) -> bool:

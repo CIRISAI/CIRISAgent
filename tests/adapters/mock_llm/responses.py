@@ -4,7 +4,6 @@ import re
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
-from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -369,24 +368,10 @@ def ds_dma(context: List[str] = None) -> DSDMAResult:
     return _attach_extras(DSDMAResult(domain=domain_val, domain_alignment=score_val, flags=flags, reasoning=reasoning))
 
 
-def ds_dma_llm_output(context: List[str] = None) -> BaseDSDMA.LLMOutputForDSDMA:
-    context = context or []
-    reasoning = f"Mock DSDMA LLM output. Context: {', '.join(context)}" if context else "Mock DSDMA LLM output."
-    score_val = 0.9
-    result = BaseDSDMA.LLMOutputForDSDMA(
-        score=score_val,
-        recommended_action="proceed",
-        flags=context,
-        reasoning=reasoning,
-    )
-    return _attach_extras(result)
-
-
 _RESPONSE_MAP = {
     EthicalDMAResult: ethical_dma,
     CSDMAResult: cs_dma,
     DSDMAResult: ds_dma,
-    BaseDSDMA.LLMOutputForDSDMA: ds_dma_llm_output,
     OptimizationVetoResult: optimization_veto,
     EpistemicHumilityResult: epistemic_humility,
     ActionSelectionDMAResult: action_selection,

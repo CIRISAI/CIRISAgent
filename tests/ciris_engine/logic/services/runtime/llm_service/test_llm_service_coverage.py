@@ -278,94 +278,119 @@ class TestInstructorModes:
 
 
 class TestReasoningModeDisabling:
-    """Tests for disabling reasoning/thinking mode on OpenRouter and Together AI.
+    """Reasoning/thinking is disabled per-endpoint via the static
+    ``_build_reasoning_off_extras(base_url, model_name)`` dispatcher.
 
-    These tests verify that CIRIS correctly disables expensive reasoning modes
-    (like Kimi K2.5's thinking mode) to improve latency.
+    There is no universal off-switch — every provider has its own enum and
+    422s on keys it doesn't know (verified live 2.7.4: Groq 422'd the
+    ``reasoning_effort=minimal`` value and circuit-broke every scout call).
+    Pydantic AI and OpenRouter both do the same per-provider dispatch
+    internally. These tests pin the per-endpoint expected keys.
     """
 
-    def test_openrouter_reasoning_disabled_in_extra_body(self):
-        """OpenRouter requests should have reasoning mode disabled."""
+    @staticmethod
+    def _build_for(base_url: str, model_name: str = "test-model") -> dict:
         from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
 
-        # Create minimal client for testing with proper config
-        config = OpenAIConfig(
-            api_key="test-key",
-            model_name="kimi/k2-0130-preview",
-            base_url="https://openrouter.ai/api/v1",
-        )
+        config = OpenAIConfig(api_key="test-key", model_name=model_name, base_url=base_url)
         client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
         client.openai_config = config
         client.model_name = config.model_name
-
-        # Call the method that builds extra kwargs
-        extra_kwargs = client._build_extra_kwargs(
+        return client._build_extra_kwargs(
             task_id="test-task-123",
             thought_id="test-thought-456",
             resp_model_name="EthicalDMAResult",
             retry_state=RetryState(),
         )
 
-        # Verify reasoning is disabled
-        assert "extra_body" in extra_kwargs
-        extra_body = extra_kwargs["extra_body"]
-        assert "reasoning" in extra_body
-        assert extra_body["reasoning"]["enabled"] is False
+    # ------------------------------------------------------------------
+    # Per-endpoint expected keys (positive assertions)
+    # ------------------------------------------------------------------
 
-    def test_together_thinking_disabled_in_extra_body(self):
-        """Together AI requests should have thinking mode disabled."""
-        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+    def test_together_gemma_carries_both_kimi_and_vllm_keys(self):
+        """2.7.4 incident pin: gemma-4 needs the vLLM key (Kimi alone is
+        silently ignored — live A/B showed ~20s vs ~3s)."""
+        extra_body = self._build_for("https://api.together.xyz/v1", "google/gemma-4-31B-it")["extra_body"]
+        assert extra_body["thinking"] == {"type": "disabled"}
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
 
-        # Create minimal client for testing with proper config
-        config = OpenAIConfig(
-            api_key="test-key",
-            model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-            base_url="https://api.together.xyz/v1",
+    def test_together_kimi_carries_both_keys(self):
+        """Kimi K2 family on Together also gets dual-key — its own key
+        works; the vLLM key is silently ignored."""
+        extra_body = self._build_for("https://api.together.xyz/v1", "moonshotai/Kimi-K2-Instruct")["extra_body"]
+        assert extra_body["thinking"] == {"type": "disabled"}
+
+    def test_deepinfra_carries_vllm_and_reasoning_enabled_keys(self):
+        extra_body = self._build_for("https://api.deepinfra.com/v1/openai", "Qwen/Qwen3.6-35B-A3B")["extra_body"]
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+        assert extra_body["reasoning"] == {"enabled": False}
+
+    def test_openrouter_carries_reasoning_enabled_false(self):
+        extra_body = self._build_for("https://openrouter.ai/api/v1", "kimi/k2-0130-preview")["extra_body"]
+        assert extra_body["reasoning"] == {"enabled": False}
+
+    def test_local_endpoint_carries_vllm_key(self):
+        extra_body = self._build_for("http://localhost:8080/v1", "llama")["extra_body"]
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_openai_o_series_carries_reasoning_effort_minimal(self):
+        extra_body = self._build_for("https://api.openai.com/v1", "o3-mini")["extra_body"]
+        assert extra_body["reasoning_effort"] == "minimal"
+
+    # ------------------------------------------------------------------
+    # Per-endpoint forbidden keys (negative assertions — 2.7.4 regressions)
+    # ------------------------------------------------------------------
+
+    def test_groq_sends_no_reasoning_keys(self):
+        """2.7.4 Groq 422 incident pin: Groq must receive NO reasoning
+        toggle keys. Llama-4-scout doesn't reason; sending
+        ``reasoning_effort=minimal`` 422s with enum
+        ``low|medium|high|xhigh|none``; sending ``thinking`` /
+        ``chat_template_kwargs`` / ``reasoning`` is also unsafe — keep
+        the dispatcher empty for Groq until we ship a Groq reasoning
+        model."""
+        extra_body = self._build_for(
+            "https://api.groq.com/openai/v1", "meta-llama/llama-4-scout-17b-16e-instruct"
+        )["extra_body"]
+        forbidden = {"thinking", "chat_template_kwargs", "reasoning", "reasoning_effort", "reasoning_format"}
+        leaked = forbidden & set(extra_body.keys())
+        assert not leaked, (
+            f"Groq must not receive reasoning toggle keys ({leaked} leaked) — "
+            "this re-introduces the 2.7.4 Groq 422 → circuit-breaker regression"
         )
-        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
-        client.openai_config = config
-        client.model_name = config.model_name
 
-        # Call the method that builds extra kwargs
-        extra_kwargs = client._build_extra_kwargs(
-            task_id="test-task-123",
-            thought_id="test-thought-456",
-            resp_model_name="ActionSelectionDMAResult",
-            retry_state=RetryState(),
+    def test_openai_4o_does_not_get_reasoning_effort(self):
+        """``reasoning_effort`` is only valid on OpenAI o-series / gpt-5.
+        4o/4-turbo 422 the field — must not be sent."""
+        extra_body = self._build_for("https://api.openai.com/v1", "gpt-4o")["extra_body"]
+        assert "reasoning_effort" not in extra_body
+
+    def test_ciris_proxy_no_reasoning_extras(self):
+        """CIRIS proxy is a pre-wrapped LLM service; no native reasoning toggle
+        applies. Only the metadata block layers in."""
+        extra_body = self._build_for("https://lens.ciris-services-1.ai/lens-api/api/v1", "datum")["extra_body"]
+        for k in ("thinking", "chat_template_kwargs", "reasoning", "reasoning_effort"):
+            assert k not in extra_body, f"CIRIS proxy unexpectedly carries {k}"
+
+    @pytest.mark.parametrize(
+        "base_url,model_name",
+        [
+            ("https://api.groq.com/openai/v1", "meta-llama/llama-4-scout-17b-16e-instruct"),
+            ("https://api.together.xyz/v1", "google/gemma-4-31B-it"),
+            ("https://api.deepinfra.com/v1/openai", "Qwen/Qwen3.6-35B-A3B"),
+            ("https://api.openai.com/v1", "gpt-4o"),
+            ("https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"),
+        ],
+    )
+    def test_reasoning_effort_minimal_only_on_openai_o_series(self, base_url, model_name):
+        """``reasoning_effort=minimal`` is OpenAI o-series only. Sending it
+        anywhere else either does nothing (silent ignore) or 422s (Groq).
+        Be conservative: only OpenAI o-series gets this key."""
+        extra_body = self._build_for(base_url, model_name)["extra_body"]
+        assert extra_body.get("reasoning_effort") != "minimal", (
+            f"reasoning_effort=minimal leaked to {base_url} model={model_name} — "
+            "only OpenAI o-series / gpt-5 accept this enum value"
         )
-
-        # Verify thinking is disabled
-        assert "extra_body" in extra_kwargs
-        extra_body = extra_kwargs["extra_body"]
-        assert "thinking" in extra_body
-        assert extra_body["thinking"]["type"] == "disabled"
-
-    def test_openai_no_reasoning_override(self):
-        """Standard OpenAI requests should not have reasoning/thinking overrides."""
-        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
-
-        # Create minimal client for testing with proper config
-        config = OpenAIConfig(
-            api_key="test-key",
-            model_name="gpt-4o",
-            base_url="https://api.openai.com/v1",
-        )
-        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
-        client.openai_config = config
-        client.model_name = config.model_name
-
-        # Call the method that builds extra kwargs
-        extra_kwargs = client._build_extra_kwargs(
-            task_id="test-task-123",
-            thought_id="test-thought-456",
-            resp_model_name="ActionSelectionDMAResult",
-            retry_state=RetryState(),
-        )
-
-        # Standard OpenAI should have no extra_body with reasoning/thinking
-        if "extra_body" in extra_kwargs and extra_kwargs["extra_body"] is not None:
-            assert "reasoning" not in extra_kwargs["extra_body"]
-            assert "thinking" not in extra_kwargs["extra_body"]
 
     def test_openrouter_includes_provider_config(self):
         """OpenRouter requests should include both provider config and reasoning disabled."""

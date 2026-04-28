@@ -709,7 +709,9 @@ The agent is exercised against three providers in production and live QA. **Conf
 | Provider | Endpoint | Model identifier (CASE-SENSITIVE) | Notes |
 |---|---|---|---|
 | **Together AI** | `https://api.together.xyz/v1` | `google/gemma-4-31B-it` | **Capital `B`, lowercase `it`.** Production datum primary. NOT `gemma-3` (deprecated), NOT `gemma-4-31b-it` (wrong case). Verify with `curl -H "Authorization: Bearer $KEY" https://api.together.xyz/v1/models \| jq '.data[].id \| select(test("gemma"))'`. |
-| **Groq** | `https://api.groq.com/openai/v1` | `meta-llama/llama-4-scout-17b-16e-instruct` | Production datum backup. **8192 max_tokens cap** — agent must not pass higher (this was the 2.7.4 incident). |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `meta-llama/llama-4-scout` | Scout for the QA matrix (live as of 2026-04-28). Routed to DeepInfra under the hood. Key at `~/.openrouter_key`; usage gate is $100/week ($0.0000018/call observed). |
+| **Together AI** | `https://api.together.xyz/v1` | `meta-llama/Llama-4-Scout-17B-16E-Instruct` | Scout exists in Together's catalog but is **NOT serverless** — every Llama-4 variant requires a paid dedicated endpoint. Don't use Together for scout until that changes. |
+| **Groq** | `https://api.groq.com/openai/v1` | `meta-llama/llama-4-scout-17b-16e-instruct` | Production datum backup, all lowercase. **8192 max_tokens cap** — agent must not pass higher (this was the 2.7.4 incident). The live key was 401-invalid as of 2026-04-28; refresh `~/.groq_key` before relying on it. |
 | **DeepInfra** | `https://api.deepinfra.com/v1/openai` | `Qwen/Qwen3.6-35B-A3B` | Used as the canonical PDMA v3.2 / locale eval test bed. **Always pass `extra_body={"chat_template_kwargs": {"enable_thinking": false}}`** or thinking-mode burns through max_tokens before producing visible output (see `llm_service/service.py:1426`). |
 
 **API keys**: `~/.together_key`, `~/.groq_key`, `~/.deepinfra_key`. Each holds the raw bearer token, no quotes, no trailing newline.

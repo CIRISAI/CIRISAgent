@@ -489,9 +489,14 @@ async def test_llm_service_interaction_id_only_for_ciris_ai(llm_service):
             task_id="test-task-123",
         )
 
-        # Verify extra_body was NOT passed
+        # Verify the CIRIS proxy `metadata` block is NOT included for non-ciris.ai
+        # endpoints. (`extra_body` itself may still be present — the 2.7.4
+        # per-endpoint reasoning-off dispatcher sets it on every provider so
+        # reasoning toggles can be layered in. The interaction_id is what's
+        # CIRIS-proxy-only, not the extra_body envelope itself.)
         call_args = mock_create.call_args[1]
-        assert "extra_body" not in call_args
+        if "extra_body" in call_args:
+            assert "metadata" not in call_args["extra_body"]
 
 
 @pytest.mark.asyncio

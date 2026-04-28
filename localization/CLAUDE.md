@@ -109,6 +109,33 @@ Preserve section headers in CAPS. Keep code blocks in English. Maintain the poet
 
 **CRITICAL**: Escape all JSON braces as `{{` and `}}`. Python's `.format()` will break otherwise. This is the #1 recurring bug in localization work.
 
+### Propagating ONE prompt change across all 28 locales (use language-family clustering)
+
+When the English source for a single DMA prompt is rewritten (e.g. dsdma_base.yml in 2.7.4), don't fan out 28 individual agents — that wastes context and produces no efficiency gain over sequential. Instead spawn **9 parallel agents grouped by language family**, each handling 2–6 related languages serially. Family clustering exploits shared glossary patterns, shared script behaviour (RTL groups, CJK groups), and shared cultural framing for the same prompt — so an agent can re-use research across the languages it owns.
+
+Canonical 9-cluster grouping for the 28 non-English locales:
+
+| Cluster | Languages | Notes |
+|---|---|---|
+| 1. Romance + Germanic European | es, fr, it, pt, de | Latin script, similar register |
+| 2. Slavic Cyrillic | ru, uk | Distinct languages, Cyrillic |
+| 3. Indo-Aryan + Iranian | hi, mr, pa, ur, fa, bn | Devanagari / Gurmukhi / Persian / Bengali; ur+fa are RTL |
+| 4. CJK East Asian | zh, ja, ko | Hanzi/kanji-based, no spaces |
+| 5. SE Asian | th, vi, id, my | Diverse scripts (Thai, Latin, Burmese) |
+| 6. Dravidian | ta, te | South Indian scripts |
+| 7. Semitic + Ethiopic + Chadic | ar, am, ha | Arabic RTL, Ge'ez script, Hausa Latin/Ajami |
+| 8. Sub-Saharan African (Niger-Congo) | sw, yo | Latin script, Bantu/Yoruba |
+| 9. Turkic | tr | Latin, Turkish |
+
+Each family-agent gets:
+- The new English source content (or a path)
+- Their assigned language codes
+- Output paths under `ciris_engine/logic/dma/prompts/localized/{code}/`
+- Required-token list (placeholders that must survive verbatim: `{domain_name}`, `{rules_summary_str}`, `{context_str}`, `{original_thought_content}` — single-brace; example JSON braces must be doubled `{{}}`)
+- The instruction to keep JSON object keys ("domain", "domain_alignment", "flags", "reasoning") in English while translating string values
+
+Use Haiku for these agents — sufficient for prompt-level translation and parallel-friendly. Validate each output by parsing the YAML and confirming the required-token set matches the English source.
+
 ### Phase 5: Comprehensive Guide (1-2 agents, ~10 min)
 
 Translate `CIRIS_COMPREHENSIVE_GUIDE_en.md`. Target 80%+ of English line count. Keep markdown structure intact.

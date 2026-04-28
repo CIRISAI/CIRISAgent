@@ -35,35 +35,26 @@ REPEATED_SPEAK_GUIDANCE = (
     "start with, 'I apologize'"
 )
 
-# Actions that count as valid intervening actions allowing another SPEAK
-# TOOL is NOT included - using tools doesn't mean you should speak again
-# TODO: Adjust logic to track tool signatures (name + params) and allow SPEAK
-#       after DIFFERENT tool calls (making progress) while still blocking
-#       identical TOOL->SPEAK->TOOL->SPEAK loops (stuck in loop).
-VALID_INTERVENING_ACTIONS = {
-    HandlerActionType.OBSERVE.value,  # New input from user
-    HandlerActionType.DEFER.value,  # Deferred to authority
-    HandlerActionType.MEMORIZE.value,  # Memory operation
-    HandlerActionType.REJECT.value,  # Rejected task
-    HandlerActionType.PONDER.value,  # Deep reflection
-}
-
-
 class ActionSequenceConscience(ConscienceInterface):
-    """Prevents repeated SPEAK actions without VALID intervening actions.
+    """Prevents back-to-back SPEAK with no intervening action.
 
-    This heuristic conscience checks if a SPEAK action is being attempted
-    after a prior completed SPEAK with no valid intervening action.
+    Rule: block only if the immediately-prior completed action was SPEAK.
+    Any other action (PONDER, TOOL, OBSERVE, MEMORIZE, RECALL, FORGET, DEFER,
+    REJECT, TASK_COMPLETE) counts as intervening — the agent has done
+    something since its last utterance, so a new SPEAK is legitimate.
 
-    Valid intervening actions that allow another SPEAK:
-    - OBSERVE (new user input)
-    - DEFER (deferred to authority)
-    - MEMORIZE (memory operation)
-    - REJECT (rejected task)
-    - PONDER (deep reflection)
+    Earlier versions kept a whitelist (OBSERVE/DEFER/MEMORIZE/REJECT/PONDER)
+    and walked backward through history treating TOOL/RECALL/FORGET/
+    TASK_COMPLETE as transparent. That misfired in two ways:
+      1. The reversed-walk hit the most-recent SPEAK first and blocked
+         before considering prior PONDERs (production datum WAKEUP livelock).
+      2. [SPEAK, TOOL, attempt-SPEAK] would block, even though the agent
+         used a tool — making productive tool→speak chains impossible.
 
-    TOOL is NOT a valid intervening action - using tools doesn't grant
-    permission to speak again. This prevents TOOL->SPEAK->TOOL->SPEAK loops.
+    The simpler rule (immediate-prior only) matches the v3.2 ponder
+    principle: ponder = "try a new approach"; the new approach is the
+    next SPEAK. If the bounce gate or another conscience rejects the
+    content, that's the right layer — not this sequence-shape check.
 
     If the rule is violated, bounces back to recursive ASPDMA with guidance.
     """
@@ -229,20 +220,10 @@ class ActionSequenceConscience(ConscienceInterface):
             f"attempting={action.selected_action}"
         )
 
-        # Check rule: SPEAK after SPEAK with no VALID intervening action
-        # Look backwards through actions to find if there's been a SPEAK
-        # since the last valid intervening action (OBSERVE, DEFER, etc.)
-        # TOOL does NOT count as valid - can't loop TOOL->SPEAK->TOOL->SPEAK
-        found_speak_since_valid_action = False
-        for action_type in reversed(completed_actions):
-            if action_type in VALID_INTERVENING_ACTIONS:
-                # Found a valid intervening action - SPEAK is allowed
-                break
-            if action_type == HandlerActionType.SPEAK.value:
-                # Found a SPEAK before any valid intervening action
-                found_speak_since_valid_action = True
-                break
-            # TOOL and other actions don't count - keep looking back
+        # Block only if the immediately-prior action was SPEAK. See class
+        # docstring for the rationale and the datum-livelock motivation.
+        prior_action = completed_actions[-1] if completed_actions else None
+        found_speak_since_valid_action = prior_action == HandlerActionType.SPEAK.value
 
         if found_speak_since_valid_action:
             # Already spoke since last valid action (like OBSERVE), blocking repeat

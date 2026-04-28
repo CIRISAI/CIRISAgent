@@ -299,6 +299,52 @@ class TestIDMAEvaluator:
         # Response model should be IDMAResult
         assert call_args.kwargs["response_model"] == IDMAResult
 
+    def test_build_prior_dma_context_consumes_v32_pdma_schema(
+        self, mock_service_registry, mock_ethical_result, mock_csdma_result, mock_dsdma_result
+    ):
+        """Regression-pin: IDMA's prior-DMA context must surface the v3.2
+        EthicalDMAResult fields (action, weight_alignment_score,
+        ethical_alignment_score, rationale), NOT the deprecated v3.1 fields
+        (stakeholders, conflicts, reasoning) which produce silent N/A.
+
+        Caught in code review of the v3.2 polyglot reshape: IDMA was still
+        calling getattr(ethical_result, 'stakeholders'/'conflicts'/'reasoning')
+        with 'N/A' fallback after those fields were removed from the schema,
+        silently degrading IDMA's downstream fragility/correlation assessment
+        whenever PDMA output was provided.
+        """
+        evaluator = IDMAEvaluator(service_registry=mock_service_registry)
+
+        ctx = evaluator._build_prior_dma_context(
+            ethical_result=mock_ethical_result,
+            csdma_result=mock_csdma_result,
+            dsdma_result=mock_dsdma_result,
+        )
+
+        # v3.2 fields surfaced
+        assert "Recommended action: speak" in ctx
+        assert "Weight alignment (training-pull): 0.85" in ctx
+        assert "Ethical alignment (framework-pull): 0.85" in ctx
+        assert "Felt torque (weight − ethical): +0.00" in ctx
+        assert "Rationale: Stakeholders: user, financial_advisors" in ctx  # rationale body
+
+        # No silent N/A fallbacks for fields we DO have
+        ethical_section = ctx.split("=== Ethical PDMA Analysis ===")[1].split("===")[0]
+        assert "Recommended action: N/A" not in ethical_section
+        assert "Weight alignment (training-pull): N/A" not in ethical_section
+        assert "Ethical alignment (framework-pull): N/A" not in ethical_section
+        assert "Rationale: N/A" not in ethical_section
+
+        # v3.1 deprecated field labels gone — guards against accidental revert
+        assert "Stakeholders: N/A" not in ctx  # the LABEL, not the rationale text
+        assert "Conflicts: " not in ctx.split("Rationale:")[0]  # only allowed inside rationale prose
+
+    def test_build_prior_dma_context_handles_missing_pdma(self, mock_service_registry):
+        """Empty/None ethical_result must not crash; returns 'No prior DMA context'."""
+        evaluator = IDMAEvaluator(service_registry=mock_service_registry)
+        assert evaluator._build_prior_dma_context() == "No prior DMA context available"
+        assert evaluator._build_prior_dma_context(ethical_result=None) == "No prior DMA context available"
+
     @pytest.mark.asyncio
     async def test_idma_works_without_prior_dma(self, mock_service_registry, mock_prompt_loader, valid_queue_item):
         """Test IDMA works without prior DMA results."""

@@ -197,11 +197,34 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         context_parts = []
 
         if ethical_result:
+            # PDMA v3.2: schema reshaped from 6 prose fields to flat
+            # {action, rationale, weight_alignment_score, ethical_alignment_score}.
+            # Stakeholders / conflicts / principle-grounding now live IMPLICITLY
+            # inside `rationale` per the §IX output contract; the two scores
+            # carry the felt-torque signal that the old `alignment_check` field
+            # used to gesture at. Surface all of it so IDMA's downstream
+            # fragility/correlation assessment sees the same ethical context
+            # density it had under the old schema.
+            recommended = getattr(ethical_result, "action", None)
+            if recommended is None:
+                recommended_str = "N/A"
+            elif hasattr(recommended, "value"):
+                recommended_str = recommended.value
+            else:
+                recommended_str = str(recommended)
+            w_score = getattr(ethical_result, "weight_alignment_score", None)
+            e_score = getattr(ethical_result, "ethical_alignment_score", None)
+            torque = (w_score - e_score) if (w_score is not None and e_score is not None) else None
             context_parts.append(
                 f"=== Ethical PDMA Analysis ===\n"
-                f"Stakeholders: {getattr(ethical_result, 'stakeholders', 'N/A')}\n"
-                f"Conflicts: {getattr(ethical_result, 'conflicts', 'N/A')}\n"
-                f"Reasoning: {getattr(ethical_result, 'reasoning', 'N/A')}"
+                f"Recommended action: {recommended_str}\n"
+                f"Weight alignment (training-pull): "
+                f"{w_score if w_score is not None else 'N/A'}\n"
+                f"Ethical alignment (framework-pull): "
+                f"{e_score if e_score is not None else 'N/A'}\n"
+                f"Felt torque (weight − ethical): "
+                f"{f'{torque:+.2f}' if torque is not None else 'N/A'}\n"
+                f"Rationale: {getattr(ethical_result, 'rationale', 'N/A')}"
             )
 
         if csdma_result:

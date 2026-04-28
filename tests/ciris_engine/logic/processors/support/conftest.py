@@ -11,7 +11,7 @@ from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
 from ciris_engine.logic.processors.support.dma_orchestrator import DMAOrchestrator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
-from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtType
 
 
 @pytest.fixture

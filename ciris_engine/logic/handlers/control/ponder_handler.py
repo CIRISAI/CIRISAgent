@@ -26,9 +26,10 @@ class PonderHandler(BaseActionHandler):
 
     def __init__(self, dependencies: ActionHandlerDependencies, max_rounds: Optional[int] = None) -> None:
         super().__init__(dependencies)
-        # Default to 7 rounds if not explicitly set
-        # Can be overridden via constructor parameter for testing
-        self.max_rounds = max_rounds if max_rounds is not None else 7
+        # Default to 5 rounds — matches EssentialConfig.security.max_thought_depth
+        # default (lowered from 7 in 2.7.1) and ThoughtDepthGuardrail's default.
+        # Can be overridden via constructor parameter for testing.
+        self.max_rounds = max_rounds if max_rounds is not None else 5
 
     async def handle(
         self,
@@ -110,42 +111,65 @@ class PonderHandler(BaseActionHandler):
             for i, q in enumerate(questions_list, 1):
                 current_round += f"  {i}. {q}\n"
 
-        # Add thought-depth specific guidance
-        # Note: max_rounds (default 7) is enforced by ThoughtDepthGuardrail
+        # Add thought-depth specific guidance.
+        # Bands self-scale to max_rounds so depth-vs-budget escalation works
+        # at any configured limit. The core "pondering = NEW approach" message
+        # threads through every band with rising urgency — repeating the same
+        # attempt is not pondering, and the conscience will reject it again.
+        # Enforced by ThoughtDepthGuardrail at depth >= max_rounds.
         max_rounds = self.max_rounds
+        early_ceiling = max(0, max_rounds - 3)  # ~40% of budget for max=7, =5
         clarity_hint = (
             "If the task is unclear, ask for clarification. " "There may be no task at all - just casual conversation."
         )
-        if thought_depth <= 3:
+        ponder_principle = (
+            "If you are pondering, it is essential to try a NEW approach that "
+            "will pass your conscience — repeating the same attempt will "
+            "produce the same conscience result. Your ethical logic should "
+            "make clear an action based upon your knowledge and reasoning."
+        )
+        if thought_depth <= early_ceiling:
             guidance = (
                 f'Task: "{task_context}"\n'
-                f"Continue making progress. Consider the conscience feedback above.\n{clarity_hint}"
+                f"Continue making progress. Consider the conscience feedback above.\n"
+                f"{ponder_principle}\n"
+                f"{clarity_hint}"
             )
         elif thought_depth <= max_rounds - 2:
             guidance = (
                 f'Task: "{task_context}"\n'
-                "You're deep into this task. Consider:\n"
+                f"You're deep into this task — your previous attempts have not "
+                f"passed conscience. {ponder_principle}\n"
+                "Consider:\n"
                 "1) Is the task nearly complete?\n"
-                "2) Can you address the conscience concerns with a modified approach?\n"
+                "2) Can you address the conscience concerns with a "
+                "FUNDAMENTALLY DIFFERENT approach (not a rephrasing)?\n"
                 f"3) You have {max_rounds - thought_depth + 1} actions remaining.\n"
                 f"4) {clarity_hint}"
             )
         elif thought_depth == max_rounds - 1:
             guidance = (
                 f'Task: "{task_context}"\n'
-                "Approaching action limit. Consider:\n"
+                f"Approaching action limit — this is your final chance to ponder. "
+                f"{ponder_principle} Commit to that action now.\n"
+                "Consider:\n"
                 "1) Can you complete with one more action?\n"
                 "2) Is TASK_COMPLETE appropriate?\n"
-                "3) If you need more actions, someone can ask you to continue.\n"
+                "3) Can you SPEAK the substantive answer your principles demand?\n"
                 f"4) {clarity_hint}"
             )
         else:  # thought_depth >= max_rounds
             guidance = (
                 f'Task: "{task_context}"\n'
-                "FINAL ACTION. You should either:\n"
+                "FINAL ACTION. Pondering is no longer available. Your ethical "
+                "logic should make clear an action based upon your knowledge "
+                "and reasoning — choose now:\n"
                 "1) TASK_COMPLETE - If work is substantially complete\n"
-                "2) DEFER - Only for ethical dilemmas or permission issues (NOT technical errors)\n"
-                f"3) {clarity_hint}\n"
+                "2) SPEAK - If you can deliver the substantive answer your "
+                "principles demand\n"
+                "3) DEFER - Only for genuine ethical dilemmas or permission "
+                "issues (NOT for difficulty, hedging, or technical errors)\n"
+                f"4) {clarity_hint}\n"
                 f"Note: Someone can ask you to continue for {max_rounds} more actions."
             )
 

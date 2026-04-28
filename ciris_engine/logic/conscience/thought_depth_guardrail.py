@@ -34,9 +34,10 @@ class ThoughtDepthGuardrail(ConscienceInterface):
         """Initialize with time service and configurable max depth."""
         self._time_service = time_service
         if max_depth is None:
-            # Default to 7 to match PonderHandler's max_rounds
-            # This prevents infinite ponder loops when depth is capped
-            max_depth = 7
+            # Match EssentialConfig.security.max_thought_depth default (5 since 2.7.1).
+            # Successful resolutions cap at depth 5; depth 6+ chains historically
+            # spoke without completing or DEFERred anyway. See essential.py:75.
+            max_depth = 5
         self.max_depth = max_depth
         logger.info(f"ThoughtDepthconscience initialized with max_depth={self.max_depth}")
 

@@ -182,10 +182,18 @@ async def send_messages(
     start = time.time()
 
     limits = httpx.Limits(max_keepalive_connections=max(20, concurrency * 2), max_connections=max(40, concurrency * 4))
+    # Read budget: process_tasks=True waits for a full DMA pipeline + SPEAK
+    # (~minutes under live LLM load); process_tasks=False is the fast queue
+    # path (just task acceptance), but 10s was too tight on GitHub Actions
+    # runners under 20-way concurrent burst — auth/rate-limit middleware +
+    # SQLite write contention on the audit + tasks tables added enough
+    # tail-latency to push 21% of /v1/agent/message calls past 10s, all
+    # surfacing as `exc_ReadTimeout`. 30s gives breathing room for the
+    # acceptance path while still catching genuine hangs.
     client_timeout = (
         httpx.Timeout(connect=5.0, read=60.0, write=30.0, pool=10.0)
         if process_tasks
-        else httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=10.0)
+        else httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=10.0)
     )
 
     async def worker(worker_id: int) -> None:

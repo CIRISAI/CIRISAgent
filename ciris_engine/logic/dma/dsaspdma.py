@@ -135,28 +135,22 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         return getattr(profile, "preferred_language", None)
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language from the current user context.
+        """Sync prompt language using the full localization priority chain.
 
-        Always assigns _explicit_language to the value derived from THIS
-        thought — including None when no profile data is available — so a
-        reused evaluator instance never inherits a previous thought's
-        language. Without this reset, thought A in `am` followed by thought
-        B with no profile would silently keep loading Amharic prompts.
+        Walks thought/task preferred_language → user_profile.preferred_language →
+        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
         """
-        user_profiles = self._user_profiles_from_context(context)
-        preferred_language: Optional[str] = (
-            self._preferred_language_of(user_profiles[0]) if user_profiles else None
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            get_user_language_from_context,
         )
 
-        if preferred_language != self._explicit_language:
-            # The prompt_loader property reads _explicit_language on next
-            # access and returns the per-language cached loader. No global
-            # mutation, no cross-thread bleed for concurrent thoughts.
-            self._explicit_language = preferred_language
-            if preferred_language:
-                logger.debug(f"DSASPDMA: Synced prompt language to {preferred_language}")
-            else:
-                logger.debug("DSASPDMA: Cleared prompt language (no profile/context)")
+        new_language = (
+            get_user_language_from_context(context) if context is not None else get_preferred_language()
+        )
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            logger.debug(f"DSASPDMA: Synced prompt language to {new_language}")
 
     def _get_prompt_value(self, key: str) -> Optional[str]:
         """Read a prompt block from PromptCollection or dict overrides."""

@@ -66,23 +66,37 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
-    def _sync_language(self, user_profiles: Any) -> None:
-        """Update _explicit_language from the first user profile.
+    def _sync_language_from_context(self, context: Optional[Any], thought: Optional[Any] = None) -> None:
+        """Sync prompt language using the full localization priority chain.
 
-        Always assigns (None included) so a reused evaluator instance never
-        inherits a previous thought's language when profile data is absent.
+        Walks thought.preferred_language → context.thought/task.preferred_language →
+        user_profile.preferred_language → CIRIS_PREFERRED_LANGUAGE env → "en" via
+        :func:`get_user_language_from_context`. The ``thought`` argument is the
+        ProcessingQueueItem being evaluated; its preferred_language is the
+        authoritative per-thought signal and beats the (often default-"en")
+        user_profile entry. Without consulting the thought directly, the
+        UserProfile.preferred_language="en" default would silently override
+        legitimate channel/thought signals.
         """
-        new_language: Optional[str] = None
-        if user_profiles and len(user_profiles) > 0:
-            new_language = getattr(user_profiles[0], "preferred_language", None)
+        from ciris_engine.logic.utils.localization import (
+            _str_lang,
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        # Thought's own preferred_language is the highest-priority signal.
+        thought_lang = _str_lang(thought, "preferred_language") if thought is not None else None
+        if thought_lang:
+            new_language = thought_lang
+        elif context is not None:
+            new_language = get_user_language_from_context(context)
+        else:
+            new_language = get_preferred_language()
         if new_language != self._explicit_language:
             self._explicit_language = new_language
-            if new_language:
-                logger.debug(f"PDMA: Synced prompt language to user preference: {new_language}")
-            else:
-                logger.debug("PDMA: Cleared prompt language (no profile/context)")
+            logger.debug(f"PDMA: Synced prompt language to {new_language}")
 
-    def _build_context_strings(self, context: Any) -> tuple[str, str]:
+    def _build_context_strings(self, context: Any, thought: Optional[Any] = None) -> tuple[str, str]:
         """Extract system snapshot and user profile context strings.
 
         Also syncs user's language preference to the DMA prompt loader.
@@ -90,7 +104,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         if not context:
             # No context = no profile = no language. Reset so a previous
             # thought's language doesn't bleed into this one.
-            self._sync_language(None)
+            self._sync_language_from_context(None)
             return "", ""
 
         system_snapshot_str = ""
@@ -106,7 +120,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             user_profiles = context.user_profiles
             user_profile_str = format_user_profiles(user_profiles)
 
-        self._sync_language(user_profiles)
+        self._sync_language_from_context(context, thought=thought)
         return system_snapshot_str, user_profile_str
 
     def _get_template_override(self, key: str) -> Optional[str]:
@@ -171,7 +185,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         # Build context strings
         context_start = time.time()
-        system_snapshot_str, user_profile_str = self._build_context_strings(context)
+        system_snapshot_str, user_profile_str = self._build_context_strings(context, thought=input_data)
         full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
         logger.info(
             f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms"

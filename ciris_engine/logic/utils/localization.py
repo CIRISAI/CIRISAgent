@@ -374,8 +374,14 @@ def _str_lang(obj: Any, attr: str) -> Optional[str]:
 
     Mock objects return a MagicMock for any attribute access, so guarding
     against non-strings is required for tests that don't pre-stub attrs.
+    Dict-shaped objects (commonly emitted by the SDK / API context blocks)
+    are handled via ``.get`` so the chain works uniformly across attr-style
+    dataclass contexts and dict-style payloads.
     """
-    val = getattr(obj, attr, None)
+    if isinstance(obj, dict):
+        val = obj.get(attr)
+    else:
+        val = getattr(obj, attr, None)
     return val.strip() if isinstance(val, str) and val.strip() else None
 
 
@@ -392,18 +398,24 @@ def _lang_from_obj_or_inner_context(obj: Any) -> Optional[str]:
     env-var default. This was the silent symptom that caused every
     non-Amharic agent's conscience to read its prompts in whatever
     CIRIS_PREFERRED_LANGUAGE was on the host.
+
+    Handles dict-shaped objects via ``_str_lang``'s dict branch.
     """
     if obj is None:
         return None
     lang = _str_lang(obj, "preferred_language")
     if lang:
         return lang
-    inner_ctx = getattr(obj, "context", None)
+    if isinstance(obj, dict):
+        inner_ctx = obj.get("context")
+        initial_ctx = obj.get("initial_context")
+    else:
+        inner_ctx = getattr(obj, "context", None)
+        initial_ctx = getattr(obj, "initial_context", None)
     if inner_ctx is not None:
         lang = _str_lang(inner_ctx, "preferred_language")
         if lang:
             return lang
-    initial_ctx = getattr(obj, "initial_context", None)
     if initial_ctx is not None:
         return _str_lang(initial_ctx, "preferred_language")
     return None
@@ -413,21 +425,36 @@ def _lang_from_thought_or_task(context: Any) -> Optional[str]:
     """Layer 1: task/thought-specific preferred_language.
 
     Checks context.thought (and its inner context), then context.task /
-    context.current_task (and its inner context), in that order.
+    context.current_task (and its inner context), in that order. Handles
+    both attr-style and dict-style contexts.
     """
-    thought_lang = _lang_from_obj_or_inner_context(getattr(context, "thought", None))
+    if isinstance(context, dict):
+        thought = context.get("thought")
+        task = context.get("task") or context.get("current_task")
+    else:
+        thought = getattr(context, "thought", None)
+        task = getattr(context, "task", None) or getattr(context, "current_task", None)
+    thought_lang = _lang_from_obj_or_inner_context(thought)
     if thought_lang:
         return thought_lang
-    task = getattr(context, "task", None) or getattr(context, "current_task", None)
     return _lang_from_obj_or_inner_context(task)
 
 
 def _lang_from_user_profiles(context: Any) -> Optional[str]:
     """Layer 2: first matching user profile's preferred_language (or
     legacy `language` alias). Looks under `context.system_snapshot` first,
-    then treats `context` itself as the snapshot."""
-    snapshot = getattr(context, "system_snapshot", None) or context
-    user_profiles = getattr(snapshot, "user_profiles", None)
+    then treats `context` itself as the snapshot. Handles both attr-style
+    and dict-style contexts uniformly."""
+    if isinstance(context, dict):
+        snapshot: Any = context.get("system_snapshot") or context
+    else:
+        snapshot = getattr(context, "system_snapshot", None) or context
+
+    if isinstance(snapshot, dict):
+        user_profiles = snapshot.get("user_profiles")
+    else:
+        user_profiles = getattr(snapshot, "user_profiles", None)
+
     if not isinstance(user_profiles, list):
         return None
     for profile in user_profiles:

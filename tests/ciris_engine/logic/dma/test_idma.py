@@ -15,7 +15,7 @@ import pytest
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
-from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 
@@ -110,10 +110,9 @@ class TestIDMAEvaluator:
     def mock_ethical_result(self):
         """Create mock PDMA result for prior context."""
         return EthicalDMAResult(
-            stakeholders="user, financial_advisors, regulatory_bodies",
-            conflicts="user_benefit vs risk_of_loss, advice_quality vs liability",
-            reasoning="Multiple stakeholders with potentially conflicting interests.",
-            alignment_check="Beneficence: supports user goals; Non-maleficence: financial risk exists",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, financial_advisors, regulatory_bodies. Conflicts: user_benefit vs risk_of_loss, advice_quality vs liability. Multiple stakeholders with potentially conflicting interests. Beneficence: supports user goals; Non-maleficence: financial risk exists",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
 
     # ==================== Core Functionality Tests ====================

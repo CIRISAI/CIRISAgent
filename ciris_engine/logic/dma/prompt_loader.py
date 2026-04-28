@@ -29,6 +29,14 @@ def _sanitize_for_log(value: str, max_length: int = 20) -> str:
 # Default language for prompts
 DEFAULT_LANGUAGE = "en"
 
+# Polyglot block substitution: {{POLYGLOT_<NAME>}} on its own line is replaced
+# at load time with the contents of data/localized/polyglot/<name_lowercase>.txt.
+# The placeholder's leading indent is re-applied to every polyglot line so the
+# substituted block stays inside its YAML block-scalar. See
+# ciris_engine/data/localized/polyglot/CLAUDE.md for the polyglot doctrine.
+POLYGLOT_PATTERN = re.compile(r"^(?P<indent>[ \t]*)\{\{POLYGLOT_(?P<name>[A-Z0-9_]+)\}\}[ \t]*$", re.MULTILINE)
+POLYGLOT_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "localized" / "polyglot"
+
 
 class DMAPromptLoader:
     """Loads and manages DMA prompts from YAML files.
@@ -91,6 +99,38 @@ class DMAPromptLoader:
         # Default to full for unknown values
         return "full"
 
+    def _substitute_polyglot_blocks(self, raw_content: str, template_path: Path) -> str:
+        """Substitute ``{{POLYGLOT_<NAME>}}`` placeholders before YAML parsing.
+
+        Each placeholder must occupy its own line. The placeholder's leading
+        indent is re-applied to every non-empty line of the polyglot content
+        so the substituted block stays inside its YAML block-scalar. Empty
+        polyglot lines are emitted truly empty (matching YAML convention for
+        blank lines inside a ``|`` scalar).
+        """
+
+        def _replace(m: "re.Match[str]") -> str:
+            indent = m.group("indent")
+            name = m.group("name")
+            polyglot_path = POLYGLOT_DIR / f"{name.lower()}.txt"
+            if not polyglot_path.exists():
+                logger.error(
+                    f"[DMA-PROMPT] Polyglot block not found: {polyglot_path} "
+                    f"(referenced from {template_path})"
+                )
+                raise FileNotFoundError(
+                    f"Polyglot block {{{{POLYGLOT_{name}}}}} not found at {polyglot_path}"
+                )
+            block_text = polyglot_path.read_text(encoding="utf-8").rstrip("\n")
+            indented = "\n".join(f"{indent}{ln}" if ln else "" for ln in block_text.split("\n"))
+            logger.debug(
+                f"[DMA-PROMPT] Substituted {{{{POLYGLOT_{name}}}}} "
+                f"({len(block_text)} chars) from {polyglot_path}"
+            )
+            return indented
+
+        return POLYGLOT_PATTERN.sub(_replace, raw_content)
+
     def load_prompt_template(self, template_name: str) -> PromptCollection:
         """
         Load a prompt template from a YAML file.
@@ -132,6 +172,7 @@ class DMAPromptLoader:
             with open(template_path, "r", encoding="utf-8") as f:
                 raw_content = f.read()
                 logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
+                raw_content = self._substitute_polyglot_blocks(raw_content, template_path)
                 template_data = yaml.safe_load(raw_content)
 
             if not isinstance(template_data, dict):

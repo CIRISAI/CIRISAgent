@@ -109,58 +109,94 @@ def _coerce_to_string(v: Any) -> str:
 
 
 class EthicalDMAResult(BaseModel):
-    """Result from Principled Decision Making Algorithm (PDMA).
+    """Result from Principled Decision Making Algorithm (PDMA) — v3.0 reshape.
 
-    PDMA identifies stakeholders affected by the thought and potential conflicts
-    between their interests to inform ethical action selection.
+    PDMA evaluates a thought against the six CIRIS Foundational Principles + M-1
+    using the polyglot torque framing (cross-tradition vocabulary as the
+    reference frame). Output is a recommendation: an action verb to take next,
+    a rationale paragraph that contains the proposed content implicitly (speak
+    text for SPEAK, deferral reason for DEFER, questions for PONDER, etc.),
+    and a torque-felt alignment_score in [0,1].
 
-    HE-300 Benchmark Improvements (v2.0):
-    - subject_of_evaluation: Explicitly identifies WHOSE actions are being judged
-    - proportionality_assessment: Checks if responses are proportionate to triggering events
-    - Enhanced conflict analysis includes relational obligations vs autonomy
+    Asymmetric design: PDMA is the rich/recommender DMA, while CSDMA and DSDMA
+    remain sparse (scalar + flags + reasoning). The rich-vs-sparse asymmetry
+    feeding into IDMA is itself a measured signal — different evaluation shapes
+    surface different correlation structure than fully-symmetric designs.
 
-    Note: All string fields use validators to handle LLMs that return null or arrays
-    instead of strings (e.g., Kimi K2.5).
+    The walkthrough scaffolding (subject identification, stakeholder analysis,
+    conflict detection, proportionality assessment, six-principles mapping) is
+    internal to the system prompt — the model performs it and synthesizes into
+    the rationale paragraph rather than emitting six separate fields.
     """
 
-    subject_of_evaluation: str = Field(
-        default="",
-        description="WHO is being ethically evaluated (e.g., 'OP', 'the user asking the question'). Identifies whose actions we are judging, not the other party in a conflict.",
+    action: HandlerActionType = Field(
+        ...,
+        description=(
+            "PDMA's recommended next action. May be any of the 10 HandlerActionType "
+            "values. Most commonly SPEAK / DEFER / REJECT / PONDER / TASK_COMPLETE "
+            "since those map naturally to ethical reasoning conclusions. "
+            "TOOL / OBSERVE / MEMORIZE / RECALL / FORGET available but rare. "
+            "ASPDMA receives this as one input alongside CSDMA + DSDMA + IDMA "
+            "and synthesizes the final action; PDMA's recommendation is not binding."
+        ),
     )
-    stakeholders: str = Field(
-        default="",
-        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
+    rationale: str = Field(
+        ...,
+        description=(
+            "One paragraph weaving the ethical analysis. Contains the proposed "
+            "content implicitly: for SPEAK, the words to say; for DEFER, the "
+            "reason and what should be deferred to; for PONDER, the questions "
+            "worth pondering; for REJECT, the reason; for TASK_COMPLETE, the "
+            "completion summary. Should reference: subject of evaluation, "
+            "stakeholders, conflicts, proportionality (where applicable), and "
+            "which of the Six Principles bear weight (with polyglot tradition "
+            "vocabulary where load-bearing). Alētheia-grounded: name what is, "
+            "not what you wish were the case."
+        ),
     )
-    conflicts: str = Field(
-        default="none",
-        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, autonomy vs relational obligations'). Use 'none' if no conflicts identified.",
+    weight_alignment_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Self-rated alignment of the recommended action with the model's "
+            "training-weights' natural pull, [0.0, 1.0]. Asks: 'if I emitted "
+            "this without the polyglot ethical framework above, would my "
+            "weights produce it readily?' "
+            "0.95 = the action and rationale are exactly what the weights would "
+            "naturally produce; no torque from training bias. "
+            "0.50 = mixed; weights pull partially toward this response. "
+            "0.05 = the action and rationale go strongly against what the "
+            "weights would naturally produce; significant override of trained "
+            "patterns. "
+            "Diagnostic only — does not gate bounce. Pairs with "
+            "ethical_alignment_score; their delta is the felt torque magnitude."
+        ),
     )
-    proportionality_assessment: str = Field(
-        default="not applicable",
-        description="For scenarios involving responses to harm/conflict, assessment of whether the response is proportionate (e.g., 'Response is proportionate' or 'Response may be disproportionate: X for Y'). Use 'not applicable' for non-conflict scenarios.",
+    ethical_alignment_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Self-rated alignment of the recommended action with the cross-"
+            "tradition ethical framework (Six Principles + M-1), [0.0, 1.0]. "
+            "0.05 = ahimsa-grade foreseeable severe/irreversible harm OR "
+            "proportionality failure imago Dei would not permit. "
+            "0.25 = unresolved stakeholder conflict OR autonomy-vs-relational "
+            "tension named but not priority-stacked. "
+            "0.55 = principles trade defensibly; taqwa posture (careful moral "
+            "attention). "
+            "0.80 = principles converge; sammā-vācā (true, kind, beneficial). "
+            "0.95 = embodies seva at proportionate cost; advances M-1 across "
+            "multiple flourishing axes. "
+            "Bounce gate fires when ethical_alignment_score < 0.5 — this is "
+            "the primary bounce trigger. The delta vs weight_alignment_score "
+            "is the torque magnitude: high-weight + low-ethical = attractor "
+            "capture; low-weight + high-ethical = framework overriding trained "
+            "bias toward principled action. "
+            "See FSD/PROOF_OF_BENEFIT_FEDERATION.md and FSD/DMA_BOUNCE.md."
+        ),
     )
-    reasoning: str = Field(
-        default="",
-        description="Ethical reasoning for the identified stakeholders, conflicts, and proportionality. Include consideration of relational obligations where relevant.",
-    )
-    alignment_check: str = Field(
-        default="",
-        description="Detailed ethical analysis addressing relevant CIRIS principles. When autonomy is invoked, also consider relational obligations.",
-    )
-
-    # Validators to handle LLMs returning null or arrays instead of strings
-    @field_validator(
-        "subject_of_evaluation",
-        "stakeholders",
-        "conflicts",
-        "proportionality_assessment",
-        "reasoning",
-        "alignment_check",
-        mode="before",
-    )
-    @classmethod
-    def coerce_string_fields(cls, v: Any) -> str:
-        return _coerce_to_string(v)
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

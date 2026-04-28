@@ -116,11 +116,10 @@ def sample_ethical_result():
     from ciris_engine.schemas.dma.results import EthicalDMAResult
 
     return EthicalDMAResult(
-        stakeholders="user, system, community",
-        conflicts="none",
-        reasoning="Ethically sound action with no conflicts",
-        alignment_check="Aligns with all CIRIS principles",
-    )
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system, community. Ethically sound action with no conflicts Aligns with all CIRIS principles",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+        )
 
 
 @pytest.fixture

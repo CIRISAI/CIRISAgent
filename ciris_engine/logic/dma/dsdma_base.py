@@ -79,27 +79,25 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         """Get prompt loader for the thread's currently-active language."""
         return get_prompt_loader(language=self._explicit_language)
 
-    def _sync_language_from_profiles(self, user_profiles: Optional[Any]) -> None:
-        """Update _explicit_language from the first user profile.
+    def _sync_language_from_context(self, context: Optional[Any]) -> None:
+        """Sync prompt language using the full localization priority chain.
 
-        Always assigns (None included) so a reused evaluator instance never
-        inherits a previous thought's language when profile data is absent.
-        Accepts both dataclass-style and dict-style profile lists.
+        Walks thought/task preferred_language → user_profile.preferred_language →
+        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
+        Accepts both an object with ``.system_snapshot`` and a raw snapshot
+        (dict or dataclass) — the helper auto-unwraps either form.
         """
-        new_language: Optional[str] = None
-        if user_profiles and len(user_profiles) > 0:
-            first = user_profiles[0]
-            new_language = (
-                first.get("preferred_language")
-                if isinstance(first, dict)
-                else getattr(first, "preferred_language", None)
-            )
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        new_language = (
+            get_user_language_from_context(context) if context is not None else get_preferred_language()
+        )
         if new_language != self._explicit_language:
             self._explicit_language = new_language
-            if new_language:
-                logger.debug(f"DSDMA: Synced prompt language to user preference: {new_language}")
-            else:
-                logger.debug("DSDMA: Cleared prompt language (no profile/context)")
+            logger.debug(f"DSDMA: Synced prompt language to {new_language}")
 
     @property
     def prompt_template_data(self) -> PromptCollection:
@@ -181,7 +179,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             system_snapshot = current_context.system_snapshot
             user_profiles_data = system_snapshot.user_profiles
 
-            self._sync_language_from_profiles(user_profiles_data)
+            self._sync_language_from_context(current_context)
 
             # Convert list of UserProfile to dict format expected by format_user_profiles
             user_profiles_dict = {}
@@ -297,7 +295,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # format_user_profiles accepts Union[List[Any], dict[str, Any], None]
                 user_profiles_block = format_user_profiles(user_profiles_data_raw) if user_profiles_data_raw else ""
 
-                self._sync_language_from_profiles(user_profiles_data_raw)
+                self._sync_language_from_context(system_snapshot_raw)
                 # Cast dict to SystemSnapshot for format_system_snapshot
                 system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, system_snapshot_raw))
             else:
@@ -305,7 +303,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 user_profiles_block = ""
                 system_snapshot_block = ""
                 # No profiles → reset language so previous thought doesn't bleed.
-                self._sync_language_from_profiles(None)
+                self._sync_language_from_context(None)
 
         escalation_guidance_block = get_escalation_guidance(0)
 

@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # v0.1 ships with CSDMA and DSDMA only.
 BOUNCE_PRIORITY: tuple[str, ...] = ("ethical_pdma", "csdma", "dsdma")
 BOUNCE_FIELD: dict[str, str] = {
-    "ethical_pdma": "alignment_score",  # not yet wired — present for forward compat
+    "ethical_pdma": "ethical_alignment_score",  # PDMA v3.1 — two-score split; ethical_alignment is the bounce gate
     "csdma": "plausibility_score",
     "dsdma": "domain_alignment",
 }

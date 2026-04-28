@@ -30,6 +30,7 @@ from ciris_engine.schemas.dma.bounce import (
 )
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.processors.dma import DMAMetadata
+from ciris_engine.schemas.runtime.enums import HandlerActionType
 
 
 def _csdma(score: float, reasoning: str = "rsn") -> CSDMAResult:
@@ -41,7 +42,11 @@ def _dsdma(score: float, reasoning: str = "rsn") -> DSDMAResult:
 
 
 def _ethical() -> EthicalDMAResult:
-    return EthicalDMAResult(stakeholders="user", conflicts="none", reasoning="ok", alignment_check="ok")
+    return EthicalDMAResult(
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user. ok ok",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+        )
 
 
 # ───────────────────────────── pure helpers ──────────────────────────────
@@ -54,10 +59,10 @@ class TestBounceablesScore:
     def test_dsdma_score_extracted(self, dma_orchestrator):
         assert DMAOrchestrator._bounceable_score("dsdma", _dsdma(0.91)) == 0.91
 
-    def test_ethical_pdma_returns_none_until_alignment_score_lands(self, dma_orchestrator):
-        # PDMA bounce is gated on EthicalDMAResult.alignment_score being added.
-        # Until then the score must read as None so the bounce gate skips PDMA.
-        assert DMAOrchestrator._bounceable_score("ethical_pdma", _ethical()) is None
+    def test_ethical_pdma_score_extracted(self, dma_orchestrator):
+        # PDMA v3.0: EthicalDMAResult.alignment_score is required and feeds bounce gate.
+        # The fixture builds with weight_alignment_score=0.85, ethical_alignment_score=0.85, which the bounce gate reads.
+        assert DMAOrchestrator._bounceable_score("ethical_pdma", _ethical()) == 0.85
 
     def test_unknown_dma_returns_none(self, dma_orchestrator):
         assert DMAOrchestrator._bounceable_score("idma", MagicMock()) is None
@@ -364,10 +369,11 @@ class TestBounceConstants:
     def test_field_per_dma(self):
         assert BOUNCE_FIELD["csdma"] == "plausibility_score"
         assert BOUNCE_FIELD["dsdma"] == "domain_alignment"
-        # PDMA field is reserved for the future EthicalDMAResult.alignment_score
-        # field; until that lands, the bounce gate skips PDMA via the score
-        # extractor returning None.
-        assert BOUNCE_FIELD["ethical_pdma"] == "alignment_score"
+        # PDMA v3.1 two-score split: bounce gate reads ethical_alignment_score
+        # specifically (the cross-tradition alignment); weight_alignment_score
+        # is a diagnostic-only sibling whose delta-vs-ethical is the felt
+        # torque magnitude, but not itself a bounce trigger.
+        assert BOUNCE_FIELD["ethical_pdma"] == "ethical_alignment_score"
 
     def test_parallelism_is_three(self):
         assert BOUNCE_PARALLELISM == 3

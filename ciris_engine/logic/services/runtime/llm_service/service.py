@@ -420,6 +420,34 @@ def _is_content_filter_error(error_str: str) -> bool:
     return any(pattern in error_str for pattern in filter_patterns)
 
 
+def _is_model_not_available_error(error_str: str) -> bool:
+    """Check if error indicates the configured model name doesn't exist on
+    the provider. This is a CONFIG bug (wrong .env / wrong manager-injected
+    OPENAI_MODEL_NAME), NOT a transient failure — retrying with the same
+    model name will keep failing forever. Categorize as non-retryable so
+    the operator sees the diagnostic immediately instead of after instructor's
+    retry storm.
+
+    Caught patterns (across providers):
+      - Together AI:  "Unable to access model X. Please visit
+                       https://api.together.ai/models" + "model_not_available"
+      - OpenAI/Groq:  "model_not_found" / "does not exist"
+      - DeepInfra:    "model not found" + 404
+      - Generic:      "invalid_request_error" + "model"
+    """
+    patterns = [
+        "model_not_available",
+        "model_not_found",
+        "model not found",
+        "unable to access model",
+        "does not exist",  # paired with model context — see also generic 404 detection below
+    ]
+    if any(p in error_str for p in patterns):
+        return True
+    # Generic 404 + model — covers providers that phrase the error differently
+    return ("404" in error_str or "not_found" in error_str) and "model" in error_str
+
+
 # Remediation messages keyed on the categories returned by
 # `OpenAICompatibleClient._categorize_llm_error`. When a retryable error
 # fires in `_retry_with_backoff`, we inject the matching remediation as a
@@ -1782,6 +1810,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # Categorize error for retry metadata + remediation lookup
                 error_category = self._categorize_llm_error(e)
 
+                # MODEL_NOT_AVAILABLE is a config error — wrong model name
+                # in .env or manager-injected OPENAI_MODEL_NAME. Retrying
+                # with the same model name will keep failing forever.
+                # Surface it immediately so the operator sees "you typo'd
+                # the model name" without burning 3× retry budget × 5
+                # parallel DMA calls × 600s qa_runner timeout per cell.
+                if error_category == "MODEL_NOT_AVAILABLE":
+                    logger.error(
+                        f"[LLM_MODEL_NOT_AVAILABLE] model={getattr(self, 'model_name', '<unknown>')} "
+                        f"error={str(e)[:200]} — config bug, raising without retry"
+                    )
+                    raise
+
                 # If a BadRequestError surfaces with a category we don't
                 # remediate (e.g. malformed request, missing field), retry
                 # provides no value — raise immediately to surface the bug.
@@ -1864,6 +1905,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Check for rate limit
         if isinstance(error, RateLimitError) or ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
             return "RATE_LIMIT"
+
+        # Check model-not-available BEFORE context-length / validation /
+        # rate-limit, because Together's "Unable to access model X" 404s
+        # match validation patterns too — the model-not-available signal
+        # is the most specific and actionable, so prefer it.
+        if _is_model_not_available_error(error_str):
+            return "MODEL_NOT_AVAILABLE"
 
         # Check for context length exceeded — delegates to the shared
         # detector so we catch every phrasing in one place (Groq's

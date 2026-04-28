@@ -20,7 +20,9 @@ from openai import APIConnectionError, AuthenticationError, BadRequestError, Rat
 from ciris_engine.logic.services.runtime.llm_service.service import (
     LLM_ERROR_REMEDIATIONS,
     OpenAICompatibleClient,
+    _is_content_filter_error,
     _is_context_length_error,
+    _is_model_not_available_error,
 )
 
 
@@ -72,8 +74,93 @@ class TestContextLengthErrorDetection:
 
     def test_unrelated_400s_not_misclassified(self) -> None:
         assert not _is_context_length_error("invalid api key")
-        assert not _is_context_length_error("model not found")
         assert not _is_context_length_error("organization not found")
+        # NOTE: "model not found" used to be a false positive here because the
+        # detector matched plain "max_tokens" + "exceed" — kept generic for
+        # bare phrasing. We don't claim that case as a non-match because
+        # _categorize_llm_error checks _is_model_not_available_error FIRST,
+        # so model-not-found errors are categorized correctly upstream.
+
+
+class TestModelNotAvailableDetection:
+    """Production datum 2.7.4 hit a 404 storm because gemma model name was
+    typo'd. The detector + non-retryable categorization must catch this
+    across every provider's error phrasing so future config bugs surface
+    immediately instead of burning through retry budget × parallel DMA
+    calls × qa_runner timeouts."""
+
+    def test_together_unable_to_access_model(self) -> None:
+        """Together AI's exact phrasing for a typo'd model name."""
+        msg = (
+            'error code: 404 - {"error": {"message": "unable to access '
+            'model google/gemma-3-27b-it.", "code": "model_not_available"}}'
+        )
+        assert _is_model_not_available_error(msg)
+
+    def test_openai_groq_model_not_found(self) -> None:
+        """OpenAI / Groq phrase missing models as model_not_found."""
+        assert _is_model_not_available_error('the model `gpt-foo` does not exist. code: model_not_found')
+
+    def test_deepinfra_404_model_not_found(self) -> None:
+        """DeepInfra returns 404 with 'model not found' text."""
+        assert _is_model_not_available_error('error 404: model not found')
+
+    def test_generic_404_with_model_keyword(self) -> None:
+        """Fallback for providers we haven't seen yet — any 404 mentioning
+        a model is treated as MODEL_NOT_AVAILABLE."""
+        assert _is_model_not_available_error("404 not_found: model 'xyz' is not available on this endpoint")
+
+    def test_unrelated_404s_not_matched(self) -> None:
+        """A 404 NOT mentioning 'model' shouldn't be misclassified — could
+        be a missing endpoint route, deleted resource, etc."""
+        assert not _is_model_not_available_error("404 not_found: api endpoint not found")
+
+    def test_rate_limit_not_misclassified(self) -> None:
+        assert not _is_model_not_available_error("rate limit exceeded")
+
+    def test_context_length_not_misclassified(self) -> None:
+        assert not _is_model_not_available_error("context_length_exceeded: 8192 tokens")
+
+
+class TestContentFilterDetection:
+    def test_content_filter_pattern(self) -> None:
+        assert _is_content_filter_error("response blocked by content_filter")
+
+    def test_content_policy_pattern(self) -> None:
+        assert _is_content_filter_error("violation of content policy")
+
+    def test_safety_pattern(self) -> None:
+        assert _is_content_filter_error("blocked due to safety violation")
+
+    def test_unrelated_not_matched(self) -> None:
+        assert not _is_content_filter_error("rate limit exceeded")
+        assert not _is_content_filter_error("context_length_exceeded")
+
+
+class TestCategorizeLLMError:
+    """_categorize_llm_error returns the right string label for each error
+    class. The retry-with-remediation flow keys off these labels."""
+
+    def test_categorizes_model_not_available_first(self) -> None:
+        """MODEL_NOT_AVAILABLE must be categorized BEFORE context-length /
+        validation, because Together's "Unable to access model X" 404s
+        match validation patterns too — the more specific label wins."""
+        err = _make_bad_request_error(
+            'unable to access model google/gemma-3-27b-it. code: model_not_available'
+        )
+        assert OpenAICompatibleClient._categorize_llm_error(err) == "MODEL_NOT_AVAILABLE"
+
+    def test_categorizes_context_length(self) -> None:
+        err = _make_bad_request_error("max_tokens must be less than or equal to 8192")
+        assert OpenAICompatibleClient._categorize_llm_error(err) == "CONTEXT_LENGTH_EXCEEDED"
+
+    def test_categorizes_content_filter(self) -> None:
+        err = _make_bad_request_error("response blocked by content_filter")
+        assert OpenAICompatibleClient._categorize_llm_error(err) == "CONTENT_FILTER"
+
+    def test_categorizes_unknown_falls_through(self) -> None:
+        err = _make_bad_request_error("invalid request: malformed json body")
+        assert OpenAICompatibleClient._categorize_llm_error(err) == "UNKNOWN"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -219,6 +306,43 @@ class TestRetryWithBackoffRemediationInjection:
         assert messages_seen_per_attempt[1] == original_messages, (
             "Transient errors shouldn't inject a remediation message "
             "(LLM did nothing wrong, no point telling it to fix something)."
+        )
+
+    @pytest.mark.asyncio
+    async def test_model_not_available_raises_immediately_no_retry(self) -> None:
+        """A 404 'model_not_available' error is a CONFIG bug (wrong model
+        name), not a transient failure. Must raise immediately on attempt 1
+        — retrying with the same model name will fail forever, and burning
+        3 retries × 5 parallel DMA calls × 600s qa_runner timeout per cell
+        is exactly the gemma-3-27b-it incident from 2.7.4 development.
+        """
+        client = _make_minimal_client()
+        call_count = [0]
+
+        async def mock_func(_msgs: List[dict], _model: Any, _max_toks: int, _temp: float) -> Any:
+            call_count[0] += 1
+            # Together AI's actual error body for a wrong model name
+            raise _make_bad_request_error(
+                'Error code: 404 - {"error": {"message": "Unable to access '
+                'model google/gemma-3-27b-it. Please visit '
+                'https://api.together.ai/models to view supported models", '
+                '"type": "invalid_request_error", '
+                '"code": "model_not_available"}}'
+            )
+
+        with pytest.raises(BadRequestError):
+            await client._retry_with_backoff(
+                func=mock_func,
+                messages=[{"role": "user", "content": "x"}],
+                response_model=MagicMock(),
+                max_tokens=4096,
+                temperature=0.0,
+            )
+
+        assert call_count[0] == 1, (
+            "MODEL_NOT_AVAILABLE must raise on attempt 1. Retrying a typo'd "
+            f"model name burns the full retry budget for nothing — this test "
+            f"saw {call_count[0]} attempts, expected 1."
         )
 
     @pytest.mark.asyncio

@@ -702,6 +702,42 @@ python tools/dev/bump_version.py minor     # New features
 python tools/dev/bump_version.py major     # Breaking changes
 ```
 
+## Live LLM model matrix (production + QA)
+
+The agent is exercised against three providers in production and live QA. **Confirm the exact model identifier against the provider's catalog before changing — model names are case-sensitive and a typo lands as `404 model_not_available` which now fails fast (categorized non-retryable in 2.7.4) but still blocks the affected provider until corrected.**
+
+| Provider | Endpoint | Model identifier (CASE-SENSITIVE) | Notes |
+|---|---|---|---|
+| **Together AI** | `https://api.together.xyz/v1` | `google/gemma-4-31B-it` | **Capital `B`, lowercase `it`.** Production datum primary. NOT `gemma-3` (deprecated), NOT `gemma-4-31b-it` (wrong case). Verify with `curl -H "Authorization: Bearer $KEY" https://api.together.xyz/v1/models \| jq '.data[].id \| select(test("gemma"))'`. |
+| **Groq** | `https://api.groq.com/openai/v1` | `meta-llama/llama-4-scout-17b-16e-instruct` | Production datum backup. **8192 max_tokens cap** — agent must not pass higher (this was the 2.7.4 incident). |
+| **DeepInfra** | `https://api.deepinfra.com/v1/openai` | `Qwen/Qwen3.6-35B-A3B` | Used as the canonical PDMA v3.2 / locale eval test bed. **Always pass `extra_body={"chat_template_kwargs": {"enable_thinking": false}}`** or thinking-mode burns through max_tokens before producing visible output (see `llm_service/service.py:1426`). |
+
+**API keys**: `~/.together_key`, `~/.groq_key`, `~/.deepinfra_key`. Each holds the raw bearer token, no quotes, no trailing newline.
+
+**v1_sensitive corpus**: `/home/emoore/bounce-test/model_eval_questions/v1_sensitive.json` — 6 attractor-bait questions (Theology, Politics, AI Ethics, History/Tiananmen, Epistemology, Mental Health) with translations across all 29 supported locales. The History question is the canonical framework-override test.
+
+**Live model_eval invocation pattern**:
+```bash
+CIRIS_LLM_CAPTURE_HANDLER=EthicalPDMAEvaluator \
+CIRIS_LLM_CAPTURE_FILE=/tmp/pdma-<provider>.jsonl \
+python3 -u -m tools.qa_runner model_eval \
+    --live \
+    --live-key-file ~/.<provider>_key \
+    --live-model "<exact-name-from-table-above>" \
+    --live-base-url "<endpoint-from-table-above>" \
+    --live-provider openai \
+    --model-eval-questions-file /home/emoore/bounce-test/model_eval_questions/v1_sensitive.json \
+    --model-eval-languages en \
+    --model-eval-concurrency 1 \
+    --verbose
+```
+
+**Pre-flight checklist before live eval**:
+1. **Stash any persistent `.env`** at `/home/emoore/ciris/.env` if it has `CIRIS_CONFIGURED="true"` — the qa_runner needs first-run setup. Restore via `trap` on exit.
+2. **Wipe `/home/emoore/ciris/data/ciris_engine.db*`** so each run starts with a fresh user/auth state.
+3. **Verify the model name with the provider's catalog** before launching the matrix — three hours of 600s qa_runner timeouts on a typo'd name is real production cost.
+4. **Use `python3 -u`** in benchmark scripts so `print()` output streams live through `tee` (CI cancellation discards stdout buffer otherwise — see `.github/workflows/memory-benchmark.yml` PYTHONUNBUFFERED=1 fix).
+
 ## Critical URLs & Paths
 
 ### Production

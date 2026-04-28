@@ -5,7 +5,15 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.7.3] - 2026-04-27
+## [2.7.4] - 2026-04-28
+
+### Fixed
+
+- **Agent-side `max_tokens` overrun rejected by Groq backup.** Caught on production datum: every LLM call to the Groq llama-4-scout-17b-16e-instruct backup was 400ing with `max_tokens must be less than or equal to 8192` because the agent was passing `max_tokens=16384` (12 sites: PDMA, IDMA, CSDMA, DSDMA, ASPDMA, TSASPDMA, DSASPDMA + 4 consciences) and `max_tokens=32768` (2 sites: action_selection_pdma + epistemic_humility_conscience). With the backup permanently rejecting all calls, every request landed on the Together gemma-4 primary, which then saturated at the per-service 8-in-flight FIFO gate (`CIRIS_LLM_MAX_CONCURRENT=8`). Queue-of-pending-LLM-calls grew without bound; cognitive loop slowed to ~16s/PDMA.
+
+  **Fix**: lower every per-call `max_tokens` to 4096 across all DMAs and consciences. 4096 is below every supported provider's cap (Groq llama-4 family: 8192; Together gemma-3: 16384; DeepInfra Qwen3.6: 32768) so backup actually shoulders load and the primary's saturation drains. Structured CIRIS outputs (action verbs, alignment scores, conscience checks) typically run 200–800 tokens; 4096 is generous headroom even for ASPDMA recursive retry with the full bounce preamble. Saves token budget on every call too.
+
+### Added
 
 ### Added
 

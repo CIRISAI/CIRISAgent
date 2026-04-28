@@ -131,13 +131,18 @@ class LLMBus(BaseBus[LLMService]):
 
         # Per-service FIFO concurrency gate. asyncio.Semaphore is fair — waiters
         # are released in the order they called acquire() — so excess callers
-        # queue up rather than blasting the provider. Default 8 in-flight is
-        # conservative for a single external endpoint (Groq/OpenRouter/etc);
-        # override with CIRIS_LLM_MAX_CONCURRENT for higher-rate-tier providers.
+        # queue up rather than blasting the provider. Default 4 in-flight is
+        # conservative for a single external endpoint (Groq/OpenRouter/etc) and
+        # spreads load across a primary+backup pair (4+4 = 8 effective
+        # parallelism while keeping any one provider's queue shallow). Lowered
+        # from 8 in 2.7.4 after the production datum incident: 8-in-flight on
+        # gemma-4 at ~16s/call meant queue depth grew faster than it drained
+        # whenever the backup was unavailable; 4 forces spillover sooner.
+        # Override with CIRIS_LLM_MAX_CONCURRENT for higher-rate-tier providers.
         try:
-            self._max_in_flight_per_service = max(1, int(os.environ.get("CIRIS_LLM_MAX_CONCURRENT", "8")))
+            self._max_in_flight_per_service = max(1, int(os.environ.get("CIRIS_LLM_MAX_CONCURRENT", "4")))
         except (TypeError, ValueError):
-            self._max_in_flight_per_service = 8
+            self._max_in_flight_per_service = 4
         self._service_semaphores: dict[str, asyncio.Semaphore] = {}
         # Explicit pending counter, incremented at selection and decremented on
         # completion. Needed because asyncio.Semaphore._value only decreases

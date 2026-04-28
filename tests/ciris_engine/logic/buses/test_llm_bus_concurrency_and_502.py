@@ -296,14 +296,16 @@ async def test_gate_logs_saturation_when_in_flight_cap_hit(registry, time_svc, c
 
 
 def test_max_in_flight_env_var_invalid_falls_back_to_default(registry, time_svc, monkeypatch):
-    """Invalid CIRIS_LLM_MAX_CONCURRENT values fall back to 8, not crash."""
+    """Invalid CIRIS_LLM_MAX_CONCURRENT values fall back to default (4 since
+    2.7.4; was 8 before — lowered to spread load across primary+backup pairs
+    after the production datum saturation incident)."""
     monkeypatch.setenv("CIRIS_LLM_MAX_CONCURRENT", "not-a-number")
     bus = LLMBus(
         service_registry=registry,
         time_service=time_svc,
         telemetry_service=None,
     )
-    assert bus._max_in_flight_per_service == 8
+    assert bus._max_in_flight_per_service == 4
 
 
 def test_max_in_flight_env_var_respects_minimum(registry, time_svc, monkeypatch):

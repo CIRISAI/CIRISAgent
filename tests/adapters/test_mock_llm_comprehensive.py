@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -86,14 +85,21 @@ class TestMockLLMComprehensive:
         assert hasattr(response, "rationale")
 
     @pytest.mark.asyncio
-    async def test_dsdma_llm_output(self, mock_client):
-        """Test BaseDSDMA.LLMOutputForDSDMA schema response."""
-        response = await mock_client._create(response_model=BaseDSDMA.LLMOutputForDSDMA)
+    async def test_dsdma_result(self, mock_client):
+        """Test DSDMAResult schema response.
 
-        assert isinstance(response, BaseDSDMA.LLMOutputForDSDMA)
+        DSDMA's instructor response_model is DSDMAResult directly — the
+        legacy BaseDSDMA.LLMOutputForDSDMA shim was removed in 2.7.4
+        (its `score` field clashed with the new prompt asking for
+        `domain_alignment`, causing schema-mismatch retry storms)."""
+        response = await mock_client._create(response_model=DSDMAResult)
+
+        assert isinstance(response, DSDMAResult)
         assert hasattr(response, "choices")
         assert hasattr(response, "finish_reason")
         assert hasattr(response, "_raw_response")
+        assert hasattr(response, "domain")
+        assert hasattr(response, "domain_alignment")
 
     @pytest.mark.asyncio
     async def test_optimization_veto_result(self, mock_client):
@@ -158,7 +164,6 @@ class TestMockLLMComprehensive:
             EthicalDMAResult,
             CSDMAResult,
             DSDMAResult,
-            BaseDSDMA.LLMOutputForDSDMA,
             OptimizationVetoResult,
             EpistemicHumilityResult,
             ActionSelectionDMAResult,

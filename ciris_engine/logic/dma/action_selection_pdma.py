@@ -272,7 +272,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         result_tuple = await self.call_llm_structured(
             messages=messages,
             response_model=ASPDMALLMResult,
-            max_tokens=32768,
+            max_tokens=8192,
             temperature=0.0,
             thought_id=input_data.original_thought.thought_id,
             task_id=input_data.original_thought.source_task_id,

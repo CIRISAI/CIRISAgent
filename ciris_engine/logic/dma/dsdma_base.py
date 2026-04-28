@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Mapping, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,47 @@ from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 logger = logging.getLogger(__name__)
+
+
+def _format_domain_specific_knowledge(dsk: Optional[Mapping[str, Any]]) -> str:
+    """Render the agent's full ``domain_specific_knowledge`` dict into the
+    DSDMA prompt. Every top-level key flows through, not just ``rules_summary``.
+
+    ``rules_summary`` (if present and a string) is emitted first as plain prose
+    so simple templates render cleanly. Everything else becomes labeled
+    sections — strings inline, lists bulleted, nested dicts indented.
+    """
+    if not isinstance(dsk, Mapping) or not dsk:
+        return "General domain guidance"
+
+    parts: List[str] = []
+
+    rules_summary = dsk.get("rules_summary")
+    if isinstance(rules_summary, str) and rules_summary.strip():
+        parts.append(rules_summary.strip())
+
+    for key, value in dsk.items():
+        if key == "rules_summary" or value is None:
+            continue
+        label = key.replace("_", " ").strip().title()
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                parts.append(f"- {label}: {text}")
+        elif isinstance(value, list):
+            items = [str(x).strip() for x in value if str(x).strip()]
+            if items:
+                bullets = "\n  • " + "\n  • ".join(items)
+                parts.append(f"- {label}:{bullets}")
+        elif isinstance(value, Mapping):
+            sub_items = [f"{k}: {v}" for k, v in value.items() if v is not None]
+            if sub_items:
+                bullets = "\n  • " + "\n  • ".join(sub_items)
+                parts.append(f"- {label}:{bullets}")
+        else:
+            parts.append(f"- {label}: {value}")
+
+    return "\n".join(parts) if parts else "General domain guidance"
 
 
 class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
@@ -122,12 +163,6 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             return system_guidance
         return self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else ""
 
-    class LLMOutputForDSDMA(BaseModel):
-        score: float = Field(..., ge=0.0, le=1.0)
-        recommended_action: Optional[str] = Field(default=None)
-        flags: List[str] = Field(default_factory=list)
-        reasoning: str
-
     async def evaluate(self, *args: Any, **kwargs: Any) -> DSDMAResult:  # type: ignore[override]
         """Evaluate thought within domain-specific context."""
         # Extract arguments - maintain backward compatibility
@@ -165,11 +200,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         if current_context:
             # Use typed DMAInputData fields
             context_str = f"Round {current_context.round_number}, Ponder count: {current_context.current_thought_depth}"
-            rules_summary_str = (
-                self.domain_specific_knowledge.get("rules_summary", "General domain guidance")
-                if isinstance(self.domain_specific_knowledge, dict)
-                else "General domain guidance"
-            )
+            rules_summary_str = _format_domain_specific_knowledge(self.domain_specific_knowledge)
 
             # Get system snapshot from DMAInputData - CRITICAL requirement
             if not current_context.system_snapshot:
@@ -228,11 +259,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             # NO FALLBACK - STRICT TYPE CHECKING ONLY
             # When no DMAInputData, we still need to get identity from ProcessingQueueItem
             context_str = "No specific platform context provided."
-            rules_summary_str = (
-                self.domain_specific_knowledge.get("rules_summary", "General domain guidance")
-                if isinstance(self.domain_specific_knowledge, dict)
-                else "General domain guidance"
-            )
+            rules_summary_str = _format_domain_specific_knowledge(self.domain_specific_knowledge)
 
             # STRICT TYPE CHECKING - initial_context MUST be a dict
             if not isinstance(thought_item.initial_context, dict):
@@ -400,18 +427,31 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         messages.append({"role": "user", "content": user_content})
 
         try:
+            # The dsdma_base.yml output contract asks the LLM for the 4
+            # DSDMAResult fields directly (domain, domain_alignment, flags,
+            # reasoning) — no intermediate shim. Using DSDMAResult as the
+            # instructor response_model means Pydantic validates against the
+            # exact shape we asked the LLM to produce; the legacy
+            # `score`-based LLMOutputForDSDMA shim was a 2.7.4 regression
+            # source (the prompt asked for domain_alignment, the response
+            # model demanded score → InstructorRetryException → circuit
+            # breaker → "All LLM services failed").
             llm_eval_data, _ = await self.call_llm_structured(
                 messages=messages,
-                response_model=BaseDSDMA.LLMOutputForDSDMA,
-                max_tokens=16384,
+                response_model=DSDMAResult,
+                max_tokens=8192,
                 temperature=0.0,
                 thought_id=thought_item.thought_id,
                 task_id=thought_item.source_task_id,
             )
 
+            # The LLM picks its own domain string — use that. Clamp the
+            # alignment to [0, 1] defensively in case the model exceeded
+            # the schema's bounds (instructor usually catches this, but
+            # paranoia is cheap).
             result = DSDMAResult(
-                domain=self.domain_name,
-                domain_alignment=min(max(llm_eval_data.score, 0.0), 1.0),
+                domain=llm_eval_data.domain or self.domain_name,
+                domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
                 flags=llm_eval_data.flags,
                 reasoning=llm_eval_data.reasoning,
             )
@@ -419,7 +459,6 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
                 f"Domain Alignment: {result.domain_alignment}"
             )
-            # raw_llm_response field has been removed from DSDMAResult
             return result
         except Exception as e:
             logger.error(

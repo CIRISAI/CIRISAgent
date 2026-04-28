@@ -309,7 +309,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=DSASPDMALLMResult,
-            max_tokens=16384,
+            max_tokens=8192,
             temperature=0.0,
             thought_id=original_thought.thought_id,
             task_id=original_thought.source_task_id,

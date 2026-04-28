@@ -16,7 +16,6 @@ from ciris_engine.schemas.dma.results import (
 )
 
 logger = logging.getLogger(__name__)
-from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -618,23 +617,6 @@ def ds_dma(context: Optional[List[str]] = None) -> DSDMAResult:
     return result
 
 
-def ds_dma_llm_output(context: Optional[List[str]] = None) -> BaseDSDMA.LLMOutputForDSDMA:
-    context = context or []
-    reasoning = (
-        f"[MOCK LLM] Mock DSDMA LLM output. Context: {', '.join(context)}"
-        if context
-        else "[MOCK LLM] Mock DSDMA LLM output."
-    )
-    score_val = 0.9
-    result = BaseDSDMA.LLMOutputForDSDMA(
-        score=score_val,
-        recommended_action="proceed",
-        flags=context,
-        reasoning=reasoning,
-    )
-    return result
-
-
 def idma(context: Optional[List[str]] = None) -> IDMAResult:
     """Generate mock IDMA (Intuition DMA) result using CCA principles.
 
@@ -701,7 +683,6 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     CSDMAResult: cs_dma,
     DSDMAResult: ds_dma,
     IDMAResult: idma,
-    BaseDSDMA.LLMOutputForDSDMA: ds_dma_llm_output,
     OptimizationVetoResult: optimization_veto,
     EpistemicHumilityResult: epistemic_humility,
     ActionSelectionDMAResult: action_selection,

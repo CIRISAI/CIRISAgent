@@ -301,7 +301,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             result_tuple = await self.call_llm_structured(
                 messages=messages,
                 response_model=IDMAResult,
-                max_tokens=16384,
+                max_tokens=8192,
                 temperature=0.0,
                 thought_id=thought_item.thought_id,
                 task_id=thought_item.source_task_id,

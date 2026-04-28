@@ -69,6 +69,15 @@ class AgentTemplate(BaseModel):
     name: str = Field(..., description="Agent name/identifier")
     description: str = Field(..., description="Agent description")
     role_description: str = Field(..., description="Agent's role")
+    domain: Optional[str] = Field(
+        None,
+        description=(
+            "Domain of expertise this agent operates in (e.g. 'Personal Assistance', "
+            "'Community Moderation', 'CIRIS Outreach'). Surfaced to the DSDMA prompt "
+            "as `{domain_name}` so the LLM has a concrete domain framing instead of "
+            "the agent's identity name. Falls back to `name` when unset."
+        ),
+    )
     internal_only: bool = Field(False, description="If true, template is internal/development only")
 
     # Permissions

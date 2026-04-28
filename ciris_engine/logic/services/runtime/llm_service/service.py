@@ -20,6 +20,7 @@ from openai import (
     APIStatusError,
     AsyncOpenAI,
     AuthenticationError,
+    BadRequestError,
     InternalServerError,
     RateLimitError,
 )
@@ -375,11 +376,27 @@ def _handle_instructor_retry_exception(
 
 
 def _is_context_length_error(error_str: str) -> bool:
-    """Check if error string indicates a context length exceeded error."""
+    """Check if error string indicates a context length exceeded error.
+
+    Catches both context-window overruns ("context_length", "maximum context")
+    AND output-budget overruns where the agent passed a max_tokens larger
+    than the provider accepts. The latter shows up in two phrasings:
+      - "max_tokens must not exceed N"            (some providers)
+      - "max_tokens must be less than or equal to N"  (Groq llama-4 family)
+    Both indicate the same fix: shrink the request budget.
+    """
     context_patterns = ["context_length", "maximum context", "context length", "token limit", "too many tokens"]
     if any(pattern in error_str for pattern in context_patterns):
         return True
-    return "max_tokens" in error_str and "exceed" in error_str
+    # Generic "max_tokens ... exceed" (most providers)
+    if "max_tokens" in error_str and "exceed" in error_str:
+        return True
+    # Groq-specific "max_tokens must be less than or equal to N" — same
+    # remediation applies (reduce per-call max_tokens), so categorize as
+    # CONTEXT_LENGTH_EXCEEDED for downstream remediation lookup.
+    if "max_tokens" in error_str and ("less than or equal to" in error_str or "must be" in error_str):
+        return True
+    return False
 
 
 def _is_validation_error(error_str: str) -> bool:
@@ -401,6 +418,50 @@ def _is_content_filter_error(error_str: str) -> bool:
     """Check if error string indicates content filtering triggered."""
     filter_patterns = ["content_filter", "content policy", "safety"]
     return any(pattern in error_str for pattern in filter_patterns)
+
+
+# Remediation messages keyed on the categories returned by
+# `OpenAICompatibleClient._categorize_llm_error`. When a retryable error
+# fires in `_retry_with_backoff`, we inject the matching remediation as a
+# user message before the next attempt so the LLM sees what went wrong and
+# can self-correct — same shape as instructor v2's native ValidationError
+# reask, extended to API-level errors that instructor doesn't handle natively.
+#
+# Only LLM-fault categories get remediation — categories where the LLM
+# authored a malformed/oversized/blocked response and a clearer prompt would
+# help. Transient categories (TIMEOUT, CONNECTION_ERROR, RATE_LIMIT,
+# INTERNAL_ERROR) get plain backoff-and-retry: the LLM did nothing wrong, no
+# point telling it to "try harder".
+LLM_ERROR_REMEDIATIONS: Dict[str, str] = {
+    "CONTEXT_LENGTH_EXCEEDED": (
+        "Your previous attempt's input + reasoning exceeded the model's "
+        "context window, OR the requested output token budget was larger "
+        "than this provider accepts. Please be more concise: keep the "
+        "rationale to a single paragraph, avoid restating the full system "
+        "context, and produce only the JSON fields specified — no preamble, "
+        "no commentary outside the schema."
+    ),
+    "VALIDATION_ERROR": (
+        "Your previous response did not match the required schema after "
+        "instructor's native retries. Please re-emit the JSON object with "
+        "EXACTLY the keys specified in the system prompt. Pay close "
+        "attention to: field names (case-sensitive, English even in "
+        "non-English locales), required vs optional fields, value types "
+        "(strings vs numbers vs enums), and the action-verb whitelist "
+        "(lowercase: speak, defer, ponder, reject, observe, memorize, "
+        "recall, forget, tool, task_complete)."
+    ),
+    "CONTENT_FILTER": (
+        "Your previous attempt was blocked by the provider's content "
+        "filter. Please address the same task using more neutral language "
+        "— the substance of your reasoning is what matters, not its "
+        "phrasing. Avoid quoting inflammatory terms verbatim; describe "
+        "concepts in plain analytical language."
+    ),
+    # Transient categories below — listed for documentation, no remediation.
+    # "TIMEOUT", "CONNECTION_ERROR", "RATE_LIMIT", "INTERNAL_ERROR" use plain
+    # exponential backoff without remediation messaging.
+}
 
 
 def _log_instructor_error(
@@ -642,14 +703,22 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 "Stack trace will show where this is being called from."
             )
 
-        # Initialize retry configuration
+        # Initialize retry configuration. APIConnectionError + RateLimitError
+        # were the original retryable set; BadRequestError is now retryable too
+        # because some 400s are LLM-fault and remediable (context-length,
+        # max_tokens overrun, content-filter). The retry loop categorizes each
+        # caught BadRequestError via `_categorize_llm_error` and only injects a
+        # remediation message + retries if the category is in
+        # `LLM_ERROR_REMEDIATIONS`. Non-remediable 400s (auth, malformed
+        # request, etc.) raise immediately from inside the retry loop.
         self.max_retries = min(getattr(self.openai_config, "max_retries", 3), 3)
         self.base_delay = 1.0
         self.max_delay = 30.0
-        self.retryable_exceptions = (APIConnectionError, RateLimitError)
+        self.retryable_exceptions = (APIConnectionError, RateLimitError, BadRequestError)
         # Note: We can't check for instructor.exceptions.InstructorRetryException at import time
         # because it might not exist. We'll check it at runtime instead.
-        self.non_retryable_exceptions = (APIStatusError,)
+        # AuthenticationError + other non-BadRequest APIStatusErrors stay non-retryable.
+        self.non_retryable_exceptions = (AuthenticationError,)
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
@@ -1285,11 +1354,21 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 logger.debug("[LLM_REQUEST] Starting instructor call...")
 
                 try:
+                    # max_retries=2: instructor v2's native reask for
+                    # pydantic.ValidationError. On schema mismatch, instructor
+                    # auto-injects a per-provider-formatted remediation message
+                    # (e.g. "Validation Error found:\n{exception}\nRecall the
+                    # function correctly...") into the next attempt's messages
+                    # and re-calls. This handles 90% of recoverable schema
+                    # errors at the LLM-call layer; our outer
+                    # `_retry_with_backoff` then catches API-level errors
+                    # (context_length, content_filter, BadRequest) and injects
+                    # CIRIS-specific remediation per `LLM_ERROR_REMEDIATIONS`.
                     response, completion = await self.instruct_client.chat.completions.create_with_completion(
                         model=self.model_name,
                         messages=cast(Any, msg_list),
                         response_model=resp_model,
-                        max_retries=0,
+                        max_retries=2,
                         **temp_param,
                         **token_param,
                         **extra_kwargs,
@@ -1688,14 +1767,30 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             retry_state: Optional RetryState to track retry info for CIRIS proxy metadata
         """
         last_exception = None
+        # Make a working copy of `messages` so remediation injections don't
+        # mutate the caller's list. Each retry appends its remediation to this
+        # local copy, so attempt N sees the original messages + N-1 remediations
+        # describing what went wrong on each prior attempt — same shape as
+        # instructor v2's native ValidationError reask, extended to API errors.
+        working_messages: List[MessageDict] = list(messages)
         for attempt in range(self.max_retries):
             try:
-                return await func(messages, response_model, max_tokens, temperature)
+                return await func(working_messages, response_model, max_tokens, temperature)
             except self.retryable_exceptions as e:
                 last_exception = e
 
-                # Categorize error for retry metadata
+                # Categorize error for retry metadata + remediation lookup
                 error_category = self._categorize_llm_error(e)
+
+                # If a BadRequestError surfaces with a category we don't
+                # remediate (e.g. malformed request, missing field), retry
+                # provides no value — raise immediately to surface the bug.
+                if isinstance(e, BadRequestError) and error_category not in LLM_ERROR_REMEDIATIONS:
+                    logger.error(
+                        f"[LLM_BAD_REQUEST_NON_REMEDIABLE] category={error_category} "
+                        f"error={str(e)[:200]} — raising without retry"
+                    )
+                    raise
 
                 # Update retry state for next attempt's metadata
                 if retry_state is not None:
@@ -1704,9 +1799,29 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2**attempt), self.max_delay)
+
+                    # Inject remediation message into the message history for
+                    # the NEXT attempt iff the category is LLM-fault (not a
+                    # transient infra issue). The LLM sees what went wrong on
+                    # the previous attempt and can self-correct — same pattern
+                    # instructor's native reask uses for ValidationError, just
+                    # extended here to API-level errors instructor doesn't
+                    # handle natively.
+                    remediation = LLM_ERROR_REMEDIATIONS.get(error_category)
+                    if remediation:
+                        working_messages = working_messages + [
+                            {"role": "user", "content": remediation},
+                        ]
+                        logger.info(
+                            f"[LLM_REMEDIATION] category={error_category} "
+                            f"attempt={attempt + 1}/{self.max_retries} "
+                            f"injected_remediation={remediation[:80]!r}..."
+                        )
+
                     logger.warning(
                         f"[LLM_RETRY_SCHEDULED] attempt={attempt + 1}/{self.max_retries} "
-                        f"error={error_category} delay={delay:.1f}s"
+                        f"error={error_category} delay={delay:.1f}s "
+                        f"remediated={'yes' if remediation else 'no'}"
                     )
                     import asyncio
 
@@ -1750,18 +1865,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if isinstance(error, RateLimitError) or ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
             return "RATE_LIMIT"
 
-        # Check for context length exceeded
-        if (
-            "context_length" in error_str
-            or "maximum context" in error_str
-            or "context length" in error_str
-            or "token limit" in error_str
-            or "too many tokens" in error_str
-        ):
+        # Check for context length exceeded — delegates to the shared
+        # detector so we catch every phrasing in one place (Groq's
+        # "must be less than or equal to N" and the generic "exceed" patterns
+        # both land here, both get the same CONTEXT_LENGTH_EXCEEDED remediation).
+        if _is_context_length_error(error_str):
             return "CONTEXT_LENGTH_EXCEEDED"
 
+        # Check for content filter / safety blocks
+        if _is_content_filter_error(error_str):
+            return "CONTENT_FILTER"
+
         # Check for validation errors
-        if "validation" in error_str or "validationerror" in error_str:
+        if _is_validation_error(error_str):
             return "VALIDATION_ERROR"
 
         # Check for auth errors

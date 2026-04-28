@@ -392,6 +392,45 @@ class TestReasoningModeDisabling:
             "only OpenAI o-series / gpt-5 accept this enum value"
         )
 
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "",  # OpenAIConfig.base_url unset → defaults to OpenAI
+            "https://example.com/v1",  # unknown cloud provider
+            "https://my-private-llm.corp.acme.com/v1",  # non-local corp endpoint
+        ],
+    )
+    def test_unknown_endpoint_does_not_get_vllm_key(self, base_url):
+        """PR review pin (release/2.7.4): unknown / unrecognized base_urls
+        must NOT receive ``chat_template_kwargs.enable_thinking`` by default.
+        Strict OpenAI-compatible providers commonly 400 on unknown request
+        keys, and an empty base_url is OpenAI's default — sending the vLLM
+        key there breaks every call. Only positively-identified local
+        endpoints (localhost, RFC1918, *.local, vLLM/ollama/llama.cpp/LM
+        Studio default ports) should receive it."""
+        extra_body = self._build_for(base_url, "test-model")["extra_body"]
+        assert "chat_template_kwargs" not in extra_body, (
+            f"chat_template_kwargs leaked to unknown endpoint {base_url!r}; "
+            "the dispatcher's fallthrough should be empty for non-local URLs."
+        )
+
+    def test_local_endpoint_still_gets_vllm_key(self):
+        """Counterpart to the unknown-endpoint test: positively-identified
+        local URLs DO need the vLLM key (CIRIS owns reasoning via the DMA
+        pipeline; we turn the model's own reasoning off, and Gemma-4 puts
+        responses in `reasoning_content` instead of `content` when
+        thinking is on — see docs/GEMMA_4_COMPATIBILITY.md)."""
+        for url in (
+            "http://localhost:8000/v1",
+            "http://127.0.0.1:11434/v1",
+            "http://192.168.1.50:1234/v1",
+            "http://my-server.local:8080/v1",
+        ):
+            extra_body = self._build_for(url, "llama")["extra_body"]
+            assert extra_body.get("chat_template_kwargs") == {"enable_thinking": False}, (
+                f"local endpoint {url} should receive chat_template_kwargs, got {extra_body!r}"
+            )
+
     def test_openrouter_includes_provider_config(self):
         """OpenRouter requests should include both provider config and reasoning disabled."""
         from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig

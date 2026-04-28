@@ -1434,6 +1434,18 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self._handle_provider_error(e)
                 raise
 
+            except BadRequestError:
+                # Re-raise raw so `_retry_with_backoff` can categorize it via
+                # `_categorize_llm_error` and inject the matching remediation
+                # message on the next attempt. If we routed BadRequestError
+                # through `_handle_general_exception` like every other
+                # Exception subclass, it would be wrapped as a generic
+                # `RuntimeError`, the categorization would never see the
+                # original 4xx body, and the retry-with-remediation path
+                # added in 2.7.4 would never fire — exactly the regression
+                # flagged by the release/2.7.4 PR review.
+                raise
+
             except Exception as e:
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
@@ -1576,11 +1588,23 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # opt into extended thinking; nothing to disable here.
             return {}
 
-        # Local endpoints — vLLM/llama.cpp/ollama/LM Studio. CIRIS owns
-        # reasoning via the DMA pipeline; turn the model's off.
-        # See docs/GEMMA_4_COMPATIBILITY.md (response goes to reasoning_content
-        # instead of content when thinking is enabled on local Gemma-4).
-        return {"chat_template_kwargs": {"enable_thinking": False}}
+        # Positively-identified local endpoint (vLLM/llama.cpp/ollama/LM
+        # Studio): send the vLLM key. CIRIS owns reasoning via the DMA
+        # pipeline; we turn the model's own reasoning off.
+        # See docs/GEMMA_4_COMPATIBILITY.md (response goes to
+        # reasoning_content instead of content when thinking is enabled
+        # on local Gemma-4).
+        if OpenAICompatibleClient._is_local_url(base):
+            return {"chat_template_kwargs": {"enable_thinking": False}}
+
+        # Truly unknown endpoint (or empty base_url that defaults to
+        # OpenAI's standard /v1). Send NOTHING — strict OpenAI-compatible
+        # providers reject unknown request keys with 400, and any
+        # endpoint we haven't explicitly classified should not be assumed
+        # vLLM. If a future deployment needs a toggle here, add it as an
+        # explicit branch above keyed on a recognizable base_url
+        # substring.
+        return {}
 
     def _build_extra_kwargs(
         self,
@@ -1617,6 +1641,52 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         extra_kwargs["extra_body"] = extra_body
         return extra_kwargs
+
+    @staticmethod
+    def _is_local_url(base_url: str) -> bool:
+        """Static check: is this URL a positively-identified local LLM server?
+
+        Mirrors :meth:`_is_local_endpoint` but is callable from static contexts
+        (notably :meth:`_build_reasoning_off_extras`, which has no `self`).
+        Both are kept in lock-step — if you change one, change the other.
+        """
+        if not base_url:
+            return False
+        base_url_lower = base_url.lower()
+        cloud_providers = (
+            "ciris.ai",
+            "ciris-services",
+            "openrouter.ai",
+            "together.xyz",
+            "api.together",
+            "openai.com",
+            "api.openai",
+            "anthropic.com",
+            "api.anthropic",
+            "googleapis.com",
+            "generativelanguage.googleapis",
+            "groq.com",
+            "api.groq",
+            "deepinfra.com",
+            "api.deepinfra",
+        )
+        if any(provider in base_url_lower for provider in cloud_providers):
+            return False
+        local_indicators = (
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "192.168.",
+            "10.0.",
+            "10.1.",
+            "172.16.",
+            ".local",
+            ":11434",  # Ollama
+            ":8080",   # llama.cpp
+            ":1234",   # LM Studio
+            ":8000",   # vLLM
+        )
+        return any(indicator in base_url_lower for indicator in local_indicators)
 
     def _is_local_endpoint(self, base_url: str) -> bool:
         """Check if the endpoint is a local LLM server (not a cloud provider).

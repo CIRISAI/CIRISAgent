@@ -303,20 +303,51 @@ class CIRISVerify:
         # Search default paths
         system = platform.system()
         paths = DEFAULT_BINARY_PATHS.get(system, [])
+        searched: list[str] = []
 
         for path_str in paths:
             path = Path(path_str)
+            searched.append(str(path))
             if path.exists():
                 return path
 
-        # Also check relative to this module
+        # Check relative to this loader module (legacy fallback — the binary
+        # was historically dropped here by some build flows).
         module_dir = Path(__file__).parent
         for suffix in self._get_platform_binary_suffixes(system):
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
+            searched.append(str(candidate))
             if candidate.exists():
                 return candidate
 
-        raise BinaryNotFoundError(f"Searched: {paths}")
+        # Wheel-distributed location: the `ciris-verify` PyPI package (a
+        # Requires-Dist of `ciris-agent`) installs the binary into the
+        # top-level `ciris_verify` package directory at
+        # site-packages/ciris_verify/libciris_verify_ffi.{so,dylib,dll}.
+        # Without this branch, every fresh `pip install ciris-agent` on
+        # Linux fails desktop init at the audit hash-chain step (the
+        # binary IS bundled, just not where the loader was looking —
+        # see release/2.7.4 incident: "Initialization sequence failed,
+        # CIRISVerify binary not found at: [system paths]").
+        try:
+            import ciris_verify as _ciris_verify_pkg
+
+            pkg_dir_str = getattr(_ciris_verify_pkg, "__file__", None)
+            if pkg_dir_str:
+                pkg_dir = Path(pkg_dir_str).parent
+                for suffix in self._get_platform_binary_suffixes(system):
+                    candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
+                    searched.append(str(candidate))
+                    if candidate.exists():
+                        return candidate
+        except ImportError:
+            # `ciris_verify` package not installed — drop through to the
+            # not-found error below. Production wheel installs always pull
+            # it via Requires-Dist; this branch only fails for editable /
+            # source-only installs that haven't installed the dep.
+            pass
+
+        raise BinaryNotFoundError(f"Searched: {searched}")
 
     @staticmethod
     def _get_platform_binary_suffixes(system: str) -> list[str]:

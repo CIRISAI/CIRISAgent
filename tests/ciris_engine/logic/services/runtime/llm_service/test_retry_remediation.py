@@ -370,3 +370,52 @@ class TestRetryWithBackoffRemediationInjection:
             "Non-remediable BadRequestError must raise on attempt 1 — retrying "
             "wouldn't help because there's no remediation to inject"
         )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Test: end-to-end BadRequestError flow
+#
+# The release/2.7.4 PR review caught a regression where BadRequestError got
+# wrapped as RuntimeError by `_handle_general_exception` inside
+# `_make_structured_call`'s `except Exception` clause — meaning by the time
+# `_retry_with_backoff` saw the failure, the original BadRequestError was
+# gone, the categorizer couldn't read the 4xx body, and the
+# retry-with-remediation machinery never fired. Pin the fix.
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestBadRequestErrorReachesRetryLoop:
+    def test_bad_request_error_not_swallowed_by_general_handler(self) -> None:
+        """`_make_structured_call` must let BadRequestError surface raw, NOT
+        wrap it through `_handle_general_exception` → RuntimeError. If this
+        assertion fails, the retry-with-remediation flow is silently dead
+        for every 4xx the agent encounters."""
+        import inspect
+
+        from ciris_engine.logic.services.runtime.llm_service import service
+
+        src = inspect.getsource(service.OpenAICompatibleClient.call_llm_structured)
+
+        # The catch-all-and-wrap block we need BadRequestError to BYPASS is
+        # the one that calls `_handle_general_exception` (which raises
+        # RuntimeError, erasing the original exception type). There may be
+        # other `except Exception` clauses earlier (e.g. JSON-recovery)
+        # that are unrelated — pin to the wrapper specifically.
+        wrapper_idx = src.find("self._handle_general_exception(e, resp_model.__name__)")
+        assert wrapper_idx != -1, (
+            "Couldn't locate `_handle_general_exception(e, resp_model...)` call "
+            "in call_llm_structured — has the structure changed? Update this test."
+        )
+
+        bad_request_idx = src.find("except BadRequestError")
+        assert bad_request_idx != -1, (
+            "_make_structured_call must have an `except BadRequestError` clause that "
+            "re-raises raw — without it, BadRequestError gets wrapped as RuntimeError "
+            "by `_handle_general_exception` and never reaches `_retry_with_backoff`. "
+            "(See release/2.7.4 PR review.)"
+        )
+        assert bad_request_idx < wrapper_idx, (
+            "`except BadRequestError` must appear BEFORE the catch-all that calls "
+            "`_handle_general_exception` so the specific catch fires first. "
+            "Putting it after is dead code — the catch-all swallows it."
+        )

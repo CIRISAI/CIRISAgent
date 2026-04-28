@@ -421,12 +421,17 @@ jobs:
 
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
-        continue-on-error: true
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          # Use verbose to diagnose any failures, continue-on-error allows CD to proceed
+          # NO continue-on-error: a 2.7.4 incident hid the PyPI project-size
+          # quota rejection (`400 Project size too large`) behind a green
+          # build for two releases — only the 9.2 MB headless wheel made
+          # it to PyPI, the three platform-specific wheels (~65-70 MB each)
+          # were silently dropped, and Linux/macOS/Windows desktop installs
+          # got the headless wheel with no JAR. If twine fails now, this
+          # step fails — visible in CI, not buried.
           python -m twine upload dist/*.whl --skip-existing --verbose
 
       - name: Build and publish alias packages

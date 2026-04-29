@@ -20,3 +20,13 @@ ignore_names = [
     "*Test*",
     "*Config*"
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest uses `assert` as its primary assertion mechanism — the S101 rule's
+# concern (asserts vanishing under `python -O`) does not apply to test code,
+# which is never run with optimizations. Suppressing here so the security
+# scan surfaces the ~10 real production assert findings instead of being
+# drowned in ~450 test-file false positives.
+"tests/**" = ["S101"]
+"**/tests/*" = ["S101"]
+"ciris_adapters/*/tests/**" = ["S101"]

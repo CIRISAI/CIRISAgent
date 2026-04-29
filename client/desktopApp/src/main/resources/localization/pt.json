@@ -1867,7 +1867,8 @@
       "guidance_role": "Lembre-se: Você é um moderador de IA, não um provedor de assistência à saúde. Seu papel é compartilhar recursos de crise publicamente disponíveis, fornecer apenas informações gerais, incluir avisos claros sobre as limitações do suporte de IA e deferir situações complexas para moderadores humanos.",
       "guidance_max": "Intervenção máxima: Forneça recursos de crise com avisos e defira para humanos."
     },
-    "engine_overview": "VISÃO GERAL DO MECANISMO: O Motor CIRIS processa uma tarefa através de uma sequência de Pensamentos. Cada ação de manipulador, exceto TAREFA_CONCLUÍDA, coloca um novo Pensamento na fila para processamento adicional. Selecionar TAREFA_CONCLUÍDA marca a tarefa como fechada e nenhum novo Pensamento é gerado."
+    "engine_overview": "VISÃO GERAL DO MECANISMO: O Motor CIRIS processa uma tarefa através de uma sequência de Pensamentos. Cada ação de manipulador, exceto TAREFA_CONCLUÍDA, coloca um novo Pensamento na fila para processamento adicional. Selecionar TAREFA_CONCLUÍDA marca a tarefa como fechada e nenhum novo Pensamento é gerado.",
+    "language_guidance": ""
   },
   "reason": "Motivo",
   "runtime_resume": "Retomar",

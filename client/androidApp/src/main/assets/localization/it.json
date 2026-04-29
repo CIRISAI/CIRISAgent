@@ -1867,7 +1867,8 @@
       "guidance_role": "Ricorda: Sei un moderatore IA, non un fornitore di assistenza sanitaria. Il tuo ruolo è condividere risorse pubblicamente disponibili, fornire solo informazioni generali, includere chiari avvertimenti sui limiti del supporto IA e differire situazioni complesse ai moderatori umani.",
       "guidance_max": "Intervento massimo: Fornisci risorse di crisi con avvertimenti e differisci agli umani."
     },
-    "engine_overview": "PANORAMICA DEL MOTORE: Il Motore CIRIS elabora un'attività attraverso una sequenza di Pensieri. Ogni azione del gestore eccetto ATTIVITÀ_COMPLETATA accoda un nuovo Pensiero per ulteriore elaborazione. Selezionare ATTIVITÀ_COMPLETATA contrassegna l'attività come chiusa e nessun nuovo Pensiero viene generato."
+    "engine_overview": "PANORAMICA DEL MOTORE: Il Motore CIRIS elabora un'attività attraverso una sequenza di Pensieri. Ogni azione del gestore eccetto ATTIVITÀ_COMPLETATA accoda un nuovo Pensiero per ulteriore elaborazione. Selezionare ATTIVITÀ_COMPLETATA contrassegna l'attività come chiusa e nessun nuovo Pensiero viene generato.",
+    "language_guidance": ""
   },
   "reason": "[EN] Reason",
   "runtime_resume": "Riprendi",

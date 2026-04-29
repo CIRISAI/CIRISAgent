@@ -493,7 +493,8 @@
       "user_interest": "Interest",
       "user_channel": "Primary Channel",
       "user_preferred_language": "Preferred Language"
-    }
+    },
+    "language_guidance": ""
   },
   "setup": {
     "back": "Quay Lại",

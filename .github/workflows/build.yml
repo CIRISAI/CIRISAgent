@@ -278,10 +278,10 @@ jobs:
 
   # Platform-specific wheels: each runner builds the desktop JAR for its OS,
   # then setup.py detects the JAR platform and tags the wheel accordingly.
+  # Runs in parallel with tests; `publish-wheels` is the gate that requires
+  # test-summary to have passed before any wheel is uploaded.
   build-wheel:
     name: Build Wheel (${{ matrix.name }})
-    needs: test-summary
-    if: success()
     permissions:
       contents: read
     strategy:
@@ -327,7 +327,7 @@ jobs:
 
       - name: Install build tools
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install build wheel
 
       - name: Build wheel
@@ -352,12 +352,110 @@ jobs:
           path: dist/*.whl
           retention-days: 30
 
+  # Windows fat installer: PyInstaller-bundled ciris-agent.exe + jlink-trimmed
+  # JRE + Compose desktop JAR + libciris_verify.dll, all wrapped in a single
+  # Inno Setup .exe. Solves the "Python install path issues" + "Java not
+  # installed" pain points for non-technical Windows users (2.7.6 install
+  # initiative). Output uploaded as a CI artifact and attached to GitHub
+  # Releases on tagged main pushes.
+  #
+  # See installers/windows/README.md for the full pipeline rationale and
+  # how to build locally for testing without a CI run.
+  build-windows-installer:
+    name: Build Windows Installer
+    # Runs in parallel with tests; produces a CI artifact for human download.
+    # No downstream job depends on it, so test-summary is not a prerequisite.
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java 17 (for jlink + desktop JAR build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+        shell: bash
+
+      - name: Build CIRIS Desktop UberJar
+        # Same step as the matrix wheel build — installer needs the JAR
+        # whether or not the wheel build runs in the same workflow.
+        run: |
+          cd client
+          ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
+          ls -lh desktopApp/build/compose/jars/
+        shell: bash
+
+      - name: Build PyInstaller bundle
+        run: |
+          cd installers/windows
+          pyinstaller ciris-agent.spec --noconfirm
+          ls dist/ciris-agent/ | head -20
+        shell: bash
+
+      - name: Locate desktop JAR for installer
+        # PyInstaller's --onedir lands the bundle at
+        #   installers/windows/dist/ciris-agent/
+        # but Inno Setup's .iss expects the bundle at
+        #   dist/ciris-agent/ (repo-root-relative).
+        # Move it up + ensure the desktop JAR is at the path the .iss
+        # references.
+        run: |
+          mkdir -p dist
+          mv installers/windows/dist/ciris-agent dist/
+          # The .iss references ..\..\client\desktopApp\build\compose\jars\
+          # which already exists from the gradle step above.
+          ls dist/ciris-agent/ | head -10
+        shell: bash
+
+      - name: Trim JRE via jlink
+        run: |
+          $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
+          if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
+          .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+        shell: pwsh
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      - name: Build installer with Inno Setup
+        # Pass the version explicitly so the installer name and metadata
+        # match what the bundled binaries report. Read from constants.py
+        # to keep one source of truth.
+        run: |
+          $version = python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION.replace('-stable',''))"
+          Write-Host "Building installer for CIRIS $version"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DCirisVersion=$version" `
+              installers\windows\ciris-installer.iss
+          Get-ChildItem dist\*.exe
+        shell: pwsh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/CIRIS-Setup-*.exe
+          retention-days: 30
+
   # Headless wheel (no desktop JAR) for server-only deployments.
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:
     name: Build Wheel (Headless)
-    needs: test-summary
-    if: success()
+    # Runs in parallel with tests; gated downstream by `publish-wheels`.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -391,7 +489,10 @@ jobs:
   # Collect all wheels and publish to PyPI + alias packages + SDK
   publish-wheels:
     name: Publish Wheels
-    needs: [build-wheel, build-wheel-headless]
+    # Choke point gating all release-side jobs: tests must have passed AND
+    # all wheels must have built. register-build / deploy / android-release
+    # transitively depend on this through their `needs` chains.
+    needs: [test-summary, build-wheel, build-wheel-headless]
     if: success()
     runs-on: ubuntu-latest
     permissions:
@@ -463,20 +564,30 @@ jobs:
 
   build:
     name: Build Docker Images
-    needs: test-summary
+    # Runs in parallel with tests; gated downstream by `register-build`
+    # (which needs both this job and `publish-wheels`, and `publish-wheels`
+    # carries the test-summary gate).
     runs-on: ubuntu-latest
-    if: success()
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download BUILD_INFO artifact
-        uses: actions/download-artifact@v4
+      # Generate BUILD_INFO inline rather than downloading the test-summary
+      # artifact — keeps this job parallel with tests. version.py just hashes
+      # the Python tree and HMAC-signs it; no test-result dependency.
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: build-info
-          path: .
+          python-version: '3.12'
+
+      - name: Generate BUILD_INFO
+        env:
+          CIRIS_BUILD_SIGN_KEY: ${{ secrets.CIRIS_BUILD_SIGN_KEY }}
+        run: |
+          python version.py
+          cat BUILD_INFO.txt || echo "No BUILD_INFO.txt created"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -680,10 +791,11 @@ jobs:
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
 
-  # Build Android debug APK, create GitHub release with tag
+  # Build Android debug APK + attach Windows installer, create GitHub release with tag.
+  # Single release per version with both APK and Windows .exe as assets.
   android-release:
-    name: Android Release
-    needs: [build, register-build]
+    name: Publish Release (Android APK + Windows Installer)
+    needs: [build, register-build, build-windows-installer]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
@@ -732,6 +844,12 @@ jobs:
 
           ls -lh androidApp/build/outputs/apk/debug/
 
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist-windows/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
         with:
@@ -742,5 +860,6 @@ jobs:
           generate_release_notes: true
           files: |
             client/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
+            dist-windows/CIRIS-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

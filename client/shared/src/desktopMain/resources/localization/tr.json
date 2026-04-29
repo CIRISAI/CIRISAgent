@@ -1867,7 +1867,8 @@
       "guidance_role": "Hatırlayın: Siz bir yapay zeka moderatörüsünüz, bir sağlık hizmet sağlayıcısı değilsiniz. Rolünüz, kamuya açık kriz kaynaklarını paylaşmak, sadece genel bilgi sağlamak, yapay zeka desteğinin sınırlamaları hakkında açık sorumluluk reddi beyanları eklemek ve karmaşık durumları insan moderatörlere derlemektir.",
       "guidance_max": "Maksimum müdahale: Kriz kaynaklarını sorumluluk reddi beyanları ile sağlayın ve insanlara derleyin."
     },
-    "engine_overview": "MOTOR ÖZETI: CIRIS Motor, bir görevi Düşünceler dizisi aracılığıyla işler. TASK_COMPLETE dışındaki her işleyici eylemi, daha ileri işlemler için yeni bir Düşünce sıraya koyar. TASK_COMPLETE'i seçmek görevi kapalı olarak işaretler ve yeni Düşünce oluşturulmaz."
+    "engine_overview": "MOTOR ÖZETI: CIRIS Motor, bir görevi Düşünceler dizisi aracılığıyla işler. TASK_COMPLETE dışındaki her işleyici eylemi, daha ileri işlemler için yeni bir Düşünce sıraya koyar. TASK_COMPLETE'i seçmek görevi kapalı olarak işaretler ve yeni Düşünce oluşturulmaz.",
+    "language_guidance": ""
   },
   "reason": "Neden",
   "runtime_resume": "Devam et",

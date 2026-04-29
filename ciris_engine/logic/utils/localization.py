@@ -326,6 +326,36 @@ def clear_cache() -> None:
     logger.debug("Localization cache cleared")
 
 
+def get_language_guidance(lang_code: str) -> str:
+    """Return the per-language guidance block for LLM prompts.
+
+    Each ``localization/{lang}.json`` carries a ``prompts.language_guidance``
+    string. For most languages this is empty (the model produces correct
+    target-language output without further nudging). For languages where
+    we've observed systematic terminology gaps — wrong-sense disambiguation,
+    transliteration fallbacks, or cross-cluster contamination — the guidance
+    string carries explicit term pairs and disambiguation notes that get
+    prepended as a system message to every DMA / conscience / ASPDMA call
+    in that language.
+
+    Returns the raw guidance string, or empty string when no guidance is
+    configured for the language. Callers should append the result as a
+    system message ONLY when non-empty (skip the append for empty strings
+    so we don't ship empty system messages over the wire).
+
+    The current populated locale (as of 2.7.6) is ``am`` (Amharic), where
+    Qwen 3.6 was observed:
+      - producing ማንነት ማወቅ (= "self-knowledge") for "diagnosis"
+        instead of ምርመራ (= "examination")
+      - falling back to phonetic transliteration ሳይኮተራፒ instead of
+        the native የንግግር ሕክምና ("speech treatment")
+      - cluster-confusing depression-cluster symptoms (self-harm
+        ideation) into schizophrenia bullets
+    """
+    raw = get_string(lang_code, "prompts.language_guidance", default="")
+    return raw.strip()
+
+
 def get_preferred_language() -> str:
     """Get the preferred language from environment.
 

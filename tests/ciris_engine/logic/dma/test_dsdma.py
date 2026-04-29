@@ -286,6 +286,84 @@ class TestDSDMAEvaluator:
         assert "============================================" in system_content
 
     @pytest.mark.asyncio
+    async def test_dsdma_injects_amharic_language_guidance_into_messages(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """DSDMA must inject the per-language guidance block as a system
+        message when the prompt language has a populated guidance string
+        (Amharic as of 2.7.6). The block lands BEFORE the DMA-specific
+        system message so the model conditions on terminology rules
+        before hitting the domain prompt.
+
+        Pin: this is the load-bearing prompt-loading change for the
+        Amharic terminology fix. If the injection silently disappears,
+        Qwen 3.6 reverts to producing ማንነት ማወቅ (self-knowledge) when it
+        should produce ምርመራ (examination) for medical "diagnosis".
+        """
+        from unittest.mock import patch
+
+        evaluator = BaseDSDMA(domain_name="Personal Assistant", service_registry=mock_service_registry)
+        # Force the Amharic prompt loader path so get_language_guidance("am")
+        # fires. The real prompt loader resolves language from env / user
+        # profile / explicit override; for the test we patch the helper
+        # directly so the test doesn't depend on global env state.
+        with patch(
+            "ciris_engine.logic.utils.localization.get_language_guidance",
+            return_value="=== የቋንቋ መመሪያ ===\nfake-amharic-guidance-content",
+        ):
+            mock_llm_output = DSDMAResult(
+                domain="personal assistance",
+                domain_alignment=0.8,
+                flags=[],
+                reasoning="ok",
+            )
+            evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
+
+            await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+            messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
+            guidance_messages = [
+                m for m in messages
+                if m["role"] == "system" and "fake-amharic-guidance-content" in str(m.get("content", ""))
+            ]
+            assert len(guidance_messages) == 1, (
+                f"Expected exactly 1 language-guidance system message, got {len(guidance_messages)}. "
+                f"All messages: {[(m['role'], str(m.get('content', ''))[:60]) for m in messages]}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_dsdma_skips_empty_language_guidance(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """When `get_language_guidance` returns empty (English and 27 other
+        locales as of 2.7.6), DSDMA must NOT append a blank system
+        message. Empty system messages waste tokens AND can confuse some
+        providers' message-validation."""
+        from unittest.mock import patch
+
+        evaluator = BaseDSDMA(domain_name="Personal Assistant", service_registry=mock_service_registry)
+        with patch(
+            "ciris_engine.logic.utils.localization.get_language_guidance",
+            return_value="",
+        ):
+            mock_llm_output = DSDMAResult(
+                domain="personal assistance",
+                domain_alignment=0.8,
+                flags=[],
+                reasoning="ok",
+            )
+            evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
+
+            await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+            messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
+            empty_systems = [m for m in messages if m["role"] == "system" and not str(m.get("content", "")).strip()]
+            assert not empty_systems, (
+                f"DSDMA must not append empty system messages — found {len(empty_systems)}. "
+                f"All messages: {[(m['role'], str(m.get('content', ''))[:40]) for m in messages]}"
+            )
+
+    @pytest.mark.asyncio
     async def test_dsdma_evaluate_method_backward_compatibility(
         self, mock_service_registry, mock_prompt_loader, valid_queue_item
     ):

@@ -487,6 +487,29 @@ data class SetupFormState(
     }
 
     /**
+     * Does this setup require an explicit local-admin account creation step?
+     *
+     * Quick Setup itself only collects LLM config + adapters. For OAuth users
+     * (Google/Apple) the WA identity comes from the OAuth provider, and HA
+     * addon mode authenticates via SUPERVISOR_TOKEN — both bypass local
+     * username/password. Everyone else (BYOK with no OAuth, local-on-device
+     * with no OAuth) needs to create the first human user before COMPLETE,
+     * or the wizard ships an empty `admin_password` to /v1/setup/complete
+     * and the desktop login fails.
+     *
+     * Source: 2.7.5 desktop install incident — Quick Setup → COMPLETE
+     * skipped admin-user creation for non-OAuth installs.
+     */
+    fun needsLocalAccountStep(): Boolean {
+        if (isGoogleAuth) return false
+        if (isHAAddonMode) return false
+        // CIRIS_PROXY without isGoogleAuth shouldn't really exist (the proxy
+        // mode requires Google/Apple), but be defensive — only require the
+        // local-account step when the user is actually password-bound.
+        return setupMode == SetupMode.BYOK || setupMode == SetupMode.LOCAL_ON_DEVICE
+    }
+
+    /**
      * Get validation error for current step.
      * Source: SetupWizardActivity.kt:209-286
      */

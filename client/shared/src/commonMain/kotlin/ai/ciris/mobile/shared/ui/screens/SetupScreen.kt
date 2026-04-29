@@ -439,10 +439,17 @@ fun SetupScreen(
                     // Determine if this is the final step before COMPLETE
                     // - Normal flow: ACCOUNT_AND_CONFIRMATION is the final step
                     // - Node flow: OPTIONAL_FEATURES is the final step (skips ACCOUNT_AND_CONFIRMATION)
-                    // - Unified quick setup: QUICK_SETUP is the final step
+                    // - Unified quick setup, OAuth/HA users: QUICK_SETUP is the final step
+                    // - Unified quick setup, BYOK / local-on-device WITHOUT OAuth:
+                    //   QUICK_SETUP is NOT final — `next` advances into
+                    //   ACCOUNT_AND_CONFIRMATION so the user creates their
+                    //   admin account before /v1/setup/complete fires. Without
+                    //   this branch, /v1/setup/complete receives an empty
+                    //   admin_password and the desktop login is broken.
+                    //   (2.7.5 desktop install incident.)
                     val isFinalStep = state.currentStep == SetupStep.ACCOUNT_AND_CONFIRMATION ||
                         (state.isNodeFlow && state.currentStep == SetupStep.OPTIONAL_FEATURES) ||
-                        state.currentStep == SetupStep.QUICK_SETUP
+                        (state.currentStep == SetupStep.QUICK_SETUP && !state.needsLocalAccountStep())
 
                     if (isFinalStep) {
                         // On final step, submit setup to API then advance

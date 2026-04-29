@@ -114,6 +114,13 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         accord_text = get_accord_text(accord_mode)
         if accord_text:
             messages.append({"role": "system", "content": accord_text})
+        # Per-language guidance — empty for most languages, populated for
+        # locales where systematic terminology gaps were observed (am as
+        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        _lang_guidance = get_language_guidance(self.prompt_loader.language)
+        if _lang_guidance:
+            messages.append({"role": "system", "content": _lang_guidance})
 
         # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None

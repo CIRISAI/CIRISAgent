@@ -1867,7 +1867,8 @@
       "guidance_role": "Kumbuka: Wewe ni msimamizi wa AI, si mtoaji wa huduma za afya. Jukumu lako ni kushiriki rasilimali za ghasia zinazopatikana hadharani, kutoa taarifa za jumla tu, kujumuisha kanusho wazi kuhusu mipaka ya msaada wa AI, na kuahirisha hali ngumu kwa wasimamizi wa binadamu.",
       "guidance_max": "Uingiliaji wa juu zaidi: Toa rasilimali za ghasia na kanusho na uahirishe kwa wanadamu."
     },
-    "engine_overview": "MUHTASARI WA INJINI: Injini ya CIRIS inashughulikia kazi kupitia mfuatano wa Mawazo. Kila kitendo cha kishughulishi isipokuwa KAZI_IMEKAMILIKA huweka foleni Wazo mpya kwa usindikaji zaidi. Kuchagua KAZI_IMEKAMILIKA huweka alama kazi kuwa imefungwa na hakuna Wazo jipya linalozalishwa."
+    "engine_overview": "MUHTASARI WA INJINI: Injini ya CIRIS inashughulikia kazi kupitia mfuatano wa Mawazo. Kila kitendo cha kishughulishi isipokuwa KAZI_IMEKAMILIKA huweka foleni Wazo mpya kwa usindikaji zaidi. Kuchagua KAZI_IMEKAMILIKA huweka alama kazi kuwa imefungwa na hakuna Wazo jipya linalozalishwa.",
+    "language_guidance": ""
   },
   "reason": "Sababu",
   "runtime_resume": "Endelea",

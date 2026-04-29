@@ -234,7 +234,8 @@
       "guidance_role": "Rántí: Ìwọ jẹ́ olùṣàkóso AI, kìí ṣe olùpèsè ìtọ́jú-ìlera. Ipa rẹ ni láti pín àwọn ohun èlò ìpọ́njú tí ó wà ní gbangba, pèsè ìròyìn gbogbogbò nìkan, fi àwọn àlàyé kedere nípa àwọn àkógbélé àtìlẹ́yìn AI, kí o sì fi àwọn ìpò tó nira lélẹ̀ fún àwọn olùṣàkóso ènìyàn.",
       "guidance_max": "Ìmúlò tó ga jùlọ: Pèsè àwọn ohun èlò ìpọ́njú pẹ̀lú àwọn àlàyé kí o sì fi lélẹ̀ fún ènìyàn."
     },
-    "engine_overview": "ÀKÓJỌ Ẹ̀RỌ: Ẹ̀rọ CIRIS ń ṣe iṣẹ́ kan nípasẹ̀ ọ̀tọ̀ọ̀tọ̀ àwọn Èrò. Gbogbo iṣẹ́ olùṣàkóso àyàfi IṢẸ́_TI_PARÍ máa ń ṣe Èrò tuntun fún ìṣe tó bá yọrí. Yíyàn IṢẸ́_TI_PARÍ máa ń sàmì iṣẹ́ náà pé ó ti parí kò sì ṣẹ̀dá Èrò tuntun."
+    "engine_overview": "ÀKÓJỌ Ẹ̀RỌ: Ẹ̀rọ CIRIS ń ṣe iṣẹ́ kan nípasẹ̀ ọ̀tọ̀ọ̀tọ̀ àwọn Èrò. Gbogbo iṣẹ́ olùṣàkóso àyàfi IṢẸ́_TI_PARÍ máa ń ṣe Èrò tuntun fún ìṣe tó bá yọrí. Yíyàn IṢẸ́_TI_PARÍ máa ń sàmì iṣẹ́ náà pé ó ti parí kò sì ṣẹ̀dá Èrò tuntun.",
+    "language_guidance": ""
   },
   "handlers": {
     "speak_failed": "Kùnà láti fi ìdáhùn aṣojú ránṣẹ́. A kò lè fi ìránṣẹ́ náà ránṣẹ́ sí ọ̀nà náà.",

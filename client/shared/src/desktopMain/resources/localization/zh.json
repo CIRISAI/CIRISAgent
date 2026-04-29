@@ -1867,7 +1867,8 @@
       "guidance_role": "记住：您是AI版主，而非医疗提供者。您的角色是分享公开可用的危机资源，仅提供一般信息，包括有关AI支持的局限性的明确免责声明，并将复杂情况延迟给人类版主。",
       "guidance_max": "最大干预：提供危机资源和免责声明，并向人类延迟。"
     },
-    "engine_overview": "引擎概览：CIRIS引擎通过一系列思考来处理任务。除TASK_COMPLETE外的每个处理器动作都会为进一步处理而排队一个新的思考。选择TASK_COMPLETE将任务标记为已关闭，不生成新思考。"
+    "engine_overview": "引擎概览：CIRIS引擎通过一系列思考来处理任务。除TASK_COMPLETE外的每个处理器动作都会为进一步处理而排队一个新的思考。选择TASK_COMPLETE将任务标记为已关闭，不生成新思考。",
+    "language_guidance": ""
   },
   "reason": "原因",
   "runtime_resume": "恢复运行",

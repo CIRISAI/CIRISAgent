@@ -1867,7 +1867,8 @@
       "guidance_role": "Rappelez-vous : Vous êtes un modérateur IA, pas un prestataire de soins de santé. Votre rôle est de partager les ressources de crise disponibles publiquement, de fournir uniquement des informations générales, d'inclure des avertissements clairs sur les limitations du support IA et de déférer les situations complexes aux modérateurs humains.",
       "guidance_max": "Intervention maximale : Fournissez les ressources de crise avec des avertissements et déférez aux humains."
     },
-    "engine_overview": "APERÇU DU MOTEUR : Le Moteur CIRIS traite une tâche à travers une séquence de Pensées. Chaque action de gestionnaire sauf TASK_COMPLETE met en file d'attente une nouvelle Pensée pour un traitement ultérieur. Sélectionner TASK_COMPLETE marque la tâche comme fermée et aucune nouvelle Pensée n'est générée."
+    "engine_overview": "APERÇU DU MOTEUR : Le Moteur CIRIS traite une tâche à travers une séquence de Pensées. Chaque action de gestionnaire sauf TASK_COMPLETE met en file d'attente une nouvelle Pensée pour un traitement ultérieur. Sélectionner TASK_COMPLETE marque la tâche comme fermée et aucune nouvelle Pensée n'est générée.",
+    "language_guidance": ""
   },
   "reason": "Raison",
   "runtime_resume": "Reprendre",

@@ -234,7 +234,8 @@
       "guidance_role": "Remember: You are an AI moderator, not a healthcare provider. Your role is to share publicly available crisis resources, provide general information only, include clear disclaimers about the limitations of AI support, and defer complex situations to human moderators.",
       "guidance_max": "Maximum intervention: Provide crisis resources with disclaimers and defer to humans."
     },
-    "engine_overview": "ENGINE OVERVIEW: The CIRIS Engine processes a task through a sequence of Thoughts. Each handler action except TASK_COMPLETE enqueues a new Thought for further processing. Selecting TASK_COMPLETE marks the task closed and no new Thought is generated."
+    "engine_overview": "ENGINE OVERVIEW: The CIRIS Engine processes a task through a sequence of Thoughts. Each handler action except TASK_COMPLETE enqueues a new Thought for further processing. Selecting TASK_COMPLETE marks the task closed and no new Thought is generated.",
+    "language_guidance": ""
   },
   "handlers": {
     "speak_failed": "Failed to deliver agent response. The message could not be sent to the channel.",

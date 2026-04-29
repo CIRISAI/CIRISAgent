@@ -1867,7 +1867,8 @@
       "guidance_role": "Recuerda: Eres un moderador de IA, no un proveedor de atención médica. Tu rol es compartir recursos de crisis disponibles públicamente, proporcionar solo información general, incluir avisos claros sobre las limitaciones del soporte de IA y diferir situaciones complejas a moderadores humanos.",
       "guidance_max": "Intervención máxima: Proporciona recursos de crisis con avisos y difiere a humanos."
     },
-    "engine_overview": "DESCRIPCIÓN DEL MOTOR: El Motor CIRIS procesa una tarea a través de una secuencia de Pensamientos. Cada acción de manejador excepto TASK_COMPLETE encola un nuevo Pensamiento para procesamiento adicional. Seleccionar TASK_COMPLETE marca la tarea como cerrada y no se genera un nuevo Pensamiento."
+    "engine_overview": "DESCRIPCIÓN DEL MOTOR: El Motor CIRIS procesa una tarea a través de una secuencia de Pensamientos. Cada acción de manejador excepto TASK_COMPLETE encola un nuevo Pensamiento para procesamiento adicional. Seleccionar TASK_COMPLETE marca la tarea como cerrada y no se genera un nuevo Pensamiento.",
+    "language_guidance": ""
   },
   "reason": "Razón",
   "runtime_resume": "Reanudar",

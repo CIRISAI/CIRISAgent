@@ -1867,7 +1867,8 @@
       "guidance_role": "Erinnern Sie sich: Sie sind ein KI-Moderator, kein Angehöriger des Gesundheitswesens. Ihre Aufgabe ist es, öffentlich verfügbare Krisenressourcen zu teilen, nur allgemeine Informationen bereitzustellen, klare Haftungsausschlüsse über die Grenzen der KI-Unterstützung einzubeziehen und komplexe Situationen an menschliche Moderatoren zu verweisen.",
       "guidance_max": "Maximale Intervention: Stellen Sie Krisenressourcen mit Haftungsausschlüssen bereit und verweisen Sie an Menschen."
     },
-    "engine_overview": "MOTOR-ÜBERSICHT: Die CIRIS-Engine verarbeitet eine Aufgabe durch eine Reihe von Gedanken. Jede Handler-Aktion außer TASK_COMPLETE reiht einen neuen Gedanken für die weitere Verarbeitung ein. Die Auswahl von TASK_COMPLETE markiert die Aufgabe als abgeschlossen und es wird kein neuer Gedanke erzeugt."
+    "engine_overview": "MOTOR-ÜBERSICHT: Die CIRIS-Engine verarbeitet eine Aufgabe durch eine Reihe von Gedanken. Jede Handler-Aktion außer TASK_COMPLETE reiht einen neuen Gedanken für die weitere Verarbeitung ein. Die Auswahl von TASK_COMPLETE markiert die Aufgabe als abgeschlossen und es wird kein neuer Gedanke erzeugt.",
+    "language_guidance": ""
   },
   "reason": "Grund",
   "runtime_resume": "Fortsetzen",

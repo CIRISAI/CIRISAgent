@@ -234,7 +234,8 @@
       "guidance_role": "Ka tuna: Kai mai kulawa ne na AI, ba mai bayar da kiwon lafiya ba. Matsayin ku shine raba albarkatun rikici da ake samu ga jama'a, bayar da bayanai na gaba ɗaya kawai, haɗa sanarwa masu bayyana iyaka na tallafin AI, kuma mika yanayi masu rikitarwa ga masu kulawa na ɗan adam.",
       "guidance_max": "Matsakaicin shiga tsakani: Bayar da albarkatun rikici tare da sanarwa kuma mika ga mutane."
     },
-    "engine_overview": "BAYANI NA INJIN: Injin CIRIS yana sarrafa aiki ta jerin Tunani. Kowane aikin sarrafa ban da GAMA yana sanya Tunani sabon jerin don ƙarin sarrafa. Zaɓar GAMA yana bayyana aikin a rufe kuma ba a samar da Tunani sabo ba."
+    "engine_overview": "BAYANI NA INJIN: Injin CIRIS yana sarrafa aiki ta jerin Tunani. Kowane aikin sarrafa ban da GAMA yana sanya Tunani sabon jerin don ƙarin sarrafa. Zaɓar GAMA yana bayyana aikin a rufe kuma ba a samar da Tunani sabo ba.",
+    "language_guidance": ""
   },
   "handlers": {
     "speak_failed": "An kasa isar da amsar wakili. Ba za a iya aika saƙon zuwa tashar ba.",

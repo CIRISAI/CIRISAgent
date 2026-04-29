@@ -278,10 +278,10 @@ jobs:
 
   # Platform-specific wheels: each runner builds the desktop JAR for its OS,
   # then setup.py detects the JAR platform and tags the wheel accordingly.
+  # Runs in parallel with tests; `publish-wheels` is the gate that requires
+  # test-summary to have passed before any wheel is uploaded.
   build-wheel:
     name: Build Wheel (${{ matrix.name }})
-    needs: test-summary
-    if: success()
     permissions:
       contents: read
     strategy:
@@ -363,8 +363,8 @@ jobs:
   # how to build locally for testing without a CI run.
   build-windows-installer:
     name: Build Windows Installer
-    needs: test-summary
-    if: success()
+    # Runs in parallel with tests; produces a CI artifact for human download.
+    # No downstream job depends on it, so test-summary is not a prerequisite.
     runs-on: windows-latest
     permissions:
       contents: read
@@ -455,8 +455,7 @@ jobs:
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:
     name: Build Wheel (Headless)
-    needs: test-summary
-    if: success()
+    # Runs in parallel with tests; gated downstream by `publish-wheels`.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -490,7 +489,10 @@ jobs:
   # Collect all wheels and publish to PyPI + alias packages + SDK
   publish-wheels:
     name: Publish Wheels
-    needs: [build-wheel, build-wheel-headless]
+    # Choke point gating all release-side jobs: tests must have passed AND
+    # all wheels must have built. register-build / deploy / android-release
+    # transitively depend on this through their `needs` chains.
+    needs: [test-summary, build-wheel, build-wheel-headless]
     if: success()
     runs-on: ubuntu-latest
     permissions:
@@ -562,9 +564,10 @@ jobs:
 
   build:
     name: Build Docker Images
-    needs: test-summary
+    # Runs in parallel with tests; gated downstream by `register-build`
+    # (which needs both this job and `publish-wheels`, and `publish-wheels`
+    # carries the test-summary gate).
     runs-on: ubuntu-latest
-    if: success()
     permissions:
       contents: read
       packages: write

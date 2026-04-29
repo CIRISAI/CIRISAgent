@@ -63,11 +63,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#MyAppName} {#CirisVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
-; Code signing wired in via /SSignTool=... when ISCC is invoked from CI.
-; Until the Authenticode cert lands we ship unsigned and accept the
-; SmartScreen warning on first run.
-SignTool=signtool
-SignedUninstaller=no
+; Code signing: until an Authenticode cert is provisioned, ship unsigned
+; and accept the SmartScreen "unknown publisher" warning on first run.
+; To enable later: register a SignTool in CI via
+;   iscc /Ssigntool="signtool.exe sign /f $CERT_PFX /p $CERT_PASS $f" ...
+; then add `SignTool=signtool` and `SignedUninstaller=yes` here.
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

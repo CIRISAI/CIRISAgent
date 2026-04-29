@@ -791,10 +791,11 @@ jobs:
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
 
-  # Build Android debug APK, create GitHub release with tag
+  # Build Android debug APK + attach Windows installer, create GitHub release with tag.
+  # Single release per version with both APK and Windows .exe as assets.
   android-release:
-    name: Android Release
-    needs: [build, register-build]
+    name: Publish Release (Android APK + Windows Installer)
+    needs: [build, register-build, build-windows-installer]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
@@ -843,6 +844,12 @@ jobs:
 
           ls -lh androidApp/build/outputs/apk/debug/
 
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist-windows/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
         with:
@@ -853,5 +860,6 @@ jobs:
           generate_release_notes: true
           files: |
             client/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
+            dist-windows/CIRIS-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -260,6 +260,15 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         messages: List[JSONDict] = []
         if accord_with_metadata:
             messages.append({"role": "system", "content": accord_with_metadata})
+        # Per-language guidance — empty for most languages, populated for
+        # locales where systematic terminology gaps were observed (am as
+        # of 2.7.6). ASPDMA has no prompt_loader, so resolve language from
+        # the env var (CIRIS_PREFERRED_LANGUAGE) which is what the agent's
+        # deployment sets globally.
+        from ciris_engine.logic.utils.localization import get_language_guidance, get_preferred_language
+        _lang_guidance = get_language_guidance(get_preferred_language())
+        if _lang_guidance:
+            messages.append({"role": "system", "content": _lang_guidance})
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_content})
 

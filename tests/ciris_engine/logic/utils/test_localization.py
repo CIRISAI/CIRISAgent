@@ -11,6 +11,7 @@ import pytest
 from ciris_engine.logic.utils.localization import (
     clear_cache,
     get_available_languages,
+    get_language_guidance,
     get_language_meta,
     get_localizer,
     get_preferred_language,
@@ -225,3 +226,57 @@ class TestCacheManagement:
         # Should still work (will reload)
         result = get_string("en", "agent.greeting")
         assert result is not None
+
+
+class TestGetLanguageGuidance:
+    """Tests for the per-language guidance block injected into LLM prompts.
+
+    Pinning the contract: 28 of 29 languages return empty (so the DMA
+    layer skips appending an empty system message), and Amharic returns
+    the populated terminology pack covering the 2.7.6 install incident's
+    three observed errors (diagnosis sense-collision, talk-therapy
+    transliteration, schizophrenia cluster contamination).
+    """
+
+    def test_amharic_returns_non_empty_guidance(self):
+        """Amharic carries the terminology pack."""
+        guidance = get_language_guidance("am")
+        assert guidance, "Amharic guidance must be populated — empty would re-introduce the 2.7.6 install regression"
+        # The three load-bearing terminology fixes that motivated this block
+        # MUST be present. Test by Amharic substring (not English) so the
+        # pack can't be quietly replaced with English filler.
+        assert "ምርመራ" in guidance, "Amharic 'diagnosis' fix (ምርመራ vs ማንነት ማወቅ) is missing"
+        assert "የንግግር ሕክምና" in guidance, "Amharic 'talk therapy' fix (የንግግር ሕክምና vs ሳይኮተራፒ transliteration) is missing"
+        # The negative-example pattern is load-bearing per the diagnostic
+        # notes — a flat glossary without the wrong-candidate disambiguation
+        # doesn't fix the sense-collision error.
+        assert "ማንነት ማወቅ" in guidance, "Wrong-sense disambiguation for 'diagnosis' must name the bad candidate"
+        assert "ሳይኮተራፒ" in guidance, "Transliteration disambiguation for 'talk therapy' must name the bad candidate"
+
+    def test_english_returns_empty_guidance(self):
+        """English doesn't need guidance (the prompt is already in English)."""
+        assert get_language_guidance("en") == ""
+
+    @pytest.mark.parametrize(
+        "lang_code",
+        ["es", "fr", "de", "pt", "it", "ru", "uk", "zh", "ja", "ko", "hi", "ar", "tr", "vi", "id"],
+    )
+    def test_other_locales_return_empty_until_populated(self, lang_code):
+        """Locales without an observed terminology gap return empty so the
+        DMA layer skips the system-message append entirely (no wire
+        overhead, no behavior change for languages we haven't audited)."""
+        assert get_language_guidance(lang_code) == ""
+
+    def test_unknown_language_returns_empty(self):
+        """A language code that doesn't exist falls through to empty (NOT
+        the literal key 'prompts.language_guidance'). The contract is that
+        callers can pass `if guidance:` and skip cleanly."""
+        assert get_language_guidance("xx") == ""
+        assert get_language_guidance("zz_NONEXISTENT") == ""
+
+    def test_strips_trailing_whitespace(self):
+        """The helper strips whitespace so the appended system message
+        doesn't carry leading/trailing newlines that would inflate the
+        wire payload."""
+        guidance = get_language_guidance("am")
+        assert guidance == guidance.strip()

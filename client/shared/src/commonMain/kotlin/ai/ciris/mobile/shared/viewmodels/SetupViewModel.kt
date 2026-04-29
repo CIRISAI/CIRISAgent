@@ -443,12 +443,24 @@ class SetupViewModel(
                 else -> SetupStep.COMPLETE
             }
         } else {
-            // Unified flow for ALL users (including HA addon): WELCOME → QUICK_SETUP → COMPLETE
-            // Quick Setup handles CIRIS mode (LLM optional), BYOK mode (LLM required), and
-            // HA addon mode (external auth via SUPERVISOR_TOKEN, user setup optional)
+            // Unified flow for ALL users (including HA addon):
+            //   WELCOME → QUICK_SETUP → [ACCOUNT_AND_CONFIRMATION] → COMPLETE
+            //
+            // Quick Setup handles CIRIS mode (OAuth covers identity), HA addon
+            // mode (external SUPERVISOR_TOKEN auth), and BYOK / local-on-device.
+            // Non-OAuth, non-HA installs MUST gather username/password before
+            // COMPLETE — otherwise /v1/setup/complete receives an empty
+            // `admin_password` and the desktop login is broken from day 1
+            // (the 2.7.5 desktop-install regression). `needsLocalAccountStep()`
+            // wedges ACCOUNT_AND_CONFIRMATION into the flow only for those
+            // users; OAuth and HA-addon users go straight to COMPLETE as
+            // before.
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.QUICK_SETUP
-                SetupStep.QUICK_SETUP -> SetupStep.COMPLETE
+                SetupStep.QUICK_SETUP ->
+                    if (currentState.needsLocalAccountStep()) SetupStep.ACCOUNT_AND_CONFIRMATION
+                    else SetupStep.COMPLETE
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.COMPLETE
                 else -> SetupStep.COMPLETE
             }
         }
@@ -478,11 +490,17 @@ class SetupViewModel(
                 else -> SetupStep.WELCOME
             }
         } else {
-            // Unified flow for ALL users (including HA addon): COMPLETE → QUICK_SETUP → WELCOME
+            // Unified flow back-button. Mirrors the forward path including the
+            // ACCOUNT_AND_CONFIRMATION wedge for non-OAuth installs. From
+            // COMPLETE we step back to ACCOUNT_AND_CONFIRMATION when a local
+            // account was required, otherwise straight to QUICK_SETUP.
             when (currentState.currentStep) {
                 SetupStep.WELCOME -> SetupStep.WELCOME
                 SetupStep.QUICK_SETUP -> SetupStep.WELCOME
-                SetupStep.COMPLETE -> SetupStep.QUICK_SETUP
+                SetupStep.ACCOUNT_AND_CONFIRMATION -> SetupStep.QUICK_SETUP
+                SetupStep.COMPLETE ->
+                    if (currentState.needsLocalAccountStep()) SetupStep.ACCOUNT_AND_CONFIRMATION
+                    else SetupStep.QUICK_SETUP
                 else -> SetupStep.WELCOME
             }
         }

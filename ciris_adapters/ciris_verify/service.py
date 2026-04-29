@@ -183,7 +183,8 @@ class CIRISVerifyService:
             self._last_nonce = nonce
 
             try:
-                assert self._client is not None, "Client not initialized"
+                if self._client is None:
+                    raise RuntimeError("CIRISVerify client not initialized")
                 response = await self._client.get_license_status(
                     challenge_nonce=nonce,
                 )
@@ -217,7 +218,8 @@ class CIRISVerifyService:
                 )
 
         try:
-            assert self._client is not None, "Client not initialized"
+            if self._client is None:
+                raise RuntimeError("CIRISVerify client not initialized")
             return await self._client.check_capability(capability)
         except Exception as e:
             logger.error("Capability check failed: %s", e)

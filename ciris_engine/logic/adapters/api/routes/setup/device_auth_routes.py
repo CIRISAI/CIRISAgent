@@ -313,20 +313,34 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
     # Validate URL is from trusted Portal domains and paths only (security: prevent SSRF)
     # ALLOWED_PORTAL_HOSTS is imported from device_auth module
     ALLOWED_PATH_PREFIXES = ("/api/", "/v1/")  # Only allow API endpoints
-    parsed_url = urlparse(req.package_download_url)
-    if parsed_url.hostname not in ALLOWED_PORTAL_HOSTS:
+
+    def _validate_and_reconstruct(raw_url: str) -> str:
+        """Validate raw_url against the allowlists and return a URL reconstructed
+        from validated components. Reconstruction is what closes the SSRF loop —
+        validating components of the parsed URL but then requesting the original
+        string lets parser-disagreement bugs (CVE-2023-24329-class) bypass the
+        check. Raises ValueError on rejection.
+        """
+        p = urlparse(raw_url)
+        if p.scheme not in ("https", "http"):
+            raise ValueError(f"scheme '{p.scheme}' not allowed")
+        host = (p.hostname or "").lower()
+        if host not in ALLOWED_PORTAL_HOSTS:
+            raise ValueError(f"host '{host}' not in allowed Portal domains")
+        if p.scheme == "http" and host not in ("localhost", "127.0.0.1"):
+            raise ValueError("http only allowed for localhost")
+        if not any(p.path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES):
+            raise ValueError("path must start with /api/ or /v1/")
+        # Reconstruct from validated parts; preserve port + path + query, drop fragment + userinfo.
+        netloc = host if p.port is None else f"{host}:{p.port}"
+        suffix = f"?{p.query}" if p.query else ""
+        return f"{p.scheme}://{netloc}{p.path}{suffix}"
+
+    try:
+        safe_download_url = _validate_and_reconstruct(req.package_download_url)
+    except ValueError as e:
         return SuccessResponse(
-            data=DownloadPackageResponse(
-                status="error",
-                error=f"Invalid package URL: host '{parsed_url.hostname}' not in allowed Portal domains",
-            )
-        )
-    if not any(parsed_url.path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES):
-        return SuccessResponse(
-            data=DownloadPackageResponse(
-                status="error",
-                error="Invalid package URL: path must start with /api/ or /v1/",
-            )
+            data=DownloadPackageResponse(status="error", error=f"Invalid package URL: {e}"),
         )
 
     try:
@@ -338,21 +352,21 @@ async def download_package(req: DownloadPackageRequest) -> SuccessResponse[Downl
             if req.portal_session_cookie:
                 headers["Cookie"] = req.portal_session_cookie
 
-            dl_resp = await client.get(req.package_download_url, headers=headers)
+            dl_resp = await client.get(safe_download_url, headers=headers)
 
             # Handle redirects manually with validation
             if dl_resp.status_code in (301, 302, 303, 307, 308):
                 redirect_url = dl_resp.headers.get("location", "")
-                redirect_parsed = urlparse(redirect_url)
-                if redirect_parsed.hostname not in ALLOWED_PORTAL_HOSTS:
+                try:
+                    safe_redirect_url = _validate_and_reconstruct(redirect_url)
+                except ValueError as e:
                     return SuccessResponse(
                         data=DownloadPackageResponse(
                             status="error",
-                            error=f"Redirect to untrusted host '{redirect_parsed.hostname}' blocked",
+                            error=f"Redirect blocked: {e}",
                         )
                     )
-                # Follow the redirect to the validated URL
-                dl_resp = await client.get(redirect_url, headers=headers)
+                dl_resp = await client.get(safe_redirect_url, headers=headers)
             dl_resp.raise_for_status()
 
         # Get checksum from response header

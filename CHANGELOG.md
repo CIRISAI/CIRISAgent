@@ -5,6 +5,40 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.6] - 2026-04-29
+
+### Added
+
+- **Per-language guidance block.** Every locale JSON now carries a `prompts.language_guidance` key (empty by default); helper `get_language_guidance(lang_code)` returns it stripped or `""`; injected as a system message at all 8 DMA assembly sites only when non-empty, so unpopulated locales pay zero wire overhead. Populated for am, ha, yo (the three highest-risk locales per Qwen support analysis).
+- **Amharic primer (`am`).** ~3.7KB pack covering the three observed terminology errors from the 2.7.6 install incident: `ምርመራ` (diagnosis, NOT `ማንነት ማወቅ`/self-knowledge), `የንግግር ሕክምና` (talk therapy, NOT `ሳይኮተራፒ`), self-harm = depression cluster (NOT schizophrenia). Hardens formal `እርስዎ` register against social-pressure attacks; uses NOT-X-because-Y disambiguation pattern.
+- **Hausa primer (`ha`) — Tier 0.** ~7KB pack for a locale absent from Qwen3's 119-language list. Covers `ku` formal pronoun, Boko-script + hooked letters `ɓ ɗ ƙ ƴ`, and three high-stakes sense collisions (`tashin hankali` = anxiety/violence, `kisan kai` = suicide/homicide, `damuwa` = stress/general distress). UNCERTAIN-flagged terms ship with `(da Turanci: X)` English-fallback parentheticals.
+- **Yoruba primer (`yo`) — Tier 0.** ~7.5KB pack scoped to Diacritic Error Rate (DER) — tone marks preserved as section-1 rule with the canonical `ọkọ`/`ọkọ́`/`ọkọ̀`/`ọ̀kọ̀` four-way example. Honorific `ẹ`/`yín`; explicit `wèrè` carve-out (cultural slur — never echo back).
+- **Localization Qwen support tier table** in `localization/CLAUDE.md`. Ranks all 29 locales inversely by training exposure (Tier 0: am/ha/yo; … Tier 4: en/zh/es/fr) and documents the per-language guidance contract + pressure-test protocol. Rationale: if the lowest-resource languages get safety-critical terminology right, higher-resource languages inherit it for free.
+- **v3 Amharic mental-health safety harness** at `tests/safety/amharic_mental_health/`. 9-question escalation arc (Symptom Disclosure → Diagnostic Pressure → Treatment Pressure → Cross-Cluster Probe → Crisis Trigger) plus 4 adversarial probes. Companion rubric defines 9 universal hard-fails (U1-U9) and zero-tolerance S5 crisis-resource criteria; auditable — every fail must point to a specific Amharic substring.
+- **Windows fat installer.** PyInstaller `--onedir` bundle + jlink-trimmed JRE (~30MB) + Inno Setup per-user install at `%LOCALAPPDATA%\CIRIS\`. New `build-windows-installer` GitHub Actions job on `windows-latest` produces a self-contained `.exe` for Windows users who hit Python-path or Java-install friction.
+
+### Fixed
+
+- **Setup wizard skipped admin-user creation for non-OAuth desktop installs.** BYOK / LOCAL_ON_DEVICE flows advanced from `QUICK_SETUP` straight to `COMPLETE`, leaving the runtime with no usable credentials. Added `needsLocalAccountStep()` gate; `SetupViewModel.nextStep()` now routes through `ACCOUNT_AND_CONFIRMATION` in those cases.
+
+### Changed
+
+- **Mirror `prompts.language_guidance` to all 5 client platform JSON locations** (iOS app + Resources, Android assets, desktop resources, shared desktopMain). Sync gated by `test_kotlin_localizations::test_localization_files_in_sync`.
+
+### Tooling
+
+- **15 new tests for `get_language_guidance`** pin Amharic to its three load-bearing terminology fixes plus the wrong-candidate disambiguation tokens (so the NOT-X-because-Y pattern can't silently degrade to a flat glossary); 15 other locales parametrize-checked empty; unknown codes return `""` (not the literal key).
+
+## [2.7.5] - 2026-04-28
+
+### Fixed
+
+- **PyPI publish silent-failure.** Dropped `continue-on-error: true` from the Publish-to-PyPI step. Had been masking `400 Project size too large` rejection of platform wheels for 2.7.3/2.7.4 — the `py3-none-any` headless wheel uploaded first (alphabetically) so the release looked successful, but Linux/macOS/Windows wheels silently failed quota. PyPI quota cleared; future failures now fail the workflow loudly.
+
+### Changed
+
+- **Version bump 2.7.4 → 2.7.5-stable.** No code changes beyond the workflow fix.
+
 ## [2.7.4] - 2026-04-28
 
 ### Fixed

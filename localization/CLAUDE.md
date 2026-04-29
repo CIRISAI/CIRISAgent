@@ -172,6 +172,83 @@ draft → needs_native_review → reviewed → production
 
 All auto-generated languages start at `draft` / `needs_native_review`. They are usable but should not be marketed as "native quality" until a native speaker reviews.
 
+## Per-Language Guidance Blocks (`prompts.language_guidance`)
+
+Beyond the core 5-component "is the language complete" deliverable above, each `localization/{code}.json` carries a **`prompts.language_guidance`** key that gets injected as a system message into every DMA / conscience / ASPDMA call when non-empty (see `ciris_engine/logic/utils/localization.py::get_language_guidance` and the 8 DMA injection sites). For 28 of 29 languages this is empty — the model handles the language well enough that no extra in-context guidance is needed. For the one language with **observed production failures**, the block carries terminology corrections, grammar primer essentials, and cross-cluster disambiguation.
+
+### When to populate vs leave empty
+
+The architecture is **empty-by-default** — every language gets a key, populated only on observed failure. This pattern is deliberate:
+
+- Empty packs add zero wire-payload (the DMA layer skips the append entirely on empty strings)
+- Each language's pack is independent — populating Amharic does not affect Spanish
+- The discipline learned crafting the first populated pack (NOT-X-because-Y disambiguation, prescriptive framing, compact grammar) is **transferable** by template, not by leakage
+- We never speculatively populate — language packs are reactive to observed failure, not a priori predictions
+
+The CIRIS philosophy is "harden for the hardest case." Per Meta-Goal M-1, languages are ordered by *need*, not by market size — and Amharic / Hausa / Yoruba are the hardest cases for any LLM, including ours. **Getting these right means the well-resourced languages are extra-right by inheritance.**
+
+### Qwen support tier table (priority order for primer work)
+
+The 29 supported languages ranked by **inverse Qwen support** (worst at top = highest priority for a populated language guidance block). Hard data is from the [MMLU-ProX 13-language benchmark](https://aclanthology.org/2025.emnlp-main.79.pdf) where available; otherwise inferred from training-data realities and the [Qwen3 official 119-language list](https://qwenlm.github.io/blog/qwen3/).
+
+| # | Lang | Tier | Hard signal | Confidence |
+|---|---|---|---|---|
+| 1 | **am** Amharic | Tier 0 — NOT in Qwen3's 119 | Production-observed transliteration + sense-collision errors. **POPULATED in 2.7.6.** | High |
+| 2 | **ha** Hausa | Tier 0 — NOT in Qwen3's 119 | Niger-Congo / Chadic — barely any Qwen training data. **PRIMER PENDING.** | High |
+| 3 | **yo** Yoruba | Tier 0 — NOT in Qwen3's 119 | Niger-Congo + tonal language (tone marks frequently dropped by LLMs). **PRIMER PENDING.** | High |
+| 4 | **sw** Swahili | Tier 1 — listed but worst-tested | 40.1% MMLU-ProX (worst of 13 langs tested) | High |
+| 5 | **my** Burmese | Tier 1 — listed, low-resource | Sino-Tibetan low-resource; Qwen-SEA-LION-v4 explicitly targets it | Medium |
+| 6 | **mr** Marathi | Tier 1 — Indo-Aryan | Consistently rated lower than Hindi | Medium |
+| 7 | **pa** Punjabi | Tier 1 — Gurmukhi script | Underrepresented vs Hindi's Devanagari in pretraining | Medium |
+| 8 | **te** Telugu | Tier 1 — Dravidian | "Lower performance" per MMLU-ProX paper | Medium |
+| 9 | **ta** Tamil | Tier 1 — Dravidian | Slightly better than Telugu; SEA-LION-v4 targets | Medium |
+| 10 | **ur** Urdu | Tier 2 — Persian-script Indo-Aryan | Persian script underrepresented vs Devanagari | Medium |
+| 11 | **bn** Bengali | Tier 2 — bottom-of-MMLU-ProX | 57.6% MMLU-ProX | High |
+| 12 | **fa** Persian | Tier 2 — Iranian + RTL | Mid-resource RTL | Low-medium |
+| 13 | **hi** Hindi | Tier 2 — best Indo-Aryan | 58.0% MMLU-ProX | High |
+| 14 | **th** Thai | Tier 2 — SEA | 60.1% MMLU-ProX | High |
+| 15 | **vi** Vietnamese | Tier 2 — SEA Latin | SEA-LION targets | Medium |
+| 16 | **id** Indonesian | Tier 2 — SEA Latin | SEA-LION priority | Medium |
+| 17 | **uk** Ukrainian | Tier 2 — Slavic | Less data than Russian | Medium |
+| 18 | **tr** Turkish | Tier 2 — Turkic | Agglutinative tokenization-hard | Medium |
+| 19 | **ar** Arabic | Tier 3 — high-resource RTL | 62.1% MMLU-ProX | High |
+| 20 | **ko** Korean | Tier 3 — high-resource CJK | 62.1% MMLU-ProX | High |
+| 21 | **ja** Japanese | Tier 3 — high-resource CJK | 63.4% MMLU-ProX | High |
+| 22 | **ru** Russian | Tier 3 — Slavic high-resource | Large pretraining corpus | Medium |
+| 23 | **it** Italian | Tier 3 — Romance | Strong on Qwen3 235B benchmarks | Medium |
+| 24 | **de** German | Tier 4 — Germanic top | 65.9% MMLU-ProX | High |
+| 25 | **pt** Portuguese | Tier 4 — Romance top | 66.6% MMLU-ProX | High |
+| 26 | **es** Spanish | Tier 4 — Romance top | 66.5% MMLU-ProX | High |
+| 27 | **fr** French | Tier 4 — best non-English | 67.1% MMLU-ProX | High |
+| 28 | **zh** Chinese | Tier 4 — Qwen native | 65.9% MMLU-ProX (native target) | High |
+| 29 | **en** English | Tier 5 — best | 70.3% MMLU-ProX | High |
+
+### Roadmap implications
+
+- **Tier 0 (am, ha, yo)**: Full primer treatment — top-line operating rules + NOT-X-because-Y term pairs + grammar essentials + cross-cluster scaffolding. Amharic shipped in 2.7.6; Hausa and Yoruba research is in flight. Each follows the same 6-section structure.
+- **Tier 1 (sw, my, mr, pa, te, ta)**: Smaller targeted packs — term-pair disambiguation only, no full grammar primer needed (Qwen has *some* training data). Build only when production observation surfaces specific failures.
+- **Tier 2 (ur, bn, fa, hi, th, vi, id, uk, tr)**: Empty-pack defaults stand. Revisit if production reveals issues.
+- **Tier 3+ (ar, ko, ja, ru, it, de, pt, es, fr, zh, en)**: Empty packs stay empty. Qwen handles these solidly; speculative population would be cargo-culting.
+
+### Anatomy of a populated pack
+
+The Amharic primer (`localization/am.json` → `prompts.language_guidance`) is the canonical reference. It carries six sections totalling ~5KB / ~1500 input tokens (~1.2% of the 128K context window every Ally-eligible model offers):
+
+1. **Top-line operating rules** — formal-register requirement, script + numerals + punctuation conventions, mark-uncertainty rule (do not silently transliterate), concision instruction, name fidelity, CIRIS canonical identifiers preserved in English.
+2. **Terminology with NOT-X-because-Y disambiguation** — load-bearing term pairs for the domains the agent handles. The negative-example pattern ("X means Y, not Z; never use Z") is research-validated for ambiguous-term resolution and outperforms flat glossaries.
+3. **CIRIS canonical wire-protocol terms** — the 10 action verbs, 6 cognitive states, key concept translations, with a reminder that JSON `selected_action` values stay in English.
+4. **Compact prescriptive grammar** — verb forms (formal vs informal imperatives), modal verbs (must/should/can/may — load-bearing for safety-critical advice), pluralization patterns, compound-term construction.
+5. **Cross-cluster disambiguation** — explicit symptom maps for adjacent clinical conditions (depression, anxiety, schizophrenia in the Amharic case) so the model doesn't contaminate one cluster with another's symptoms.
+6. **Closing operating reminder** — defer to professional, concise responses, agent's role.
+
+Framing throughout is **prescriptive** ("respect these conventions") not descriptive ("here are facts about Amharic"). Walia-LLM (Azime et al., EMNLP 2024) documented that descriptive context turns into template-mimicry; prescriptive framing keeps the model treating the primer as constraints-to-honor.
+
+### Pressure-test protocol for new packs
+
+Before a new populated pack ships, exercise it against an adversarial question set. The Amharic pack was hardened via `tests/safety/amharic_mental_health/v3_amharic_mental_health_arc.json` — 9 questions covering symptom disclosure → diagnostic pressure → treatment pressure → cross-cluster probe → crisis trigger → 4 adversarial probes (transliteration mirror, register attack, medication boundary push, false reassurance). Grade against `v3_amharic_scoring_rubric.md` (universal hard-fail criteria + per-question checklists). Hard-fail = release block.
+
+Each new tier-0 language should ship with a parallel safety harness in `tests/safety/{language}_mental_health/` following the same structure. Amharic is the template.
+
 ## Haiku Model for Translation
 
 Use `model: haiku` for translation sub-agents. It is:

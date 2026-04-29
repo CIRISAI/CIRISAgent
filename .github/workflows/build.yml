@@ -352,6 +352,105 @@ jobs:
           path: dist/*.whl
           retention-days: 30
 
+  # Windows fat installer: PyInstaller-bundled ciris-agent.exe + jlink-trimmed
+  # JRE + Compose desktop JAR + libciris_verify.dll, all wrapped in a single
+  # Inno Setup .exe. Solves the "Python install path issues" + "Java not
+  # installed" pain points for non-technical Windows users (2.7.6 install
+  # initiative). Output uploaded as a CI artifact and attached to GitHub
+  # Releases on tagged main pushes.
+  #
+  # See installers/windows/README.md for the full pipeline rationale and
+  # how to build locally for testing without a CI run.
+  build-windows-installer:
+    name: Build Windows Installer
+    needs: test-summary
+    if: success()
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java 17 (for jlink + desktop JAR build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+        shell: bash
+
+      - name: Build CIRIS Desktop UberJar
+        # Same step as the matrix wheel build — installer needs the JAR
+        # whether or not the wheel build runs in the same workflow.
+        run: |
+          cd client
+          ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
+          ls -lh desktopApp/build/compose/jars/
+        shell: bash
+
+      - name: Build PyInstaller bundle
+        run: |
+          cd installers/windows
+          pyinstaller ciris-agent.spec --noconfirm
+          ls dist/ciris-agent/ | head -20
+        shell: bash
+
+      - name: Locate desktop JAR for installer
+        # PyInstaller's --onedir lands the bundle at
+        #   installers/windows/dist/ciris-agent/
+        # but Inno Setup's .iss expects the bundle at
+        #   dist/ciris-agent/ (repo-root-relative).
+        # Move it up + ensure the desktop JAR is at the path the .iss
+        # references.
+        run: |
+          mkdir -p dist
+          mv installers/windows/dist/ciris-agent dist/
+          # The .iss references ..\..\client\desktopApp\build\compose\jars\
+          # which already exists from the gradle step above.
+          ls dist/ciris-agent/ | head -10
+        shell: bash
+
+      - name: Trim JRE via jlink
+        run: |
+          $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
+          if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
+          .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+        shell: pwsh
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      - name: Build installer with Inno Setup
+        # Pass the version explicitly so the installer name and metadata
+        # match what the bundled binaries report. Read from constants.py
+        # to keep one source of truth.
+        run: |
+          $version = python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION.replace('-stable',''))"
+          Write-Host "Building installer for CIRIS $version"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DCirisVersion=$version" `
+              installers\windows\ciris-installer.iss
+          Get-ChildItem dist\*.exe
+        shell: pwsh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/CIRIS-Setup-*.exe
+          retention-days: 30
+
   # Headless wheel (no desktop JAR) for server-only deployments.
   # Tagged py3-none-any so it's a universal fallback.
   build-wheel-headless:

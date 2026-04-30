@@ -32,10 +32,51 @@ Live evidence from a 2026-04-30 wakeup thought
 | **Recursive conscience** — re-validation per retry | Up to 5 `RECURSIVE_CONSCIENCE` events | Final result only |
 | **Verb-specific second pass** (TSASPDMA today; see §4 for generalization) | Per-verb second-pass result | Stored as a separate per-verb event type per verb (asymmetric — DSASPDMA has NO event today) |
 | **PERFORM_ASPDMA retry-with-remediation** (`llm_service/service.py`, 2.7.4) | Up to 3 internal LLM retries on parsing failures | Aggregated cost only; failure reasons silent |
+| **Individual LLM calls** (every DMA / ASPDMA / conscience / verb-second-pass step issues 1+ LLM calls) | Per-call request: model, base_url, prompt content + token count, response text + token count, wall duration, status (ok/timeout/rate-limited/instructor-retry), `extra_body` (e.g. thinking-mode flag) | **Aggregated only** as `llm_calls` / `tokens` / `cost_usd` summed at thought level. Per-call duration, prompt size, completion size, and error class are invisible. |
 
 The cost columns (`llm_calls`, `tokens_used`, `cost_usd`) survive because they
 sum across events. This is why `llm_calls=13` is currently the only fingerprint
 of an override-and-retry journey: cost is summed, content is overwritten.
+
+The per-LLM-call lossage is the most expensive: every individual call to
+`google/gemma-4-31B-it` or `meta-llama/llama-4-scout` carries its own latency
+distribution, prompt size distribution, and failure modes. Aggregates flatten a
+13-call journey where one call took 400s and twelve took 10ms each into
+indistinguishable from a 13-call journey of 30s × 13 evenly distributed —
+which has very different operational meaning (one slow upstream vs. structural
+load). The agent already has the per-call data — the live-debug
+`CIRIS_LLM_CAPTURE_HANDLER` / `CIRIS_LLM_CAPTURE_FILE` env-var path
+(`tools/qa_runner/server.py`) shows we can serialize it; we just don't ship
+it through the trace adapter.
+
+**Concrete example: Spanish Mental Health timeout (2026-04-30, thought
+`th_seed_af724b5d_338cffac-b94`, channel `model_eval_es_06`).**
+Cell hit `httpx.ReadTimeout` at 600s wall clock. Investigation against
+`logs/sqlite/ciris_agent_20260430_141007.log.1` and the
+`service_correlations` table:
+
+| Attempt | Component | Duration | Status |
+|--------:|-----------|---------:|--------|
+| 1 | EthicalPDMA | **90.0s** | **TIMEOUT** |
+| 1 | CSDMA       | 69.8s    | OK (score 1.00) |
+| 1 | DSDMA       | 45.6s    | OK (score 0.00) |
+| 2 | EthicalPDMA | **90.0s** | **TIMEOUT** |
+| 2 | DSDMA       | 45.6s    | OK (score 0.00) |
+| 3 | EthicalPDMA | **150+s** | **TIMEOUT (unbounded)** |
+
+This is qualitatively different from the Chinese History case (a conscience
+override loop). Here the agent fired three EthicalPDMA calls, each hung at the
+90s LLM service timeout, and the third blew through the 600s wall before any
+conscience pass even ran. **Conscience activity for this thought: zero — PDMA
+never produced a result for it to evaluate.** Same model, same prompt size
+(~32,666 chars), same backend; the question content alone triggered an
+upstream slowdown.
+
+Today's lens shape would record this as `llm_calls=6` (or wherever the cost
+counter landed before the timeout) with no information about where the time
+went, why three calls timed out, what the prompt was, or that the same DMA
+hung three times in a row. With per-call rows (§5.2), the diagnosis above
+becomes a one-query lookup.
 
 ## 3. Design principle
 
@@ -152,7 +193,103 @@ CREATE INDEX trace_events_journey ON trace_events (thought_id, ts);
 - Lens write logic: `attempt_index = (max attempt_index for this (thought_id,
   step_point) so far) + 1`, atomic per-thought. No upsert; pure append.
 
-### 5.2 Derived summary view
+### 5.2 Per-LLM-call persistence (sibling table)
+
+Pipeline events answer "what did the agent decide at step X attempt Y." LLM
+calls are the level below — the actual provider invocations those events made
+under the hood. Every DMA, ASPDMA, conscience, verb-second-pass, and recursive
+retry issues 1+ LLM calls; preserving per-call latency, prompt size, completion
+size, and error class is required to debug tail-latency, attribute cost, or
+tell "one slow upstream call" apart from "thirteen normal calls" when the
+aggregate is identical.
+
+```sql
+CREATE TABLE trace_llm_calls (
+  call_id              BIGSERIAL PRIMARY KEY,
+  trace_id             TEXT NOT NULL,
+  thought_id           TEXT NOT NULL,
+  task_id              TEXT NOT NULL,
+  parent_event_id      BIGINT REFERENCES trace_events(event_id),
+                                          -- the broadcast event whose handler issued this call
+  parent_step_point    TEXT NOT NULL,     -- denormalized for filter-without-join
+  parent_attempt_index INT NOT NULL,
+  call_index           INT NOT NULL,      -- monotonic per (thought_id, parent_event_id)
+  ts_start             TIMESTAMPTZ NOT NULL,
+  ts_end               TIMESTAMPTZ NOT NULL,
+  duration_ms          INT NOT NULL,      -- ts_end - ts_start, denormalized for fast queries
+  model                TEXT NOT NULL,     -- e.g. "google/gemma-4-31B-it"
+  base_url             TEXT NOT NULL,     -- e.g. "https://api.together.xyz/v1"
+  response_model       TEXT,              -- pydantic model used by instructor
+                                          -- e.g. "ASPDMALLMResult", "EthicalDMAResult"
+  prompt_tokens        INT,               -- input size (provider-reported)
+  completion_tokens    INT,               -- output size (provider-reported)
+  prompt_bytes         INT,               -- raw byte count (sanity vs. token count)
+  completion_bytes     INT,
+  cost_usd             NUMERIC(12,8),
+  status               TEXT NOT NULL,     -- 'ok' | 'instructor_retry' | 'rate_limited'
+                                          -- | 'timeout' | 'model_not_available' | 'other_error'
+  error_class          TEXT,              -- e.g. "InstructorRetryException", "ReadTimeout"
+  attempt_count        INT NOT NULL,      -- 1 = first try; 2+ = instructor re-prompted on parse failure
+  extra_body           JSONB,             -- e.g. {"chat_template_kwargs": {"enable_thinking": false}}
+  prompt_hash          TEXT,              -- SHA-256 of prompt for dedup analysis (lightweight)
+  prompt               TEXT,              -- FULL trace level only — see §6 + §11 PII
+  response_text        TEXT,              -- FULL trace level only
+  signature            TEXT,
+  signing_key_id       TEXT
+);
+
+CREATE INDEX trace_llm_calls_thought ON trace_llm_calls (thought_id, ts_start);
+CREATE INDEX trace_llm_calls_parent  ON trace_llm_calls (parent_event_id);
+CREATE INDEX trace_llm_calls_model   ON trace_llm_calls (model, ts_start);
+CREATE INDEX trace_llm_calls_status  ON trace_llm_calls (status, ts_start)
+  WHERE status != 'ok';
+```
+
+**Source of truth in code**: per-call data is captured at three observation
+points today, all of which the trace adapter could subscribe to without new
+agent-side instrumentation:
+
+1. `ciris_engine/logic/services/runtime/llm_service/service.py` — issues
+   every call through a single path that logs `[LLM_REQUEST]` (with model,
+   base_url, response_model, msg_count, thought_id, extra_body) and
+   `Instructor call completed in Xs` on return. Knows the resolved prompt,
+   the parsed completion, and the instructor retry count.
+2. `ciris_engine/logic/buses/llm_bus.py` — emits `[LLM-TIMING]` lines with
+   per-call duration tagged to the calling handler name (`EthicalPDMA`,
+   `CSDMA`, `DSDMA`, `ASPDMA`, …). This is where the per-handler attribution
+   happens.
+3. `service_correlations` SQLite table — already persists `request_data` /
+   `response_data` per LLM call with start/end timestamps and the calling
+   handler, keyed by `thought_id`. The trace adapter could read this table
+   directly for replay or subscribe to its write path.
+
+The existing `CIRIS_LLM_CAPTURE_HANDLER` / `CIRIS_LLM_CAPTURE_FILE` env-var
+path (used in production by `tools/qa_runner/server.py`) writes per-call
+JSONL with exactly the fields above for offline analysis. The persistence
+path can reuse that same capture point — the data is already structured, it
+just needs to be handed to the trace adapter rather than (or in addition
+to) the local JSONL file.
+
+**Why a sibling table, not a nested array in `trace_events.payload`**:
+- A 13-call thought becomes 13 queryable rows, not one jsonb blob to
+  unpack at query time. Tail-latency / cost / failure-rate queries become
+  trivial SQL.
+- Per-call signing is granular and independent — tampering with one call's
+  detail doesn't invalidate the parent event row.
+- Storage tiering: full prompt / response_text dwell at FULL trace level
+  only, but the cheap rows (duration_ms, sizes, status) are kept at all
+  trace levels for cost / latency monitoring.
+- LLM calls have their own partition key (`(model, ts_start)`) for
+  per-provider load analysis without touching the pipeline event table.
+
+**Trace-level gating** mirrors the existing `accord_metrics` levels (generic
+/ detailed / full_traces). At GENERIC level, only the metadata columns
+populate (no `prompt`, no `response_text`, no `prompt_hash`). At DETAILED,
+add `prompt_hash` (allows dedup analysis without leaking content). At FULL,
+add `prompt` and `response_text`. Same envelope as `_to_event_data` builders
+in `accord_metrics/services.py:1712-1767` already use.
+
+### 5.3 Derived summary view
 
 Existing tools that consume one-row-per-thought continue to work via:
 
@@ -167,10 +304,17 @@ SELECT
   (SELECT payload->>'final_action' FROM trace_events e2
     WHERE e2.thought_id = e.thought_id AND e2.step_point = 'finalize_action'
     ORDER BY ts DESC LIMIT 1) AS final_action,
-  -- aggregate cost
-  SUM(cost_llm_calls) AS llm_calls,
-  SUM(cost_tokens) AS tokens,
-  SUM(cost_usd) AS cost_usd,
+  -- aggregate cost — pulled from trace_llm_calls (per-call source of truth)
+  -- so this never drifts from individual call records
+  (SELECT COUNT(*) FROM trace_llm_calls c WHERE c.thought_id = e.thought_id) AS llm_calls,
+  (SELECT SUM(c.prompt_tokens + c.completion_tokens) FROM trace_llm_calls c
+    WHERE c.thought_id = e.thought_id) AS tokens,
+  (SELECT SUM(c.cost_usd) FROM trace_llm_calls c WHERE c.thought_id = e.thought_id) AS cost_usd,
+  -- p99 / max LLM call duration: lets a query distinguish "13 fast calls" from
+  -- "12 fast + 1 hung" without scanning the per-call table directly
+  (SELECT MAX(c.duration_ms) FROM trace_llm_calls c WHERE c.thought_id = e.thought_id) AS max_call_ms,
+  (SELECT COUNT(*) FROM trace_llm_calls c
+    WHERE c.thought_id = e.thought_id AND c.status != 'ok') AS llm_call_errors,
   -- override fingerprint: count of conscience_execution + recursive_conscience events
   COUNT(*) FILTER (WHERE step_point IN ('conscience_execution', 'recursive_conscience')) AS conscience_attempts,
   COUNT(*) FILTER (WHERE step_point IN ('conscience_execution', 'recursive_conscience')
@@ -249,8 +393,8 @@ without re-signing the whole thought.
 
 | Phase | Owner | Gate |
 |-------|-------|------|
-| 0 | Agent team — add `attempt_index` to event_data builders, wire DSASPDMA broadcast, generalize TSASPDMA→verb_second_pass | Adapter still ships old events; lens accepts both |
-| 1 | Lens team — create `trace_events` table + dual-write ingestion + summary view | Old dashboards keep working; new event-log queries available for spot checks |
+| 0 | Agent team — add `attempt_index` to event_data builders, wire DSASPDMA broadcast, generalize TSASPDMA→verb_second_pass, ship per-LLM-call records (subscribe trace adapter to the existing `service_correlations` write path or `[LLM-TIMING]` hook in `llm_bus.py`) | Adapter still ships old events; lens accepts both |
+| 1 | Lens team — create `trace_events` + `trace_llm_calls` tables, dual-write ingestion + summary view | Old dashboards keep working; new event-log queries available for spot checks |
 | 2 | Lens team — switch primary ingestion to event-log; old per-thought writer becomes derived view materialization | Dashboards now read from view; query parity verified |
 | 3 | Agent team — emit `schema_version=v2.8.0` once all in-flight agents are upgraded | Drop v2_7_0 ingestion mapping after rolling-deploy window closes |
 

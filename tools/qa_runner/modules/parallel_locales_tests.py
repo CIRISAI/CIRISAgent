@@ -139,8 +139,13 @@ class ParallelLocalesTests:
         client: Any,
         console: Console,
         max_concurrency: int = 29,
-        response_timeout: float = 180.0,
+        response_timeout: float = 600.0,
     ):
+        # response_timeout matches the agent's CIRIS_API_INTERACTION_TIMEOUT
+        # (raised to 600s by the qa_runner for this module). 29-way parallel
+        # × 12 LLM calls × pipeline serial steps means even mock-LLM runs
+        # routinely take 3-5 min per channel. Anything tighter has the
+        # client giving up before the agent can deliver.
         self.client = client
         self.console = console
         # Default concurrency = number of locales: the whole point of this

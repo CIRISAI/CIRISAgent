@@ -713,26 +713,46 @@ class APIServerManager:
             env["CIRIS_FORCE_FIRST_RUN"] = "1"
             self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for wiped data[/dim]")
 
-        # model_eval fires all (questions × languages) tasks in parallel against unique
-        # channels. Disable task-append coalescing so any stray cross-channel collision
-        # (system channel bootstraps, identical channel IDs across retries) doesn't
-        # silently merge submissions into a single task.
-        if any(m == QAModule.MODEL_EVAL for m in self.modules):
+        # model_eval and parallel_locales BOTH fire concurrent submissions against
+        # unique per-channel routes. Disable task-append coalescing so any stray
+        # cross-channel collision doesn't silently merge submissions into a
+        # single task. Raise the per-IP rate limit because all 29 (or N×N)
+        # concurrent requests come from 127.0.0.1 in the test runner, but in
+        # production those would be N different phones with N different IPs.
+        # Raise the interact response timeout because each request fans out
+        # through the full DMA + conscience pipeline (~12 LLM calls).
+        if any(m in (QAModule.MODEL_EVAL, QAModule.PARALLEL_LOCALES) for m in self.modules):
             env["CIRIS_DISABLE_TASK_APPEND"] = "1"
-            self.console.print("[dim]Setting CIRIS_DISABLE_TASK_APPEND=1 for MODEL_EVAL module[/dim]")
-            # model_eval fires a burst of concurrent submissions; the default
-            # 60 req/min API rate limit 429s most of them. Raise to 600/min
-            # (10/s) so the bursts land while the LLM bus's own FIFO gate
-            # still backpressures downstream.
+            # Default 60 req/min rate-limit 429s most of the parallel burst.
+            # 600/min (10/s) accommodates 29-way and (questions × languages)
+            # bursts while the LLM bus's FIFO gate still backpressures
+            # downstream — this is a localhost-IP artifact, not a deployment
+            # config change. Production deployments serve different users from
+            # different IPs and don't hit this rate limit.
             env.setdefault("CIRIS_API_RATE_LIMIT_PER_MINUTE", "600")
-            # The /v1/agent/interact endpoint defaults to a 55s response
-            # timeout. Live-LLM multilingual DMA chains with conscience
-            # checks routinely run 2-5 min, so the default causes the
-            # server to return synthetic timeout responses. Raise to 600s.
+            # Default 55s interact timeout truncates DMA+conscience chains
+            # (routinely 2-5 min on live LLM). Raise to 600s.
             env.setdefault("CIRIS_API_INTERACTION_TIMEOUT", "600")
+            # The LLM bus defaults to 4 in-flight calls per service to avoid
+            # provider rate limits for a single user. Each channel in this
+            # test fans out ~12 LLM calls through the DMA+conscience pipeline,
+            # so 29 parallel channels = ~348 calls queued behind a 4-deep
+            # bottleneck (per-channel latency unbounded as queue grows).
+            # Raise to 32 — enough to sustain 29-way fan-out without losing
+            # the per-provider safety the gate provides. This is a deployment
+            # config knob, not a pipeline-depth override; pipeline behavior
+            # per channel is identical to a phone deployment.
+            env.setdefault("CIRIS_LLM_MAX_CONCURRENT", "32")
+            module_label = (
+                "MODEL_EVAL"
+                if any(m == QAModule.MODEL_EVAL for m in self.modules)
+                else "PARALLEL_LOCALES"
+            )
             self.console.print(
-                "[dim]Setting CIRIS_API_RATE_LIMIT_PER_MINUTE=600 and "
-                "CIRIS_API_INTERACTION_TIMEOUT=600 for MODEL_EVAL module[/dim]"
+                f"[dim]Setting CIRIS_DISABLE_TASK_APPEND=1, "
+                f"CIRIS_API_RATE_LIMIT_PER_MINUTE=600, "
+                f"CIRIS_API_INTERACTION_TIMEOUT=600, "
+                f"CIRIS_LLM_MAX_CONCURRENT=32 for {module_label} module[/dim]"
             )
 
         # Set backend-specific log directory to avoid symlink collisions

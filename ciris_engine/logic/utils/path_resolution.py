@@ -68,27 +68,42 @@ ALLOWED_PATH_EXCEPTIONS = frozenset(
 # Context string for CIRIS_HOME validation errors
 CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
 
-# Allowlist of valid ISO 639-1 language codes supported by CIRIS
-# This is the ONLY source of truth for valid language codes - user input MUST match
+# Allowlist of valid ISO 639-1 language codes supported by CIRIS.
+# This is the ONLY source of truth for valid language codes - user input MUST match.
+# Mirrors localization/manifest.json — 29 locales total. Adding a locale here
+# without adding the corresponding localization/<code>.json file will surface
+# as missing-prompt errors at agent startup.
 SUPPORTED_LANGUAGE_CODES = frozenset(
     {
         "am",  # Amharic
-        "ar",  # Arabic
+        "ar",  # Arabic (RTL)
         "bn",  # Bengali
         "de",  # German
-        "en",  # English
+        "en",  # English (base)
         "es",  # Spanish
+        "fa",  # Persian (RTL)
         "fr",  # French
+        "ha",  # Hausa
         "hi",  # Hindi
+        "id",  # Indonesian
         "it",  # Italian
         "ja",  # Japanese
         "ko",  # Korean
+        "mr",  # Marathi
+        "my",  # Burmese
+        "pa",  # Punjabi
         "pt",  # Portuguese
         "ru",  # Russian
         "sw",  # Swahili
+        "ta",  # Tamil
+        "te",  # Telugu
+        "th",  # Thai
         "tr",  # Turkish
-        "ur",  # Urdu
-        "zh",  # Chinese
+        "uk",  # Ukrainian
+        "ur",  # Urdu (RTL)
+        "vi",  # Vietnamese
+        "yo",  # Yoruba
+        "zh",  # Chinese (Simplified)
     }
 )
 

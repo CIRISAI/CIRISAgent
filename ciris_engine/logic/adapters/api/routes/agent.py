@@ -319,15 +319,51 @@ async def _create_interaction_message(
     additional_content = await _process_request_documents(body)
     final_content = body.message + additional_content
 
-    # Look up user's display name (oauth_name) for author_name
-    # Falls back to user_id if not available
+    # Look up user's display name for author_name. Priority:
+    #   1. user_preferred_name (set via PUT /v1/users/me/settings — explicit display preference)
+    #   2. oauth_name (from OAuth provider)
+    #   3. name (auth username, e.g. "jeff" for QA admin)
+    #   4. user_id (final fallback)
+    #
+    # Why user_preferred_name beats name: the auth username is an opaque
+    # identifier (often ASCII-only, often hardcoded for QA), while
+    # user_preferred_name is the user's chosen display name (Unicode-safe,
+    # culturally appropriate). For multilingual / multi-locale agents,
+    # using the username instead of the display name causes the agent to
+    # address users by an inappropriate identifier — e.g. addressing a
+    # Yoruba user as "jeff" instead of "Tèmítọ́pẹ́".
     author_name = auth.user_id
     auth_service = getattr(request.app.state, "auth_service", None)
-    if auth_service and hasattr(auth_service, "get_user"):
+    memory_service = getattr(request.app.state, "memory_service", None)
+
+    # Tier 1: user_preferred_name from the user's graph node (best-effort).
+    if memory_service:
+        try:
+            from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+            from ciris_engine.schemas.services.operations import MemoryQuery
+
+            user_results = await memory_service.recall(
+                MemoryQuery(
+                    node_id=f"user/{auth.user_id}",
+                    scope=GraphScope.LOCAL,
+                    type=NodeType.USER,
+                    include_edges=False,
+                    depth=1,
+                )
+            )
+            if user_results:
+                attrs = user_results[0].attributes if isinstance(user_results[0].attributes, dict) else {}
+                preferred = attrs.get("user_preferred_name")
+                if isinstance(preferred, str) and preferred.strip():
+                    author_name = preferred.strip()
+        except Exception:
+            pass  # Fall through to auth-service lookup
+
+    # Tier 2-4: oauth_name → name → user_id (only if user_preferred_name didn't resolve).
+    if author_name == auth.user_id and auth_service and hasattr(auth_service, "get_user"):
         try:
             user = auth_service.get_user(auth.user_id)
             if user:
-                # Prefer oauth_name, then name, then fall back to user_id
                 author_name = getattr(user, "oauth_name", None) or getattr(user, "name", None) or auth.user_id
         except Exception:
             pass  # Keep default author_name on lookup failure

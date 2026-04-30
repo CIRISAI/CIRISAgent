@@ -41,6 +41,16 @@ class StreamingVerificationModule:
     # Optional events that may be emitted depending on action type
     OPTIONAL_EVENTS = {
         "tsaspdma_result",  # v1.9.3: Only emitted when ASPDMA selects TOOL action
+        "llm_call",  # v2.7.8: Per-provider-call observation (FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+                     # §5.2). Multiple llm_call events per thought is BY DESIGN — every DMA /
+                     # ASPDMA / conscience handler issues 1+ LLM calls and each is its own event.
+                     # The duplicate-detection logic below skips this event type accordingly.
+    }
+
+    # Event types where multiple events per thought is expected and correct, not a bug.
+    # Each entry here is a sub-pipeline event whose entire point is per-call observability.
+    MULTI_EMIT_EVENTS = {
+        "llm_call",  # one event per LLM invocation; ~5-15 calls per thought is normal
     }
 
     @staticmethod
@@ -136,24 +146,30 @@ class StreamingVerificationModule:
                                     unexpected_events.add(event_type)
 
                                 # Track duplicates: (thought_id, event_type)
-                                # Allow duplicates if is_recursive=True (legitimate recursive processing)
+                                # Multi-emit events (llm_call) and recursive events legitimately
+                                # produce multiple rows per (thought_id, event_type) — see
+                                # MULTI_EMIT_EVENTS for the explicit list.
                                 thought_id = event.get("thought_id")
                                 is_recursive = event.get("is_recursive", False)
+                                is_multi_emit = (
+                                    event_type in StreamingVerificationModule.MULTI_EMIT_EVENTS
+                                )
                                 if thought_id:
                                     key = (thought_id, event_type)
                                     event_occurrences[key] = event_occurrences.get(key, 0) + 1
                                     if event_occurrences[key] > 1:
-                                        # Only flag as duplicate error if NOT recursive
-                                        # Recursive processing legitimately re-emits events for the same thought
-                                        if not is_recursive:
+                                        # Only flag as duplicate error if NOT a recursive re-emit
+                                        # AND NOT an inherently multi-emit event type
+                                        if not is_recursive and not is_multi_emit:
                                             dup_msg = f"Duplicate {event_type} for thought {thought_id} (occurrence #{event_occurrences[key]})"
                                             if dup_msg not in duplicates_found:
                                                 duplicates_found.append(dup_msg)
                                                 errors.append(dup_msg)
                                         else:
                                             logger.debug(
-                                                f"Allowed recursive duplicate: {event_type} for thought {thought_id} "
-                                                f"(occurrence #{event_occurrences[key]}, is_recursive=True)"
+                                                f"Allowed multi-emit/recursive duplicate: {event_type} for thought {thought_id} "
+                                                f"(occurrence #{event_occurrences[key]}, "
+                                                f"is_recursive={is_recursive}, is_multi_emit={is_multi_emit})"
                                             )
 
                                 # Validate event structure
@@ -1010,6 +1026,31 @@ class StreamingVerificationModule:
                                         "entropy_threshold",
                                         "entropy_reason",
                                     },
+                                    "llm_call": {
+                                        # Per-provider-call observation (v2.7.8). One event per
+                                        # LLM invocation; multiple per thought is by design. Keep
+                                        # in sync with LLMCallEvent in
+                                        # ciris_engine/schemas/services/runtime_control.py.
+                                        # See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2.
+                                        "handler_name",
+                                        "service_name",
+                                        "model",
+                                        "base_url",
+                                        "response_model",
+                                        "prompt_tokens",
+                                        "completion_tokens",
+                                        "prompt_bytes",
+                                        "completion_bytes",
+                                        "cost_usd",
+                                        "duration_ms",
+                                        "status",
+                                        "error_class",
+                                        "attempt_count",
+                                        "retry_count",
+                                        "prompt_hash",
+                                        "prompt",
+                                        "response_text",
+                                    },
                                 }
 
                                 expected_fields = expected_common_fields | event_type_specific_fields.get(
@@ -1149,7 +1190,11 @@ class StreamingVerificationModule:
         # Wait for events to stream (60s timeout allows wakeup to complete and actions to dispatch)
         elapsed = 0
         check_interval = 0.5
-        while elapsed < timeout and len(received_events) < len(StreamingVerificationModule.EXPECTED_EVENTS):
+        # Wait until the EXPECTED set is a subset of received_events. The
+        # previous len(received) < len(EXPECTED) check was unsound after LLM_CALL
+        # was added: any received llm_call boosted the count past EXPECTED's
+        # length, satisfying the loop exit before thought_start arrived.
+        while elapsed < timeout and not StreamingVerificationModule.EXPECTED_EVENTS.issubset(received_events):
             time.sleep(check_interval)
             elapsed += check_interval
 
@@ -1829,7 +1874,11 @@ class StreamingVerificationModule:
         # Wait for events
         elapsed = 0
         check_interval = 0.5
-        while elapsed < timeout and len(received_events) < len(StreamingVerificationModule.EXPECTED_EVENTS):
+        # Wait until the EXPECTED set is a subset of received_events. The
+        # previous len(received) < len(EXPECTED) check was unsound after LLM_CALL
+        # was added: any received llm_call boosted the count past EXPECTED's
+        # length, satisfying the loop exit before thought_start arrived.
+        while elapsed < timeout and not StreamingVerificationModule.EXPECTED_EVENTS.issubset(received_events):
             time.sleep(check_interval)
             elapsed += check_interval
 

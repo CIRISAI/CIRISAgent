@@ -1,9 +1,11 @@
 """
 Reasoning stream for H3ERE pipeline.
 
-8 event types for monitoring pipeline execution:
-- 6 core events (always emitted)
-- 2 optional events (IDMA_RESULT, TSASPDMA_RESULT)
+9 event types for monitoring pipeline execution:
+- 7 pipeline events (always emitted; one per H3ERE step)
+- 1 optional pipeline event (TSASPDMA_RESULT, only when TOOL selected)
+- 1 sub-pipeline event (LLM_CALL, fires N times per pipeline event — see
+  FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2)
 
 Pure data events, no UI metadata (SVG locations, etc).
 """
@@ -19,13 +21,14 @@ from ciris_engine.schemas.services.runtime_control import (
     ConscienceResultEvent,
     DMAResultsEvent,
     IDMAResultEvent,
+    LLMCallEvent,
     ReasoningEvent,
     SnapshotAndContextResult,
     ThoughtStartEvent,
     TSASPDMAResultEvent,
 )
 
-# Union of all 8 reasoning event types (7 core + 1 optional)
+# Union of all 9 reasoning event types (7 pipeline + 1 optional + 1 sub-pipeline)
 ReasoningEventUnion = Union[
     ThoughtStartEvent,
     SnapshotAndContextResult,
@@ -35,6 +38,7 @@ ReasoningEventUnion = Union[
     TSASPDMAResultEvent,  # Optional: Tool-specific ASPDMA when TOOL selected
     ConscienceResultEvent,
     ActionResultEvent,
+    LLMCallEvent,  # Sub-pipeline: per-provider-call observation
 ]
 
 
@@ -88,6 +92,11 @@ def create_reasoning_event(
         return ConscienceResultEvent(**base_data, **event_data)
     elif event_type == ReasoningEvent.ACTION_RESULT:
         return ActionResultEvent(**base_data, **event_data)
+    elif event_type == ReasoningEvent.LLM_CALL:
+        # LLM_CALL events may fire from contexts where thought_id is None
+        # (LLM calls outside thought processing — e.g. dream-state introspection
+        # in future). Allow None to flow through; the schema permits it.
+        return LLMCallEvent(**base_data, **event_data)
     else:
         raise ValueError(f"Unknown reasoning event type: {event_type}")
 
@@ -104,5 +113,6 @@ __all__ = [
     "TSASPDMAResultEvent",
     "ConscienceResultEvent",
     "ActionResultEvent",
+    "LLMCallEvent",
     "create_reasoning_event",
 ]

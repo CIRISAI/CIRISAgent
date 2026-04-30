@@ -405,6 +405,7 @@ class AccordMetricsService:
         "TSASPDMA_RESULT": "rationale",  # Tool-specific ASPDMA (optional)
         "CONSCIENCE_RESULT": "conscience",
         "ACTION_RESULT": "action",  # Also contains outcome data
+        "LLM_CALL": "llm_call",  # Sub-pipeline: per-provider-call observation
         # Also handle full enum names from streaming
         "ReasoningEvent.THOUGHT_START": "observation",
         "ReasoningEvent.SNAPSHOT_AND_CONTEXT": "context",
@@ -414,6 +415,7 @@ class AccordMetricsService:
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
+        "ReasoningEvent.LLM_CALL": "llm_call",
         # Commons Credits trace events (bilateral verified interactions)
         "DEFERRAL_ROUTED": "deferral_routed",
         "DEFERRAL_RECEIVED": "deferral_received",
@@ -1807,6 +1809,37 @@ class AccordMetricsService:
                 # Include full positive moment text at FULL detail level
                 if positive_moment_text:
                     data["positive_moment"] = positive_moment_text[:500]  # Truncate for safety
+            return data
+
+        elif event_type == "LLM_CALL":
+            # SUB-PIPELINE: per-provider-call observation (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2)
+            # Multiple LLM_CALL events fire under each pipeline event — every DMA
+            # / ASPDMA / conscience handler issues 1+ provider calls.
+            # GENERIC: caller attribution + sizes + duration + outcome (no content)
+            data = {
+                "handler_name": event.get("handler_name"),
+                "service_name": event.get("service_name"),
+                "model": event.get("model"),
+                "base_url": event.get("base_url"),
+                "response_model": event.get("response_model"),
+                "duration_ms": event.get("duration_ms"),
+                "prompt_tokens": event.get("prompt_tokens"),
+                "completion_tokens": event.get("completion_tokens"),
+                "prompt_bytes": event.get("prompt_bytes"),
+                "completion_bytes": event.get("completion_bytes"),
+                "cost_usd": event.get("cost_usd"),
+                "status": event.get("status"),
+                "error_class": event.get("error_class"),
+                "attempt_count": event.get("attempt_count", 1),
+                "retry_count": event.get("retry_count", 0),
+            }
+            # DETAILED: add prompt hash for dedup analysis without leaking content
+            if is_detailed:
+                data["prompt_hash"] = event.get("prompt_hash")
+            # FULL: full prompt + completion text
+            if is_full:
+                data["prompt"] = event.get("prompt")
+                data["response_text"] = event.get("response_text")
             return data
 
         else:

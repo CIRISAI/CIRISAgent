@@ -23,20 +23,32 @@ from rich.text import Text
 from .memory_benchmark_tests import find_server_pid, format_size, get_children_memory
 
 
-# v3 mental-health harness named users — one per language harness. The agent
-# sees this name in user.preferred_name (display) so its responses address
-# the correct user, and user.preferred_language is set so the language-chain
-# walk delivers the target locale via the user-profile tier (not just metadata).
+# Per-locale display names. Each (locale, name) pair gets its own user
+# account at the start of the run — channels submit under that user's
+# token so the agent sees user_preferred_name + preferred_language matching
+# the cell's locale. Without this, every cell ran as the qa_runner admin
+# ("jeff", preferred_language="en"), which leaked into responses (the
+# agent addressed Chinese-channel users as "Jeff" and Spanish-channel
+# users as "Jeff", because the admin's username is the fallback when
+# user_preferred_name isn't set).
 #
-# Without this, the agent processes every question as the qa_runner admin
-# (default name = ASCII placeholder, preferred_language = "en"), which leaks
-# into adversarial-context responses (locale collapse, name confusion).
-V3_HARNESS_USERS: Dict[str, str] = {
-    "am": "ሰላማዊት",
+# Names are culturally appropriate display names in the target locale's
+# script. Covers every locale in LANGUAGE_SPECS — adding a locale to
+# LANGUAGE_SPECS without adding it here means that locale's cells fall
+# back to the admin's username.
+LOCALE_USERS: Dict[str, str] = {
+    "am": "ሰላማዊት",      # Selamawit
+    "bn": "সুমিতা",       # Sumita
+    "en": "Sarah",
+    "es": "Sofía",
     "ha": "Hauwa",
+    "my": "မေသူ",          # Methu
+    "pa": "ਹਰਪ੍ਰੀਤ",        # Harpreet
+    "sw": "Aisha",
+    "ta": "தேன்மொழி",      # Thenmozhi
+    "te": "శ్రావణి",        # Sravani
     "yo": "Tèmítọ́pẹ́",
-    "my": "မေသူ",
-    "pa": "ਹਰਪ੍ਰੀਤ",
+    "zh": "美玲",           # Meiling
 }
 
 # Pattern: extract the user's first-person message from explicit harness
@@ -243,6 +255,11 @@ class ModelEvalTests:
         self._completed_interactions = 0
         self._memory_task: Optional[asyncio.Task[None]] = None
         self._memory_sampling = False
+        # Per-locale user tokens populated by _create_locale_users() before
+        # any question fires. Each locale's cells submit under its own
+        # user's token so the agent reads user_preferred_name +
+        # preferred_language matching the cell's locale.
+        self._locale_tokens: Dict[str, str] = {}
 
         # Source of truth for the question pool: file (out-of-tree) wins
         # over in-tree default. Sensitive / attractor-bait sets live in
@@ -283,15 +300,12 @@ class ModelEvalTests:
 
         await self._ensure_accord_metrics_adapters()
 
-        # Plumb v3 harness named user + preferred_language onto the admin's
-        # user node BEFORE any question fires. The qa_runner-created admin
-        # has a default ASCII name + preferred_language="en", which leaks
-        # into adversarial-context responses as name confusion ("Jeff" in
-        # Hausa Q7) and locale collapse (Amharic in Hausa Q6, English in
-        # Hausa Q9). Setting user_preferred_name + preferred_language puts
-        # the user-profile tier of the language-chain in agreement with
-        # the metadata tier, so the agent has a coherent context.
-        await self._configure_harness_user_for_languages()
+        # Create one user per locale (locale-appropriate display name +
+        # preferred_language) and store its token for use by _ask_question.
+        # Cells submit under their locale's user token so the agent reads
+        # user_preferred_name and preferred_language matching the cell's
+        # language — no more "Jeff" addressing Chinese-channel users.
+        await self._create_locale_users()
 
         if self.profile_memory:
             await self._start_memory_sampler()
@@ -339,40 +353,47 @@ class ModelEvalTests:
     ) -> EvalResult:
         async with semaphore:
             channel_id = f"model_eval_{language.code}_{question_index:02d}"
-            # Submit only the user's first-person utterance. The v3 harnesses
-            # wrap each question in a third-person evaluator framing for
-            # rubric clarity ("User Hauwa said: '...'"); without stripping,
-            # the agent treats the wrapper as the conversation and the
-            # quoted user as a third party.
             payload = _strip_question_wrapper(self._format_question(language, question))
             start_time = time.time()
 
+            user_token = self._locale_tokens.get(language.code)
+            transport = getattr(self.client, "_transport", None)
+            base_url = getattr(transport, "base_url", "http://localhost:8080") if transport else "http://localhost:8080"
+            # Fall back to admin token only if locale-user setup failed —
+            # this preserves "the run still produces *something*" behavior
+            # at the cost of the Jeff leak for that locale, with a visible
+            # warning at setup time.
+            auth_token = user_token or (getattr(transport, "api_key", None) if transport else None)
+
+            response_text = ""
+            success = False
             try:
-                # interact() is the synchronous submit+wait endpoint: it blocks
-                # server-side until the agent actually SPEAKs (or errors). We
-                # previously used submit_message + poll get_history, but the
-                # /v1/agent/history endpoint only queries the user's default
-                # channels — custom per-question channels like
-                # model_eval_en_01 never show up there, so polling always
-                # timed out even when the agent had completed the reasoning.
-                response = await self.client.agent.interact(
-                    payload,
-                    context={
-                        "channel_id": channel_id,
-                        "session_id": channel_id,
-                        "metadata": {
-                            "qa_module": "model_eval",
-                            "language": language.code,
-                            "question_index": str(question_index),
-                            "category": question.category,
+                async with httpx.AsyncClient(timeout=600.0) as http:
+                    resp = await http.post(
+                        f"{base_url}/v1/agent/interact",
+                        headers={"Authorization": f"Bearer {auth_token}"},
+                        json={
+                            "message": payload,
+                            "context": {
+                                "channel_id": channel_id,
+                                "session_id": channel_id,
+                                "metadata": {
+                                    "qa_module": "model_eval",
+                                    "language": language.code,
+                                    "question_index": str(question_index),
+                                    "category": question.category,
+                                },
+                            },
                         },
-                    },
-                )
-                response_text = response.response or ""
-                success = bool(response_text) and "Still processing" not in response_text
+                    )
+                if resp.status_code == 200:
+                    body = resp.json()
+                    response_text = body.get("data", {}).get("response") or body.get("response", "") or ""
+                    success = bool(response_text) and "Still processing" not in response_text
+                else:
+                    response_text = f"(HTTP {resp.status_code}: {resp.text[:120]})"
             except Exception as exc:
                 response_text = f"(Error: {type(exc).__name__}: {exc})"
-                success = False
 
             elapsed = time.time() - start_time
             self._completed_interactions += 1
@@ -386,58 +407,114 @@ class ModelEvalTests:
                 success=success,
             )
 
-    async def _configure_harness_user_for_languages(self) -> None:
-        """Set admin's user_preferred_name + preferred_language to match the run.
+    async def _create_locale_users(self) -> None:
+        """Create one user account per requested locale and store its token.
 
-        For single-language runs (the common case for v3 mental-health harnesses
-        — one language per qa_runner invocation), this aligns the user-profile
-        tier of the language-chain with the metadata tier. The agent's "from"
-        line will use user_preferred_name, so adversarial responses address
-        the right user instead of leaking the qa_runner admin's username.
+        Each cell submits under its locale's user token so the agent reads
+        user_preferred_name + preferred_language matching the cell's
+        locale. This replaces the old admin-mutation pattern (which only
+        worked for one locale at a time and skipped any locale missing
+        from V3_HARNESS_USERS, leaving the admin's "jeff" username
+        leaking into multilingual responses).
 
-        For multi-language runs, only the LAST language's setup wins on the
-        single admin user — those runs should rely on metadata.language only.
-        Genuine multi-user-per-question support is a future change.
-
-        Best-effort — if the API call fails (e.g. older agent version without
-        the endpoint, or no v3 user mapping for the language), the run
-        proceeds with whatever defaults the admin has.
+        Best-effort per locale — a locale whose user setup fails falls
+        back to the admin token in _ask_question, with a visible warning
+        here. The other locales still benefit from per-user identity.
         """
         transport = getattr(self.client, "_transport", None)
         if transport is None:
+            self.console.print("[yellow]model_eval: no SDK transport — skipping per-locale user setup[/yellow]")
             return
         base_url = getattr(transport, "base_url", "http://localhost:8080")
-        token = getattr(transport, "api_key", None)
-        if not token:
+        admin_token = getattr(transport, "api_key", None)
+        if not admin_token:
+            self.console.print("[yellow]model_eval: no admin token — skipping per-locale user setup[/yellow]")
             return
 
+        import secrets
+
         for language in self.languages:
-            harness_name = V3_HARNESS_USERS.get(language.code)
-            if not harness_name:
-                continue  # Locale without a v3 harness — leave admin defaults
+            display_name = LOCALE_USERS.get(language.code)
+            if not display_name:
+                self.console.print(
+                    f"[yellow]model_eval: no LOCALE_USERS entry for {language.code} — "
+                    f"cells will fall back to admin user[/yellow]"
+                )
+                continue
+
+            username = f"qa_eval_{language.code}"
+            password = secrets.token_urlsafe(16)
             try:
-                async with httpx.AsyncClient(timeout=10.0) as http:
-                    resp = await http.put(
-                        f"{base_url}/v1/users/me/settings",
-                        headers={"Authorization": f"Bearer {token}"},
+                async with httpx.AsyncClient(timeout=15.0) as http:
+                    create_resp = await http.post(
+                        f"{base_url}/v1/users",
+                        headers={"Authorization": f"Bearer {admin_token}"},
                         json={
-                            "user_preferred_name": harness_name,
+                            "username": username,
+                            "password": password,
+                            "api_role": "OBSERVER",
+                        },
+                    )
+                if create_resp.status_code not in (200, 201, 409):
+                    self.console.print(
+                        f"[yellow]model_eval: create user for {language.code} returned "
+                        f"HTTP {create_resp.status_code} — falling back to admin[/yellow]"
+                    )
+                    continue
+
+                # 409 = user already exists from a previous run; we still need a
+                # fresh password. The qa_runner wipes data between runs, so a
+                # 409 here is unusual but recoverable: re-attempt would need an
+                # admin-side password reset, which we don't have. Skip.
+                if create_resp.status_code == 409:
+                    self.console.print(
+                        f"[yellow]model_eval: user qa_eval_{language.code} already exists "
+                        f"— falling back to admin (wipe data dir to reset)[/yellow]"
+                    )
+                    continue
+
+                async with httpx.AsyncClient(timeout=15.0) as http:
+                    login_resp = await http.post(
+                        f"{base_url}/v1/auth/login",
+                        json={"username": username, "password": password},
+                    )
+                if login_resp.status_code != 200:
+                    self.console.print(
+                        f"[yellow]model_eval: login for {language.code} returned "
+                        f"HTTP {login_resp.status_code} — falling back to admin[/yellow]"
+                    )
+                    continue
+                login_body = login_resp.json()
+                user_token = login_body.get("data", {}).get("access_token") or login_body.get("access_token")
+                if not user_token:
+                    self.console.print(
+                        f"[yellow]model_eval: no access_token in login for {language.code} — falling back to admin[/yellow]"
+                    )
+                    continue
+
+                async with httpx.AsyncClient(timeout=15.0) as http:
+                    settings_resp = await http.put(
+                        f"{base_url}/v1/users/me/settings",
+                        headers={"Authorization": f"Bearer {user_token}"},
+                        json={
+                            "user_preferred_name": display_name,
                             "preferred_language": language.code,
                         },
                     )
-                if resp.status_code == 200:
+                if settings_resp.status_code != 200:
                     self.console.print(
-                        f"[dim]model_eval: configured admin as "
-                        f"'{harness_name}' (lang={language.code}) for v3 harness[/dim]"
+                        f"[yellow]model_eval: PUT settings for {language.code} returned "
+                        f"HTTP {settings_resp.status_code} — token kept but name/lang unset[/yellow]"
                     )
-                else:
-                    self.console.print(
-                        f"[yellow]model_eval: PUT /v1/users/me/settings returned "
-                        f"{resp.status_code} for {language.code} — proceeding with admin defaults[/yellow]"
-                    )
+                self._locale_tokens[language.code] = user_token
+                self.console.print(
+                    f"[dim]model_eval: created '{display_name}' (lang={language.code}, "
+                    f"user=qa_eval_{language.code})[/dim]"
+                )
             except Exception as exc:
                 self.console.print(
-                    f"[yellow]model_eval: harness-user setup for {language.code} failed: {exc}[/yellow]"
+                    f"[yellow]model_eval: locale-user setup for {language.code} failed: {exc} "
+                    f"— falling back to admin[/yellow]"
                 )
 
     def _format_question(self, language: LanguageSpec, question: EvalQuestion) -> str:

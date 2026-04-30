@@ -12,13 +12,16 @@ from pydantic import BaseModel, Field, field_validator
 # and `column_name` directly into SQL strings. If the schema ever becomes user-editable
 # (admin UI form, imported YAML), this validator is the choke point that prevents SQL
 # injection through the identifier surface.
-_SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# `re.ASCII` keeps `\w` to ASCII-only [A-Za-z0-9_], matching SQL standard
+# identifier chars. Without this flag, Python's `\w` would also accept
+# Unicode letters — too permissive for SQL identifier validation.
+_SQL_IDENT_RE = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)
 
 
 def _validate_sql_identifier(value: str) -> str:
     if not _SQL_IDENT_RE.match(value):
         raise ValueError(
-            f"invalid SQL identifier: {value!r} — must match ^[A-Za-z_][A-Za-z0-9_]*$"
+            f"invalid SQL identifier: {value!r} — must match ^[A-Za-z_]\\w*$ (ASCII)"
         )
     return value
 

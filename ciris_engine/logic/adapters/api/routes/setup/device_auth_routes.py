@@ -80,7 +80,13 @@ async def connect_node(req: ConnectNodeRequest) -> SuccessResponse[ConnectNodeRe
     # Check for existing non-expired session — reuse it if found
     existing_session = _load_device_auth_session()
     if existing_session and existing_session.get("portal_url") == portal_url:
-        logger.info("Reusing existing device auth session (device_code=%s...)", existing_session["device_code"][:16])
+        # Log a SHA-256 prefix of the device_code rather than the code itself.
+        # Even truncated, the code is user-influenced (came through a Portal
+        # flow the caller initiated) and shouldn't land in logs verbatim.
+        import hashlib
+
+        _code_fp = hashlib.sha256(existing_session["device_code"].encode("utf-8")).hexdigest()[:12]
+        logger.info("Reusing existing device auth session (code_fp=%s)", _code_fp)
         remaining = int(existing_session["expires_at"] - time.time())
         return SuccessResponse(
             data=ConnectNodeResponse(

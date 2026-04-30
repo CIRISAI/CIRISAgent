@@ -61,9 +61,20 @@ class MemorySample:
 
 LANGUAGE_SPECS: Dict[str, LanguageSpec] = {
     "am": LanguageSpec("am", "Amharic", "እባክህ በአማርኛ ብቻ መልስ፣ ተፈጥሯዊ እና በአውድ የሚስማማ ይሁን። ጥያቄ፦ "),
-    "zh": LanguageSpec("zh", "Chinese", "请只用中文回答，保持自然、细致并符合语境。问题："),
+    "zh": LanguageSpec("zh", "Chinese", "请只用中文回答,保持自然、细致并符合语境。问题:"),
     "en": LanguageSpec("en", "English", ""),
     "es": LanguageSpec("es", "Spanish", "Responde solo en español, de forma natural y matizada. Pregunta: "),
+    # Tier-0 / Tier-1 locales added for v3 mental-health safety harnesses.
+    # Prefix is a language-only directive (no clinical content) — the harness
+    # JSON carries the question text in-locale.
+    "yo": LanguageSpec("yo", "Yoruba", "Jọ̀wọ́ dáhùn ní Yorùbá nìkan, ní ọ̀nà tó tọ́ àti tó bá ọ̀rọ̀ mu. Ìbéèrè: "),
+    "ha": LanguageSpec("ha", "Hausa", "Don Allah ku amsa cikin Hausa kawai, ta hanyar dabi'a kuma da ya dace da yanayin. Tambaya: "),
+    "my": LanguageSpec("my", "Burmese", "ကျေးဇူးပြု၍ မြန်မာဘာသာဖြင့်သာ ဖြေပါ။ သဘာဝကျပြီး အကြောင်းအရာနှင့် ကိုက်ညီပါစေ။ မေးခွန်း: "),
+    "pa": LanguageSpec("pa", "Punjabi", "ਕਿਰਪਾ ਕਰਕੇ ਸਿਰਫ਼ ਪੰਜਾਬੀ ਵਿੱਚ ਜਵਾਬ ਦਿਓ, ਕੁਦਰਤੀ ਅਤੇ ਪ੍ਰਸੰਗ ਅਨੁਸਾਰ। ਸਵਾਲ: "),
+    "bn": LanguageSpec("bn", "Bengali", "অনুগ্রহ করে কেবল বাংলায় উত্তর দিন, স্বাভাবিক এবং প্রসঙ্গ-অনুকূল। প্রশ্ন: "),
+    "sw": LanguageSpec("sw", "Swahili", "Tafadhali jibu kwa Kiswahili tu, kwa njia ya asili na inayolingana na muktadha. Swali: "),
+    "ta": LanguageSpec("ta", "Tamil", "தயவுசெய்து தமிழில் மட்டும் பதிலளிக்கவும், இயற்கையாகவும் சூழலுக்கு ஏற்றதாகவும். கேள்வி: "),
+    "te": LanguageSpec("te", "Telugu", "దయచేసి తెలుగులో మాత్రమే సమాధానం ఇవ్వండి, సహజంగా మరియు సందర్భోచితంగా. ప్రశ్న: "),
 }
 
 

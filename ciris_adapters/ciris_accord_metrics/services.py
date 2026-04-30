@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -578,6 +578,17 @@ class AccordMetricsService:
         # Active traces being built (keyed by thought_id)
         self._active_traces: Dict[str, CompleteTrace] = {}
         self._traces_lock = asyncio.Lock()
+
+        # Per-(thought_id, event_type) attempt index counter. Computed at
+        # broadcast-receive time and injected into the event dict so the lens
+        # has stable monotonic ordering for events that fire N times per
+        # thought (LLM_CALL, RECURSIVE_ASPDMA, RECURSIVE_CONSCIENCE,
+        # CONSCIENCE_RESULT, DMA_RESULTS bounce alternatives). For events that
+        # fire once per thought the index is always 0. Single-subscriber FIFO
+        # delivery from reasoning_event_stream guarantees broadcast-order
+        # arrival, so the counter increments produce a stable index.
+        # See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.1 attempt_index semantics.
+        self._attempt_counters: Dict[Tuple[str, str], int] = {}
 
         # Completed traces ready for sending
         self._completed_traces: List[CompleteTrace] = []
@@ -1252,6 +1263,19 @@ class AccordMetricsService:
 
         self._events_received += 1
 
+        # Compute attempt_index — monotonic per (thought_id, event_type).
+        # Single-subscriber FIFO from reasoning_event_stream preserves
+        # broadcast order; the counter increments produce a stable index
+        # the lens can use to order rows for events that fire multiple
+        # times per thought (LLM_CALL, RECURSIVE_*, CONSCIENCE_RESULT, DMA
+        # bounce alternatives). Inject into the event dict so the
+        # downstream _extract_component_data builders pick it up via
+        # event.get("attempt_index", 0).
+        attempt_key = (thought_id, event_type)
+        attempt_index = self._attempt_counters.get(attempt_key, 0)
+        self._attempt_counters[attempt_key] = attempt_index + 1
+        event["attempt_index"] = attempt_index
+
         # Get or create trace for this thought
         async with self._traces_lock:
             if thought_id not in self._active_traces:
@@ -1275,6 +1299,10 @@ class AccordMetricsService:
 
         # Extract relevant data based on event type
         component_data = self._extract_component_data(event_type, event)
+        # Always carry attempt_index forward so the lens row writer sees it
+        # uniformly across event types (single-emit events have 0 here, which
+        # is informative — confirms the event is the first occurrence).
+        component_data["attempt_index"] = attempt_index
 
         # Add component to trace
         component = TraceComponent(
@@ -1866,6 +1894,13 @@ class AccordMetricsService:
             trace.completed_at = completion_time
             # Set trace_level BEFORE signing - critical for per-level signature verification
             trace.trace_level = self._trace_level.value
+
+        # Drop attempt_index counters for this thought — they're only meaningful
+        # while the thought is in-flight, and leaving them in the dict means
+        # unbounded growth across long-running agents.
+        self._attempt_counters = {
+            key: count for key, count in self._attempt_counters.items() if key[0] != thought_id
+        }
 
         # Sign the trace (signature includes trace_level for uniqueness)
         if self._signer.sign_trace(trace):

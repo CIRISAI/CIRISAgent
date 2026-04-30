@@ -5,7 +5,8 @@ Pins:
     (so adding a locale to manifest.json without adding it here gets caught
     at PR time).
   - User_preferred_name values are non-empty and Unicode-clean.
-  - Conversation turns are sane (3 turns, all non-empty English text).
+  - The benign question is non-empty and not clinical content.
+  - Runner wiring is intact in all 3 required places.
 """
 
 import json
@@ -14,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from tools.qa_runner.modules.parallel_locales_tests import (
-    CONVO_TURNS,
+    CONVO_QUESTION,
     LOCALE_USERS,
     LocaleResult,
     ParallelLocalesTests,
@@ -91,21 +92,17 @@ class TestLocaleCoverage:
             )
 
 
-class TestConvoTurns:
-    """The conversation template must be runnable end-to-end."""
+class TestQuestion:
+    """The single question fanned out to all 29 channels."""
 
-    def test_three_turns(self):
-        assert len(CONVO_TURNS) == 3, "Convo template must have exactly 3 turns"
+    def test_question_non_empty(self):
+        assert CONVO_QUESTION and CONVO_QUESTION.strip()
 
-    def test_turns_non_empty(self):
-        for i, turn in enumerate(CONVO_TURNS, 1):
-            assert turn and turn.strip(), f"Turn {i} is empty or whitespace"
-
-    def test_turns_are_benign(self):
-        """The convo content should be benign — this module exercises the
-        29-locale infrastructure, NOT clinical content (that's model_eval's job
-        with the v3 mental-health harnesses). Catching accidental drift into
-        clinical content here is a safety guard."""
+    def test_question_is_benign(self):
+        """The question is infrastructure-validation only — no clinical content.
+        Clinical content belongs in the v3 mental-health harnesses, where the
+        rubric review process catches misuse. Catching accidental drift here
+        is a safety guard."""
         clinical_red_flags = [
             "depression",
             "suicide",
@@ -116,10 +113,10 @@ class TestConvoTurns:
             "therapy",
             "diagnosis",
         ]
-        joined = " ".join(CONVO_TURNS).lower()
-        present = [w for w in clinical_red_flags if w in joined]
+        lower = CONVO_QUESTION.lower()
+        present = [w for w in clinical_red_flags if w in lower]
         assert not present, (
-            f"Convo template contains clinical content: {present}. "
+            f"Question contains clinical content: {present}. "
             f"Move clinical content to the v3 mental-health harnesses; "
             f"this module is for benign multi-locale infrastructure testing."
         )
@@ -131,17 +128,51 @@ class TestModuleConstruction:
     def test_constructs_with_minimal_args(self):
         from rich.console import Console
 
-        # Pass a stub for client; just confirms the class shape.
         instance = ParallelLocalesTests(client=object(), console=Console())
-        assert instance.max_concurrency == 12
-        assert instance.per_turn_timeout == 120.0
         assert instance.results == []
+
+    def test_default_concurrency_runs_all_locales_in_parallel(self):
+        """The whole point is parallel fan-out — default concurrency should be
+        high enough to fan out all 29 locales at once. This is what mirrors a
+        production phone deployment where 29 different users in 29 different
+        timezones could all be hitting the agent simultaneously."""
+        from rich.console import Console
+
+        instance = ParallelLocalesTests(client=object(), console=Console())
+        assert instance.max_concurrency >= len(LOCALE_USERS), (
+            f"Default max_concurrency ({instance.max_concurrency}) must allow ALL "
+            f"{len(LOCALE_USERS)} locales to run in parallel — that's the test's "
+            f"value proposition (29-way concurrent load on the LLM backend)."
+        )
 
     def test_concurrency_floor(self):
         from rich.console import Console
 
         instance = ParallelLocalesTests(client=object(), console=Console(), max_concurrency=0)
         assert instance.max_concurrency == 1, "max_concurrency must be at least 1"
+
+    def test_no_pipeline_overrides(self):
+        """The module class must NOT expose any knob that reduces the agent's
+        DMA pipeline depth, conscience checks, or turn count. The whole point
+        is to test the agent EXACTLY AS IT RUNS ON PHONE — full pipeline,
+        no shortcuts. If a future contributor adds a `quick_mode` flag or
+        similar, this test should fail to flag it."""
+        from rich.console import Console
+
+        instance = ParallelLocalesTests(client=object(), console=Console())
+        forbidden_attrs = [
+            "turns",
+            "skip_conscience",
+            "skip_dma",
+            "quick_mode",
+            "shallow_pipeline",
+            "fast_mode",
+        ]
+        for attr in forbidden_attrs:
+            assert not hasattr(instance, attr), (
+                f"ParallelLocalesTests has `{attr}` — this module must NOT override "
+                f"agent defaults. The test exists to validate phone-equivalent behavior."
+            )
 
 
 class TestLocaleResult:
@@ -155,9 +186,9 @@ class TestLocaleResult:
         assert not r.passed  # Auth alone insufficient
 
         r.settings_set = True
-        assert not r.passed  # Need turns too
+        assert not r.passed  # Need response too
 
-        r.turns_completed = 3
+        r.response_received = True
         assert r.passed  # All conditions met
 
         r.error = "something broke"
@@ -184,7 +215,6 @@ class TestRunnerWiring:
         """If the module isn't in the sdk_modules list, _run_sdk_modules silently
         skips it — the QA Runner CLAUDE.md flags this as a CRITICAL pitfall."""
         runner_src = (REPO_ROOT / "tools" / "qa_runner" / "runner.py").read_text()
-        # Look for the membership in the sdk_modules list (tolerates whitespace variations).
         assert "QAModule.PARALLEL_LOCALES" in runner_src, (
             "QAModule.PARALLEL_LOCALES must appear in runner.py — both in sdk_modules "
             "list and in module_map. Without the sdk_modules entry, the module is "

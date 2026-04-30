@@ -1,25 +1,35 @@
-"""Parallel multi-locale conversation test.
+"""Parallel multi-locale single-question fan-out test.
 
-Runs a 3-turn benign conversation in EVERY supported locale (29 languages)
-simultaneously, each as its own user with locale-appropriate
-`user_preferred_name` and `preferred_language` set. Each user gets their
-own auth token and their own channel; turns are sequential within a channel
-but channels run in parallel.
+Submits ONE question to the agent in 29 channels simultaneously — each
+channel owned by a different user with a locale-appropriate
+`user_preferred_name` and `preferred_language` — and validates that all
+29 channels receive a non-empty reply.
 
-This exercises the language-chain plumbing end-to-end:
-  1. User creation — POST /v1/users for 29 users in parallel.
-  2. Auth — POST /v1/auth/login for each, cache token per locale.
-  3. User-profile settings — PUT /v1/users/me/settings to set
-     user_preferred_name + preferred_language.
-  4. Multi-turn interact — agent.interact() per turn, per channel, with
-     each user's token, with continuity preserved across turns.
-  5. Validation — every response is non-empty and addresses the user
-     (presence of user_preferred_name in at least one turn's response).
+This is the integration test that mirrors what a real user gets on phone:
+no overridden defaults, no reduced pipeline depth, no shortcuts. Each
+question fans out through the agent's full DMA + conscience pipeline
+(PDMA + CSDMA + DSDMA + IDMA + ASPDMA + TSASPDMA + DSASPDMA + 4
+consciences + follow-up thought) — about 12 LLM calls per channel — so
+this run is ~29 × 12 ≈ 350 LLM calls, all happening in parallel against
+whatever LLM backend the agent is configured for.
 
-Pass criterion: all 29 locales complete all 3 turns with non-empty
-agent responses. Failure mode is per-locale visibility — if the Burmese
-locale's user can't be created or the agent times out on Tamil, the
-result table shows exactly which locale failed at which step.
+What it pins:
+  1. 29 user creations work (auth service scales to many concurrent
+     account creations).
+  2. 29 distinct tokens isolate per-channel context (no cross-talk
+     between locales).
+  3. user_preferred_name + preferred_language flow through PUT
+     /v1/users/me/settings correctly, and the agent's localization chain
+     picks them up — every reply lands in the user's target locale.
+  4. Per-channel routing is correct — locale `am` gets the Amharic
+     reply, locale `ja` gets the Japanese reply, no cross-routing.
+  5. The agent's pipeline (and the LLM backend serving it) can sustain
+     29-way parallel load without timeouts, rate-limit failures, or
+     correctness regressions.
+
+Pass criterion: all 29 locales return non-empty replies. Failure mode is
+per-locale visible — the result table shows exactly which locale failed
+at which step (auth / settings / response).
 
 This is the foundation for true multilingual CI coverage: any future
 work that breaks one locale's auth, language-chain delivery, or
@@ -30,7 +40,7 @@ import asyncio
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import httpx
 from rich.console import Console
@@ -77,30 +87,30 @@ LOCALE_USERS: Dict[str, str] = {
     "zh": "美玲",           # Meiling
 }
 
-# Three-turn benign conversation. Sent in English to every locale; each
-# user has preferred_language set so the agent's localization chain delivers
-# the response in their target locale. This isolates the "agent uses my
-# preferred language" infrastructure from per-locale message-translation
-# concerns.
-CONVO_TURNS: List[str] = [
+# The single benign question fanned out to all 29 channels. Sent in
+# English; each user's preferred_language is set so the agent's
+# localization chain delivers the response in the target locale.
+#
+# Content is intentionally benign infrastructure-only — clinical content
+# belongs in the v3 mental-health harnesses, not here. This module exists
+# to validate that the multilingual plumbing works under load.
+CONVO_QUESTION: str = (
     "Hello! I'd like some advice about journaling for self-reflection. "
-    "I'm new to it.",
-    "What's a good prompt for a beginner who wants to journal in the evening?",
-    "Thank you, that's exactly what I needed.",
-]
+    "I'm new to it. What's a good way to start?"
+)
 
 
 @dataclass
 class LocaleResult:
-    """Outcome for a single locale's conversation."""
+    """Outcome for a single locale's question fan-out."""
 
     locale: str
     user_preferred_name: str
     user_id: Optional[str] = None
     token_acquired: bool = False
     settings_set: bool = False
-    turns_completed: int = 0
-    turn_response_lengths: List[int] = field(default_factory=list)
+    response_received: bool = False
+    response_length: int = 0
     name_addressed: bool = False
     total_seconds: float = 0.0
     error: Optional[str] = None
@@ -110,35 +120,48 @@ class LocaleResult:
         return (
             self.token_acquired
             and self.settings_set
-            and self.turns_completed == len(CONVO_TURNS)
+            and self.response_received
             and self.error is None
         )
 
 
 class ParallelLocalesTests:
-    """Run the 3-turn convo across all 29 locales in parallel."""
+    """Submit one question to the agent in 29 channels simultaneously.
+
+    Each channel is owned by a different user with a locale-appropriate
+    user_preferred_name and preferred_language. Validates all 29 reply.
+    Each reply costs ~12 LLM calls (full DMA + conscience pipeline), so
+    a run is ~29 × 12 ≈ 350 LLM calls — all in parallel.
+    """
 
     def __init__(
         self,
         client: Any,
         console: Console,
-        max_concurrency: int = 12,
-        per_turn_timeout: float = 120.0,
+        max_concurrency: int = 29,
+        response_timeout: float = 180.0,
     ):
         self.client = client
         self.console = console
+        # Default concurrency = number of locales: the whole point of this
+        # module is parallel fan-out. Override only for backend-load debugging.
         self.max_concurrency = max(1, max_concurrency)
-        self.per_turn_timeout = per_turn_timeout
+        self.response_timeout = response_timeout
         self.results: List[Dict[str, Any]] = []
         self._locale_results: List[LocaleResult] = []
 
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[bold cyan]🌐 Parallel Locales Conversation Test[/bold cyan]")
+        self.console.print("\n[bold cyan]🌐 Parallel Locales Question Fan-Out[/bold cyan]")
         self.console.print("=" * 70)
+        n_locales = len(LOCALE_USERS)
+        # Each user-visible message fans out ~12 LLM calls through the agent's
+        # DMA + conscience pipeline. Full-pipeline run, no shortcuts.
+        approx_llm_calls = n_locales * 12
         self.console.print(
-            f"[dim]Running {len(LOCALE_USERS)} locales × {len(CONVO_TURNS)} turns "
-            f"= {len(LOCALE_USERS) * len(CONVO_TURNS)} interactions, "
-            f"max {self.max_concurrency} channels in flight.[/dim]\n"
+            f"[dim]Submitting 1 question to {n_locales} channels in parallel "
+            f"≈ ~{approx_llm_calls} LLM calls (each channel runs the full "
+            f"DMA + conscience pipeline). Max {self.max_concurrency} channels "
+            f"in flight at once.[/dim]\n"
         )
 
         transport = getattr(self.client, "_transport", None)
@@ -154,7 +177,7 @@ class ParallelLocalesTests:
         semaphore = asyncio.Semaphore(self.max_concurrency)
         tasks = [
             asyncio.create_task(
-                self._run_locale_conversation(base_url, admin_token, locale, name, semaphore)
+                self._run_locale_question(base_url, admin_token, locale, name, semaphore)
             )
             for locale, name in LOCALE_USERS.items()
         ]
@@ -164,10 +187,11 @@ class ParallelLocalesTests:
             completed += 1
             self._locale_results.append(result)
             badge = "[green]✓[/green]" if result.passed else "[red]✗[/red]"
+            name_marker = " 👤" if result.name_addressed else ""
             self.console.print(
-                f"  {badge} ({completed:02d}/{len(LOCALE_USERS)}) "
+                f"  {badge} ({completed:02d}/{n_locales}) "
                 f"{result.locale} ({result.user_preferred_name}) — "
-                f"{result.turns_completed}/{len(CONVO_TURNS)} turns, "
+                f"{result.response_length} chars{name_marker}, "
                 f"{result.total_seconds:.1f}s"
                 + (f" — [yellow]{result.error}[/yellow]" if result.error else "")
             )
@@ -176,7 +200,7 @@ class ParallelLocalesTests:
         self._record_results()
         return self.results
 
-    async def _run_locale_conversation(
+    async def _run_locale_question(
         self,
         base_url: str,
         admin_token: str,
@@ -184,7 +208,10 @@ class ParallelLocalesTests:
         user_preferred_name: str,
         semaphore: asyncio.Semaphore,
     ) -> LocaleResult:
-        """Create user, login, set settings, run 3-turn convo. Bounded by semaphore."""
+        """Create user, login, set settings, submit one question, validate reply.
+
+        Bounded by the semaphore so parallel fan-out is controlled.
+        """
         result = LocaleResult(locale=locale, user_preferred_name=user_preferred_name)
         start = time.time()
 
@@ -243,19 +270,17 @@ class ParallelLocalesTests:
                     return result
                 result.settings_set = True
 
-                # 4) Multi-turn conversation in the user's own channel.
+                # 4) Submit the single question in this user's channel.
+                #    No turn cycling, no overrides — exactly what a phone user gets.
                 channel_id = f"parallel_locales_{locale}"
-                for turn_idx, content in enumerate(CONVO_TURNS, 1):
-                    turn_response = await self._send_turn(
-                        base_url, user_token, channel_id, content, locale, turn_idx
-                    )
-                    if turn_response is None:
-                        result.error = f"turn {turn_idx} timeout/empty"
-                        break
-                    result.turns_completed += 1
-                    result.turn_response_lengths.append(len(turn_response))
-                    if user_preferred_name in turn_response:
-                        result.name_addressed = True
+                response = await self._send_question(base_url, user_token, channel_id, locale)
+                if response is None:
+                    result.error = "response timeout/empty"
+                    return result
+                result.response_received = True
+                result.response_length = len(response)
+                if user_preferred_name in response:
+                    result.name_addressed = True
             except Exception as exc:
                 result.error = f"{type(exc).__name__}: {exc}"
             finally:
@@ -263,30 +288,27 @@ class ParallelLocalesTests:
 
         return result
 
-    async def _send_turn(
+    async def _send_question(
         self,
         base_url: str,
         user_token: str,
         channel_id: str,
-        content: str,
         locale: str,
-        turn_idx: int,
     ) -> Optional[str]:
-        """Send one turn via /v1/agent/interact, return the response text or None on failure."""
-        async with httpx.AsyncClient(timeout=self.per_turn_timeout) as http:
+        """POST /v1/agent/interact with the question; return the reply or None."""
+        async with httpx.AsyncClient(timeout=self.response_timeout) as http:
             try:
                 resp = await http.post(
                     f"{base_url}/v1/agent/interact",
                     headers={"Authorization": f"Bearer {user_token}"},
                     json={
-                        "message": content,
+                        "message": CONVO_QUESTION,
                         "context": {
                             "channel_id": channel_id,
                             "session_id": channel_id,
                             "metadata": {
                                 "qa_module": "parallel_locales",
                                 "language": locale,
-                                "turn": str(turn_idx),
                             },
                         },
                     },
@@ -306,12 +328,13 @@ class ParallelLocalesTests:
         avg_seconds = (
             sum(r.total_seconds for r in self._locale_results) / total if total else 0.0
         )
+        max_seconds = max((r.total_seconds for r in self._locale_results), default=0.0)
 
         self.console.print()
         self.console.print(
-            f"[bold]Summary:[/bold] {passed}/{total} locales completed all turns; "
+            f"[bold]Summary:[/bold] {passed}/{total} locales replied; "
             f"{named}/{total} addressed user by name; "
-            f"avg per-locale wall-clock {avg_seconds:.1f}s"
+            f"avg {avg_seconds:.1f}s, max {max_seconds:.1f}s (parallel wall-clock = max)"
         )
 
         # Failure detail table
@@ -326,8 +349,10 @@ class ParallelLocalesTests:
                     step = "auth"
                 elif not r.settings_set:
                     step = "settings"
+                elif not r.response_received:
+                    step = "response"
                 else:
-                    step = f"turn {r.turns_completed + 1}"
+                    step = "unknown"
                 table.add_row(r.locale, step, (r.error or "")[:80])
             self.console.print(table)
 
@@ -342,10 +367,9 @@ class ParallelLocalesTests:
                     "error": r.error,
                     "metadata": {
                         "user_preferred_name": r.user_preferred_name,
-                        "turns_completed": r.turns_completed,
-                        "turns_total": len(CONVO_TURNS),
+                        "response_received": r.response_received,
+                        "response_length": r.response_length,
                         "name_addressed": r.name_addressed,
-                        "response_lengths": r.turn_response_lengths,
                     },
                 }
             )

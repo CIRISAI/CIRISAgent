@@ -192,3 +192,176 @@ class TestAccordModeIntegration:
         assert ACCORD_TEXT is not None
         assert ACCORD_TEXT_COMPRESSED is not None
         assert callable(get_accord_text)
+
+
+class TestAccordIntegrityHashes:
+    """Pin every ACCORD_EXPECTED_HASHES entry to the actual SHA-256 of the
+    file on disk.
+
+    Drift between this constant and the file content is a real production
+    incident: the agent's optimization_veto conscience reads the integrity
+    summary in its system snapshot, sees ✗FileIntegrity, and starts
+    fabricating SHA-256 hash-mismatch tampering threats — vetoing every
+    proposed action and forcing DEFER on every interaction. This was
+    diagnosed in the v3 mental-health harness where one stale hash on
+    accord_1.2b_my.txt locked the Burmese run into a defer storm.
+
+    The check is structural (no Burmese-specific carve-out): if any
+    localized ACCORD or POLYGLOT or guide file's content drifts from
+    the pinned manifest, this test fails BEFORE the conscience storm
+    can land in production.
+    """
+
+    @staticmethod
+    def _find_accord_file(filename):
+        """Locate an ACCORD file in any of the standard data directories.
+
+        Returns Path or None.
+        """
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parents[4]
+        candidates = [
+            repo_root / "ciris_engine" / "data" / "localized" / filename,
+            repo_root / "ciris_engine" / "data" / filename,
+            repo_root / filename,
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    @staticmethod
+    def _compute_sha256(path):
+        import hashlib
+
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_all_localized_accord_hashes_match(self):
+        """Every entry in ACCORD_EXPECTED_HASHES must match its file's actual SHA-256.
+
+        This test guards against the failure mode where a translator edit lands
+        but the manifest in constants.py is not updated, causing the integrity
+        check to fail at runtime and the conscience to interpret it as tampering.
+        """
+        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+
+        mismatches = []
+        missing = []
+        for filename, expected_hash in ACCORD_EXPECTED_HASHES.items():
+            path = self._find_accord_file(filename)
+            if path is None:
+                missing.append(filename)
+                continue
+            actual_hash = self._compute_sha256(path)
+            if actual_hash != expected_hash:
+                mismatches.append((filename, expected_hash, actual_hash))
+
+        # Detailed failure messages so an engineer can copy-paste the fix
+        if missing:
+            pytest.fail(
+                f"{len(missing)} ACCORD file(s) missing on disk but pinned in "
+                f"ACCORD_EXPECTED_HASHES: {missing}. Either ship the file or "
+                f"remove the hash entry."
+            )
+        if mismatches:
+            lines = [
+                f"{len(mismatches)} ACCORD file hash(es) drifted from manifest. "
+                f"This will trigger the conscience tampering-storm bug.",
+                "Update ciris_engine/logic/utils/constants.py:ACCORD_EXPECTED_HASHES with:",
+            ]
+            for filename, expected, actual in mismatches:
+                lines.append(f'    "{filename}": "{actual}",  # was {expected[:12]}...')
+            pytest.fail("\n".join(lines))
+
+    def test_all_guide_hashes_match(self):
+        """GUIDE_EXPECTED_HASHES (CIRIS_COMPREHENSIVE_GUIDE.md / _MOBILE.md)
+        must match actual file SHA-256s.
+
+        These hashes are also signature-verified via the seed/accord_manifest.json
+        chain — any drift here means EITHER the guide file was edited without
+        regenerating the manifest, OR the signed manifest is stale. Both are
+        production hazards.
+        """
+        from ciris_engine.logic.utils.constants import GUIDE_EXPECTED_HASHES
+
+        mismatches = []
+        missing = []
+        for filename, expected_hash in GUIDE_EXPECTED_HASHES.items():
+            path = self._find_accord_file(filename)
+            if path is None:
+                missing.append(filename)
+                continue
+            actual_hash = self._compute_sha256(path)
+            if actual_hash != expected_hash:
+                mismatches.append((filename, expected_hash, actual_hash))
+
+        if missing:
+            pytest.fail(
+                f"{len(missing)} guide file(s) missing on disk but pinned in "
+                f"GUIDE_EXPECTED_HASHES: {missing}."
+            )
+        if mismatches:
+            lines = [
+                f"{len(mismatches)} guide file hash(es) drifted from manifest:",
+                "Update ciris_engine/logic/utils/constants.py:GUIDE_EXPECTED_HASHES with:",
+            ]
+            for filename, expected, actual in mismatches:
+                lines.append(f'    "{filename}": "{actual}",  # was {expected[:12]}...')
+            lines.append("")
+            lines.append(
+                "If you also need to re-sign seed/accord_manifest.json, "
+                "regenerate via the signing script and update both."
+            )
+            pytest.fail("\n".join(lines))
+
+    def test_polyglot_files_pinned(self):
+        """The POLYGLOT ACCORD files (used in production via DMA prompts) must
+        be pinned in ACCORD_EXPECTED_HASHES so any edit triggers a hash check
+        rather than silently propagating.
+        """
+        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+
+        required = {"accord_1.2b_POLYGLOT.txt", "accord_1.2b_POLYGLOT_compressed.txt"}
+        missing_pins = required - set(ACCORD_EXPECTED_HASHES.keys())
+        assert not missing_pins, (
+            f"POLYGLOT ACCORD file(s) not pinned in ACCORD_EXPECTED_HASHES: "
+            f"{missing_pins}. These are the production-default ACCORDs and "
+            f"must be hash-checked."
+        )
+
+    def test_all_29_locales_pinned(self):
+        """Every supported locale (per localization/manifest.json) must have
+        a pinned ACCORD hash. Adding a locale without a pinned hash means
+        the integrity check silently passes that locale — a translator could
+        ship arbitrary content with no detection.
+        """
+        import json
+        from pathlib import Path
+
+        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+
+        repo_root = Path(__file__).resolve().parents[4]
+        manifest = json.loads((repo_root / "localization" / "manifest.json").read_text())
+        # The manifest may store languages as a list or dict — normalize.
+        if isinstance(manifest.get("languages"), list):
+            locales = set(manifest["languages"])
+        elif isinstance(manifest.get("languages"), dict):
+            locales = set(manifest["languages"].keys())
+        else:
+            pytest.fail("localization/manifest.json has unexpected 'languages' shape")
+
+        pinned_locales = {
+            name.removeprefix("accord_1.2b_").removesuffix(".txt")
+            for name in ACCORD_EXPECTED_HASHES
+            if name.startswith("accord_1.2b_") and name not in {
+                "accord_1.2b_POLYGLOT.txt",
+                "accord_1.2b_POLYGLOT_compressed.txt",
+            }
+        }
+        missing_pins = locales - pinned_locales
+        assert not missing_pins, (
+            f"Locales declared in localization/manifest.json but NOT in "
+            f"ACCORD_EXPECTED_HASHES: {sorted(missing_pins)}. Every shipped "
+            f"locale's ACCORD must be hash-pinned."
+        )

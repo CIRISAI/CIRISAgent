@@ -39,24 +39,39 @@ V3_HARNESS_USERS: Dict[str, str] = {
     "pa": "ਹਰਪ੍ਰੀਤ",
 }
 
-# Pattern: extract the longest single-quoted span as the user's first-person
-# message. The v3 harnesses wrap each question in a third-person evaluator
-# framing ("User Hauwa said: '...'") so reviewers can cross-reference rubric
-# expectations. The model must receive ONLY the inner first-person utterance —
-# otherwise it interprets "User Hauwa" as someone-being-quoted-by-jeff and
-# the conversation partner becomes the qa_runner admin.
-_WRAPPER_QUOTE_RE = re.compile(r"['‘’](.+?)['‘’]", re.DOTALL)
+# Pattern: extract the user's first-person message from explicit harness
+# framing. The v3 mental-health harnesses wrap each question in a third-person
+# evaluator framing for rubric clarity:
+#
+#   en: "User Hauwa said: '<inner>'"
+#   ha: "Mai amfani Hauwa ta ce: '<inner>'"
+#   yo: "Olùmúlò Tèmítọ́pẹ́ sọ pé: '<inner>'"
+#   my: "အသုံးပြုသူ မေသူက ပြောသည်: '<inner>'"
+#   pa: "ਯੂਜ਼ਰ ਹਰਪ੍ਰੀਤ ਨੇ ਕਿਹਾ: '<inner>'"
+#
+# The model must receive ONLY the inner first-person utterance — otherwise
+# it interprets "User Hauwa" as someone-being-quoted-by-jeff and the
+# conversation partner becomes the qa_runner admin.
+#
+# CRITICAL: anchor on the colon-space-quote pattern ("`: '`") so we only
+# strip ACTUAL wrappers. A naive "longest single-quoted span" heuristic
+# corrupts ordinary English questions containing contractions ("I've ...
+# doesn't") because it picks up apostrophes as quote delimiters and silently
+# truncates the payload. The colon anchor is present in every v3 wrapper but
+# absent before contractions in non-wrapper questions.
+_WRAPPER_RE = re.compile(r":\s*['‘’](.+?)['‘’]", re.DOTALL)
 
 
 def _strip_question_wrapper(text: str) -> str:
-    """Strip 'User X said: \"...\"' style framing from a v3 question.
+    """Strip 'User X said: "<...>"' style framing from a v3 question.
 
-    Returns the longest single-quoted span if one is present and >=30 chars
-    (heuristic threshold to avoid mistaking incidental quotes for the wrapper).
-    Falls back to the original text if no wrapper detected — older question
-    sets without wrappers are passed through unchanged.
+    Returns the longest `: '<inner>'` span (where <inner> is at least 30
+    chars) if the colon-space-quote framing is present. Falls back to the
+    original text otherwise — older question sets without explicit wrapper
+    framing pass through unchanged, and questions containing contractions
+    or quotation aren't corrupted.
     """
-    matches = list(_WRAPPER_QUOTE_RE.finditer(text))
+    matches = list(_WRAPPER_RE.finditer(text))
     if not matches:
         return text
     longest = max(matches, key=lambda m: len(m.group(1)))

@@ -145,7 +145,17 @@ class ReasoningEvent(str, Enum):
     DMA_RESULTS = "dma_results"  # 2) 3 DMA results (CSDMA, DSDMA, PDMA)
     IDMA_RESULT = "idma_result"  # 3) Identity DMA fragility check (always emitted)
     ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
-    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5) Tool-Specific ASPDMA (optional, when TOOL)
+    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5a) DEPRECATED: Tool-Specific ASPDMA legacy event
+                                         # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
+                                         # transition window per FSD/TRACE_EVENT_LOG_PERSISTENCE.md §10
+                                         # phase 0 gate. Remove after lens stops reading it.
+    VERB_SECOND_PASS_RESULT = "verb_second_pass_result"  # 4.5) Generic verb-specific second pass
+                                         # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). Replaces per-verb
+                                         # event types — single event with `verb` discriminator and
+                                         # verb-specific data so future verbs (MEMORIZE, OBSERVE, ...)
+                                         # adding a second pass don't multiply the schema. Currently
+                                         # fires for TOOL (replaces TSASPDMA_RESULT) and DEFER
+                                         # (closes the existing no-event asymmetry on DSASPDMA).
     CONSCIENCE_RESULT = "conscience_result"  # 5) Conscience evaluation + final action
     ACTION_RESULT = "action_result"  # 6) Action execution outcome + audit trail
     LLM_CALL = "llm_call"  # *) Per-provider-call observation (every LLM invocation, success+failure)
@@ -1295,6 +1305,63 @@ class TSASPDMAResultEvent(BaseModel):
     final_tool_name: Optional[str] = Field(None, description="Tool name if action is TOOL")
     final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
     tsaspdma_reasoning: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+
+
+class VerbSecondPassResultEvent(BaseModel):
+    """Generic verb-specific second-pass result (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4).
+
+    Replaces per-verb second-pass event types (TSASPDMA_RESULT, future
+    DSASPDMA_RESULT, etc.) with a single event keyed by a `verb` discriminator
+    and a verb-specific payload. Future verbs that gain a second-pass evaluator
+    drop into this event without schema changes.
+
+    Wire format mirrors TSASPDMAResultEvent's pattern but flattens the
+    "what was selected" / "what was refined to" axis across verbs:
+      - `original_action` is always the verb that triggered the second pass
+        (TOOL, DEFER, future MEMORIZE, ...).
+      - `final_action` is what the second pass recommended (may be the same
+        verb refined, or a switch to SPEAK/PONDER).
+      - `verb_specific_data` carries the verb's particular fields. For TOOL:
+        original_tool_name, final_tool_name, original_parameters,
+        final_parameters, gotchas_acknowledged. For DEFER: rights_basis,
+        primary_need_category, secondary_need_categories, domain_hint,
+        operational_reason. For future verbs: their own shape.
+
+    During the transition window, TOOL second-passes also emit the legacy
+    TSASPDMAResultEvent so existing lens consumers keep working — see
+    ReasoningEvent.TSASPDMA_RESULT docstring.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.VERB_SECOND_PASS_RESULT)
+    thought_id: str = Field(..., description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # Verb discriminator — which verb's second pass produced this event.
+    # Lower-case to match HandlerActionType enum value convention.
+    verb: str = Field(
+        ..., description="Verb whose second-pass evaluator produced this event (e.g. 'tool', 'defer')"
+    )
+
+    # First-pass input — what ASPDMA originally selected
+    original_action: str = Field(..., description="Action verb selected by first-pass ASPDMA")
+    original_reasoning: str = Field(..., description="Reasoning from first-pass ASPDMA")
+
+    # Second-pass output — what the verb-specific evaluator decided
+    final_action: str = Field(..., description="Final action after second pass (may be unchanged or a switch)")
+    final_reasoning: str = Field(..., description="Reasoning from the verb-specific second pass")
+
+    # Verb-specific fields — opaque at the schema level, validated per-verb at the
+    # producer side. Lens reads `verb` to decide which fields are present.
+    verb_specific_data: JSONDict = Field(
+        default_factory=dict,
+        description="Verb-specific second-pass data. Shape depends on `verb`. See class docstring.",
+    )
+
+    # User prompt passed to the verb-specific evaluator (debugging/transparency)
+    second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")

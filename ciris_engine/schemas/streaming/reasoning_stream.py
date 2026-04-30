@@ -26,16 +26,18 @@ from ciris_engine.schemas.services.runtime_control import (
     SnapshotAndContextResult,
     ThoughtStartEvent,
     TSASPDMAResultEvent,
+    VerbSecondPassResultEvent,
 )
 
-# Union of all 9 reasoning event types (7 pipeline + 1 optional + 1 sub-pipeline)
+# Union of all 10 reasoning event types (7 pipeline + 2 optional + 1 sub-pipeline)
 ReasoningEventUnion = Union[
     ThoughtStartEvent,
     SnapshotAndContextResult,
     DMAResultsEvent,
     IDMAResultEvent,  # IDMA fragility check (always emitted after DMAs)
     ASPDMAResultEvent,
-    TSASPDMAResultEvent,  # Optional: Tool-specific ASPDMA when TOOL selected
+    TSASPDMAResultEvent,  # DEPRECATED legacy: Tool-specific ASPDMA (kept during transition)
+    VerbSecondPassResultEvent,  # Generic verb-specific second pass — replaces TSASPDMA_RESULT
     ConscienceResultEvent,
     ActionResultEvent,
     LLMCallEvent,  # Sub-pipeline: per-provider-call observation
@@ -97,6 +99,8 @@ def create_reasoning_event(
         # (LLM calls outside thought processing — e.g. dream-state introspection
         # in future). Allow None to flow through; the schema permits it.
         return LLMCallEvent(**base_data, **event_data)
+    elif event_type == ReasoningEvent.VERB_SECOND_PASS_RESULT:
+        return VerbSecondPassResultEvent(**base_data, **event_data)
     else:
         raise ValueError(f"Unknown reasoning event type: {event_type}")
 
@@ -111,6 +115,7 @@ __all__ = [
     "IDMAResultEvent",
     "ASPDMAResultEvent",
     "TSASPDMAResultEvent",
+    "VerbSecondPassResultEvent",
     "ConscienceResultEvent",
     "ActionResultEvent",
     "LLMCallEvent",

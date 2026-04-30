@@ -402,7 +402,8 @@ class AccordMetricsService:
         "DMA_RESULTS": "rationale",
         "IDMA_RESULT": "rationale",  # Identity DMA fragility check
         "ASPDMA_RESULT": "rationale",
-        "TSASPDMA_RESULT": "rationale",  # Tool-specific ASPDMA (optional)
+        "TSASPDMA_RESULT": "rationale",  # DEPRECATED legacy; replaced by VERB_SECOND_PASS_RESULT
+        "VERB_SECOND_PASS_RESULT": "verb_second_pass",  # Generic verb-specific second pass
         "CONSCIENCE_RESULT": "conscience",
         "ACTION_RESULT": "action",  # Also contains outcome data
         "LLM_CALL": "llm_call",  # Sub-pipeline: per-provider-call observation
@@ -413,6 +414,7 @@ class AccordMetricsService:
         "ReasoningEvent.IDMA_RESULT": "rationale",
         "ReasoningEvent.ASPDMA_RESULT": "rationale",
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
+        "ReasoningEvent.VERB_SECOND_PASS_RESULT": "verb_second_pass",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
         "ReasoningEvent.LLM_CALL": "llm_call",
@@ -1720,6 +1722,7 @@ class AccordMetricsService:
 
         elif event_type == "TSASPDMA_RESULT":
             # RATIONALE (Part 2.5): Tool-Specific ASPDMA (optional, when TOOL selected)
+            # DEPRECATED — replaced by VERB_SECOND_PASS_RESULT, kept during transition.
             # GENERIC: Final action and decision
             data = {
                 "original_tool_name": event.get("original_tool_name"),
@@ -1737,6 +1740,30 @@ class AccordMetricsService:
                 data["aspdma_rationale"] = event.get("aspdma_rationale")
                 data["tsaspdma_rationale"] = event.get("tsaspdma_rationale")
                 data["tsaspdma_prompt"] = event.get("tsaspdma_prompt")
+            return data
+
+        elif event_type == "VERB_SECOND_PASS_RESULT":
+            # VERB_SECOND_PASS: Generic verb-specific second-pass result
+            # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). One event with verb
+            # discriminator replaces per-verb event types — TSASPDMA_RESULT
+            # for TOOL, future per-verb second passes for MEMORIZE/etc.
+            # GENERIC: verb + action transition + opaque verb-specific payload
+            data = {
+                "verb": event.get("verb"),
+                "original_action": event.get("original_action"),
+                "final_action": event.get("final_action"),
+                # verb_specific_data is opaque at the lens row level —
+                # serialized whole, ordered/decoded by `verb` discriminator
+                # at query time. Lens may project verb-specific columns later.
+                "verb_specific_data": _serialize(event.get("verb_specific_data", {})),
+            }
+            # DETAILED: Add reasoning text
+            if is_detailed:
+                data["original_reasoning"] = event.get("original_reasoning")
+                data["final_reasoning"] = event.get("final_reasoning")
+            # FULL: Add the second-pass prompt
+            if is_full:
+                data["second_pass_prompt"] = event.get("second_pass_prompt")
             return data
 
         elif event_type == "CONSCIENCE_RESULT":

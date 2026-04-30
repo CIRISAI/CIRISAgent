@@ -40,7 +40,12 @@ class StreamingVerificationModule:
 
     # Optional events that may be emitted depending on action type
     OPTIONAL_EVENTS = {
-        "tsaspdma_result",  # v1.9.3: Only emitted when ASPDMA selects TOOL action
+        "tsaspdma_result",  # v1.9.3: DEPRECATED legacy, replaced by verb_second_pass_result
+                            #         in v2.7.8. Still emitted alongside the new event during
+                            #         the transition window per FSD §10 phase 0 gate.
+        "verb_second_pass_result",  # v2.7.8: Generic verb-specific second pass (FSD §4) —
+                                    # fires for TOOL (replaces tsaspdma_result) and DEFER
+                                    # (closes prior no-event asymmetry on DSASPDMA).
         "llm_call",  # v2.7.8: Per-provider-call observation (FSD/TRACE_EVENT_LOG_PERSISTENCE.md
                      # §5.2). Multiple llm_call events per thought is BY DESIGN — every DMA /
                      # ASPDMA / conscience handler issues 1+ LLM calls and each is its own event.
@@ -925,19 +930,35 @@ class StreamingVerificationModule:
                                         "idma_prompt",  # Optional prompt
                                     },
                                     "tsaspdma_result": {
-                                        # TSASPDMA tool-specific evaluation (v1.9.3)
+                                        # TSASPDMA tool-specific evaluation (v1.9.3 — DEPRECATED)
+                                        # Replaced by verb_second_pass_result in v2.7.8.
                                         # Input from ASPDMA
                                         "original_tool_name",
                                         "original_parameters",
                                         "aspdma_rationale",
+                                        "aspdma_reasoning",  # legacy alias
                                         # Output (refined decision)
                                         "final_action",
                                         "final_tool_name",
                                         "final_parameters",
                                         "tsaspdma_rationale",
+                                        "tsaspdma_reasoning",  # legacy alias
                                         # Optional tool documentation context
                                         "tool_description",
                                         "gotchas_acknowledged",
+                                    },
+                                    "verb_second_pass_result": {
+                                        # Generic verb-specific second pass (v2.7.8). Replaces
+                                        # tsaspdma_result. Keep in sync with VerbSecondPassResultEvent
+                                        # in ciris_engine/schemas/services/runtime_control.py.
+                                        # See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4.
+                                        "verb",
+                                        "original_action",
+                                        "original_reasoning",
+                                        "final_action",
+                                        "final_reasoning",
+                                        "verb_specific_data",
+                                        "second_pass_prompt",
                                     },
                                     "aspdma_result": {
                                         "selected_action",

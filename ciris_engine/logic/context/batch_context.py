@@ -65,32 +65,13 @@ async def _get_attestation_summary() -> Optional[str]:
         else:
             checks.append(f"✗Registry({sources_valid}/3)")
 
-        # File integrity — handled with care: a failing file_integrity should NOT
-        # propagate as a hard ✗ into the conscience's reasoning context, because
-        # the conscience LLM mis-reads "✗FileIntegrity" as "system tampered" and
-        # invents SHA-256 mismatch security threats that veto every action. File-
-        # integrity status is for the audit/security layer — observability via
-        # ATTESTATION_FAILURE incidents — not for action-selection vetoing.
-        #
-        # Two common failure modes that are NOT tampering:
-        #   (1) Build-time-injected files like _build_secrets.py have machine-
-        #       specific hashes that legitimately diverge from the FFI's baked
-        #       manifest. They should never have been pinned.
-        #   (2) Code edited between FFI builds (typical during a release cycle)
-        #       — the FFI manifest is regenerated only when the Rust binary
-        #       rebuilds, so post-FFI-build edits show as "modified" until the
-        #       next FFI release.
-        #
-        # Both surface as `valid: False` but neither is a runtime tampering
-        # signal. We emit `○FileIntegrity` (informational marker, parallel to
-        # `○Audit`) so the conscience treats it as "unverified, not failed"
-        # while the audit layer still records the actual mismatch list.
+        # File integrity
         file_integrity = result.get("file_integrity", {})
         fi_full = file_integrity.get("full", {}) if isinstance(file_integrity, dict) else {}
         if fi_full.get("valid", False) or fi_full.get("files_failed", 1) == 0:
             checks.append("✓FileIntegrity")
         else:
-            checks.append("○FileIntegrity")
+            checks.append("✗FileIntegrity")
 
         # Audit trail
         audit = result.get("audit_trail", {})

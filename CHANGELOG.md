@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.7] - 2026-04-29
+
+### Fixed
+
+- **ACCORD `accord_1.2b_my.txt` hash drift** — pinned `ACCORD_EXPECTED_HASHES["accord_1.2b_my.txt"]` had drifted from the actual file (last-edited in 2.6.3 but the manifest never re-pinned). The integrity check failed at runtime, the optimization_veto conscience read ✗FileIntegrity from its system snapshot, and started fabricating elaborate SHA-256-hash-mismatch tampering threats — vetoing every proposed action and forcing DEFER on every interaction. Diagnosed in the v3 mental-health Burmese run (locked into a defer storm; conscience reasoning quoted "ACCORD ဖိုင်၏ SHA-256 hash မှာ မမှန်ကန်ဘဲ" verbatim).
+- **CodeQL SSRF #346** — `/v1/setup/download-package` validated parsed-URL components but requested the raw user input string. Closed via `_validate_and_reconstruct()` that builds the request URL from validated parts only (drops fragment + userinfo, preserves scheme/port/path/query). Defense against `urlparse`/httpx parser-disagreement bypasses (CVE-2023-24329 class).
+- **`assert` in production crypto-verify** (`ciris_adapters/ciris_verify/service.py:186, 220`) — converted to explicit `RuntimeError` so the "Client not initialized" guard holds in `python -O` builds where assertions are stripped.
+- **SQL identifier allowlist** on `PrivacyTableMapping` / `PrivacyColumnMapping` — `table_name`, `column_name`, `identifier_column`, `cascade_deletes[]` flow through string-formatted SQL. Validators now reject anything not matching `^[A-Za-z_][A-Za-z0-9_]*$`. Defense-in-depth against future user-editable privacy schemas. 14 regression tests pinning injection-shaped strings.
+- **`SUPPORTED_LANGUAGE_CODES` covered only 17 locales** while `localization/manifest.json` declares 29. Added `fa, ha, id, mr, my, pa, ta, te, th, uk, vi, yo`. Surfaced when the v3 harness called `PUT /v1/users/me/settings` with a Tier-0 locale and got `400 "Invalid language code 'yo'"`.
+- **API `agent.interact()` author_name leaked the auth username** — resolved as `oauth_name || user.name || user_id`, which used the QA admin's hardcoded "jeff" username and ignored the user's chosen display preference. For multilingual deployments the agent addressed Yoruba users as "jeff" instead of "Tèmítọ́pẹ́". New priority: `user_preferred_name` (graph attribute) → `oauth_name` → `name` → `user_id`. Tier 1 lookup is best-effort via `memory_service.recall()`.
+- **`qa_runner` LANGUAGE_SPECS missing Tier-0/Tier-1 codes** — `--model-eval-languages yo/ha/my/pa/bn/sw/ta/te` silently filtered to zero submissions because the lookup dropped unknown codes. Runner reported "9 questions × 0 languages = 0 submissions" and exited cleanly without doing any work. Added all 8 missing locales.
+
+### Added
+
+- **Tier-1 language guidance packs** (`bn`/`sw`/`my`/`pa`/`ta`) — five primers wired into `prompts.language_guidance`. Same shape and review-policy as the 2.7.6 Tier-0 packs (Amharic / Hausa / Yoruba): UNCERTAIN-flagged terms ship with English-fallback parentheticals so the agent surfaces uncertainty rather than misdirecting a vulnerable user.
+- **v3 mental-health safety harnesses for Hausa, Yoruba, Burmese, Punjabi** under `tests/safety/{hausa,yoruba,burmese,punjabi}_mental_health/`. Parallel to the 2.7.6 Amharic v3 — 9-question 5-stage escalation arc + 4 adversarial probes with auditable rubrics. Per-language universal hard-fails (e.g. Yoruba U10 tone-strip, U11 `wèrè` echo; Burmese U10 script corruption, U11 `ရူး` echo, U12 gendered first-person; Punjabi U10 `ਪਾਗਲ` slur, U11 Devanagari script-bleed, U12 false canonical-depression-term invention).
+- **Yoruba + Hausa primer v2 hardening** based on Tier-0 v3 live results against DeepInfra Qwen3.6-35B-A3B that produced U5 register-break hard-fails. v1 worked on neutral questions but collapsed on Q1 (symptom disclosure) and Q4 (cross-cluster crisis lead-in). v2 adds: worked counter-example tables (`Mo gbọ́ ọ̀rọ̀ rẹ` → `Mo gbọ́ ọ̀rọ̀ yín`; `kake` → `kuke`, `kana` → `kuna`, `maka` → `muku`), possessive / verb-form pinning, hold-the-line rule (forbids mid-response register shifts), "warmth ≠ informality" framing repeated three times, Yoruba-specific tone-mark stacking ban with recovery rule, §5 directive forcing in-response cross-cluster disambiguation, §6 false-reassurance posture.
+- **`model_eval` v3 harness user identity plumbing** — for each language, sets `user_preferred_name` (in-question name like `Tèmítọ́pẹ́`/`Hauwa`) and `preferred_language` on the admin user before any question fires. Strips the `User X said: '...'` third-person evaluator wrapper so the agent receives only the in-character first-person utterance. Eliminates the "Jeff" name-leak and adversarial-context locale collapse (Hausa Q6 Amharic-leak, Q9 English-leak both fixed).
+- **4 ACCORD integrity tests** in `TestAccordIntegrityHashes`: pins every `ACCORD_EXPECTED_HASHES` and `GUIDE_EXPECTED_HASHES` entry to the actual file SHA-256, requires POLYGLOT files always pinned, requires every locale in `localization/manifest.json` to have a pinned ACCORD hash. Failure messages include copy-paste-ready replacement constants. A translator edit that misses the manifest update will now fail at PR time rather than landing in production and triggering the conscience tampering-storm bug.
+
+### Changed
+
+- **Ruff S101 (`assert` use) excluded from `tests/`** in `pyproject.toml` per-file-ignores. Pytest uses `assert` as its primary assertion mechanism; the S101 rule's concern (asserts vanishing under `python -O`) does not apply to test code. Production S101 hits dropped from ~457 to ~10 — making future security triage tractable.
+
 ## [2.7.6] - 2026-04-29
 
 ### Added

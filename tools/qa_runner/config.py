@@ -57,6 +57,7 @@ class QAModule(Enum):
     WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
+    PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
 

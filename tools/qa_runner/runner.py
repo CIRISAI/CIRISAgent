@@ -284,6 +284,7 @@ class QARunner:
             QAModule.WALLET,
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
+            QAModule.PARALLEL_LOCALES,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
         ]
@@ -925,6 +926,7 @@ class QARunner:
         from .modules.mcp_tests import MCPTests
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
         from .modules.model_eval_tests import ModelEvalTests
+        from .modules.parallel_locales_tests import ParallelLocalesTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
@@ -978,6 +980,7 @@ class QARunner:
             QAModule.WALLET: WalletTests,
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
+            QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }

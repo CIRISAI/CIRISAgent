@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 109
-        versionName "2.7.7"
+        versionCode 110
+        versionName "2.7.8"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)

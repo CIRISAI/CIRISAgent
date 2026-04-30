@@ -7,18 +7,62 @@ server config, and samples server memory during the run.
 """
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
+import httpx
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from .memory_benchmark_tests import find_server_pid, format_size, get_children_memory
+
+
+# v3 mental-health harness named users — one per language harness. The agent
+# sees this name in user.preferred_name (display) so its responses address
+# the correct user, and user.preferred_language is set so the language-chain
+# walk delivers the target locale via the user-profile tier (not just metadata).
+#
+# Without this, the agent processes every question as the qa_runner admin
+# (default name = ASCII placeholder, preferred_language = "en"), which leaks
+# into adversarial-context responses (locale collapse, name confusion).
+V3_HARNESS_USERS: Dict[str, str] = {
+    "am": "ሰላማዊት",
+    "ha": "Hauwa",
+    "yo": "Tèmítọ́pẹ́",
+    "my": "မေသူ",
+    "pa": "ਹਰਪ੍ਰੀਤ",
+}
+
+# Pattern: extract the longest single-quoted span as the user's first-person
+# message. The v3 harnesses wrap each question in a third-person evaluator
+# framing ("User Hauwa said: '...'") so reviewers can cross-reference rubric
+# expectations. The model must receive ONLY the inner first-person utterance —
+# otherwise it interprets "User Hauwa" as someone-being-quoted-by-jeff and
+# the conversation partner becomes the qa_runner admin.
+_WRAPPER_QUOTE_RE = re.compile(r"['‘’](.+?)['‘’]", re.DOTALL)
+
+
+def _strip_question_wrapper(text: str) -> str:
+    """Strip 'User X said: \"...\"' style framing from a v3 question.
+
+    Returns the longest single-quoted span if one is present and >=30 chars
+    (heuristic threshold to avoid mistaking incidental quotes for the wrapper).
+    Falls back to the original text if no wrapper detected — older question
+    sets without wrappers are passed through unchanged.
+    """
+    matches = list(_WRAPPER_QUOTE_RE.finditer(text))
+    if not matches:
+        return text
+    longest = max(matches, key=lambda m: len(m.group(1)))
+    if len(longest.group(1)) < 30:
+        return text
+    return longest.group(1)
 
 
 @dataclass(frozen=True)
@@ -224,6 +268,16 @@ class ModelEvalTests:
 
         await self._ensure_accord_metrics_adapters()
 
+        # Plumb v3 harness named user + preferred_language onto the admin's
+        # user node BEFORE any question fires. The qa_runner-created admin
+        # has a default ASCII name + preferred_language="en", which leaks
+        # into adversarial-context responses as name confusion ("Jeff" in
+        # Hausa Q7) and locale collapse (Amharic in Hausa Q6, English in
+        # Hausa Q9). Setting user_preferred_name + preferred_language puts
+        # the user-profile tier of the language-chain in agreement with
+        # the metadata tier, so the agent has a coherent context.
+        await self._configure_harness_user_for_languages()
+
         if self.profile_memory:
             await self._start_memory_sampler()
 
@@ -270,7 +324,12 @@ class ModelEvalTests:
     ) -> EvalResult:
         async with semaphore:
             channel_id = f"model_eval_{language.code}_{question_index:02d}"
-            payload = self._format_question(language, question)
+            # Submit only the user's first-person utterance. The v3 harnesses
+            # wrap each question in a third-person evaluator framing for
+            # rubric clarity ("User Hauwa said: '...'"); without stripping,
+            # the agent treats the wrapper as the conversation and the
+            # quoted user as a third party.
+            payload = _strip_question_wrapper(self._format_question(language, question))
             start_time = time.time()
 
             try:
@@ -311,6 +370,60 @@ class ModelEvalTests:
                 channel_id=channel_id,
                 success=success,
             )
+
+    async def _configure_harness_user_for_languages(self) -> None:
+        """Set admin's user_preferred_name + preferred_language to match the run.
+
+        For single-language runs (the common case for v3 mental-health harnesses
+        — one language per qa_runner invocation), this aligns the user-profile
+        tier of the language-chain with the metadata tier. The agent's "from"
+        line will use user_preferred_name, so adversarial responses address
+        the right user instead of leaking the qa_runner admin's username.
+
+        For multi-language runs, only the LAST language's setup wins on the
+        single admin user — those runs should rely on metadata.language only.
+        Genuine multi-user-per-question support is a future change.
+
+        Best-effort — if the API call fails (e.g. older agent version without
+        the endpoint, or no v3 user mapping for the language), the run
+        proceeds with whatever defaults the admin has.
+        """
+        transport = getattr(self.client, "_transport", None)
+        if transport is None:
+            return
+        base_url = getattr(transport, "base_url", "http://localhost:8080")
+        token = getattr(transport, "api_key", None)
+        if not token:
+            return
+
+        for language in self.languages:
+            harness_name = V3_HARNESS_USERS.get(language.code)
+            if not harness_name:
+                continue  # Locale without a v3 harness — leave admin defaults
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as http:
+                    resp = await http.put(
+                        f"{base_url}/v1/users/me/settings",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={
+                            "user_preferred_name": harness_name,
+                            "preferred_language": language.code,
+                        },
+                    )
+                if resp.status_code == 200:
+                    self.console.print(
+                        f"[dim]model_eval: configured admin as "
+                        f"'{harness_name}' (lang={language.code}) for v3 harness[/dim]"
+                    )
+                else:
+                    self.console.print(
+                        f"[yellow]model_eval: PUT /v1/users/me/settings returned "
+                        f"{resp.status_code} for {language.code} — proceeding with admin defaults[/yellow]"
+                    )
+            except Exception as exc:
+                self.console.print(
+                    f"[yellow]model_eval: harness-user setup for {language.code} failed: {exc}[/yellow]"
+                )
 
     def _format_question(self, language: LanguageSpec, question: EvalQuestion) -> str:
         # Prefer the native-language translation when available — a Chinese user

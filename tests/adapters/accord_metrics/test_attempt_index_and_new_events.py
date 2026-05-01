@@ -275,6 +275,148 @@ class TestConscienceResultIsRecursive:
         assert data.get("is_recursive") is False
 
 
+class TestSnapshotAndContextCirisVerifyFields:
+    """Pin the CIRISVerify attestation field set on SNAPSHOT_AND_CONTEXT.
+
+    The lens uses these for hardware-integrity scoring as part of k_eff
+    analysis (see FSD/TRACE_WIRE_FORMAT.md §5.2.1). Each `*_ok` boolean
+    is independently meaningful — collapsing them or dropping any from
+    GENERIC silently breaks per-check k_eff dimensions in the lens.
+
+    Source of truth for the field set: VerifyAttestationContext in
+    ciris_engine/schemas/services/attestation.py.
+    """
+
+    def _snapshot_event_with_attestation(self) -> Dict[str, Any]:
+        return {
+            "event_type": "SNAPSHOT_AND_CONTEXT",
+            "thought_id": "th_test",
+            "task_id": "task_test",
+            "timestamp": "2026-04-30T15:00:00Z",
+            "system_snapshot": {
+                "cognitive_state": "work",
+                "verify_attestation": {
+                    "attestation_level": 3,
+                    "attestation_status": "verified",
+                    "attestation_summary": "Level 3/5 | ✓Binary ✓Environment ✓Registry",
+                    "disclosure_severity": "info",
+                    "disclosure_text": "",
+                    "binary_ok": True,
+                    "env_ok": True,
+                    "registry_ok": True,
+                    "file_integrity_ok": False,
+                    "audit_ok": False,
+                    "play_integrity_ok": False,
+                    "hardware_backed": True,
+                    "key_status": "local",
+                    "key_id": "agent-test",
+                    "ed25519_fingerprint": "0123abcd" * 8,  # 64 hex chars
+                    "key_storage_mode": "TPM",
+                    "hardware_type": "TpmFirmware",
+                    "verify_version": "1.6.3",
+                },
+            },
+        }
+
+    def test_generic_carries_full_per_check_boolean_set(self):
+        """All six per-check booleans + hardware_backed must land at GENERIC.
+        Each is near-zero-correlation with the reasoning stack and powers
+        an independent k_eff dimension."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        data = service._extract_component_data(
+            "SNAPSHOT_AND_CONTEXT", self._snapshot_event_with_attestation()
+        )
+        # Each check is a separate k_eff dimension — losing any silently
+        # collapses the lens's hardware-integrity scoring
+        for field in (
+            "binary_ok",
+            "env_ok",
+            "registry_ok",
+            "file_integrity_ok",
+            "audit_ok",
+            "play_integrity_ok",
+            "hardware_backed",
+        ):
+            assert field in data, f"GENERIC missing CIRISVerify check field: {field}"
+        # Per-check values pass through verbatim
+        assert data["binary_ok"] is True
+        assert data["registry_ok"] is True
+        assert data["file_integrity_ok"] is False
+
+    def test_generic_carries_attestation_summary_fields(self):
+        """attestation_level + attestation_status + attestation_context +
+        disclosure_severity must all land at GENERIC. They drive UI banner
+        severity and lens-side level-stratified queries."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        data = service._extract_component_data(
+            "SNAPSHOT_AND_CONTEXT", self._snapshot_event_with_attestation()
+        )
+        for field in (
+            "attestation_level",
+            "attestation_status",
+            "attestation_context",
+            "disclosure_severity",
+        ):
+            assert field in data, f"GENERIC missing attestation summary field: {field}"
+        assert data["attestation_level"] == 3
+        assert data["attestation_status"] == "verified"
+        # Pre-rendered summary string is human-readable — not authoritative
+        # but lens may show it in detail dashboards
+        assert "Level 3/5" in data["attestation_context"]
+
+    def test_detailed_adds_key_identifying_fields(self):
+        """Key identity fields are gated behind DETAILED because they
+        identify the agent instance — keep them out of GENERIC for
+        deployments that share GENERIC traces with non-operators."""
+        service = _make_service(TraceDetailLevel.DETAILED)
+        data = service._extract_component_data(
+            "SNAPSHOT_AND_CONTEXT", self._snapshot_event_with_attestation()
+        )
+        for field in (
+            "key_status",
+            "key_id",
+            "ed25519_fingerprint",
+            "key_storage_mode",
+            "hardware_type",
+            "verify_version",
+        ):
+            assert field in data, f"DETAILED missing key/version field: {field}"
+        assert data["ed25519_fingerprint"] == "0123abcd" * 8
+        assert data["hardware_type"] == "TpmFirmware"
+
+    def test_generic_does_not_leak_key_identity(self):
+        """Key fingerprint and key_id MUST NOT appear at GENERIC — they're
+        identifying and gated behind DETAILED. Pin this so a future
+        well-meaning refactor doesn't promote them."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        data = service._extract_component_data(
+            "SNAPSHOT_AND_CONTEXT", self._snapshot_event_with_attestation()
+        )
+        for field in ("ed25519_fingerprint", "key_id", "key_status"):
+            assert field not in data, f"GENERIC unexpectedly leaks identifying field: {field}"
+
+    def test_attestation_absent_when_verify_not_run(self):
+        """When CIRISVerify hasn't run (verify_attestation absent),
+        builder emits attestation_level=0, attestation_status='not_attempted',
+        and the per-check booleans default to None (not False — preserving
+        the distinction between 'check failed' and 'check not run')."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        event = {
+            "event_type": "SNAPSHOT_AND_CONTEXT",
+            "thought_id": "th_test",
+            "task_id": "task_test",
+            "timestamp": "2026-04-30T15:00:00Z",
+            "system_snapshot": {"cognitive_state": "work"},  # no verify_attestation
+        }
+        data = service._extract_component_data("SNAPSHOT_AND_CONTEXT", event)
+        assert data["attestation_level"] == 0
+        assert data["attestation_status"] == "not_attempted"
+        # Per-check booleans default to None when verify wasn't run — distinct
+        # from False which means "check ran and failed"
+        assert data["binary_ok"] is None
+        assert data["env_ok"] is None
+
+
 class TestEventToComponentMapping:
     """The EVENT_TO_COMPONENT mapping routes events to trace component_type.
     Pin the new entries — these decide the lens column the event lands in."""

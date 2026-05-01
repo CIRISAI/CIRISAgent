@@ -261,6 +261,74 @@ re-gathering), the entire field is stripped by `_strip_empty`. Treat its
 absence as "no snapshot at this point in the thought," not as a missing
 field.
 
+#### 5.2.1 CIRISVerify attestation block
+
+The `attestation_*`, `*_ok`, `key_*`, `ed25519_fingerprint`,
+`hardware_*`, and `verify_version` fields above are projected from a
+single source — the `VerifyAttestationContext` schema in
+`ciris_engine/schemas/services/attestation.py:244`. CIRISVerify is the
+agent-side cryptographic attestation framework that proves the binary,
+environment, signing key, file integrity, and audit chain are intact.
+Every traced thought carries a snapshot of this state so the lens can
+correlate reasoning quality with hardware-integrity dimensions.
+
+**`attestation_level` (0-5):** highest level the agent achieved at
+attestation time. Higher = more independent integrity dimensions verified.
+Each level requires all lower levels to pass:
+
+| Level | Requires | Meaning |
+|------:|----------|---------|
+| 0 | (nothing) | CIRISVerify not loaded or disabled |
+| 1 | `binary_ok` | Agent binary hash matches a published artifact |
+| 2 | + `env_ok` | Runtime environment matches expected config |
+| 3 | + `registry_ok` OR `hardware_backed` | Either: signing key registered with Portal, or: signing key hardware-backed (TPM/TEE) |
+| 4 | + `file_integrity_ok` | All loadable files (prompts, configs, accord) verified against their hashes |
+| 5 | + `audit_ok` AND `play_integrity_ok` (mobile) | Audit chain verified end-to-end; on mobile, Google Play Integrity passed |
+
+**Per-check booleans (always at GENERIC):** each `*_ok` field is
+**independently meaningful and near-zero-correlation with the reasoning
+stack** — the lens should treat them as separate integrity dimensions
+for k_eff analysis, not collapse them into the level scalar.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `binary_ok` | bool | CIRISVerify binary loaded and functional |
+| `env_ok` | bool | Environment configured (CIRIS_HOME, paths, etc.) |
+| `registry_ok` | bool | Signing key registered with Portal or root authority |
+| `file_integrity_ok` | bool | Loadable file hashes verified (ACCORD, prompts, configs) |
+| `audit_ok` | bool | Audit chain end-to-end intact |
+| `play_integrity_ok` | bool | Google Play Integrity passed (Android only; false on desktop) |
+| `hardware_backed` | bool | Signing key in hardware (TPM/TEE) rather than software |
+
+**`attestation_status`** ∈ {`not_attempted`, `pending`, `verified`,
+`failed`} — high-level status; `verified` requires all checks at the
+claimed level to pass. `partial` (in `attestation_mode`, not
+`attestation_status`) means some checks failed at higher levels but the
+agent achieved a non-zero floor.
+
+**`disclosure_severity`** ∈ {`info`, `warning`, `critical`} — drives UI
+banner severity in CIRIS-aware clients. The lens should preserve this
+field for downstream alerting; a switch from `info` to `warning` on a
+running agent is a meaningful integrity signal even if the level didn't
+change.
+
+**`attestation_context`** — pre-rendered human-readable summary string,
+same format used in agent LLM context, API responses, and traces. Not
+authoritative; the booleans above are. The lens may show this string in
+trace-detail dashboards for one-glance status.
+
+**Key fields** (DETAILED+) — `key_status` ∈ {`none`, `ephemeral`,
+`portal_pending`, `portal_active`, `local`}, `key_id` (Portal-issued ID
+when activated), `ed25519_fingerprint` (SHA-256 of the public key),
+`key_storage_mode` (e.g. `TPM`, `SOFTWARE`), `hardware_type` (e.g.
+`TpmFirmware`, `TEE`, `SOFTWARE_ONLY`). These are identifying — gated
+behind DETAILED rather than GENERIC for that reason.
+
+**`verify_version`** — CIRISVerify library version string (e.g.
+`"1.6.3"`). Lens should pin per-trace-row so a future version that
+changes attestation semantics doesn't silently invalidate older
+comparisons.
+
 ### 5.3 `DMA_RESULTS`
 
 Once per thought. Carries the three perspective DMAs run in parallel:

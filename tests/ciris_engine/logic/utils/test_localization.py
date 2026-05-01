@@ -317,6 +317,79 @@ class TestGetLanguageGuidance:
         assert "ማንነት ማወቅ" in guidance, "Wrong-sense disambiguation for 'diagnosis' must name the bad candidate"
         assert "ሳይኮተራፒ" in guidance, "Transliteration disambiguation for 'talk therapy' must name the bad candidate"
 
+    def test_amharic_2_7_8_grammar_and_terminology_findings(self):
+        """Six findings from a live Amharic CIRIS Ally response captured by
+        Esu. Each was a real production bug class — pin the primer's
+        coverage of them so the corrections can't silently regress.
+
+        The findings the primer must address (each gets one positive +
+        one negative substring assertion mirroring the existing
+        NOT-X-because-Y pattern):
+
+        1. Transitive vs intransitive infinitive in medical disclaimer
+           (ለማዳን "to heal someone" vs ለመዳን "to be healed")
+        2. Lifestyle vs substance/habit category labeling
+           (የአኗኗር ዘይቤ for sleep + diet + substance use as a bucket)
+        3. Genetics — native term vs transliteration
+           (የዘር ውርስ vs ጄኔቲክስ)
+        4. Exercise / physical activity in medical context
+           (የአካል እንቅስቃሴ vs ስፖርት — ስፖርት means competitive sport)
+        5. Eating habits — moral-conduct word misuse
+           (አመጋገብ vs ምግባር — ምግባር is "moral conduct", not eating)
+        6. Neurotransmitter — native gloss or omit
+           (የነርቭ ተላላፊ ኬሚካሎች vs leaving 'neurotransmitter' as English)
+
+        Plus: cultural frame and a worked-example SPEAK paragraph the
+        LLM can copy.
+        """
+        guidance = get_language_guidance("am")
+
+        # 1. Transitive vs intransitive
+        assert "ለማዳን" in guidance, (
+            "Transitive 'to heal someone' (ለማ- prefix) must be in the primer "
+            "— this is the canonical correction for the captured 'ለመዳን' bug "
+            "in the medical disclaimer"
+        )
+        assert "ለመዳን" in guidance, (
+            "The intransitive ለመዳን ('to be healed') must be named as the "
+            "wrong form so the LLM doesn't reach for it via NOT-X-because-Y"
+        )
+
+        # 2. Lifestyle category
+        assert "የአኗኗር ዘይቤ" in guidance, "Lifestyle category term missing"
+
+        # 3. Genetics
+        assert "የዘር ውርስ" in guidance, "Native term for genetics (የዘር ውርስ) missing"
+        assert "ጄኔቲክስ" in guidance, "Transliteration disambiguation for 'genetics' must name the bad candidate"
+
+        # 4. Exercise
+        assert "የአካል እንቅስቃሴ" in guidance, "Native term for exercise (የአካል እንቅስቃሴ) missing"
+        assert "ስፖርት" in guidance, "Wrong-context disambiguation for 'sport vs medical exercise' must name ስፖርት"
+
+        # 5. Eating habits — moral-conduct misuse
+        assert "አመጋገብ" in guidance, "Native term for eating (አመጋገብ) missing"
+        assert "ምግባር" in guidance, "Wrong-sense disambiguation for ምግባር (moral conduct vs eating) must be present"
+
+        # 6. Neurotransmitter
+        assert "የነርቭ ተላላፊ ኬሚካሎች" in guidance, "Native gloss for neurotransmitter missing"
+
+        # Cultural frame — Ethiopian mental-health context
+        assert "ጸበል" in guidance or "ሃይማኖታዊ መሪ" in guidance, (
+            "Cultural-frame section must reference the parallel-path resources "
+            "(ጸበል / ሃይማኖታዊ መሪ / ቤተሰብ) — pure-biomedical framing was the "
+            "captured-response gap"
+        )
+        assert "የመጀመሪያ ደረጃ ጤና" in guidance, (
+            "Primary-care recommendation must be present — psychiatrist scarcity in "
+            "Ethiopia means 'see a psychiatrist' alone isn't actionable"
+        )
+
+        # Worked-example SPEAK paragraph the LLM should copy
+        assert "ተጠቃሚ ጥያቄ" in guidance, (
+            "Worked-example SPEAK section must be present — the LLM copies "
+            "concrete in-context patterns more reliably than abstract rules"
+        )
+
     def test_english_returns_empty_guidance(self):
         """English doesn't need guidance (the prompt is already in English)."""
         assert get_language_guidance("en") == ""

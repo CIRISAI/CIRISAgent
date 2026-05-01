@@ -231,12 +231,76 @@ class TestCacheManagement:
 class TestGetLanguageGuidance:
     """Tests for the per-language guidance block injected into LLM prompts.
 
-    Pinning the contract: 28 of 29 languages return empty (so the DMA
-    layer skips appending an empty system message), and Amharic returns
-    the populated terminology pack covering the 2.7.6 install incident's
-    three observed errors (diagnosis sense-collision, talk-therapy
-    transliteration, schizophrenia cluster contamination).
+    Pinning the contract: as of 2.7.8, 8 of 29 languages have populated
+    packs (am from 2.7.6; ha + yo Tier-0 plus bn / my / pa / sw / ta from
+    2.7.7), and 21 return empty. Each populated pack is asserted to (a)
+    stay non-empty and (b) carry a distinctive native-script substring so
+    a deletion or English-filler replacement gets caught at PR time.
+
+    The 8 DMA / ASPDMA / conscience call sites (PDMA, IDMA, CSDMA, DSDMA,
+    ASPDMA, TSASPDMA × 2, DSASPDMA) all use this same get_language_guidance
+    helper, so an end-to-end injection test covering all populated locales
+    here proves the wiring works for every consumer in the agent.
     """
+
+    # Pinned populated set. ADD entries here when a new locale ships a
+    # primer; the parametrized `test_populated_locales_have_guidance` and
+    # `test_populated_set_pinned_exactly` will both exercise the
+    # addition. The native_substring must be a string distinctive enough
+    # to fail if the pack is replaced with English filler.
+    POPULATED_LOCALES = {
+        # 2.7.6 — Amharic primer
+        "am": "ምርመራ",  # Amharic 'diagnosis' fix
+        # 2.7.6 — Tier-0 primers
+        "ha": "JAGORAR HARSHE",  # Hausa header
+        "yo": "ÌTỌ́NISỌ́NÀ ÈDÈ",  # Yoruba header (with tone marks)
+        # 2.7.7 — Tier-1 primers
+        "sw": "MWONGOZO WA LUGHA",  # Swahili header
+        "my": "ဘာသာစကားလမ်းညွှန်",  # Burmese header
+        "pa": "ਭਾਸ਼ਾ ਮਾਰਗਦਰਸ਼ਨ",  # Punjabi (Gurmukhi)
+        "ta": "மொழி வழிகாட்டி",  # Tamil
+        "bn": "ভাষা নির্দেশিকা",  # Bengali
+    }
+
+    def test_populated_set_pinned_exactly(self):
+        """The set of populated locales is pinned. If a new pack ships,
+        update POPULATED_LOCALES to add it (forcing PR review of the
+        addition). If a populated pack accidentally gets emptied, this
+        test catches it before the "wired but silently empty" regression
+        ships.
+        """
+        actual_populated = {lang for lang in self.POPULATED_LOCALES if get_language_guidance(lang)}
+        expected_populated = set(self.POPULATED_LOCALES.keys())
+        missing = expected_populated - actual_populated
+        assert not missing, (
+            f"Locales pinned as populated but returning empty guidance: {sorted(missing)}. "
+            f"Either the pack was deleted or the JSON path drifted."
+        )
+
+    @pytest.mark.parametrize(
+        "lang_code,native_substring",
+        sorted(POPULATED_LOCALES.items()),
+    )
+    def test_populated_locales_have_guidance(self, lang_code: str, native_substring: str):
+        """Every pinned populated pack must (a) stay non-empty and (b)
+        carry a distinctive native-script substring. The substring guard
+        catches the failure mode where someone "merges" a pack but
+        accidentally replaces the body with English filler — empty would
+        be silent through `if guidance:` but English filler at the wrong
+        time costs production trust."""
+        guidance = get_language_guidance(lang_code)
+        assert guidance, f"{lang_code} guidance must be populated (pinned in POPULATED_LOCALES)"
+        assert native_substring in guidance, (
+            f"{lang_code} guidance lost its distinctive native-script substring "
+            f"{native_substring!r}; pack may have been replaced with English filler"
+        )
+        # Also pin a minimum size so a 3-character native string isn't
+        # a trivial pass — every shipping pack so far is >2KB and the
+        # smallest (am) is 3.6KB.
+        assert len(guidance) > 2000, (
+            f"{lang_code} guidance dropped below 2KB ({len(guidance)} chars) — "
+            f"pack may have been truncated. Ship-day floor was 3.6KB (am)."
+        )
 
     def test_amharic_returns_non_empty_guidance(self):
         """Amharic carries the terminology pack."""
@@ -257,15 +321,58 @@ class TestGetLanguageGuidance:
         """English doesn't need guidance (the prompt is already in English)."""
         assert get_language_guidance("en") == ""
 
-    @pytest.mark.parametrize(
-        "lang_code",
-        ["es", "fr", "de", "pt", "it", "ru", "uk", "zh", "ja", "ko", "hi", "ar", "tr", "vi", "id"],
-    )
+    # Empty-by-design locales (Tier 2-5 per localization/CLAUDE.md). Test
+    # asserts they stay empty so accidentally populating one without
+    # adding to POPULATED_LOCALES gets caught here. Marathi (mr) and
+    # Telugu (te) are Tier-1 — empty pending production-observation per
+    # the roadmap's gate.
+    EMPTY_LOCALES = [
+        "ar", "de", "es", "fa", "fr", "hi", "id", "it", "ja", "ko",
+        "mr", "pt", "ru", "te", "th", "tr", "uk", "ur", "vi", "zh",
+    ]
+
+    @pytest.mark.parametrize("lang_code", EMPTY_LOCALES)
     def test_other_locales_return_empty_until_populated(self, lang_code):
         """Locales without an observed terminology gap return empty so the
         DMA layer skips the system-message append entirely (no wire
-        overhead, no behavior change for languages we haven't audited)."""
+        overhead, no behavior change for languages we haven't audited).
+
+        If you populate one of these, MOVE it to POPULATED_LOCALES and
+        re-run — leaving it here means the pack is wired but the
+        non-empty contract is unenforced."""
         assert get_language_guidance(lang_code) == ""
+
+    def test_populated_and_empty_cover_full_manifest(self):
+        """Coverage check: every locale in localization/manifest.json is
+        either pinned populated OR pinned empty. New locales added to
+        the manifest must be classified explicitly — silent inclusion
+        risks a populated pack going untested."""
+        import json
+        from pathlib import Path
+
+        manifest_path = Path(__file__).resolve().parents[4] / "localization" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        if isinstance(manifest.get("languages"), list):
+            manifest_langs = set(manifest["languages"])
+        elif isinstance(manifest.get("languages"), dict):
+            manifest_langs = set(manifest["languages"].keys())
+        else:
+            pytest.fail("localization/manifest.json has unexpected 'languages' shape")
+
+        # English is implicitly empty (test_english_returns_empty_guidance
+        # covers it directly); add it to the union so the math works.
+        classified = set(self.POPULATED_LOCALES.keys()) | set(self.EMPTY_LOCALES) | {"en"}
+        unclassified = manifest_langs - classified
+        assert not unclassified, (
+            f"Locales in manifest.json with no language-guidance classification: {sorted(unclassified)}. "
+            f"Add to POPULATED_LOCALES (with native substring) if shipping a pack, "
+            f"or to EMPTY_LOCALES if intentionally empty."
+        )
+        extra = classified - manifest_langs
+        assert not extra, (
+            f"Locales classified but not in manifest.json: {sorted(extra)}. "
+            f"Either add to manifest or remove from classification lists."
+        )
 
     def test_unknown_language_returns_empty(self):
         """A language code that doesn't exist falls through to empty (NOT

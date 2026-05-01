@@ -4,7 +4,8 @@ Scripts kept for one release after their replacement landed, then deleted.
 
 | Script | Replaced by | Deprecated in | Delete in |
 |---|---|---|---|
-| `register_agent_build.py` | `ciris-build-sign --tree` (CIRISVerify v1.8.1) + `tools/ops/register_signed_manifest.py` | 2.7.8.4 | 2.7.9 |
+| `register_agent_build.py` | `ciris-build-sign --tree` (CIRISVerify v1.8.1) + REST `POST /v1/verify/build-manifest` | 2.7.8.4 | 2.7.9 |
+| `register_signed_manifest.py` | direct `curl POST /v1/verify/build-manifest` (CIRISRegistry Phase A — REST endpoint shipped 2026-05-01) | 2.7.8.5 | 2.7.9 |
 
 ## Why this dir exists
 
@@ -17,6 +18,35 @@ a focused diff (old script → legacy/ + new wrapper added) rather than as
 
 After one release, the legacy copy is removed. The history is preserved in
 git; the working tree stays clean.
+
+## Migration: register_signed_manifest.py → direct curl POST
+
+Migrated 2026-05-01 in 2.7.8.5 (issue #707, finishing pass). The
+register_signed_manifest.py wrapper existed from 2.7.8.4 only because the
+registry's `/v1/verify/build-manifest` REST endpoint hadn't shipped yet.
+With Phase A of the registry's federation work landing the endpoint live,
+the wrapper's reason for existing is gone.
+
+CI now does:
+
+```bash
+ciris-build-sign sign --primitive agent --tree . ... --output build-manifest.json
+curl -X POST "$REGISTRY_URL/v1/verify/build-manifest" \
+     -H "Authorization: Bearer $REGISTRY_ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data-binary @build-manifest.json
+```
+
+Auth contract is now `Authorization: Bearer ${{ secrets.REGISTRY_ADMIN_TOKEN }}`
+— same admin token the function-manifest endpoint uses, NOT the gRPC HS256
+JWT (that surface remains live for `RegistryAdminService` operations like
+`RegisterAgent`, but is no longer used for build manifest publication).
+
+Pre-flight: the agent-steward Ed25519 + ML-DSA-65 pubkey must be registered
+once as a trusted key for `project='ciris-agent'` via
+`RegisterTrustedPrimitiveKey` admin RPC. Without it, requests get HTTP 403
+`no_trusted_key`. Same prerequisite that ciris-persist, ciris-lens,
+ciris-verify went through.
 
 ## Migration: register_agent_build.py → ciris-build-sign + register_signed_manifest.py
 

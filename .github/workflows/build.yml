@@ -668,11 +668,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install grpcurl
-        run: |
-          curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v1.8.9/grpcurl_1.8.9_linux_x86_64.tar.gz | tar xz
-          sudo mv grpcurl /usr/local/bin/
-
       - name: Install ciris-build-sign (CIRISVerify v1.8.1+)
         # Provides the `ciris-build-sign` binary on PATH. Required for the
         # --tree manifest shape that replaces register_agent_build.py's
@@ -713,11 +708,32 @@ jobs:
             --output build-manifest.json
 
       - name: Push signed manifest to Registry (Python source tree)
+        # Posts the raw signed BuildManifest JSON to /v1/verify/build-manifest.
+        # Auth: Bearer ${{ secrets.REGISTRY_ADMIN_TOKEN }} (same admin token
+        # the function-manifest endpoint uses; not the gRPC HS256 JWT, which
+        # was retired with register_signed_manifest.py).
+        # Pre-flight: the agent-steward pubkey must already be registered as
+        # a trusted key for project='ciris-agent' via RegisterTrustedPrimitiveKey
+        # admin RPC. Without it: HTTP 403 no_trusted_key.
         env:
-          REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
-          REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+          REGISTRY_ADMIN_TOKEN: ${{ secrets.REGISTRY_ADMIN_TOKEN }}
         run: |
-          python tools/ops/register_signed_manifest.py build-manifest.json --modules core
+          HTTP_CODE=$(curl -sw "%{http_code}" -o response.json \
+            -X POST "$REGISTRY_URL/v1/verify/build-manifest" \
+            -H "Authorization: Bearer $REGISTRY_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @build-manifest.json)
+          echo "HTTP $HTTP_CODE"
+          cat response.json
+          echo
+          case "$HTTP_CODE" in
+            200) echo "✓ Stored";;
+            401) echo "ERROR 401 unauthorized — verify REGISTRY_ADMIN_TOKEN matches production env var"; exit 1;;
+            403) echo "ERROR 403 no_trusted_key — operator must register the agent-steward pubkey via RegisterTrustedPrimitiveKey admin RPC for project='ciris-agent'"; exit 1;;
+            400) echo "ERROR 400 — body invalid (verification_failed = pubkey mismatch; invalid_manifest = body shape)"; exit 1;;
+            *) echo "ERROR unexpected HTTP $HTTP_CODE"; exit 1;;
+          esac
 
       - name: Extract mobile Resources.zip
         run: |
@@ -748,10 +764,24 @@ jobs:
 
       - name: Push signed mobile manifest to Registry
         env:
-          REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
-          REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+          REGISTRY_ADMIN_TOKEN: ${{ secrets.REGISTRY_ADMIN_TOKEN }}
         run: |
-          python tools/ops/register_signed_manifest.py build-manifest-mobile.json --modules core
+          HTTP_CODE=$(curl -sw "%{http_code}" -o response-mobile.json \
+            -X POST "$REGISTRY_URL/v1/verify/build-manifest" \
+            -H "Authorization: Bearer $REGISTRY_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @build-manifest-mobile.json)
+          echo "HTTP $HTTP_CODE"
+          cat response-mobile.json
+          echo
+          case "$HTTP_CODE" in
+            200) echo "✓ Stored";;
+            401) echo "ERROR 401 unauthorized — verify REGISTRY_ADMIN_TOKEN matches production env var"; exit 1;;
+            403) echo "ERROR 403 no_trusted_key — operator must register the agent-steward pubkey via RegisterTrustedPrimitiveKey admin RPC for project='ciris-agent'"; exit 1;;
+            400) echo "ERROR 400 — body invalid (verification_failed = pubkey mismatch; invalid_manifest = body shape)"; exit 1;;
+            *) echo "ERROR unexpected HTTP $HTTP_CODE"; exit 1;;
+          esac
 
   deploy:
     name: Notify CIRISManager of Update

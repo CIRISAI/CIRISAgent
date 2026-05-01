@@ -5,6 +5,35 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.5] - 2026-05-01
+
+Finishing pass on the build-pipeline migration. CIRISRegistry Phase A shipped `POST /v1/verify/build-manifest` today (live, 401-on-no-auth gate working, federation-ready). With the REST endpoint in place, the thin gRPC wrapper from 2.7.8.4 (`tools/ops/register_signed_manifest.py`) has no reason to exist.
+
+### Changed
+
+- **CI workflow `register-build` job**: replaced `python tools/ops/register_signed_manifest.py build-manifest.json --modules core` with a direct `curl POST` to `${{ vars.REGISTRY_URL }}/v1/verify/build-manifest`. Same change for the mobile build path. The grpcurl install step is also gone (no other CI job needs it). Workflow now: install ciris-build-sign → emit build-secrets.json → sign → curl POST.
+- **Auth contract for build-manifest publish**: `Authorization: Bearer ${{ secrets.REGISTRY_ADMIN_TOKEN }}` (same admin-token pattern the registry's function-manifest endpoint uses). The HS256 JWT minted from `REGISTRY_JWT_SECRET` is NO LONGER used for build-manifest publication — that JWT surface remains live for the gRPC `RegistryAdminService` (used by `RegisterAgent` / `RegisterTrustedPrimitiveKey` admin operations), it just isn't this particular code path's concern anymore.
+- **Failure-mode-aware curl wrapper**: the new step decodes registry response codes per the registry team's failure-mode table:
+  - 200 → stored
+  - 401 → wrong/missing bearer token
+  - 403 → `no_trusted_key` (operator must register the agent-steward pubkey via `RegisterTrustedPrimitiveKey`)
+  - 400 → `verification_failed` (pubkey mismatch) or `invalid_manifest` (body shape)
+  CI exits non-zero with a contextual error message in each non-200 case.
+- **`tools/ops/register_signed_manifest.py` → `tools/legacy/register_signed_manifest.py`**. One-release deprecation home; deletion in 2.7.9. The 11 regression tests that pinned its contract were also retired (the contract being pinned no longer exists in production).
+
+### ⚠️ Operator runbook for landing this
+
+GH-level requirements (user has confirmed handled):
+- `secrets.REGISTRY_ADMIN_TOKEN`: same admin token the registry's existing function-manifest endpoint uses
+- `vars.REGISTRY_URL`: registry's HTTPS base URL (e.g. `https://registry.ciris-services-1.ai`)
+- (existing) `secrets.CIRIS_BUILD_ED25519_SEED`, `secrets.CIRIS_BUILD_MLDSA_SECRET`: agent-steward keypair, unchanged from 2.7.8.4
+- `secrets.REGISTRY_JWT_SECRET`: still required for OTHER CI jobs (any gRPC `RegistryAdminService` use); no longer used by `register-build` specifically
+- (one-time, registry-side) Agent-steward Ed25519 + ML-DSA-65 pubkey registered as a trusted key for `project='ciris-agent'` via `RegisterTrustedPrimitiveKey` admin RPC. Without this, every CI run gets HTTP 403 `no_trusted_key`. Same prerequisite ciris-persist, ciris-lens, ciris-verify already went through.
+
+### Closes
+
+- CIRISAgent#707 — register_agent_build.py refactor → fully migrated. `tools/legacy/` carries the deprecated scripts for one release; both delete in 2.7.9. The agent-side build-pipeline plumbing is now: ~30 lines of YAML + ~50 lines of `build_agent_extras.py`. The 538-line monolith and its 80-line transitional successor are both retired.
+
 ## [2.7.8.4] - 2026-05-01
 
 Build-pipeline migration to `ciris-build-sign` (CIRISVerify v1.8.1) per #707, plus a byte-equivalence fix between the iOS and Android `_build_secrets.py` generators.

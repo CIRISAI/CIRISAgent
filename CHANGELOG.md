@@ -5,6 +5,12 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.1] - 2026-05-01
+
+Additive build on top of 2.7.8: minimum-viable language primers for the remaining 11 non-first-world locales, shipped by language family — Perso-Arabic RTL (ar/fa/ur), South Asian (hi/mr/te), Southeast Asian (th/vi/id), and mid-tier European (tr/uk). Doubles populated-pack coverage from 8 → 19. Each primer follows the same four-section prescriptive structure that landed for Amharic (priority rules + canonical safety disclaimer + culturally-grounded help-seeking pathway + worked-example SPEAK output), targets ≥2.5KB (test contract floor is 2KB), and uses the NOT-X-because-Y disambiguation pattern to lean on Walia-LLM's prescriptive-vs-descriptive primer insight. Empty-by-design now restricted to the nine first-world locales (de/es/fr/it/ja/ko/pt/ru/zh) where base-LLM training already aligns reasonably to register; populate one of those only after observing a concrete production failure.
+
+Notable per-language calls: **uk** carries an explicit Russian-bleed trap with 16 росіянізм→Ukrainian word pairs (the #1 LLM-Ukrainian failure mode); **vi** triple-warns on diacritic preservation; **id** reflects Indonesia's three-religion reality in the help-seeking pathway; **th** explicitly cautions that ทำใจ (kreng-jai acceptance) must NOT be used to dismiss treatable depression; **fa** distinguishes Shi'a clergy / Sufi mentor pathways; **ar** is MSA-only with regional psychiatrist scarcity acknowledged. Test contract pinned: `POPULATED_LOCALES` now carries a distinctive native-script substring per pack so a future "merged but quietly replaced with English filler" regression is caught at CI time.
+
 ## [2.7.8] - 2026-05-01
 
 Trace persistence overhaul. The lens previously collapsed every reasoning event for a thought into a single row, last-write-wins, so DMA bounces, conscience overrides, recursive ASPDMA retries, and verb-specific second-pass evaluations all disappeared into the cost columns. 2.7.8 makes every `@streaming_step` broadcast a discrete persisted observation with stable per-(thought, event_type) ordering, ships per-LLM-call records as the new source of truth for tail-latency / size / failure-class analysis, generalizes the verb-second-pass machinery so future verbs drop in without schema changes, and ships a definitive wire-format spec for the lens team.

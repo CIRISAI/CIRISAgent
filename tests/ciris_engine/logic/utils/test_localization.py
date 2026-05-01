@@ -260,6 +260,22 @@ class TestGetLanguageGuidance:
         "pa": "ਭਾਸ਼ਾ ਮਾਰਗਦਰਸ਼ਨ",  # Punjabi (Gurmukhi)
         "ta": "மொழி வழிகாட்டி",  # Tamil
         "bn": "ভাষা নির্দেশিকা",  # Bengali
+        # 2.7.8 — MVP primers by language family (non-first-world)
+        # Perso-Arabic RTL family
+        "ar": "التوجيه اللغوي",  # Arabic header
+        "fa": "راهنمای زبانی",  # Persian header
+        "ur": "لسانی ہدایت",  # Urdu header
+        # South Asian family (Indo-Aryan + Dravidian)
+        "hi": "भाषा निर्देशिका",  # Hindi header (Devanagari)
+        "mr": "भाषा मार्गदर्शक",  # Marathi header (Devanagari, distinct from hi)
+        "te": "భాషా మార్గదర్శి",  # Telugu header
+        # Southeast Asian family
+        "th": "คำแนะนำภาษา",  # Thai header
+        "vi": "chẩn đoán",  # Vietnamese disclaimer phrase (diacritic-heavy)
+        "id": "Panduan Bahasa",  # Indonesian header
+        # Mid-tier European family
+        "tr": "DİL REHBERİ",  # Turkish header (uses Turkish-specific İ)
+        "uk": "МОВНИЙ ОРІЄНТИР",  # Ukrainian header (Cyrillic)
     }
 
     def test_populated_set_pinned_exactly(self):
@@ -394,14 +410,14 @@ class TestGetLanguageGuidance:
         """English doesn't need guidance (the prompt is already in English)."""
         assert get_language_guidance("en") == ""
 
-    # Empty-by-design locales (Tier 2-5 per localization/CLAUDE.md). Test
-    # asserts they stay empty so accidentally populating one without
-    # adding to POPULATED_LOCALES gets caught here. Marathi (mr) and
-    # Telugu (te) are Tier-1 — empty pending production-observation per
-    # the roadmap's gate.
+    # Empty-by-design locales. Per the 2.7.8 language-family expansion,
+    # the remaining empties are first-world languages (de/es/fr/it/ja/ko/pt/ru/zh)
+    # where existing LLM training already aligns reasonably well to local
+    # register and clinical vocabulary, and the marginal value of a primer
+    # is lowest. Populate any of these only after observing a concrete
+    # terminology or register failure in production.
     EMPTY_LOCALES = [
-        "ar", "de", "es", "fa", "fr", "hi", "id", "it", "ja", "ko",
-        "mr", "pt", "ru", "te", "th", "tr", "uk", "ur", "vi", "zh",
+        "de", "es", "fr", "it", "ja", "ko", "pt", "ru", "zh",
     ]
 
     @pytest.mark.parametrize("lang_code", EMPTY_LOCALES)

@@ -242,18 +242,37 @@ class AccordMetricsTests:
         ],
     }
 
-    def __init__(self, client: Any, console: Any, live_lens: bool = False):
+    def __init__(
+        self,
+        client: Any,
+        console: Any,
+        live_lens: bool = False,
+        qa_reports_dir: Optional[Path] = None,
+    ):
         """Initialize test module.
 
         Args:
             client: CIRISClient SDK client
             console: Rich console for output
             live_lens: If True, use real Lens server instead of mock logshipper
+            qa_reports_dir: Per-backend trace output dir (e.g.
+                `qa_reports/sqlite/`, `qa_reports/postgres/`). Defaults to
+                `qa_reports/` for backwards compatibility with single-backend
+                runs that don't pass it through.
         """
         self.client = client
         self.console = console
         self.results: List[Dict[str, Any]] = []
         self.live_lens = live_lens or os.environ.get("CIRIS_LIVE_LENS", "").lower() == "true"
+        # Repo-root / qa_reports / <backend> if backend is namespaced;
+        # otherwise repo-root / qa_reports for default single-backend runs.
+        # The server-side mock logshipper is configured to write to this same
+        # path, so the test always reads what the agent just wrote.
+        self.qa_reports_dir: Path = (
+            qa_reports_dir
+            if qa_reports_dir is not None
+            else Path(__file__).parent.parent.parent.parent / "qa_reports"
+        )
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all accord metrics tests.
@@ -368,7 +387,7 @@ class AccordMetricsTests:
 
             # Wait for traces to be flushed (QA uses 5-second flush interval)
             # Check periodically for trace files to appear
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             max_wait = 15  # Wait up to 15 seconds
             waited = 0
 
@@ -404,7 +423,7 @@ class AccordMetricsTests:
         force ASPDMA into a verb that has a second-pass evaluator.
         """
         try:
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             # Snapshot trace files BEFORE so we only validate the ones we just produced
             existing = {p.name for p in qa_reports.glob("trace_*.json")}
 
@@ -461,7 +480,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
             # Find trace files saved by mock logshipper
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
@@ -604,7 +623,7 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
@@ -746,7 +765,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server)"
 
             # Find detailed trace files
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_detailed_*.json"))
 
             if not trace_files:
@@ -827,7 +846,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server)"
 
             # Find full trace files
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_full_*.json"))
 
             if not trace_files:
@@ -891,7 +910,7 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             all_traces = list(qa_reports.glob("trace_*.json"))
 
             if not all_traces:
@@ -1005,7 +1024,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
             # Check trace files saved by mock logshipper
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:

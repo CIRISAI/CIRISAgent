@@ -30,12 +30,46 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-class MockLogshipperHandler(BaseHTTPRequestHandler):
-    """HTTP handler for mock logshipper that receives accord traces."""
+class _MockLogshipperHTTPServer(HTTPServer):
+    """HTTPServer subclass that holds per-instance state.
 
-    # Class-level storage for received traces
+    The handler reads state from `self.server` rather than from the handler
+    class itself, so two MockLogshipperServer instances running concurrently
+    in the same Python process (e.g. SQLITE + POSTGRES under
+    --parallel-backends) keep their `output_dir` and `received_traces`
+    separate. The previous class-level storage on MockLogshipperHandler
+    meant the second .start() call clobbered the first's state and ALL
+    received traces went to whichever backend won the assignment race.
+    """
+
+    output_dir: Optional[Path]
+    received_traces: List[Dict[str, Any]]
+
+
+class MockLogshipperHandler(BaseHTTPRequestHandler):
+    """HTTP handler for mock logshipper that receives accord traces.
+
+    State lives on `self.server` (the _MockLogshipperHTTPServer instance)
+    so each MockLogshipperServer can run independently in the same process.
+    """
+
+    # Optional class-level fallbacks ONLY for code paths that still reach
+    # for them via the class (e.g. tests that import the handler directly
+    # without spinning up a server). Real server use should always populate
+    # state on the _MockLogshipperHTTPServer instance.
     received_traces: List[Dict[str, Any]] = []
     output_dir: Optional[Path] = None
+
+    @property
+    def _state_owner(self) -> Any:
+        """Return the object whose state should be used for this request.
+
+        Prefer the per-server state (self.server) when available; fall back
+        to the handler class for legacy callers.
+        """
+        if isinstance(self.server, _MockLogshipperHTTPServer):
+            return self.server
+        return MockLogshipperHandler
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress default logging."""
@@ -70,8 +104,15 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _save_trace(self, trace: Dict[str, Any]) -> None:
-        """Save a trace to file with task-based name."""
-        if not self.output_dir:
+        """Save a trace to file with task-based name.
+
+        Reads `output_dir` and appends to `received_traces` on the
+        per-server state owner so concurrent MockLogshipperServer instances
+        don't share a destination.
+        """
+        owner = self._state_owner
+        output_dir = getattr(owner, "output_dir", None)
+        if not output_dir:
             return
 
         # Extract task name from first component
@@ -105,12 +146,12 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
         # Create short unique ID from hash of trace_id
         short_id = hashlib.md5(trace_id.encode()).hexdigest()[:8]
         filename = f"trace_{task_name}_{short_id}.json"
-        filepath = self.output_dir / filename
+        filepath = output_dir / filename
 
         with open(filepath, "w") as f:
             json.dump(trace, f, indent=2, default=str)
 
-        MockLogshipperHandler.received_traces.append(
+        getattr(owner, "received_traces").append(
             {
                 "task_name": task_name,
                 "filepath": str(filepath),
@@ -120,7 +161,13 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
 
 
 class MockLogshipperServer:
-    """Mock logshipper server that receives and saves accord traces."""
+    """Mock logshipper server that receives and saves accord traces.
+
+    Per-instance state lives on the underlying HTTPServer subclass
+    (_MockLogshipperHTTPServer) so two MockLogshipperServer instances can
+    run concurrently in the same process without overwriting each other's
+    output_dir / received_traces.
+    """
 
     def __init__(self, port: int = 18080, output_dir: Optional[Path] = None):
         """Initialize mock server.
@@ -131,18 +178,17 @@ class MockLogshipperServer:
         """
         self.port = port
         self.output_dir = output_dir or Path(__file__).parent.parent.parent / "qa_reports"
-        self.output_dir.mkdir(exist_ok=True)
-        self.server: Optional[HTTPServer] = None
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.server: Optional[_MockLogshipperHTTPServer] = None
         self.thread: Optional[threading.Thread] = None
-
-        # Configure handler
-        MockLogshipperHandler.output_dir = self.output_dir
-        MockLogshipperHandler.received_traces = []
 
     def start(self) -> bool:
         """Start the mock server in a background thread."""
         try:
-            self.server = HTTPServer(("127.0.0.1", self.port), MockLogshipperHandler)
+            self.server = _MockLogshipperHTTPServer(("127.0.0.1", self.port), MockLogshipperHandler)
+            # Per-instance state — handler reads via self.server, NOT class attrs
+            self.server.output_dir = self.output_dir
+            self.server.received_traces = []
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             return True
@@ -156,8 +202,10 @@ class MockLogshipperServer:
             self.server = None
 
     def get_received_traces(self) -> List[Dict[str, Any]]:
-        """Get list of received traces."""
-        return MockLogshipperHandler.received_traces.copy()
+        """Get list of received traces (per-instance)."""
+        if self.server is None:
+            return []
+        return list(self.server.received_traces)
 
     @property
     def endpoint_url(self) -> str:
@@ -504,6 +552,18 @@ class APIServerManager:
         self.mock_logshipper: Optional[MockLogshipperServer] = None
         self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
 
+        # Per-backend output namespace. In parallel-backend mode both SQLITE
+        # and POSTGRES backends would otherwise share `qa_reports/` and
+        # collide on hash-keyed trace filenames — one backend's
+        # `_clear_trace_files()` would delete the other's traces mid-run.
+        # Logs are already namespaced by backend (logs/sqlite/, logs/postgres/);
+        # mirror the same shape for trace output here.
+        self._repo_root = Path(__file__).parent.parent.parent
+        self.qa_reports_dir: Path = self._repo_root / "qa_reports" / self.database_backend
+        # Mock logshipper port also needs per-backend offset so two backends
+        # can both bind a receiver. sqlite=18080 (canonical), postgres=18081.
+        self._mock_logshipper_port: int = 18080 if self.database_backend == "sqlite" else 18081
+
     def _clear_wakeup_state(self) -> bool:
         """Clear wakeup state from database for fresh wakeup run.
 
@@ -561,15 +621,39 @@ class APIServerManager:
             return True  # Continue anyway
 
     def _clear_trace_files(self) -> None:
-        """Clear existing trace files for fresh capture."""
-        qa_reports = Path(__file__).parent.parent.parent / "qa_reports"
-        if qa_reports.exists():
-            # Clear both old format (real_trace_*) and new format (trace_*)
-            trace_files = list(qa_reports.glob("real_trace_*.json")) + list(qa_reports.glob("trace_*.json"))
+        """Clear existing trace files for fresh capture.
+
+        Only clears THIS backend's trace dir. Under --parallel-backends each
+        backend has its own qa_reports/<backend>/ namespace, so clearing
+        one can't delete the other's in-flight traces.
+
+        Also sweeps any legacy traces left at qa_reports/ root (pre-2.7.8
+        single-backend layout) so they don't accumulate across upgrades.
+        """
+        # Per-backend dir
+        if self.qa_reports_dir.exists():
+            trace_files = list(self.qa_reports_dir.glob("real_trace_*.json")) + list(
+                self.qa_reports_dir.glob("trace_*.json")
+            )
             for f in trace_files:
                 f.unlink()
             if trace_files:
-                self.console.print(f"[cyan]🧹 Cleared {len(trace_files)} old trace files[/cyan]")
+                self.console.print(
+                    f"[cyan]🧹 Cleared {len(trace_files)} old trace files in "
+                    f"qa_reports/{self.database_backend}/[/cyan]"
+                )
+
+        # Legacy root-level traces from older single-backend runs — only the
+        # FIRST backend to enter start() will have these to clear; subsequent
+        # parallel backends find nothing.
+        legacy_root = self._repo_root / "qa_reports"
+        if legacy_root.exists():
+            legacy_files = list(legacy_root.glob("real_trace_*.json")) + list(legacy_root.glob("trace_*.json"))
+            for f in legacy_files:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass  # Another parallel backend may have already removed it
 
     def start(self) -> bool:
         """Start the API server."""
@@ -608,9 +692,19 @@ class APIServerManager:
             self.console.print("[cyan]📊 Enabling accord_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
-            self.mock_logshipper = MockLogshipperServer(port=18080)
+            # Per-backend port + per-backend output dir so parallel SQLITE
+            # and POSTGRES runs don't collide on either the network port or
+            # the trace filename (FSD scoring trace dedup uses a hash that
+            # collides cross-backend; the backend dir is what disambiguates).
+            self.mock_logshipper = MockLogshipperServer(
+                port=self._mock_logshipper_port,
+                output_dir=self.qa_reports_dir,
+            )
             if self.mock_logshipper.start():
-                self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
+                self.console.print(
+                    f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url} "
+                    f"→ qa_reports/{self.database_backend}/[/cyan]"
+                )
             else:
                 self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
                 self.mock_logshipper = None

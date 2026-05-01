@@ -198,22 +198,68 @@ processing. (`runtime_control.py:1086-1108`)
 
 ### 5.2 `SNAPSHOT_AND_CONTEXT`
 
-Once per thought. The agent's full system snapshot at context-gather
-time. (`runtime_control.py:1111-1126`)
+Once per thought. The adapter flattens specific high-value scalars from
+the SystemSnapshot to top-level fields and gates the full nested
+snapshot behind `full_traces` only.
+(`accord_metrics/services.py:1388-1506`)
+
+**GENERIC** — agent identity, cognitive state, attestation booleans,
+counts. No system_snapshot blob.
 
 ```json
 {
-  "thought_id": "th_std_...",
-  "task_id": "task_...",
-  "timestamp": "...",
-  "system_snapshot": { /* SystemSnapshot — see ciris_engine/schemas/runtime/system_context.py */ }
+  "thought_id": "...", "task_id": "...", "timestamp": "...",
+  "agent_name": "Ally",
+  "cognitive_state": "work",
+  "attestation_context": "CIRIS VERIFY ATTESTATION: Level 3/5 | ✓Binary ✓Environment ✗...",
+  "attestation_level": 3,
+  "attestation_status": "partial",
+  "disclosure_severity": "warning",
+  "binary_ok": true, "env_ok": true, "registry_ok": false,
+  "file_integrity_ok": false, "audit_ok": false, "play_integrity_ok": false,
+  "hardware_backed": true,
+  "memory_count": 0,
+  "context_tokens": 1
 }
 ```
 
-`system_snapshot` is large and structured; consult the SystemSnapshot
-schema for its full shape. The lens may want to denormalize specific
-sub-fields (`user_profiles`, `current_state`, `cognitive_state`) into
-indexed columns.
+**DETAILED** — adds:
+
+```json
+{
+  "active_services": [...], "context_sources": [...], "service_health": {...},
+  "agent_version": "2.7.8-stable",
+  "circuit_breaker_status": {...},
+  "key_status": "local", "key_id": "agent-...",
+  "ed25519_fingerprint": "8a0b70302aae...",
+  "key_storage_mode": "TPM", "hardware_type": "TpmFirmware",
+  "verify_version": "1.6.3"
+}
+```
+
+**FULL_TRACES** — adds:
+
+```json
+{
+  "system_snapshot":  { /* full SystemSnapshot — see ciris_engine/schemas/runtime/system_context.py */ },
+  "gathered_context": { /* context payload */ },
+  "relevant_memories":   [...],
+  "conversation_history": [...]
+}
+```
+
+The flat fields are emitted directly because: (a) they're privacy-safe
+(no content), (b) they're zero-correlation with the reasoning stack so
+the lens k_eff analysis benefits from having them at GENERIC, and
+(c) every scalar of `verify_attestation` is needed for hardware-integrity
+scoring without pulling the whole SystemSnapshot. The lens MAY denormalize
+the nested `system_snapshot` (FULL only) into per-field columns for
+queryability — every flat field above is already that shape.
+
+If `system_snapshot` is empty (e.g. follow-up thoughts that skip context
+re-gathering), the entire field is stripped by `_strip_empty`. Treat its
+absence as "no snapshot at this point in the thought," not as a missing
+field.
 
 ### 5.3 `DMA_RESULTS`
 

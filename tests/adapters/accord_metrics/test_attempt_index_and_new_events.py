@@ -214,6 +214,67 @@ class TestVerbSecondPassExtractComponentData:
         assert "original_tool_name" not in data["verb_specific_data"]
 
 
+class TestConscienceResultIsRecursive:
+    """Regression: pre-2.7.8 captured traces validated against
+    FSD/TRACE_WIRE_FORMAT.md §5.8 surfaced that the CONSCIENCE_RESULT
+    builder was missing `is_recursive` (the boolean flag distinguishing
+    initial conscience pass from recursive re-validation post-override).
+    ASPDMA_RESULT had it; CONSCIENCE_RESULT didn't, leaving the lens with
+    only attempt_index>0 to infer recursive-ness.
+
+    The lens uses the bool flag for direct queries and attempt_index for
+    ordering — both are needed. Pin the bool's presence at GENERIC level
+    so it stays in the wire shape lens dashboards depend on.
+    """
+
+    def test_is_recursive_present_at_generic_level(self):
+        service = _make_service(TraceDetailLevel.GENERIC)
+        event = {
+            "event_type": "CONSCIENCE_RESULT",
+            "thought_id": "th_test",
+            "task_id": "task_test",
+            "timestamp": "2026-04-30T15:00:00Z",
+            "conscience_passed": True,
+            "action_was_overridden": False,
+            "is_recursive": False,
+        }
+        data = service._extract_component_data("CONSCIENCE_RESULT", event)
+        assert "is_recursive" in data
+        assert data["is_recursive"] is False
+
+    def test_is_recursive_true_for_recursive_pass(self):
+        """A recursive_conscience emission MUST carry is_recursive=True
+        so the lens can distinguish from the initial pass without
+        inference."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        event = {
+            "event_type": "CONSCIENCE_RESULT",
+            "thought_id": "th_test",
+            "task_id": "task_test",
+            "timestamp": "2026-04-30T15:00:00Z",
+            "conscience_passed": False,
+            "action_was_overridden": True,
+            "is_recursive": True,
+        }
+        data = service._extract_component_data("CONSCIENCE_RESULT", event)
+        assert data["is_recursive"] is True
+        assert data["action_was_overridden"] is True
+
+    def test_is_recursive_defaults_to_false_when_missing(self):
+        """If the broadcast event omits is_recursive (older paths),
+        builder defaults to False so downstream code never sees None."""
+        service = _make_service(TraceDetailLevel.GENERIC)
+        event = {
+            "event_type": "CONSCIENCE_RESULT",
+            "thought_id": "th_test",
+            "task_id": "task_test",
+            "timestamp": "2026-04-30T15:00:00Z",
+            "conscience_passed": True,
+        }
+        data = service._extract_component_data("CONSCIENCE_RESULT", event)
+        assert data.get("is_recursive") is False
+
+
 class TestEventToComponentMapping:
     """The EVENT_TO_COMPONENT mapping routes events to trace component_type.
     Pin the new entries — these decide the lens column the event lands in."""

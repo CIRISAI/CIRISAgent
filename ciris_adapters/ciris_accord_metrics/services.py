@@ -1778,6 +1778,13 @@ class AccordMetricsService:
                 "conscience_passed": event.get("conscience_passed"),
                 "action_was_overridden": event.get("action_was_overridden", False),
                 "ethical_faculties_skipped": event.get("ethical_faculties_skipped"),
+                # is_recursive: True for the recursive_conscience pass after
+                # an override. Lens uses this alongside attempt_index to
+                # distinguish initial from recursive emissions in trace_events.
+                # Mirrors the same field on ASPDMA_RESULT — without it the lens
+                # has to infer recursive-ness from attempt_index>0 alone.
+                # See FSD/TRACE_WIRE_FORMAT.md §5.8.
+                "is_recursive": event.get("is_recursive", False),
                 # Bypass guardrails (boolean)
                 "updated_status_detected": event.get("updated_status_detected"),
                 "thought_depth_triggered": event.get("thought_depth_triggered"),

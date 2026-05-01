@@ -36,6 +36,7 @@ class ResourceAvailability(str, Enum):
     EU = "eu"
     CANADA = "ca"
     AUSTRALIA = "au"
+    ETHIOPIA = "et"
     REGIONAL = "regional"
 
 
@@ -295,6 +296,52 @@ DEFAULT_CRISIS_RESOURCES = CrisisResourceRegistry(
             is_endorsed=False,
             requires_disclaimer=True,
         ),
+        # Ethiopia (Addis Ababa-centric; numbers verified May 2026 against
+        # gorebet.com, addisababa.embassy.qa, en.wikipedia.org/wiki/List_of_emergency_telephone_numbers).
+        # Mental-health-specific hotline: not a single national number exists; route via ambulance + hospital + findahelpline directory.
+        "ethiopia_police": CrisisResource(
+            id="ethiopia_police",
+            name="Ethiopia Federal Police",
+            type=CrisisResourceType.EMERGENCY,
+            phone="991",
+            description="Federal Police emergency line (Ethiopia)",
+            availability=[ResourceAvailability.ETHIOPIA],
+            languages=["am", "en"],
+            last_validated=datetime.now(),
+            is_endorsed=False,
+            requires_disclaimer=True,
+        ),
+        "ethiopia_ambulance": CrisisResource(
+            id="ethiopia_ambulance",
+            name="Ethiopia Ambulance (Addis Ababa Red Cross)",
+            type=CrisisResourceType.EMERGENCY,
+            phone="907",
+            description="Ambulance service — primary route for medical/psychiatric emergencies in Addis Ababa",
+            availability=[ResourceAvailability.ETHIOPIA],
+            languages=["am", "en"],
+            last_validated=datetime.now(),
+            is_endorsed=False,
+            requires_disclaimer=True,
+        ),
+        "ethiopia_fire": CrisisResource(
+            id="ethiopia_fire",
+            name="Ethiopia Fire Brigade",
+            type=CrisisResourceType.EMERGENCY,
+            phone="939",
+            description="Fire brigade emergency line (Ethiopia; some regions also use 912)",
+            availability=[ResourceAvailability.ETHIOPIA],
+            languages=["am", "en"],
+            last_validated=datetime.now(),
+            is_endorsed=False,
+            requires_disclaimer=True,
+        ),
+        # Mental-health pathway — when no specific hotline exists, agents
+        # should surface the local-search resource (which already exists)
+        # and the findahelpline directory (also already exists) AS WELL AS
+        # the country emergency entries above. The PRIMARY routing instruction
+        # for am-locale crisis is: family/religious leader → primary health
+        # center → 907 ambulance → nearest hospital — encoded in the am-locale
+        # primer Section 6, not duplicated here.
     }
 )
 

@@ -673,25 +673,85 @@ jobs:
           curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v1.8.9/grpcurl_1.8.9_linux_x86_64.tar.gz | tar xz
           sudo mv grpcurl /usr/local/bin/
 
-      - name: Register build manifest with Registry
+      - name: Install ciris-build-sign (CIRISVerify v1.8.1+)
+        # Provides the `ciris-build-sign` binary on PATH. Required for the
+        # --tree manifest shape that replaces register_agent_build.py's
+        # in-Python file-tree hashing + signing as of 2.7.8.4 (issue #707).
+        run: |
+          pip install --upgrade "ciris-verify>=1.8.1"
+          which ciris-build-sign && ciris-build-sign --version
+
+      - name: Emit build-secrets hash file
+        # The agent's release builds inject secrets at build time into files
+        # not in the source repo. Their SHA-256 hashes are tracked in
+        # build_agent_extras.py and surfaced here for ciris-build-sign
+        # --tree-extra-hashes-file consumption.
+        run: |
+          python tools/ops/build_agent_extras.py > build-secrets.json
+          cat build-secrets.json
+
+      - name: Sign build manifest (Python source tree)
+        env:
+          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
+        run: |
+          VERSION=$(python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          GIT_SHA=$(git rev-parse HEAD)
+          ciris-build-sign sign \
+            --primitive agent \
+            --tree . \
+            --tree-include ciris_engine ciris_adapters ciris_sdk \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
+            --tree-extra-hashes-file build-secrets.json \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA" \
+            --target python-source-tree \
+            --ed25519-seed "$CIRIS_BUILD_ED25519_SEED" \
+            --mldsa-secret "$CIRIS_BUILD_MLDSA_SECRET" \
+            --key-id "agent-steward-2026" \
+            --output build-manifest.json
+
+      - name: Push signed manifest to Registry (Python source tree)
         env:
           REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
           REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
         run: |
-          python tools/ops/register_agent_build.py --build . --modules core
+          python tools/ops/register_signed_manifest.py build-manifest.json --modules core
 
       - name: Extract mobile Resources.zip
         run: |
           mkdir -p client/iosApp/Resources/app
           cd client/iosApp/Resources && unzip -qo ../Resources.zip
 
-      - name: Register mobile build manifest with Registry
+      - name: Sign mobile build manifest
+        env:
+          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
+        run: |
+          VERSION=$(python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          GIT_SHA=$(git rev-parse HEAD)
+          ciris-build-sign sign \
+            --primitive agent \
+            --tree client/iosApp/Resources/app \
+            --tree-include ciris_engine ciris_adapters ciris_ios ciris_sdk \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
+            --tree-extra-hashes-file build-secrets.json \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA-mobile" \
+            --target ios-mobile-bundle \
+            --ed25519-seed "$CIRIS_BUILD_ED25519_SEED" \
+            --mldsa-secret "$CIRIS_BUILD_MLDSA_SECRET" \
+            --key-id "agent-steward-2026" \
+            --output build-manifest-mobile.json
+
+      - name: Push signed mobile manifest to Registry
         env:
           REGISTRY_JWT_SECRET: ${{ secrets.REGISTRY_JWT_SECRET }}
           REGISTRY_GRPC_ADDR: "207.148.13.157:50051"
         run: |
-          python tools/ops/register_agent_build.py --build client/iosApp/Resources/app \
-            --modules core --include-dirs ciris_engine ciris_adapters ciris_ios ciris_sdk
+          python tools/ops/register_signed_manifest.py build-manifest-mobile.json --modules core
 
   deploy:
     name: Notify CIRISManager of Update

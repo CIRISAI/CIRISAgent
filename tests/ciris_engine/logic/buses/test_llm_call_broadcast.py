@@ -13,6 +13,7 @@ import pytest
 from pydantic import BaseModel
 
 from ciris_engine.logic.buses.llm_bus import (
+    LLMCallEventContext,
     _broadcast_llm_call_event,
     _classify_error,
     _safe_messages_to_text,
@@ -137,21 +138,23 @@ class TestBroadcastLlmCallEventSuccess:
         service.openai_config = type("C", (), {"model_name": "google/gemma-4-31B-it"})()
 
         await _broadcast_llm_call_event(
-            success=True,
-            handler_name="EthicalPDMA",
-            service_name="OpenAICompatibleLLM",
-            selected_service=service,
-            api_base="https://api.together.xyz/v1",
-            response_model=_Result,
-            messages=[{"role": "user", "content": "hi"}],
-            result=_Result(),
-            usage=ResourceUsage(
-                tokens_used=15, tokens_input=10, tokens_output=5, model_used="gemma-4"
-            ),
-            latency_ms=42.5,
-            thought_id="th_test",
-            task_id="task_test",
-            retry_count=0,
+            LLMCallEventContext(
+                success=True,
+                handler_name="EthicalPDMA",
+                service_name="OpenAICompatibleLLM",
+                selected_service=service,
+                api_base="https://api.together.xyz/v1",
+                response_model=_Result,
+                messages=[{"role": "user", "content": "hi"}],
+                result=_Result(),
+                usage=ResourceUsage(
+                    tokens_used=15, tokens_input=10, tokens_output=5, model_used="gemma-4"
+                ),
+                duration_ms=42.5,
+                thought_id="th_test",
+                task_id="task_test",
+                retry_count=0,
+            )
         )
 
         assert len(captured) == 1
@@ -198,19 +201,21 @@ class TestBroadcastLlmCallEventSuccess:
         # doesn't pre-empt that decision (otherwise the trace adapter, which
         # may subscribe AFTER the call, would miss events).
         await _broadcast_llm_call_event(
-            success=True,
-            handler_name="EthicalPDMA",
-            service_name="MockLLMService",
-            selected_service=service,
-            api_base=None,
-            response_model=_Result,
-            messages=[{"role": "user", "content": "hi"}],
-            result=_Result(),
-            usage=None,
-            latency_ms=1.0,
-            thought_id="th_test",
-            task_id=None,
-            retry_count=0,
+            LLMCallEventContext(
+                success=True,
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                selected_service=service,
+                api_base=None,
+                response_model=_Result,
+                messages=[{"role": "user", "content": "hi"}],
+                result=_Result(),
+                usage=None,
+                duration_ms=1.0,
+                thought_id="th_test",
+                task_id=None,
+                retry_count=0,
+            )
         )
         assert broadcast_called is True
 
@@ -239,20 +244,22 @@ class TestBroadcastLlmCallEventFailure:
         service = type("S", (), {"openai_config": type("C", (), {"model_name": "x"})()})()
 
         await _broadcast_llm_call_event(
-            success=False,
-            handler_name="EthicalPDMA",
-            service_name="MockLLMService",
-            selected_service=service,
-            api_base=None,
-            response_model=_Result,
-            messages=[{"role": "user", "content": "hi"}],
-            result=None,
-            usage=None,
-            latency_ms=90000.0,
-            thought_id="th_test",
-            task_id="task_test",
-            retry_count=0,
-            error=ReadTimeout("connection hung"),
+            LLMCallEventContext(
+                success=False,
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                selected_service=service,
+                api_base=None,
+                response_model=_Result,
+                messages=[{"role": "user", "content": "hi"}],
+                result=None,
+                usage=None,
+                duration_ms=90000.0,
+                thought_id="th_test",
+                task_id="task_test",
+                retry_count=0,
+                error=ReadTimeout("connection hung"),
+            )
         )
 
         assert len(captured) == 1
@@ -287,17 +294,19 @@ class TestBroadcastLlmCallEventFailure:
 
         # MUST NOT RAISE — even though the underlying stream raised
         await _broadcast_llm_call_event(
-            success=True,
-            handler_name="EthicalPDMA",
-            service_name="MockLLMService",
-            selected_service=service,
-            api_base=None,
-            response_model=_Result,
-            messages=[{"role": "user", "content": "hi"}],
-            result=_Result(),
-            usage=None,
-            latency_ms=1.0,
-            thought_id="th_test",
-            task_id=None,
-            retry_count=0,
+            LLMCallEventContext(
+                success=True,
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                selected_service=service,
+                api_base=None,
+                response_model=_Result,
+                messages=[{"role": "user", "content": "hi"}],
+                result=_Result(),
+                usage=None,
+                duration_ms=1.0,
+                thought_id="th_test",
+                task_id=None,
+                retry_count=0,
+            )
         )

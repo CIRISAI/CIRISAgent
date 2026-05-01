@@ -40,7 +40,7 @@ import asyncio
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from rich.console import Console
@@ -241,6 +241,21 @@ class ParallelLocalesTests:
                 if create_resp.status_code != 409:
                     body = create_resp.json()
                     result.user_id = body.get("data", {}).get("user_id") or body.get("user_id")
+                else:
+                    # User exists from a prior run that didn't wipe data. The
+                    # locally-generated `password` won't match the stored hash,
+                    # so login will 401. Recover by SYSTEM_ADMIN-resetting the
+                    # stored password to the freshly generated one via
+                    # /v1/users/{user_id}/password (admin-bypass path —
+                    # docs at users.py:707, "skip_current_check=True").
+                    user_id = await self._lookup_user_id(base_url, admin_token, username)
+                    if not user_id:
+                        result.error = "user already exists but lookup failed (need wipe)"
+                        return result
+                    if not await self._reset_user_password(base_url, admin_token, user_id, password):
+                        result.error = "password reset failed for existing user (need wipe)"
+                        return result
+                    result.user_id = user_id
 
                 # 2) Login as the new user.
                 async with httpx.AsyncClient(timeout=15.0) as http:
@@ -292,6 +307,46 @@ class ParallelLocalesTests:
                 result.total_seconds = time.time() - start
 
         return result
+
+    async def _lookup_user_id(
+        self, base_url: str, admin_token: str, username: str
+    ) -> Optional[str]:
+        """Find a user's user_id by username via the admin GET /v1/users
+        endpoint with `?search=`. Returns None if not found or on error."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                resp = await http.get(
+                    f"{base_url}/v1/users",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                    params={"search": username, "page_size": 50},
+                )
+            if resp.status_code != 200:
+                return None
+            body = resp.json()
+            items = body.get("data", {}).get("items") or body.get("items") or []
+            for item in items:
+                if item.get("username") == username:
+                    return cast(Optional[str], item.get("user_id"))
+        except Exception:
+            return None
+        return None
+
+    async def _reset_user_password(
+        self, base_url: str, admin_token: str, user_id: str, new_password: str
+    ) -> bool:
+        """Reset a user's password via the SYSTEM_ADMIN-bypass path
+        PUT /v1/users/{user_id}/password. Used to recover from 409
+        "user already exists" on un-wiped reruns."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http:
+                resp = await http.put(
+                    f"{base_url}/v1/users/{user_id}/password",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                    json={"new_password": new_password},
+                )
+            return resp.status_code == 200
+        except Exception:
+            return False
 
     async def _send_question(
         self,

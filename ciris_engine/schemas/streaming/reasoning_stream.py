@@ -54,7 +54,7 @@ class ReasoningStreamUpdate(BaseModel):
 
 def create_reasoning_event(
     event_type: ReasoningEvent,
-    thought_id: str,
+    thought_id: Optional[str],
     task_id: Optional[str],
     timestamp: str,
     **event_data: Any,

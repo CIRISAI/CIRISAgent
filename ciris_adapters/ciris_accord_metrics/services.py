@@ -904,6 +904,45 @@ class AccordMetricsService:
         Args:
             events: List of event dictionaries to send
         """
+        # TODO(2.7.9 / lens-413-handling): byte-size-bounded batching.
+        #
+        # The lens enforces HTTP 413 + max_bytes at 8 MiB per request body
+        # (AV-13 closed in lens middleware). Today this code path is event-
+        # COUNT gated (batch_size, default 10) with no byte ceiling. Real
+        # captured FULL_TRACES sizes from the 2.7.8 qa runs:
+        #   - 4.2 MB single complete_trace event (16-component thought)
+        #   - 3.0 MB / 1.2 MB / 642 KB also routine
+        # A batch of two such traces already overshoots the 8 MiB limit;
+        # default batch_size=10 will overshoot most days at FULL.
+        #
+        # Required work (split into a follow-up — non-trivial because a
+        # single event can exceed the limit on long recursive-conscience
+        # thoughts, so events[] partitioning alone isn't enough):
+        #   1. Estimate serialized bytes per event before assembly
+        #      (json.dumps with separators=(",",":") gives a tight bound).
+        #   2. Pack events[] into 1+ payloads each ≤ ~7.5 MiB serialized
+        #      (leave headroom for envelope + correlation_metadata).
+        #   3. POST each payload separately; preserve flush semantics
+        #      (all-or-nothing per the lens contract — if one chunk 4xx's,
+        #      requeue the unsent chunks the same way the current
+        #      _flush_events does on TimeoutError).
+        #   4. For the SINGLE-EVENT-OVERFLOW case (trace > 8 MiB on its
+        #      own — observed 4.2 MB max so far but a 5-retry recursive-
+        #      conscience thought at FULL could plausibly hit it):
+        #      negotiate a smaller trace level for that event (drop FULL
+        #      content, ship at DETAILED), OR split the components[] list
+        #      into a primary trace + appendix events keyed by trace_id.
+        #      The lens schema bump in FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        #      would naturally accommodate the appendix shape since each
+        #      event becomes its own row anyway.
+        #   5. Add a metric for "batches that exceeded ceiling" so we can
+        #      tell when single-event-overflow becomes common in
+        #      production rather than waiting for 413s.
+        #
+        # Until then: a 413 from the lens will surface as the generic
+        # `RuntimeError(f"CIRISLens API error {response.status}: ...")`
+        # below and the events get re-queued by _flush_events's failure
+        # path (capped at batch_size*10 deep). Functional but noisy.
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
 

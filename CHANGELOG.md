@@ -5,6 +5,35 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.7] - 2026-05-01
+
+Local-tee for accord_metrics ships traces to lens AND keeps an offline copy. Closes the audit-asymmetry gap surfaced by the v3 Amharic + Hausa safety sweeps where we shipped data to lens with no local copy to score against. Also feeds the persist engine real test data for the new wire-format ingest path — gating concern for the 2.7.8 release per the lens/persist coordination.
+
+### Added
+
+- **`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` feature flag** in `ciris_adapters/ciris_accord_metrics/services.py`. When set to a writable path, every batch payload that gets POSTed to the lens endpoint is *also* written to `<dir>/accord-batch-<utc-iso>-<seq>.json` using the same JSON shape we POST. The lens stays the source of truth; the local copy is supplementary.
+  - Init validates the dir at startup (mkdir + probe-write) so misconfigurations fail at boot, not on the first flush.
+  - Tee runs BEFORE the POST so an operator killing a run mid-flight still has whatever was about to ship.
+  - Filename pattern: `accord-batch-<YYYYMMDDTHHMMSSffffff>-<NNNN>.json` — sortable, collision-resistant within a single adapter instance, parseable by the persist engine's batch-replay path.
+  - Best-effort: disk failures (full / permission denied / non-serializable event) MUST NOT block the live POST. Logged at WARNING with a clear "POST unaffected" suffix so operators know the lens still got the data even if the tee didn't.
+  - Default off — empty env var means no tee, zero behavior change for existing deployments.
+
+- **QA runner auto-wires the tee for live-lens runs** (`tools/qa_runner/server.py`). When `--live-lens` is active and `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` isn't already set by the operator, the runner sets it to `/tmp/qa-runner-lens-traces-<utc-iso>/`. Per-run /tmp dir keeps lens-bound trace copies out of the repo working tree and out of `$HOME`. Operator override (env-var preset) takes precedence — useful for routing copies into a CI artifact bundle or a persist-engine ingest-test fixture dir.
+
+- **9 regression tests** in `tests/adapters/accord_metrics/test_local_copy_tee.py`:
+  - Env-var-unset → no disk activity (default-off contract)
+  - Env-var-set + writable dir → tee writes, file exists, JSON round-trips equal to input payload
+  - Env-var-set + unwritable dir → graceful degradation, OSError/PermissionError raised by mkdir/probe is caught
+  - Sequence numbers prevent collision when multiple batches share a microsecond
+  - Tee write failure mid-run (PermissionError simulated) → POST path proceeds
+  - Non-serializable event (TypeError) → tee suppressed, POST proceeds (the bug should surface via the POST failing for the same reason, not via the tee being noisy)
+  - QA runner default path is under `/tmp/`
+  - QA runner respects operator override of `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`
+
+### Why this is gating for 2.7.8
+
+The persist engine (CIRISPersist) has just begun ingesting traces in the new wire format. The 2.7.8 release ships the wire-format-spec'd events; persist needs real captured data to validate against. Until the local tee existed, every safety sweep we ran for the format-validation work shipped to lens and disappeared into a remote endpoint we couldn't replay against persist's ingest path. With the tee, every QA-driven sweep produces a file dump that can be uploaded to persist directly. The 2.7.8 release was effectively gated on this; ships now.
+
 ## [2.7.8.6] - 2026-05-01
 
 Operational: per-language safety-sweep ledger + first Hausa sweep against Qwen.

@@ -936,6 +936,18 @@ class APIServerManager:
             # Set live lens endpoint explicitly
             if self.config.live_lens:
                 env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"
+                # Local-tee for live-lens runs: write every batch payload that
+                # gets POSTed to the lens to a per-run /tmp directory in
+                # parallel. Gives us an audit copy + feeds the persist engine
+                # real test data for the new wire-format ingest path. Default
+                # path: /tmp/qa-runner-lens-traces-<utc-iso>/. Operators can
+                # override by setting CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR
+                # before launching the QA runner.
+                if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                    from datetime import datetime, timezone
+
+                    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = f"/tmp/qa-runner-lens-traces-{ts}"
             self.console.print(
                 f"[dim]Enabling accord_metrics adapter with consent for trace capture ({trace_level})[/dim]"
             )
@@ -947,6 +959,9 @@ class APIServerManager:
             if self.config.live_lens:
                 self.console.print(
                     f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]"
+                )
+                self.console.print(
+                    f"[dim]   CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env['CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR']}[/dim]"
                 )
 
         # Load Reddit credentials if Reddit adapter is being used

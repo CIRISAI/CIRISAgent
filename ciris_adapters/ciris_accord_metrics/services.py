@@ -482,6 +482,41 @@ class AccordMetricsService:
         else:
             self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
+        # Local-tee feature flag for what gets shipped to lens.
+        # When CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, every batch payload
+        # POSTed to lens is ALSO written to <dir>/accord-batch-<timestamp>-<seq>.json
+        # using the same JSON shape we POST. Purpose: audit copy when shipping
+        # to the live lens (which doesn't auto-mirror the way the mock-logshipper
+        # does in QA), and feeds the persist engine real test data for the new
+        # wire-format ingest path. Best-effort — disk failures must NEVER break
+        # the live POST (the lens is the source of truth, the local copy is
+        # supplementary). Default off; QA runner sets the dir to /tmp/<run-id>
+        # automatically when --live-lens is active (see tools/qa_runner/server.py).
+        env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
+        self._local_copy_dir: Optional[Path] = None
+        self._local_copy_seq: int = 0
+        if env_local_copy_dir:
+            try:
+                candidate = Path(env_local_copy_dir)
+                candidate.mkdir(parents=True, exist_ok=True)
+                # Smoke-test writability so we fail at startup rather than
+                # silently dropping copies the operator thinks they have.
+                probe = candidate / ".accord_local_copy_probe"
+                probe.write_text("")
+                probe.unlink()
+                self._local_copy_dir = candidate
+                logger.info(
+                    f"📂 [{self._adapter_instance_id}] Local-copy enabled: {candidate} "
+                    f"(every batch shipped to {self._endpoint_url} will be teed here)"
+                )
+            except (OSError, PermissionError) as e:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env_local_copy_dir!r} "
+                    f"is not writable ({e}); proceeding without local copies. "
+                    f"Live POSTs to lens are unaffected."
+                )
+                self._local_copy_dir = None
+
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
             self._batch_size: int = int(raw_batch)
@@ -990,6 +1025,32 @@ class AccordMetricsService:
         logger.info(
             f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, trace_level={self._trace_level.value})"
         )
+
+        # Local tee: write the same payload we POST to disk if the operator
+        # opted in via CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR. Done BEFORE the
+        # POST so an operator killing the run mid-flight still has whatever
+        # was about to ship. Disk failures must NEVER block the POST — the
+        # lens is the source of truth, this copy is supplementary.
+        if self._local_copy_dir is not None:
+            self._local_copy_seq += 1
+            try:
+                # Filename pattern: accord-batch-<ISO-utc>-<seq>.json — sortable,
+                # collision-resistant within a single adapter instance, parseable
+                # by the persist engine's batch-replay path.
+                ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+                copy_path = self._local_copy_dir / f"accord-batch-{ts}-{self._local_copy_seq:04d}.json"
+                copy_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+                logger.debug(
+                    f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events) to {copy_path}"
+                )
+            except (OSError, PermissionError, TypeError) as e:
+                # TypeError catches the rare case of a non-JSON-serializable
+                # value sneaking into events — the POST will fail too in that
+                # case, but the tee shouldn't be the thing that surfaces it.
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] Local-copy write failed ({e}); "
+                    f"proceeding with POST. The lens will still receive this batch."
+                )
 
         async with self._session.post(url, json=payload) as response:
             if response.status != 200:

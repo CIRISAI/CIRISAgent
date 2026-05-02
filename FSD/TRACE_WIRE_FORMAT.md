@@ -125,23 +125,32 @@ granularity (component_type is also a coarse ordering hint — components
 go through the H3ERE step sequence: observation → context → rationale →
 conscience → action).
 
-### 3.1 `agent_id_hash` is per-event, not per-batch
+### 3.1 `agent_id_hash` is denormalized onto every TraceComponent (2.7.9+)
 
-Although `agent_id_hash` appears once per CompleteTrace at this envelope
-level, **it binds every TraceComponent under the trace structurally**: the
-persistence dedup tuple (§9.1) is `(agent_id_hash, trace_id, thought_id,
-event_type, attempt_index, ts)`, evaluated per persisted row. Compliant
-persistence layers MUST propagate the parent CompleteTrace's
-`agent_id_hash` into every component-row UNIQUE check, OR equivalently
-treat `(agent_id_hash, trace_id)` as the trace-binding pair before any
-per-component dedup. Without this gating, a malicious agent can pre-claim
-a `(trace_id, thought_id, event_type, attempt_index, ts)` tuple it
-doesn't own — see AV-9 in `CIRISPersist/THREAT_MODEL.md §3.1`.
+`agent_id_hash` appears at BOTH the CompleteTrace envelope level (§3) AND
+on every TraceComponent (§4). The two values MUST be equal — agents emit
+them locked at build time; persistence MAY reject mismatches as
+malformed. The denormalization is deliberate: each event row is
+self-contained, so the persistence layer reads `agent_id_hash` directly
+from each component row without propagating from the envelope. This makes
+the persistence dedup tuple (§9.1) `(agent_id_hash, trace_id, thought_id,
+event_type, attempt_index, ts)` resolvable from a single component row.
 
-The `trace_id` namespace ("globally unique per agent by convention") is
+Without `agent_id_hash` in the dedup tuple, a malicious agent can
+pre-claim a `(trace_id, thought_id, event_type, attempt_index, ts)`
+tuple it doesn't own (AV-9 in `CIRISPersist/THREAT_MODEL.md §3.1`). The
+`trace_id` namespace ("globally unique per agent by convention") is
 **adversary-controllable at the SQL layer**. The dedup tuple's
 `agent_id_hash` prefix prevents cross-agent collision; the `ts` suffix is
 defense-in-depth against attempt_index counting bugs (§6).
+
+**Schema version semantics.** At `trace_schema_version "2.7.0"` the
+field appeared only at the CompleteTrace level and persistence
+propagated; at `trace_schema_version "2.7.9"` it appears on both
+CompleteTrace and every TraceComponent — persistence reads directly.
+Persistence implementations MAY accept 2.7.0-shaped traces during a
+dual-window transition (`SUPPORTED_VERSIONS = ["2.7.0", "2.7.9"]`) but
+MUST reject 2.7.9 traces missing the per-component value.
 
 ## 4. TraceComponent envelope
 
@@ -149,6 +158,7 @@ Each entry in `components[]`:
 
 ```json
 {
+  "agent_id_hash": "7c3f8e2b1d9a4f60",
   "component_type": "rationale",
   "event_type": "ASPDMA_RESULT",
   "timestamp": "2026-04-30T00:16:01.234567+00:00",
@@ -158,6 +168,7 @@ Each entry in `components[]`:
 
 | Field | Type | Notes |
 |---|---|---|
+| `agent_id_hash` | string | Same 16-hex-char SHA-256 prefix as the parent CompleteTrace's `agent_id_hash` (§3 + §3.1). MUST be equal to the envelope value; agents emit them locked, persistence MAY reject mismatches. **Required at `trace_schema_version "2.7.9"`**; absent at `"2.7.0"`. |
 | `component_type` | enum | One of `observation`, `context`, `rationale`, `conscience`, `action`, `verb_second_pass`, `llm_call`, `unknown`. |
 | `event_type` | enum | The `ReasoningEvent` value — discriminator for `data` shape. |
 | `timestamp` | ISO-8601 | Per-component wall clock. |
@@ -193,11 +204,14 @@ accept `step_point` as a deserialization alias for migration but MUST
 write `event_type` on output. The dedup tuple in §9.1 binds
 `event_type`, not `step_point`.
 
-**`agent_id_hash` propagation.** The parent CompleteTrace's
-`agent_id_hash` (§3) applies to every component under it (§3.1). A
-component does NOT carry its own `agent_id_hash` field on the wire —
-implementations propagate it from the parent envelope when persisting
-into a per-component table.
+**`agent_id_hash` denormalization (2.7.9+).** Each TraceComponent
+carries `agent_id_hash` on the wire; its value MUST equal the parent
+CompleteTrace's `agent_id_hash` (§3). The denormalization makes each
+component row self-contained — persistence reads the value directly
+from the row without propagating from the envelope. Mismatch is
+malformed and persistence MAY reject. (At `trace_schema_version
+"2.7.0"` the field appeared only at the envelope level and persistence
+propagated; 2.7.9 lifts the contract to per-component-on-wire.)
 
 ## 5. Reasoning event types and `data` shapes
 
@@ -762,7 +776,7 @@ be confused across levels.
 Per-trace Ed25519 signatures
 (`accord_metrics/services.py:208-368`).
 
-**Canonical payload** (the bytes signed):
+**Canonical payload at `trace_schema_version "2.7.9"`** (the bytes signed):
 
 ```python
 canonical = {
@@ -776,6 +790,7 @@ canonical = {
     "trace_schema_version": trace.trace_schema_version,
     "components": [
         {
+            "agent_id_hash": c.agent_id_hash,  # NEW in 2.7.9 — denormalized from envelope, MUST equal trace.agent_id_hash
             "component_type": c.component_type,
             "data": _strip_empty(c.data),  # omit None / "" / [] / {}
             "event_type": c.event_type,
@@ -788,6 +803,19 @@ signed_bytes = json.dumps(canonical, sort_keys=True, separators=(",", ":")).enco
 signature = ed25519_sign(signed_bytes)
 ```
 
+**Schema-version-gated canonical shapes** (lens verifier accepts each in
+order; first match wins):
+
+| `trace_schema_version` | Per-component shape | Notes |
+|---|---|---|
+| `"2.7.0"` | 4 fields: `component_type`, `data`, `event_type`, `timestamp` | The 9-field outer canonical shipped in 2.7.8.9. Persistence propagates `agent_id_hash` from envelope. |
+| `"2.7.9"` | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component. |
+
+The legacy 2-field shape (`{"components", "trace_level"}`, pre-2.7.8.9)
+is retired on the agent side but persistence implementations MAY keep
+it in the try-list during a triple-window transition for federation
+peers that haven't upgraded.
+
 **Key:** unified Ed25519 signing key, shared between the audit service
 and accord_metrics traces. Agent registers its public key with the
 lens at startup (POST `<endpoint>/accord/agents/register`); the lens
@@ -797,7 +825,7 @@ caches `signature_key_id → public_key` for verification.
 
 1. Look up the public key by `signature_key_id`.
 2. Reconstruct `canonical` from the received CompleteTrace using the
-   same algorithm above (json.dumps with sort_keys + separators).
+   shape that matches `trace_schema_version` (table above).
 3. `ed25519_verify(public_key, canonical_bytes, signature)`.
 4. Reject the trace on signature mismatch.
 

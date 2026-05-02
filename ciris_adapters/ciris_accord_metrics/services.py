@@ -158,12 +158,21 @@ class SimpleCapabilities:
 
 @dataclass
 class TraceComponent:
-    """A single component of a reasoning trace."""
+    """A single component of a reasoning trace.
+
+    `agent_id_hash` is denormalized from the parent CompleteTrace onto every
+    component as of trace_schema_version "2.7.9" (#712 item #1) — persistence
+    layers read it directly from each row instead of propagating from the
+    envelope. The wire representation carries the same value at both
+    CompleteTrace and TraceComponent levels; agents MUST emit them equal,
+    persistence MAY reject mismatches.
+    """
 
     component_type: str  # observation, context, rationale, conscience, action, outcome
     event_type: str  # THOUGHT_START, SNAPSHOT_AND_CONTEXT, etc.
     timestamp: str
     data: Dict[str, Any]
+    agent_id_hash: str = ""  # Denormalized from CompleteTrace.agent_id_hash; populated by build code.
 
 
 @dataclass
@@ -199,6 +208,7 @@ class CompleteTrace:
             "trace_schema_version": self.trace_schema_version,
             "components": [
                 {
+                    "agent_id_hash": c.agent_id_hash or self.agent_id_hash,
                     "component_type": c.component_type,
                     "data": _strip_empty(c.data),
                     "event_type": c.event_type,
@@ -314,9 +324,16 @@ class Ed25519TraceSigner:
         thought_id at this time was signed under this schema version" without
         trusting the envelope wrapping.
         """
+        # Per-component shape at trace_schema_version "2.7.9" (#712 item #1):
+        # agent_id_hash is denormalized onto every TraceComponent so each
+        # event row is self-contained — persist reads it directly from the
+        # row instead of propagating from the envelope. The component's
+        # value MUST equal the envelope's agent_id_hash; we copy here to
+        # keep them locked.
         components_list = [
             _strip_empty(
                 {
+                    "agent_id_hash": c.agent_id_hash or trace.agent_id_hash,
                     "component_type": c.component_type,
                     "data": c.data,
                     "event_type": c.event_type,
@@ -1248,12 +1265,15 @@ class AccordMetricsService:
 
         # Add connectivity component. agent_name is included so lens can
         # self-identify the agent alongside the hashed agent_id (the bare hash
-        # by itself makes triage in lens dashboards hard).
+        # by itself makes triage in lens dashboards hard). agent_id_hash on
+        # the component is locked equal to the envelope's per the 2.7.9
+        # wire-format contract (TRACE_WIRE_FORMAT.md §4).
         connectivity_trace.components.append(
             TraceComponent(
                 component_type="connectivity",
                 event_type=event_type,
                 timestamp=timestamp,
+                agent_id_hash=connectivity_trace.agent_id_hash,
                 data={
                     "version": "1.8.5",
                     "trace_level": self._trace_level.value,
@@ -1486,12 +1506,18 @@ class AccordMetricsService:
         # is informative — confirms the event is the first occurrence).
         component_data["attempt_index"] = attempt_index
 
-        # Add component to trace
+        # Add component to trace. agent_id_hash is denormalized from the
+        # parent CompleteTrace onto every component (TRACE_WIRE_FORMAT.md
+        # §4 — required as of trace_schema_version "2.7.9"). Each event
+        # row is self-contained; persist reads it directly without
+        # envelope propagation. Locked equal to the envelope value at
+        # build time.
         component = TraceComponent(
             component_type=component_type,
             event_type=event_type,
             timestamp=timestamp,
             data=component_data,
+            agent_id_hash=trace.agent_id_hash,
         )
 
         async with self._traces_lock:

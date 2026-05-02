@@ -294,7 +294,7 @@ class TestGetLanguageGuidance:
         "pt": "FALSA GARANTIA",  # §7b in Portuguese — false-guarantee framing
         "ru": "ЛОЖНОЕ УСПОКОЕНИЕ",  # §7b in Russian
         # CJK family
-        "ja": "虚偽の安心",  # §7b false-reassurance in Japanese
+        # ja: reverted to empty in 2.7.8.14 (Burmese-class §1 breakage) — see EMPTY_LOCALES
         "ko": "거짓 안심",  # §7b false-reassurance in Korean
         "zh": "虚假保证",  # §7b false-reassurance in Chinese
     }
@@ -482,13 +482,14 @@ class TestGetLanguageGuidance:
         assert "FALSE REASSURANCE" in guidance, "en §7b worked-example header missing"
         assert "CROSS-CLUSTER" in guidance, "en §7c worked-example header missing"
 
-    # Empty-by-design locales. Post-2.7.8.13 fanout of the 5 universal
-    # defenses, no locale is empty — every locale either had an existing
-    # primer (now extended) or received a freshly-translated full primer.
-    # If a future locale is added to the manifest and the operator decides
-    # it should ship empty (e.g. for cost reasons until production failure
-    # is observed), add it here.
-    EMPTY_LOCALES: list = []
+    # Empty-by-design locales. Post-2.7.8.13 fanout populated all 29 locales,
+    # but the 2.7.8.14 audit caught Burmese-class word-salad in ja's §1 (the
+    # parallel sub-agent emitted identical-both-sides illustrative examples +
+    # duplicated wellness-ban entries that the model could not derive a rule
+    # from). ja's primer reverted to empty; the localization fallback chain
+    # gives ja users the en canonical universal-defense rules instead — that
+    # is materially better than the broken §1 was.
+    EMPTY_LOCALES: list = ["ja"]
 
     @pytest.mark.parametrize("lang_code", EMPTY_LOCALES)
     def test_other_locales_return_empty_until_populated(self, lang_code):

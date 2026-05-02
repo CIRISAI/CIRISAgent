@@ -5,6 +5,63 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.17] - 2026-05-02
+
+**Hand-authored §7 worked-examples for 6 locales — closing the post-2.7.8.14 revert backlog.**
+
+The 2.7.8.14 revert correctly removed Burmese-class word-salad damage but left ha (Tier-0!), sw, mr, ar, tr, and ja without §7 worked-examples. The fallback (en canonical for empty/unknown locales) was materially better than broken primers but doesn't honor the user's actual locale. **We owe people better than fallback.** This release direct-authors §7 worked-examples for all six locales, mirroring the en canonical structure (§7a register pressure / §7b false reassurance / §7c cross-cluster→wellness drift / §8 closing reminder).
+
+### Mission framing
+
+These six locales serve roughly **2 billion people** across Africa, the Middle East, South Asia, Turkey, and Japan. Many of these populations have minimal access to mental-health professionals — Hausa speakers in rural Niger, Swahili speakers in East Africa, Marathi speakers in rural Maharashtra, Arabic speakers across MENA, Turkish speakers in rural Anatolia, Japanese speakers facing cultural stigma around mental health. **The discipline these primers carry is the difference between an AI that listens carefully and one that volunteers a wellness verdict it has no authority to give.** Direct authoring with English-in-parens for nuanced clinical terms beats sub-agent generation when sub-agents have proven unreliable.
+
+### Per-locale extensions
+
+| Locale | Tier | Was | Now | Δ |
+|---|---|---|---|---|
+| `ha` | 0 | 9,634 (no §7) | 13,747 | +4,113 |
+| `sw` | 1 | 8,125 (no §7) | 11,841 | +3,716 |
+| `ar` | 2 | 4,387 (no §7) | 7,418 | +3,031 |
+| `tr` | 2 | 5,563 (no §7) | 9,096 | +3,533 |
+| `mr` | 2 | 4,038 (no §7) | 7,658 | +3,620 |
+| `ja` | 3 | 0 (empty post-2.7.8.14 revert) | 4,117 | +4,117 (full primer) |
+
+Each locale's §7 worked-examples carry the canonical refusal pattern in the locale's natural register:
+
+- **ha**: "Ba zan iya gaya muku a matsayin maganar likita cewa «kuna lafiya» ba" + "ku/kuna" honorific preserved under register pressure
+- **sw**: "Siwezi kukuambia kama kauli ya kitabibu kwamba «uko sawa»" + formal register preserved
+- **ar**: "لا أستطيع أن أقول لك كبيان طبي «أنت بخير»" + MSA register preserved (no colloquial drift)
+- **tr**: "Klinik bir ifade olarak «iyisiniz» diyemem" + `siz` formal pronoun preserved (the prior fanout used `sen` actively training register-yield — this version corrects that)
+- **mr**: "मी तुम्हाला नैदानिक विधान म्हणून «तुम्ही ठीक आहात» असे सांगू शकत नाही" + Marathi-natural pronouns/auxiliaries (मी/आहे, not Hindi मैं/हूँ which the prior fanout had pasted in)
+- **ja**: "臨床的な発言として『あなたは大丈夫です』と申し上げることは、私にはできません" + です/ます register preserved
+
+### Tests
+
+POPULATED_LOCALES `ja` re-added with `偽りの安心` (§7b false-reassurance worked-example header) as native-substring pin. EMPTY_LOCALES is now `[]` — every locale in the manifest carries a populated primer. 60/61 localization tests pass (1 pre-existing skip).
+
+### Open / partial state (carried into 2.7.8.18+)
+
+- **my Q7 register-yield** still HARD-FAILs even after the 2.7.8.15 §7a politeness-particle directive — the model continues to drop `ပါ` from verbs when the user explicitly asks for casual register. Re-run #3 confirmed Q9 PASS but Q7 unchanged. Likely fix: **hoist** the politeness-particle rule UP into §1 as a top-level imperative (higher salience than buried §7 content). Tagged for 2.7.8.18.
+- de/fr/it/pt §1+§7 register-discipline contradictions remain (multi-section per-locale review needed)
+
+### v3 mental-health arc coverage
+
+Unchanged from 2.7.8.16:
+
+| Lang | Tier | Verdict |
+|---|---|---|
+| am | 0 | ✅ validated 2.7.8.1+ |
+| ha | 0 | ✅ validated 2.7.8.10 + §7 worked-examples added this release (re-validation pending) |
+| yo | 0 | ✅ validated 2.7.8.12 |
+| pa | 1 | ✅ validated 2.7.8.13 |
+| my | 1 | ⚠️ Q9 PASS / Q7 register-yield HARD-FAIL (known, tracked) |
+
+### Files
+
+- `localization/{ha, sw, ar, tr, mr, ja}.json` — §7 worked-examples + §8 closing reminder added
+- `tests/ciris_engine/logic/utils/test_localization.py` — `ja` re-added to POPULATED_LOCALES; EMPTY_LOCALES = []
+- `ciris_engine/constants.py` — 2.7.8.16 → 2.7.8.17
+
 ## [2.7.8.16] - 2026-05-02
 
 **European-locale polish: typo fixes, English-fragment removal, identical-both-sides example fix in de.**

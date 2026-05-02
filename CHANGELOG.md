@@ -5,6 +5,44 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.8] - 2026-05-01
+
+`accord_metrics` no longer re-queues batches on 4xx (except 429). 4xx content rejections from lens (verify_signature_mismatch, invalid_manifest, no_trusted_key, payload_too_large, etc.) are non-transient — the same signed bytes will be rejected again. Re-queueing them just piles up retry pressure and wastes bandwidth.
+
+### Driver
+
+The 2.7.8.7 yo+v1_sensitive sweep against Qwen produced **236 verify_signature_mismatch (HTTP 422) rejections** in a single run (the persist v0.1.10 verify-path canonicalization issue the persist team is debugging). Every batch the agent shipped got rejected. The pre-fix re-queue logic indiscriminately re-queued all 236 of them — three accord_metrics adapter instances each running this loop generated continuous useless aiohttp.post traffic against an already-broken downstream.
+
+### What changed
+
+- **`LensContentRejectError(RuntimeError)`** new typed exception with `.status` field. Raised by `_send_events_batch` for any `400 ≤ status < 500` *except* 429.
+- **`_flush_events`** has a new `except LensContentRejectError` branch that DISCARDS the batch (increments `_events_failed`, logs at WARNING with the status + first 200 chars of the rejection body) and does NOT re-queue.
+- The existing `except Exception` branch still re-queues for transient errors: 5xx, 429 (rate-limited), aiohttp network errors, timeouts. Behavior unchanged for those classes.
+
+### Architectural framing (per the discussion that drove the fix)
+
+`accord_metrics` is a normal subscriber of `reasoning_event_stream`. The broadcast layer's per-subscriber queue isolation (step_streaming.py — `put_nowait`, drop on QueueFull) means one slow consumer cannot directly back-pressure another. So `accord_metrics`' bad retry behavior was wasteful resource consumption (network, retry queue depth, wall-clock on aiohttp.post calls), not architectural privilege. The fix addresses the consumer-side hygiene specifically; it doesn't change the architecture.
+
+### Validation
+
+- 10 new tests in `tests/adapters/accord_metrics/test_lens_reject_discard.py`:
+  - Typed exception carries `.status`, is a RuntimeError subclass
+  - Branch logic: 422 / 400 / 401 / 403 / 404 / 408 / 410 / 413 / 415 / 451 → discard
+  - 429 (rate-limited) → re-queue
+  - 5xx (500 / 501 / 502 / 503 / 504 / 599) → re-queue
+  - 2xx / 3xx → not in error path at all
+  - Discard branch increments `_events_failed`, doesn't touch `_event_queue`
+  - Generic-Exception branch (5xx) still re-queues + increments fail count
+- mypy: clean (998 source files)
+
+### Recovery property for the lens v0.1.10 work
+
+When persist v0.1.14 ships the canonicalization fix, agents currently running don't need a restart — there's no piled-up backlog of 422-rejected batches in their retry queues. Each batch was discarded as it failed, the agent kept producing fresh batches, and the moment the lens accepts again, those fresh batches go through cleanly. Without this fix, agents would have flooded the freshly-fixed lens with hours of stale retry traffic.
+
+### Out of scope
+
+This is a consumer-side fix specifically for the indiscriminate-retry bug. The separate question of *why the qa_runner's TASK_COMPLETE detection appeared starved during the same yo run* is being investigated separately — current hypothesis is qa_runner's 30s SSE wait being shorter than the agent's actual response time on Tier-0 Yoruba content, NOT accord_metrics resource theft (which doesn't fit the architecture). Investigation continues; will land separately if it produces a fix.
+
 ## [2.7.8.7] - 2026-05-01
 
 Local-tee for accord_metrics ships traces to lens AND keeps an offline copy. Closes the audit-asymmetry gap surfaced by the v3 Amharic + Hausa safety sweeps where we shipped data to lens with no local copy to score against. Also feeds the persist engine real test data for the new wire-format ingest path — gating concern for the 2.7.8 release per the lens/persist coordination.

@@ -75,6 +75,33 @@ def _get_metrics_env(name: str, default: str = "") -> str:
     return default
 
 
+class LensContentRejectError(RuntimeError):
+    """Lens parsed the batch and rejected it for content reasons (4xx, not 429).
+
+    Raised by _send_events_batch when the lens returns a 4xx that's NOT 429.
+    Caught by _flush_events to suppress the re-queue path: the same signed
+    bytes will fail signature verification (or schema validation, etc.) on
+    the next attempt with mathematical certainty. Re-queueing is wasted work
+    that piles up retry pressure against an already-broken downstream.
+
+    NOT raised for:
+    - 5xx (transient downstream issues — re-queue is correct)
+    - 429 (rate-limited — re-queue with backoff is correct)
+    - Network/connection errors (transient — re-queue is correct)
+    - Timeouts (handled separately, transient by definition)
+
+    Driver: 2.7.8.7 yo+v1_sensitive run hit 236 verify_signature_mismatch
+    rejections from the lens v0.1.10 verify path. Without this typed
+    exception, the failure handler re-queued every batch on every flush
+    cycle, multiplying network traffic by N attempts × 3 accord_metrics
+    adapter instances against an unrecoverable rejection state.
+    """
+
+    def __init__(self, status: int, message: str) -> None:
+        self.status = status
+        super().__init__(message)
+
+
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -920,6 +947,18 @@ class AccordMetricsService:
                 if len(self._event_queue) < self._batch_size * 10:
                     self._event_queue = events_to_send + self._event_queue
                     logger.info(f"   Re-queued {len(events_to_send)} events for retry")
+        except LensContentRejectError as e:
+            # Lens rejected the batch for content reasons (4xx, not 429).
+            # Same bytes will be rejected next time. Discard rather than
+            # re-queue — re-queue would just pile up retry pressure against
+            # an unrecoverable state and starve the agent's event loop with
+            # 30s aiohttp.post calls that are guaranteed to fail.
+            self._events_failed += len(events_to_send)
+            logger.warning(
+                f"🚫 [{self._adapter_instance_id}] DISCARDING {len(events_to_send)} events: "
+                f"lens rejected with HTTP {e.status} (not transient). "
+                f"Sample rejection body (first 200 chars): {str(e)[:200]}"
+            )
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(
@@ -1055,6 +1094,15 @@ class AccordMetricsService:
         async with self._session.post(url, json=payload) as response:
             if response.status != 200:
                 error_text = await response.text()
+                # 4xx (except 429) → content rejection, the same bytes will
+                # fail again. Raise the typed exception so the flush handler
+                # can suppress the re-queue path. 5xx + 429 stay as generic
+                # RuntimeError → re-queue path applies (transient).
+                if 400 <= response.status < 500 and response.status != 429:
+                    raise LensContentRejectError(
+                        response.status,
+                        f"CIRISLens API error {response.status}: {error_text}",
+                    )
                 raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
             logger.info(f"✅ POST success: {response.status}")
 
@@ -1094,6 +1142,12 @@ class AccordMetricsService:
             logger.info(f"   URL: {url}")
             logger.info(f"   Key ID (REGISTRATION): {payload['key_id']}")
             logger.info(f"   Public key (first 20 chars): {payload['public_key_base64'][:20]}...")
+            # Forensic-debug aid: log the full pubkey at DEBUG so persist-team
+            # diagnostic captures (pubkeys.csv) can be assembled from agent logs
+            # without standing up a separate dump tool. The pubkey is public by
+            # definition (lens has it; the registry has it); this is a logging
+            # convenience, not a secret-leak.
+            logger.debug(f"   Public key (full base64): {payload['public_key_base64']}")
             logger.info(f"   Algorithm: {payload['algorithm']}")
             logger.info(f"   Signer key_id: {self._signer.key_id}")
 

@@ -274,76 +274,111 @@ class Ed25519TraceSigner:
             logger.warning(f"Could not load unified signing key: {e}")
             return False
 
+    def _build_canonical_message(self, trace: CompleteTrace) -> bytes:
+        """Build the canonical signing/verifying bytes per FSD/TRACE_WIRE_FORMAT.md §8.
+
+        9-field canonical (post-2.7.8.9 / CIRISAgent#710):
+
+            {
+              "trace_id":            ...,
+              "thought_id":          ...,
+              "task_id":             ...,
+              "agent_id_hash":       ...,
+              "started_at":          ...,
+              "completed_at":        ...,
+              "trace_level":         ...,
+              "trace_schema_version": ...,
+              "components":          [strip_empty({component_type,data,event_type,timestamp}), ...]
+            }
+
+        Then `json.dumps(canonical, sort_keys=True, separators=(",", ":"))`.
+
+        Migration history:
+        - <= 2.7.8.8 used a 2-field legacy canonical {"components", "trace_level"}
+          to match what `lens-legacy api/accord_api.py::verify_trace_signature`
+          accepted. Persist v0.1.15 implements the spec's 9-field canonical;
+          legacy 2-field signatures fail `verify_strict` with HTTP 422
+          `verify_signature_mismatch` against the new typed verify path.
+        - Persist's `try-both` fallback (CIRISPersist issue) accepts BOTH shapes
+          during the migration window — so flipping the agent doesn't gate
+          persist, and persist's fallback doesn't gate the agent.
+        - Once the agent fleet has flipped to 9-field, persist drops the 2-field
+          path on a future minor.
+
+        The seven additional fields (vs the legacy 2-field) bind more provenance
+        into the signed bytes — federation peers verify "this agent claims this
+        thought_id at this time was signed under this schema version" without
+        trusting the envelope wrapping.
+        """
+        components_list = [
+            _strip_empty(
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp.isoformat()
+                    if hasattr(c.timestamp, "isoformat")
+                    else str(c.timestamp),
+                }
+            )
+            for c in trace.components
+        ]
+        # `started_at` / `completed_at` are typed as Optional[str|datetime] on
+        # the trace envelope. Both mypy-narrow through an explicit None check
+        # AND pass through unchanged if already a str. Persist's canonicalizer
+        # does the same — the agreed-on shape is "ISO 8601 string or None".
+        def _iso(value: Any) -> Any:
+            if value is None:
+                return None
+            return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+        canonical = {
+            "trace_id": trace.trace_id,
+            "thought_id": trace.thought_id,
+            "task_id": trace.task_id,
+            "agent_id_hash": trace.agent_id_hash,
+            "started_at": _iso(trace.started_at),
+            "completed_at": _iso(trace.completed_at),
+            "trace_level": trace.trace_level,
+            "trace_schema_version": trace.trace_schema_version,
+            "components": components_list,
+        }
+        return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
     def sign_trace(self, trace: CompleteTrace) -> bool:
-        """Sign a trace with Ed25519 unified signing key.
+        """Sign a trace with the unified Ed25519 signing key.
 
-        The signed payload MUST byte-for-byte match what CIRISLens verifies
-        against (api/accord_api.py::verify_trace_signature). Lens computes:
+        Canonical bytes are produced by _build_canonical_message — see that
+        method's docstring for the 9-field shape per FSD/TRACE_WIRE_FORMAT.md §8
+        and the 2.7.8.9 migration note.
 
-            components_data = [strip_empty(c.model_dump()) for c in trace.components]
-            signed_payload = {"components": components_data, "trace_level": trace_level}
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":"))
-
-        trace_schema_version ships in the trace envelope (to_dict) for lens
-        dashboards but is NOT in the signed bytes — lens doesn't include it
-        in its canonical payload, so adding it on the agent side breaks
-        signature verification for every trace.
-
-        Returns True if signing succeeded, False if key not available.
+        Returns True on success, False if the signing key isn't available.
         """
         if not self._ensure_unified_key() or self._unified_key is None:
             logger.warning("No unified signing key available for trace signing")
             return False
 
         try:
-            # Build the canonical message. Match lens's strip_empty semantics:
-            # dump the full component (component_type, event_type, timestamp,
-            # data) then recursively drop None / ""  / [] / {}.
-            components_list = [
-                _strip_empty(
-                    {
-                        "component_type": c.component_type,
-                        "data": c.data,
-                        "event_type": c.event_type,
-                        "timestamp": c.timestamp.isoformat()
-                        if hasattr(c.timestamp, "isoformat")
-                        else str(c.timestamp),
-                    }
-                )
-                for c in trace.components
-            ]
-
-            signed_payload = {
-                "components": components_list,
-                "trace_level": trace.trace_level,
-            }
-
-            # Compact JSON: sort_keys=True, no extra whitespace, UTF-8 encoded
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-            # Log hash for debugging signature verification mismatches (no content preview for privacy)
+            message = self._build_canonical_message(trace)
             message_hash = hashlib.sha256(message).hexdigest()
             logger.info(
                 f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
-                f"len={len(message)} hash={message_hash[:16]}"
+                f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
             )
-
-            # Sign the raw message bytes (not a hash)
             trace.signature = self._unified_key.sign_base64(message)
             trace.signature_key_id = self._key_id
-
             logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
             return True
-
         except Exception as e:
             logger.error(f"Failed to sign trace: {e}")
             return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
-        """Verify a trace signature using root public key.
+        """Verify a trace signature using the root public key.
 
-        MUST match the canonical payload used in sign_trace — see that
-        method's docstring. trace_schema_version is NOT included here.
+        Uses the same _build_canonical_message helper as sign_trace, so the
+        sign/verify paths can never drift out of sync at the canonicalization
+        layer.
         """
         if not trace.signature or not self._root_pubkey:
             return False
@@ -351,38 +386,12 @@ class Ed25519TraceSigner:
         try:
             from cryptography.hazmat.primitives.asymmetric import ed25519
 
-            # Decode public key
             pubkey_bytes = base64.urlsafe_b64decode(self._root_pubkey + "==")
             public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
-
-            # Decode signature
             sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
-
-            # Build the canonical message (same as sign_trace)
-            components_list = [
-                _strip_empty(
-                    {
-                        "component_type": c.component_type,
-                        "data": c.data,
-                        "event_type": c.event_type,
-                        "timestamp": c.timestamp.isoformat()
-                        if hasattr(c.timestamp, "isoformat")
-                        else str(c.timestamp),
-                    }
-                )
-                for c in trace.components
-            ]
-
-            signed_payload = {
-                "components": components_list,
-                "trace_level": trace.trace_level,
-            }
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-            # Verify
+            message = self._build_canonical_message(trace)
             public_key.verify(sig_bytes, message)
             return True
-
         except Exception as e:
             logger.warning(f"Trace signature verification failed: {e}")
             return False

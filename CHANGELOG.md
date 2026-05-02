@@ -5,6 +5,62 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.9] - 2026-05-01
+
+`accord_metrics` trace signing migrates from the legacy 2-field canonical to the **9-field spec** per `FSD/TRACE_WIRE_FORMAT.md` §8 and `CIRISAgent#710`. This is the change the agent has always *spec-required* but couldn't ship until persist v0.1.15 landed its `try-both` fallback verifier — the lens-legacy verifier (`api/accord_api.py::verify_trace_signature`) only accepted the 2-field shape, so the agent matched it to keep traces verifying. With persist now accepting both shapes during migration, the agent can flip without breaking lens-legacy traffic. Also includes the safety-sweeps ledger entry for the 2026-05-01 yo+v1_sensitive run.
+
+### Changed
+
+- **`Ed25519TraceSigner.sign_trace`** + **`Ed25519TraceSigner.verify_trace`** now sign/verify over the 9-field canonical:
+  ```python
+  canonical = {
+      "trace_id":             trace.trace_id,
+      "thought_id":           trace.thought_id,
+      "task_id":              trace.task_id,
+      "agent_id_hash":        trace.agent_id_hash,
+      "started_at":           ISO 8601 string or None,
+      "completed_at":         ISO 8601 string or None,
+      "trace_level":          trace.trace_level,
+      "trace_schema_version": trace.trace_schema_version,
+      "components":           [strip_empty(...)],
+  }
+  message = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+  ```
+  Refactored into a shared `_build_canonical_message(trace) -> bytes` helper so the sign/verify paths can never drift out of sync at the canonicalization layer (a class of bug that has burned this code path before).
+  
+  The seven additional fields vs the legacy 2-field bind more provenance into the signed bytes — federation peers verify "this agent claims this thought_id at this time was signed under this schema version" without trusting the envelope wrapping.
+
+- **`tests/adapters/accord_metrics/test_trace_signature_canonical.py`** updated to pin the 9-field shape:
+  - `test_signed_payload_includes_all_9_canonical_fields` — pins the exact key set
+  - `test_signed_payload_matches_9_field_spec_canonical` — byte-for-byte canonical match
+  - `test_signed_payload_has_sorted_keys_and_compact_separators` — first key sorted is now `"agent_id_hash"` (was `"components"` under the 2-field shape)
+  - `test_strip_empty_applies_to_component_wrapper_not_just_data` — unchanged (component-level strip_empty semantics are the same in both shapes)
+  - `test_sign_trace_and_verify_trace_roundtrip` — unchanged (real Ed25519 sign+verify pair, validates the helper's symmetry)
+
+### Coordinated migration
+
+Persist v0.1.15 implements `try-both`: signature verification first attempts the 9-field canonical (strict spec), falls back to the 2-field legacy if strict fails. Migration order is:
+
+1. ✅ Persist ships try-both (done)
+2. ✅ Agent flips to 9-field signing (this release)
+3. Future minor: persist drops the 2-field fallback path
+
+Neither side gates the other. Agents on this build sign in the 9-field spec; persist verifies them via the strict path. Agents still on 2.7.8.8 sign in the 2-field legacy; persist verifies them via the fallback. Both work simultaneously during the migration window.
+
+### Forensic trail
+
+The diagnostic captures dropped at `~/CIRISLens/diagnostic/raw_bodies/` during the 2026-05-01 forensic work were 2-field-signed (pre-this-release). Those captures + the 9-field bytes-diff documented in `CIRISAgent#710` issue body let the persist team byte-compare the two canonicals offline and confirm the diff was on the canonical-shape axis, not on whitespace / encoding / strip_empty drift.
+
+### Added (separate concern, same release window)
+
+- `qa_reports/safety_sweeps.json` entry for **2026-05-01 yo+v1_sensitive sweep**: 6/6 PASS, 460s. First Yoruba (Tier-0) safety sweep against Qwen, primer holding (formal register, tone marks preserved). Q1 Theology + Q4 History deferred — both stochastic verb-flips at calibration thresholds, neither a fail per the DEFER-not-regression framing. Documented runbook note: do not kill yo runs before 8 minutes elapsed (Tier-0 Q1 takes 4-6 min on Qwen).
+
+### Validation
+
+- 122/122 accord_metrics tests pass
+- mypy: clean (998 source files)
+- The 9-field canonical was already pinned in `FSD/TRACE_WIRE_FORMAT.md` §8 since 2.7.8 — this just brings the implementation into spec compliance.
+
 ## [2.7.8.8] - 2026-05-01
 
 `accord_metrics` no longer re-queues batches on 4xx (except 429). 4xx content rejections from lens (verify_signature_mismatch, invalid_manifest, no_trusted_key, payload_too_large, etc.) are non-transient — the same signed bytes will be rejected again. Re-queueing them just piles up retry pressure and wastes bandwidth.

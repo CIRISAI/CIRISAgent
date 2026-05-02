@@ -317,3 +317,110 @@ class TestHealthEndpointSurfacing:
             assert r.json()["status"] == "ok"
             # And must omit the descriptor field
             assert "storage_descriptor" not in r.json()
+
+
+class TestNormalizeDescriptor:
+    """Direct unit tests for the `_normalize_descriptor` helper extracted in
+    2.7.8.x to drop the cognitive-complexity of `get_storage_descriptor`. Each
+    branch (None, dict, model_dump, __dict__, scalar) must produce the
+    documented return shape."""
+
+    def test_none_returns_none(self):
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        assert _normalize_descriptor(None) is None
+
+    def test_dict_returns_dict_unchanged(self):
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        d = {"path": "/x", "signer_type": "ed25519"}
+        assert _normalize_descriptor(d) == d
+
+    def test_pydantic_like_uses_model_dump(self):
+        """If the FFI returns something with `.model_dump()`, prefer that."""
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        class _PydanticLike:
+            def model_dump(self):
+                return {"path": "/from/model_dump", "kind": "file"}
+
+        result = _normalize_descriptor(_PydanticLike())
+        assert result == {"path": "/from/model_dump", "kind": "file"}
+
+    def test_pydantic_model_dump_failure_falls_through(self):
+        """If model_dump() raises, fall through to __dict__ extraction."""
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        class _PydanticBroken:
+            def __init__(self):
+                self.path = "/from/dict_attr"
+
+            def model_dump(self):
+                raise RuntimeError("model_dump broken")
+
+        result = _normalize_descriptor(_PydanticBroken())
+        assert result is not None
+        # Falls through to __dict__ branch
+        assert result["path"] == "/from/dict_attr"
+
+    def test_object_with_dict_attr_uses_filtered_dict(self):
+        """Plain object → filtered __dict__ (drops underscore-prefixed)."""
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        class _Plain:
+            def __init__(self):
+                self.path = "/data/k.key"
+                self._private = "filtered_out"
+
+        result = _normalize_descriptor(_Plain())
+        assert result == {"path": "/data/k.key"}
+
+    def test_scalar_path_string_wraps_to_value_dict(self):
+        """Bare string from the FFI → wrapped as {'value': ...}."""
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        assert _normalize_descriptor("/var/lib/ciris/keyring.bin") == {
+            "value": "/var/lib/ciris/keyring.bin"
+        }
+
+    def test_scalar_int_wraps_via_str(self):
+        """Defensive: even a non-string scalar gets stringified into the
+        wrapper so callers always see Dict[str, str|...] keyed by 'value'."""
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            _normalize_descriptor,
+        )
+
+        assert _normalize_descriptor(42) == {"value": "42"}
+
+
+class TestGetStorageDescriptorReturnsNoneForCallableNone:
+    """Edge case: the verifier method exists, returns None, and the
+    accessor must propagate None back. Covers the post-method None branch."""
+
+    def test_method_returns_none_propagates(self):
+        from ciris_engine.logic.services.infrastructure.authentication import verifier_singleton
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+            get_storage_descriptor,
+        )
+
+        verifier_singleton.reset_verifier()
+        mock_verifier = MagicMock()
+        mock_verifier.storage_descriptor.return_value = None
+        verifier_singleton._verifier = mock_verifier
+
+        try:
+            assert get_storage_descriptor() is None
+        finally:
+            verifier_singleton.reset_verifier()

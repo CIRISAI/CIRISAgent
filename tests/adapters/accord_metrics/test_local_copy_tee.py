@@ -286,3 +286,211 @@ class TestQARunnerWiring:
         if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
             env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = "/tmp/qa-runner-default"
         assert env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] == "/operator/preset/path"
+
+
+class TestSendEventsBatchEndToEnd:
+    """End-to-end coverage of `_send_events_batch` — exercises the body
+    serialization, sha256 computation, tee write, and POST path with a
+    mocked aiohttp session. Pre-2.7.8.x these lines were structurally
+    inline-tested only; SonarCloud's "new code coverage" tracker counts
+    real `_send_events_batch` calls. These tests close that gap."""
+
+    def _make_full_adapter(self, tmp_path, with_tee=True):
+        """Build a minimally-configured AccordMetricsService that will
+        actually execute `_send_events_batch`. Mocks the heavy pieces
+        (aiohttp session, signing key) but lets the body-serialization +
+        tee + status-handling code run for real."""
+        from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+
+        obj = AccordMetricsService.__new__(AccordMetricsService)
+        obj._adapter_instance_id = "e2e-test"
+        obj._endpoint_url = "https://lens.example.test/api/v1"
+        obj._local_copy_dir = tmp_path if with_tee else None
+        obj._local_copy_seq = 0
+        obj._consent_timestamp = "2025-01-01T00:00:00Z"
+        obj._deployment_region = ""
+        obj._deployment_type = ""
+        obj._agent_role = ""
+        obj._agent_template = ""
+        obj._share_location_in_traces = False
+        obj._user_location = ""
+        obj._user_timezone = ""
+        obj._user_latitude = None
+        obj._user_longitude = None
+        # _trace_level is an enum-shaped attribute the method reads .value off
+        from types import SimpleNamespace
+        obj._trace_level = SimpleNamespace(value="generic")
+        return obj
+
+    def _make_mock_session(self, status=200, body_text="ok"):
+        """aiohttp ClientSession.post returns an async-context-manager
+        wrapping the response. Build a mock that supports both
+        `async with session.post(...) as response` and the response's
+        `.status` + `.text()` accessors."""
+        response = MagicMock()
+        response.status = status
+        response.text = AsyncMock(return_value=body_text)
+
+        # Async context manager
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=response)
+        cm.__aexit__ = AsyncMock(return_value=None)
+
+        session = MagicMock()
+        session.post = MagicMock(return_value=cm)
+        return session, response
+
+    @pytest.mark.asyncio
+    async def test_full_path_writes_tee_file_and_posts_body(self, tmp_path):
+        """Happy path: serialize once → tee write → POST with same bytes.
+        Verifies the 2.7.8.12 byte-equality contract end-to-end."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=True)
+        session, response = self._make_mock_session(status=200)
+        adapter._session = session
+
+        events = [
+            {"event_type": "thought_start", "thought_id": "t1"},
+            {"event_type": "action_result", "thought_id": "t1", "action": "speak"},
+        ]
+        await adapter._send_events_batch(events)
+
+        # Tee file written
+        tee_files = list(tmp_path.glob("accord-batch-*.json"))
+        assert len(tee_files) == 1, f"Expected exactly one tee file, got {tee_files}"
+
+        # POST called once
+        assert session.post.call_count == 1
+        call_kwargs = session.post.call_args.kwargs
+        # Body passed as `data=`, not `json=` (the byte-equality fix)
+        assert "data" in call_kwargs
+        assert call_kwargs["headers"] == {"Content-Type": "application/json"}
+
+        # Tee bytes byte-identical to wire bytes
+        wire_body = call_kwargs["data"]
+        assert tee_files[0].read_bytes() == wire_body
+
+    @pytest.mark.asyncio
+    async def test_no_tee_when_local_copy_dir_unset(self, tmp_path):
+        """`_local_copy_dir is None` → no tee branch executes."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        session, _ = self._make_mock_session(status=200)
+        adapter._session = session
+
+        await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        # No tee files anywhere under tmp_path
+        assert list(tmp_path.glob("accord-batch-*.json")) == []
+        assert session.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_lens_422_raises_typed_reject_error(self, tmp_path):
+        """4xx (except 429) → LensContentRejectError raised, NOT generic RuntimeError.
+        That's the typed-exception contract from 2.7.8.8 that the discard branch hangs on."""
+        from ciris_adapters.ciris_accord_metrics.services import LensContentRejectError
+
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        session, _ = self._make_mock_session(
+            status=422, body_text='{"detail":"verify_signature_mismatch"}'
+        )
+        adapter._session = session
+
+        with pytest.raises(LensContentRejectError) as exc_info:
+            await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        assert exc_info.value.status == 422
+        assert "verify_signature_mismatch" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_lens_429_rate_limited_raises_runtime_error_not_typed(self, tmp_path):
+        """429 stays as a generic RuntimeError → re-queue path applies.
+        The discard branch is for non-transient 4xx ONLY; rate-limiting is transient."""
+        from ciris_adapters.ciris_accord_metrics.services import LensContentRejectError
+
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        session, _ = self._make_mock_session(status=429, body_text="rate limited")
+        adapter._session = session
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        # Specifically NOT the typed exception — the re-queue path catches generic
+        # RuntimeError but skips LensContentRejectError
+        assert not isinstance(exc_info.value, LensContentRejectError)
+        assert "429" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_lens_502_bad_gateway_raises_runtime_error(self, tmp_path):
+        """5xx is transient → generic RuntimeError → re-queue path."""
+        from ciris_adapters.ciris_accord_metrics.services import LensContentRejectError
+
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        session, _ = self._make_mock_session(status=502, body_text="bad gateway")
+        adapter._session = session
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        assert not isinstance(exc_info.value, LensContentRejectError)
+
+    @pytest.mark.asyncio
+    async def test_tee_write_failure_does_not_block_post(self, tmp_path, monkeypatch):
+        """If the tee write fails (disk full, perm denied), the POST still
+        proceeds. The lens is the source of truth; the tee is supplementary."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=True)
+        session, _ = self._make_mock_session(status=200)
+        adapter._session = session
+
+        # Simulate write_bytes raising — the OSError catch must swallow it.
+        original_write_bytes = Path.write_bytes
+
+        def _failing_write_bytes(self, *args, **kwargs):
+            raise OSError("simulated disk full")
+
+        monkeypatch.setattr(Path, "write_bytes", _failing_write_bytes)
+
+        # Must NOT raise — POST proceeds even if tee fails.
+        await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        assert session.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_consent_timestamp_required(self, tmp_path):
+        """No consent_timestamp → RuntimeError before any POST. Belt-and-suspenders
+        check beyond the per-config validation, since lens returns 422 without it."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        adapter._consent_timestamp = ""  # Drop consent
+        session, _ = self._make_mock_session(status=200)
+        adapter._session = session
+
+        with pytest.raises(RuntimeError, match="consent_timestamp"):
+            await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        # POST never called
+        assert session.post.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_no_session_raises(self, tmp_path):
+        """`_send_events_batch` requires an initialized HTTP session."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        adapter._session = None  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="HTTP session not initialized"):
+            await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+    @pytest.mark.asyncio
+    async def test_correlation_metadata_only_added_when_non_empty(self, tmp_path):
+        """The correlation_metadata key is only present in the payload when
+        at least one optional field has been set. Empty correlation never
+        ships an empty `correlation_metadata` field — wire-shape contract."""
+        adapter = self._make_full_adapter(tmp_path, with_tee=False)
+        adapter._deployment_region = "us-east-1"  # set ONE field
+        session, _ = self._make_mock_session(status=200)
+        adapter._session = session
+
+        await adapter._send_events_batch([{"event_type": "x", "thought_id": "t"}])
+
+        # Read what was POSTed
+        wire_body = session.post.call_args.kwargs["data"]
+        payload = json.loads(wire_body.decode("utf-8"))
+        assert "correlation_metadata" in payload
+        assert payload["correlation_metadata"]["deployment_region"] == "us-east-1"

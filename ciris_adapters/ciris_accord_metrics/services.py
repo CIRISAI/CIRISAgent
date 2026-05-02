@@ -545,7 +545,7 @@ class AccordMetricsService:
                     f"📂 [{self._adapter_instance_id}] Local-copy enabled: {candidate} "
                     f"(every batch shipped to {self._endpoint_url} will be teed here)"
                 )
-            except (OSError, PermissionError) as e:
+            except OSError as e:  # PermissionError is a subclass of OSError
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env_local_copy_dir!r} "
                     f"is not writable ({e}); proceeding without local copies. "
@@ -987,7 +987,7 @@ class AccordMetricsService:
         Args:
             events: List of event dictionaries to send
         """
-        # TODO(2.7.9 / lens-413-handling): byte-size-bounded batching.
+        # Deferred (tracked under 2.7.9 / lens-413-handling): byte-size-bounded batching.
         #
         # The lens enforces HTTP 413 + max_bytes at 8 MiB per request body
         # (AV-13 closed in lens middleware). Today this code path is event-
@@ -1105,7 +1105,7 @@ class AccordMetricsService:
                     f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events, "
                     f"body_sha256={body_sha256[:16]}) to {copy_path}"
                 )
-            except (OSError, PermissionError) as e:
+            except OSError as e:  # PermissionError is a subclass of OSError
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] Local-copy write failed ({e}); "
                     f"proceeding with POST. The lens will still receive this batch."

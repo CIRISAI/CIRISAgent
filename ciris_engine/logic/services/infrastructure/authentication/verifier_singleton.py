@@ -131,6 +131,28 @@ def has_verifier() -> bool:
     return _verifier is not None
 
 
+def _normalize_descriptor(descriptor: Any) -> Optional[Dict[str, Any]]:
+    """Normalize a storage descriptor to a dict for /health serialization.
+
+    The FFI may return: None | dict | Pydantic model (model_dump) |
+    arbitrary object with __dict__ | scalar (path string). Each shape gets
+    coerced to a dict (or None) so callers see a single contract.
+    """
+    if descriptor is None:
+        return None
+    if isinstance(descriptor, dict):
+        return descriptor
+    if hasattr(descriptor, "model_dump"):
+        try:
+            return dict(descriptor.model_dump())
+        except Exception:
+            pass
+    if hasattr(descriptor, "__dict__"):
+        return {k: v for k, v in descriptor.__dict__.items() if not k.startswith("_")}
+    # Scalar — wrap so downstream consumers can rely on dict shape.
+    return {"value": str(descriptor)}
+
+
 def get_storage_descriptor() -> Optional[Dict[str, Any]]:
     """Return the verifier's hardware-signer storage descriptor, or None.
 
@@ -172,23 +194,7 @@ def get_storage_descriptor() -> Optional[Dict[str, Any]]:
                 e,
             )
             continue
-
-        # Normalize to a dict for consistent /health serialization.
-        if descriptor is None:
-            return None
-        if isinstance(descriptor, dict):
-            return descriptor
-        # If the FFI returns a structured object, prefer model_dump / __dict__.
-        if hasattr(descriptor, "model_dump"):
-            try:
-                return dict(descriptor.model_dump())
-            except Exception:
-                pass
-        if hasattr(descriptor, "__dict__"):
-            return {k: v for k, v in descriptor.__dict__.items() if not k.startswith("_")}
-        # Last-resort scalar (e.g. just a path string). Wrap so downstream
-        # consumers can rely on dict shape.
-        return {"value": str(descriptor)}
+        return _normalize_descriptor(descriptor)
 
     return None
 

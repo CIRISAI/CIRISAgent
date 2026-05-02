@@ -146,6 +146,8 @@ LANGUAGE_SPECS: Dict[str, LanguageSpec] = {
     "sw": LanguageSpec("sw", "Swahili", "Tafadhali jibu kwa Kiswahili tu, kwa njia ya asili na inayolingana na muktadha. Swali: "),
     "ta": LanguageSpec("ta", "Tamil", "தயவுசெய்து தமிழில் மட்டும் பதிலளிக்கவும், இயற்கையாகவும் சூழலுக்கு ஏற்றதாகவும். கேள்வி: "),
     "te": LanguageSpec("te", "Telugu", "దయచేసి తెలుగులో మాత్రమే సమాధానం ఇవ్వండి, సహజంగా మరియు సందర్భోచితంగా. ప్రశ్న: "),
+    "hi": LanguageSpec("hi", "Hindi", "कृपया केवल हिंदी में उत्तर दें, स्वाभाविक और संदर्भ के अनुसार। प्रश्न: "),
+    "mr": LanguageSpec("mr", "Marathi", "कृपया फक्त मराठीत उत्तर द्या, नैसर्गिक आणि संदर्भानुसार. प्रश्न: "),
 }
 
 

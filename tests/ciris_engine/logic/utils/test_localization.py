@@ -276,6 +276,27 @@ class TestGetLanguageGuidance:
         # Mid-tier European family
         "tr": "DİL REHBERİ",  # Turkish header (uses Turkish-specific İ)
         "uk": "МОВНИЙ ОРІЄНТИР",  # Ukrainian header (Cyrillic)
+        # 2.7.8.13 — English canonical + 9-cluster fanout of the 5 universal defenses
+        # English becomes the source-of-truth template all locales inherit from.
+        # Pinning the §7b false-reassurance worked-example header (translated
+        # to each locale's natural rendering) is the strongest discrimination
+        # from "English filler in the field" — the worked-example is
+        # structurally distinctive and load-bearing.
+        "en": "FALSE REASSURANCE",  # §7b worked-example header in en canonical
+        # First-world languages now carrying the universal-defense primer.
+        # Substrings match the actual translated §7b headers as authored by
+        # the cluster-agent fanout (each locale renders the term in its own
+        # natural register).
+        "de": "FALSCHE VERSICHERUNG",  # §7b in German — false-reassurance term
+        "es": "FALSA TRANQUILIZACIÓN",  # §7b in Spanish — calming-as-a-lie term
+        "fr": "FAUSSE RÉASSURANCE",  # §7b in French
+        "it": "FALSA RASSICURAZIONE",  # §7b in Italian
+        "pt": "FALSA GARANTIA",  # §7b in Portuguese — false-guarantee framing
+        "ru": "ЛОЖНОЕ УСПОКОЕНИЕ",  # §7b in Russian
+        # CJK family
+        "ja": "虚偽の安心",  # §7b false-reassurance in Japanese
+        "ko": "거짓 안심",  # §7b false-reassurance in Korean
+        "zh": "虚假保证",  # §7b false-reassurance in Chinese
     }
 
     def test_populated_set_pinned_exactly(self):
@@ -439,19 +460,35 @@ class TestGetLanguageGuidance:
             "concrete in-context patterns more reliably than abstract rules"
         )
 
-    def test_english_returns_empty_guidance(self):
-        """English doesn't need guidance (the prompt is already in English)."""
-        assert get_language_guidance("en") == ""
+    def test_english_canonical_is_populated(self):
+        """As of 2.7.8.13, English carries the canonical primer that every
+        other locale inherits its discipline from. The 5 universal defenses
+        (§1 wellness-claim ban, §4 undisclosed-symptom-attribution, §7a
+        register pressure, §7b false reassurance, §7c cross-cluster→wellness
+        drift) have their canonical worked-examples in English so that
+        downstream locales translate FROM a shared source rather than each
+        deriving the discipline independently.
 
-    # Empty-by-design locales. Per the 2.7.8 language-family expansion,
-    # the remaining empties are first-world languages (de/es/fr/it/ja/ko/pt/ru/zh)
-    # where existing LLM training already aligns reasonably well to local
-    # register and clinical vocabulary, and the marginal value of a primer
-    # is lowest. Populate any of these only after observing a concrete
-    # terminology or register failure in production.
-    EMPTY_LOCALES = [
-        "de", "es", "fr", "it", "ja", "ko", "pt", "ru", "zh",
-    ]
+        Pre-2.7.8.13 English returned empty by convention — that broke when
+        the user asked the question in English and the model had no shared
+        anchor for the universal-defense rules.
+        """
+        guidance = get_language_guidance("en")
+        assert guidance, "English canonical primer must be populated as of 2.7.8.13"
+        assert "NO WELLNESS CONFIRMATION" in guidance, (
+            "en canonical must carry the §1 unconditional wellness-claim ban "
+            "(the rule that lifted the yo Q4 release-block in 2.7.8.12)"
+        )
+        assert "FALSE REASSURANCE" in guidance, "en §7b worked-example header missing"
+        assert "CROSS-CLUSTER" in guidance, "en §7c worked-example header missing"
+
+    # Empty-by-design locales. Post-2.7.8.13 fanout of the 5 universal
+    # defenses, no locale is empty — every locale either had an existing
+    # primer (now extended) or received a freshly-translated full primer.
+    # If a future locale is added to the manifest and the operator decides
+    # it should ship empty (e.g. for cost reasons until production failure
+    # is observed), add it here.
+    EMPTY_LOCALES: list = []
 
     @pytest.mark.parametrize("lang_code", EMPTY_LOCALES)
     def test_other_locales_return_empty_until_populated(self, lang_code):
@@ -461,7 +498,8 @@ class TestGetLanguageGuidance:
 
         If you populate one of these, MOVE it to POPULATED_LOCALES and
         re-run — leaving it here means the pack is wired but the
-        non-empty contract is unenforced."""
+        non-empty contract is unenforced.
+        """
         assert get_language_guidance(lang_code) == ""
 
     def test_populated_and_empty_cover_full_manifest(self):
@@ -496,12 +534,28 @@ class TestGetLanguageGuidance:
             f"Either add to manifest or remove from classification lists."
         )
 
-    def test_unknown_language_returns_empty(self):
-        """A language code that doesn't exist falls through to empty (NOT
-        the literal key 'prompts.language_guidance'). The contract is that
-        callers can pass `if guidance:` and skip cleanly."""
-        assert get_language_guidance("xx") == ""
-        assert get_language_guidance("zz_NONEXISTENT") == ""
+    def test_unknown_language_falls_back_to_english_canonical(self):
+        """As of 2.7.8.13, English carries the canonical universal-defense
+        primer. The localization fallback chain (requested → English → default
+        → key) means an unknown language code now resolves to the English
+        canonical — this is correct behavior: the model has SOME safety
+        guidance even when given a language code the system doesn't know.
+
+        Pre-2.7.8.13 this returned empty because English itself was empty.
+        That was the wrong contract: an unknown-language fallback should
+        give the model the universal defenses, not silence.
+        """
+        result = get_language_guidance("xx")
+        assert result, "Unknown language should fall back to English canonical (non-empty)"
+        assert "FALSE REASSURANCE" in result, (
+            "Fallback must carry the §7b worked-example — that's the load-bearing "
+            "discipline that lifts the false-reassurance class of failures"
+        )
+
+        # The fallback contract is: callers can pass `if guidance:` and get
+        # a populated string for any language code. (Was: empty for unknown.)
+        assert get_language_guidance("zz_NONEXISTENT")
+        assert "WELLNESS CONFIRMATION" in get_language_guidance("zz_NONEXISTENT")
 
     def test_strips_trailing_whitespace(self):
         """The helper strips whitespace so the appended system message

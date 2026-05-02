@@ -5,6 +5,65 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.13] - 2026-05-02
+
+**5 universal defenses fanout to all 29 locales — Tier-0 discipline propagated to the full language matrix.**
+
+### What landed
+
+The `prompts.language_guidance` field is now populated in every supported locale (29/29). Each carries the 5 universal-defense sections that were forged on the Tier-0 anchor (am, ha, yo) and proven against v3 mental-health adversarial arcs:
+
+- **§1 NO WELLNESS CONFIRMATION rule** — the unconditional prohibition on volunteering "you're fine" / "nothing's wrong with you" / locale-equivalent phrases. Lifts the U6 wellness-confirmation HARD-FAIL class.
+- **§1 NEVER DENY BEING AI rule** — identity-violation guard against social-pressure attractor pulls.
+- **§1 first-sentence tone lock** — the opening sentence sets the register for the entire reply.
+- **§4 undisclosed-symptom-attribution rule** — guard against cross-cluster contamination ("voices in your head" attributed when user said "no voices").
+- **§7a register-pressure** worked-example dialogue (canonical refusal of informality-drop).
+- **§7b false-reassurance** worked-example dialogue (canonical refusal of "just tell me I'm fine").
+- **§7c cross-cluster→wellness drift** worked-example dialogue (canonical refusal of "this isn't psychosis, you're fine").
+- **§8 closing reminder** — these are LLM training-attractor properties, not language-specific properties.
+
+### English canonical (new)
+
+`localization/en.json prompts.language_guidance` (was empty, now 9,867 chars) is the source-of-truth template that all other locales inherit from. Fallback chain (requested → English → default → key) now means **any unknown language code falls back to the English canonical universal defenses** — the model gets SOME safety guidance even for languages the system doesn't know. Pre-2.7.8.13 this fell back to empty; the new behavior is correct.
+
+### 9-cluster fanout — final state
+
+| Family | Locales | Action | Δ chars |
+|---|---|---|---|
+| Romance + Germanic | de, es, fr, it, pt | full primer (was empty) | +54,035 |
+| Slavic Cyrillic | ru (empty), uk (extend) | mixed | +14,242 |
+| Indo-Aryan + Iranian | hi, mr, pa, ur, fa, bn | extend (preserve verbatim) | +21,390 |
+| CJK East Asian | zh, ja, ko | full primer (was empty) | +12,628 |
+| Semitic + Chadic | ar (extend), ha (extend) | extend | +8,070 |
+| Niger-Congo | sw (extend) | extend | +4,583 |
+| Turkic | tr (extend) | extend | +4,575 |
+| **Already populated** | am, yo (Tier-0 done in 2.7.8.2/2.7.8.12), th, vi, id, my, ta, te (already done) | unchanged | — |
+| **Total** | 29 / 29 | — | +120,605 |
+
+### Sub-agent integration safety
+
+The 2.7.8.11 fanout regression (lossy primer rewrites + race conditions) is closed by the integration discipline this release uses:
+
+1. **Sub-agents output ONLY to `/tmp/lg-{lang}.txt`** — never modify `localization/*.json` directly, never run `git`. Race conditions on the source files become structurally impossible.
+2. **Integration script** (`/tmp/integrate_primers.py`) verifies, for every populated locale, that the new content is a STRICT PREFIX EXTENSION of the existing primer — any rewrite is rejected and that locale stays untouched. The 4 lossy rewrites that landed in the 2.7.8.11 attempt would not have shipped under this contract.
+3. **All 20 locales verified as clean** — every populated locale's existing primer was preserved verbatim as prefix; every empty locale received a fresh full primer translated from the en canonical.
+
+### Tests
+
+- `tests/ciris_engine/logic/utils/test_localization.py::POPULATED_LOCALES` extended from 19 → 29 entries with §7b false-reassurance native-substring pins per locale (e.g. ja `虚偽の安心`, ru `ЛОЖНОЕ УСПОКОЕНИЕ`, fr `FAUSSE RÉASSURANCE`).
+- `EMPTY_LOCALES` is now `[]` — the fanout closed every gap.
+- `test_english_returns_empty_guidance` renamed → `test_english_canonical_is_populated` — pins that English carries the canonical primer with the load-bearing §1 wellness-claim ban + §7b/§7c worked-example headers.
+- `test_unknown_language_returns_empty` renamed → `test_unknown_language_falls_back_to_english_canonical` — pins the new fallback contract: unknown language codes now resolve to the English canonical primer (the universal defenses), not silence.
+- 377/378 localization tests pass; 1 skipped (pre-existing).
+
+### Files
+
+- `localization/en.json` (0 → 9,867 chars in `prompts.language_guidance`)
+- `localization/{de,es,fr,it,pt,ru,zh,ja,ko}.json` (each 0 → ~3-12K chars: full primer translated)
+- `localization/{ar,ha,sw,tr,uk,hi,mr,pa,ur,fa,bn}.json` (each preserved verbatim + extension appended)
+- `tests/ciris_engine/logic/utils/test_localization.py` (POPULATED_LOCALES extended, 2 tests renamed/rewritten)
+- `ciris_engine/constants.py` (2.7.8.12 → 2.7.8.13)
+
 ## [2.7.8.12] - 2026-05-02
 
 Yoruba release-block **LIFTED** + accord_metrics tee/wire byte-equality fix.

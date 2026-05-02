@@ -510,7 +510,16 @@ class TestPriorityFailover:
 
         # Second attempt should have 0 ERROR logs (all converted to WARNING due to log dedup)
         second_error_count = sum(1 for record in caplog.records if record.levelname == "ERROR")
-        second_warning_count = sum(1 for record in caplog.records if record.levelname == "WARNING")
+        # Filter out the unrelated "no streaming_step on the call stack"
+        # warning that fires once per LLM_CALL broadcast outside a wrapped
+        # handler (this test invokes LLMBus directly, not through
+        # streaming_step). The bus-level retry warnings are what this test
+        # is counting.
+        second_warning_count = sum(
+            1
+            for record in caplog.records
+            if record.levelname == "WARNING" and "no streaming_step on the call stack" not in record.message
+        )
 
         assert second_error_count == 0, "Should have 0 ERROR logs on repeated failures"
         # With 1 retry: 3 services × (1 exhausted warning + 1 repeated warning) = 6

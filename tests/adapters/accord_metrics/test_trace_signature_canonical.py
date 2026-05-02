@@ -42,15 +42,19 @@ from ciris_adapters.ciris_accord_metrics.services import (
 
 
 def _build_expected_message(trace: CompleteTrace) -> bytes:
-    """Reproduce the 9-field canonical (FSD/TRACE_WIRE_FORMAT.md §8) byte-for-byte.
+    """Reproduce the 2.7.9 canonical (FSD/TRACE_WIRE_FORMAT.md §8) byte-for-byte.
 
-    Persist v0.1.15+ verifies against this exact shape. Any drift here means
-    every trace gets rejected with verify_signature_mismatch — caught in tests
-    rather than in production.
+    Per-component shape carries 5 fields: agent_id_hash (denormalized from
+    envelope, MUST equal trace.agent_id_hash), component_type, data,
+    event_type, timestamp. Persist v0.3.0+ accepts both 2.7.0 (4-field
+    per-component) and 2.7.9 (5-field) shapes via the schema-version-gated
+    canonical table in §8; this test pins the 2.7.9 shape since that's
+    what the agent emits as of release/2.7.9.
     """
     components_data = [
         _strip_empty(
             {
+                "agent_id_hash": c.agent_id_hash or trace.agent_id_hash,
                 "component_type": c.component_type,
                 "data": c.data,
                 "event_type": c.event_type,

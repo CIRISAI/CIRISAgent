@@ -191,6 +191,52 @@ async def _maybe_add_resource_usage(
         )
 
 
+def _resolve_parent_event_for_step(step: StepPoint) -> Optional[Tuple[str, int]]:
+    """Map a StepPoint to (parent_event_type, parent_attempt_index) so any
+    LLM_CALL issued from inside this step's handler can carry the
+    parent-event linkage required by TRACE_WIRE_FORMAT.md §5.10.
+
+    Returns None for steps that don't issue LLM calls (those don't need
+    a parent context — boot diagnostics, action dispatch, round bookkeeping).
+
+    The pipeline-event-to-step mapping (see comment block in
+    `_broadcast_reasoning_event`):
+      - PERFORM_DMAS issues PDMA + CSDMA + IDMA + DSDMA LLM calls;
+        the resulting events are DMA_RESULTS + IDMA_RESULT (broadcast
+        at the next step's exit per the existing architecture). Parent
+        for those LLM calls is `DMA_RESULTS`.
+      - PERFORM_ASPDMA issues the action-selection LLM call; the
+        eventual reasoning event is `ASPDMA_RESULT` (initial pass).
+      - RECURSIVE_ASPDMA issues recursive action-selection LLM calls;
+        eventual event is `ASPDMA_RESULT` with attempt_index > 0.
+      - CONSCIENCE_EXECUTION / RECURSIVE_CONSCIENCE issue conscience
+        LLM calls; eventual event is `CONSCIENCE_RESULT`. Recursive
+        attempts increment the index.
+      - FINALIZE_ACTION may issue a final conscience call; treat as
+        `CONSCIENCE_RESULT`.
+
+    Recursive steps carry the per-thread counter via the attempt_index
+    machinery upstream — for the parent-context purpose we report
+    attempt_index 0 for non-recursive steps and rely on accord_metrics's
+    own counter for the actual broadcast index.
+    """
+    if step in (StepPoint.PERFORM_DMAS,):
+        return ("DMA_RESULTS", 0)
+    if step in (StepPoint.PERFORM_ASPDMA, StepPoint.RECURSIVE_ASPDMA):
+        # RECURSIVE_ASPDMA's parent_attempt_index is filled by the
+        # accord_metrics counter at broadcast time — agent-side we
+        # report 0 here and let the broadcaster increment as it sees
+        # multiple emissions.
+        return ("ASPDMA_RESULT", 0)
+    if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE, StepPoint.FINALIZE_ACTION):
+        return ("CONSCIENCE_RESULT", 0)
+    # Other steps (START_ROUND, GATHER_CONTEXT, PERFORM_ACTION,
+    # ACTION_COMPLETE, ROUND_COMPLETE) don't issue LLM calls in the
+    # canonical pipeline. If a future step starts issuing calls, add
+    # the mapping here.
+    return None
+
+
 def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
@@ -199,6 +245,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
     1. Extracts step data from function arguments/results
     2. Broadcasts to global step_result_stream
     3. Never pauses - always streams and continues
+    4. Sets the parent-event ContextVar so any LLM_CALL issued during
+       the wrapped handler carries the right `(parent_event_type,
+       parent_attempt_index)` linkage per TRACE_WIRE_FORMAT.md §5.10.
 
     Args:
         step: The StepPoint enum for this step
@@ -213,6 +262,8 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
     def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
+            from ciris_engine.logic.buses.llm_call_context import set_parent_event_context
+
             thought_id = getattr(thought_item, "thought_id", "unknown")
             time_service = getattr(self, "_time_service", None)
             if not time_service or not hasattr(time_service, "now"):
@@ -221,9 +272,21 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                 )
             start_timestamp = time_service.now()
 
+            # Resolve parent event for any LLM_CALLs the handler issues.
+            # If the step doesn't have a known parent event, run the
+            # handler without setting the ContextVar — LLM_CALLs from
+            # those steps would surface as UNKNOWN_PARENT in the
+            # broadcast helper's warning log.
+            parent_event = _resolve_parent_event_for_step(step)
+
             try:
                 # Execute the original function
-                result = await func(self, thought_item, *args, **kwargs)
+                if parent_event is not None:
+                    parent_event_type, parent_attempt_index = parent_event
+                    with set_parent_event_context(parent_event_type, parent_attempt_index):
+                        result = await func(self, thought_item, *args, **kwargs)
+                else:
+                    result = await func(self, thought_item, *args, **kwargs)
 
                 # Calculate processing time
                 end_timestamp = time_service.now()

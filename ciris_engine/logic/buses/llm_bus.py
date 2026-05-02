@@ -158,6 +158,10 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
     issues.
     """
     try:
+        from ciris_engine.logic.buses.llm_call_context import (
+            UNKNOWN_PARENT_EVENT_TYPE,
+            get_parent_event_context,
+        )
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
         from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
         from ciris_engine.schemas.services.runtime_control import ReasoningEvent
@@ -171,6 +175,18 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
 
         response_text, completion_bytes = _serialize_response(ctx.result)
         status, error_class = _resolve_status_and_error_class(ctx.success, ctx.error)
+
+        # Parent-event linkage per TRACE_WIRE_FORMAT.md §5.10. Required
+        # as of 2.7.9 — emit on every LLM_CALL. Sentinel surfaces uncovered
+        # code paths so we can wire them as we find them.
+        parent_event_type, parent_attempt_index = get_parent_event_context()
+        if parent_event_type == UNKNOWN_PARENT_EVENT_TYPE:
+            logger.warning(
+                "[LLM_CALL parent] no streaming_step on the call stack — "
+                "emitting parent_event_type=%r. Wire a parent context at "
+                "the call site to fix this.",
+                parent_event_type,
+            )
 
         event = create_reasoning_event(
             event_type=ReasoningEvent.LLM_CALL,
@@ -198,6 +214,9 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
             # ships them and lets the adapter strip per-level.
             prompt=prompt_text,
             response_text=response_text,
+            # Parent linkage — see comment above.
+            parent_event_type=parent_event_type,
+            parent_attempt_index=parent_attempt_index,
         )
         await reasoning_event_stream.broadcast_reasoning_event(event)
     except Exception as broadcast_exc:

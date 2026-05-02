@@ -977,7 +977,12 @@ async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
-        stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
+        # 1000 matches the cirisnode + accord_metrics subscriber queues. The
+        # original 100 was sized for pre-2.7.8 event volume (~6 events/thought);
+        # LLM_CALL adds 5-15 sub-events per thought, so wakeup-state bursts
+        # exceed 100 and drop thought_start during high-throughput streaming
+        # verification (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2).
+        stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1000)
         reasoning_event_stream.subscribe(stream_queue)
 
         logger.debug(

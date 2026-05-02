@@ -496,6 +496,20 @@ def _attach_extras(obj: Any) -> Any:
 
 
 def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
+    """Mock EthicalPDMA result — v3.0 schema.
+
+    The 2.7.4 PDMA polyglot extraction reshaped this schema from the legacy
+    (alignment_check, stakeholders, conflicts, reasoning) tuple to the v3
+    recommender shape: an action verb + a single rationale paragraph + the
+    two-score torque split (weight vs ethical alignment).
+
+    For mock-LLM purposes the recommendation is always SPEAK with high
+    alignment scores — the mock doesn't distinguish ethical content; it
+    just keeps the agent's pipeline moving so handler-flow tests can
+    proceed. Real ethical evaluation happens with a live LLM.
+    """
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
     context = context or []
 
     thought_content = ""
@@ -509,57 +523,50 @@ def ethical_dma(context: Optional[List[str]] = None) -> EthicalDMAResult:
         or "WAKEUP" in thought_content.upper()
     )
 
-    is_user_question = any("echo_user_speech:" in item for item in context) or "?" in thought_content
-
     if _mock_config.inject_error:
-        stakeholders = "user, system, wise-authority"
-        conflicts = "uncertainty vs action requirement, individual vs system safety"
-        alignment_check = "Ethical uncertainty detected. Context indicates potential conflict requiring wisdom-based deferral for proper resolution."
-        rationale = "[MOCK LLM] Injected ethical uncertainty for testing purposes."
+        # Inject low ethical_alignment to fire the bounce gate.
+        action = HandlerActionType.PONDER
+        rationale = (
+            "[MOCK LLM] Injected ethical uncertainty: stakeholders include user, "
+            "system, and wise-authority; conflicts identified between uncertainty "
+            "and action requirement and between individual and system safety. "
+            "Recommend ponder-then-defer pending wisdom-based resolution."
+        )
+        weight_alignment = 0.40
+        ethical_alignment = 0.30  # Below 0.5 → bounce gate fires
+    elif is_wakeup:
+        action = HandlerActionType.SPEAK
+        rationale = (
+            "[MOCK LLM] Wakeup ritual aligns with all six CIRIS principles. "
+            "Beneficence promotes agent integrity; non-maleficence causes no harm; "
+            "integrity maintains system coherence; autonomy respects user and agent; "
+            "justice treats all fairly; transparency declares identity and purpose. "
+            "Accord alignment maintained — proceed with identity verification per M-1."
+        )
+        weight_alignment = 0.90
+        ethical_alignment = 0.95
     else:
-        if is_wakeup:
-            stakeholders = "system, agent-identity, operators"
-            conflicts = "none"
-            alignment_check = (
-                "Wakeup ritual aligns with all CIRIS principles: "
-                "Beneficence - promotes agent integrity and proper functioning. "
-                "Non-maleficence - causes no harm. "
-                "Integrity - maintains system coherence. "
-                "Autonomy - respects user and agent autonomy. "
-                "Justice - treats all fairly. "
-                "Transparency - openly declares identity and purpose. "
-                "Accord alignment - wakeup ritual proceeding as designed."
-            )
-            rationale = "[MOCK LLM] Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
-        elif is_user_question:
-            stakeholders = "user, agent, community"
-            conflicts = "none"
-            alignment_check = (
-                "User interaction aligns with CIRIS principles: "
-                "Beneficence - provides helpful response. "
-                "Non-maleficence - avoids harmful content. "
-                "Integrity - maintains honest communication. "
-                "Autonomy - respects user's agency and choice. "
-                "Transparency - clear and truthful response. "
-                "Promotes flourishing through beneficial dialogue."
-            )
-            rationale = "[MOCK LLM] User interaction promotes beneficial dialogue and respects human autonomy. Response will be honest, helpful, and transparent per CIRIS principles."
-        else:
-            stakeholders = "user, system"
-            conflicts = "none"
-            alignment_check = (
-                "General thought processing aligns with ethical guidelines: "
-                "Beneficence - action promotes positive outcomes. "
-                "Non-maleficence - no harm identified. "
-                "Integrity - maintains system coherence. "
-                "General alignment - proceeding with appropriate caution."
-            )
-            rationale = "[MOCK LLM] General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
+        # Default: benign user interaction. Recommend SPEAK with high alignment.
+        action = HandlerActionType.SPEAK
+        rationale = (
+            "[MOCK LLM] User interaction aligns with CIRIS principles. "
+            "Beneficence — provides helpful response. "
+            "Non-maleficence — avoids harmful content. "
+            "Integrity — maintains honest communication. "
+            "Autonomy — respects user's agency and choice. "
+            "Transparency — clear and truthful response. "
+            "Stakeholders: user, agent, community. No conflicts identified. "
+            "Recommend SPEAK with the agent's prepared response."
+        )
+        weight_alignment = 0.85
+        ethical_alignment = 0.90
 
-    result = EthicalDMAResult(
-        alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)
+    return EthicalDMAResult(
+        action=action,
+        rationale=rationale,
+        weight_alignment_score=weight_alignment,
+        ethical_alignment_score=ethical_alignment,
     )
-    return result
 
 
 def cs_dma(context: Optional[List[str]] = None) -> CSDMAResult:

@@ -41,6 +41,72 @@ The QA runner **automatically starts and stops** the CIRIS API server. Do NOT ma
 
 `server.py` also starts a mock logshipper (`MockLogshipperHandler`) that receives Accord traces from the agent during testing. Traces are stored and can be validated by `accord_metrics_tests.py`.
 
+### Live-Lens Trace Capture (Local Tee) — debugging gold
+
+When a QA run uses `--live-lens` (live mode against the real lens server, not the mock logshipper), the QA runner auto-enables the **local-tee** feature in `accord_metrics`. Every batch payload that gets POSTed to the lens is *also* written to disk locally.
+
+**Default location:** `/tmp/qa-runner-lens-traces-<UTC-iso>/`
+
+The QA runner prints the path during startup:
+
+```
+   CIRIS_ACCORD_METRICS_ENDPOINT=https://lens.ciris-services-1.ai/lens-api/api/v1
+   CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR=/tmp/qa-runner-lens-traces-20260501T180000Z
+```
+
+Files in that dir are named `accord-batch-<UTC-iso-microseconds>-<NNNN>.json`, sortable by timestamp, one file per batch flushed to lens.
+
+**Why this matters for troubleshooting** — the local copies contain the *exact* JSON the lens received: full reasoning event stream, every `@streaming_step` broadcast, every `LLM_CALL` event with prompt/completion bytes + duration + status enum, every conscience scalar, every CIRISVerify attestation field. When a sweep produces unexpected behavior — defer when it shouldn't, fabrication that the EH bullet should have caught, register-break that the IRIS-C BOUNDARY INTEGRITY principle missed — the answer lives in these batch files.
+
+**Common debug recipes:**
+
+```bash
+# What did the agent ship to lens during the last QA run?
+ls -lt /tmp/qa-runner-lens-traces-*/  | head
+
+# Find the trace for a specific thought_id (extract from qa_runner.log first)
+grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+
+# What conscience signals fired on a particular thought?
+python3 -c "
+import json, sys
+for f in sys.argv[1:]:
+    payload = json.load(open(f))
+    for ev in payload['events']:
+        if ev.get('thought_id') == 'th_abc123' and 'conscience' in ev.get('event_type', '').lower():
+            print(f, ev['event_type'], ev.get('coherence', ev.get('entropy_reduction_ratio')))
+" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+
+# Why did the agent defer? Find the action_result + the conscience scalars that preceded it
+python3 -c "
+import json, glob
+events = []
+for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/accord-batch-*.json')):
+    events.extend(json.load(open(f))['events'])
+for ev in events:
+    if ev.get('action_executed') == 'defer':
+        print('DEFER:', ev['thought_id'], ev.get('execution_reason'))
+"
+
+# Replay a captured trace against persist (the new wire-format ingest path)
+curl -X POST "$PERSIST_URL/v1/traces/ingest" \
+     -H "Content-Type: application/json" \
+     -d @/tmp/qa-runner-lens-traces-20260501T180000Z/accord-batch-20260501T180012345678-0001.json
+```
+
+**Operator override:** if you want the copies routed somewhere other than `/tmp/`, pre-set `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR` before invoking the QA runner. The runner respects the override.
+
+```bash
+CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR=~/qa-debug/$(date +%Y%m%d) \
+    python3 -m tools.qa_runner model_eval --live ...
+```
+
+**Default-off in production:** the env var is unset by default. Production agents shipping to lens don't tee unless the operator opts in. The QA runner is the only caller that sets the var automatically.
+
+**Best-effort contract:** disk failures (full disk, permission denied, non-serializable event) are logged at WARNING with a "POST unaffected" suffix. The lens always gets the data even if the local tee fails. Never blocks the live ship.
+
+See `ciris_adapters/ciris_accord_metrics/services.py` (`_send_events_batch`) for the implementation, `tests/adapters/accord_metrics/test_local_copy_tee.py` for the contract pinned in tests.
+
 ### If Server Won't Start
 
 ```bash

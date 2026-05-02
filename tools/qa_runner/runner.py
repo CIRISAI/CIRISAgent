@@ -284,6 +284,7 @@ class QARunner:
             QAModule.WALLET,
             QAModule.DEGRADED_MODE,
             QAModule.MODEL_EVAL,
+            QAModule.PARALLEL_LOCALES,
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
         ]
@@ -925,6 +926,7 @@ class QARunner:
         from .modules.mcp_tests import MCPTests
         from .modules.memory_benchmark_tests import MemoryBenchmarkTests
         from .modules.model_eval_tests import ModelEvalTests
+        from .modules.parallel_locales_tests import ParallelLocalesTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
@@ -978,6 +980,7 @@ class QARunner:
             QAModule.WALLET: WalletTests,
             QAModule.DEGRADED_MODE: DegradedModeTests,
             QAModule.MODEL_EVAL: ModelEvalTests,
+            QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
         }
@@ -1015,9 +1018,16 @@ class QARunner:
                 client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
-                # Special handling for AccordMetricsTests - pass live_lens config
+                # Special handling for AccordMetricsTests - pass live_lens config +
+                # backend-namespaced trace dir (qa_reports/<backend>/) so parallel
+                # backends don't clobber each other's hash-keyed trace files.
                 if module == QAModule.ACCORD_METRICS:
-                    test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        live_lens=self.config.live_lens,
+                        qa_reports_dir=self.server_manager.qa_reports_dir,
+                    )
                 # Special handling for CIRISNodeTests - pass live_node config
                 elif module == QAModule.CIRISNODE:
                     test_instance = test_class(client, self.console, live_node=getattr(self.config, "live_node", False))

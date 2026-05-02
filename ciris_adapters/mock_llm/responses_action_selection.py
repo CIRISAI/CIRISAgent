@@ -1817,40 +1817,40 @@ def aspdma_llm_result(
     if action == HandlerActionType.SPEAK:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             speak_content=params_dict.get("content", ""),
         )
     elif action == HandlerActionType.PONDER:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             ponder_questions=params_dict.get("questions", ["What should I do?"]),
         )
     elif action == HandlerActionType.TOOL:
         # ASPDMA only selects tool NAME - TSASPDMA extracts parameters
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             tool_name=params_dict.get("name", "unknown_tool"),
         )
     elif action == HandlerActionType.REJECT:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             reject_reason=params_dict.get("reason", "Request rejected"),
             reject_create_filter=params_dict.get("create_filter", False),
         )
     elif action == HandlerActionType.DEFER:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             defer_reason=params_dict.get("reason", "Deferring"),
             defer_until=params_dict.get("defer_until"),
         )
     elif action == HandlerActionType.RECALL:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             recall_query=params_dict.get("query"),
             recall_node_type=params_dict.get("node_type"),
             recall_scope=str(params_dict.get("scope")) if params_dict.get("scope") else None,
@@ -1862,7 +1862,7 @@ def aspdma_llm_result(
             node = node.model_dump()
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             memorize_node_type=str(node.get("node_type", "observation")),
             memorize_content=node.get("content", ""),
             memorize_scope=str(node.get("scope", "local")),
@@ -1873,26 +1873,26 @@ def aspdma_llm_result(
             node = node.model_dump()
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             forget_node_id=node.get("node_id") or node.get("id"),
             forget_reason=params_dict.get("reason", "Forgetting"),
         )
     elif action == HandlerActionType.TASK_COMPLETE:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             completion_reason=params_dict.get("completion_reason", "Task completed"),
         )
     elif action == HandlerActionType.OBSERVE:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
             observe_active=params_dict.get("active", True),
         )
     else:
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            rationale=rationale,
+            reasoning=rationale,
         )
 
     logger.info(f"[MOCK_LLM] aspdma_llm_result returning: {flat_result.selected_action}")
@@ -1931,14 +1931,14 @@ def tsaspdma_llm_result(
         logger.info("[MOCK_LLM] TSASPDMA: Switching to SPEAK for clarification (test mode)")
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
+            reasoning="TSASPDMA: Documentation review revealed ambiguity requiring user clarification.",
             tool_parameters={"content": "TSASPDMA: I need clarification before proceeding with this tool."},
         )
     elif "$tsaspdma_ponder" in user_input:
         logger.info("[MOCK_LLM] TSASPDMA: Switching to PONDER to reconsider (test mode)")
         return TSASPDMALLMResult(
             selected_action=HandlerActionType.PONDER,
-            rationale="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
+            reasoning="TSASPDMA: After reviewing documentation, reconsidering if this is the right approach.",
             tool_parameters={"questions": ["Would a different tool be more appropriate?", "What are the gotchas?"]},
         )
 
@@ -2049,7 +2049,7 @@ def tsaspdma_llm_result(
     logger.info(f"[MOCK_LLM] TSASPDMA: Confirming TOOL '{tool_name}' with params: {tool_params}")
     return TSASPDMALLMResult(
         selected_action=HandlerActionType.TOOL,
-        rationale=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
+        reasoning=f"TSASPDMA: Reviewed documentation for '{tool_name}'. Proceeding with tool execution.",
         tool_parameters=tool_params,
     )
 

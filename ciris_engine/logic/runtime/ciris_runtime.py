@@ -1135,7 +1135,27 @@ class CIRISRuntime(ServicePropertyMixin):
         await load_saved_adapters_from_graph(self)
 
     async def _build_components(self) -> None:
-        """Build all processing components."""
+        """Build all processing components.
+
+        Idempotent: if `self.agent_processor` is already built, this is a
+        no-op. The init manager registers a "Build Components" step at
+        Phase 6 (`ciris_runtime.py:601`) AND the post-setup RESUME flow
+        calls `_build_components` directly (`ciris_runtime.py:1387`).
+        Without idempotency the second call replaces `self.agent_processor`
+        with a fresh AgentProcessor whose state_manager never transitions
+        to WORK — the first agent_processor's task is still running but
+        `self.agent_processor` no longer points to it, so /v1/agent/status
+        reads SHUTDOWN from the orphaned reference and the qa_runner
+        timeout fires (observed: accord_metrics qa module hung 600s
+        despite the agent actually being in WORK).
+        """
+        if self.agent_processor is not None:
+            logger.debug(
+                "[_build_components] agent_processor already built; skipping duplicate "
+                "build (idempotent guard against double-registration on Phase 6)."
+            )
+            return
+
         logger.info("[_build_components] Starting component building...")
         logger.info(f"[_build_components] llm_service: {self.llm_service}")
         logger.info(f"[_build_components] service_registry: {self.service_registry}")

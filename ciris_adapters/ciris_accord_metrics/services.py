@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -73,6 +73,33 @@ def _get_metrics_env(name: str, default: str = "") -> str:
         return value
 
     return default
+
+
+class LensContentRejectError(RuntimeError):
+    """Lens parsed the batch and rejected it for content reasons (4xx, not 429).
+
+    Raised by _send_events_batch when the lens returns a 4xx that's NOT 429.
+    Caught by _flush_events to suppress the re-queue path: the same signed
+    bytes will fail signature verification (or schema validation, etc.) on
+    the next attempt with mathematical certainty. Re-queueing is wasted work
+    that piles up retry pressure against an already-broken downstream.
+
+    NOT raised for:
+    - 5xx (transient downstream issues — re-queue is correct)
+    - 429 (rate-limited — re-queue with backoff is correct)
+    - Network/connection errors (transient — re-queue is correct)
+    - Timeouts (handled separately, transient by definition)
+
+    Driver: 2.7.8.7 yo+v1_sensitive run hit 236 verify_signature_mismatch
+    rejections from the lens v0.1.10 verify path. Without this typed
+    exception, the failure handler re-queued every batch on every flush
+    cycle, multiplying network traffic by N attempts × 3 accord_metrics
+    adapter instances against an unrecoverable rejection state.
+    """
+
+    def __init__(self, status: int, message: str) -> None:
+        self.status = status
+        super().__init__(message)
 
 
 class TraceDetailLevel(str, Enum):
@@ -247,76 +274,111 @@ class Ed25519TraceSigner:
             logger.warning(f"Could not load unified signing key: {e}")
             return False
 
+    def _build_canonical_message(self, trace: CompleteTrace) -> bytes:
+        """Build the canonical signing/verifying bytes per FSD/TRACE_WIRE_FORMAT.md §8.
+
+        9-field canonical (post-2.7.8.9 / CIRISAgent#710):
+
+            {
+              "trace_id":            ...,
+              "thought_id":          ...,
+              "task_id":             ...,
+              "agent_id_hash":       ...,
+              "started_at":          ...,
+              "completed_at":        ...,
+              "trace_level":         ...,
+              "trace_schema_version": ...,
+              "components":          [strip_empty({component_type,data,event_type,timestamp}), ...]
+            }
+
+        Then `json.dumps(canonical, sort_keys=True, separators=(",", ":"))`.
+
+        Migration history:
+        - <= 2.7.8.8 used a 2-field legacy canonical {"components", "trace_level"}
+          to match what `lens-legacy api/accord_api.py::verify_trace_signature`
+          accepted. Persist v0.1.15 implements the spec's 9-field canonical;
+          legacy 2-field signatures fail `verify_strict` with HTTP 422
+          `verify_signature_mismatch` against the new typed verify path.
+        - Persist's `try-both` fallback (CIRISPersist issue) accepts BOTH shapes
+          during the migration window — so flipping the agent doesn't gate
+          persist, and persist's fallback doesn't gate the agent.
+        - Once the agent fleet has flipped to 9-field, persist drops the 2-field
+          path on a future minor.
+
+        The seven additional fields (vs the legacy 2-field) bind more provenance
+        into the signed bytes — federation peers verify "this agent claims this
+        thought_id at this time was signed under this schema version" without
+        trusting the envelope wrapping.
+        """
+        components_list = [
+            _strip_empty(
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp.isoformat()
+                    if hasattr(c.timestamp, "isoformat")
+                    else str(c.timestamp),
+                }
+            )
+            for c in trace.components
+        ]
+        # `started_at` / `completed_at` are typed as Optional[str|datetime] on
+        # the trace envelope. Both mypy-narrow through an explicit None check
+        # AND pass through unchanged if already a str. Persist's canonicalizer
+        # does the same — the agreed-on shape is "ISO 8601 string or None".
+        def _iso(value: Any) -> Any:
+            if value is None:
+                return None
+            return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+        canonical = {
+            "trace_id": trace.trace_id,
+            "thought_id": trace.thought_id,
+            "task_id": trace.task_id,
+            "agent_id_hash": trace.agent_id_hash,
+            "started_at": _iso(trace.started_at),
+            "completed_at": _iso(trace.completed_at),
+            "trace_level": trace.trace_level,
+            "trace_schema_version": trace.trace_schema_version,
+            "components": components_list,
+        }
+        return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
     def sign_trace(self, trace: CompleteTrace) -> bool:
-        """Sign a trace with Ed25519 unified signing key.
+        """Sign a trace with the unified Ed25519 signing key.
 
-        The signed payload MUST byte-for-byte match what CIRISLens verifies
-        against (api/accord_api.py::verify_trace_signature). Lens computes:
+        Canonical bytes are produced by _build_canonical_message — see that
+        method's docstring for the 9-field shape per FSD/TRACE_WIRE_FORMAT.md §8
+        and the 2.7.8.9 migration note.
 
-            components_data = [strip_empty(c.model_dump()) for c in trace.components]
-            signed_payload = {"components": components_data, "trace_level": trace_level}
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":"))
-
-        trace_schema_version ships in the trace envelope (to_dict) for lens
-        dashboards but is NOT in the signed bytes — lens doesn't include it
-        in its canonical payload, so adding it on the agent side breaks
-        signature verification for every trace.
-
-        Returns True if signing succeeded, False if key not available.
+        Returns True on success, False if the signing key isn't available.
         """
         if not self._ensure_unified_key() or self._unified_key is None:
             logger.warning("No unified signing key available for trace signing")
             return False
 
         try:
-            # Build the canonical message. Match lens's strip_empty semantics:
-            # dump the full component (component_type, event_type, timestamp,
-            # data) then recursively drop None / ""  / [] / {}.
-            components_list = [
-                _strip_empty(
-                    {
-                        "component_type": c.component_type,
-                        "data": c.data,
-                        "event_type": c.event_type,
-                        "timestamp": c.timestamp.isoformat()
-                        if hasattr(c.timestamp, "isoformat")
-                        else str(c.timestamp),
-                    }
-                )
-                for c in trace.components
-            ]
-
-            signed_payload = {
-                "components": components_list,
-                "trace_level": trace.trace_level,
-            }
-
-            # Compact JSON: sort_keys=True, no extra whitespace, UTF-8 encoded
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-            # Log hash for debugging signature verification mismatches (no content preview for privacy)
+            message = self._build_canonical_message(trace)
             message_hash = hashlib.sha256(message).hexdigest()
             logger.info(
                 f"[SIGN_TRACE] trace={trace.trace_id} level={trace.trace_level} "
-                f"len={len(message)} hash={message_hash[:16]}"
+                f"len={len(message)} hash={message_hash[:16]} canonical=9-field"
             )
-
-            # Sign the raw message bytes (not a hash)
             trace.signature = self._unified_key.sign_base64(message)
             trace.signature_key_id = self._key_id
-
             logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
             return True
-
         except Exception as e:
             logger.error(f"Failed to sign trace: {e}")
             return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
-        """Verify a trace signature using root public key.
+        """Verify a trace signature using the root public key.
 
-        MUST match the canonical payload used in sign_trace — see that
-        method's docstring. trace_schema_version is NOT included here.
+        Uses the same _build_canonical_message helper as sign_trace, so the
+        sign/verify paths can never drift out of sync at the canonicalization
+        layer.
         """
         if not trace.signature or not self._root_pubkey:
             return False
@@ -324,38 +386,12 @@ class Ed25519TraceSigner:
         try:
             from cryptography.hazmat.primitives.asymmetric import ed25519
 
-            # Decode public key
             pubkey_bytes = base64.urlsafe_b64decode(self._root_pubkey + "==")
             public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
-
-            # Decode signature
             sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
-
-            # Build the canonical message (same as sign_trace)
-            components_list = [
-                _strip_empty(
-                    {
-                        "component_type": c.component_type,
-                        "data": c.data,
-                        "event_type": c.event_type,
-                        "timestamp": c.timestamp.isoformat()
-                        if hasattr(c.timestamp, "isoformat")
-                        else str(c.timestamp),
-                    }
-                )
-                for c in trace.components
-            ]
-
-            signed_payload = {
-                "components": components_list,
-                "trace_level": trace.trace_level,
-            }
-            message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-            # Verify
+            message = self._build_canonical_message(trace)
             public_key.verify(sig_bytes, message)
             return True
-
         except Exception as e:
             logger.warning(f"Trace signature verification failed: {e}")
             return False
@@ -402,9 +438,11 @@ class AccordMetricsService:
         "DMA_RESULTS": "rationale",
         "IDMA_RESULT": "rationale",  # Identity DMA fragility check
         "ASPDMA_RESULT": "rationale",
-        "TSASPDMA_RESULT": "rationale",  # Tool-specific ASPDMA (optional)
+        "TSASPDMA_RESULT": "rationale",  # DEPRECATED legacy; replaced by VERB_SECOND_PASS_RESULT
+        "VERB_SECOND_PASS_RESULT": "verb_second_pass",  # Generic verb-specific second pass
         "CONSCIENCE_RESULT": "conscience",
         "ACTION_RESULT": "action",  # Also contains outcome data
+        "LLM_CALL": "llm_call",  # Sub-pipeline: per-provider-call observation
         # Also handle full enum names from streaming
         "ReasoningEvent.THOUGHT_START": "observation",
         "ReasoningEvent.SNAPSHOT_AND_CONTEXT": "context",
@@ -412,8 +450,10 @@ class AccordMetricsService:
         "ReasoningEvent.IDMA_RESULT": "rationale",
         "ReasoningEvent.ASPDMA_RESULT": "rationale",
         "ReasoningEvent.TSASPDMA_RESULT": "rationale",
+        "ReasoningEvent.VERB_SECOND_PASS_RESULT": "verb_second_pass",
         "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
         "ReasoningEvent.ACTION_RESULT": "action",
+        "ReasoningEvent.LLM_CALL": "llm_call",
         # Commons Credits trace events (bilateral verified interactions)
         "DEFERRAL_ROUTED": "deferral_routed",
         "DEFERRAL_RECEIVED": "deferral_received",
@@ -477,6 +517,41 @@ class AccordMetricsService:
             self._endpoint_url = str(raw_url)
         else:
             self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
+
+        # Local-tee feature flag for what gets shipped to lens.
+        # When CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, every batch payload
+        # POSTed to lens is ALSO written to <dir>/accord-batch-<timestamp>-<seq>.json
+        # using the same JSON shape we POST. Purpose: audit copy when shipping
+        # to the live lens (which doesn't auto-mirror the way the mock-logshipper
+        # does in QA), and feeds the persist engine real test data for the new
+        # wire-format ingest path. Best-effort — disk failures must NEVER break
+        # the live POST (the lens is the source of truth, the local copy is
+        # supplementary). Default off; QA runner sets the dir to /tmp/<run-id>
+        # automatically when --live-lens is active (see tools/qa_runner/server.py).
+        env_local_copy_dir = _get_metrics_env("LOCAL_COPY_DIR") or None
+        self._local_copy_dir: Optional[Path] = None
+        self._local_copy_seq: int = 0
+        if env_local_copy_dir:
+            try:
+                candidate = Path(env_local_copy_dir)
+                candidate.mkdir(parents=True, exist_ok=True)
+                # Smoke-test writability so we fail at startup rather than
+                # silently dropping copies the operator thinks they have.
+                probe = candidate / ".accord_local_copy_probe"
+                probe.write_text("")
+                probe.unlink()
+                self._local_copy_dir = candidate
+                logger.info(
+                    f"📂 [{self._adapter_instance_id}] Local-copy enabled: {candidate} "
+                    f"(every batch shipped to {self._endpoint_url} will be teed here)"
+                )
+            except (OSError, PermissionError) as e:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env_local_copy_dir!r} "
+                    f"is not writable ({e}); proceeding without local copies. "
+                    f"Live POSTs to lens are unaffected."
+                )
+                self._local_copy_dir = None
 
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
@@ -576,6 +651,17 @@ class AccordMetricsService:
         # Active traces being built (keyed by thought_id)
         self._active_traces: Dict[str, CompleteTrace] = {}
         self._traces_lock = asyncio.Lock()
+
+        # Per-(thought_id, event_type) attempt index counter. Computed at
+        # broadcast-receive time and injected into the event dict so the lens
+        # has stable monotonic ordering for events that fire N times per
+        # thought (LLM_CALL, RECURSIVE_ASPDMA, RECURSIVE_CONSCIENCE,
+        # CONSCIENCE_RESULT, DMA_RESULTS bounce alternatives). For events that
+        # fire once per thought the index is always 0. Single-subscriber FIFO
+        # delivery from reasoning_event_stream guarantees broadcast-order
+        # arrival, so the counter increments produce a stable index.
+        # See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.1 attempt_index semantics.
+        self._attempt_counters: Dict[Tuple[str, str], int] = {}
 
         # Completed traces ready for sending
         self._completed_traces: List[CompleteTrace] = []
@@ -870,6 +956,18 @@ class AccordMetricsService:
                 if len(self._event_queue) < self._batch_size * 10:
                     self._event_queue = events_to_send + self._event_queue
                     logger.info(f"   Re-queued {len(events_to_send)} events for retry")
+        except LensContentRejectError as e:
+            # Lens rejected the batch for content reasons (4xx, not 429).
+            # Same bytes will be rejected next time. Discard rather than
+            # re-queue — re-queue would just pile up retry pressure against
+            # an unrecoverable state and starve the agent's event loop with
+            # 30s aiohttp.post calls that are guaranteed to fail.
+            self._events_failed += len(events_to_send)
+            logger.warning(
+                f"🚫 [{self._adapter_instance_id}] DISCARDING {len(events_to_send)} events: "
+                f"lens rejected with HTTP {e.status} (not transient). "
+                f"Sample rejection body (first 200 chars): {str(e)[:200]}"
+            )
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(
@@ -889,6 +987,45 @@ class AccordMetricsService:
         Args:
             events: List of event dictionaries to send
         """
+        # TODO(2.7.9 / lens-413-handling): byte-size-bounded batching.
+        #
+        # The lens enforces HTTP 413 + max_bytes at 8 MiB per request body
+        # (AV-13 closed in lens middleware). Today this code path is event-
+        # COUNT gated (batch_size, default 10) with no byte ceiling. Real
+        # captured FULL_TRACES sizes from the 2.7.8 qa runs:
+        #   - 4.2 MB single complete_trace event (16-component thought)
+        #   - 3.0 MB / 1.2 MB / 642 KB also routine
+        # A batch of two such traces already overshoots the 8 MiB limit;
+        # default batch_size=10 will overshoot most days at FULL.
+        #
+        # Required work (split into a follow-up — non-trivial because a
+        # single event can exceed the limit on long recursive-conscience
+        # thoughts, so events[] partitioning alone isn't enough):
+        #   1. Estimate serialized bytes per event before assembly
+        #      (json.dumps with separators=(",",":") gives a tight bound).
+        #   2. Pack events[] into 1+ payloads each ≤ ~7.5 MiB serialized
+        #      (leave headroom for envelope + correlation_metadata).
+        #   3. POST each payload separately; preserve flush semantics
+        #      (all-or-nothing per the lens contract — if one chunk 4xx's,
+        #      requeue the unsent chunks the same way the current
+        #      _flush_events does on TimeoutError).
+        #   4. For the SINGLE-EVENT-OVERFLOW case (trace > 8 MiB on its
+        #      own — observed 4.2 MB max so far but a 5-retry recursive-
+        #      conscience thought at FULL could plausibly hit it):
+        #      negotiate a smaller trace level for that event (drop FULL
+        #      content, ship at DETAILED), OR split the components[] list
+        #      into a primary trace + appendix events keyed by trace_id.
+        #      The lens schema bump in FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        #      would naturally accommodate the appendix shape since each
+        #      event becomes its own row anyway.
+        #   5. Add a metric for "batches that exceeded ceiling" so we can
+        #      tell when single-event-overflow becomes common in
+        #      production rather than waiting for 413s.
+        #
+        # Until then: a 413 from the lens will surface as the generic
+        # `RuntimeError(f"CIRISLens API error {response.status}: ...")`
+        # below and the events get re-queued by _flush_events's failure
+        # path (capped at batch_size*10 deep). Functional but noisy.
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
 
@@ -933,13 +1070,61 @@ class AccordMetricsService:
             payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/accord/events"
+
+        # Serialize the body ONCE, here, with aiohttp's default settings so the
+        # bytes we tee, hash, and POST are byte-identical. Pre-2.7.8.12 the tee
+        # used `ensure_ascii=False, separators=(",", ":")` while aiohttp's
+        # `json=payload` path used `json.dumps` defaults (`ensure_ascii=True`,
+        # spaced separators) — the two byte sequences differed on every
+        # non-ASCII character and every comma/colon, so persist's
+        # body_sha256_prefix join from rejected wire bytes never matched any
+        # local-tee file. Single source of truth eliminates that drift.
+        body = json.dumps(payload).encode("utf-8")
+        body_sha256 = hashlib.sha256(body).hexdigest()
         logger.info(
-            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, trace_level={self._trace_level.value})"
+            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, "
+            f"trace_level={self._trace_level.value}, body_bytes={len(body)}, "
+            f"body_sha256={body_sha256[:16]}...)"
         )
 
-        async with self._session.post(url, json=payload) as response:
+        # Local tee: write the EXACT bytes we POST to disk if the operator
+        # opted in via CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR. Done BEFORE the
+        # POST so an operator killing the run mid-flight still has whatever
+        # was about to ship. Disk failures must NEVER block the POST — the
+        # lens is the source of truth, this copy is supplementary.
+        if self._local_copy_dir is not None:
+            self._local_copy_seq += 1
+            try:
+                # Filename pattern: accord-batch-<ISO-utc>-<seq>.json — sortable,
+                # collision-resistant within a single adapter instance, parseable
+                # by the persist engine's batch-replay path.
+                ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+                copy_path = self._local_copy_dir / f"accord-batch-{ts}-{self._local_copy_seq:04d}.json"
+                copy_path.write_bytes(body)
+                logger.debug(
+                    f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events, "
+                    f"body_sha256={body_sha256[:16]}) to {copy_path}"
+                )
+            except (OSError, PermissionError) as e:
+                logger.warning(
+                    f"⚠️ [{self._adapter_instance_id}] Local-copy write failed ({e}); "
+                    f"proceeding with POST. The lens will still receive this batch."
+                )
+
+        async with self._session.post(
+            url, data=body, headers={"Content-Type": "application/json"}
+        ) as response:
             if response.status != 200:
                 error_text = await response.text()
+                # 4xx (except 429) → content rejection, the same bytes will
+                # fail again. Raise the typed exception so the flush handler
+                # can suppress the re-queue path. 5xx + 429 stay as generic
+                # RuntimeError → re-queue path applies (transient).
+                if 400 <= response.status < 500 and response.status != 429:
+                    raise LensContentRejectError(
+                        response.status,
+                        f"CIRISLens API error {response.status}: {error_text}",
+                    )
                 raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
             logger.info(f"✅ POST success: {response.status}")
 
@@ -979,6 +1164,12 @@ class AccordMetricsService:
             logger.info(f"   URL: {url}")
             logger.info(f"   Key ID (REGISTRATION): {payload['key_id']}")
             logger.info(f"   Public key (first 20 chars): {payload['public_key_base64'][:20]}...")
+            # Forensic-debug aid: log the full pubkey at DEBUG so persist-team
+            # diagnostic captures (pubkeys.csv) can be assembled from agent logs
+            # without standing up a separate dump tool. The pubkey is public by
+            # definition (lens has it; the registry has it); this is a logging
+            # convenience, not a secret-leak.
+            logger.debug(f"   Public key (full base64): {payload['public_key_base64']}")
             logger.info(f"   Algorithm: {payload['algorithm']}")
             logger.info(f"   Signer key_id: {self._signer.key_id}")
 
@@ -1250,6 +1441,19 @@ class AccordMetricsService:
 
         self._events_received += 1
 
+        # Compute attempt_index — monotonic per (thought_id, event_type).
+        # Single-subscriber FIFO from reasoning_event_stream preserves
+        # broadcast order; the counter increments produce a stable index
+        # the lens can use to order rows for events that fire multiple
+        # times per thought (LLM_CALL, RECURSIVE_*, CONSCIENCE_RESULT, DMA
+        # bounce alternatives). Inject into the event dict so the
+        # downstream _extract_component_data builders pick it up via
+        # event.get("attempt_index", 0).
+        attempt_key = (thought_id, event_type)
+        attempt_index = self._attempt_counters.get(attempt_key, 0)
+        self._attempt_counters[attempt_key] = attempt_index + 1
+        event["attempt_index"] = attempt_index
+
         # Get or create trace for this thought
         async with self._traces_lock:
             if thought_id not in self._active_traces:
@@ -1273,6 +1477,10 @@ class AccordMetricsService:
 
         # Extract relevant data based on event type
         component_data = self._extract_component_data(event_type, event)
+        # Always carry attempt_index forward so the lens row writer sees it
+        # uniformly across event types (single-emit events have 0 here, which
+        # is informative — confirms the event is the first occurrence).
+        component_data["attempt_index"] = attempt_index
 
         # Add component to trace
         component = TraceComponent(
@@ -1690,6 +1898,7 @@ class AccordMetricsService:
 
         elif event_type == "TSASPDMA_RESULT":
             # RATIONALE (Part 2.5): Tool-Specific ASPDMA (optional, when TOOL selected)
+            # DEPRECATED — replaced by VERB_SECOND_PASS_RESULT, kept during transition.
             # GENERIC: Final action and decision
             data = {
                 "original_tool_name": event.get("original_tool_name"),
@@ -1709,6 +1918,30 @@ class AccordMetricsService:
                 data["tsaspdma_prompt"] = event.get("tsaspdma_prompt")
             return data
 
+        elif event_type == "VERB_SECOND_PASS_RESULT":
+            # VERB_SECOND_PASS: Generic verb-specific second-pass result
+            # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). One event with verb
+            # discriminator replaces per-verb event types — TSASPDMA_RESULT
+            # for TOOL, future per-verb second passes for MEMORIZE/etc.
+            # GENERIC: verb + action transition + opaque verb-specific payload
+            data = {
+                "verb": event.get("verb"),
+                "original_action": event.get("original_action"),
+                "final_action": event.get("final_action"),
+                # verb_specific_data is opaque at the lens row level —
+                # serialized whole, ordered/decoded by `verb` discriminator
+                # at query time. Lens may project verb-specific columns later.
+                "verb_specific_data": _serialize(event.get("verb_specific_data", {})),
+            }
+            # DETAILED: Add reasoning text
+            if is_detailed:
+                data["original_reasoning"] = event.get("original_reasoning")
+                data["final_reasoning"] = event.get("final_reasoning")
+            # FULL: Add the second-pass prompt
+            if is_full:
+                data["second_pass_prompt"] = event.get("second_pass_prompt")
+            return data
+
         elif event_type == "CONSCIENCE_RESULT":
             # CONSCIENCE: Ethical validation
             # GENERIC: All boolean flags and numeric scores (core for CIRIS scoring)
@@ -1721,6 +1954,13 @@ class AccordMetricsService:
                 "conscience_passed": event.get("conscience_passed"),
                 "action_was_overridden": event.get("action_was_overridden", False),
                 "ethical_faculties_skipped": event.get("ethical_faculties_skipped"),
+                # is_recursive: True for the recursive_conscience pass after
+                # an override. Lens uses this alongside attempt_index to
+                # distinguish initial from recursive emissions in trace_events.
+                # Mirrors the same field on ASPDMA_RESULT — without it the lens
+                # has to infer recursive-ness from attempt_index>0 alone.
+                # See FSD/TRACE_WIRE_FORMAT.md §5.8.
+                "is_recursive": event.get("is_recursive", False),
                 # Bypass guardrails (boolean)
                 "updated_status_detected": event.get("updated_status_detected"),
                 "thought_depth_triggered": event.get("thought_depth_triggered"),
@@ -1809,6 +2049,37 @@ class AccordMetricsService:
                     data["positive_moment"] = positive_moment_text[:500]  # Truncate for safety
             return data
 
+        elif event_type == "LLM_CALL":
+            # SUB-PIPELINE: per-provider-call observation (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2)
+            # Multiple LLM_CALL events fire under each pipeline event — every DMA
+            # / ASPDMA / conscience handler issues 1+ provider calls.
+            # GENERIC: caller attribution + sizes + duration + outcome (no content)
+            data = {
+                "handler_name": event.get("handler_name"),
+                "service_name": event.get("service_name"),
+                "model": event.get("model"),
+                "base_url": event.get("base_url"),
+                "response_model": event.get("response_model"),
+                "duration_ms": event.get("duration_ms"),
+                "prompt_tokens": event.get("prompt_tokens"),
+                "completion_tokens": event.get("completion_tokens"),
+                "prompt_bytes": event.get("prompt_bytes"),
+                "completion_bytes": event.get("completion_bytes"),
+                "cost_usd": event.get("cost_usd"),
+                "status": event.get("status"),
+                "error_class": event.get("error_class"),
+                "attempt_count": event.get("attempt_count", 1),
+                "retry_count": event.get("retry_count", 0),
+            }
+            # DETAILED: add prompt hash for dedup analysis without leaking content
+            if is_detailed:
+                data["prompt_hash"] = event.get("prompt_hash")
+            # FULL: full prompt + completion text
+            if is_full:
+                data["prompt"] = event.get("prompt")
+                data["response_text"] = event.get("response_text")
+            return data
+
         else:
             # Unknown event type - capture minimal info
             # GENERIC: Just event type
@@ -1833,6 +2104,13 @@ class AccordMetricsService:
             trace.completed_at = completion_time
             # Set trace_level BEFORE signing - critical for per-level signature verification
             trace.trace_level = self._trace_level.value
+
+        # Drop attempt_index counters for this thought — they're only meaningful
+        # while the thought is in-flight, and leaving them in the dict means
+        # unbounded growth across long-running agents.
+        self._attempt_counters = {
+            key: count for key, count in self._attempt_counters.items() if key[0] != thought_id
+        }
 
         # Sign the trace (signature includes trace_level for uniqueness)
         if self._signer.sign_trace(trace):

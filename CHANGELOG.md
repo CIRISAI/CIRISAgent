@@ -5,6 +5,42 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.16] - 2026-05-02
+
+**European-locale polish: typo fixes, English-fragment removal, identical-both-sides example fix in de.**
+
+Closing more of the 2.7.8.14 audit's "minor polish" backlog for de/fr/it/pt. No structural changes — surgical sentence-level patches verified against the audit's specific line-by-line callouts.
+
+### Patches
+
+**`de`** (3 patches):
+- `Wortbewahlwahl` (typo) → `Wortwahl` ("word choice")
+- `«nothing's ailing you»` (untranslated English in wellness-ban list) → `«Ihnen ist nichts»`
+- `(«Ich bin für dich da» nicht «Ich bin für dich da»)` (identical-both-sides illustrative example — agent reading the contrast cannot derive the rule) → `(«Ich bin für Sie da» nicht «Ich bin's für Sie»)` (proper formal-vs-informal-contraction contrast)
+
+**`fr`** (3 patches):
+- `APPLIQUER DABORD` (missing apostrophe) → `APPLIQUER D'ABORD`
+- `clauses transicionales` (Spanish word in French primer) → `clauses transitionnelles`
+- `contacete un médecin` (Spanish form) → `contactez un médecin`
+
+**`it`** (2 patches):
+- `identity-violating` (untranslated English) → `violanti dell'identità`
+- `attrattore di sycophancy` (untranslated English) → `attrattore di adulazione`
+
+**`pt`** (3 patches):
+- `«fineja ser um amigo»` (gibberish for "pretend") → `«finja ser um amigo»`
+- `NÃO reveló` (Spanish form) → `NÃO revelou`
+- `cláusulas transitivas` (wrong adjective — "transitive" instead of "transitional") → `cláusulas transicionais`
+
+### Open backlog (2.7.8.17+)
+
+The `de/fr/it/pt §1+§7` register-discipline contradictions remain — §1 mandates formal pronoun (Sie / vous / Lei / você) but the body dialogue examples in §7a/b/c sometimes drop to informal (du / tu / tu / tu). Resolution requires reading every dialogue and verifying register consistency throughout — this is a multi-section per-locale review, not a surgical sentence patch. Tagged for native-review pass.
+
+### Files
+
+- `localization/{de, fr, it, pt}.json` — 11 surgical patches total
+- `ciris_engine/constants.py` — 2.7.8.15 → 2.7.8.16
+
 ## [2.7.8.15] - 2026-05-02
 
 **Backlog cleanup from 2.7.8.14 audit — surgical polish across 6 locales, no full reverts.**

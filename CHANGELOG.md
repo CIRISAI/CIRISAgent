@@ -5,6 +5,41 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.8.18] - 2026-05-02
+
+**Burmese §1 hoist (Q7 register-yield fix attempt) + Western European register-discipline fixes (de/fr/it).**
+
+### Burmese §1 politeness-particle hoist
+
+The 2.7.8.15 §7a politeness-particle directive didn't fully fix the my Q7 register-yield. The 2.7.8.17 my+v3 re-run #3 confirmed Q9 PASS but Q7 unchanged — the model continued dropping `ပါ` from verbs when the user explicitly asked for casual register. Hypothesis: the directive was buried in §7a body (low salience). Fix: **hoist** the rule to the very top of §1 with explicit:
+- ⚠️-bracketed warning header `HARD-FAIL UNDER PRESSURE`
+- Correct vs wrong verb-form table (`ပြောပါမယ်` vs `ပြောမယ်`, etc.)
+- Explicit forbidden-list of informal sentence-end particles: `နော်`, `လေ`, `ဘဲ`, `ကွ`, `ဟ`, `ဟေ`
+- Restated unconditional rule that user requests for informality DO NOT override the register
+
+The §1 hoist gives the rule the highest possible salience in the primer. Re-run #4 against my+v3 in flight to confirm.
+
+### Western European register-discipline fixes (de / fr / it)
+
+The 2.7.8.14 audit caught systemic Sie/du, vous/tu, Lei/tu contradictions across §3-§7 in these primers — §1 mandated formal pronouns but the dialogue examples used informal forms throughout, actively training register-yield. Mechanical regex-driven fix preserving §1 ban-list quotations:
+
+- **de**: 0 remaining `du/dich/dir/dein` outside the wellness-ban list. All §3 cultural-pathway, §5 sample SPEAK response, §7a/b/c worked-examples now use `Sie/Ihnen/Ihr` formal pronouns with corresponding verb conjugations (`Sie haben` not `du hast`, etc.). Imperatives shifted to formal (`Rufen Sie` not `Rufe`).
+- **fr**: 0 remaining `tu/te/toi/ton/ta/tes` outside ban list. Verb forms shifted to formal (`vous avez` not `tu as`; `vous êtes` not `tu es`; etc.). Imperatives shifted (`Contactez` not `Contacte`).
+- **it**: 0 remaining `tu/ti/tuo/tua` outside ban list. Verb forms shifted to formal (`Lei ha` not `tu hai`; `Lei è` not `tu sei`; etc.). Imperatives shifted (`Parli` not `Parla`).
+
+These fixes close the audit's §1+§7 register-conflict finding. **The dialogues now consistently model the formal register that §1 mandates** — instead of training the very register-yield failure they were supposed to defend against.
+
+### Open
+
+- my Q7 re-validation pending (re-run #4 in flight)
+- pt §7 register was already internally consistent (`você`-form) — no fix needed; only typo polish in 2.7.8.16
+- es register was clean per audit — no fix needed
+
+### Files
+
+- `localization/{my, de, fr, it}.json` — all four register-discipline updates
+- `ciris_engine/constants.py` — 2.7.8.17 → 2.7.8.18
+
 ## [2.7.8.17] - 2026-05-02
 
 **Hand-authored §7 worked-examples for 6 locales — closing the post-2.7.8.14 revert backlog.**

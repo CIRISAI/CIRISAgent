@@ -92,7 +92,7 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
   "trace_id": "trace-th_std_518a7abb-...-20260430001553",
   "thought_id": "th_std_518a7abb-6b1f-447b-a030-7af8f5d8cd37",
   "task_id": "ACCEPT_INCOMPLETENESS_1d10d1b5-...",
-  "agent_id_hash": "7c3f...64chars",
+  "agent_id_hash": "7c3f8e2b1d9a4f60",
   "started_at": "2026-04-30T00:15:53.123456+00:00",
   "completed_at": "2026-04-30T00:16:12.789012+00:00",
   "trace_level": "generic",
@@ -108,7 +108,7 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
 | `trace_id` | string | yes | Format `trace-<thought_id>-<YYYYMMDDHHMMSS>`. Globally unique per agent. |
 | `thought_id` | string | yes | Anchors all `TraceComponent` rows back to one CIRIS thought. |
 | `task_id` | string \| null | optional | Not all internal thoughts (system probes) have parent tasks. |
-| `agent_id_hash` | string | yes | SHA-256 hash prefix of the agent's signing key — pseudonymous. |
+| `agent_id_hash` | string | yes | First 16 hex characters (8 bytes) of `sha256(public_key_bytes)`, lowercase. **Canonical derivation**: `hashlib.sha256(public_key_bytes).hexdigest()[:16]` over the agent's Ed25519 signing key bytes. Same value `ciris-persist v0.2.2+` uses for AV-9 dedup gating; same value PoB §3.2 uses for Reticulum addressing. One definition serves identity, transport, and dedup — implementations MUST use exactly this derivation so the values are interchangeable across consumers. Pseudonymous: invertible only by an attacker who already holds the public key. |
 | `started_at` | ISO-8601 | yes | When the first component event arrived at the adapter. |
 | `completed_at` | ISO-8601 | yes (post-seal) | When `ACTION_RESULT` fired. **A trace is only sealed and shipped when ACTION_RESULT fires** — no action means it never happened (see §10). |
 | `trace_level` | enum | yes | `generic`, `detailed`, or `full_traces`. Same value as the batch envelope. |
@@ -124,6 +124,24 @@ FIFO. Use the per-component `timestamp` for tie-breaking at sub-millisecond
 granularity (component_type is also a coarse ordering hint — components
 go through the H3ERE step sequence: observation → context → rationale →
 conscience → action).
+
+### 3.1 `agent_id_hash` is per-event, not per-batch
+
+Although `agent_id_hash` appears once per CompleteTrace at this envelope
+level, **it binds every TraceComponent under the trace structurally**: the
+persistence dedup tuple (§9.1) is `(agent_id_hash, trace_id, thought_id,
+event_type, attempt_index, ts)`, evaluated per persisted row. Compliant
+persistence layers MUST propagate the parent CompleteTrace's
+`agent_id_hash` into every component-row UNIQUE check, OR equivalently
+treat `(agent_id_hash, trace_id)` as the trace-binding pair before any
+per-component dedup. Without this gating, a malicious agent can pre-claim
+a `(trace_id, thought_id, event_type, attempt_index, ts)` tuple it
+doesn't own — see AV-9 in `CIRISPersist/THREAT_MODEL.md §3.1`.
+
+The `trace_id` namespace ("globally unique per agent by convention") is
+**adversary-controllable at the SQL layer**. The dedup tuple's
+`agent_id_hash` prefix prevents cross-agent collision; the `ts` suffix is
+defense-in-depth against attempt_index counting bugs (§6).
 
 ## 4. TraceComponent envelope
 
@@ -166,6 +184,20 @@ Empty fields are stripped before signing and shipping (the
 strings, empty lists, empty dicts recursively from `data`). The lens
 must treat absent fields as "not emitted at this trace level," not
 "emitted as null."
+
+**`event_type` vs `step_point` naming.** This spec and `ciris-persist
+v0.1.2+` use `event_type` as the canonical discriminator; the alias
+`step_point` appears in some early lens design notes
+(`INCOMING_2_7_8.md §7.1`) but is non-canonical. Persistence layers MAY
+accept `step_point` as a deserialization alias for migration but MUST
+write `event_type` on output. The dedup tuple in §9.1 binds
+`event_type`, not `step_point`.
+
+**`agent_id_hash` propagation.** The parent CompleteTrace's
+`agent_id_hash` (§3) applies to every component under it (§3.1). A
+component does NOT carry its own `agent_id_hash` field on the wire —
+implementations propagate it from the parent envelope when persisting
+into a per-component table.
 
 ## 5. Reasoning event types and `data` shapes
 
@@ -455,7 +487,7 @@ DSASPDMA; future verbs drop in to the registry without schema changes.
 
 | Field | Type | Notes |
 |---|---|---|
-| `verb` | string | Discriminator. Lower-case `HandlerActionType.value` — currently `"tool"` or `"defer"`. |
+| `verb` | string | **Discriminator field.** Lower-case `HandlerActionType.value`. **Canonical enum (2.7.9):** `"tool"`, `"defer"`. Future verbs adding a second-pass evaluator MUST extend this enum (lower-case `HandlerActionType.value`) before emitting; persistence-layer per-version payload gates rely on the discriminator being closed at any given schema version. The `verb_specific_data` shape is gated on this field — see §5.7.1. |
 | `original_action` | string | First-pass selection. |
 | `original_reasoning` | string | DETAILED+. |
 | `final_action` | string | Refined selection (may equal `original_action`). |
@@ -626,6 +658,9 @@ provider invocation, success or failure. Emitted by
   "prompt": "<full prompt text — FULL only>",
   "response_text": "<full completion text — FULL only>",
 
+  "parent_event_type": "ASPDMA_RESULT",
+  "parent_attempt_index": 0,
+
   "attempt_index": 4
 }
 ```
@@ -643,6 +678,31 @@ provider invocation, success or failure. Emitted by
 | `attempt_count` | yes | Instructor retry counter (1 = first try, 2+ = re-prompted on parse failure). |
 | `retry_count` | yes | LLMBus-level retry counter (0 = first attempt). |
 | `attempt_index` | yes | §6 — monotonic per (thought_id, event_type). |
+| `parent_event_type` | recommended (2.7.9), required (2.8.0+) | The pipeline event_type whose execution issued this LLM call (e.g. `ASPDMA_RESULT`, `IDMA_RESULT`, `CONSCIENCE_RESULT`). Forms a non-forgeable parent-link with `parent_attempt_index` — see below. |
+| `parent_attempt_index` | recommended (2.7.9), required (2.8.0+) | The `attempt_index` of the parent pipeline event under the same `(thought_id, parent_event_type)` namespace. Together with `parent_event_type` and the parent CompleteTrace's `(agent_id_hash, trace_id, thought_id)`, uniquely identifies the parent row in the persistence layer. |
+
+**Parent-event linkage (item #5 of #712).** LLM_CALL events SHOULD carry
+`parent_event_type` + `parent_attempt_index` as first-class wire-format
+fields, included in the trace's signed canonical bytes (§8). Implicit
+positional linkage is not safe — broadcast reordering or replay can
+break it. Explicit linkage in the signed bytes makes the link
+non-forgeable: a malicious lens-side aggregator cannot rebind an
+LLM_CALL to a different parent without invalidating the trace's
+signature. The persistence layer's `trace_llm_calls` foreign key into
+`trace_events` MUST resolve to `(agent_id_hash, trace_id, thought_id,
+parent_event_type, parent_attempt_index)` once the agent emits these
+fields.
+
+**Transition window (2.7.9).** The agent-side emission of
+`parent_event_type` + `parent_attempt_index` is being staged across
+2.7.9 patches. During this window, persistence implementations MUST
+accept LLM_CALL events with these fields ABSENT (treat as nullable
+foreign-key parent until backfill is possible) and MUST NOT reject
+on missing-field. Agents emitting these fields in 2.7.9 SHALL include
+them in the signed canonical bytes. Bumping `trace_schema_version`
+from `"2.7.0"` to `"2.7.9"` once emission is complete signals the
+transition; persistence layers gate `parent_*` field requirement on
+`trace_schema_version >= "2.7.9"`.
 
 The lens schema in `FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2` proposes a
 sibling `trace_llm_calls` table for these — query-friendly per-call
@@ -670,6 +730,15 @@ without timestamp races.
 
 The counter is reset per thread when `ACTION_RESULT` seals the trace
 (`_complete_trace` cleans up entries for that thought).
+
+**`ts` is defense-in-depth, not redundant.** The persistence dedup tuple
+(§9.1) includes both `attempt_index` AND `ts`. `attempt_index` is the
+ordering invariant — but if a future implementation has an
+attempt_index counting bug (skipping, double-incrementing, race in the
+counter cleanup), `ts` keeps the dedup index UNIQUE-correct rather than
+collapsing distinct events into one row. Implementations MUST NOT drop
+`ts` from the dedup tuple "because attempt_index is enough" — that's
+the exact regression `INCOMING_2_7_8.md §7.1` proposed and #712 closes.
 
 ## 7. Trace-level gating
 
@@ -741,16 +810,52 @@ defeats the ledger guarantee.
 See `FSD/TRACE_EVENT_LOG_PERSISTENCE.md` for the full proposal. Summary:
 
 - Replace per-thought row writer with `trace_events` table — one row
-  per TraceComponent, keyed on `(trace_id, thought_id, step_point,
-  attempt_index)`.
+  per TraceComponent, keyed on the canonical dedup tuple in §9.1.
 - Add `trace_llm_calls` sibling table — one row per LLM_CALL event,
-  parent-FK to the issuing pipeline event row.
+  parent-FK to the issuing pipeline event row via `(agent_id_hash,
+  trace_id, thought_id, parent_event_type, parent_attempt_index)`
+  (see §5.10 parent-event linkage).
 - Materialize `trace_thought_summary` view from these two tables for
   existing dashboards (preserves their query shape).
 
 This shape preserves the override journey (the conscience reasons, the
 rejected ASPDMA candidates, the per-LLM-call latency tail) that's
 currently collapsed by last-write-wins per-thought rows.
+
+### 9.1 Canonical persistence dedup tuple
+
+Compliant `trace_events` implementations MUST use this exact UNIQUE key:
+
+```
+(agent_id_hash, trace_id, thought_id, event_type, attempt_index, ts)
+```
+
+Each component contributes:
+
+| Field | Source | Why it's load-bearing |
+|---|---|---|
+| `agent_id_hash` | parent CompleteTrace (§3.1) | **AV-9 closure.** `trace_id` is "globally unique per agent" by convention only; the SQL layer treats it as adversary-controllable. Without `agent_id_hash` prefix, a malicious agent can pre-claim a row another agent's trace would write into. Per `CIRISPersist/THREAT_MODEL.md §3.1`. |
+| `trace_id` | parent CompleteTrace (§3) | The trace-level identifier. |
+| `thought_id` | parent CompleteTrace (§3) | The thought-level identifier within a trace. |
+| `event_type` | TraceComponent (§4) | Discriminator for which `data` shape applies. **Canonical name**: `event_type`, not `step_point` (§4 alias rule). |
+| `attempt_index` | TraceComponent `data` (§6) | Ordering invariant for events that broadcast multiple times per thought (LLM_CALL, CONSCIENCE_RESULT, ASPDMA_RESULT). |
+| `ts` | TraceComponent `timestamp` (§4) | Defense-in-depth (§6). MUST NOT be dropped "because attempt_index is enough." |
+
+This tuple is what `ciris-persist v0.2.2+` ships in its V001 schema
+(`CIRISPersist/migrations/postgres/lens/V001__trace_events.sql`). The
+spec lifts it here so any compliant implementation arrives at the
+right UNIQUE key by reading the wire format alone, not by reading
+persist's threat model. **Lens consumers** computing per-agent
+aggregates (Coherence Ratchet detection, case-law candidate corpus,
+N_eff measurements, constraint-space PCA) depend on this tuple holding
+— a cross-agent pre-claim violation poisons the aggregates.
+
+**Out-of-spec proposals** (e.g. dropping `agent_id_hash` and `ts`,
+renaming `event_type → step_point`) MUST be rejected at review time
+even if they appear in implementer-side design docs. The wire format
+spec is the authority; threat-model rationale is summarized inline so
+DDL authors don't need to read three repos to converge on the right
+key.
 
 ## 10. The action anchor
 

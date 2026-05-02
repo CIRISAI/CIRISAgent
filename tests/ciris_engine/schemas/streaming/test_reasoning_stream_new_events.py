@@ -28,21 +28,71 @@ class TestLLMCallEventSchema:
     """
 
     def test_minimum_required_fields(self):
-        """timestamp, handler_name, service_name, duration_ms, status are required."""
+        """timestamp, handler_name, service_name, duration_ms, status,
+        parent_event_type, parent_attempt_index are required.
+
+        parent_event_type + parent_attempt_index pinned as required as of
+        2.7.9 per TRACE_WIRE_FORMAT.md §5.10 (item #5 of #712). Lens-side
+        persistence enforces presence; the agent's wire-format emission
+        is non-optional once trace_schema_version="2.7.9".
+        """
         ev = LLMCallEvent(
             timestamp="2026-04-30T15:00:00Z",
             handler_name="EthicalPDMA",
             service_name="MockLLMService",
             duration_ms=42.0,
             status="ok",
+            parent_event_type="DMA_RESULTS",
+            parent_attempt_index=0,
         )
         assert ev.event_type == ReasoningEvent.LLM_CALL
         assert ev.duration_ms == 42.0
         assert ev.status == "ok"
+        assert ev.parent_event_type == "DMA_RESULTS"
+        assert ev.parent_attempt_index == 0
         # Optional fields default to None / 1 / 0
         assert ev.thought_id is None
         assert ev.attempt_count == 1
         assert ev.retry_count == 0
+
+    def test_required_parent_event_type(self):
+        """parent_event_type is REQUIRED as of 2.7.9 — drop it and validation fails."""
+        with pytest.raises(ValidationError) as exc_info:
+            LLMCallEvent(
+                timestamp="2026-04-30T15:00:00Z",
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                duration_ms=42.0,
+                status="ok",
+                parent_attempt_index=0,
+            )
+        assert "parent_event_type" in str(exc_info.value)
+
+    def test_required_parent_attempt_index(self):
+        """parent_attempt_index is REQUIRED as of 2.7.9."""
+        with pytest.raises(ValidationError) as exc_info:
+            LLMCallEvent(
+                timestamp="2026-04-30T15:00:00Z",
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                duration_ms=42.0,
+                status="ok",
+                parent_event_type="DMA_RESULTS",
+            )
+        assert "parent_attempt_index" in str(exc_info.value)
+
+    def test_parent_attempt_index_non_negative(self):
+        """ge=0 constraint blocks negative parent index."""
+        with pytest.raises(ValidationError):
+            LLMCallEvent(
+                timestamp="2026-04-30T15:00:00Z",
+                handler_name="EthicalPDMA",
+                service_name="MockLLMService",
+                duration_ms=42.0,
+                status="ok",
+                parent_event_type="DMA_RESULTS",
+                parent_attempt_index=-1,
+            )
 
     def test_required_field_handler_name(self):
         """handler_name is required — drop it and validation fails."""
@@ -97,6 +147,8 @@ class TestLLMCallEventSchema:
             attempt_count=1,
             retry_count=2,
             prompt_hash="0" * 64,
+            parent_event_type="DMA_RESULTS",
+            parent_attempt_index=0,
         )
         # All status enum values from the schema docstring should round-trip
         assert ev.status == "timeout"
@@ -112,6 +164,8 @@ class TestLLMCallEventSchema:
             service_name="MockLLMService",
             duration_ms=10.0,
             status="ok",
+            parent_event_type="DMA_RESULTS",
+            parent_attempt_index=0,
             future_field="ignored",  # not in schema; should not raise
         )
         # extras drop silently; the model_dump won't include the extra
@@ -206,9 +260,12 @@ class TestCreateReasoningEventDispatcher:
             service_name="MockLLMService",
             duration_ms=10.0,
             status="ok",
+            parent_event_type="DMA_RESULTS",
+            parent_attempt_index=0,
         )
         assert isinstance(ev, LLMCallEvent)
         assert ev.handler_name == "EthicalPDMA"
+        assert ev.parent_event_type == "DMA_RESULTS"
         # And it satisfies the union (so reasoning_event_stream can broadcast it)
         assert isinstance(ev, ReasoningEventUnion.__args__)
 
@@ -231,7 +288,12 @@ class TestCreateReasoningEventDispatcher:
     def test_dispatcher_llm_call_allows_none_thought_id(self):
         """LLM_CALL events may originate from contexts where thought_id is None
         (future dream-state introspection, system probes). The dispatcher
-        and schema both have to permit it — pin that contract."""
+        and schema both have to permit it — pin that contract.
+
+        Such out-of-pipeline calls report parent_event_type="UNKNOWN_PARENT"
+        from the ContextVar default — the broadcast helper logs a warning so
+        we can wire them as we find them.
+        """
         ev = create_reasoning_event(
             event_type=ReasoningEvent.LLM_CALL,
             thought_id=None,
@@ -241,8 +303,11 @@ class TestCreateReasoningEventDispatcher:
             service_name="MockLLMService",
             duration_ms=5.0,
             status="ok",
+            parent_event_type="UNKNOWN_PARENT",
+            parent_attempt_index=0,
         )
         assert ev.thought_id is None
+        assert ev.parent_event_type == "UNKNOWN_PARENT"
 
     def test_dispatcher_unknown_event_raises(self):
         """Defensive — dispatcher should still reject unknown types so a future

@@ -678,10 +678,10 @@ provider invocation, success or failure. Emitted by
 | `attempt_count` | yes | Instructor retry counter (1 = first try, 2+ = re-prompted on parse failure). |
 | `retry_count` | yes | LLMBus-level retry counter (0 = first attempt). |
 | `attempt_index` | yes | §6 — monotonic per (thought_id, event_type). |
-| `parent_event_type` | recommended (2.7.9), required (2.8.0+) | The pipeline event_type whose execution issued this LLM call (e.g. `ASPDMA_RESULT`, `IDMA_RESULT`, `CONSCIENCE_RESULT`). Forms a non-forgeable parent-link with `parent_attempt_index` — see below. |
-| `parent_attempt_index` | recommended (2.7.9), required (2.8.0+) | The `attempt_index` of the parent pipeline event under the same `(thought_id, parent_event_type)` namespace. Together with `parent_event_type` and the parent CompleteTrace's `(agent_id_hash, trace_id, thought_id)`, uniquely identifies the parent row in the persistence layer. |
+| `parent_event_type` | yes (2.7.9+) | The pipeline event_type whose execution issued this LLM call (e.g. `ASPDMA_RESULT`, `IDMA_RESULT`, `CONSCIENCE_RESULT`). Forms a non-forgeable parent-link with `parent_attempt_index` — see below. |
+| `parent_attempt_index` | yes (2.7.9+) | The `attempt_index` of the parent pipeline event under the same `(thought_id, parent_event_type)` namespace. Together with `parent_event_type` and the parent CompleteTrace's `(agent_id_hash, trace_id, thought_id)`, uniquely identifies the parent row in the persistence layer. |
 
-**Parent-event linkage (item #5 of #712).** LLM_CALL events SHOULD carry
+**Parent-event linkage (item #5 of #712).** LLM_CALL events MUST carry
 `parent_event_type` + `parent_attempt_index` as first-class wire-format
 fields, included in the trace's signed canonical bytes (§8). Implicit
 positional linkage is not safe — broadcast reordering or replay can
@@ -690,19 +690,18 @@ non-forgeable: a malicious lens-side aggregator cannot rebind an
 LLM_CALL to a different parent without invalidating the trace's
 signature. The persistence layer's `trace_llm_calls` foreign key into
 `trace_events` MUST resolve to `(agent_id_hash, trace_id, thought_id,
-parent_event_type, parent_attempt_index)` once the agent emits these
-fields.
+parent_event_type, parent_attempt_index)`.
 
-**Transition window (2.7.9).** The agent-side emission of
-`parent_event_type` + `parent_attempt_index` is being staged across
-2.7.9 patches. During this window, persistence implementations MUST
-accept LLM_CALL events with these fields ABSENT (treat as nullable
-foreign-key parent until backfill is possible) and MUST NOT reject
-on missing-field. Agents emitting these fields in 2.7.9 SHALL include
-them in the signed canonical bytes. Bumping `trace_schema_version`
-from `"2.7.0"` to `"2.7.9"` once emission is complete signals the
-transition; persistence layers gate `parent_*` field requirement on
-`trace_schema_version >= "2.7.9"`.
+**Required as of 2.7.9 — no transition window.** Both fields ship
+together: `trace_schema_version "2.7.9"` MUST carry them, persistence
+implementations MUST enforce their presence on incoming LLM_CALL events,
+and lens-side aggregators MAY reject any LLM_CALL row missing either
+field. The agent's wire-format emission and the persistence-layer
+enforcement land in the same release; there is no period where one
+side accepts the absence of these fields. If a deployed agent at
+`trace_schema_version "2.7.0"` ships an LLM_CALL without the parent
+fields, persistence MAY persist it for backfill compatibility but MUST
+NOT advance the dedup index for that trace until the agent upgrades.
 
 The lens schema in `FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2` proposes a
 sibling `trace_llm_calls` table for these — query-friendly per-call

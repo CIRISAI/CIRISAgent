@@ -51,7 +51,11 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
-TRACE_SCHEMA_VERSION = "2.7.0"
+# 2.7.9: bumped from "2.7.0" — signals to persistence that LLM_CALL events
+# carry the parent_event_type + parent_attempt_index fields specified in
+# TRACE_WIRE_FORMAT.md §5.10. Persistence layers MAY enforce field
+# presence on traces at this schema version.
+TRACE_SCHEMA_VERSION = "2.7.9"
 
 
 def _get_metrics_env(name: str, default: str = "") -> str:

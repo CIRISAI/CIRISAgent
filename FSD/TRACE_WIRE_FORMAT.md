@@ -152,6 +152,17 @@ Persistence implementations MAY accept 2.7.0-shaped traces during a
 dual-window transition (`SUPPORTED_VERSIONS = ["2.7.0", "2.7.9"]`) but
 MUST reject 2.7.9 traces missing the per-component value.
 
+**Cross-shape field injection.** A trace with `trace_schema_version:
+"2.7.0"` whose components carry per-component `agent_id_hash` fields
+(the 2.7.9 shape's extra field) is malformed-but-safe: the 2.7.0
+canonical reconstruction strips per-component fields outside the
+4-field shape, so the signature still verifies and the dedup is
+unaffected. **Persistence at `"2.7.0"` MUST IGNORE per-component
+`agent_id_hash` if present — only the envelope value is authoritative
+for that schema version.** This closes the cross-shape injection
+question: an attacker cannot smuggle a different `agent_id_hash` per
+component into a 2.7.0 trace and have it influence dedup or signing.
+
 ## 4. TraceComponent envelope
 
 Each entry in `components[]`:
@@ -203,6 +214,17 @@ v0.1.2+` use `event_type` as the canonical discriminator; the alias
 accept `step_point` as a deserialization alias for migration but MUST
 write `event_type` on output. The dedup tuple in §9.1 binds
 `event_type`, not `step_point`.
+
+**`event_type` enum closure.** The set of valid `event_type` values at
+a given `trace_schema_version` is exactly those enumerated in §5
+(`THOUGHT_START`, `SNAPSHOT_AND_CONTEXT`, `DMA_RESULTS`, `IDMA_RESULT`,
+`ASPDMA_RESULT`, `TSASPDMA_RESULT` *(deprecated)*,
+`VERB_SECOND_PASS_RESULT`, `CONSCIENCE_RESULT`, `ACTION_RESULT`,
+`LLM_CALL`). Persistence MUST reject components whose `event_type` is
+outside this set — silent acceptance of unknown event types lets a
+future agent emission slip past per-version payload gates (AV-12)
+without per-event review. New event types ship with a `trace_schema_
+version` bump and a §5 subsection.
 
 **`agent_id_hash` denormalization (2.7.9+).** Each TraceComponent
 carries `agent_id_hash` on the wire; its value MUST equal the parent
@@ -803,8 +825,15 @@ signed_bytes = json.dumps(canonical, sort_keys=True, separators=(",", ":")).enco
 signature = ed25519_sign(signed_bytes)
 ```
 
-**Schema-version-gated canonical shapes** (lens verifier accepts each in
-order; first match wins):
+**Schema-version-gated canonical shapes — deterministic dispatch.**
+`trace_schema_version` is part of the signed canonical bytes (it
+appears as a top-level key in the canonical above), which makes the
+field self-authenticating: the verifier MUST select the canonical
+shape by `trace_schema_version` and reject on signature mismatch with
+the *selected* shape. There is no fallback iteration, no "try-list"
+under load — a 2.7.9 trace whose signature fails against the 2.7.9
+canonical is invalid even if it would happen to verify against the
+2.7.0 shape.
 
 | `trace_schema_version` | Per-component shape | Notes |
 |---|---|---|
@@ -812,9 +841,11 @@ order; first match wins):
 | `"2.7.9"` | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component. |
 
 The legacy 2-field shape (`{"components", "trace_level"}`, pre-2.7.8.9)
-is retired on the agent side but persistence implementations MAY keep
-it in the try-list during a triple-window transition for federation
-peers that haven't upgraded.
+is retired on the agent side. Persistence implementations MAY accept
+it for federation peers that haven't upgraded, but only by dispatching
+on a `trace_schema_version` that explicitly opts in (e.g. a
+hypothetical `"2.7.legacy"` sentinel) — never as silent fallback for
+unrecognized versions.
 
 **Key:** unified Ed25519 signing key, shared between the audit service
 and accord_metrics traces. Agent registers its public key with the
@@ -883,6 +914,18 @@ even if they appear in implementer-side design docs. The wire format
 spec is the authority; threat-model rationale is summarized inline so
 DDL authors don't need to read three repos to converge on the right
 key.
+
+**Residual: `agent_id_hash` collision-resistance is 8 bytes.** The
+16-hex-character truncation gives 64 bits of pre-image resistance —
+~2⁶⁴ work to grind a targeted collision against a specific victim's
+hash, ~2³² work for a birthday collision against any pair in the
+population. For non-adversarial federation scale (target: ≤4B agents,
+the birthday bound) this is generous. An attacker willing to spend
+2⁶⁴ SHA-256 ops to deliberately collide a victim's hash for targeted
+DOS against the dedup tuple is the residual — same trade-off PoB §3.2
+made for Reticulum addressing. Persistence threat models should
+explicitly note this residual under the AV-9 closure (acceptable for
+anti-DOS at federation scale; not a confidentiality boundary).
 
 ## 10. The action anchor
 

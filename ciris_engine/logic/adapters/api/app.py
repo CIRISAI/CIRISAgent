@@ -234,13 +234,33 @@ def _add_api_root_endpoint(app: FastAPI, gui_status: str, message: str) -> None:
         }
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        """Root-level health check (no /v1 prefix needed)."""
-        return {
+    def health() -> dict[str, Any]:
+        """Root-level health check (no /v1 prefix needed).
+
+        Surfaces the CIRISVerify storage descriptor when available
+        (ciris-verify >= 1.8.0) so operators can confirm the identity-seed
+        keyring is on a persistent volume rather than container ephemeral
+        storage. See issue #708. Field is omitted (not null) when the
+        loaded ciris-verify is older or the descriptor isn't yet exposed —
+        keeps the health-check payload small for callers that don't care.
+        """
+        payload: dict[str, Any] = {
             "status": "ok",
             "version": __version__,
             "api": "running",
         }
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_storage_descriptor,
+            )
+
+            descriptor = get_storage_descriptor()
+            if descriptor is not None:
+                payload["storage_descriptor"] = descriptor
+        except Exception:
+            # /health MUST NOT 500 because of an optional surfacing helper.
+            pass
+        return payload
 
 
 def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:

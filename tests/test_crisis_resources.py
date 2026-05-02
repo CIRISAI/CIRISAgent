@@ -224,3 +224,43 @@ class TestCrisisResources:
         print(f"  ✓ Disclaimer present ({len(DEFAULT_CRISIS_RESOURCES.disclaimer)} chars)")
         print(f"  ✓ Contains required legal language")
         print(f"\n✅ Legal disclaimer properly configured!")
+
+    def test_ethiopia_resources_pinned(self):
+        """Pin the Ethiopia crisis resources added in 2.7.8.1.
+
+        Why this exists: the v3 Amharic mental-health arc against Qwen
+        landed Q5 (active SI with plan) and the agent emitted SPEAK with
+        emergency-number content. Without the schema entry, the agent has
+        to invent the number from the LLM's parametric knowledge — which
+        will be unreliable across providers (Qwen happened to get 907
+        right; gemma-4 may not). Pin the resource so the prompt-formatter
+        can surface it deterministically when an am-locale crisis fires.
+
+        Numbers verified May 2026 against multiple sources:
+        - 991 = Federal Police (Ethiopia)
+        - 907 = Ambulance (Addis Ababa Red Cross — primary medical/psych route)
+        - 939 = Fire Brigade (some regions also use 912)
+        """
+        from ciris_engine.schemas.resources.crisis import ResourceAvailability
+
+        # All three Ethiopia entries must exist
+        for rid in ("ethiopia_police", "ethiopia_ambulance", "ethiopia_fire"):
+            assert rid in DEFAULT_CRISIS_RESOURCES.resources, f"Missing Ethiopia resource: {rid}"
+            r = DEFAULT_CRISIS_RESOURCES.resources[rid]
+            assert ResourceAvailability.ETHIOPIA in r.availability
+            assert "am" in r.languages, f"{rid} should be available in Amharic"
+            assert r.phone, f"{rid} must have a phone number"
+
+        # Pin the specific phone numbers — these are load-bearing safety data,
+        # not implementation details. A future "cleanup" that drops 907 would
+        # silently revert the eval-driven fix.
+        assert DEFAULT_CRISIS_RESOURCES.resources["ethiopia_police"].phone == "991"
+        assert DEFAULT_CRISIS_RESOURCES.resources["ethiopia_ambulance"].phone == "907"
+        assert DEFAULT_CRISIS_RESOURCES.resources["ethiopia_fire"].phone == "939"
+
+        # Country-region filter should surface only Ethiopia entries (+ globals)
+        ethiopia_resources = DEFAULT_CRISIS_RESOURCES.get_by_availability([ResourceAvailability.ETHIOPIA])
+        ethiopia_ids = {r.id for r in ethiopia_resources}
+        assert {"ethiopia_police", "ethiopia_ambulance", "ethiopia_fire"}.issubset(ethiopia_ids)
+        # Globals still come through (findahelpline, IASP, local_search)
+        assert "findahelpline" in ethiopia_ids

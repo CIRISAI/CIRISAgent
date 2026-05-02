@@ -476,12 +476,28 @@ class ThoughtProcessor(
                 f"{tsaspdma_result.selected_action} (was TOOL)"
             )
 
-            # Emit TSASPDMA_RESULT event for reasoning trace
+            # Emit TSASPDMA_RESULT event for reasoning trace (legacy, kept
+            # during the transition window per FSD §10 phase 0 gate)
             await self._emit_tsaspdma_result_event(
                 thought_item=thought_item,
                 tool_name=tool_name,
                 tsaspdma_result=tsaspdma_result,
                 aspdma_reasoning=action_result.rationale or "",
+            )
+
+            # Emit VERB_SECOND_PASS_RESULT event — generic verb-second-pass
+            # replacement that closes the per-verb-event-type asymmetry
+            # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4)
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="tool",
+                original_action=HandlerActionType.TOOL.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=tsaspdma_result,
+                verb_specific_data=self._build_tool_verb_specific_data(
+                    tool_name=tool_name,
+                    tsaspdma_result=tsaspdma_result,
+                ),
             )
 
             # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
@@ -525,13 +541,29 @@ class ThoughtProcessor(
         try:
             from ciris_engine.logic.dma.dma_executor import run_dsaspdma
 
-            return await run_dsaspdma(
+            dsaspdma_result = await run_dsaspdma(
                 evaluator=evaluator,
                 aspdma_result=action_result,
                 original_thought=thought_item,
                 context=thought_context,
                 time_service=self._time_service,
             )
+
+            # Emit VERB_SECOND_PASS_RESULT — closes the prior asymmetry where
+            # DSASPDMA dispatched but produced no reasoning event. The
+            # verb_specific_data carries the deferral classification fields
+            # (rights_basis, primary_need_category, etc.) drawn from the
+            # refined ActionSelectionDMAResult.
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="defer",
+                original_action=HandlerActionType.DEFER.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=dsaspdma_result,
+                verb_specific_data=self._build_defer_verb_specific_data(dsaspdma_result),
+            )
+
+            return dsaspdma_result
         except Exception as e:
             logger.error("DSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
             return action_result
@@ -600,6 +632,117 @@ class ThoughtProcessor(
 
         except Exception as e:
             logger.warning(f"TSASPDMA: Failed to emit reasoning event: {e}")
+
+    def _build_tool_verb_specific_data(
+        self,
+        tool_name: str,
+        tsaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Build verb_specific_data for TOOL second pass.
+
+        These are the same fields TSASPDMAResultEvent carries explicitly,
+        flattened into the generic event's payload dict so per-verb shape
+        lives at the verb registry level instead of the schema.
+        """
+        final_tool_name: Optional[str] = None
+        final_parameters: Dict[str, Any] = {}
+        if tsaspdma_result.selected_action == HandlerActionType.TOOL:
+            final_tool_name = tool_name
+            if isinstance(tsaspdma_result.action_parameters, ToolParams):
+                final_parameters = tsaspdma_result.action_parameters.parameters or {}
+            elif isinstance(tsaspdma_result.action_parameters, dict):
+                final_parameters = tsaspdma_result.action_parameters.get("parameters", {})
+
+        return {
+            "original_tool_name": tool_name,
+            "original_parameters": {},  # ASPDMA doesn't provide params in v1.9.3
+            "final_tool_name": final_tool_name,
+            "final_parameters": final_parameters,
+        }
+
+    def _build_defer_verb_specific_data(
+        self,
+        dsaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Build verb_specific_data for DEFER second pass.
+
+        DSASPDMA refines the deferral with rights-basis classification fields
+        (rights_basis, primary_need_category, secondary_need_categories,
+        domain_hint, operational_reason). These come from DSASPDMALLMResult
+        and land on the resulting DeferParams. Flatten them into the generic
+        event payload.
+        """
+        params = dsaspdma_result.action_parameters
+        if isinstance(params, DeferParams):
+            return {
+                "rights_basis": list(params.rights_basis),
+                "primary_need_category": (
+                    params.needs_category.value if params.needs_category else None
+                ),
+                "secondary_need_categories": [
+                    cat.value for cat in params.secondary_needs_categories
+                ],
+                "domain_hint": params.domain_hint.value if params.domain_hint else None,
+                "operational_reason": (
+                    params.reason_code.value if params.reason_code else None
+                ),
+                "defer_reason": params.reason,
+                "defer_until": params.defer_until,
+            }
+        # If params isn't a DeferParams (shouldn't happen on this path), emit
+        # an empty payload rather than dropping the event entirely — the
+        # `verb` discriminator is still informative.
+        return {}
+
+    async def _emit_verb_second_pass_result_event(
+        self,
+        thought_item: ProcessingQueueItem,
+        verb: str,
+        original_action: str,
+        original_reasoning: str,
+        second_pass_result: ActionSelectionDMAResult,
+        verb_specific_data: Dict[str, Any],
+    ) -> None:
+        """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
+
+        Replaces per-verb event types (TSASPDMA_RESULT, future DSASPDMA_RESULT,
+        ...) with one event keyed by `verb`. See FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        §4 for the rationale.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+
+        if not reasoning_event_stream or not reasoning_event_stream._subscribers:
+            logger.debug(
+                "VERB_SECOND_PASS: No reasoning event subscribers, skipping event emission "
+                f"(verb={verb}, thought={thought_item.thought_id})"
+            )
+            return
+
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.VERB_SECOND_PASS_RESULT,
+                thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
+                timestamp=timestamp,
+                verb=verb,
+                original_action=original_action,
+                original_reasoning=original_reasoning,
+                final_action=second_pass_result.selected_action.value,
+                final_reasoning=second_pass_result.rationale or "",
+                verb_specific_data=verb_specific_data,
+            )
+            await reasoning_event_stream.broadcast_reasoning_event(event)
+            logger.info(
+                f"VERB_SECOND_PASS-EVENT: Emitted for thought {thought_item.thought_id}: "
+                f"verb={verb}, original={original_action} → final={second_pass_result.selected_action.value}"
+            )
+        except Exception as e:
+            logger.warning(f"VERB_SECOND_PASS: Failed to emit reasoning event ({verb}): {e}")
 
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance."""

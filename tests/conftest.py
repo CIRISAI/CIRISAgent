@@ -23,18 +23,35 @@ os.environ["CIRIS_DATA_DIR"] = "test_data"
 
 # PERFORMANCE: Use tmpfs for all temp files to reduce disk I/O during tests
 # /dev/shm is a RAM-based tmpfs available on most Linux systems
-_TMPFS_DIR = "/dev/shm/ciris_tests"
+#
+# Per-worker isolation (added 2026-04-30 for the -n 28 parallel-execution
+# regression in db-maintenance-multi-occurrence + dsar-multi-source):
+# every worker gets its OWN TMPDIR subdir under _TMPFS_BASE. Without this,
+# all workers shared `/dev/shm/ciris_tests/` and pytest-xdist's session-
+# level cleanup of `pytest-of-emoore/pytest-0/popen-gw{N}/` could delete
+# one worker's tmpdir while another worker was still using it (FileNotFoundError
+# on iterdir during test setup, observed in -n 28 runs).
+_TMPFS_BASE = "/dev/shm/ciris_tests"
 if os.path.isdir("/dev/shm"):
-    # Clean up stale temp files from previous test runs to prevent /dev/shm from filling up
-    # Only do this for the main process (not xdist workers) to avoid race conditions
     import shutil
 
     is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
-    if not is_xdist_worker and os.path.isdir(_TMPFS_DIR):
-        try:
-            shutil.rmtree(_TMPFS_DIR)
-        except OSError:
-            pass  # May fail if files are in use by another test run
+
+    if is_xdist_worker:
+        # Worker process — isolate temp files under a worker-specific subdir
+        # so xdist session cleanup of one worker's dir can't hit another's.
+        worker_id = os.environ["PYTEST_XDIST_WORKER"]  # e.g. "gw23"
+        _TMPFS_DIR = os.path.join(_TMPFS_BASE, worker_id)
+    else:
+        # Main process (single-worker run) — clean stale tmp files from prior
+        # runs to prevent /dev/shm filling up.
+        _TMPFS_DIR = _TMPFS_BASE
+        if os.path.isdir(_TMPFS_DIR):
+            try:
+                shutil.rmtree(_TMPFS_DIR)
+            except OSError:
+                pass  # May fail if files are in use by another test run
+
     os.makedirs(_TMPFS_DIR, exist_ok=True)
     os.environ["TMPDIR"] = _TMPFS_DIR
     tempfile.tempdir = _TMPFS_DIR

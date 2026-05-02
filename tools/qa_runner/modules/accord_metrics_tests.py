@@ -242,18 +242,37 @@ class AccordMetricsTests:
         ],
     }
 
-    def __init__(self, client: Any, console: Any, live_lens: bool = False):
+    def __init__(
+        self,
+        client: Any,
+        console: Any,
+        live_lens: bool = False,
+        qa_reports_dir: Optional[Path] = None,
+    ):
         """Initialize test module.
 
         Args:
             client: CIRISClient SDK client
             console: Rich console for output
             live_lens: If True, use real Lens server instead of mock logshipper
+            qa_reports_dir: Per-backend trace output dir (e.g.
+                `qa_reports/sqlite/`, `qa_reports/postgres/`). Defaults to
+                `qa_reports/` for backwards compatibility with single-backend
+                runs that don't pass it through.
         """
         self.client = client
         self.console = console
         self.results: List[Dict[str, Any]] = []
         self.live_lens = live_lens or os.environ.get("CIRIS_LIVE_LENS", "").lower() == "true"
+        # Repo-root / qa_reports / <backend> if backend is namespaced;
+        # otherwise repo-root / qa_reports for default single-backend runs.
+        # The server-side mock logshipper is configured to write to this same
+        # path, so the test always reads what the agent just wrote.
+        self.qa_reports_dir: Path = (
+            qa_reports_dir
+            if qa_reports_dir is not None
+            else Path(__file__).parent.parent.parent.parent / "qa_reports"
+        )
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all accord metrics tests.
@@ -268,6 +287,7 @@ class AccordMetricsTests:
             ("Root Public Key Load", self._test_root_key_load),
             ("Load Multi-Level Adapters", self._test_load_multi_level_adapters),
             ("Agent Interaction Trace", self._test_interaction_triggers_trace),
+            ("Verb Second Pass Trace", self._test_verb_second_pass_traces),
             ("Generic Trace Field Validation", self._test_generic_trace_fields),
             ("Critical Scoring Fields Not Null", self._test_critical_scoring_fields),
             ("Detailed Trace Field Validation", self._test_detailed_trace_fields),
@@ -367,7 +387,7 @@ class AccordMetricsTests:
 
             # Wait for traces to be flushed (QA uses 5-second flush interval)
             # Check periodically for trace files to appear
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             max_wait = 15  # Wait up to 15 seconds
             waited = 0
 
@@ -383,6 +403,71 @@ class AccordMetricsTests:
         except Exception as e:
             return False, str(e)
 
+    async def _test_verb_second_pass_traces(self) -> tuple[bool, str]:
+        """Induce VERB_SECOND_PASS_RESULT events for both TOOL and DEFER verbs.
+
+        The default `What is 2+2?` interaction lands a SPEAK action, which
+        bypasses every verb-specific second-pass evaluator — so a capture
+        from this module historically never represented the
+        VERB_SECOND_PASS_RESULT event in the lens fixtures
+        (FSD/TRACE_WIRE_FORMAT.md §5.7).
+
+        Mock LLM recognizes `$tool` and `$defer` prefixes and routes ASPDMA
+        to TOOL / DEFER directly, which fires TSASPDMA / DSASPDMA and
+        emits VERB_SECOND_PASS_RESULT with verb=tool / verb=defer
+        respectively. This test sends both, then asserts at least one
+        captured trace contains a VERB_SECOND_PASS_RESULT component for
+        each verb so the next fixture-set refresh has the missing event.
+
+        Pin: do NOT use a SPEAK-routed message here — the whole point is to
+        force ASPDMA into a verb that has a second-pass evaluator.
+        """
+        try:
+            qa_reports = self.qa_reports_dir
+            # Snapshot trace files BEFORE so we only validate the ones we just produced
+            existing = {p.name for p in qa_reports.glob("trace_*.json")}
+
+            # Trigger TOOL → TSASPDMA → VERB_SECOND_PASS_RESULT verb=tool
+            await self.client.agent.interact(message="$tool self_help")
+            # Trigger DEFER → DSASPDMA → VERB_SECOND_PASS_RESULT verb=defer
+            await self.client.agent.interact(message="$defer Need wise authority guidance for verb_second_pass capture")
+
+            # Wait for flush (server sets CIRIS_ACCORD_METRICS_FLUSH_INTERVAL=5)
+            verbs_seen: set[str] = set()
+            max_wait = 30
+            waited = 0
+            new_traces: List[Path] = []
+            while waited < max_wait and verbs_seen != {"tool", "defer"}:
+                await asyncio.sleep(2)
+                waited += 2
+                new_traces = [p for p in qa_reports.glob("trace_*.json") if p.name not in existing]
+                for trace_file in new_traces:
+                    try:
+                        with open(trace_file) as f:
+                            trace = json.load(f)
+                    except Exception:
+                        continue
+                    for comp in trace.get("components", []):
+                        if comp.get("event_type") == "VERB_SECOND_PASS_RESULT":
+                            verb = comp.get("data", {}).get("verb")
+                            if verb:
+                                verbs_seen.add(verb)
+
+            if not verbs_seen:
+                return False, (
+                    f"No VERB_SECOND_PASS_RESULT events found in {len(new_traces)} new traces "
+                    f"after $tool + $defer submission — verb-specific second pass not firing"
+                )
+            missing = {"tool", "defer"} - verbs_seen
+            if missing:
+                return True, (
+                    f"Captured verbs={sorted(verbs_seen)}, missing={sorted(missing)} "
+                    f"(partial — {len(new_traces)} new trace(s); rerun if persistent)"
+                )
+            return True, f"Captured VERB_SECOND_PASS_RESULT for both verbs: {sorted(verbs_seen)}"
+        except Exception as e:
+            return False, str(e)
+
     async def _test_generic_trace_fields(self) -> tuple[bool, str]:
         """Validate generic traces have all fields required for CIRIS scoring.
 
@@ -395,7 +480,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
             # Find trace files saved by mock logshipper
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
@@ -538,7 +623,7 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:
@@ -680,7 +765,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server)"
 
             # Find detailed trace files
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_detailed_*.json"))
 
             if not trace_files:
@@ -761,7 +846,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server)"
 
             # Find full trace files
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_full_*.json"))
 
             if not trace_files:
@@ -825,7 +910,7 @@ class AccordMetricsTests:
             if self.live_lens:
                 return True, "Skipped (traces sent to live Lens server)"
 
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             all_traces = list(qa_reports.glob("trace_*.json"))
 
             if not all_traces:
@@ -939,7 +1024,7 @@ class AccordMetricsTests:
                 return True, "Skipped (traces sent to live Lens server, not local files)"
 
             # Check trace files saved by mock logshipper
-            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            qa_reports = self.qa_reports_dir
             trace_files = list(qa_reports.glob("trace_*.json"))
 
             if not trace_files:

@@ -117,9 +117,9 @@ class StepPoint(str, Enum):
 
 
 class ReasoningEvent(str, Enum):
-    """Reasoning stream events - 8 result events.
+    """Reasoning stream events - 9 result events.
 
-    Core events (always emitted):
+    Pipeline events (always emitted):
     - THOUGHT_START: Thought begins processing
     - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
     - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
@@ -127,6 +127,14 @@ class ReasoningEvent(str, Enum):
     - ASPDMA_RESULT: Selected action + rationale
     - CONSCIENCE_RESULT: Conscience evaluation + final action
     - ACTION_RESULT: Action execution outcome + audit trail
+
+    Sub-pipeline events:
+    - LLM_CALL: Per-provider-call observation. Emitted by LLMBus._execute_llm_call
+      after every individual LLM invocation (success or failure). Multiple LLM_CALL
+      events fire under each pipeline event (one per call the DMA / ASPDMA /
+      conscience handler issues). This is the level needed to debug tail latency
+      and per-call failure modes that thought-level aggregates hide.
+      See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2.
 
     Optional events (emitted when applicable):
     - TSASPDMA_RESULT: Tool-Specific ASPDMA (emitted when TOOL action selected)
@@ -137,9 +145,20 @@ class ReasoningEvent(str, Enum):
     DMA_RESULTS = "dma_results"  # 2) 3 DMA results (CSDMA, DSDMA, PDMA)
     IDMA_RESULT = "idma_result"  # 3) Identity DMA fragility check (always emitted)
     ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
-    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5) Tool-Specific ASPDMA (optional, when TOOL)
+    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5a) DEPRECATED: Tool-Specific ASPDMA legacy event
+                                         # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
+                                         # transition window per FSD/TRACE_EVENT_LOG_PERSISTENCE.md §10
+                                         # phase 0 gate. Remove after lens stops reading it.
+    VERB_SECOND_PASS_RESULT = "verb_second_pass_result"  # 4.5) Generic verb-specific second pass
+                                         # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). Replaces per-verb
+                                         # event types — single event with `verb` discriminator and
+                                         # verb-specific data so future verbs (MEMORIZE, OBSERVE, ...)
+                                         # adding a second pass don't multiply the schema. Currently
+                                         # fires for TOOL (replaces TSASPDMA_RESULT) and DEFER
+                                         # (closes the existing no-event asymmetry on DSASPDMA).
     CONSCIENCE_RESULT = "conscience_result"  # 5) Conscience evaluation + final action
     ACTION_RESULT = "action_result"  # 6) Action execution outcome + audit trail
+    LLM_CALL = "llm_call"  # *) Per-provider-call observation (every LLM invocation, success+failure)
 
 
 class StepDuration(str, Enum):
@@ -1287,6 +1306,63 @@ class TSASPDMAResultEvent(BaseModel):
     final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
     tsaspdma_reasoning: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
 
+
+class VerbSecondPassResultEvent(BaseModel):
+    """Generic verb-specific second-pass result (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4).
+
+    Replaces per-verb second-pass event types (TSASPDMA_RESULT, future
+    DSASPDMA_RESULT, etc.) with a single event keyed by a `verb` discriminator
+    and a verb-specific payload. Future verbs that gain a second-pass evaluator
+    drop into this event without schema changes.
+
+    Wire format mirrors TSASPDMAResultEvent's pattern but flattens the
+    "what was selected" / "what was refined to" axis across verbs:
+      - `original_action` is always the verb that triggered the second pass
+        (TOOL, DEFER, future MEMORIZE, ...).
+      - `final_action` is what the second pass recommended (may be the same
+        verb refined, or a switch to SPEAK/PONDER).
+      - `verb_specific_data` carries the verb's particular fields. For TOOL:
+        original_tool_name, final_tool_name, original_parameters,
+        final_parameters, gotchas_acknowledged. For DEFER: rights_basis,
+        primary_need_category, secondary_need_categories, domain_hint,
+        operational_reason. For future verbs: their own shape.
+
+    During the transition window, TOOL second-passes also emit the legacy
+    TSASPDMAResultEvent so existing lens consumers keep working — see
+    ReasoningEvent.TSASPDMA_RESULT docstring.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.VERB_SECOND_PASS_RESULT)
+    thought_id: str = Field(..., description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # Verb discriminator — which verb's second pass produced this event.
+    # Lower-case to match HandlerActionType enum value convention.
+    verb: str = Field(
+        ..., description="Verb whose second-pass evaluator produced this event (e.g. 'tool', 'defer')"
+    )
+
+    # First-pass input — what ASPDMA originally selected
+    original_action: str = Field(..., description="Action verb selected by first-pass ASPDMA")
+    original_reasoning: str = Field(..., description="Reasoning from first-pass ASPDMA")
+
+    # Second-pass output — what the verb-specific evaluator decided
+    final_action: str = Field(..., description="Final action after second pass (may be unchanged or a switch)")
+    final_reasoning: str = Field(..., description="Reasoning from the verb-specific second pass")
+
+    # Verb-specific fields — opaque at the schema level, validated per-verb at the
+    # producer side. Lens reads `verb` to decide which fields are present.
+    verb_specific_data: JSONDict = Field(
+        default_factory=dict,
+        description="Verb-specific second-pass data. Shape depends on `verb`. See class docstring.",
+    )
+
+    # User prompt passed to the verb-specific evaluator (debugging/transparency)
+    second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
+
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")
     gotchas_acknowledged: List[str] = Field(default_factory=list, description="Tool gotchas acknowledged in reasoning")
@@ -1411,3 +1487,61 @@ class ActionResultEvent(PropagatedCoherenceEntropyMixin, BaseModel):
     models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")
     api_bases_used: List[str] = Field(default_factory=list, description="Unique API base URLs used for this thought")
     # Coherence/entropy fields inherited from PropagatedCoherenceEntropyMixin
+
+
+class LLMCallEvent(BaseModel):
+    """Per-LLM-call observation. Broadcast by LLMBus._execute_llm_call after
+    every individual provider invocation (success, retry, or failure).
+
+    Multiple LLM_CALL events fire under each pipeline event — every DMA, ASPDMA,
+    conscience, and verb-second-pass step issues 1+ provider calls. This event
+    records each one discretely so the trace persistence layer (FSD/
+    TRACE_EVENT_LOG_PERSISTENCE.md §5.2) can preserve per-call latency, sizes,
+    and status instead of the thought-level aggregates that hide tail latency
+    and timeout patterns.
+
+    Concrete need: 2026-04-30 Spanish Mental Health timeout exhibited three
+    consecutive 90s EthicalPDMA timeouts. Today's lens shows only the cost
+    counter; with LLM_CALL events, the per-call status='timeout' rows make
+    the diagnosis trivial.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.LLM_CALL)
+    thought_id: Optional[str] = Field(None, description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # Caller attribution — which DMA / ASPDMA / conscience handler issued the call
+    handler_name: str = Field(..., description="Calling handler/DMA name (EthicalPDMA, CSDMA, ASPDMA, ...)")
+    service_name: str = Field(..., description="LLM service that handled the call")
+
+    # Provider identity
+    model: Optional[str] = Field(None, description="Model identifier (e.g. 'google/gemma-4-31B-it')")
+    base_url: Optional[str] = Field(None, description="Provider base URL")
+    response_model: Optional[str] = Field(None, description="Pydantic response model class name")
+
+    # Sizes — input and output, in tokens (provider-reported) and bytes (raw, sanity)
+    prompt_tokens: Optional[int] = Field(None, ge=0, description="Input token count")
+    completion_tokens: Optional[int] = Field(None, ge=0, description="Output token count")
+    prompt_bytes: Optional[int] = Field(None, ge=0, description="Input raw byte count")
+    completion_bytes: Optional[int] = Field(None, ge=0, description="Output raw byte count")
+    cost_usd: Optional[float] = Field(None, ge=0.0, description="Estimated cost in USD")
+
+    # Timing
+    duration_ms: float = Field(..., ge=0.0, description="Wall-clock duration of the call in milliseconds")
+
+    # Outcome
+    status: str = Field(
+        ...,
+        description="Call outcome: 'ok' | 'timeout' | 'rate_limited' | 'model_not_available' | 'instructor_retry' | 'other_error'",
+    )
+    error_class: Optional[str] = Field(None, description="Exception class name on failure")
+    attempt_count: int = Field(1, ge=1, description="Instructor attempt count (1 = first try; 2+ = re-prompted on parse failure)")
+    retry_count: int = Field(0, ge=0, description="LLMBus retry count for this call (0 = first attempt at the bus level)")
+
+    # Optional content (gated by trace level — empty at GENERIC, hash at DETAILED, full at FULL)
+    prompt_hash: Optional[str] = Field(None, description="SHA-256 of prompt text (DETAILED+ trace level)")
+    prompt: Optional[str] = Field(None, description="Full prompt text (FULL trace level only)")
+    response_text: Optional[str] = Field(None, description="Full completion text (FULL trace level only)")

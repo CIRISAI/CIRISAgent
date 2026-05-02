@@ -654,6 +654,7 @@ python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-ba
 - 🔍 **Detailed Reporting** - Success rates, duration, failure analysis
 - 🚀 **Production Ready** - Validates all critical system functionality
 - 🔄 **Multi-Backend Support** - Test against SQLite and PostgreSQL (sequential or parallel)
+- 📂 **Local-Tee for Live Lens Traces** - When `--live-lens` is active, every batch the agent ships to lens is also written to `/tmp/qa-runner-lens-traces-<UTC-iso>/` automatically. Auto-enabled by the QA runner; default-off otherwise via `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`. **Useful for troubleshooting any agent issue surfaced by a sweep** — defer-when-shouldn't, fabrication, register break, conscience-scalar weirdness — the answer lives in those batch JSON files (full reasoning event stream, every `LLM_CALL`, every conscience signal, every CIRISVerify attestation field). See `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)" for debug recipes.
 
 **IMPORTANT - Server Lifecycle:**
 - QA runner automatically starts and stops the API server
@@ -817,6 +818,29 @@ docker exec container tail -n 100 /app/logs/incidents_latest.log
 3. Verify with audit trail
 4. Test incrementally
 
+### Reasoning-Stream Forensics (live-lens runs)
+
+When a QA sweep against the live lens produces unexpected behavior — defer that shouldn't have fired, conscience scalar that looks off, a primer rule that didn't hold, fabrication or register-break that the conscience layer should have caught — the full reasoning event stream is sitting in `/tmp/qa-runner-lens-traces-<UTC-iso>/`. The QA runner auto-tees every batch the agent ships to lens into that dir.
+
+```bash
+# Find the most recent live-lens run dump
+ls -lt /tmp/qa-runner-lens-traces-*/ | head -3
+
+# Find the trace for a specific thought_id
+grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/accord-batch-*.json
+
+# Why did the agent defer? Decode the action_result
+python3 -c "
+import json, glob
+for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/accord-batch-*.json')):
+    for ev in json.load(open(f))['events']:
+        if ev.get('action_executed') == 'defer':
+            print(ev['thought_id'], ev.get('execution_reason', ''))
+"
+```
+
+Default-off in production (env var unset). The QA runner is the only caller that auto-enables. See `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)" for full recipes.
+
 ### Common Issues & Solutions
 
 | Issue | Solution |
@@ -826,6 +850,7 @@ docker exec container tail -n 100 /app/logs/incidents_latest.log
 | OAuth not working | Check callback URL format |
 | Service not found | Check ServiceRegistry capabilities |
 | WA deferral failing | Check WiseBus broadcast logic |
+| Live-lens sweep behavior unexplained | Inspect `/tmp/qa-runner-lens-traces-<ts>/accord-batch-*.json` — full reasoning stream, every LLM_CALL, every conscience scalar |
 
 ## Command Timeouts
 

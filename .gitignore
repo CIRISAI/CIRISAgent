@@ -67,6 +67,7 @@ logs/.current_log
 logs/.current_incident_log
 qa_reports/*
 !qa_reports/qa_status.json
+!qa_reports/safety_sweeps.json
 
 # Backup directories and temporary files
 CLAUDE_LOCAL_BACKUP*/

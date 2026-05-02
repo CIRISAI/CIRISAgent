@@ -129,6 +129,86 @@ class TestDSASPDMAEvaluator:
         assert result.action_parameters.context["primary_need_category"] == "justice_and_legal_agency"
         assert result.action_parameters.context["domain_hint"] == "LEGAL"
 
+    def test_convert_result_normalizes_resource_usage_pydantic_to_dict(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        sample_defer_result: ActionSelectionDMAResult,
+    ) -> None:
+        """Regression: 2.7.8 commit 90ea382e9 fixed a silent DSASPDMA failure
+        where ResourceUsage Pydantic objects were passed directly to
+        ActionSelectionDMAResult.resource_usage (typed JSONDict). The Pydantic
+        validation error was caught by the outer try/except in
+        _maybe_run_dsaspdma, which silently fell back to the unrefined DEFER —
+        so DSASPDMA was effectively dead code on every DEFER path until the
+        fix landed. This test pins the conversion so it can't silently break
+        again."""
+        from ciris_engine.schemas.runtime.resources import ResourceUsage
+
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+        llm_result = DSASPDMALLMResult(
+            reason_summary="General human oversight requested.",
+            operational_reason=DeferralOperationalReason.RIGHTS_IMPACT_REVIEW,
+            primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+        )
+
+        # The LLM bus returns a ResourceUsage Pydantic object, not a dict —
+        # this is the shape that broke pre-fix.
+        usage = ResourceUsage(tokens_used=15, tokens_input=10, tokens_output=5, model_used="mock")
+
+        # Should NOT raise — _convert_result must coerce ResourceUsage to dict.
+        result = evaluator._convert_result(
+            llm_result,
+            sample_defer_result.action_parameters,
+            resource_usage=usage,
+        )
+
+        assert isinstance(result.action_parameters, DeferParams)
+        # ActionSelectionDMAResult.resource_usage is JSONDict; confirm we got
+        # a real dict with the usage fields (not the Pydantic instance).
+        assert isinstance(result.resource_usage, dict)
+        assert result.resource_usage["tokens_used"] == 15
+        assert result.resource_usage["tokens_input"] == 10
+        assert result.resource_usage["tokens_output"] == 5
+
+    def test_convert_result_passes_through_dict_resource_usage(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        sample_defer_result: ActionSelectionDMAResult,
+    ) -> None:
+        """If the caller already serialized resource_usage to a dict (some
+        paths do), the helper must not double-convert."""
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+        llm_result = DSASPDMALLMResult(
+            reason_summary="General human oversight requested.",
+            operational_reason=DeferralOperationalReason.RIGHTS_IMPACT_REVIEW,
+            primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+        )
+        usage_dict = {"tokens_used": 7, "tokens_input": 5, "tokens_output": 2}
+        result = evaluator._convert_result(
+            llm_result, sample_defer_result.action_parameters, resource_usage=usage_dict
+        )
+        assert result.resource_usage == usage_dict
+
+    def test_convert_result_resource_usage_none(
+        self,
+        mock_service_registry: MagicMock,
+        mock_sink: MagicMock,
+        sample_defer_result: ActionSelectionDMAResult,
+    ) -> None:
+        """None resource_usage stays None (some test paths don't pass usage)."""
+        evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
+        llm_result = DSASPDMALLMResult(
+            reason_summary="General human oversight requested.",
+            operational_reason=DeferralOperationalReason.RIGHTS_IMPACT_REVIEW,
+            primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+        )
+        result = evaluator._convert_result(
+            llm_result, sample_defer_result.action_parameters, resource_usage=None
+        )
+        assert result.resource_usage is None
+
     def test_create_messages_uses_localized_prompt_and_taxonomy(
         self,
         mock_service_registry: MagicMock,

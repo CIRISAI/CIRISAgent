@@ -1772,6 +1772,24 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Note: CIRISVerify singleton must be initialized before this runs
         await self._migrate_wa_keys_to_verify()
 
+        # Surface CIRISVerify storage descriptor at boot so operators can
+        # confirm where the agent's identity seed lives. Best-effort — silent
+        # when ciris-verify <1.8.0 is loaded (descriptor not yet exposed).
+        # See issue #708 / CIRISVerify#1 for the PoB substrate-primitive
+        # context: the same Ed25519 key signs traces, addresses Reticulum
+        # destinations, and authors gratitude signals — losing it silently
+        # on container restart resets the federation S-factor decay window.
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                log_storage_descriptor_at_boot,
+            )
+
+            log_storage_descriptor_at_boot()
+        except Exception as e:
+            # MUST NOT raise from start(); identity-seed observability is
+            # opt-in by ciris-verify version, not a hard dependency.
+            logger.debug(f"[AuthenticationService] storage_descriptor boot log skipped: {e}")
+
         # Kick off startup attestation in the BACKGROUND — but capture the
         # task so any code that *needs* the attestation result can await it.
         # The previous pattern was create-task-and-forget plus a test-mode

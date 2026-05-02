@@ -257,7 +257,17 @@ class TestDSDMAEvaluator:
     async def test_dsdma_formats_identity_block_correctly(
         self, mock_service_registry, mock_prompt_loader, valid_queue_item
     ):
-        """Test that DSDMA formats the identity block with CORE IDENTITY header."""
+        """Test that DSDMA formats the identity block with CORE IDENTITY header.
+
+        As of 2.7.8.13 the language_guidance injection fires for English too
+        (the en canonical carries the universal-defense rules), so the
+        message at messages[1] is now the language_guidance system message,
+        not the identity prompt. This test is position-agnostic — it
+        searches all messages for the CORE IDENTITY block rather than
+        pinning to a specific index. See
+        test_dsdma_injects_amharic_language_guidance_into_messages for the
+        position-aware injection contract.
+        """
         evaluator = BaseDSDMA(domain_name="engineering", service_registry=mock_service_registry)
 
         mock_llm_output = DSDMAResult(
@@ -271,19 +281,22 @@ class TestDSDMAEvaluator:
         call_args = evaluator.call_llm_structured.call_args
         messages = call_args.kwargs["messages"]
 
-        # System message should contain CORE IDENTITY block
-        # First message is Accord, second should be the system prompt with identity
-        if len(messages) > 1:
-            system_content = messages[1]["content"]
-        else:
-            # If only one message, it should contain identity
-            system_content = messages[0]["content"]
+        # CORE IDENTITY block must appear in SOME system message — across
+        # all the messages assembled (accord, optional language_guidance,
+        # domain prompt). Position-agnostic search avoids brittleness when
+        # the injection sequence shifts.
+        all_system_content = "\n\n".join(
+            m["content"] for m in messages if m.get("role") == "system"
+        )
+        # Fall back to all-message content if 'role' isn't tagged
+        if not all_system_content:
+            all_system_content = "\n\n".join(m["content"] for m in messages)
 
-        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" in system_content
-        assert "Agent: test_agent" in system_content
-        assert "Description: Test agent for DSDMA evaluation" in system_content
-        assert "Role: Assistant for testing purposes" in system_content
-        assert "============================================" in system_content
+        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" in all_system_content
+        assert "Agent: test_agent" in all_system_content
+        assert "Description: Test agent for DSDMA evaluation" in all_system_content
+        assert "Role: Assistant for testing purposes" in all_system_content
+        assert "============================================" in all_system_content
 
     @pytest.mark.asyncio
     async def test_dsdma_injects_amharic_language_guidance_into_messages(

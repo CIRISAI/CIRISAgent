@@ -288,12 +288,22 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             rights_basis=rights_basis,
             domain_hint=llm_result.domain_hint or original_params.domain_hint,
         )
+        # ActionSelectionDMAResult.resource_usage is JSONDict; LLMBus returns
+        # a ResourceUsage Pydantic object. Convert via model_dump or pass
+        # through if the caller already serialized it.
+        resource_usage_dict: Optional[JSONDict]
+        if resource_usage is None:
+            resource_usage_dict = None
+        elif hasattr(resource_usage, "model_dump"):
+            resource_usage_dict = resource_usage.model_dump()
+        else:
+            resource_usage_dict = resource_usage  # already a dict
         return ActionSelectionDMAResult(
             selected_action=HandlerActionType.DEFER,
             action_parameters=params,
             rationale=f"DSASPDMA: {llm_result.reason_summary}",
             raw_llm_response=llm_result.model_dump_json(),
-            resource_usage=resource_usage,
+            resource_usage=resource_usage_dict,
             user_prompt=self.last_user_prompt,
         )
 

@@ -12,7 +12,7 @@ This ensures:
 
 import logging
 import threading
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.logic.utils.path_resolution import ensure_ciris_home_env
 
@@ -129,6 +129,134 @@ def _setup_logging(verifier: Any) -> None:
 def has_verifier() -> bool:
     """Check if verifier singleton has been initialized."""
     return _verifier is not None
+
+
+def _normalize_descriptor(descriptor: Any) -> Optional[Dict[str, Any]]:
+    """Normalize a storage descriptor to a dict for /health serialization.
+
+    The FFI may return: None | dict | Pydantic model (model_dump) |
+    arbitrary object with __dict__ | scalar (path string). Each shape gets
+    coerced to a dict (or None) so callers see a single contract.
+    """
+    if descriptor is None:
+        return None
+    if isinstance(descriptor, dict):
+        return descriptor
+    if hasattr(descriptor, "model_dump"):
+        try:
+            return dict(descriptor.model_dump())
+        except Exception:
+            pass
+    if hasattr(descriptor, "__dict__"):
+        return {k: v for k, v in descriptor.__dict__.items() if not k.startswith("_")}
+    # Scalar — wrap so downstream consumers can rely on dict shape.
+    return {"value": str(descriptor)}
+
+
+def get_storage_descriptor() -> Optional[Dict[str, Any]]:
+    """Return the verifier's hardware-signer storage descriptor, or None.
+
+    Added 2.7.8.1 for CIRISVerify v1.8.0 (PoB substrate primitive coordination —
+    see https://github.com/CIRISAI/CIRISAgent/issues/708 and
+    https://github.com/CIRISAI/CIRISVerify/issues/1).
+
+    The descriptor declares where the agent's identity seed lives — the same
+    Ed25519 key that signs traces, addresses Reticulum destinations, and
+    authors gratitude signals. Surfacing it on /health and at boot time lets
+    operators confirm the keyring is on a mounted volume rather than silently
+    landing in container ephemeral storage (the lens-scrub-key incident class).
+
+    Returns:
+        Dict-shaped descriptor (path, signer-type, hardware-backed flag, etc.)
+        if the loaded ciris-verify supports it (v1.8.0+).
+        None if the verifier hasn't been initialized, the loaded library
+        predates v1.8.0, or the descriptor call raised.
+
+    Best-effort: this MUST NOT raise. Boot-time logging callers depend on
+    being able to call this without a try/except wrapper.
+    """
+    if _verifier is None:
+        return None
+
+    # Defensive accessor: v1.8.0 ships HardwareSigner.storage_descriptor() but
+    # the exact Python binding surface in older bundled FFI .so files may differ.
+    # Try the documented method name first; fall through to None on any failure.
+    for attr_name in ("storage_descriptor", "get_storage_descriptor"):
+        method = getattr(_verifier, attr_name, None)
+        if not callable(method):
+            continue
+        try:
+            descriptor = method()
+        except Exception as e:
+            logger.debug(
+                "[verifier_singleton] %s() raised: %s — falling through.",
+                attr_name,
+                e,
+            )
+            continue
+        return _normalize_descriptor(descriptor)
+
+    return None
+
+
+def log_storage_descriptor_at_boot() -> None:
+    """Emit a single boot-time log line surfacing the storage descriptor.
+
+    Called once during agent startup. Logs at WARNING level so it surfaces
+    even with default-suppressed runtime loggers — operators need this
+    visible in deploy logs without having to re-run with --debug.
+
+    Silent (DEBUG only) when the descriptor is unavailable, since the v1.8
+    feature is opt-in by ciris-verify version. Loud (WARNING) when the
+    descriptor IS available but points at a path that *looks* ephemeral —
+    a defensive heuristic for the canonical container-misconfiguration
+    failure mode (see issue #708 / CIRISVerify#1).
+    """
+    descriptor = get_storage_descriptor()
+    if descriptor is None:
+        logger.debug(
+            "[verifier_singleton] storage_descriptor() unavailable — "
+            "ciris-verify <1.8.0 or descriptor not yet exposed."
+        )
+        return
+
+    logger.warning(
+        "[verifier_singleton] CIRISVerify storage descriptor: %s",
+        descriptor,
+    )
+
+    # Defensive heuristic: any path string containing /tmp/, /run/, or
+    # /var/lib/docker (without an explicit user override) flags as ephemeral.
+    # This is intentionally conservative — false positives are louder than
+    # false negatives here. The CIRIS_PERSIST_KEYRING_PATH_OK=1 override
+    # mirrors the CIRISPersist convention.
+    import os as _os
+
+    path_value = ""
+    for key in ("path", "keyring_path", "value"):
+        if isinstance(descriptor.get(key), str):
+            path_value = descriptor[key]
+            break
+
+    if not path_value:
+        return
+
+    ephemeral_markers = ("/tmp/", "/run/", "/var/lib/docker")
+    if any(marker in path_value for marker in ephemeral_markers):
+        if _os.environ.get("CIRIS_PERSIST_KEYRING_PATH_OK") == "1":
+            logger.info(
+                "[verifier_singleton] Storage path %s matched ephemeral heuristic "
+                "but CIRIS_PERSIST_KEYRING_PATH_OK=1 is set — proceeding.",
+                path_value,
+            )
+        else:
+            logger.error(
+                "[verifier_singleton] WARNING: keyring path %s looks ephemeral. "
+                "Identity seed may be lost on container restart, which would reset "
+                "this agent's PoB S-factor decay window to zero. Mount a persistent "
+                "volume, or set CIRIS_PERSIST_KEYRING_PATH_OK=1 to acknowledge.",
+                path_value,
+            )
 
 
 def reset_verifier() -> None:

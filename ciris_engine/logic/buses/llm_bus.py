@@ -3,10 +3,13 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import random
 import re
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 from ciris_engine.logic.utils import error_emitter
@@ -19,7 +22,6 @@ if TYPE_CHECKING:
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
@@ -37,6 +39,171 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
+
+
+def _classify_error(exc: BaseException) -> str:
+    """Map an exception to one of the LLMCallEvent.status enum values.
+
+    Keep this list consistent with the schema docstring. Any class not matched
+    here lands in 'other_error'; the exception class name is preserved in
+    error_class so we don't lose fidelity for unrecognized failures.
+    """
+    cls = exc.__class__.__name__.lower()
+    if "timeout" in cls or "deadlineexceeded" in cls:
+        return "timeout"
+    if "ratelimit" in cls or "429" in str(exc)[:32].lower():
+        return "rate_limited"
+    if "modelnotfound" in cls or "model_not_available" in str(exc)[:64].lower():
+        return "model_not_available"
+    if "instructorretry" in cls:
+        return "instructor_retry"
+    return "other_error"
+
+
+def _safe_messages_to_text(messages: List[JSONDict]) -> str:
+    """Serialize the prompt messages list to a flat string for byte-counting
+    and content hashing. Uses JSON for round-trippability."""
+    try:
+        return json.dumps(messages, ensure_ascii=False, sort_keys=False)
+    except (TypeError, ValueError):
+        # Fall back to repr() if any nested object isn't JSON-able
+        return repr(messages)
+
+
+@dataclass
+class LLMCallEventContext:
+    """Bundle of arguments for emitting one ReasoningEvent.LLM_CALL.
+
+    Grouping these into a context dataclass keeps the broadcast helper's
+    parameter count under the 13-arg threshold (was 14 individual kwargs)
+    and gives callers one symbol to construct + reuse on success / failure
+    paths instead of repeating the kwarg list at each emit site.
+    """
+
+    success: bool
+    handler_name: str
+    service_name: str
+    selected_service: Any
+    api_base: Optional[str]
+    response_model: Type[BaseModel]
+    messages: List[JSONDict]
+    result: Optional[BaseModel]
+    usage: Optional[ResourceUsage]
+    duration_ms: float
+    thought_id: Optional[str]
+    task_id: Optional[str]
+    retry_count: int
+    error: Optional[BaseException] = None
+
+
+def _extract_call_model(selected_service: Any) -> Optional[str]:
+    """Get the provider model identifier from whichever attribute the
+    selected_service exposes (varies between services)."""
+    if hasattr(selected_service, "model_name"):
+        return cast(Optional[str], getattr(selected_service, "model_name", None))
+    if hasattr(selected_service, "openai_config") and selected_service.openai_config:
+        return cast(Optional[str], getattr(selected_service.openai_config, "model_name", None))
+    return None
+
+
+def _extract_usage_metrics(
+    usage: Optional[ResourceUsage],
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
+    """Return (prompt_tokens, completion_tokens, cost_usd) from a
+    ResourceUsage record. Tolerates both modern (tokens_input) and legacy
+    (prompt_tokens) field names."""
+    if usage is None:
+        return None, None, None
+    prompt_tokens = getattr(usage, "tokens_input", None) or getattr(usage, "prompt_tokens", None)
+    completion_tokens = getattr(usage, "tokens_output", None) or getattr(usage, "completion_tokens", None)
+    cost_cents = getattr(usage, "cost_cents", None)
+    cost_usd = float(cost_cents) / 100.0 if cost_cents is not None else None
+    return prompt_tokens, completion_tokens, cost_usd
+
+
+def _serialize_response(result: Optional[BaseModel]) -> Tuple[Optional[str], Optional[int]]:
+    """Return (response_text, completion_bytes) from a Pydantic result.
+    Failures here MUST NOT block the broadcast — fall back to (None, None)."""
+    if result is None:
+        return None, None
+    try:
+        if hasattr(result, "model_dump_json"):
+            response_text = result.model_dump_json()
+        else:
+            response_text = json.dumps(getattr(result, "__dict__", {}), default=str)
+    except Exception:
+        return None, None
+    return response_text, len(response_text.encode("utf-8"))
+
+
+def _resolve_status_and_error_class(
+    success: bool, error: Optional[BaseException]
+) -> Tuple[str, Optional[str]]:
+    """Map (success, error) to (status_enum, error_class_name)."""
+    if success:
+        return "ok", None
+    if error is None:
+        return "other_error", None
+    return _classify_error(error), error.__class__.__name__
+
+
+async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
+    """Emit one ReasoningEvent.LLM_CALL per provider invocation.
+
+    Called from BOTH the success path (in _execute_llm_call after the call
+    returns) and the failure path (in _try_service's exception handler) so
+    every call — successful, retried, or failed — produces exactly one
+    discrete event. Best-effort: any exception in the broadcast itself is
+    logged and swallowed so the LLM call path is never affected by trace-side
+    issues.
+    """
+    try:
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+
+        model = _extract_call_model(ctx.selected_service)
+        prompt_tokens, completion_tokens, cost_usd = _extract_usage_metrics(ctx.usage)
+
+        prompt_text = _safe_messages_to_text(ctx.messages)
+        prompt_bytes = len(prompt_text.encode("utf-8"))
+        prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+
+        response_text, completion_bytes = _serialize_response(ctx.result)
+        status, error_class = _resolve_status_and_error_class(ctx.success, ctx.error)
+
+        event = create_reasoning_event(
+            event_type=ReasoningEvent.LLM_CALL,
+            thought_id=ctx.thought_id,
+            task_id=ctx.task_id,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            handler_name=ctx.handler_name,
+            service_name=ctx.service_name,
+            model=model,
+            base_url=ctx.api_base,
+            response_model=ctx.response_model.__name__,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            prompt_bytes=prompt_bytes,
+            completion_bytes=completion_bytes,
+            cost_usd=cost_usd,
+            duration_ms=float(ctx.duration_ms),
+            status=status,
+            error_class=error_class,
+            attempt_count=1,  # Instructor-level attempt count not surfaced through bus today; reserved
+            retry_count=ctx.retry_count,
+            prompt_hash=prompt_hash,
+            # prompt and response_text are populated for the trace adapter to gate
+            # by trace level (DETAILED+ keeps hash; FULL keeps full text). The bus
+            # ships them and lets the adapter strip per-level.
+            prompt=prompt_text,
+            response_text=response_text,
+        )
+        await reasoning_event_stream.broadcast_reasoning_event(event)
+    except Exception as broadcast_exc:
+        # Trace plumbing failure must never break the LLM call path. Log once
+        # at warning level so the gap is visible in incidents.
+        logger.warning(f"[LLM_CALL broadcast] failed: {broadcast_exc!r}", exc_info=False)
 
 
 class DistributionStrategy(str, Enum):
@@ -605,6 +772,11 @@ class LLMBus(BaseBus[LLMService]):
         last_was_rate_limit = False
 
         while retry_count < max_retries:
+            # Capture per-attempt start so duration_ms on the LLM_CALL event
+            # reflects THIS invocation only, not the cumulative time across
+            # retries. Without this, the second timeout reports "first +
+            # second" elapsed and tail-latency hotspot analysis breaks.
+            attempt_start_time = self._time_service.timestamp()
             try:
                 result, usage = await self._execute_llm_call(
                     selected_service,
@@ -617,6 +789,7 @@ class LLMBus(BaseBus[LLMService]):
                     task_id,
                     handler_name,
                     start_time,
+                    attempt_start_time,
                     retry_count,
                 )
                 return result, usage, None, False
@@ -627,6 +800,36 @@ class LLMBus(BaseBus[LLMService]):
 
             except Exception as e:
                 service_last_error = e
+
+                # Per-call failure broadcast — every failed LLM invocation
+                # gets its own LLM_CALL event with status != 'ok'. This is
+                # what makes the Spanish-MH-style three-consecutive-timeouts
+                # diagnosis a one-query lookup instead of a log scrape.
+                # Use attempt-local timing so each retry's reported duration
+                # is the wall-clock of that attempt only.
+                api_base = None
+                if hasattr(selected_service, "openai_config") and selected_service.openai_config:
+                    api_base = getattr(selected_service.openai_config, "base_url", None)
+                attempt_duration_ms = (self._time_service.timestamp() - attempt_start_time) * 1000
+                await _broadcast_llm_call_event(
+                    LLMCallEventContext(
+                        success=False,
+                        handler_name=handler_name,
+                        service_name=service_name,
+                        selected_service=selected_service,
+                        api_base=api_base,
+                        response_model=response_model,
+                        messages=normalized_messages,
+                        result=None,
+                        usage=None,
+                        duration_ms=attempt_duration_ms,
+                        thought_id=thought_id,
+                        task_id=task_id,
+                        retry_count=retry_count,
+                        error=e,
+                    )
+                )
+
                 retry_count += 1
 
                 action, last_was_rate_limit, rate_limit_retry_count, rate_limit_start_time = (
@@ -661,12 +864,19 @@ class LLMBus(BaseBus[LLMService]):
         task_id: Optional[str],
         handler_name: str,
         start_time: float,
+        attempt_start_time: float,
         retry_count: int,
     ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
         """Execute the actual LLM call and record metrics on success.
 
         Acquires the per-service FIFO concurrency gate before dispatch so
         excess callers queue rather than all racing the provider at once.
+
+        `start_time` is the request-level wall clock (used for existing
+        service-level telemetry) and `attempt_start_time` is captured once
+        per retry iteration in `_try_service` (used for the LLM_CALL
+        event's per-attempt duration_ms — without this distinction, retries
+        report cumulative time and tail-latency analysis breaks).
         """
         semaphore = self._get_service_semaphore(service_name)
         # Log when we actually have to wait so saturation is visible.
@@ -713,6 +923,31 @@ class LLMBus(BaseBus[LLMService]):
             api_base = getattr(selected_service.openai_config, "base_url", None)
         await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id, api_base)
         logger.info(f"[LLM-TIMING] {handler_name} {thought_id or 'no-thought'}: {latency_ms:.0f}ms via {service_name}")
+
+        # Per-call broadcast — every LLM invocation is a discrete observation
+        # for the trace persistence layer (FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        # §5.2). Aggregate cost columns hide tail-latency and per-call failure
+        # patterns; LLM_CALL events restore that visibility.
+        # duration_ms uses attempt_start_time so the event reflects THIS
+        # invocation only — not the cumulative time across retries.
+        attempt_duration_ms = (self._time_service.timestamp() - attempt_start_time) * 1000
+        await _broadcast_llm_call_event(
+            LLMCallEventContext(
+                success=True,
+                handler_name=handler_name,
+                service_name=service_name,
+                selected_service=selected_service,
+                api_base=api_base,
+                response_model=response_model,
+                messages=normalized_messages,
+                result=result,
+                usage=usage,
+                duration_ms=attempt_duration_ms,
+                thought_id=thought_id,
+                task_id=task_id,
+                retry_count=retry_count,
+            )
+        )
 
         return result, usage
 

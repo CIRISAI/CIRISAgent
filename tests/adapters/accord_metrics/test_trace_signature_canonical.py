@@ -1,19 +1,29 @@
 """
 Pin the canonical message format used for Ed25519 trace signing.
 
-Lens verifies signatures by rebuilding the canonical JSON from the received
-trace and comparing against the signature. If the agent's signed bytes differ
-by even one character from what lens reconstructs, every trace is rejected
-with BadSignatureError and nothing lands in the DB.
+The 9-field canonical per FSD/TRACE_WIRE_FORMAT.md §8 (post-2.7.8.9 / #710):
 
-The shape is defined by CIRISLens/api/accord_api.py::verify_trace_signature:
+    canonical = {
+      "trace_id":             trace.trace_id,
+      "thought_id":           trace.thought_id,
+      "task_id":              trace.task_id,
+      "agent_id_hash":        trace.agent_id_hash,
+      "started_at":           trace.started_at.isoformat(),
+      "completed_at":         trace.completed_at.isoformat(),
+      "trace_level":          trace.trace_level,
+      "trace_schema_version": trace.trace_schema_version,
+      "components":           [strip_empty({component_type,data,event_type,timestamp}), ...]
+    }
+    message = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
 
-    components_data = [strip_empty(c.model_dump()) for c in trace.components]
-    signed_payload = {"components": components_data, "trace_level": trace_level}
-    message = json.dumps(signed_payload, sort_keys=True, separators=(",", ":"))
+Migration from the legacy 2-field (`{"components", "trace_level"}`) was gated
+on persist v0.1.15 shipping its `try-both` fallback verifier. Once persist
+accepts both shapes, the agent flips to the 9-field spec; once the agent
+fleet has flipped, persist drops the 2-field path on a future minor.
 
-These tests lock in the contract so future schema evolution can't silently
-drift — if lens updates its verifier, these must be updated in lockstep.
+These tests lock the canonical bytes shape — any drift (key set, key order,
+value formatting, separators) breaks signature verification on every trace
+and gets caught at CI time rather than in production.
 """
 
 import hashlib
@@ -32,7 +42,12 @@ from ciris_adapters.ciris_accord_metrics.services import (
 
 
 def _build_expected_message(trace: CompleteTrace) -> bytes:
-    """Reproduce lens's canonical-message construction byte-for-byte."""
+    """Reproduce the 9-field canonical (FSD/TRACE_WIRE_FORMAT.md §8) byte-for-byte.
+
+    Persist v0.1.15+ verifies against this exact shape. Any drift here means
+    every trace gets rejected with verify_signature_mismatch — caught in tests
+    rather than in production.
+    """
     components_data = [
         _strip_empty(
             {
@@ -44,11 +59,18 @@ def _build_expected_message(trace: CompleteTrace) -> bytes:
         )
         for c in trace.components
     ]
-    signed_payload = {
-        "components": components_data,
+    canonical = {
+        "trace_id": trace.trace_id,
+        "thought_id": trace.thought_id,
+        "task_id": trace.task_id,
+        "agent_id_hash": trace.agent_id_hash,
+        "started_at": trace.started_at if isinstance(trace.started_at, str) else trace.started_at.isoformat(),
+        "completed_at": trace.completed_at if isinstance(trace.completed_at, str) else trace.completed_at.isoformat(),
         "trace_level": trace.trace_level,
+        "trace_schema_version": trace.trace_schema_version,
+        "components": components_data,
     }
-    return json.dumps(signed_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _make_signer_with_key():
@@ -88,27 +110,50 @@ def _make_trace(level: str = "generic") -> CompleteTrace:
     )
 
 
-def test_signed_payload_excludes_trace_schema_version():
-    """trace_schema_version must NOT appear in the signed bytes.
+def test_signed_payload_includes_all_9_canonical_fields():
+    """The 9-field spec canonical (FSD/TRACE_WIRE_FORMAT.md §8) — replaces the
+    legacy 2-field shape. Locked in by 2.7.8.9 / CIRISAgent#710 once persist
+    v0.1.15 shipped its try-both fallback.
 
-    Lens's verify_trace_signature does NOT include it in the canonical
-    payload. Including it on the agent side breaks every signature.
+    The seven additional fields vs the legacy 2-field bind more provenance
+    into the signed bytes — federation peers verify "this agent claims this
+    thought_id at this time was signed under this schema version" without
+    trusting the envelope wrapping.
     """
     signer, mock_key = _make_signer_with_key()
     trace = _make_trace()
 
     assert signer.sign_trace(trace) is True
 
-    # Capture what was signed
     signed_bytes = mock_key.sign_base64.call_args[0][0]
     payload = json.loads(signed_bytes.decode("utf-8"))
 
-    assert "trace_schema_version" not in payload
-    assert set(payload.keys()) == {"components", "trace_level"}
+    expected_keys = {
+        "trace_id",
+        "thought_id",
+        "task_id",
+        "agent_id_hash",
+        "started_at",
+        "completed_at",
+        "trace_level",
+        "trace_schema_version",
+        "components",
+    }
+    assert set(payload.keys()) == expected_keys, (
+        f"Canonical key set drift! Got {sorted(payload.keys())}, expected {sorted(expected_keys)}"
+    )
+
+    # trace_schema_version IS in the signed bytes (legacy 2-field excluded it)
+    assert payload["trace_schema_version"] == trace.trace_schema_version
+    # Provenance fields populated
+    assert payload["trace_id"] == "trace-test-1"
+    assert payload["thought_id"] == "th-1"
+    assert payload["task_id"] == "task-1"
+    assert payload["agent_id_hash"] == "deadbeef"
 
 
-def test_signed_payload_matches_lens_canonical_format():
-    """Exact byte-for-byte match against lens's reconstruction."""
+def test_signed_payload_matches_9_field_spec_canonical():
+    """Exact byte-for-byte match against the 9-field spec canonical."""
     signer, mock_key = _make_signer_with_key()
     trace = _make_trace(level="detailed")
 
@@ -127,7 +172,8 @@ def test_signed_payload_matches_lens_canonical_format():
 
 
 def test_signed_payload_has_sorted_keys_and_compact_separators():
-    """Lens uses sort_keys=True + separators=(',', ':'). Must match exactly."""
+    """Spec uses sort_keys=True + separators=(',', ':'). Must match exactly —
+    persist canonicalizes the same way and any drift breaks every signature."""
     signer, mock_key = _make_signer_with_key()
     trace = _make_trace()
 
@@ -138,8 +184,9 @@ def test_signed_payload_has_sorted_keys_and_compact_separators():
     # Compact separators: no space after comma, no space after colon
     assert ", " not in signed_str
     assert ": " not in signed_str
-    # Keys are alphabetically sorted at the top level
-    assert signed_str.startswith('{"components":')
+    # Keys alphabetically sorted at the top level — first is "agent_id_hash"
+    # in the 9-field spec (it sorts before "components")
+    assert signed_str.startswith('{"agent_id_hash":')
 
 
 def test_strip_empty_applies_to_component_wrapper_not_just_data():

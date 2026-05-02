@@ -1070,11 +1070,24 @@ class AccordMetricsService:
             payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/accord/events"
+
+        # Serialize the body ONCE, here, with aiohttp's default settings so the
+        # bytes we tee, hash, and POST are byte-identical. Pre-2.7.8.12 the tee
+        # used `ensure_ascii=False, separators=(",", ":")` while aiohttp's
+        # `json=payload` path used `json.dumps` defaults (`ensure_ascii=True`,
+        # spaced separators) — the two byte sequences differed on every
+        # non-ASCII character and every comma/colon, so persist's
+        # body_sha256_prefix join from rejected wire bytes never matched any
+        # local-tee file. Single source of truth eliminates that drift.
+        body = json.dumps(payload).encode("utf-8")
+        body_sha256 = hashlib.sha256(body).hexdigest()
         logger.info(
-            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, trace_level={self._trace_level.value})"
+            f"📡 [{self._adapter_instance_id}] POST {url} ({len(events)} events, "
+            f"trace_level={self._trace_level.value}, body_bytes={len(body)}, "
+            f"body_sha256={body_sha256[:16]}...)"
         )
 
-        # Local tee: write the same payload we POST to disk if the operator
+        # Local tee: write the EXACT bytes we POST to disk if the operator
         # opted in via CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR. Done BEFORE the
         # POST so an operator killing the run mid-flight still has whatever
         # was about to ship. Disk failures must NEVER block the POST — the
@@ -1087,20 +1100,20 @@ class AccordMetricsService:
                 # by the persist engine's batch-replay path.
                 ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
                 copy_path = self._local_copy_dir / f"accord-batch-{ts}-{self._local_copy_seq:04d}.json"
-                copy_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+                copy_path.write_bytes(body)
                 logger.debug(
-                    f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events) to {copy_path}"
+                    f"📂 [{self._adapter_instance_id}] Tee'd batch ({len(events)} events, "
+                    f"body_sha256={body_sha256[:16]}) to {copy_path}"
                 )
-            except (OSError, PermissionError, TypeError) as e:
-                # TypeError catches the rare case of a non-JSON-serializable
-                # value sneaking into events — the POST will fail too in that
-                # case, but the tee shouldn't be the thing that surfaces it.
+            except (OSError, PermissionError) as e:
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] Local-copy write failed ({e}); "
                     f"proceeding with POST. The lens will still receive this batch."
                 )
 
-        async with self._session.post(url, json=payload) as response:
+        async with self._session.post(
+            url, data=body, headers={"Content-Type": "application/json"}
+        ) as response:
             if response.status != 200:
                 error_text = await response.text()
                 # 4xx (except 429) → content rejection, the same bytes will

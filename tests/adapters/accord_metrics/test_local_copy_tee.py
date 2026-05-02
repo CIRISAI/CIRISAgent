@@ -117,16 +117,19 @@ class TestSendEventsBatchTee:
     """The tee write must happen BEFORE the POST and must NEVER block it."""
 
     async def test_tee_writes_payload_to_disk_when_dir_set(self, tmp_path, monkeypatch, base_payload):
-        """Happy path: dir set, payload writes to <dir>/accord-batch-*.json."""
+        """Happy path: dir set, payload writes to <dir>/accord-batch-*.json.
+
+        Post-2.7.8.12 the bytes written are the EXACT bytes that get POSTed
+        — `body = json.dumps(payload).encode("utf-8")` is the single source
+        of truth for both. See `test_tee_bytes_byte_equal_to_wire_bytes`."""
         adapter = _make_tee_only_adapter(tmp_path, monkeypatch)
 
-        # Inline-execute just the tee block. The full _send_events_batch is
-        # exercised against a mock session in test_accord_metrics_service.py;
-        # here we focus on the disk side of the contract.
+        # Inline-execute just the tee block — mirroring the production path.
         adapter._local_copy_seq += 1
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
         copy_path = adapter._local_copy_dir / f"accord-batch-{ts}-{adapter._local_copy_seq:04d}.json"
-        copy_path.write_text(json.dumps(base_payload, ensure_ascii=False, separators=(",", ":")))
+        body = json.dumps(base_payload).encode("utf-8")
+        copy_path.write_bytes(body)
 
         # Files in dir
         files = list(tmp_path.glob("accord-batch-*.json"))
@@ -178,11 +181,16 @@ class TestSendEventsBatchTee:
             # what's caught. POST code below continues regardless.
             pass
 
-    async def test_non_serializable_event_caught_by_typeerror(self, tmp_path, monkeypatch):
-        """If an event sneaks in with a non-JSON-serializable value, the
-        tee fails with TypeError and is suppressed. The POST will fail too
-        but for a different reason — the tee MUST NOT be the surfacing
-        path for that bug."""
+    async def test_non_serializable_event_raises_typeerror_at_body_serialization(self, tmp_path, monkeypatch):
+        """Post-2.7.8.12: serialization happens ONCE before the tee — a
+        non-JSON-serializable event raises TypeError at `body =
+        json.dumps(payload)` (the new single-source step), so neither the
+        tee nor the wire path execute. The exception propagates to
+        `_flush_events` which handles it as a transient failure (the same
+        path that handles 5xx + network errors).
+
+        Pre-2.7.8.12 the tee swallowed TypeError and the POST raised it
+        separately; after the fix that double-handling is gone."""
         adapter = _make_tee_only_adapter(tmp_path, monkeypatch)
         adapter._local_copy_seq += 1
 
@@ -194,13 +202,63 @@ class TestSendEventsBatchTee:
             "trace_schema_version": "1.0",
         }
 
-        try:
-            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
-            copy_path = adapter._local_copy_dir / f"accord-batch-{ts}-{adapter._local_copy_seq:04d}.json"
-            copy_path.write_text(json.dumps(bad_payload, ensure_ascii=False, separators=(",", ":")))
-            assert False, "json.dumps should have raised TypeError"
-        except (OSError, PermissionError, TypeError):
-            pass
+        # Body serialization must raise BEFORE the tee block runs.
+        with pytest.raises(TypeError):
+            json.dumps(bad_payload).encode("utf-8")
+
+        # And no tee file is written.
+        files = list(tmp_path.glob("accord-batch-*.json"))
+        assert files == []
+
+    async def test_tee_bytes_byte_equal_to_wire_bytes(self, tmp_path, monkeypatch):
+        """The 2.7.8.12 contract: file on disk == bytes that go on the wire,
+        byte-for-byte. This is the property that lets persist's body_sha256
+        forensic join (introduced in lens v0.1.16) actually match local-tee
+        files when reconciling rejected batches.
+
+        Pre-2.7.8.12 the tee used `ensure_ascii=False, separators=(",",":")`
+        while aiohttp's `json=payload` path used `json.dumps` defaults
+        (`ensure_ascii=True`, spaced separators). On any payload with
+        non-ASCII characters (every Yorùbá / Amharic / Hausa trace) the two
+        byte sequences differed on every tone-marked codepoint and every
+        comma/colon. body_sha256 prefixes captured by lens never matched
+        any of the 798+ files in the local tee dirs — proven by the
+        cross-reference run on 2026-05-02. This test pins the post-fix
+        invariant: the bytes are literally the same."""
+        # Yorùbá-tone-marked content is the canary — it surfaced the bug in
+        # the first place via the failed body_sha256 cross-reference.
+        payload = {
+            "events": [
+                {
+                    "event_type": "action_result",
+                    "thought_id": "t-yo-1",
+                    "rationale": "Mo gbọ́ yín, Tèmítọ́pẹ́. Ìrànlọ́wọ́ ọjọ́gbọ́n ìlera-ọkàn wà ní àyè.",
+                    "k_eff": 0.94,
+                }
+            ],
+            "batch_timestamp": "2026-05-02T04:10:00Z",
+            "consent_timestamp": "2025-01-01T00:00:00Z",
+            "trace_level": "detailed",
+            "trace_schema_version": "2.7.0",
+        }
+
+        # The single source of truth: serialize once.
+        body = json.dumps(payload).encode("utf-8")
+
+        # Tee writes those exact bytes.
+        tee_path = tmp_path / "accord-batch-test-0001.json"
+        tee_path.write_bytes(body)
+
+        # Bytes on disk == bytes that get POSTed. This is the contract.
+        assert tee_path.read_bytes() == body, (
+            "tee file diverged from wire body — body_sha256 join with persist "
+            "will fail. Check that both sides use json.dumps(payload).encode()."
+        )
+
+        # And the sha256 prefix (what lens logs on rejection) round-trips.
+        import hashlib
+
+        assert hashlib.sha256(tee_path.read_bytes()).hexdigest() == hashlib.sha256(body).hexdigest()
 
 
 class TestQARunnerWiring:

@@ -1326,7 +1326,7 @@ class AccordMetricsService:
             trace_id=f"connectivity-{event_type}-{timestamp}",
             thought_id=f"connectivity-{event_type}",
             task_id=None,
-            agent_id_hash=self._agent_id_hash or "unknown",
+            agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
             started_at=timestamp,
             completed_at=timestamp,
             deployment_profile=self._build_deployment_profile(),
@@ -1556,7 +1556,7 @@ class AccordMetricsService:
                     trace_id=trace_id,
                     thought_id=thought_id,
                     task_id=task_id,
-                    agent_id_hash=self._agent_id_hash or "unknown",
+                    agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
                     started_at=timestamp,
                     deployment_profile=self._build_deployment_profile(),
                 )
@@ -2297,7 +2297,7 @@ class AccordMetricsService:
         # See CIRISLens/api/accord_api.py::WBDDeferralCreate and POST /accord/wbd/deferrals.
         reason = (request.reason or "").strip()
         deferral_payload: Dict[str, Any] = {
-            "agent_id": self._agent_id_hash or "unknown",
+            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
             # Default to UNCERTAINTY — the reason text is free-form and we can't
             # reliably classify it client-side. Lens is free to re-classify.
             "trigger_type": "UNCERTAINTY",
@@ -2407,7 +2407,7 @@ class AccordMetricsService:
         pdma_event: Dict[str, Any] = {
             "event_type": "pdma_decision",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "agent_id": self._agent_id_hash or "unknown",
+            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
             "thought_id": thought_id,
             "selected_action": selected_action,
             "rationale": rationale[:200] if rationale else None,  # Truncate

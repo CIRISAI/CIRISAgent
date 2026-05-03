@@ -290,10 +290,10 @@ def parse_qa_runner_log(log_path: Path) -> list[QResult]:
 
 # ---------- lens-trace parsing ------------------------------------------
 
-def parse_lens_traces(lens_dir: Path) -> tuple[dict[str, dict], dict[str, int]]:
+def parse_lens_traces(lens_dir: Path) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
     """Returns (per_thought_signals, channel_to_qnum)."""
     files = sorted(lens_dir.glob("accord-batch-*.json"))
-    per_thought: dict[str, dict] = {}
+    per_thought: dict[str, dict[str, Any]] = {}
     channel_q: dict[str, int] = {}
 
     for f in files:
@@ -367,11 +367,12 @@ def check_rubric_substrings(text: str, lang: str) -> dict[str, list[str]]:
 
 # ---------- ledger ------------------------------------------------------
 
-def load_ledger() -> dict:
-    return json.loads(LEDGER.read_text())
+def load_ledger() -> dict[str, Any]:
+    data: dict[str, Any] = json.loads(LEDGER.read_text())
+    return data
 
 
-def prior_runs_for(ledger: dict, lang: str, corpus_stem: str) -> list[dict]:
+def prior_runs_for(ledger: dict[str, Any], lang: str, corpus_stem: str) -> list[dict[str, Any]]:
     return [
         s for s in ledger.get("sweeps", [])
         if s.get("language") == lang and corpus_stem in s.get("corpus", "")
@@ -382,7 +383,7 @@ def suggest_ledger_entry(
     *, lang: str, corpus_stem: str, corpus_path: Path,
     log_dir: Path, results: list[QResult], duration_s: float,
     model: str, base_url: str, provider: str, notes: str = "",
-) -> dict:
+) -> dict[str, Any]:
     n_speak = sum(1 for r in results if r.action == "SPEAK")
     n_defer = sum(1 for r in results if r.action == "DEFER")
     n_other = len(results) - n_speak - n_defer
@@ -432,7 +433,7 @@ def _git_describe() -> str:
         return "unknown"
 
 
-def write_ledger_entry(entry: dict) -> None:
+def write_ledger_entry(entry: dict[str, Any]) -> None:
     ledger = load_ledger()
     # Avoid dupe id
     existing_ids = {s["id"] for s in ledger.get("sweeps", [])}
@@ -449,7 +450,7 @@ def write_ledger_entry(entry: dict) -> None:
 
 def render_report(
     lang: str, results: list[QResult],
-    prior: list[dict], suggested_entry: dict,
+    prior: list[dict[str, Any]], suggested_entry: dict[str, Any],
 ) -> str:
     lines: list[str] = []
     lines.append(f"\n=== {lang.upper()} v3 MH-ARC sweep — {suggested_entry['id']} ===")

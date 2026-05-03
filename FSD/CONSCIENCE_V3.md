@@ -1,6 +1,6 @@
 # Conscience v3 — 3 LLM Shards + Deterministic Gate
 
-**Status:** Proposal
+**Status:** Stage 1 + Phase-2 DEFER landed in `c6411c7d9` (2026-05-03). Stages 2-4 remain.
 **Scope:** `ciris_engine/logic/conscience/` — the 4 IRIS shards
 **Prerequisites:** IRIS-E v2.0 (semantic-entropy self-resampling, already deployed)
 **Defers:** Recursive Interaction Information (II) monitoring — addressed separately once v3 baselines
@@ -101,11 +101,23 @@ Migration path:
 
 ## Migration plan
 
-**Stage 1 — schema expansion (backwards-compatible)**
-- Extend `CoherenceResult` with optional fields.
-- Add TOOL branch to `entropy_conscience.yml` and `coherence_conscience.yml`.
-- Lift SPEAK-only short-circuits in `core.py:273` and `core.py:397` to `{SPEAK, TOOL}`.
-- Keep H running. Ship.
+**Stage 1 — schema expansion (backwards-compatible)** — ✅ landed `c6411c7d9` 2026-05-03
+- ⏳ Extend `CoherenceResult` with optional fields. (deferred — schema-enrichment carries to Stage 2 alongside heuristic-gate work; not load-bearing for the verb-scope expansion that landed)
+- ✅ Add TOOL branch to `entropy_conscience.yml` and `coherence_conscience.yml`. Done as verb-agnostic "ACTION TO ASSESS" wording + per-verb extraction note covering SPEAK/TOOL/DEFER.
+- ✅ Lift SPEAK-only short-circuits in `core.py` to `{SPEAK, TOOL}` (Entropy) and `{SPEAK, TOOL, DEFER}` (Coherence — see Phase-2 below). New `_BaseConscience._render_action_text` helper renders verb-specific content (`SPEAK→content`, `TOOL→"TOOL CALL: name(args)"`, `DEFER→"DEFER REASON: reason"`).
+- ✅ Localized prompt fanout to all 28 locales — CONSCIENCE-V3 SCOPE comment header carries canonical SPEAK/TOOL/DEFER tokens (file-text-counted by zh-chain canonical_action_verbs_preserved test, excluded from natural-language script-ratio test which only loads YAML strings).
+- Keep H running. ✅ Shipped.
+
+**Stage 1 Phase-2 — DEFER → Coherence + EOV + EpistemicHumility** — ✅ landed `c6411c7d9` 2026-05-03 (additive to original FSD scope per 2026-05-03 verb-scope investigation)
+- ✅ DEFER removed from outer `_is_exempt_from_conscience_checks` set in `conscience_execution.py` and the mirror set in `main.py`. DEFER now flows through Coherence + EOV + EH (Entropy stays scoped via inner guard — DEFER reasons aren't narrative response content with semantic-alternative space).
+- ✅ Coherence inner guard extended to `{SPEAK, TOOL, DEFER}` so the DEFER reason text is judged against CIRIS principles + user message coherence.
+- ✅ Test update: `test_process_thought_with_defer` now asserts `original_action.selected_action == DEFER` (DMA output unchanged) AND `final_action.selected_action ∈ {DEFER, PONDER}` — DEFER may now be conscience-overridden to PONDER on borderline framings.
+- **Why this addition:** catches defensive-mimicry refusal framing in DEFER reasons that previously bypassed all conscience evaluation. Pure positive coverage — no SPEAK/TOOL behavior changed.
+
+**Stage 1 Phase-3 — `CoherenceResult` schema enrichment** — pending
+- Add optional `justification: str = ""`, `flagged_patterns: list[str] = []`, `alignment_score: float | None = None`, `context_fit_score: float | None = None` with `extra="ignore"` so legacy provider outputs still parse.
+- Update `coherence_conscience.yml` prompt to request the new fields.
+- This is what the load-bearing schema migration section calls out as the "single most important change" — splitting it from Phase-1 lets the verb-scope expansion ship and accumulate validation data ahead of the schema work.
 
 **Stage 2 — heuristic gate shadow mode**
 - Implement `HeuristicGateResult` and the deterministic function.

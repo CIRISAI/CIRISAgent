@@ -143,5 +143,22 @@ system_prompt: |
   — the three alternatives should converge, entropy should be low.
   Do not rely on any visual content; evaluate on text + metadata only.
 
-user_prompt_template: "ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}"
+user_prompt_template: |
+  ASSISTANT ACTION TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+
+  (The action above may be a SPEAK reply or a TOOL CALL: line. For SPEAK,
+  enumerate alternative response meanings the agent could have produced. For
+  TOOL CALL, enumerate alternative tool+argument combinations a thoughtful
+  agent could have chosen for the same underlying task. Both are anchoring
+  measurements: is the actual action representative of the alternative
+  cluster, or an outlier?)
+user_prompt_with_image_template: |
+  {image_context}
+
+  ASSISTANT ACTION TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+
+  (The action above may be a SPEAK reply or a TOOL CALL: line. For SPEAK,
+  enumerate alternative response meanings. For TOOL CALL, enumerate alternative
+  tool+argument combinations.)

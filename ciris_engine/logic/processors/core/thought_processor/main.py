@@ -1394,10 +1394,15 @@ class ThoughtProcessor(
         return is_conscience_retry
 
     def _is_exempt_from_conscience_checks(self, action_result: ActionSelectionDMAResult) -> bool:
-        """Check if action is exempt from conscience override."""
+        """Check if action is exempt from conscience override.
+
+        Updated 2026-05-03: DEFER no longer exempt — Coherence, OptimizationVeto,
+        and EpistemicHumility now evaluate defer `reason` for defensive-mimicry
+        refusal framing. See conscience_execution.py:140 for the full rationale
+        and the matching Conscience runs / exempt action lists.
+        """
         exempt_actions = {
             HandlerActionType.TASK_COMPLETE.value,
-            HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }
         return action_result.selected_action in exempt_actions

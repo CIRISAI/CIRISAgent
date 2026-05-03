@@ -134,14 +134,22 @@ class ConscienceExecutionPhase:
                 updated_status_detected=bypass_result.get("updated_status_detected"),
             )
 
-        # Exempt actions that shouldn't be overridden by NORMAL consciences
-        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET (5 actions)
-        # Conscience exempt: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (5 actions)
+        # Exempt actions that shouldn't be overridden by NORMAL consciences.
+        #
+        # Updated 2026-05-03: DEFER removed from exempt set so Coherence,
+        # OptimizationVeto, and EpistemicHumility can evaluate the
+        # agent-generated defer `reason` for defensive-mimicry refusal
+        # framing (e.g. topic-substitution dodges, principled-clothing
+        # cowardice per PDMA §VIII). Entropy still skips DEFER per its
+        # inner verb-scope guard (SPEAK+TOOL only — DEFER reasons are
+        # short structured prose, not narrative response content).
+        #
+        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET, DEFER (6 actions)
+        # Conscience exempt:   RECALL, TASK_COMPLETE, OBSERVE, REJECT (4 actions)
         exempt_actions = {
             HandlerActionType.RECALL.value,
             HandlerActionType.TASK_COMPLETE.value,
             HandlerActionType.OBSERVE.value,
-            HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }
 

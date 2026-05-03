@@ -247,6 +247,40 @@ class _BaseConscience(ConscienceInterface):
             text = text[: self._USER_MESSAGE_MAX_CHARS] + "...[truncated]"
         return text
 
+    def _render_action_text(self, action: ActionSelectionDMAResult) -> str:
+        """Render the agent-generated content of an action as text for Entropy/Coherence to evaluate.
+
+        Per CONSCIENCE_V3.md migration plan and the agent-side investigation
+        (2026-05-03), Entropy and Coherence apply to a verb-set broader than
+        just SPEAK. This helper extracts the verb-specific content surface:
+
+          SPEAK   → action_parameters.content   (the agent's response text)
+          TOOL    → "{name}({args})"            (the agent's tool call rendering)
+          DEFER   → action_parameters.reason    (the agent's defer reason)
+
+        Other verbs (PONDER, MEMORIZE, FORGET, REJECT) have callers that
+        should not yet route through this helper — Phase 1 is SPEAK+TOOL+DEFER.
+
+        Returns empty string when the verb has no agent-generated content
+        suitable for evaluation; the caller will treat this as MSG_NO_CONTENT
+        and skip the LLM call.
+        """
+        params = action.action_parameters
+        if action.selected_action == HandlerActionType.SPEAK:
+            return getattr(params, "content", "") or ""
+        if action.selected_action == HandlerActionType.TOOL:
+            name = getattr(params, "name", "") or "unknown_tool"
+            args = getattr(params, "parameters", {}) or {}
+            try:
+                arg_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+            except (AttributeError, TypeError):
+                arg_str = str(args)
+            return f"TOOL CALL: {name}({arg_str})"
+        if action.selected_action == HandlerActionType.DEFER:
+            reason = getattr(params, "reason", "") or ""
+            return f"DEFER REASON: {reason}" if reason else ""
+        return ""
+
     def _get_image_context_info(self, context: ConscienceCheckContext) -> Optional[str]:
         """
         Get textual metadata about images in context for conscience evaluation.
@@ -295,8 +329,13 @@ class EntropyConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no entropy check needed", start_time)
+        # Entropy verb-scope: SPEAK + TOOL (per FSD/CONSCIENCE_V3.md Stage 1
+        # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
+            self._update_trace_correlation(
+                correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time
+            )
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -311,11 +350,7 @@ class EntropyConscience(_BaseConscience):
                 reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
@@ -428,8 +463,19 @@ class CoherenceConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no coherence check needed", start_time)
+        # Coherence verb-scope: SPEAK + TOOL + DEFER. Phase-1 extension
+        # beyond SPEAK-only per FSD/CONSCIENCE_V3.md (TOOL) plus defer-reason
+        # coherence per the 2026-05-03 verb-scope investigation (Phase 2):
+        # catches defensive-mimicry refusal framing in DEFER reasons.
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (
+            HandlerActionType.SPEAK,
+            HandlerActionType.TOOL,
+            HandlerActionType.DEFER,
+        ):
+            self._update_trace_correlation(
+                correlation, True, "Verb out of Coherence scope (SPEAK+TOOL+DEFER only)", start_time
+            )
             return ConscienceCheckResult(status=ConscienceStatus.PASSED, passed=True, check_timestamp=ts_datetime)
         sink = await self._get_sink()
         if not sink:
@@ -440,11 +486,7 @@ class CoherenceConscience(_BaseConscience):
                 reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(

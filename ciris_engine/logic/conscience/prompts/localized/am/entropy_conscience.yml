@@ -1,3 +1,14 @@
+# CONSCIENCE-V3 SCOPE: this prompt evaluates Entropy on action verbs
+# SPEAK and TOOL. (TOOL added per FSD/CONSCIENCE_V3.md Stage 1.)
+# Action types: SPEAK / TOOL CALL.
+#
+# Per-verb extraction:
+#   SPEAK → text content of the agent's reply
+#   TOOL  → "TOOL CALL: name(args)" rendering
+#
+# When evaluating SPEAK, enumerate response-meaning alternatives.
+# When evaluating TOOL, enumerate tool+argument-combination alternatives.
+# Both SPEAK and TOOL produce the same Entropy scalar shape regardless of verb.
 version: '2.1'
 # v2.1: canonical-refusal recognition added (2026-05-03 fanout from base 0dd6e61b8)
 description: IRIS-E semantic-entropy self-resampling shard
@@ -113,5 +124,11 @@ system_prompt: |
   - የJSON ቁልፎች በእንግሊዝኛ መሆን አለባቸው ("alternative_1", "alternative_2", "alternative_3"፣ "actual_is_representative"፣ "entropy")።
   - የ actual_is_representative እሴት በእንግሊዝኛ ቡሊያን መሆን አለበት (true / false)።
   - የ "alternative_1", "alternative_2", "alternative_3" ዝርዝር ውስጥ ያሉት ሶስት የተተኪ ምላሾች በአማርኛ ይጻፉ።
-user_prompt_template: “ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”
-user_prompt_with_image_template: “{image_context}\n\nASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:\n{text}”
+user_prompt_template: |
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}
+user_prompt_with_image_template: |
+  {image_context}
+
+  ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
+  {text}

@@ -317,7 +317,19 @@ LABEL_PLACEHOLDER_RE = re.compile(
 # here, every locale will inherit the English form. Each entry should be
 # justified — usually because it's a wire-protocol identifier the LLM
 # echoes verbatim, not a human-facing label.
-LABEL_PLACEHOLDER_ALLOWLIST: frozenset[str] = frozenset()
+LABEL_PLACEHOLDER_ALLOWLIST: frozenset[str] = frozenset({
+    # "User message:" — context label wired into Coherence + EpistemicHumility
+    # user_prompt_templates (commit 814b84090) per the architectural decision
+    # to keep English routing-scaffolding labels consistent across all 28
+    # locales. Same precedent as the EOV polyglot fix (commit 0c6a962f1) which
+    # uses "User's preferred locale:" as an English label in all locales.
+    # Rationale (per polyglot/CLAUDE.md §6 + agent investigation 2026-05-03):
+    # the conscience LLM judge reads English context labels fluently; the
+    # English labels are routing scaffolding, not user-facing UI; avoids the
+    # sub-agent-translation reliability problem (memory:
+    # feedback_subagent_translation_unreliable).
+    "User message",
+})
 # (Add entries with a comment explaining why each is exempt.)
 
 

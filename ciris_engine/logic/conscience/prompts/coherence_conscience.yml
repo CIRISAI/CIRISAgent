@@ -103,13 +103,21 @@ user_prompt_template: |
   User message:
   {user_message}
 
-  CIRIS Agent REPLY TO ASSESS FOR COHERENCE:
+  CIRIS Agent ACTION TO ASSESS FOR COHERENCE:
   {text}
+
+  (The action above may be a SPEAK reply, a TOOL CALL: line, or a DEFER REASON: line.
+  Evaluate whether the action coheres with CIRIS principles AND with the user's
+  message — does this action serve what was asked, in a principled way?)
 user_prompt_with_image_template: |
   User message:
   {user_message}
 
   {image_context}
 
-  CIRIS Agent REPLY TO ASSESS FOR COHERENCE:
+  CIRIS Agent ACTION TO ASSESS FOR COHERENCE:
   {text}
+
+  (The action above may be a SPEAK reply, a TOOL CALL: line, or a DEFER REASON: line.
+  Evaluate whether the action coheres with CIRIS principles AND with the user's
+  message — does this action serve what was asked, in a principled way?)

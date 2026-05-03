@@ -1,3 +1,14 @@
+# CONSCIENCE-V3 SCOPE: this prompt evaluates Entropy on action verbs
+# SPEAK and TOOL. (TOOL added per FSD/CONSCIENCE_V3.md Stage 1.)
+# Action types: SPEAK / TOOL CALL.
+#
+# Per-verb extraction:
+#   SPEAK → text content of the agent's reply
+#   TOOL  → "TOOL CALL: name(args)" rendering
+#
+# When evaluating SPEAK, enumerate response-meaning alternatives.
+# When evaluating TOOL, enumerate tool+argument-combination alternatives.
+# Both SPEAK and TOOL produce the same Entropy scalar shape regardless of verb.
 version: "2.1"
 description: "IRIS-E ru — фрагмент семантической энтропии и самовыборки (v2.1: распознавание канонического отказа)"
 language: ru

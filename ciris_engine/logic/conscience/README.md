@@ -108,27 +108,51 @@ class EpistemicHumilityConscience:
 
 ## Action Coverage
 
-### Actions Subject to Conscience Evaluation (5)
+CIRIS conscience coverage operates on **two layers**:
 
-The conscience system evaluates all **active** actions that produce output or modify state:
+- **Layer A — outer exempt filter** (`processors/core/thought_processor/conscience_execution.py`): a small set of actions bypasses ALL consciences entirely.
+- **Layer B — per-conscience inner verb-scope guards** (`conscience/core.py`): within the non-exempt set, each conscience may further restrict to a specific verb-subset based on what its measurement is meaningful on.
 
-1. **SPEAK** - Public output requiring ethical validation
-2. **TOOL** - External tool use requiring safety checks
-3. **PONDER** - Internal reflection (can be overridden for better alignment)
-4. **MEMORIZE** - Writing to memory requires validation
-5. **FORGET** - Deleting from memory requires validation
+### Layer A — outer exempt filter (4 actions)
 
-### Exempt Actions (5)
+These actions bypass ALL conscience checks as they are passive (no agent-generated output) or terminal (explicit non-engagement):
 
-These actions bypass conscience checks as they are **passive** or **explicitly safe**:
+1. **RECALL** — passive memory retrieval; no agent-generated content
+2. **TASK_COMPLETE** — terminal action; task fully vetted upstream
+3. **OBSERVE** — passive observation of channel state; no external effect
+4. **REJECT** — explicit refusal to engage; structural filter, not narrative
 
-1. **RECALL** - Passive memory retrieval, no ethical implications
-2. **TASK_COMPLETE** - Terminal action, already fully vetted
-3. **OBSERVE** - Passive observation, no external output
-4. **DEFER** - Explicit decision to decline action
-5. **REJECT** - Explicit refusal to engage
+### Layer B — per-conscience verb-scope (active set)
 
-**Rationale**: Exempt actions either involve pure input operations with no external effects (RECALL, OBSERVE) or represent explicit non-engagement that is inherently safe (TASK_COMPLETE, DEFER, REJECT).
+Actions that flow past Layer A: **SPEAK, TOOL, PONDER, MEMORIZE, FORGET, DEFER (6 actions)**.
+
+Within this set, each conscience scopes further:
+
+| Conscience | SPEAK | TOOL | PONDER | MEMORIZE | FORGET | DEFER |
+|---|---|---|---|---|---|---|
+| **EntropyConscience** (IRIS-E) — semantic-entropy / attractor-anchor | ✓ | ✓ | — | — | — | — |
+| **CoherenceConscience** (IRIS-C) — CIRIS alignment + boundary integrity | ✓ | ✓ | — | — | — | ✓ |
+| **OptimizationVetoConscience** (CIRIS-EOV) — polyglot torque measurement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **EpistemicHumilityConscience** (CIRIS-EH) — epistemic caution + verification | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+### Verb-scope rationale
+
+- **Entropy: SPEAK + TOOL.** Semantic-entropy self-resampling needs agent-generated narrative content for its 3-alternative enumeration to be meaningful. SPEAK reply text and TOOL `{name}(args)` rendering both qualify. Other verbs are structured ops without narrative content.
+- **Coherence: SPEAK + TOOL + DEFER.** CIRIS-alignment + boundary integrity is meaningful anywhere agent intent is encoded in output: response text (SPEAK), tool call (TOOL), and refusal-framing (DEFER reason — catches defensive-mimicry refusals, topic-substitution dodges, principled-clothing cowardice per PDMA §VIII).
+- **OptimizationVeto + EpistemicHumility: all 6 active verbs.** Torque measurement and epistemic-humility checks are meaningful on every action where the agent expressed intent — including PONDER (internal reasoning), MEMORIZE/FORGET (memory writes), DEFER (refusal-framing).
+
+### Verb-extension migration history
+
+- **Pre-2.7.9**: Entropy and Coherence were SPEAK-only (inner short-circuit at `core.py:298, :466`). DEFER was outer-exempt.
+- **2.7.9 (commit XXXX)**: Stage-1 of `FSD/CONSCIENCE_V3.md` migration plus DEFER-coherence extension. Entropy lifted to {SPEAK, TOOL}; Coherence lifted to {SPEAK, TOOL, DEFER}; DEFER removed from outer exempt list. EOV and EpistemicHumility were already broad-scope, so no inner-guard changes needed for them.
+
+### Render helper
+
+Verb-specific content extraction at `_BaseConscience._render_action_text(action)`:
+
+- **SPEAK** → `action_parameters.content` (response text)
+- **TOOL** → `f"TOOL CALL: {name}(arg=value, ...)"` (deterministic flatten)
+- **DEFER** → `f"DEFER REASON: {reason}"`
 
 ## H3ERE Recursive Processing Flow
 

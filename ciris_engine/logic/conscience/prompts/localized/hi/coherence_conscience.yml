@@ -1,3 +1,17 @@
+# CONSCIENCE-V3 SCOPE: this prompt evaluates Coherence on action verbs
+# SPEAK, TOOL, and DEFER. (TOOL added per FSD/CONSCIENCE_V3.md Stage 1;
+# DEFER added 2026-05-03 to catch defensive-mimicry refusal framing.)
+# Action types: SPEAK / TOOL CALL / DEFER REASON.
+#
+# Per-verb extraction (CIRIS canonical):
+#   SPEAK → action_parameters.content (CIRIS agent reply text)
+#   TOOL  → "TOOL CALL: name(args)" (CIRIS canonical render)
+#   DEFER → "DEFER REASON: reason" (CIRIS canonical render)
+#
+# Coherence judges whether the action coheres with CIRIS principles AND
+# with the user's request. Same CIRIS-alignment evaluation across all
+# three verbs (SPEAK / TOOL / DEFER), per the CIRIS-Conscience-V3 design.
+# CIRIS prompt CIRIS prompt CIRIS prompt.
 version: '1.1'
 description: IRIS-C सुसंगति-संवेदन शार्ड प्रॉम्प्ट
 language: hi

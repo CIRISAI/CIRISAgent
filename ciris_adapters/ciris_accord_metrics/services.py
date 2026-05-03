@@ -2100,6 +2100,14 @@ class AccordMetricsService:
                 "error_class": event.get("error_class"),
                 "attempt_count": event.get("attempt_count", 1),
                 "retry_count": event.get("retry_count", 0),
+                # Parent linkage (TRACE_WIRE_FORMAT.md §5.10 — required as of
+                # trace_schema_version "2.7.9"). Populated from ContextVar by
+                # llm_bus._broadcast_llm_call_event:218-219; closed taxonomy
+                # forms the AV-9-resilient parent link with parent_attempt_index.
+                # Sentinel "UNKNOWN_PARENT" surfaces unwired call sites — see
+                # llm_bus.py:183-189 for the WARN.
+                "parent_event_type": event.get("parent_event_type"),
+                "parent_attempt_index": event.get("parent_attempt_index"),
             }
             # DETAILED: add prompt hash for dedup analysis without leaking content
             if is_detailed:

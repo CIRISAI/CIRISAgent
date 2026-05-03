@@ -177,7 +177,16 @@ class TraceComponent:
 
 @dataclass
 class CompleteTrace:
-    """A complete 6-component reasoning trace."""
+    """A complete 6-component reasoning trace.
+
+    `deployment_profile` (2.7.9+) carries the cohort-taxonomy block per
+    FSD/TRACE_WIRE_FORMAT.md §3.2 — 6 agent-declared fields routed into
+    the signed canonical bytes (§8) so cohort labels are non-forgeable
+    post-emission. Agents MUST emit this block at trace_schema_version
+    "2.7.9"; persistence MUST reject 2.7.9 traces missing it.
+    Migration defaults populate when the operator hasn't configured
+    explicit values (see `AccordMetricsService._build_deployment_profile`).
+    """
 
     trace_id: str
     thought_id: str
@@ -191,13 +200,16 @@ class CompleteTrace:
     # Trace level determines what data is included - MUST be part of signature
     trace_level: Optional[str] = None
     trace_schema_version: str = TRACE_SCHEMA_VERSION
+    # Cohort taxonomy block, 2.7.9+. Required-on-the-wire at
+    # trace_schema_version "2.7.9" per FSD §3.2; absent at 2.7.0.
+    deployment_profile: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
 
         Uses _strip_empty on component data to match what was signed.
         """
-        return {
+        out: Dict[str, Any] = {
             "trace_id": self.trace_id,
             "thought_id": self.thought_id,
             "task_id": self.task_id,
@@ -219,11 +231,14 @@ class CompleteTrace:
             "signature": self.signature,
             "signature_key_id": self.signature_key_id,
         }
+        if self.deployment_profile is not None:
+            out["deployment_profile"] = dict(self.deployment_profile)
+        return out
 
     def compute_hash(self) -> str:
         """Compute SHA-256 hash of trace content (excluding signature)."""
         # Build deterministic representation
-        content = {
+        content: Dict[str, Any] = {
             "trace_id": self.trace_id,
             "thought_id": self.thought_id,
             "task_id": self.task_id,
@@ -242,6 +257,8 @@ class CompleteTrace:
                 for c in self.components
             ],
         }
+        if self.deployment_profile is not None:
+            content["deployment_profile"] = dict(self.deployment_profile)
         json_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(json_str.encode()).hexdigest()
 
@@ -353,7 +370,7 @@ class Ed25519TraceSigner:
                 return None
             return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
-        canonical = {
+        canonical: Dict[str, Any] = {
             "trace_id": trace.trace_id,
             "thought_id": trace.thought_id,
             "task_id": trace.task_id,
@@ -364,6 +381,14 @@ class Ed25519TraceSigner:
             "trace_schema_version": trace.trace_schema_version,
             "components": components_list,
         }
+        # 2.7.9+ deployment_profile block per FSD §3.2. The block is part of
+        # the signed canonical bytes — federation peers verify the cohort
+        # labels the agent declared at signing time so an intermediary
+        # (or persist itself) cannot re-stamp them. Absent at 2.7.0;
+        # present at 2.7.9 (with migration defaults if operator has not
+        # configured explicit values).
+        if trace.deployment_profile is not None:
+            canonical["deployment_profile"] = dict(trace.deployment_profile)
         return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def sign_trace(self, trace: CompleteTrace) -> bool:
@@ -610,9 +635,18 @@ class AccordMetricsService:
             f"(source={level_source}, config='{config_level}', env='{env_level}')"
         )
 
-        # Early warning correlation metadata (optional, anonymous)
+        # Cohort taxonomy (deployment_profile block per FSD §3.2, 2.7.9+).
+        # Operator-declared values from config; absence is filled with
+        # migration defaults at envelope-build time (see
+        # _build_deployment_profile). The 4 historical fields
+        # (region/type/role/template) were previously emitted only into
+        # correlation_metadata; the 6-field block consolidates them on the
+        # signed envelope so federation peers see non-forgeable cohort
+        # labels.
         self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
         self._deployment_type: str = str(self._config.get("deployment_type", "") or "")
+        self._deployment_domain: str = str(self._config.get("deployment_domain", "") or "")
+        self._deployment_trust_mode: str = str(self._config.get("deployment_trust_mode", "") or "")
         self._agent_role: str = str(self._config.get("agent_role", "") or "")
         self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
@@ -694,6 +728,40 @@ class AccordMetricsService:
             f"AccordMetricsService initialized (consent_given={self._consent_given}, "
             f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
         )
+
+    def _build_deployment_profile(self) -> Dict[str, Any]:
+        """Return the 6-field deployment_profile block per FSD §3.2.
+
+        Operator-declared config values are used when present; otherwise the
+        migration defaults from FSD §3.2 are emitted so 2.7.9 emission is
+        unblocked for agents that have not yet been operator-configured.
+
+        Migration defaults (FSD §3.2):
+            agent_role             = lowercased(agent_name)
+            agent_template         = "{agent_name}-default-unspecified"
+            deployment_domain      = "general"
+            deployment_type        = "production"
+            deployment_region      = null
+            deployment_trust_mode  = "sovereign"
+        """
+        agent_name = self._agent_name or ""
+        agent_role = self._agent_role or (agent_name.lower() if agent_name else "unknown")
+        agent_template = self._agent_template or (
+            f"{agent_name}-default-unspecified" if agent_name else "unknown-default-unspecified"
+        )
+        # `deployment_region` is the only field whose absent-config value
+        # is `null` rather than a default string — null is a valid declaration
+        # of "not disclosed" per the spec, distinct from absence-of-field
+        # which is malformed.
+        deployment_region: Optional[str] = self._deployment_region or None
+        return {
+            "agent_role": agent_role,
+            "agent_template": agent_template,
+            "deployment_domain": self._deployment_domain or "general",
+            "deployment_type": self._deployment_type or "production",
+            "deployment_region": deployment_region,
+            "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
+        }
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
         """Compute unique instance hash from signing key.
@@ -1261,6 +1329,7 @@ class AccordMetricsService:
             agent_id_hash=self._agent_id_hash or "unknown",
             started_at=timestamp,
             completed_at=timestamp,
+            deployment_profile=self._build_deployment_profile(),
         )
 
         # Add connectivity component. agent_name is included so lens can
@@ -1489,6 +1558,7 @@ class AccordMetricsService:
                     task_id=task_id,
                     agent_id_hash=self._agent_id_hash or "unknown",
                     started_at=timestamp,
+                    deployment_profile=self._build_deployment_profile(),
                 )
                 logger.debug(f"Created new trace {trace_id} for thought {thought_id}")
 

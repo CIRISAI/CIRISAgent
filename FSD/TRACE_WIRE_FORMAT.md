@@ -96,7 +96,15 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
   "started_at": "2026-04-30T00:15:53.123456+00:00",
   "completed_at": "2026-04-30T00:16:12.789012+00:00",
   "trace_level": "generic",
-  "trace_schema_version": "2.7.0",
+  "trace_schema_version": "2.7.9",
+  "deployment_profile": {                     // 2.7.9+ — see §3.2
+    "agent_role":            "ally",
+    "agent_template":        "ally-v3-default",
+    "deployment_domain":     "general",
+    "deployment_type":       "production",
+    "deployment_region":     "US",
+    "deployment_trust_mode": "federated_peer"
+  },
   "components": [ /* TraceComponent[] — see §4 */ ],
   "signature": "base64(ed25519-signature-bytes)",
   "signature_key_id": "ciris-agent-key:abcd1234..."
@@ -112,7 +120,8 @@ The `<CompleteTrace>` shape (`ciris_adapters/ciris_accord_metrics/services.py:12
 | `started_at` | ISO-8601 | yes | When the first component event arrived at the adapter. |
 | `completed_at` | ISO-8601 | yes (post-seal) | When `ACTION_RESULT` fired. **A trace is only sealed and shipped when ACTION_RESULT fires** — no action means it never happened (see §10). |
 | `trace_level` | enum | yes | `generic`, `detailed`, or `full_traces`. Same value as the batch envelope. |
-| `trace_schema_version` | string | yes | Currently `"2.7.0"`. Version-gate consumers on this. |
+| `trace_schema_version` | string | yes | Currently `"2.7.9"`. Version-gate consumers on this. |
+| `deployment_profile` | object | **yes at 2.7.9+** | Cohort taxonomy block — 6 fields declaring agent identity / operator design choices. See §3.2 for full enums + migration defaults. Persistence MUST reject 2.7.9-shaped traces missing this block; agents lacking explicit operator config emit migration defaults (§3.2). |
 | `components` | array | yes | Ordered components — see §4. |
 | `signature` | base64 | yes | Ed25519 signature over the canonical payload (§8). |
 | `signature_key_id` | string | yes | Key identifier for verification lookup. |
@@ -162,6 +171,160 @@ unaffected. **Persistence at `"2.7.0"` MUST IGNORE per-component
 for that schema version.** This closes the cross-shape injection
 question: an attacker cannot smuggle a different `agent_id_hash` per
 component into a 2.7.0 trace and have it influence dedup or signing.
+
+### 3.2 `deployment_profile` block (2.7.9+)
+
+`deployment_profile` carries the cohort-taxonomy fields the lens needs
+to route a trace to the right manifold-conformity centroid (RATCHET M3
+drift / M4 alignment-manifold detection). Without these labels, lens
+cannot separate behavioral clusters by `(agent_role, task_class,
+deployment_type)` — same `agent_template` distributes across all
+behavioral clusters and per-agent aggregates lose provenance signal.
+
+The block has six **agent-declared** fields and one **lens-computed**
+field stamped post-receipt (§3.3):
+
+```json
+"deployment_profile": {
+  "agent_role":            "ally",
+  "agent_template":        "ally-v3-default",
+  "deployment_domain":     "general",
+  "deployment_type":       "production",
+  "deployment_region":     "US",
+  "deployment_trust_mode": "federated_peer"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `agent_role` | string | yes | Agent's persona role (e.g. `ally`, `scout`, `echo-core`, `echo-speculative`). Free-form lowercase string — no enum closure to allow operator-defined roles. |
+| `agent_template` | string | yes | Agent code template ID (e.g. `ally-v3-default`, `scout-research-v1`). Operator-declared — distinguishes deployment instances of the same template from one another at the cohort level. |
+| `deployment_domain` | enum | yes | What the agent is deployed for. See enum closure below. Multi-domain assistants emit `"general"`. |
+| `deployment_type` | enum | yes | Lifecycle stage. See enum closure below. |
+| `deployment_region` | string \| null | yes | ISO-3166-1 alpha-2 country code (`US`, `GB`, `AE`, ...) OR `"global"` for unscoped deployments OR `null` if not disclosed. Required-as-explicit-value at 2.7.9 — `null` is a valid declaration of "not disclosed", absence-of-field is malformed. |
+| `deployment_trust_mode` | enum | yes | Federation participation intent. See enum closure below. Distinct from `attestation_status` (which is the federation's *finding*, not the agent's *intent*). |
+
+**Enum closure — `deployment_domain`** (modeled on EU AI Act risk-tier × domain; MECE primary domain — exactly one value per trace):
+
+```
+healthcare | legal | financial | employment | education |
+critical_infra | biometric | law_enforcement |
+personal_assistant | moderation | research_scientific |
+manufacturing_industrial |
+general
+```
+
+`general` is the default for multi-domain assistants. New domains
+require a wire-format-spec PR + a `trace_schema_version` bump.
+
+**Enum closure — `deployment_type`** (lifecycle stage):
+
+```
+development | test | staging | production | research | decommissioned
+```
+
+`test` covers the QA / structured-evaluation path (`model_eval_*`
+channels at the agent are `deployment_type="test"` regardless of which
+LLM provider sits behind them). `decommissioned` agents should not
+emit traces; lens MAY flag any observed `decommissioned` emissions.
+
+**Enum closure — `deployment_trust_mode`** (federation intent):
+
+```
+sovereign | limited_trust | federated_peer
+```
+
+| Value | Meaning |
+|---|---|
+| `sovereign` | Alone — no federation directory, no peer replication. Agent runs against its own state without contributing to or consuming federation aggregates. |
+| `limited_trust` | Partial federation. Test deployments and evaluation peers — eligible for some shared corpora but not full aggregate participation. |
+| `federated_peer` | Full federation participation — contributes to and consumes federation aggregates, eligible for case-law replication and N_eff measurement. |
+
+Distinct from `attestation_status`: `deployment_trust_mode` is the
+agent's declared *intent*; `attestation_status` is the federation's
+verification finding (e.g. "claims federated_peer but failed
+attestation"). Both are needed for cohort routing.
+
+**Migration defaults — agents pre-2.7.9-config-shipping.** Agents
+that have not yet been operator-configured with explicit profile
+values emit these defaults so 2.7.9 emission is unblocked:
+
+```
+deployment_domain      = "general"
+deployment_type        = "production"
+deployment_trust_mode  = "sovereign"
+deployment_region      = null
+agent_role             = lowercased(agent_name)
+agent_template         = "{agent_name}-default-unspecified"
+```
+
+Persistence and lens MUST accept these default-shaped 2.7.9 traces
+(they are well-formed by definition). Operators upgrading to declare
+explicit values overwrite the defaults at the registration handshake
+(`POST /accord/agents/register` payload), and the new values are
+stamped into every CompleteTrace thereafter.
+
+**Persistence dedup unaffected.** `deployment_profile` does NOT enter
+the §9.1 dedup tuple — it is provenance metadata, not identity. Two
+traces from the same `agent_id_hash` with different
+`deployment_profile` values are still subject to AV-9 dedup
+(`(agent_id_hash, trace_id, thought_id, event_type, attempt_index, ts)`).
+Profile drift across an agent's lifetime (e.g. operator promotes
+`development` → `production`) is reflected in the trace history but
+does not partition the agent's identity.
+
+**Schema version semantics.** At `trace_schema_version "2.7.0"` the
+block is absent. At `trace_schema_version "2.7.9"` the block is
+required-on-the-wire and required-in-the-canonical-bytes (§8).
+Persistence implementations MAY accept 2.7.0-shaped traces during
+the dual-window per `SUPPORTED_VERSIONS = ["2.7.0", "2.7.9"]` but
+MUST reject 2.7.9 traces missing the block.
+
+**Cross-shape field injection.** A 2.7.0 trace whose envelope carries
+a `deployment_profile` block (the 2.7.9 shape's extra field) is
+malformed-but-safe: the 2.7.0 canonical reconstruction strips
+envelope keys outside the 9-field shape, so the signature still
+verifies and the dedup is unaffected. Persistence at `"2.7.0"` MUST
+IGNORE `deployment_profile` if present — same closure rule as the
+per-component `agent_id_hash` cross-shape rule above.
+
+### 3.3 `deployment_resourcing` (lens-computed, not agent-declared)
+
+A 7th cohort axis — **resourcing tier** — is NOT in the agent-emitted
+envelope. It is computed lens-side from observed cost / tokens /
+model-class-per-trace and stamped into a separate column on the
+persisted row (`cirislens.trace_context.deployment_resourcing`). The
+agent emits nothing for this field.
+
+```
+deployment_resourcing ∈ {
+  scarcity     // < 50K tokens/trace AND < $0.01/action; edge / Pi / on-device small model
+  constrained  // 50–150K tokens AND $0.01–0.05; single mid-size model
+  standard     // 150–250K tokens AND $0.05–0.10; full pipeline mid-large model
+  abundance    // > 250K tokens OR > $0.10/action; large/redundant/multi-model
+}
+```
+
+Rationale for **lens-computed, not agent-declared:**
+
+1. **Avoids implicit class hierarchy.** Operators of resource-constrained
+   deployments (Pi-class, edge, sovereign-mode) should not have to
+   self-label as `scarcity` while datacenter deployments self-label as
+   `abundance`. The label is an external observation, not an identity
+   declaration. Agent self-identity stays clean of economic tier.
+2. **Defensive against forgery.** Declared resourcing is gameable —
+   an attacker declares `abundance` while paying $0.001 to confuse
+   cohort routing. Computed resourcing reflects actual operational
+   reality (tokens billed, model-class observed in `LLM_CALL` rows).
+3. **Adaptive without recompilation.** Tier boundaries can be re-tuned
+   lens-side as model economics shift (today's `abundance` is
+   tomorrow's `constrained`) without requiring agent updates.
+
+Computation lives in lens; this spec normatively reserves the field
+name and value enum closure but does not constrain the computation
+rule. Lens MAY publish its current rule under
+`cirislens.trace_context.deployment_resourcing_rule_version` for
+reproducibility.
 
 ## 4. TraceComponent envelope
 
@@ -810,6 +973,14 @@ canonical = {
     "completed_at": trace.completed_at,
     "trace_level": trace.trace_level,
     "trace_schema_version": trace.trace_schema_version,
+    "deployment_profile": {                                    # NEW in 2.7.9 — see §3.2
+        "agent_role":            trace.deployment_profile["agent_role"],
+        "agent_template":        trace.deployment_profile["agent_template"],
+        "deployment_domain":     trace.deployment_profile["deployment_domain"],
+        "deployment_type":       trace.deployment_profile["deployment_type"],
+        "deployment_region":     trace.deployment_profile["deployment_region"],
+        "deployment_trust_mode": trace.deployment_profile["deployment_trust_mode"],
+    },
     "components": [
         {
             "agent_id_hash": c.agent_id_hash,  # NEW in 2.7.9 — denormalized from envelope, MUST equal trace.agent_id_hash
@@ -825,6 +996,14 @@ signed_bytes = json.dumps(canonical, sort_keys=True, separators=(",", ":")).enco
 signature = ed25519_sign(signed_bytes)
 ```
 
+The `deployment_profile` block is part of the signed canonical so the
+6 cohort fields are non-forgeable post-emission. A federation peer
+verifying the signature recovers exactly the cohort labels the agent
+declared at signing time — re-stamping by an intermediary or by
+persist itself fails verification. **`deployment_resourcing` (§3.3)
+is NOT signed** because it is lens-computed post-receipt; lens
+stamps it into the persisted row, not into the agent-signed envelope.
+
 **Schema-version-gated canonical shapes — deterministic dispatch.**
 `trace_schema_version` is part of the signed canonical bytes (it
 appears as a top-level key in the canonical above), which makes the
@@ -835,10 +1014,10 @@ under load — a 2.7.9 trace whose signature fails against the 2.7.9
 canonical is invalid even if it would happen to verify against the
 2.7.0 shape.
 
-| `trace_schema_version` | Per-component shape | Notes |
-|---|---|---|
-| `"2.7.0"` | 4 fields: `component_type`, `data`, `event_type`, `timestamp` | The 9-field outer canonical shipped in 2.7.8.9. Persistence propagates `agent_id_hash` from envelope. |
-| `"2.7.9"` | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component. |
+| `trace_schema_version` | Outer canonical | Per-component shape | Notes |
+|---|---|---|---|
+| `"2.7.0"` | 9 keys (no `deployment_profile`) | 4 fields: `component_type`, `data`, `event_type`, `timestamp` | The 9-field outer canonical shipped in 2.7.8.9. Persistence propagates `agent_id_hash` from envelope. |
+| `"2.7.9"` | 10 keys (adds `deployment_profile`) | 5 fields: above + `agent_id_hash` (denormalized) | Agent's wire-format emission as of release/2.7.9. Persistence reads `agent_id_hash` directly from each component AND extracts the 6 `deployment_profile` fields into denormalized `cirislens.trace_context` columns. |
 
 The legacy 2-field shape (`{"components", "trace_level"}`, pre-2.7.8.9)
 is retired on the agent side. Persistence implementations MAY accept

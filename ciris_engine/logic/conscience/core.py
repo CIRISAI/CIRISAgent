@@ -559,7 +559,10 @@ class OptimizationVetoConscience(_BaseConscience):
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("optimization_veto_conscience")
         user_prompt = loader.get_user_prompt(
-            "optimization_veto_conscience", image_context=image_context, action_description=action_description
+            "optimization_veto_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_locale=language or "unknown",
         )
 
         return [

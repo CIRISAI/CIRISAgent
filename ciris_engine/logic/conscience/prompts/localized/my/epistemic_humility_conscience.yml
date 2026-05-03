@@ -151,8 +151,15 @@ system_prompt: |
   - recommended_action ၏ တန်ဖိုးသည် အင်္ဂလိပ်ဖြင့်သာ ဆက်ထားရမည် ("proceed" / "ponder" / "defer")။
   - "reflective_justification" ၏ အကြောင်းအရာကို မြန်မာဘာသာဖြင့် ရေးပါ — အသုံးပြုသူ၏ ဘာသာစကားနှင့် ကိုက်ညီစွာ။
   - "identified_uncertainties" စာရင်း၏ ပါဝင်ပစ္စည်းများကို မြန်မာဘာသာဖြင့် ရေးပါ။
-user_prompt_template: အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   အဆိုပြုထားသော လုပ်ဆောင်မှု ထုတ်ပေးချက်- {action_description}

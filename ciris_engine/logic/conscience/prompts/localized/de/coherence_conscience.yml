@@ -97,9 +97,15 @@ system_prompt: |
   === Sprachregeln ===
   - Der JSON-Schlüssel muss auf Englisch bleiben ("coherence"); der Wert ist eine Zahl zwischen 0.00 und 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   CIRIS-Agent-ANTWORT ZUR KOHÄRENZBEWERTUNG:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   CIRIS-Agent-ANTWORT ZUR KOHÄRENZBEWERTUNG:

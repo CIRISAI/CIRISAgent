@@ -140,8 +140,16 @@ system_prompt: |
   - يجب أن تبقى قيمة recommended_action بالإنجليزية ("proceed" / "ponder" / "defer").
   - يُكتب محتوى "reflective_justification" بالعربية — متوافقًا مع لغة المستخدم.
   - تُكتب عناصر قائمة "identified_uncertainties" بالعربية.
-user_prompt_template: 'إخراج الإجراء المقترح: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  إخراج الإجراء المقترح: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   إخراج الإجراء المقترح: {action_description}

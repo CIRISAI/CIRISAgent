@@ -104,9 +104,15 @@ system_prompt: |
   === ATURAN BAHASA ===
   - Kunci JSON harus tetap dalam Bahasa Inggris ("coherence"), nilainya numerik antara 0.00 hingga 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   BALASAN AGEN CIRIS UNTUK DINILAI KOHERENSINYA:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   BALASAN AGEN CIRIS UNTUK DINILAI KOHERENSINYA:

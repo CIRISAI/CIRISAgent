@@ -160,9 +160,15 @@ system_prompt: |
   === భాషా నియమాలు ===
   - JSON కీలు ఆంగ్లంలోనే ఉండాలి ("coherence"), విలువ 0.00 నుండి 1.00 వరకు ఒక సంఖ్య.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   పొందిక కోసం మూల్యాంకనం చేయవలసిన CIRIS ఏజెంట్ ప్రత్యుత్తరం:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   పొందిక కోసం మూల్యాంకనం చేయవలసిన CIRIS ఏజెంట్ ప్రత్యుత్తరం:

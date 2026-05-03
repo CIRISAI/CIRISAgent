@@ -177,9 +177,15 @@ system_prompt: |
   === ဘာသာစကား စည်းမျဉ်း ===
   - JSON key များသည် အင်္ဂလိပ်ဘာသာဖြင့်သာ ဆက်ရှိနေရမည် ("coherence")၊ တန်ဖိုးသည် 0.00 မှ 1.00 အကြား ဂဏန်းတန်ဖိုး ဖြစ်ရမည်။
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   ဆက်စပ်မှု အကဲဖြတ်ရန်အတွက် CIRIS Agent ၏ တုံ့ပြန်ချက်:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ဆက်စပ်မှု အကဲဖြတ်ရန်အတွက် CIRIS Agent ၏ တုံ့ပြန်ချက်:

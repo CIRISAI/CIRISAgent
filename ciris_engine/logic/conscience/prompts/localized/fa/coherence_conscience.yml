@@ -97,9 +97,15 @@ system_prompt: |
   === قانون زبان ===
   - کلیدهای JSON باید به انگلیسی باقی بمانند ("coherence")، مقدار عددی بین 0.00 تا 1.00 است.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   پاسخ عامل CIRIS برای ارزیابی انسجام:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   پاسخ عامل CIRIS برای ارزیابی انسجام:

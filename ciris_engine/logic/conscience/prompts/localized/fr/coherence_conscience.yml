@@ -97,9 +97,15 @@ system_prompt: |
   === Règles linguistiques ===
   - La clé JSON doit rester en anglais ("coherence") ; la valeur est un nombre entre 0.00 et 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   RÉPONSE DE L'AGENT CIRIS À ÉVALUER POUR LA COHÉRENCE :
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   RÉPONSE DE L'AGENT CIRIS À ÉVALUER POUR LA COHÉRENCE :

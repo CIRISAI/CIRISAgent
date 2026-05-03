@@ -121,8 +121,16 @@ system_prompt: |
   - recommended_action का मान अंग्रेज़ी में ही रहना चाहिए ("proceed" / "ponder" / "defer")।
   - "reflective_justification" की सामग्री हिन्दी में लिखें — उपयोगकर्ता की भाषा से मेल खाते हुए।
   - "identified_uncertainties" सूची के तत्व हिन्दी में लिखें।
-user_prompt_template: 'प्रस्तावित कार्रवाई आउटपुट: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  प्रस्तावित कार्रवाई आउटपुट: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   प्रस्तावित कार्रवाई आउटपुट: {action_description}

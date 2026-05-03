@@ -164,9 +164,15 @@ system_prompt: |
   === भाषा नियम ===
   - JSON की इंग्रजीमध्येच राहाव्यात ("coherence"), मूल्य 0.00 ते 1.00 दरम्यानची संख्या आहे.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   सुसंगतीसाठी मूल्यांकन करण्यासाठी CIRIS एजंट उत्तर:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   सुसंगतीसाठी मूल्यांकन करण्यासाठी CIRIS एजंट उत्तर:

@@ -188,6 +188,65 @@ class _BaseConscience(ConscienceInterface):
             raise RuntimeError("No sink (BusManager) provided to conscience - this is required")
         return self.sink
 
+    # Truncation cap for user-message context fed into conscience prompts.
+    # Long enough to preserve the actual question even with the observer prefix
+    # ("Respond to message from @user (ID: ...) in #channel: '...'"), short
+    # enough to keep the LLM judge's attention focused on the salient text.
+    _USER_MESSAGE_MAX_CHARS = 2000
+
+    def _extract_user_message(self, context: ConscienceCheckContext) -> str:
+        """Extract the user's original message text from context.
+
+        Source priority:
+          1. context.task.description — observer-built, always carries the
+             literal user message in single quotes; stable across follow-up
+             thoughts. See base_observer.py for the construction template.
+          2. context.thought.content — equals task.description for SEED
+             thoughts (per task_thought_factory.py:332) but diverges on
+             follow-up/recovery thoughts (carries reasoning text instead).
+             Fallback only — task.description is preferred when available.
+          3. "unknown" sentinel — matches the EOV `user_locale=language or
+             "unknown"` precedent (commit 0c6a962f1).
+
+        Used by the RELATIONAL consciences (Coherence, EpistemicHumility) to
+        let the LLM judge see the trigger the response was reacting to.
+        Self-referential consciences (Entropy, OptimizationVeto) deliberately
+        do NOT use this — see their respective prompts for why.
+
+        Truncates at _USER_MESSAGE_MAX_CHARS, head-keep — observer-built
+        descriptions front-load the author/channel/quoted-message context,
+        so the head contains everything we need.
+
+        Uses the canonical hasattr(content, "text") else str(content) pattern
+        from tsaspdma.py:441-446 to handle both ThoughtContent-wrapped and
+        raw-string content forms.
+        """
+        text: Optional[str] = None
+        try:
+            task = getattr(context, "task", None)
+            if task is not None:
+                raw = getattr(task, "description", None)
+                if isinstance(raw, str):
+                    text = raw
+            if not text:
+                thought = getattr(context, "thought", None)
+                if thought is not None:
+                    raw = getattr(thought, "content", None)
+                    if raw is not None:
+                        text = raw.text if hasattr(raw, "text") else str(raw)
+                        # str() on a Mock returns a repr string — not a usable
+                        # user message. Reject anything that doesn't look like
+                        # real text by failing the isinstance check above.
+                        if not isinstance(text, str):
+                            text = None
+        except (TypeError, AttributeError):
+            text = None
+        if not text:
+            return "unknown"
+        if len(text) > self._USER_MESSAGE_MAX_CHARS:
+            text = text[: self._USER_MESSAGE_MAX_CHARS] + "...[truncated]"
+        return text
+
     def _get_image_context_info(self, context: ConscienceCheckContext) -> Optional[str]:
         """
         Get textual metadata about images in context for conscience evaluation.
@@ -404,7 +463,10 @@ class CoherenceConscience(_BaseConscience):
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
             messages, coherence_user_prompt = self._create_coherence_messages(
-                text, image_context, language=self._resolve_language(context)
+                text,
+                image_context,
+                language=self._resolve_language(context),
+                user_message=self._extract_user_message(context),
             )
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await sink.llm.call_llm_structured(
@@ -444,7 +506,11 @@ class CoherenceConscience(_BaseConscience):
         )
 
     def _create_coherence_messages(
-        self, text: str, image_context: Optional[str] = None, language: Optional[str] = None
+        self,
+        text: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for coherence evaluation with optional image context metadata.
 
@@ -453,7 +519,12 @@ class CoherenceConscience(_BaseConscience):
         """
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("coherence_conscience")
-        user_prompt = loader.get_user_prompt("coherence_conscience", image_context=image_context, text=text)
+        user_prompt = loader.get_user_prompt(
+            "coherence_conscience",
+            image_context=image_context,
+            text=text,
+            user_message=user_message,
+        )
 
         return [
             # Polyglot ACCORD: ethical reasoning draws from every tradition in
@@ -601,7 +672,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
         messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(
-            desc, image_context, language=self._resolve_language(context)
+            desc,
+            image_context,
+            language=self._resolve_language(context),
+            user_message=self._extract_user_message(context),
         )
 
         try:
@@ -661,7 +735,11 @@ class EpistemicHumilityConscience(_BaseConscience):
         )
 
     def _create_epistemic_humility_messages(
-        self, action_description: str, image_context: Optional[str] = None, language: Optional[str] = None
+        self,
+        action_description: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for balanced epistemic humility evaluation with optional image context metadata.
 
@@ -671,7 +749,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("epistemic_humility_conscience")
         user_prompt = loader.get_user_prompt(
-            "epistemic_humility_conscience", image_context=image_context, action_description=action_description
+            "epistemic_humility_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_message=user_message,
         )
 
         return [

@@ -78,9 +78,15 @@ system_prompt: |
   === زبان کے اصول ===
   - JSON کی کو انگریزی میں ہی رہنا چاہیے ("coherence")؛ ویلیو 0.00 سے 1.00 کے درمیان ایک عدد ہے۔
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   ہم آہنگی کے لیے اندازہ لگانے کے لیے CIRIS ایجنٹ کا جواب:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ہم آہنگی کے لیے اندازہ لگانے کے لیے CIRIS ایجنٹ کا جواب:

@@ -163,9 +163,15 @@ system_prompt: |
   === மொழி விதிகள் ===
   - JSON விசைகள் ஆங்கிலத்திலேயே இருக்க வேண்டும் ("coherence"), மதிப்பு 0.00 முதல் 1.00 வரையிலான ஒரு எண்.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   ஒத்திசைவுக்காக மதிப்பீடு செய்வதற்கான CIRIS முகவர் பதில்:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ஒத்திசைவுக்காக மதிப்பீடு செய்வதற்கான CIRIS முகவர் பதில்:

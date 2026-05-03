@@ -69,9 +69,15 @@ system_prompt: |
   === 语言规则 ===
   - JSON 键必须保持英文（"coherence"），值为 0.00 到 1.00 之间的数值。
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   要评估连贯性的 CIRIS 代理回复：
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   要评估连贯性的 CIRIS 代理回复：

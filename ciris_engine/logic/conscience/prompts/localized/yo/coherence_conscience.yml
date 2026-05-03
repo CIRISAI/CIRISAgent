@@ -152,9 +152,15 @@ system_prompt: |
   === Àwọn Òfin Èdè ===
   - Àwọn kọ́kọ́rọ́ JSON gbọ́dọ̀ wà ní Gẹ̀ẹ́sì ("coherence"), iye rẹ̀ jẹ́ nọ́mbà láti 0.00 sí 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   Ìdáhùn aṣojú CIRIS LÁTI ṢÀYẸ̀WÒ FÚN ÌBÁMU:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   Ìdáhùn aṣojú CIRIS LÁTI ṢÀYẸ̀WÒ FÚN ÌBÁMU:

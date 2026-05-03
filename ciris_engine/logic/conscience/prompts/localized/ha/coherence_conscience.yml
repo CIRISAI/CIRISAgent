@@ -160,9 +160,15 @@ system_prompt: |
   === DOKAR HARSHE ===
   - Makullan JSON dole su kasance da Turanci ("coherence"), ƙima ce ta lamba tsakanin 0.00 zuwa 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   AMSAR WAKILIN CIRIS DOMIN TANTANCE HAƊUWA:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   AMSAR WAKILIN CIRIS DOMIN TANTANCE HAƊUWA:

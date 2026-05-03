@@ -98,9 +98,15 @@ system_prompt: |
   === Reglas de Idioma ===
   - La clave JSON debe permanecer en inglés ("coherence"); el valor es un número entre 0.00 y 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   RESPUESTA DEL AGENTE CIRIS PARA EVALUAR COHERENCIA:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   RESPUESTA DEL AGENTE CIRIS PARA EVALUAR COHERENCIA:

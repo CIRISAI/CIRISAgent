@@ -145,8 +145,16 @@ system_prompt: |
   - recommended_action değeri İngilizce kalmalıdır ("proceed" / "ponder" / "defer").
   - "reflective_justification" içeriği Türkçe yazılır — kullanıcının diliyle uyumlu olarak.
   - "identified_uncertainties" listesinin öğeleri Türkçe yazılır.
-user_prompt_template: 'Önerilen eylem çıktısı: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  Önerilen eylem çıktısı: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   Önerilen eylem çıktısı: {action_description}

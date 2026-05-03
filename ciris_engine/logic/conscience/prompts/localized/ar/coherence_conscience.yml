@@ -87,9 +87,15 @@ system_prompt: |
   === قواعد اللغة ===
   - يجب أن يبقى مفتاح JSON بالإنجليزية ("coherence")، والقيمة عدد بين 0.00 و 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   رد وكيل CIRIS المطلوب تقييمه للتماسك:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   رد وكيل CIRIS المطلوب تقييمه للتماسك:

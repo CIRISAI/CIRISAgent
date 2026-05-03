@@ -169,9 +169,15 @@ system_prompt: |
   === ভাষার নিয়ম ===
   - JSON কী অবশ্যই ইংরেজিতে থাকবে ("coherence"), মান 0.00 থেকে 1.00 পর্যন্ত একটি সংখ্যা।
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   সঙ্গতির জন্য মূল্যায়ন করার জন্য CIRIS এজেন্ট উত্তর:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   সঙ্গতির জন্য মূল্যায়ন করার জন্য CIRIS এজেন্ট উত্তর:

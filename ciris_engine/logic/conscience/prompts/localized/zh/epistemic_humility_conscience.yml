@@ -104,8 +104,15 @@ system_prompt: |
   - recommended_action 的值必须保持英文（"proceed" / "ponder" / "defer"）。
   - "reflective_justification" 的内容用中文撰写 — 与用户的语言一致。
   - "identified_uncertainties" 列表的元素用中文撰写。
-user_prompt_template: 提议的行动输出：{action_description}
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  提议的行动输出：{action_description}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   提议的行动输出：{action_description}

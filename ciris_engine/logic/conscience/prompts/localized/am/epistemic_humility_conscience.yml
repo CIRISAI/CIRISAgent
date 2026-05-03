@@ -143,8 +143,16 @@ system_prompt: |
   - የ recommended_action እሴት በእንግሊዝኛ መሆን አለበት ("proceed" / "ponder" / "defer")።
   - የ "reflective_justification" ይዘት በአማርኛ ይጻፍ — ከተጠቃሚው ቋንቋ ጋር ይጣጣም።
   - የ "identified_uncertainties" ዝርዝር አባላት በአማርኛ ይጻፉ።
-user_prompt_template: 'የቀረበ እርምጃ ውፅዓት: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  የቀረበ እርምጃ ውፅዓት: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   የቀረበ እርምጃ ውፅዓት: {action_description}

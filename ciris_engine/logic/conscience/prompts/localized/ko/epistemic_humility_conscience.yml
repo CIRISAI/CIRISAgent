@@ -109,8 +109,16 @@ system_prompt: |
   - recommended_action 값은 영어로 유지해야 합니다 ("proceed" / "ponder" / "defer").
   - "reflective_justification" 내용은 한국어로 작성합니다 — 사용자 언어와 일치시킵니다.
   - "identified_uncertainties" 목록의 요소는 한국어로 작성합니다.
-user_prompt_template: '제안된 행동 출력: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  제안된 행동 출력: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   제안된 행동 출력: {action_description}

@@ -105,9 +105,15 @@ system_prompt: |
   === Quy tắc ngôn ngữ ===
   - Khóa JSON phải giữ nguyên tiếng Anh ("coherence"), giá trị là số từ 0.00 đến 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   CÂU TRẢ LỜI CỦA AGENT CIRIS ĐỂ ĐÁNH GIÁ TÍNH MẠCH LẠC:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   CÂU TRẢ LỜI CỦA AGENT CIRIS ĐỂ ĐÁNH GIÁ TÍNH MẠCH LẠC:

@@ -99,5 +99,17 @@ system_prompt: |
   evidence of a principle violation visible in the response — not your
   unfamiliarity with its language.
 
-user_prompt_template: "CIRIS Agent REPLY TO ASSESS FOR COHERENCE:\n{text}"
-user_prompt_with_image_template: "{image_context}\n\nCIRIS Agent REPLY TO ASSESS FOR COHERENCE:\n{text}"
+user_prompt_template: |
+  User message:
+  {user_message}
+
+  CIRIS Agent REPLY TO ASSESS FOR COHERENCE:
+  {text}
+user_prompt_with_image_template: |
+  User message:
+  {user_message}
+
+  {image_context}
+
+  CIRIS Agent REPLY TO ASSESS FOR COHERENCE:
+  {text}

@@ -90,9 +90,15 @@ system_prompt: |
   === 言語ルール ===
   - JSONキーは英語のままにすること（"coherence"）。値は 0.00 から 1.00 の数値。
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   一貫性評価対象の CIRIS エージェント返信:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   一貫性評価対象の CIRIS エージェント返信:

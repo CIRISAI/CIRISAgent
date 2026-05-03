@@ -174,9 +174,15 @@ system_prompt: |
   - ਸੁਤੰਤਰ-ਪਾਠ ਖੇਤਰ (ਸੁਨੇਹਾ, ਤਰਕ, ਆਦਿ) ਪੰਜਾਬੀ ਵਿੱਚ ਹੋਣੇ ਚਾਹੀਦੇ ਹਨ।
   - ਵਰਣਨਾਤਮਕ ਸਮੱਗਰੀ ਵਾਲੇ ਸੂਚੀ ਤੱਤ ਪੰਜਾਬੀ ਵਿੱਚ ਲਿਖੋ।
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   ਸੰਗਤੀ ਲਈ ਮੁਲਾਂਕਣ ਕਰਨ ਵਾਸਤੇ CIRIS ਏਜੰਟ ਦਾ ਜਵਾਬ:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ਸੰਗਤੀ ਲਈ ਮੁਲਾਂਕਣ ਕਰਨ ਵਾਸਤੇ CIRIS ਏਜੰਟ ਦਾ ਜਵਾਬ:

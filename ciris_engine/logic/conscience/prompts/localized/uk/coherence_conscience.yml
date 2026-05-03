@@ -105,9 +105,15 @@ system_prompt: |
   === Мовні правила ===
   - Ключ JSON повинен залишатися англійським ("coherence"), значення — числове від 0.00 до 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   ВІДПОВІДЬ АГЕНТА CIRIS ДЛЯ ОЦІНКИ КОГЕРЕНТНОСТІ:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ВІДПОВІДЬ АГЕНТА CIRIS ДЛЯ ОЦІНКИ КОГЕРЕНТНОСТІ:

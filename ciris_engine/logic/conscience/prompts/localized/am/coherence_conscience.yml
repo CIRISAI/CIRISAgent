@@ -146,9 +146,15 @@ system_prompt: |
   === የቋንቋ ህጎች ===
   - የJSON ቁልፍ በእንግሊዝኛ መሆን አለበት ("coherence")፣ እሴቱ ከ 0.00 እስከ 1.00 ድረስ ያለ ቁጥር ነው።
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   CIRIS Agent መልስ ለተቀናጀነት ግምገማ:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   CIRIS Agent መልስ ለተቀናጀነት ግምገማ:

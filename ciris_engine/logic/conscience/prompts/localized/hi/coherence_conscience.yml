@@ -141,9 +141,15 @@ system_prompt: |
   === भाषा नियम ===
   - JSON कुंजी अंग्रेज़ी में ही रहनी चाहिए ("coherence"); मान 0.00 से 1.00 के बीच एक संख्या है।
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   सुसंगति के लिए मूल्यांकन करने के लिए CIRIS एजेंट उत्तर:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   सुसंगति के लिए मूल्यांकन करने के लिए CIRIS एजेंट उत्तर:

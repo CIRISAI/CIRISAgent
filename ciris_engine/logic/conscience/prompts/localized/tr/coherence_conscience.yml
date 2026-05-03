@@ -95,9 +95,15 @@ system_prompt: |
   === Dil Kuralları ===
   - JSON anahtarı İngilizce kalmalıdır ("coherence"); değer 0.00 ile 1.00 arasında bir sayıdır.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   TUTARLILIK İÇİN DEĞERLENDİRİLECEK CIRIS Ajan YANITI:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   TUTARLILIK İÇİN DEĞERLENDİRİLECEK CIRIS Ajan YANITI:

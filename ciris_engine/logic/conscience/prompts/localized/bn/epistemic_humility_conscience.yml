@@ -154,7 +154,15 @@ system_prompt: |
   - recommended_action-এর মান অবশ্যই ইংরেজিতে থাকবে ("proceed" / "ponder" / "defer")।
   - "reflective_justification"-এর বিষয়বস্তু বাংলায় লিখুন — ব্যবহারকারীর ভাষার সঙ্গে সামঞ্জস্যপূর্ণ।
   - "identified_uncertainties" তালিকার উপাদানগুলি বাংলায় লিখুন।
-user_prompt_template: 'প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
   প্রস্তাবিত ক্রিয়ার আউটপুট: {action_description}

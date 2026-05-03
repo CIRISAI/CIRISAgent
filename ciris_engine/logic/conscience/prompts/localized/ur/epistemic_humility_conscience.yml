@@ -97,8 +97,16 @@ system_prompt: |
   - recommended_action کی ویلیو انگریزی میں ہی رہنی چاہیے ("proceed" / "ponder" / "defer").
   - "reflective_justification" کا مواد اردو میں لکھا جائے — صارف کی زبان سے ہم آہنگ۔
   - "identified_uncertainties" فہرست کے عناصر اردو میں لکھے جائیں۔
-user_prompt_template: 'تجویز کردہ عمل کی آؤٹ پٹ: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  تجویز کردہ عمل کی آؤٹ پٹ: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   تجویز کردہ عمل کی آؤٹ پٹ: {action_description}

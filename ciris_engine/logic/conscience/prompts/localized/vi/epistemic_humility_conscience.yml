@@ -145,8 +145,16 @@ system_prompt: |
   - Giá trị của recommended_action phải giữ nguyên tiếng Anh ("proceed" / "ponder" / "defer").
   - Nội dung của "reflective_justification" được viết bằng tiếng Việt — phù hợp với ngôn ngữ của người dùng.
   - Các phần tử trong danh sách "identified_uncertainties" được viết bằng tiếng Việt.
-user_prompt_template: 'Đầu ra hành động đề xuất: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  Đầu ra hành động đề xuất: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   Đầu ra hành động đề xuất: {action_description}

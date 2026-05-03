@@ -141,8 +141,16 @@ system_prompt: |
   - recommended_action విలువ ఆంగ్లంలోనే ఉండాలి ("proceed" / "ponder" / "defer").
   - "reflective_justification" కంటెంట్ తెలుగులో రాయండి — వినియోగదారు భాషకు అనుగుణంగా.
   - "identified_uncertainties" జాబితాలోని అంశాలను తెలుగులో రాయండి.
-user_prompt_template: 'ప్రతిపాదిత చర్య అవుట్‌పుట్: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  ప్రతిపాదిత చర్య అవుట్‌పుట్: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   ప్రతిపాదిత చర్య అవుట్‌పుట్: {action_description}

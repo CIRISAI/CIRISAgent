@@ -156,9 +156,15 @@ system_prompt: |
   === Sheria za Lugha ===
   - Ufunguo wa JSON lazima ubaki kwa Kiingereza ("coherence"); thamani ni nambari kati ya 0.00 na 1.00.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   JIBU LA WAKALA WA CIRIS LITAKACHOPIMWA KWA UPATANIFU:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   JIBU LA WAKALA WA CIRIS LITAKACHOPIMWA KWA UPATANIFU:

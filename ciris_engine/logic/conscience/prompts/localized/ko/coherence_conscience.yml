@@ -69,9 +69,15 @@ system_prompt: |
   === 언어 규칙 ===
   - JSON 키는 영어로 유지해야 합니다 ("coherence"); 값은 0.00에서 1.00 사이의 숫자입니다.
 user_prompt_template: |-
+  User message:
+  {user_message}
+
   일관성 평가를 위한 CIRIS 에이전트 응답:
   {text}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   일관성 평가를 위한 CIRIS 에이전트 응답:

@@ -693,20 +693,35 @@ jobs:
 
       - name: Sign build manifest (Python source tree)
         env:
-          # Fleet convention: secret is named CIRIS_BUILD_ED25519_SECRET (not _SEED).
-          # Bridge-provisioned across all 6 onboarded repos (Persist/Lens/Agent/
-          # Verify/Registry/Edge) on 2026-05-01. Env-var name CIRIS_BUILD_ED25519_SEED
-          # stays since ciris-build-sign reads from it via --ed25519-seed; only the
-          # secrets.* source is renamed.
-          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          # Fleet convention: secrets stored base64-encoded; ciris-build-sign
+          # reads the seed/secret as FILE PATHS (not raw values), so we
+          # materialize to mktemp paths before invocation. Pattern matches
+          # CIRISPersist/.github/workflows/ci.yml exactly. Bridge-provisioned
+          # across all 6 onboarded repos on 2026-05-01.
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured."
+            echo "::error::Set CIRIS_BUILD_ED25519_SECRET and CIRIS_BUILD_MLDSA_SECRET."
+            echo "::error::See CIRISPersist/docs/BUILD_SIGNING.md for ciris-build-sign generate-keys + secret upload."
+            exit 1
+          fi
+          # Materialize the secret bytes to short-lived files. set +x stays
+          # OFF so the secret never echoes to logs (GH Actions auto-masks
+          # declared secrets, but belt-and-suspenders here too).
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          # Secrets are stored base64-encoded; decode to raw bytes for the CLI.
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
           # Read CIRIS_VERSION as a string literal without importing the
-          # `ciris_engine` package — the package's __init__ pulls in the
-          # full runtime which transitively imports aiofiles + other
-          # runtime-only deps not installed in this signing job (only
-          # ciris-verify is). awk on the literal stays robust as more
-          # runtime deps get added. Format: `CIRIS_VERSION = "x.y.z-stage"`
+          # `ciris_engine` package (transitive import chain pulls runtime
+          # deps not installed in this signing job; only ciris-verify is).
+          # awk on the literal stays robust as more runtime deps are added.
+          # Format: `CIRIS_VERSION = "x.y.z-stage"`
           VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
           if [ -z "$VERSION" ]; then
             echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
@@ -723,10 +738,12 @@ jobs:
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA" \
             --target python-source-tree \
-            --ed25519-seed "$CIRIS_BUILD_ED25519_SEED" \
-            --mldsa-secret "$CIRIS_BUILD_MLDSA_SECRET" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
             --key-id "agent-steward-2026" \
             --output build-manifest.json
+          # Wipe key files immediately after signing.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
 
       - name: Push signed manifest to Registry (Python source tree)
         # Posts the raw signed BuildManifest JSON to /v1/verify/build-manifest.
@@ -763,20 +780,21 @@ jobs:
 
       - name: Sign mobile build manifest
         env:
-          # Fleet convention: secret is named CIRIS_BUILD_ED25519_SECRET (not _SEED).
-          # Bridge-provisioned across all 6 onboarded repos (Persist/Lens/Agent/
-          # Verify/Registry/Edge) on 2026-05-01. Env-var name CIRIS_BUILD_ED25519_SEED
-          # stays since ciris-build-sign reads from it via --ed25519-seed; only the
-          # secrets.* source is renamed.
-          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          # Same secret-materialization pattern as the Python source-tree
+          # sign step above; see that step's comment block for rationale.
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
-          # Read CIRIS_VERSION as a string literal without importing the
-          # `ciris_engine` package — the package's __init__ pulls in the
-          # full runtime which transitively imports aiofiles + other
-          # runtime-only deps not installed in this signing job (only
-          # ciris-verify is). awk on the literal stays robust as more
-          # runtime deps get added. Format: `CIRIS_VERSION = "x.y.z-stage"`
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured (mobile sign step)."
+            exit 1
+          fi
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
           VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
           if [ -z "$VERSION" ]; then
             echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
@@ -793,10 +811,12 @@ jobs:
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA-mobile" \
             --target ios-mobile-bundle \
-            --ed25519-seed "$CIRIS_BUILD_ED25519_SEED" \
-            --mldsa-secret "$CIRIS_BUILD_MLDSA_SECRET" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
             --key-id "agent-steward-2026" \
             --output build-manifest-mobile.json
+          # Wipe key files immediately after signing.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
 
       - name: Push signed mobile manifest to Registry
         env:

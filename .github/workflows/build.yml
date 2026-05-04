@@ -674,12 +674,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install ciris-build-sign (CIRISVerify v1.8.1+)
-        # Provides the `ciris-build-sign` binary on PATH. Required for the
-        # --tree manifest shape that replaces register_agent_build.py's
-        # in-Python file-tree hashing + signing as of 2.7.8.4 (issue #707).
+      - name: Install ciris-build-sign (CIRISVerify v1.10.1+)
+        # v1.10.1 ships the `register` subcommand which writes all 3 registry
+        # tables (builds + binary_manifests + function_manifests) — closes
+        # the parent-row gap that left 2.7.8/2.7.9 with only function_manifests
+        # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
+        # /v1/builds; drops REGISTRY_JWT_SECRET requirement.
         run: |
-          pip install --upgrade "ciris-verify>=1.8.1"
+          pip install --upgrade "ciris-verify>=1.10.1"
           which ciris-build-sign && ciris-build-sign --version
 
       - name: Emit build-secrets hash file
@@ -720,13 +722,16 @@ jobs:
           # Read CIRIS_VERSION as a string literal without importing the
           # `ciris_engine` package (transitive import chain pulls runtime
           # deps not installed in this signing job; only ciris-verify is).
-          # awk on the literal stays robust as more runtime deps are added.
-          # Format: `CIRIS_VERSION = "x.y.z-stage"`
-          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          # Strip the channel suffix (-stable / -rc / -beta) so the
+          # registry receives plain semver in `binary_version` per #726
+          # — every other primitive ships plain semver, and the registry
+          # does exact-string match on the column. Format in source:
+          # `CIRIS_VERSION = "x.y.z-stage"`.
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
           if [ -z "$VERSION" ]; then
             echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
           fi
-          echo "CIRIS_VERSION = $VERSION"
+          echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
           ciris-build-sign sign \
             --primitive agent \
@@ -744,34 +749,6 @@ jobs:
             --output build-manifest.json
           # Wipe key files immediately after signing.
           shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
-
-      - name: Push signed manifest to Registry (Python source tree)
-        # Posts the raw signed BuildManifest JSON to /v1/verify/build-manifest.
-        # Auth: Bearer ${{ secrets.REGISTRY_ADMIN_TOKEN }} (same admin token
-        # the function-manifest endpoint uses; not the gRPC HS256 JWT, which
-        # was retired with register_signed_manifest.py).
-        # Pre-flight: the agent-steward pubkey must already be registered as
-        # a trusted key for project='ciris-agent' via RegisterTrustedPrimitiveKey
-        # admin RPC. Without it: HTTP 403 no_trusted_key.
-        env:
-          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
-          REGISTRY_ADMIN_TOKEN: ${{ secrets.REGISTRY_ADMIN_TOKEN }}
-        run: |
-          HTTP_CODE=$(curl -sw "%{http_code}" -o response.json \
-            -X POST "$REGISTRY_URL/v1/verify/build-manifest" \
-            -H "Authorization: Bearer $REGISTRY_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @build-manifest.json)
-          echo "HTTP $HTTP_CODE"
-          cat response.json
-          echo
-          case "$HTTP_CODE" in
-            200) echo "✓ Stored";;
-            401) echo "ERROR 401 unauthorized — verify REGISTRY_ADMIN_TOKEN matches production env var"; exit 1;;
-            403) echo "ERROR 403 no_trusted_key — operator must register the agent-steward pubkey via RegisterTrustedPrimitiveKey admin RPC for project='ciris-agent'"; exit 1;;
-            400) echo "ERROR 400 — body invalid (verification_failed = pubkey mismatch; invalid_manifest = body shape)"; exit 1;;
-            *) echo "ERROR unexpected HTTP $HTTP_CODE"; exit 1;;
-          esac
 
       - name: Extract mobile Resources.zip
         run: |
@@ -795,11 +772,12 @@ jobs:
           printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
           printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
 
-          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          # Strip channel suffix per #726 (plain semver to registry).
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
           if [ -z "$VERSION" ]; then
             echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
           fi
-          echo "CIRIS_VERSION = $VERSION"
+          echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
           ciris-build-sign sign \
             --primitive agent \
@@ -818,26 +796,79 @@ jobs:
           # Wipe key files immediately after signing.
           shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
 
-      - name: Push signed mobile manifest to Registry
+      - name: Register release with CIRISRegistry (file mode + binary mode)
+        # Single-step replacement for the legacy two-curl-POST flow, per
+        # CIRISAgent#727. ciris-build-sign register (v1.10.1+) writes all
+        # 3 registry tables — builds + binary_manifests + function_manifests —
+        # in one call, closing the parent-row gap that left every release
+        # ≥ 2.7.8 with only function_manifests rows. Mode auto-detected
+        # from the BuildManifest:
+        #   - python-source-tree → FILE mode (FileTreeExtras present)
+        #     → writes builds row + function_manifests
+        #   - ios-mobile-bundle  → BINARY mode (binary hash present)
+        #     → writes builds row + binary_manifests + function_manifests
+        # Mixed modes in a single register call are rejected, so we run
+        # two calls per release (#727 § "single mode per release call").
+        # REGISTRY_JWT_SECRET no longer needed (v1.10.1 cut over to HTTP
+        # POST /v1/builds with REGISTRY_ADMIN_TOKEN bearer).
+        # Pre-flight requirement: agent-steward pubkey must be registered
+        # as a trusted key for project='ciris-agent' via
+        # RegisterTrustedPrimitiveKey admin RPC (otherwise HTTP 403
+        # no_trusted_key).
         env:
           REGISTRY_URL: ${{ vars.REGISTRY_URL }}
           REGISTRY_ADMIN_TOKEN: ${{ secrets.REGISTRY_ADMIN_TOKEN }}
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
-          HTTP_CODE=$(curl -sw "%{http_code}" -o response-mobile.json \
-            -X POST "$REGISTRY_URL/v1/verify/build-manifest" \
-            -H "Authorization: Bearer $REGISTRY_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data-binary @build-manifest-mobile.json)
-          echo "HTTP $HTTP_CODE"
-          cat response-mobile.json
-          echo
-          case "$HTTP_CODE" in
-            200) echo "✓ Stored";;
-            401) echo "ERROR 401 unauthorized — verify REGISTRY_ADMIN_TOKEN matches production env var"; exit 1;;
-            403) echo "ERROR 403 no_trusted_key — operator must register the agent-steward pubkey via RegisterTrustedPrimitiveKey admin RPC for project='ciris-agent'"; exit 1;;
-            400) echo "ERROR 400 — body invalid (verification_failed = pubkey mismatch; invalid_manifest = body shape)"; exit 1;;
-            *) echo "ERROR unexpected HTTP $HTTP_CODE"; exit 1;;
-          esac
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured (register step)."
+            exit 1
+          fi
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
+          # Strip channel suffix per #726 (plain semver to registry).
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          GIT_SHA=$(git rev-parse HEAD)
+
+          # Call 1: python-source-tree (file mode → builds row, file_manifest_json populated).
+          echo "::group::register python-source-tree (file mode)"
+          ciris-build-sign register \
+            --project ciris-agent \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA" \
+            --target python-source-tree:./build-manifest.json \
+            --modules core \
+            --source-repo "https://github.com/CIRISAI/CIRISAgent" \
+            --source-commit "$GIT_SHA" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026"
+          echo "::endgroup::"
+
+          # Call 2: ios-mobile-bundle (binary mode → builds + binary_manifests + function_manifests).
+          # Two separate `builds` rows per release is fine; they're keyed on
+          # build_hash which differs because the `binaries` map differs.
+          echo "::group::register ios-mobile-bundle (binary mode)"
+          ciris-build-sign register \
+            --project ciris-agent \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA-mobile" \
+            --target ios-mobile-bundle:./build-manifest-mobile.json \
+            --modules ios \
+            --source-repo "https://github.com/CIRISAI/CIRISAgent" \
+            --source-commit "$GIT_SHA" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026"
+          echo "::endgroup::"
+
+          # Wipe key files immediately after register.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
 
   deploy:
     name: Notify CIRISManager of Update

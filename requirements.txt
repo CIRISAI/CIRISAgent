@@ -35,7 +35,7 @@ pycryptodome>=3.20.0,<4.0.0  # Keccak-256 for EVM address checksums (EIP-55)
 PyJWT[crypto]>=2.8.0,<3.0.0
 bcrypt>=4.0.0,<5.0.0
 PyNaCl>=1.5.0,<2.0.0
-ciris-verify>=1.8.1  # Hardware-rooted license verification, wallet signing, native encryption (CIRISVerify FFI bindings) + ciris-build-sign CLI. v1.8.1 adds --tree manifest shape (file-tree extras) — replaces tools/legacy/register_agent_build.py's in-Python file-tree hashing in CI per #707. v1.8.0 floor: HardwareSigner.storage_descriptor() (PoB substrate primitive, see #708). v1.6.4 was the iOS SQLite-symbol-fix floor.
+ciris-verify>=1.10.1  # Hardware-rooted license verification, wallet signing, native encryption (CIRISVerify FFI bindings) + ciris-build-sign CLI. v1.10.1 adds `register` subcommand (writes all 3 registry tables: builds + binary_manifests + function_manifests; closes parent-row gap that left 2.7.8/2.7.9 with only function_manifests rows). v1.10.1 also cuts over from gRPC RegisterBuild to HTTP POST /v1/builds — drops REGISTRY_JWT_SECRET requirement, single bearer token (REGISTRY_ADMIN_TOKEN) for all 3 endpoints. Earlier history: v1.8.1 added --tree manifest shape (#707), v1.8.0 floor HardwareSigner.storage_descriptor() (#708), v1.6.4 iOS SQLite-symbol-fix.
 
 # Web Framework (API)
 fastapi>=0.111.0,<1.0.0

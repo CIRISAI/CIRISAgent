@@ -55,7 +55,14 @@ BUILD_SECRETS_HASHES: Dict[str, str] = {
 
 
 def main() -> int:
-    json.dump(BUILD_SECRETS_HASHES, sys.stdout, indent=2, sort_keys=True)
+    # ciris-build-sign --tree-extra-hashes-file requires the multihash-style
+    # `sha256:<hex>` prefix, not bare hex. Cross-fleet convention: see
+    # CIRISPersist/tools/legacy/ciris_manifest.py + that repo's CI which
+    # emits `sha256:$(sha256sum ...)`. Prefix at emit time so
+    # BUILD_SECRETS_HASHES stays a clean {path: hex} dict for human editing
+    # while the wire format ships the canonical multihash form.
+    prefixed = {path: f"sha256:{hex_hash}" for path, hex_hash in BUILD_SECRETS_HASHES.items()}
+    json.dump(prefixed, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
     return 0
 

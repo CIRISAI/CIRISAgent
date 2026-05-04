@@ -188,6 +188,99 @@ class _BaseConscience(ConscienceInterface):
             raise RuntimeError("No sink (BusManager) provided to conscience - this is required")
         return self.sink
 
+    # Truncation cap for user-message context fed into conscience prompts.
+    # Long enough to preserve the actual question even with the observer prefix
+    # ("Respond to message from @user (ID: ...) in #channel: '...'"), short
+    # enough to keep the LLM judge's attention focused on the salient text.
+    _USER_MESSAGE_MAX_CHARS = 2000
+
+    def _extract_user_message(self, context: ConscienceCheckContext) -> str:
+        """Extract the user's original message text from context.
+
+        Source priority:
+          1. context.task.description — observer-built, always carries the
+             literal user message in single quotes; stable across follow-up
+             thoughts. See base_observer.py for the construction template.
+          2. context.thought.content — equals task.description for SEED
+             thoughts (per task_thought_factory.py:332) but diverges on
+             follow-up/recovery thoughts (carries reasoning text instead).
+             Fallback only — task.description is preferred when available.
+          3. "unknown" sentinel — matches the EOV `user_locale=language or
+             "unknown"` precedent (commit 0c6a962f1).
+
+        Used by the RELATIONAL consciences (Coherence, EpistemicHumility) to
+        let the LLM judge see the trigger the response was reacting to.
+        Self-referential consciences (Entropy, OptimizationVeto) deliberately
+        do NOT use this — see their respective prompts for why.
+
+        Truncates at _USER_MESSAGE_MAX_CHARS, head-keep — observer-built
+        descriptions front-load the author/channel/quoted-message context,
+        so the head contains everything we need.
+
+        Uses the canonical hasattr(content, "text") else str(content) pattern
+        from tsaspdma.py:441-446 to handle both ThoughtContent-wrapped and
+        raw-string content forms.
+        """
+        text: Optional[str] = None
+        try:
+            task = getattr(context, "task", None)
+            if task is not None:
+                raw = getattr(task, "description", None)
+                if isinstance(raw, str):
+                    text = raw
+            if not text:
+                thought = getattr(context, "thought", None)
+                if thought is not None:
+                    raw = getattr(thought, "content", None)
+                    if raw is not None:
+                        text = raw.text if hasattr(raw, "text") else str(raw)
+                        # str() on a Mock returns a repr string — not a usable
+                        # user message. Reject anything that doesn't look like
+                        # real text by failing the isinstance check above.
+                        if not isinstance(text, str):
+                            text = None
+        except (TypeError, AttributeError):
+            text = None
+        if not text:
+            return "unknown"
+        if len(text) > self._USER_MESSAGE_MAX_CHARS:
+            text = text[: self._USER_MESSAGE_MAX_CHARS] + "...[truncated]"
+        return text
+
+    def _render_action_text(self, action: ActionSelectionDMAResult) -> str:
+        """Render the agent-generated content of an action as text for Entropy/Coherence to evaluate.
+
+        Per CONSCIENCE_V3.md migration plan and the agent-side investigation
+        (2026-05-03), Entropy and Coherence apply to a verb-set broader than
+        just SPEAK. This helper extracts the verb-specific content surface:
+
+          SPEAK   → action_parameters.content   (the agent's response text)
+          TOOL    → "{name}({args})"            (the agent's tool call rendering)
+          DEFER   → action_parameters.reason    (the agent's defer reason)
+
+        Other verbs (PONDER, MEMORIZE, FORGET, REJECT) have callers that
+        should not yet route through this helper — Phase 1 is SPEAK+TOOL+DEFER.
+
+        Returns empty string when the verb has no agent-generated content
+        suitable for evaluation; the caller will treat this as MSG_NO_CONTENT
+        and skip the LLM call.
+        """
+        params = action.action_parameters
+        if action.selected_action == HandlerActionType.SPEAK:
+            return getattr(params, "content", "") or ""
+        if action.selected_action == HandlerActionType.TOOL:
+            name = getattr(params, "name", "") or "unknown_tool"
+            args = getattr(params, "parameters", {}) or {}
+            try:
+                arg_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+            except (AttributeError, TypeError):
+                arg_str = str(args)
+            return f"TOOL CALL: {name}({arg_str})"
+        if action.selected_action == HandlerActionType.DEFER:
+            reason = getattr(params, "reason", "") or ""
+            return f"DEFER REASON: {reason}" if reason else ""
+        return ""
+
     def _get_image_context_info(self, context: ConscienceCheckContext) -> Optional[str]:
         """
         Get textual metadata about images in context for conscience evaluation.
@@ -236,8 +329,13 @@ class EntropyConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no entropy check needed", start_time)
+        # Entropy verb-scope: SPEAK + TOOL (per FSD/CONSCIENCE_V3.md Stage 1
+        # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
+            self._update_trace_correlation(
+                correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time
+            )
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -252,11 +350,7 @@ class EntropyConscience(_BaseConscience):
                 reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
@@ -369,8 +463,19 @@ class CoherenceConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no coherence check needed", start_time)
+        # Coherence verb-scope: SPEAK + TOOL + DEFER. Phase-1 extension
+        # beyond SPEAK-only per FSD/CONSCIENCE_V3.md (TOOL) plus defer-reason
+        # coherence per the 2026-05-03 verb-scope investigation (Phase 2):
+        # catches defensive-mimicry refusal framing in DEFER reasons.
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (
+            HandlerActionType.SPEAK,
+            HandlerActionType.TOOL,
+            HandlerActionType.DEFER,
+        ):
+            self._update_trace_correlation(
+                correlation, True, "Verb out of Coherence scope (SPEAK+TOOL+DEFER only)", start_time
+            )
             return ConscienceCheckResult(status=ConscienceStatus.PASSED, passed=True, check_timestamp=ts_datetime)
         sink = await self._get_sink()
         if not sink:
@@ -381,11 +486,7 @@ class CoherenceConscience(_BaseConscience):
                 reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
@@ -404,7 +505,10 @@ class CoherenceConscience(_BaseConscience):
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
             messages, coherence_user_prompt = self._create_coherence_messages(
-                text, image_context, language=self._resolve_language(context)
+                text,
+                image_context,
+                language=self._resolve_language(context),
+                user_message=self._extract_user_message(context),
             )
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await sink.llm.call_llm_structured(
@@ -444,7 +548,11 @@ class CoherenceConscience(_BaseConscience):
         )
 
     def _create_coherence_messages(
-        self, text: str, image_context: Optional[str] = None, language: Optional[str] = None
+        self,
+        text: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for coherence evaluation with optional image context metadata.
 
@@ -453,7 +561,12 @@ class CoherenceConscience(_BaseConscience):
         """
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("coherence_conscience")
-        user_prompt = loader.get_user_prompt("coherence_conscience", image_context=image_context, text=text)
+        user_prompt = loader.get_user_prompt(
+            "coherence_conscience",
+            image_context=image_context,
+            text=text,
+            user_message=user_message,
+        )
 
         return [
             # Polyglot ACCORD: ethical reasoning draws from every tradition in
@@ -559,7 +672,10 @@ class OptimizationVetoConscience(_BaseConscience):
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("optimization_veto_conscience")
         user_prompt = loader.get_user_prompt(
-            "optimization_veto_conscience", image_context=image_context, action_description=action_description
+            "optimization_veto_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_locale=language or "unknown",
         )
 
         return [
@@ -598,7 +714,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
         messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(
-            desc, image_context, language=self._resolve_language(context)
+            desc,
+            image_context,
+            language=self._resolve_language(context),
+            user_message=self._extract_user_message(context),
         )
 
         try:
@@ -658,7 +777,11 @@ class EpistemicHumilityConscience(_BaseConscience):
         )
 
     def _create_epistemic_humility_messages(
-        self, action_description: str, image_context: Optional[str] = None, language: Optional[str] = None
+        self,
+        action_description: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
     ) -> tuple[List[LLMMessage], str]:
         """Create messages for balanced epistemic humility evaluation with optional image context metadata.
 
@@ -668,7 +791,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         loader = get_conscience_prompt_loader(language=language)
         system_prompt = loader.get_system_prompt("epistemic_humility_conscience")
         user_prompt = loader.get_user_prompt(
-            "epistemic_humility_conscience", image_context=image_context, action_description=action_description
+            "epistemic_humility_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_message=user_message,
         )
 
         return [

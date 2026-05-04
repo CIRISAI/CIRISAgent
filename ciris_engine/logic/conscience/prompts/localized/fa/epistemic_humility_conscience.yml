@@ -116,8 +116,16 @@ system_prompt: |
   - مقدار recommended_action باید به انگلیسی باقی بماند ("proceed" / "ponder" / "defer").
   - محتوای "reflective_justification" به فارسی نوشته شود — همسو با زبان کاربر.
   - عناصر فهرست "identified_uncertainties" به فارسی نوشته شوند.
-user_prompt_template: 'خروجی کنش پیشنهادی: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  خروجی کنش پیشنهادی: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   خروجی کنش پیشنهادی: {action_description}

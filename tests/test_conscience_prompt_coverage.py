@@ -36,13 +36,30 @@ MANIFEST = REPO_ROOT / "localization" / "manifest.json"
 EN_BASE = REPO_ROOT / "ciris_engine" / "logic" / "conscience" / "prompts"
 LOCALIZED_ROOT = EN_BASE / "localized"
 
+# Conscience prompts that are POLYGLOT — load universally regardless of
+# user-preferred locale, so per-locale mirrors are NOT expected (and would
+# silently shadow the base, breaking polyglot uplifts; see polyglot/CLAUDE.md
+# §6 + memory anchor `feedback_polyglot_artifacts_universal`). Locales MUST
+# NOT have files for these — the per-locale-coverage assertion below
+# excludes them, and a separate assertion below catches stale per-locale
+# mirrors that would silently shadow the base.
+#
+# `optimization_veto_conscience.yml` was lifted to polyglot v3.0 in commit
+# 5a340b8e9 (canonical-encoding triangulation); the 28 stale localized
+# mirrors were deliberately removed in commit 0c6a962f1.
+POLYGLOT_PROMPTS: frozenset[str] = frozenset({
+    "optimization_veto_conscience.yml",
+})
+
 # All conscience prompt files expected per language. Derived from the
 # English base directory at module-load time so adding a new conscience
 # (e.g. epistemic_charity_conscience.yml) automatically expands the
 # coverage requirement — the test will fail until every locale gains the
-# new prompt.
+# new prompt. POLYGLOT_PROMPTS are excluded — they don't have per-locale
+# variants by design.
 EXPECTED_PROMPTS: list[str] = sorted(
-    p.name for p in EN_BASE.glob("*.yml") if p.is_file()
+    p.name for p in EN_BASE.glob("*.yml")
+    if p.is_file() and p.name not in POLYGLOT_PROMPTS
 )
 
 # Languages from the localization manifest, excluding `en` (the base).
@@ -61,13 +78,24 @@ def test_expected_prompts_known() -> None:
     aware: every change here cascades to a coverage requirement on all
     28 localized directories.
     """
+    # The 3 per-locale-required consciences. EXPECTED_PROMPTS excludes
+    # POLYGLOT_PROMPTS (i.e. EOV) since polyglot prompts are loaded
+    # universally — locales must NOT have per-locale variants that would
+    # shadow the base.
     assert "entropy_conscience.yml" in EXPECTED_PROMPTS
     assert "coherence_conscience.yml" in EXPECTED_PROMPTS
-    assert "optimization_veto_conscience.yml" in EXPECTED_PROMPTS
     assert "epistemic_humility_conscience.yml" in EXPECTED_PROMPTS
-    assert len(EXPECTED_PROMPTS) >= 4, (
-        f"At least 4 conscience prompts expected in en base, found "
-        f"{len(EXPECTED_PROMPTS)}: {EXPECTED_PROMPTS}"
+    # EOV is polyglot — should be in en base but excluded from EXPECTED.
+    assert (EN_BASE / "optimization_veto_conscience.yml").is_file(), (
+        "Polyglot EOV prompt missing from en base"
+    )
+    assert "optimization_veto_conscience.yml" not in EXPECTED_PROMPTS, (
+        "EOV is a polyglot conscience and must NOT be in EXPECTED_PROMPTS — "
+        "per-locale mirrors silently shadow the polyglot base."
+    )
+    assert len(EXPECTED_PROMPTS) >= 3, (
+        f"At least 3 per-locale-required conscience prompts expected, "
+        f"found {len(EXPECTED_PROMPTS)}: {EXPECTED_PROMPTS}"
     )
 
 
@@ -101,11 +129,26 @@ def test_locale_has_complete_conscience_prompt_set(locale: str) -> None:
         f"see existing translations in localized/zh/ or localized/de/ "
         f"for format and language-rule block conventions."
     )
-    assert not extra, (
+    # `extra` here is computed against EXPECTED_PROMPTS (which excludes
+    # POLYGLOT_PROMPTS). So if a locale dir contains EOV, it shows up here
+    # as "extra" — and that IS the violation we want to catch (stale
+    # polyglot mirror shadowing the base). Surface it with a polyglot-
+    # specific message when applicable.
+    polyglot_extras = sorted(set(extra) & POLYGLOT_PROMPTS)
+    other_extras = sorted(set(extra) - POLYGLOT_PROMPTS)
+    assert not polyglot_extras, (
+        f"Locale '{locale}' has stale POLYGLOT mirror(s) that shadow the "
+        f"polyglot base: {polyglot_extras}. Polyglot consciences load "
+        f"universally regardless of user-preferred locale; per-locale "
+        f"mirrors silently pre-empt the base prompt and break polyglot "
+        f"uplifts. See polyglot/CLAUDE.md §6 + commit 0c6a962f1 (which "
+        f"removed 28 stale EOV mirrors after polyglot v3.0 uplift)."
+    )
+    assert not other_extras, (
         f"Locale '{locale}' has unexpected conscience prompt files "
-        f"(not present in en base): {extra}. Either the file is misnamed "
-        f"or a corresponding en base file is missing. The en base is the "
-        f"source of truth for which conscience prompts exist."
+        f"(not present in en base): {other_extras}. Either the file is "
+        f"misnamed or a corresponding en base file is missing. The en "
+        f"base is the source of truth for which conscience prompts exist."
     )
 
 

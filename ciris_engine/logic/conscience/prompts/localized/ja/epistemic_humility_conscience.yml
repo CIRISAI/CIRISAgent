@@ -124,8 +124,15 @@ system_prompt: |
   - recommended_action の値は英語のままにすること（"proceed" / "ponder" / "defer"）。
   - "reflective_justification" の内容は日本語で記述する — ユーザーの言語に合わせる。
   - "identified_uncertainties" リストの要素は日本語で記述する。
-user_prompt_template: 提案された行動出力:{action_description}
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  提案された行動出力:{action_description}
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   提案された行動出力:{action_description}

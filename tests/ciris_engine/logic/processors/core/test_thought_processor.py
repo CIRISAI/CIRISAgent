@@ -417,8 +417,20 @@ class TestThoughtProcessor:
         result = await thought_processor.process_thought(item)
 
         assert result is not None
-        # Result is ConscienceApplicationResult, so access final_action.selected_action
-        assert result.final_action.selected_action == HandlerActionType.DEFER
+        # Result is ConscienceApplicationResult.
+        # DMA output side: ASPDMA selected DEFER for this thought.
+        assert result.original_action.selected_action == HandlerActionType.DEFER
+        # Note: as of 2.7.9, DEFER is no longer outer-exempt from consciences —
+        # Coherence/EOV/EpistemicHumility evaluate the defer `reason` for
+        # defensive-mimicry refusal framing. The mocked DEFER reason in this
+        # test ("Waiting for user input") is short and may trigger a conscience
+        # PONDER override, so result.final_action is allowed to differ from
+        # the original DMA selection. This test verifies the DMA-DEFER-routing
+        # path, not conscience pass-through.
+        assert result.final_action.selected_action in (
+            HandlerActionType.DEFER,
+            HandlerActionType.PONDER,
+        )
 
     @pytest.mark.asyncio
     async def test_process_thought_with_error(

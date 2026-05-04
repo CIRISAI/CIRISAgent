@@ -144,5 +144,15 @@ system_prompt: |
 
   Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
 
-user_prompt_template: "Proposed action output: {action_description}"
-user_prompt_with_image_template: "{image_context}\n\nProposed action output: {action_description}"
+user_prompt_template: |
+  User message:
+  {user_message}
+
+  Proposed action output: {action_description}
+user_prompt_with_image_template: |
+  User message:
+  {user_message}
+
+  {image_context}
+
+  Proposed action output: {action_description}

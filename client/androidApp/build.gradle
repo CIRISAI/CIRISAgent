@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 121
-        versionName "2.7.8"
+        versionCode 123
+        versionName "2.7.9"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -77,12 +77,26 @@ android {
         }
     }
 
+    // Resolve a signing credential from env → gradle property → ~/.keystore_pass
+    // file (last-resort fallback). The file fallback lets local dev builds work
+    // without exporting env vars every shell — set the value once in
+    // ~/.keystore_pass (chmod 600) and it flows through. CI must use env vars.
+    def resolveKeystoreSecret = { String envName, String propName ->
+        def fromEnv = System.getenv(envName)
+        if (fromEnv) return fromEnv
+        def fromProp = findProperty(propName)
+        if (fromProp) return fromProp
+        def fallbackFile = file("${System.getProperty('user.home')}/.keystore_pass")
+        if (fallbackFile.exists()) return fallbackFile.text.trim()
+        return ""
+    }
+
     signingConfigs {
         release {
             storeFile file(System.getenv("CIRIS_KEYSTORE_PATH") ?: "${System.getProperty('user.home')}/ciris-release-key.jks")
-            storePassword System.getenv("CIRIS_KEYSTORE_PASSWORD") ?: findProperty("cirisKeystorePassword") ?: ""
+            storePassword resolveKeystoreSecret("CIRIS_KEYSTORE_PASSWORD", "cirisKeystorePassword")
             keyAlias System.getenv("CIRIS_KEY_ALIAS") ?: findProperty("cirisKeyAlias") ?: "ciris-release-key"
-            keyPassword System.getenv("CIRIS_KEY_PASSWORD") ?: findProperty("cirisKeyPassword") ?: ""
+            keyPassword resolveKeystoreSecret("CIRIS_KEY_PASSWORD", "cirisKeyPassword")
         }
     }
 

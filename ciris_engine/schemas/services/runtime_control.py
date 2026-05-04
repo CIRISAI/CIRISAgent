@@ -1545,3 +1545,19 @@ class LLMCallEvent(BaseModel):
     prompt_hash: Optional[str] = Field(None, description="SHA-256 of prompt text (DETAILED+ trace level)")
     prompt: Optional[str] = Field(None, description="Full prompt text (FULL trace level only)")
     response_text: Optional[str] = Field(None, description="Full completion text (FULL trace level only)")
+
+    # Parent-event linkage (TRACE_WIRE_FORMAT.md §5.10, item #5 of #712).
+    # REQUIRED as of 2.7.9 — no transition window. Together with the parent
+    # CompleteTrace's (agent_id_hash, trace_id, thought_id), uniquely
+    # identifies the pipeline event that issued this LLM call. Persistence
+    # implementations enforce presence on incoming LLM_CALL events; the
+    # agent's emission is non-optional once trace_schema_version="2.7.9".
+    parent_event_type: str = Field(
+        ...,
+        description="The pipeline event_type whose execution issued this LLM call (e.g. 'DMA_RESULTS', 'ASPDMA_RESULT', 'CONSCIENCE_RESULT'). Required as of 2.7.9.",
+    )
+    parent_attempt_index: int = Field(
+        ...,
+        ge=0,
+        description="The attempt_index of the parent pipeline event under (thought_id, parent_event_type). Forms a non-forgeable parent-link with parent_event_type when included in the signed canonical bytes (§8). Required as of 2.7.9.",
+    )

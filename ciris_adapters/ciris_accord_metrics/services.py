@@ -51,7 +51,11 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
-TRACE_SCHEMA_VERSION = "2.7.0"
+# 2.7.9: bumped from "2.7.0" — signals to persistence that LLM_CALL events
+# carry the parent_event_type + parent_attempt_index fields specified in
+# TRACE_WIRE_FORMAT.md §5.10. Persistence layers MAY enforce field
+# presence on traces at this schema version.
+TRACE_SCHEMA_VERSION = "2.7.9"
 
 
 def _get_metrics_env(name: str, default: str = "") -> str:
@@ -154,17 +158,35 @@ class SimpleCapabilities:
 
 @dataclass
 class TraceComponent:
-    """A single component of a reasoning trace."""
+    """A single component of a reasoning trace.
+
+    `agent_id_hash` is denormalized from the parent CompleteTrace onto every
+    component as of trace_schema_version "2.7.9" (#712 item #1) — persistence
+    layers read it directly from each row instead of propagating from the
+    envelope. The wire representation carries the same value at both
+    CompleteTrace and TraceComponent levels; agents MUST emit them equal,
+    persistence MAY reject mismatches.
+    """
 
     component_type: str  # observation, context, rationale, conscience, action, outcome
     event_type: str  # THOUGHT_START, SNAPSHOT_AND_CONTEXT, etc.
     timestamp: str
     data: Dict[str, Any]
+    agent_id_hash: str = ""  # Denormalized from CompleteTrace.agent_id_hash; populated by build code.
 
 
 @dataclass
 class CompleteTrace:
-    """A complete 6-component reasoning trace."""
+    """A complete 6-component reasoning trace.
+
+    `deployment_profile` (2.7.9+) carries the cohort-taxonomy block per
+    FSD/TRACE_WIRE_FORMAT.md §3.2 — 6 agent-declared fields routed into
+    the signed canonical bytes (§8) so cohort labels are non-forgeable
+    post-emission. Agents MUST emit this block at trace_schema_version
+    "2.7.9"; persistence MUST reject 2.7.9 traces missing it.
+    Migration defaults populate when the operator hasn't configured
+    explicit values (see `AccordMetricsService._build_deployment_profile`).
+    """
 
     trace_id: str
     thought_id: str
@@ -178,13 +200,16 @@ class CompleteTrace:
     # Trace level determines what data is included - MUST be part of signature
     trace_level: Optional[str] = None
     trace_schema_version: str = TRACE_SCHEMA_VERSION
+    # Cohort taxonomy block, 2.7.9+. Required-on-the-wire at
+    # trace_schema_version "2.7.9" per FSD §3.2; absent at 2.7.0.
+    deployment_profile: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
 
         Uses _strip_empty on component data to match what was signed.
         """
-        return {
+        out: Dict[str, Any] = {
             "trace_id": self.trace_id,
             "thought_id": self.thought_id,
             "task_id": self.task_id,
@@ -195,6 +220,7 @@ class CompleteTrace:
             "trace_schema_version": self.trace_schema_version,
             "components": [
                 {
+                    "agent_id_hash": c.agent_id_hash or self.agent_id_hash,
                     "component_type": c.component_type,
                     "data": _strip_empty(c.data),
                     "event_type": c.event_type,
@@ -205,11 +231,14 @@ class CompleteTrace:
             "signature": self.signature,
             "signature_key_id": self.signature_key_id,
         }
+        if self.deployment_profile is not None:
+            out["deployment_profile"] = dict(self.deployment_profile)
+        return out
 
     def compute_hash(self) -> str:
         """Compute SHA-256 hash of trace content (excluding signature)."""
         # Build deterministic representation
-        content = {
+        content: Dict[str, Any] = {
             "trace_id": self.trace_id,
             "thought_id": self.thought_id,
             "task_id": self.task_id,
@@ -228,6 +257,8 @@ class CompleteTrace:
                 for c in self.components
             ],
         }
+        if self.deployment_profile is not None:
+            content["deployment_profile"] = dict(self.deployment_profile)
         json_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(json_str.encode()).hexdigest()
 
@@ -310,9 +341,16 @@ class Ed25519TraceSigner:
         thought_id at this time was signed under this schema version" without
         trusting the envelope wrapping.
         """
+        # Per-component shape at trace_schema_version "2.7.9" (#712 item #1):
+        # agent_id_hash is denormalized onto every TraceComponent so each
+        # event row is self-contained — persist reads it directly from the
+        # row instead of propagating from the envelope. The component's
+        # value MUST equal the envelope's agent_id_hash; we copy here to
+        # keep them locked.
         components_list = [
             _strip_empty(
                 {
+                    "agent_id_hash": c.agent_id_hash or trace.agent_id_hash,
                     "component_type": c.component_type,
                     "data": c.data,
                     "event_type": c.event_type,
@@ -332,7 +370,7 @@ class Ed25519TraceSigner:
                 return None
             return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
-        canonical = {
+        canonical: Dict[str, Any] = {
             "trace_id": trace.trace_id,
             "thought_id": trace.thought_id,
             "task_id": trace.task_id,
@@ -343,6 +381,14 @@ class Ed25519TraceSigner:
             "trace_schema_version": trace.trace_schema_version,
             "components": components_list,
         }
+        # 2.7.9+ deployment_profile block per FSD §3.2. The block is part of
+        # the signed canonical bytes — federation peers verify the cohort
+        # labels the agent declared at signing time so an intermediary
+        # (or persist itself) cannot re-stamp them. Absent at 2.7.0;
+        # present at 2.7.9 (with migration defaults if operator has not
+        # configured explicit values).
+        if trace.deployment_profile is not None:
+            canonical["deployment_profile"] = dict(trace.deployment_profile)
         return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
     def sign_trace(self, trace: CompleteTrace) -> bool:
@@ -589,9 +635,18 @@ class AccordMetricsService:
             f"(source={level_source}, config='{config_level}', env='{env_level}')"
         )
 
-        # Early warning correlation metadata (optional, anonymous)
+        # Cohort taxonomy (deployment_profile block per FSD §3.2, 2.7.9+).
+        # Operator-declared values from config; absence is filled with
+        # migration defaults at envelope-build time (see
+        # _build_deployment_profile). The 4 historical fields
+        # (region/type/role/template) were previously emitted only into
+        # correlation_metadata; the 6-field block consolidates them on the
+        # signed envelope so federation peers see non-forgeable cohort
+        # labels.
         self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
         self._deployment_type: str = str(self._config.get("deployment_type", "") or "")
+        self._deployment_domain: str = str(self._config.get("deployment_domain", "") or "")
+        self._deployment_trust_mode: str = str(self._config.get("deployment_trust_mode", "") or "")
         self._agent_role: str = str(self._config.get("agent_role", "") or "")
         self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
@@ -673,6 +728,40 @@ class AccordMetricsService:
             f"AccordMetricsService initialized (consent_given={self._consent_given}, "
             f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
         )
+
+    def _build_deployment_profile(self) -> Dict[str, Any]:
+        """Return the 6-field deployment_profile block per FSD §3.2.
+
+        Operator-declared config values are used when present; otherwise the
+        migration defaults from FSD §3.2 are emitted so 2.7.9 emission is
+        unblocked for agents that have not yet been operator-configured.
+
+        Migration defaults (FSD §3.2):
+            agent_role             = lowercased(agent_name)
+            agent_template         = "{agent_name}-default-unspecified"
+            deployment_domain      = "general"
+            deployment_type        = "production"
+            deployment_region      = null
+            deployment_trust_mode  = "sovereign"
+        """
+        agent_name = self._agent_name or ""
+        agent_role = self._agent_role or (agent_name.lower() if agent_name else "unknown")
+        agent_template = self._agent_template or (
+            f"{agent_name}-default-unspecified" if agent_name else "unknown-default-unspecified"
+        )
+        # `deployment_region` is the only field whose absent-config value
+        # is `null` rather than a default string — null is a valid declaration
+        # of "not disclosed" per the spec, distinct from absence-of-field
+        # which is malformed.
+        deployment_region: Optional[str] = self._deployment_region or None
+        return {
+            "agent_role": agent_role,
+            "agent_template": agent_template,
+            "deployment_domain": self._deployment_domain or "general",
+            "deployment_type": self._deployment_type or "production",
+            "deployment_region": deployment_region,
+            "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
+        }
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
         """Compute unique instance hash from signing key.
@@ -1237,19 +1326,23 @@ class AccordMetricsService:
             trace_id=f"connectivity-{event_type}-{timestamp}",
             thought_id=f"connectivity-{event_type}",
             task_id=None,
-            agent_id_hash=self._agent_id_hash or "unknown",
+            agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
             started_at=timestamp,
             completed_at=timestamp,
+            deployment_profile=self._build_deployment_profile(),
         )
 
         # Add connectivity component. agent_name is included so lens can
         # self-identify the agent alongside the hashed agent_id (the bare hash
-        # by itself makes triage in lens dashboards hard).
+        # by itself makes triage in lens dashboards hard). agent_id_hash on
+        # the component is locked equal to the envelope's per the 2.7.9
+        # wire-format contract (TRACE_WIRE_FORMAT.md §4).
         connectivity_trace.components.append(
             TraceComponent(
                 component_type="connectivity",
                 event_type=event_type,
                 timestamp=timestamp,
+                agent_id_hash=connectivity_trace.agent_id_hash,
                 data={
                     "version": "1.8.5",
                     "trace_level": self._trace_level.value,
@@ -1463,8 +1556,9 @@ class AccordMetricsService:
                     trace_id=trace_id,
                     thought_id=thought_id,
                     task_id=task_id,
-                    agent_id_hash=self._agent_id_hash or "unknown",
+                    agent_id_hash=self._agent_id_hash or self._compute_instance_hash(),
                     started_at=timestamp,
+                    deployment_profile=self._build_deployment_profile(),
                 )
                 logger.debug(f"Created new trace {trace_id} for thought {thought_id}")
 
@@ -1482,12 +1576,18 @@ class AccordMetricsService:
         # is informative — confirms the event is the first occurrence).
         component_data["attempt_index"] = attempt_index
 
-        # Add component to trace
+        # Add component to trace. agent_id_hash is denormalized from the
+        # parent CompleteTrace onto every component (TRACE_WIRE_FORMAT.md
+        # §4 — required as of trace_schema_version "2.7.9"). Each event
+        # row is self-contained; persist reads it directly without
+        # envelope propagation. Locked equal to the envelope value at
+        # build time.
         component = TraceComponent(
             component_type=component_type,
             event_type=event_type,
             timestamp=timestamp,
             data=component_data,
+            agent_id_hash=trace.agent_id_hash,
         )
 
         async with self._traces_lock:
@@ -2070,6 +2170,14 @@ class AccordMetricsService:
                 "error_class": event.get("error_class"),
                 "attempt_count": event.get("attempt_count", 1),
                 "retry_count": event.get("retry_count", 0),
+                # Parent linkage (TRACE_WIRE_FORMAT.md §5.10 — required as of
+                # trace_schema_version "2.7.9"). Populated from ContextVar by
+                # llm_bus._broadcast_llm_call_event:218-219; closed taxonomy
+                # forms the AV-9-resilient parent link with parent_attempt_index.
+                # Sentinel "UNKNOWN_PARENT" surfaces unwired call sites — see
+                # llm_bus.py:183-189 for the WARN.
+                "parent_event_type": event.get("parent_event_type"),
+                "parent_attempt_index": event.get("parent_attempt_index"),
             }
             # DETAILED: add prompt hash for dedup analysis without leaking content
             if is_detailed:
@@ -2189,7 +2297,7 @@ class AccordMetricsService:
         # See CIRISLens/api/accord_api.py::WBDDeferralCreate and POST /accord/wbd/deferrals.
         reason = (request.reason or "").strip()
         deferral_payload: Dict[str, Any] = {
-            "agent_id": self._agent_id_hash or "unknown",
+            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
             # Default to UNCERTAINTY — the reason text is free-form and we can't
             # reliably classify it client-side. Lens is free to re-classify.
             "trigger_type": "UNCERTAINTY",
@@ -2299,7 +2407,7 @@ class AccordMetricsService:
         pdma_event: Dict[str, Any] = {
             "event_type": "pdma_decision",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "agent_id": self._agent_id_hash or "unknown",
+            "agent_id": self._agent_id_hash or self._compute_instance_hash(),
             "thought_id": thought_id,
             "selected_action": selected_action,
             "rationale": rationale[:200] if rationale else None,  # Truncate

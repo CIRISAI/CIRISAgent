@@ -49,7 +49,13 @@ LOCALIZED_DIR = (
 # key shape (asks LLM for `{"entropy": float}` only). Pydantic
 # defaults absorb the missing alt fields. When these get ported to v2
 # self-resampling, remove them from this set.
-_V1_GRANDFATHERED: Set[str] = {"pt", "ru", "sw"}
+#
+# As of 2.7.9 (commit facb67c8c) all 28 localized variants are on v2.1
+# self-resampling — the v1-grandfathered set is empty. Keeping the
+# infrastructure here as a forward guard: if a locale ever regresses
+# to v1, add its code back to this set and the parity asserts will
+# skip it cleanly while the regression is fixed.
+_V1_GRANDFATHERED: Set[str] = set()
 
 
 def _all_locales() -> list[str]:

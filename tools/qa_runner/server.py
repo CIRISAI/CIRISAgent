@@ -620,6 +620,65 @@ class APIServerManager:
             self.console.print(f"[yellow]⚠️  Could not clear wakeup state: {e}[/yellow]")
             return True  # Continue anyway
 
+    def _prune_lens_trace_dirs(self) -> None:
+        """Retention sweep for `/tmp/qa-runner-lens-traces-*` dirs.
+
+        Each live-lens QA run accumulates ~50-300MB of `accord-batch-*.json`
+        files in its tee dir. Left unchecked the dirs build up — saw
+        60MB-free-of-935GB on 2026-05-03 from ~30 accumulated dirs blocking
+        the next run. Called before creating this run's dir so we land at
+        N most recent (default 5) inclusive of the about-to-be-created dir.
+
+        Operator override via env var `CIRIS_QA_LENS_TRACE_KEEP_N` (int);
+        set to 0 to disable retention entirely (e.g. when bisecting across
+        many runs and you need every dir on hand).
+
+        Best-effort: any per-dir delete failure is swallowed so the QA run
+        is never blocked by retention bookkeeping.
+        """
+        import glob as _glob
+        import os as _os
+        import shutil as _shutil
+
+        try:
+            keep_n = int(_os.environ.get("CIRIS_QA_LENS_TRACE_KEEP_N", "5"))
+        except (TypeError, ValueError):
+            keep_n = 5
+        if keep_n <= 0:
+            return  # 0 disables retention; negative is treated as disabled
+
+        # We're about to create a new dir — keep keep_n - 1 of the existing
+        # ones so the steady-state population sits at exactly keep_n.
+        existing_keep = max(0, keep_n - 1)
+
+        candidates = _glob.glob("/tmp/qa-runner-lens-traces-*")
+        # Sort by mtime, newest first; mtime is stable across renames and
+        # works even when the timestamp suffix in the dir name diverges
+        # from creation time (e.g. operator-overridden CIRIS_ACCORD_METRICS_
+        # LOCAL_COPY_DIR or copies from another machine).
+        candidates.sort(key=lambda p: _os.path.getmtime(p), reverse=True)
+
+        to_drop = candidates[existing_keep:]
+        if not to_drop:
+            return
+
+        dropped = 0
+        for path in to_drop:
+            try:
+                if _os.path.isdir(path):
+                    _shutil.rmtree(path)
+                    dropped += 1
+            except OSError:
+                # Permission denied / busy / already removed — leave it for
+                # next sweep, never block the run.
+                pass
+        if dropped:
+            self.console.print(
+                f"[dim]🧹 Pruned {dropped} old lens-trace dir(s); keeping "
+                f"{existing_keep} prior + the new run = {keep_n} total. "
+                f"(override via CIRIS_QA_LENS_TRACE_KEEP_N)[/dim]"
+            )
+
     def _clear_trace_files(self) -> None:
         """Clear existing trace files for fresh capture.
 
@@ -948,6 +1007,12 @@ class APIServerManager:
 
                     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
                     env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = f"/tmp/qa-runner-lens-traces-{ts}"
+                    # Retention: keep only the most recent N=5 prior dirs
+                    # before creating this run's. Lens trace dirs accumulate
+                    # at ~50-300MB each — left unchecked they fill /tmp and
+                    # crash the host (saw 60M-free-of-935G on 2026-05-03).
+                    # Operator override via CIRIS_QA_LENS_TRACE_KEEP_N.
+                    self._prune_lens_trace_dirs()
             self.console.print(
                 f"[dim]Enabling accord_metrics adapter with consent for trace capture ({trace_level})[/dim]"
             )

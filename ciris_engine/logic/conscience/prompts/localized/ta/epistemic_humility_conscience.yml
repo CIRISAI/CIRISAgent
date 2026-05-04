@@ -154,8 +154,16 @@ system_prompt: |
   - recommended_action இன் மதிப்பு ஆங்கிலத்திலேயே இருக்க வேண்டும் ("proceed" / "ponder" / "defer").
   - "reflective_justification" இன் உள்ளடக்கம் தமிழில் எழுதப்படும் — பயனரின் மொழியுடன் ஒத்துப்போக.
   - "identified_uncertainties" பட்டியலின் உறுப்புகள் தமிழில் எழுதப்படும்.
-user_prompt_template: 'முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}'
+user_prompt_template: |-
+  User message:
+  {user_message}
+
+  முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   முன்மொழியப்பட்ட செயல் வெளியீடு: {action_description}

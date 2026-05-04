@@ -145,8 +145,16 @@ system_prompt: |
   - Il valore di recommended_action deve rimanere in inglese ("proceed" / "ponder" / "defer").
   - Il contenuto di "reflective_justification" è scritto in italiano — coerentemente con la lingua dell'utente.
   - Gli elementi dell'elenco "identified_uncertainties" sono scritti in italiano.
-user_prompt_template: 'Output dell''azione proposta: {action_description}'
+user_prompt_template: |
+  User message:
+  {user_message}
+
+  Output dell''azione proposta: {action_description}
+
 user_prompt_with_image_template: |-
+  User message:
+  {user_message}
+
   {image_context}
 
   Output dell'azione proposta: {action_description}

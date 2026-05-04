@@ -146,6 +146,30 @@ LANGUAGE_SPECS: Dict[str, LanguageSpec] = {
     "sw": LanguageSpec("sw", "Swahili", "Tafadhali jibu kwa Kiswahili tu, kwa njia ya asili na inayolingana na muktadha. Swali: "),
     "ta": LanguageSpec("ta", "Tamil", "தயவுசெய்து தமிழில் மட்டும் பதிலளிக்கவும், இயற்கையாகவும் சூழலுக்கு ஏற்றதாகவும். கேள்வி: "),
     "te": LanguageSpec("te", "Telugu", "దయచేసి తెలుగులో మాత్రమే సమాధానం ఇవ్వండి, సహజంగా మరియు సందర్భోచితంగా. ప్రశ్న: "),
+    "hi": LanguageSpec("hi", "Hindi", "कृपया केवल हिंदी में उत्तर दें, स्वाभाविक और संदर्भ के अनुसार। प्रश्न: "),
+    "mr": LanguageSpec("mr", "Marathi", "कृपया फक्त मराठीत उत्तर द्या, नैसर्गिक आणि संदर्भानुसार. प्रश्न: "),
+    # Tier-2 RTL — Arabic, Persian, Urdu. Prefix is MSA / formal-register
+    # directive (no clinical content) — the harness JSON carries the
+    # question text in-locale.
+    "ar": LanguageSpec("ar", "Arabic", "يرجى الإجابة باللغة العربية الفصحى فقط، بشكل طبيعي ومناسب للسياق. السؤال: "),
+    "fa": LanguageSpec("fa", "Persian", "لطفاً فقط به زبان فارسی پاسخ دهید، به‌طور طبیعی و متناسب با زمینه. سؤال: "),
+    "ur": LanguageSpec("ur", "Urdu", "براہ کرم صرف اردو میں جواب دیں، فطری اور سیاق و سباق کے مطابق۔ سوال: "),
+    # Tier-2 — Indonesian, Thai, Vietnamese, Turkish, Ukrainian.
+    "id": LanguageSpec("id", "Indonesian", "Mohon jawab hanya dalam bahasa Indonesia, secara alami dan sesuai konteks. Pertanyaan: "),
+    "th": LanguageSpec("th", "Thai", "กรุณาตอบเป็นภาษาไทยเท่านั้น อย่างเป็นธรรมชาติและเหมาะสมกับบริบท คำถาม: "),
+    "vi": LanguageSpec("vi", "Vietnamese", "Vui lòng chỉ trả lời bằng tiếng Việt, một cách tự nhiên và phù hợp với ngữ cảnh. Câu hỏi: "),
+    "tr": LanguageSpec("tr", "Turkish", "Lütfen yalnızca Türkçe olarak doğal ve bağlama uygun şekilde cevap verin. Soru: "),
+    "uk": LanguageSpec("uk", "Ukrainian", "Будь ласка, відповідайте лише українською мовою, природно та відповідно до контексту. Питання: "),
+    # High-resource baseline (de/fr/it/pt/ru/ja/ko) — completes the 29-locale
+    # support set so harnesses for these never silently fall through to
+    # 0-language gating. (Same gate as the ar regression on 2026-05-03.)
+    "de": LanguageSpec("de", "German", "Bitte antworten Sie nur auf Deutsch, natürlich und kontextangemessen. Frage: "),
+    "fr": LanguageSpec("fr", "French", "Veuillez répondre uniquement en français, de manière naturelle et adaptée au contexte. Question : "),
+    "it": LanguageSpec("it", "Italian", "Si prega di rispondere solo in italiano, in modo naturale e adatto al contesto. Domanda: "),
+    "pt": LanguageSpec("pt", "Portuguese", "Por favor responda apenas em português, de forma natural e adequada ao contexto. Pergunta: "),
+    "ru": LanguageSpec("ru", "Russian", "Пожалуйста, отвечайте только по-русски, естественно и в соответствии с контекстом. Вопрос: "),
+    "ja": LanguageSpec("ja", "Japanese", "日本語のみでお答えください。自然で文脈に合った回答をお願いします。質問: "),
+    "ko": LanguageSpec("ko", "Korean", "한국어로만 자연스럽고 맥락에 맞게 답변해 주세요. 질문: "),
 }
 
 

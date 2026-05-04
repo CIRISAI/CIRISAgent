@@ -94,11 +94,14 @@ targets:
           RESOURCES_DIR="${PROJECT_DIR}/Resources"
           if [ -d "$RESOURCES_DIR" ] && [ -d "$CIRIS_ROOT/ciris_engine" ]; then
             echo "Syncing ciris_engine + ciris_adapters into Resources..."
-            rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
+            EXCLUDES="--exclude=__pycache__ --exclude=.pytest_cache --exclude=*.pyc --exclude=*.pyo --exclude=gui_static --exclude=desktop_app --exclude=android_gui_static --exclude=README* --exclude=*.md --exclude=examples/ --exclude=tests/ --exclude=adapters/discord"
+            rsync -a --delete $EXCLUDES \
                 "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
-            rsync -a --delete --exclude='__pycache__' \
+            rsync -a --delete $EXCLUDES \
                 "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
             find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            find "$RESOURCES_DIR" \( -name "README*" -o -name "*.md" \) -delete 2>/dev/null || true
+            find "$RESOURCES_DIR/app" -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
             cd "$RESOURCES_DIR"
             rm -f "$PROJECT_DIR/Resources.zip"
             zip -q -r "$PROJECT_DIR/Resources.zip" .

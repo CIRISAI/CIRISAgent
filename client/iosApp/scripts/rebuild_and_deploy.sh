@@ -23,6 +23,23 @@ RESOURCES_DIR="$IOS_APP_DIR/Resources"
 
 MODE="${1:-full}"
 SIMULATOR_NAME="iPhone 17 Pro"
+
+# Shared rsync exclusions for iOS Resources — mirrors Android build.gradle excludes
+# These reduce zip size and avoid shipping docs/tests/dev artifacts to the device
+IOS_RSYNC_EXCLUDES=(
+    --exclude='__pycache__'
+    --exclude='.pytest_cache'
+    --exclude='*.pyc'
+    --exclude='*.pyo'
+    --exclude='gui_static'
+    --exclude='desktop_app'
+    --exclude='android_gui_static'
+    --exclude='README*'
+    --exclude='*.md'
+    --exclude='examples/'
+    --exclude='tests/'
+    --exclude='adapters/discord'
+)
 DEVICE_UUID="A53DA92F-972A-5A28-86E3-E6E86E02EE79"
 IS_DEVICE=false
 if [ "$MODE" = "--device" ]; then
@@ -147,12 +164,12 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
     step "Quick overlay: latest ciris_engine source..."
 
     # Overlay ciris_engine
-    rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
+    rsync -a --delete "${IOS_RSYNC_EXCLUDES[@]}" \
         "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
     ok "ciris_engine overlaid"
 
     # Overlay ciris_adapters
-    rsync -a --delete --exclude='__pycache__' \
+    rsync -a --delete "${IOS_RSYNC_EXCLUDES[@]}" \
         "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
     ok "ciris_adapters overlaid"
 
@@ -254,11 +271,14 @@ ok "Build $CURRENT_BUILD → $NEXT_BUILD"
 # Step 4.9: Always overlay latest source and rebuild Resources.zip
 # This ensures the zip matches the repo, not a stale committed version
 step "Syncing latest source into Resources..."
-rsync -a --delete --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' \
+rsync -a --delete "${IOS_RSYNC_EXCLUDES[@]}" \
     "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
-rsync -a --delete --exclude='__pycache__' \
+rsync -a --delete "${IOS_RSYNC_EXCLUDES[@]}" \
     "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
 find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# Also strip READMEs from sdk and any other source that was synced earlier
+find "$RESOURCES_DIR" -name "README*" -o -name "*.md" | xargs rm -f 2>/dev/null || true
+find "$RESOURCES_DIR/app" -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
 cd "$RESOURCES_DIR"
 rm -f "$IOS_APP_DIR/Resources.zip"
 zip -q -r "$IOS_APP_DIR/Resources.zip" .

@@ -436,7 +436,13 @@ jobs:
         # match what the bundled binaries report. Read from constants.py
         # to keep one source of truth.
         run: |
-          $version = python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION.replace('-stable',''))"
+          # Read CIRIS_VERSION without importing the `ciris_engine`
+          # package — the package's __init__ pulls full runtime + deps
+          # not installed in this job (only ciris-verify is). exec()'ing
+          # constants.py directly runs only its stdlib imports +
+          # constant assignments. Strip "-stable" suffix to match the
+          # installer-name convention.
+          $version = python -c "exec(open('ciris_engine/constants.py').read()); print(CIRIS_VERSION.replace('-stable',''))"
           Write-Host "Building installer for CIRIS $version"
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
               "/DCirisVersion=$version" `
@@ -690,7 +696,17 @@ jobs:
           CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
-          VERSION=$(python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # Read CIRIS_VERSION as a string literal without importing the
+          # `ciris_engine` package — the package's __init__ pulls in the
+          # full runtime which transitively imports aiofiles + other
+          # runtime-only deps not installed in this signing job (only
+          # ciris-verify is). awk on the literal stays robust as more
+          # runtime deps get added. Format: `CIRIS_VERSION = "x.y.z-stage"`
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
+          fi
+          echo "CIRIS_VERSION = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
           ciris-build-sign sign \
             --primitive agent \
@@ -745,7 +761,17 @@ jobs:
           CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
-          VERSION=$(python -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # Read CIRIS_VERSION as a string literal without importing the
+          # `ciris_engine` package — the package's __init__ pulls in the
+          # full runtime which transitively imports aiofiles + other
+          # runtime-only deps not installed in this signing job (only
+          # ciris-verify is). awk on the literal stays robust as more
+          # runtime deps get added. Format: `CIRIS_VERSION = "x.y.z-stage"`
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
+          fi
+          echo "CIRIS_VERSION = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
           ciris-build-sign sign \
             --primitive agent \

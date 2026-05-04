@@ -225,17 +225,44 @@ def get_current_platform() -> tuple[str, str]:
 
 
 def update_desktop_binary(version: str, tmpdir: Path) -> bool:
-    """Download and install desktop binary from PyPI wheel.
+    """No-op shim — desktop FFI is now resolved via the pip-installed wheel.
 
-    Downloads the platform-specific wheel from PyPI, extracts the native
-    library, and copies it to the FFI bindings directory.
+    As of agent 2.8.2 the in-repo `ciris_adapters/ciris_verify/ffi_bindings/
+    libciris_verify_ffi.{so,dylib,dll}` is no longer maintained. The desktop
+    loader (`ffi_bindings/client.py::_find_binary`) resolves directly via
+    `import ciris_verify; ciris_verify.__file__` → site-packages, which is
+    version-pinned through `requirements.txt`. Single source of truth for
+    the desktop binary.
+
+    To upgrade the desktop binary, bump the pin in `requirements.txt` and
+    `pip install --upgrade -r requirements.txt`. This shim keeps the
+    `--desktop-only` flag working as a hand-off message; mobile binaries
+    (Android JNI / iOS framework) are still managed by this script via
+    `update_android_binaries` / `update_ios_from_release`.
+
+    See CIRISAgent#732 for the parity-CI test that fails the build when
+    the pip pin and the mobile JNI lib version drift apart.
 
     Args:
-        version: Version to download (e.g., "1.1.25")
-        tmpdir: Temporary directory for downloads
+        version: Requested version (used in the hand-off message only).
+        tmpdir: Unused — kept for signature compatibility.
 
     Returns:
-        True if successful, False otherwise
+        True (always — non-failure no-op).
+    """
+    print(f"\nDesktop binary: NO-OP (resolved via pip wheel, not in-repo).")
+    print(f"  To upgrade to {version}, bump the ciris-verify pin in requirements.txt:")
+    print(f"      ciris-verify>={version}  # in requirements.txt")
+    print(f"  Then: pip install --upgrade -r requirements.txt")
+    print(f"  The desktop FFI loader resolves via site-packages/ciris_verify/")
+    print(f"  libciris_verify_ffi.{{so,dylib,dll}} (single source of truth).")
+    return True
+
+
+def _legacy_update_desktop_binary_unused(version: str, tmpdir: Path) -> bool:
+    """LEGACY: previous in-repo wheel-extraction path — retired in 2.8.2.
+
+    Kept here so the historical behavior is git-greppable; not called.
     """
     import platform as plat
 
@@ -344,14 +371,20 @@ def update_desktop_binary(version: str, tmpdir: Path) -> bool:
 
 
 def update_desktop_from_local(ciris_verify_root: Path) -> bool:
-    """Update desktop binary from local CIRISVerify build.
+    """No-op shim — same rationale as `update_desktop_binary` (2.8.2 cleanup).
 
-    Args:
-        ciris_verify_root: Path to local CIRISVerify repo
-
-    Returns:
-        True if successful, False otherwise
+    Local CIRISVerify dev builds reach the agent via `pip install -e
+    /path/to/CIRISVerify` (which builds the wheel + drops the .so into
+    site-packages). No in-repo copy needed.
     """
+    print(f"\nDesktop binary (local build): NO-OP — install via pip:")
+    print(f"  cd {ciris_verify_root} && pip install -e .")
+    print(f"  # builds the wheel + installs to site-packages/ciris_verify/")
+    return True
+
+
+def _legacy_update_desktop_from_local_unused(ciris_verify_root: Path) -> bool:
+    """LEGACY: previous in-repo copy path — retired in 2.8.2."""
     import platform as plat
 
     system = plat.system()

@@ -5,6 +5,17 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2026-05-04
+
+Cleanup release. Closes the in-repo desktop FFI drift class that surfaced 5 versions of stale `.so` between pin bumps. No agent-behavior changes.
+
+- **Deleted in-repo desktop `.so`** (`ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so`). Was a 10MB binary that silently shadowed the pip-installed wheel — agent reported FFI v1.6.3 at startup while `requirements.txt` had pinned v1.11.1 for two releases. Desktop FFI is now resolved exclusively via `import ciris_verify; ciris_verify.__file__` → site-packages, version-pinned through `requirements.txt`. `.gitignore` guard prevents recommitting.
+- **Loader cleanup** (`ciris_adapters/ciris_verify/ffi_bindings/client.py`): removed the legacy `module_dir / libciris_verify_ffi.*` fallback. Pip-package resolution promoted from "fallback" to the primary desktop path.
+- **`tools/update_ciris_verify.py` mobile-only**: desktop update functions become no-op shims that emit a `pip install --upgrade -r requirements.txt` hand-off message. Mobile (Android JNI / iOS framework) update paths unchanged — those still need explicit binary downloads because the mobile build pipeline ships them into the APK/IPA.
+- **CI parity gate** (`tests/test_ciris_verify_pin_parity.py`): reads the pinned version from `requirements.txt` + the `CIRISVerify FFI init starting (vX.Y.Z)` string baked into each Android JNI binary; fails the build with a directed `python tools/update_ciris_verify.py <version>` command when they drift. Same shape as the `LANGUAGE_SPECS` regression guard. Catches mobile-bin staleness at CI time, before the mobile branch cuts from main.
+- **Android JNI binaries refreshed to v1.11.1** to match the 2.8.1 pin. Three ABIs updated: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
+- **iOS parity coverage deferred to #732** — the existing `tools/update_ciris_verify.py --ios-only` flow has structural issues (over-bundles `Resources.zip` instead of staging the binary for the iOS build script to bundle fresh; doesn't refresh the `.xcframework` Mach-O binaries from release tarballs). Both the script fix and the parity test extension to iOS xcframework live in #732.
+
 ## [2.8.1] - 2026-05-04
 
 Fast follow-up to 2.8.0. No agent-behavior changes.

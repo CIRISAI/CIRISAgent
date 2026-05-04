@@ -1,14 +1,22 @@
 #!/bin/bash
 # Build Release AAB for Google Play Store
 # This script produces a signed AAB bundle with arm64-v8a support
+#
+# 2.8.1 update: the standalone `android/` project was retired in favor
+# of the KMP shape under `client/androidApp/`. Build target is now the
+# `:androidApp:bundleRelease` gradle task in the `client/` module;
+# AAB output is `client/androidApp/build/outputs/bundle/release/
+# androidApp-release.aab`. Static-GUI assets are pulled from
+# `android_gui_static/` into the androidApp's main assets.
 
 set -e  # Exit on any error
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ANDROID_DIR="$PROJECT_ROOT/android"
-OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/release"
+CLIENT_DIR="$PROJECT_ROOT/client"
+ANDROID_APP_DIR="$CLIENT_DIR/androidApp"
+OUTPUT_DIR="$ANDROID_APP_DIR/build/outputs/bundle/release"
 
 # Colors for output
 RED='\033[0;31m'
@@ -26,8 +34,8 @@ echo ""
 echo -e "${YELLOW}[1/6] Checking prerequisites...${NC}"
 
 # Check if we're in the right directory
-if [ ! -f "$ANDROID_DIR/build.gradle" ]; then
-    echo -e "${RED}ERROR: Cannot find android/build.gradle${NC}"
+if [ ! -f "$ANDROID_APP_DIR/build.gradle" ]; then
+    echo -e "${RED}ERROR: Cannot find client/androidApp/build.gradle${NC}"
     echo "Please run this script from the CIRISAgent root directory"
     exit 1
 fi
@@ -59,9 +67,10 @@ echo -e "${GREEN}  ✓ Prerequisites OK${NC}"
 echo ""
 echo -e "${YELLOW}[2/6] Updating static GUI assets...${NC}"
 if [ -d "$PROJECT_ROOT/android_gui_static" ]; then
-    # Copy static files to Android assets
-    rm -rf "$ANDROID_DIR/app/src/main/assets/public"
-    cp -r "$PROJECT_ROOT/android_gui_static" "$ANDROID_DIR/app/src/main/assets/public"
+    # Copy static files to androidApp's main assets.
+    rm -rf "$ANDROID_APP_DIR/src/main/assets/public"
+    mkdir -p "$ANDROID_APP_DIR/src/main/assets"
+    cp -r "$PROJECT_ROOT/android_gui_static" "$ANDROID_APP_DIR/src/main/assets/public"
     echo -e "${GREEN}  ✓ Static GUI assets updated${NC}"
 else
     echo -e "${YELLOW}  ⚠ android_gui_static not found, skipping${NC}"
@@ -70,20 +79,22 @@ fi
 # Step 3: Clean previous builds
 echo ""
 echo -e "${YELLOW}[3/6] Cleaning previous builds...${NC}"
-cd "$ANDROID_DIR"
-./gradlew clean --quiet
+cd "$CLIENT_DIR"
+./gradlew :androidApp:clean --quiet
 echo -e "${GREEN}  ✓ Clean complete${NC}"
 
 # Step 4: Build the release AAB
 echo ""
 echo -e "${YELLOW}[4/6] Building release AAB (this may take a few minutes)...${NC}"
-echo "  Building for architectures: arm64-v8a, armeabi-v7a, x86_64"
+echo "  Building :androidApp:bundleRelease (KMP shape; signing config in androidApp/build.gradle)"
 
-# Build release bundle (signing config in build.gradle)
-./gradlew bundleRelease --warning-mode=none
+# Build release bundle. Output is androidApp-release.aab in the KMP layout.
+./gradlew :androidApp:bundleRelease --warning-mode=none
 
-if [ ! -f "$OUTPUT_DIR/app-release.aab" ]; then
+AAB_FILE="$OUTPUT_DIR/androidApp-release.aab"
+if [ ! -f "$AAB_FILE" ]; then
     echo -e "${RED}ERROR: AAB build failed - output file not found${NC}"
+    echo "  Expected: $AAB_FILE"
     exit 1
 fi
 
@@ -93,7 +104,6 @@ echo -e "${GREEN}  ✓ AAB build complete${NC}"
 echo ""
 echo -e "${YELLOW}[5/6] Verifying AAB...${NC}"
 
-AAB_FILE="$OUTPUT_DIR/app-release.aab"
 AAB_SIZE=$(du -h "$AAB_FILE" | cut -f1)
 
 echo "  AAB file: $AAB_FILE"
@@ -114,9 +124,9 @@ echo -e "${GREEN}  ✓ Verification complete${NC}"
 echo ""
 echo -e "${YELLOW}[6/6] Finalizing...${NC}"
 
-# Get version from build.gradle
-VERSION_NAME=$(grep "versionName" "$ANDROID_DIR/app/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')
-VERSION_CODE=$(grep "versionCode" "$ANDROID_DIR/app/build.gradle" | head -1 | sed 's/[^0-9]*//g')
+# Get version from build.gradle (KMP layout: client/androidApp/build.gradle)
+VERSION_NAME=$(grep "versionName" "$ANDROID_APP_DIR/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+VERSION_CODE=$(grep "versionCode" "$ANDROID_APP_DIR/build.gradle" | head -1 | sed 's/[^0-9]*//g')
 
 FINAL_AAB="$PROJECT_ROOT/ciris-mobile-v${VERSION_NAME}.aab"
 cp "$AAB_FILE" "$FINAL_AAB"

@@ -5,6 +5,15 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-05-04
+
+Fast follow-up to 2.8.0. No agent-behavior changes.
+
+- **`ciris-verify` floor `>=1.10.1` → `>=1.11.1`** (#730). Three cumulative fixes make Levels 1-5 self-verification work end-to-end: v1.10.2 file-mode writes all 3 registry tables, v1.11.0 mandatory `project` arg on `RegistryClient`, v1.11.1 `binary_manifests.binaries[target]` stores the actual `.so` SHA-256.
+- **Mobile bundle parity**: `client/androidApp/build.gradle` `syncPythonSources` excludes `desktop_app/`, `README*`, `*.md`, `examples/`, `tests/` — matches iOS rsync excludes (commit `e28371555`).
+- **`tools/build_release_aab.sh`** restored — canonical AAB build entrypoint for the KMP `client/androidApp/` shape.
+- Versions bumped: `2.8.0-stable` → `2.8.1-stable`, Android `124` → `125`, iOS `277` → `278`.
+
 ## [2.8.0] - 2026-05-04
 
 Trust release. First CIRISAgent release on the new signing infrastructure (`ciris-build-sign register`). No wire-format / runtime / agent-behavior changes — 2.8.0 inherits 2.7.9's deployment_profile cohort taxonomy, conscience verb-scope expansion, and per-locale Coherence dignity anchor unchanged. The version bump exists to mark the cutover from per-target curl-POST registration to single-call `register`, which closes the parent-row gap that affected every release ≥ 2.7.8.

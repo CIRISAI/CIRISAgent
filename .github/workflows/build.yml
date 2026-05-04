@@ -595,6 +595,18 @@ jobs:
           python version.py
           cat BUILD_INFO.txt || echo "No BUILD_INFO.txt created"
 
+      - name: Regenerate startup_python_hashes.json
+        # Bridge step (option A) until CIRISVerify FFI gains a runtime tree
+        # walker (option B). The agent reads this JSON at boot to populate
+        # `python_integrity` in attestation; its `agent_version` field is
+        # the registry lookup key. Regenerating here ensures the docker
+        # image always carries hashes matching the source tree being baked
+        # — eliminates the staleness that capped CIRISVerify at Level 3 in
+        # 2.8.2 (#TBD). Algorithm matches mobile_main.py byte-for-byte.
+        run: |
+          python3 tools/dev/regenerate_python_hashes.py
+          python3 -c "import json; d=json.load(open('startup_python_hashes.json')); print(f'agent_version={d[\"agent_version\"]} modules={d[\"modules_hashed\"]} total_hash={d[\"total_hash\"][:16]}...')"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

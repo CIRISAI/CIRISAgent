@@ -301,6 +301,16 @@ task syncPythonSources(type: Sync) {
     // Exclude web GUI static files (React/Next.js) - not used in mobile KMP app
     exclude "**/gui_static/**"
     exclude "**/android_gui_static/**"
+    // Desktop-app sources don't ship in the mobile bundle.
+    exclude "**/desktop_app/**"
+
+    // No point bundling docs/examples/tests on-device — parity with iOS
+    // (client/iosApp/scripts/rebuild_and_deploy.sh IOS_RSYNC_EXCLUDES,
+    // commit e28371555). README* + *.md are the bulk of the savings.
+    exclude "**/README*"
+    exclude "**/*.md"
+    exclude "**/examples/**"
+    exclude "**/tests/**"
 
     // Exclude adapters that depend on libraries not available on Android
     // Discord adapter requires discord.py which has no Android wheels

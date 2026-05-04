@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-05-04
+
+Trust release. First CIRISAgent release on the new signing infrastructure (`ciris-build-sign register`). No wire-format / runtime / agent-behavior changes — 2.8.0 inherits 2.7.9's deployment_profile cohort taxonomy, conscience verb-scope expansion, and per-locale Coherence dignity anchor unchanged. The version bump exists to mark the cutover from per-target curl-POST registration to single-call `register`, which closes the parent-row gap that affected every release ≥ 2.7.8.
+
+### Build / signing infrastructure
+
+- **`ciris-verify` floor lifted >=1.8.1 → >=1.10.1** (#727). v1.10.1 ships the `ciris-build-sign register` subcommand which writes all 3 registry tables — `builds` + `binary_manifests` + `function_manifests` — in one call. Closes the parent-row gap: every release between 2.7.8 and 2.7.9 landed in the registry with only `function_manifests` rows, leaving `/v1/builds/<v>` and `/v1/verify/binary-manifest/<v>` returning 404 for verify-clients. v1.10.1 also cuts over from gRPC RegisterBuild to HTTP `POST /v1/builds`, dropping the `REGISTRY_JWT_SECRET` requirement and the `grpcurl` install — single bearer token (`REGISTRY_ADMIN_TOKEN`) for all 3 endpoints.
+- **`build.yml` cut over to `register`** (#727). Replaced the two per-target `curl POST /v1/verify/build-manifest` steps with a single `ciris-build-sign register` step that runs two register calls — file mode for `python-source-tree` (writes `builds` row + `function_manifests`) and binary mode for `ios-mobile-bundle` (writes `builds` + `binary_manifests` + `function_manifests`). Mode auto-detected from the BuildManifest shape; mixed modes in one call are rejected by design, so two calls per release.
+- **`binary_version` channel-suffix strip** (#726). Build manifests now ship plain semver in `binary_version` (e.g. `2.8.0`), not the channel-suffixed form (`2.8.0-stable`). Every other primitive's manifest already uses plain semver; the registry does exact-string matching, so verify URLs of the natural form `/v1/verify/function-manifest/<version>/<target>` returned 404 for 2.7.9 specifically (manually patched in both regions, but won't recur). awk extraction at both bash sign sites + the existing PowerShell installer step now strip `-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$` from the version literal before passing to `ciris-build-sign --binary-version`.
+
+### Inherited from 2.7.9 (no change)
+
+- `deployment_profile` cohort-taxonomy block on the CompleteTrace envelope (#718)
+- `agent_id_hash` canonical-derivation fallback at trace emission (#716)
+- Conscience verb-scope expansion (CONSCIENCE_V3 Stage 1 + Phase 2): Entropy on `{SPEAK, TOOL}`, Coherence on `{SPEAK, TOOL, DEFER}`
+- Universal `DIGNITY AND NON-HARM` principle in all 29 Coherence prompts + per-locale stigma class enumeration in 13 (am/ar/bn/fa/ha/hi/mr/my/pa/sw/ta/te/ur/yo)
+- Tier-2 RTL safety harness onboarding (ar/fa/ur v3 MH-ARC corpus + scoring rubric drafts)
+- FSD/TRACE_WIRE_FORMAT.md §5.4 `correlation_risk` example corrected to numeric f64 (#724)
+
+### CI fixes carried forward
+
+The 2.7.9-cycle CI hotfixes for the agent's first signing-infra cycle stay in place:
+
+- aiofiles ImportError on package init (constants.py read via awk/exec)
+- `CIRIS_BUILD_ED25519_SECRET` fleet-convention secret name
+- `sha256:` multihash prefix on extras JSON
+- ed25519/mldsa secret materialization to `mktemp` paths
+
+These all become moot for non-2.8.0 follow-up cycles once the toolchain stabilizes on the `register`-based shape.
+
 ## [2.7.9] - 2026-05-03
 
 Architectural follow-up to 2.7.8 that closes three structural gaps surfaced by the Tier-1 sweep cycle: cohort taxonomy on the trace envelope, conscience verb-scope coverage on DEFER, and a localized place for "hurtful words always hurt." Plus the Tier-2 RTL onboarding (ar/fa/ur) and the persist-side `agent_id_hash='unknown'` regression close.

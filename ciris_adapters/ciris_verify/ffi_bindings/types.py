@@ -4,7 +4,7 @@ All types use Pydantic for validation and follow CIRIS typing conventions.
 """
 
 from enum import IntEnum, Enum
-from typing import Optional, List, Set
+from typing import Literal, Optional, List, Set
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -76,6 +76,7 @@ class HardwareType(str, Enum):
     ANDROID_KEYSTORE = "android_keystore"
     ANDROID_STRONGBOX = "android_strongbox"
     IOS_SECURE_ENCLAVE = "ios_secure_enclave"
+    MAC_OS_SECURE_ENCLAVE = "mac_os_secure_enclave"
     TPM_DISCRETE = "tpm_discrete"
     TPM_FIRMWARE = "tpm_firmware"
     INTEL_SGX = "intel_sgx"
@@ -91,12 +92,122 @@ class HardwareType(str, Enum):
             HardwareType.ANDROID_STRONGBOX: 5,
             HardwareType.TPM_DISCRETE: 5,
             HardwareType.IOS_SECURE_ENCLAVE: 5,
+            HardwareType.MAC_OS_SECURE_ENCLAVE: 5,
             HardwareType.TPM_FIRMWARE: 4,
             HardwareType.INTEL_SGX: 4,
             HardwareType.ANDROID_KEYSTORE: 3,
             HardwareType.SOFTWARE_ONLY: 1,
         }
         return levels.get(self, 1)
+
+
+# ---------------------------------------------------------------------------
+# Storage Descriptor (v1.7)
+# ---------------------------------------------------------------------------
+#
+# Mirrors the Rust `StorageDescriptor` enum from ciris-keyring's types.rs.
+# The FFI emits JSON with a `kind` discriminator and variant-specific fields:
+#
+#   {"kind":"hardware","hardware_type":"TpmFirmware","blob_path":"/var/lib/.../key.tpm"}
+#   {"kind":"software_file","path":"/home/u/.local/share/ciris-verify/agent.p256.key"}
+#   {"kind":"software_os_keyring","backend":"secret-service","scope":"unknown"}
+#   {"kind":"in_memory"}
+#
+# Note: the FFI reports `hardware_type` as the PascalCase Rust variant name
+# (`"TpmFirmware"`, `"AndroidStrongbox"`), NOT the snake_case `HardwareType`
+# enum value above. This mirrors the wire format produced by serde's default
+# unit-variant encoding. Consumers comparing to the snake_case `HardwareType`
+# enum should map: `"TpmFirmware"` -> `HardwareType.TPM_FIRMWARE`, etc.
+#
+# The `disk_path` and `is_hardware_backed` helpers below match the semantics
+# of the Rust impl on `StorageDescriptor`. For longitudinal-score primitives
+# (PoB §2.4 S-factor, 30-day decay window), an unstable storage location is
+# a configuration bug — use these helpers from the agent's boot-time check.
+
+class StorageKind(str, Enum):
+    """Discriminator for `StorageDescriptor` variants."""
+    HARDWARE = "hardware"
+    SOFTWARE_FILE = "software_file"
+    SOFTWARE_OS_KEYRING = "software_os_keyring"
+    IN_MEMORY = "in_memory"
+
+
+class KeyringScope(str, Enum):
+    """Scope of an OS keyring entry."""
+    USER = "user"
+    SYSTEM = "system"
+    UNKNOWN = "unknown"
+
+
+class StorageDescriptor(BaseModel):
+    """Where a signer's identity material is stored.
+
+    Returned by `CIRISVerify.storage_descriptor()`. Use to detect ephemeral
+    storage at boot before identity churn silently breaks longitudinal
+    scoring (PoB §2.4 S-factor decay window cannot accumulate behind an
+    unstable identity).
+
+    Attributes vary by `kind`:
+      - HARDWARE: `hardware_type` (PascalCase variant name string),
+        `blob_path` (informational; useless without HSM)
+      - SOFTWARE_FILE: `path` (the path ephemeral-storage heuristics MUST
+        check)
+      - SOFTWARE_OS_KEYRING: `backend`, `scope`
+      - IN_MEMORY: no extra fields
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    kind: StorageKind
+    # Hardware variant
+    hardware_type: Optional[str] = Field(
+        default=None,
+        description="PascalCase Rust variant name (e.g. 'TpmFirmware', "
+                    "'AndroidStrongbox', 'IosSecureEnclave'). "
+                    "Present iff kind == HARDWARE.",
+    )
+    blob_path: Optional[str] = Field(
+        default=None,
+        description="Path to a hardware-wrapped envelope file, if the "
+                    "backend stores one. Informational — its presence does "
+                    "NOT imply ephemerality risk.",
+    )
+    # SoftwareFile variant
+    path: Optional[str] = Field(
+        default=None,
+        description="Filesystem path to the seed (kind == SOFTWARE_FILE). "
+                    "This IS the path ephemeral-storage heuristics check.",
+    )
+    # SoftwareOsKeyring variant
+    backend: Optional[str] = Field(
+        default=None,
+        description="OS keyring backend (kind == SOFTWARE_OS_KEYRING).",
+    )
+    scope: Optional[KeyringScope] = Field(
+        default=None,
+        description="Keyring scope (kind == SOFTWARE_OS_KEYRING).",
+    )
+
+    def is_hardware_backed(self) -> bool:
+        """True iff the underlying key is protected by a hardware HSM.
+
+        Returns True only for `HARDWARE`. Both software variants and
+        `IN_MEMORY` return False.
+        """
+        return self.kind == StorageKind.HARDWARE
+
+    def disk_path(self) -> Optional[str]:
+        """Filesystem path the descriptor exposes, if any.
+
+        - HARDWARE: returns blob_path (informational; not subject to
+          ephemerality heuristics — file is useless without HSM).
+        - SOFTWARE_FILE: returns the seed path (apply heuristics here).
+        - SOFTWARE_OS_KEYRING / IN_MEMORY: returns None.
+        """
+        if self.kind == StorageKind.HARDWARE:
+            return self.blob_path
+        if self.kind == StorageKind.SOFTWARE_FILE:
+            return self.path
+        return None
 
 
 class ValidationStatus(str, Enum):

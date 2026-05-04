@@ -34,6 +34,9 @@ from .types import (
     SecurityAdvisory,
     HardwareLimitation,
     HardwareInfo,
+    StorageDescriptor,
+    StorageKind,
+    KeyringScope,
 )
 from .exceptions import (
     BinaryNotFoundError,
@@ -303,68 +306,20 @@ class CIRISVerify:
         # Search default paths
         system = platform.system()
         paths = DEFAULT_BINARY_PATHS.get(system, [])
-        searched: list[str] = []
 
         for path_str in paths:
             path = Path(path_str)
-            searched.append(str(path))
             if path.exists():
                 return path
 
-        # Check relative to this loader module (legacy fallback — the binary
-        # was historically dropped here by some build flows).
+        # Also check relative to this module
         module_dir = Path(__file__).parent
-        for suffix in self._get_platform_binary_suffixes(system):
+        for suffix in [".so", ".dylib", ".dll"]:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
-            searched.append(str(candidate))
             if candidate.exists():
                 return candidate
 
-        # Wheel-distributed location: the `ciris-verify` PyPI package (a
-        # Requires-Dist of `ciris-agent`) installs the binary into the
-        # top-level `ciris_verify` package directory at
-        # site-packages/ciris_verify/libciris_verify_ffi.{so,dylib,dll}.
-        # Without this branch, every fresh `pip install ciris-agent` on
-        # Linux fails desktop init at the audit hash-chain step (the
-        # binary IS bundled, just not where the loader was looking —
-        # see release/2.7.4 incident: "Initialization sequence failed,
-        # CIRISVerify binary not found at: [system paths]").
-        try:
-            import ciris_verify as _ciris_verify_pkg
-
-            pkg_dir_str = getattr(_ciris_verify_pkg, "__file__", None)
-            if pkg_dir_str:
-                pkg_dir = Path(pkg_dir_str).parent
-                for suffix in self._get_platform_binary_suffixes(system):
-                    candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
-                    searched.append(str(candidate))
-                    if candidate.exists():
-                        return candidate
-        except ImportError:
-            # `ciris_verify` package not installed — drop through to the
-            # not-found error below. Production wheel installs always pull
-            # it via Requires-Dist; this branch only fails for editable /
-            # source-only installs that haven't installed the dep.
-            pass
-
-        raise BinaryNotFoundError(f"Searched: {searched}")
-
-    @staticmethod
-    def _get_platform_binary_suffixes(system: str) -> list[str]:
-        """Return library suffixes in platform-preferred order."""
-        preferred_suffixes = {
-            "Linux": ".so",
-            "Darwin": ".dylib",
-            "Windows": ".dll",
-        }
-        ordered_suffixes: list[str] = []
-        preferred = preferred_suffixes.get(system)
-        if preferred is not None:
-            ordered_suffixes.append(preferred)
-        for suffix in [".so", ".dylib", ".dll"]:
-            if suffix not in ordered_suffixes:
-                ordered_suffixes.append(suffix)
-        return ordered_suffixes
+        raise BinaryNotFoundError(f"Searched: {paths}")
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""
@@ -470,6 +425,18 @@ class CIRISVerify:
             ctypes.POINTER(ctypes.c_size_t),    # proof_len (out)
         ]
         self._lib.ciris_verify_export_attestation.restype = ctypes.c_int
+
+        # ciris_verify_signer_storage_descriptor(handle, descriptor_data, descriptor_len) -> i32 (v1.7)
+        # Older libraries do not export this; gated by _has_storage_descriptor.
+        self._has_storage_descriptor = False
+        if hasattr(self._lib, "ciris_verify_signer_storage_descriptor"):
+            self._lib.ciris_verify_signer_storage_descriptor.argtypes = [
+                ctypes.c_void_p,                    # handle
+                ctypes.POINTER(ctypes.c_void_p),    # descriptor_data (out)
+                ctypes.POINTER(ctypes.c_size_t),    # descriptor_len (out)
+            ]
+            self._lib.ciris_verify_signer_storage_descriptor.restype = ctypes.c_int
+            self._has_storage_descriptor = True
 
         # ciris_verify_free(data)
         # NOTE: MUST be c_void_p, not c_char_p! c_char_p treats the pointer as a
@@ -1418,6 +1385,65 @@ class CIRISVerify:
         finally:
             if proof_data.value:
                 self._lib.ciris_verify_free(proof_data.value)
+
+    # ========================================================================
+    # Storage Descriptor (v1.7)
+    # ========================================================================
+
+    @property
+    def has_storage_descriptor_support(self) -> bool:
+        """Check if the underlying library exports the v1.7 descriptor API."""
+        return getattr(self, "_has_storage_descriptor", False)
+
+    def storage_descriptor(self) -> StorageDescriptor:
+        """Get the storage descriptor of the signer's identity material.
+
+        Use this at boot to detect ephemeral storage before identity churn
+        silently breaks longitudinal scoring (PoB §2.4 S-factor decay window
+        cannot accumulate behind an unstable identity). For an agent, the
+        check looks like:
+
+            desc = client.storage_descriptor()
+            if desc.kind == StorageKind.SOFTWARE_FILE:
+                path = desc.disk_path()
+                if path and any(path.startswith(p) for p in ("/tmp/", "/var/cache/")):
+                    raise RuntimeError(f"identity in ephemeral storage: {path}")
+
+        Returns:
+            A `StorageDescriptor` with `kind` and variant-specific fields.
+
+        Raises:
+            VerificationFailedError: If the FFI call returns non-zero.
+            RuntimeError: If the underlying library predates v1.7
+                (check `has_storage_descriptor_support` first).
+        """
+        if not self.has_storage_descriptor_support:
+            raise RuntimeError(
+                "Underlying ciris-verify library does not expose "
+                "ciris_verify_signer_storage_descriptor (added in v1.7). "
+                "Upgrade the native library."
+            )
+
+        descriptor_data = ctypes.c_void_p()
+        descriptor_len = ctypes.c_size_t()
+
+        ret = self._lib.ciris_verify_signer_storage_descriptor(
+            self._handle,
+            ctypes.byref(descriptor_data),
+            ctypes.byref(descriptor_len),
+        )
+
+        if ret != 0:
+            raise VerificationFailedError(
+                ret, f"storage_descriptor failed with code {ret}"
+            )
+
+        try:
+            payload = ctypes.string_at(descriptor_data.value, descriptor_len.value)
+            return StorageDescriptor.model_validate_json(payload)
+        finally:
+            if descriptor_data.value:
+                self._lib.ciris_verify_free(descriptor_data.value)
 
     # ========================================================================
     # Audit Trail Verification
@@ -3103,3 +3129,326 @@ class CIRISVerify:
             if json_out.value:
                 self._lib.ciris_verify_free_string(json_out)
 
+
+class MockCIRISVerify(CIRISVerify):
+    """Mock CIRISVerify client for testing without the actual binary.
+
+    Usage:
+        verifier = MockCIRISVerify(
+            mock_status=LicenseStatus.UNLICENSED_COMMUNITY
+        )
+        status = await verifier.get_license_status(os.urandom(32))
+        assert status.status == LicenseStatus.UNLICENSED_COMMUNITY
+    """
+
+    def __init__(
+        self,
+        mock_status: LicenseStatus = LicenseStatus.UNLICENSED_COMMUNITY,
+        mock_hardware: HardwareType = HardwareType.SOFTWARE_ONLY,
+        mock_capabilities: Optional[Set[str]] = None,
+    ):
+        """Initialize mock client.
+
+        Args:
+            mock_status: Status to return from get_license_status().
+            mock_hardware: Hardware type to report.
+            mock_capabilities: Set of allowed capabilities.
+        """
+        self._mock_status = mock_status
+        self._mock_hardware = mock_hardware
+        self._mock_capabilities = mock_capabilities
+        self._timeout = 10.0
+        # Don't call parent __init__ - no binary needed
+
+    def _find_binary(self, path):
+        return None
+
+    def _verify_binary_integrity(self):
+        pass
+
+    def _load_library(self):
+        pass
+
+    def __del__(self):
+        pass
+
+    async def get_license_status(
+        self,
+        challenge_nonce: bytes,
+        device_fingerprint: Optional[bytes] = None,
+        timeout: Optional[float] = None,
+    ) -> LicenseStatusResponse:
+        """Return mock license status."""
+        if len(challenge_nonce) < 32:
+            raise ValueError("challenge_nonce must be at least 32 bytes")
+
+        severity = DisclosureSeverity.INFO
+        if self._mock_status.requires_lockdown():
+            severity = DisclosureSeverity.CRITICAL
+        elif self._mock_status.requires_restricted():
+            severity = DisclosureSeverity.WARNING
+
+        license_details = None
+        if self._mock_status.allows_licensed_operation():
+            license_details = LicenseDetails(
+                license_id="mock-license-001",
+                tier=LicenseTier.PROFESSIONAL_FULL,
+                capabilities=self._mock_capabilities or {"*"},
+                prohibited_capabilities=set(),
+                issued_at=datetime.now(timezone.utc),
+                expires_at=datetime(2099, 12, 31, tzinfo=timezone.utc),
+                issuer="mock-issuer",
+            )
+
+        mock_reason = (
+            "Using MockCIRISVerify (no real binary). "
+            "Install ciris-verify with hardware support for licensed operation."
+        )
+        return LicenseStatusResponse(
+            status=self._mock_status,
+            license=license_details,
+            mandatory_disclosure=MandatoryDisclosure(
+                text="[MOCK] " + self._default_disclosure(self._mock_status, reason=mock_reason),
+                severity=severity,
+            ),
+            hardware_type=self._mock_hardware,
+            source_details=SourceDetails(
+                dns_us_reachable=True,
+                dns_eu_reachable=True,
+                https_reachable=True,
+                validation_status=ValidationStatus.ALL_SOURCES_AGREE,
+                sources_agreeing=3,
+            ),
+            cached=False,
+            verification_timestamp=datetime.now(timezone.utc),
+        )
+
+    async def check_capability(
+        self,
+        capability: str,
+        timeout: Optional[float] = None,
+    ) -> CapabilityCheckResult:
+        """Return mock capability check.
+
+        In community mode, standard operations (standard:*, tool:*) are
+        allowed. Professional domain capabilities (medical, legal, financial,
+        etc.) are blocked.
+        """
+        # Standard operations are always allowed, even in community mode
+        cap_lower = capability.lower()
+        is_standard = (
+            cap_lower.startswith("standard:")
+            or cap_lower.startswith("tool:")
+        )
+
+        if not self._mock_status.allows_licensed_operation():
+            if is_standard:
+                return CapabilityCheckResult(
+                    capability=capability,
+                    allowed=True,
+                    reason="Standard operation allowed",
+                )
+            return CapabilityCheckResult(
+                capability=capability,
+                allowed=False,
+                reason="Community mode - professional capabilities not available",
+            )
+
+        if self._mock_capabilities is None:
+            allowed = True
+        else:
+            allowed = capability in self._mock_capabilities or "*" in self._mock_capabilities
+
+        return CapabilityCheckResult(
+            capability=capability,
+            allowed=allowed,
+            reason="Allowed by mock" if allowed else "Not in mock capabilities",
+        )
+
+    async def check_agent_integrity(
+        self,
+        manifest_path: str,
+        agent_root: str,
+        spot_check_count: int = 0,
+        timeout: Optional[float] = None,
+    ) -> FileIntegrityResult:
+        """Mock agent integrity check — always passes."""
+        return FileIntegrityResult(
+            integrity_valid=True,
+            total_files=0,
+            files_checked=0,
+            files_passed=0,
+            files_failed=0,
+            files_missing=0,
+            files_unexpected=0,
+            failure_reason="",
+        )
+
+    async def sign(
+        self,
+        data: bytes,
+        timeout: Optional[float] = None,
+    ) -> bytes:
+        """Mock sign — uses software Ed25519 key for testing.
+
+        Generates a deterministic mock signature. NOT cryptographically
+        secure — for testing only.
+        """
+        # Use a mock Ed25519 signing key
+        if not hasattr(self, "_mock_private_key"):
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+            self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
+            self._mock_public_key = self._mock_private_key.public_key()
+
+        return self._mock_private_key.sign(data)
+
+    async def get_public_key(
+        self,
+        timeout: Optional[float] = None,
+    ) -> tuple[bytes, str]:
+        """Mock get_public_key — returns software Ed25519 key."""
+        if not hasattr(self, "_mock_private_key"):
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+            self._mock_private_key = ed25519.Ed25519PrivateKey.generate()
+            self._mock_public_key = self._mock_private_key.public_key()
+
+        from cryptography.hazmat.primitives import serialization
+        key_bytes = self._mock_public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        return key_bytes, "Ed25519"
+
+    @property
+    def has_run_attestation_support(self) -> bool:
+        """Mock always supports run_attestation."""
+        return True
+
+    async def run_attestation(
+        self,
+        challenge: bytes,
+        agent_version: Optional[str] = None,
+        agent_root: Optional[str] = None,
+        spot_check_count: int = 0,
+        audit_entries: Optional[list] = None,
+        portal_key_id: Optional[str] = None,
+        skip_registry: bool = False,
+        skip_file_integrity: bool = False,
+        skip_audit: bool = False,
+        key_fingerprint: Optional[str] = None,
+        python_hashes: Optional[PythonModuleHashes] = None,
+        expected_python_hash: Optional[str] = None,
+        partial_file_check: bool = False,
+        timeout: Optional[float] = None,
+    ) -> dict:
+        """Mock run_attestation — returns successful attestation."""
+        if len(challenge) < 32:
+            raise ValueError("challenge must be at least 32 bytes")
+
+        return {
+            "valid": True,
+            "level": 3,  # Registry cross-validation level
+            "key_attestation": {
+                "valid": True,
+                "hardware_type": "Software",
+                "registry_key_status": "active" if key_fingerprint else "not_checked",
+            },
+            "file_integrity": None,  # Skipped in mock
+            "sources": {
+                "dns_us": {"reachable": True, "valid": True},
+                "dns_eu": {"reachable": True, "valid": True},
+                "https": {"reachable": True, "valid": True},
+            },
+            "audit_trail": None,  # Skipped in mock
+            "python_integrity": {
+                "valid": True,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
+                "modules_failed": 0,
+                "total_hash_valid": True,
+            } if python_hashes else None,
+            "registry_key_status": "active" if key_fingerprint else "not_checked",
+            "checks_passed": 3,
+            "checks_total": 3,
+            "diagnostics": "[MOCK] Using MockCIRISVerify",
+            "errors": [],
+        }
+
+    def run_attestation_sync(
+        self,
+        challenge: bytes,
+        agent_version: Optional[str] = None,
+        agent_root: Optional[str] = None,
+        spot_check_count: int = 0,
+        audit_entries: Optional[list] = None,
+        portal_key_id: Optional[str] = None,
+        skip_registry: bool = False,
+        skip_file_integrity: bool = False,
+        skip_audit: bool = False,
+        key_fingerprint: Optional[str] = None,
+        python_hashes: Optional[PythonModuleHashes] = None,
+        expected_python_hash: Optional[str] = None,
+        partial_file_check: bool = False,
+    ) -> dict:
+        """Synchronous mock run_attestation."""
+        if len(challenge) < 32:
+            raise ValueError("challenge must be at least 32 bytes")
+
+        return {
+            "valid": True,
+            "level": 3,
+            "key_attestation": {
+                "valid": True,
+                "hardware_type": "Software",
+                "registry_key_status": "active" if key_fingerprint else "not_checked",
+            },
+            "file_integrity": None,
+            "sources": {
+                "dns_us": {"reachable": True, "valid": True},
+                "dns_eu": {"reachable": True, "valid": True},
+                "https": {"reachable": True, "valid": True},
+            },
+            "audit_trail": None,
+            "python_integrity": {
+                "valid": True,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
+                "modules_failed": 0,
+                "total_hash_valid": True,
+            } if python_hashes else None,
+            "registry_key_status": "active" if key_fingerprint else "not_checked",
+            "checks_passed": 3,
+            "checks_total": 3,
+            "diagnostics": "[MOCK] Using MockCIRISVerify",
+            "errors": [],
+        }
+
+    @property
+    def has_device_attestation_failed_support(self) -> bool:
+        """Mock always supports device_attestation_failed."""
+        return True
+
+    def device_attestation_failed_sync(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Mock device_attestation_failed — no-op."""
+        if platform not in ("android", "ios"):
+            raise ValueError("platform must be 'android' or 'ios'")
+        # No-op in mock
+
+    async def device_attestation_failed(
+        self,
+        platform: str,
+        error_code: int,
+        error_message: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Async mock device_attestation_failed — no-op."""
+        self.device_attestation_failed_sync(platform, error_code, error_message)
+
+    def _default_disclosure(self, status: LicenseStatus, reason: str = "") -> str:
+        """Generate default disclosure for mock."""
+        return super()._default_disclosure(status, reason=reason)

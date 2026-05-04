@@ -28,7 +28,7 @@ Logging:
 
 import logging as _logging
 
-from .client import CIRISVerify
+from .client import CIRISVerify, MockCIRISVerify
 from .types import (
     LicenseStatus,
     LicenseTier,
@@ -47,6 +47,9 @@ from .types import (
     SecurityAdvisory,
     HardwareLimitation,
     HardwareInfo,
+    StorageDescriptor,
+    StorageKind,
+    KeyringScope,
 )
 from .exceptions import (
     CIRISVerifyError,
@@ -111,9 +114,10 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.6.3"
+__version__ = "1.11.1"
 __all__ = [
     "CIRISVerify",
+    "MockCIRISVerify",
     "get_library_version",
     "setup_logging",
     "LicenseStatus",
@@ -133,6 +137,9 @@ __all__ = [
     "SecurityAdvisory",
     "HardwareLimitation",
     "HardwareInfo",
+    "StorageDescriptor",
+    "StorageKind",
+    "KeyringScope",
     "CIRISVerifyError",
     "BinaryNotFoundError",
     "BinaryTamperedError",

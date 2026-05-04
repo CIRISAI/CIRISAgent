@@ -693,7 +693,12 @@ jobs:
 
       - name: Sign build manifest (Python source tree)
         env:
-          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
+          # Fleet convention: secret is named CIRIS_BUILD_ED25519_SECRET (not _SEED).
+          # Bridge-provisioned across all 6 onboarded repos (Persist/Lens/Agent/
+          # Verify/Registry/Edge) on 2026-05-01. Env-var name CIRIS_BUILD_ED25519_SEED
+          # stays since ciris-build-sign reads from it via --ed25519-seed; only the
+          # secrets.* source is renamed.
+          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
           # Read CIRIS_VERSION as a string literal without importing the
@@ -758,7 +763,12 @@ jobs:
 
       - name: Sign mobile build manifest
         env:
-          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SEED }}
+          # Fleet convention: secret is named CIRIS_BUILD_ED25519_SECRET (not _SEED).
+          # Bridge-provisioned across all 6 onboarded repos (Persist/Lens/Agent/
+          # Verify/Registry/Edge) on 2026-05-01. Env-var name CIRIS_BUILD_ED25519_SEED
+          # stays since ciris-build-sign reads from it via --ed25519-seed; only the
+          # secrets.* source is renamed.
+          CIRIS_BUILD_ED25519_SEED: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
           CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
         run: |
           # Read CIRIS_VERSION as a string literal without importing the

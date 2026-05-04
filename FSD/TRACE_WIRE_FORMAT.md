@@ -599,7 +599,7 @@ margins. Schema is rich; see `IDMAResult` in
   "thought_id": "...", "task_id": "...", "timestamp": "...",
   "k_eff": 3.0, "k_raw": 4, "raw_source_count": 4,
   "effective_source_count": 3.0,
-  "correlation_risk": "low", "fragility_flag": false,
+  "correlation_risk": 0.18, "fragility_flag": false,
   "reasoning_is_fragile": false, "phase": "healthy",
   "phase_confidence": 0.92, "reasoning_state": "stable",
   "collapse_margin": 1.5, "safety_margin": 0.8,

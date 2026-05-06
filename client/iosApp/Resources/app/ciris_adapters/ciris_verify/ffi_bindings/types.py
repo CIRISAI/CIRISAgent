@@ -1,0 +1,551 @@
+"""Type definitions for CIRISVerify Python bindings.
+
+All types use Pydantic for validation and follow CIRIS typing conventions.
+"""
+
+from enum import IntEnum, Enum
+from typing import Literal, Optional, List, Set
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class LicenseStatus(IntEnum):
+    """License verification status codes.
+
+    Matches FSD-001 Section 3.2 LicenseStatus enum.
+    """
+    # Active licensed states (100-199)
+    LICENSED_PROFESSIONAL = 100
+    LICENSED_PROFESSIONAL_GRACE = 101  # Offline grace period
+
+    # Community states (200-299)
+    UNLICENSED_COMMUNITY = 200
+    UNLICENSED_COMMUNITY_OFFLINE = 201
+
+    # Restricted states (300-399)
+    RESTRICTED_VERIFICATION_FAILED = 300
+    RESTRICTED_SOURCES_DISAGREE = 301
+    RESTRICTED_PARTIAL_AGREEMENT = 302
+
+    # Error states (400-499)
+    ERROR_BINARY_TAMPERED = 400
+    ERROR_REVOKED = 401
+    ERROR_EXPIRED = 402
+    ERROR_HARDWARE_MISMATCH = 403
+    ERROR_VERIFICATION_FAILED = 404
+    ERROR_SOURCES_DISAGREE = 405
+
+    # Lockdown (500+)
+    LOCKDOWN_INTEGRITY_FAILURE = 500
+    LOCKDOWN_ATTACK_DETECTED = 501
+
+    def allows_licensed_operation(self) -> bool:
+        """Check if this status allows professional licensed operations."""
+        return self.value in (100, 101)
+
+    def requires_lockdown(self) -> bool:
+        """Check if this status requires immediate lockdown."""
+        return self.value >= 500
+
+    def requires_restricted(self) -> bool:
+        """Check if this status forces restricted mode."""
+        return 300 <= self.value < 500
+
+    def is_community_mode(self) -> bool:
+        """Check if this status is community (unlicensed) mode."""
+        return 200 <= self.value < 300
+
+
+class LicenseTier(IntEnum):
+    """License tier levels.
+
+    Higher tiers unlock more capabilities.
+    SOFTWARE_ONLY hardware caps at COMMUNITY regardless of license.
+    """
+    COMMUNITY = 0           # No professional capabilities
+    PROFESSIONAL_BASIC = 1  # Basic professional capabilities
+    PROFESSIONAL_FULL = 2   # Full professional capabilities
+    ENTERPRISE = 3          # Enterprise features
+
+
+class HardwareType(str, Enum):
+    """Hardware security module type.
+
+    Determines maximum achievable license tier.
+    """
+    ANDROID_KEYSTORE = "android_keystore"
+    ANDROID_STRONGBOX = "android_strongbox"
+    IOS_SECURE_ENCLAVE = "ios_secure_enclave"
+    MAC_OS_SECURE_ENCLAVE = "mac_os_secure_enclave"
+    TPM_DISCRETE = "tpm_discrete"
+    TPM_FIRMWARE = "tpm_firmware"
+    INTEL_SGX = "intel_sgx"
+    SOFTWARE_ONLY = "software_only"
+
+    def supports_professional_license(self) -> bool:
+        """Check if this hardware supports professional licensing."""
+        return self != HardwareType.SOFTWARE_ONLY
+
+    def security_level(self) -> int:
+        """Get security level (1-5, higher is better)."""
+        levels = {
+            HardwareType.ANDROID_STRONGBOX: 5,
+            HardwareType.TPM_DISCRETE: 5,
+            HardwareType.IOS_SECURE_ENCLAVE: 5,
+            HardwareType.MAC_OS_SECURE_ENCLAVE: 5,
+            HardwareType.TPM_FIRMWARE: 4,
+            HardwareType.INTEL_SGX: 4,
+            HardwareType.ANDROID_KEYSTORE: 3,
+            HardwareType.SOFTWARE_ONLY: 1,
+        }
+        return levels.get(self, 1)
+
+
+# ---------------------------------------------------------------------------
+# Storage Descriptor (v1.7)
+# ---------------------------------------------------------------------------
+#
+# Mirrors the Rust `StorageDescriptor` enum from ciris-keyring's types.rs.
+# The FFI emits JSON with a `kind` discriminator and variant-specific fields:
+#
+#   {"kind":"hardware","hardware_type":"TpmFirmware","blob_path":"/var/lib/.../key.tpm"}
+#   {"kind":"software_file","path":"/home/u/.local/share/ciris-verify/agent.p256.key"}
+#   {"kind":"software_os_keyring","backend":"secret-service","scope":"unknown"}
+#   {"kind":"in_memory"}
+#
+# Note: the FFI reports `hardware_type` as the PascalCase Rust variant name
+# (`"TpmFirmware"`, `"AndroidStrongbox"`), NOT the snake_case `HardwareType`
+# enum value above. This mirrors the wire format produced by serde's default
+# unit-variant encoding. Consumers comparing to the snake_case `HardwareType`
+# enum should map: `"TpmFirmware"` -> `HardwareType.TPM_FIRMWARE`, etc.
+#
+# The `disk_path` and `is_hardware_backed` helpers below match the semantics
+# of the Rust impl on `StorageDescriptor`. For longitudinal-score primitives
+# (PoB §2.4 S-factor, 30-day decay window), an unstable storage location is
+# a configuration bug — use these helpers from the agent's boot-time check.
+
+class StorageKind(str, Enum):
+    """Discriminator for `StorageDescriptor` variants."""
+    HARDWARE = "hardware"
+    SOFTWARE_FILE = "software_file"
+    SOFTWARE_OS_KEYRING = "software_os_keyring"
+    IN_MEMORY = "in_memory"
+
+
+class KeyringScope(str, Enum):
+    """Scope of an OS keyring entry."""
+    USER = "user"
+    SYSTEM = "system"
+    UNKNOWN = "unknown"
+
+
+class StorageDescriptor(BaseModel):
+    """Where a signer's identity material is stored.
+
+    Returned by `CIRISVerify.storage_descriptor()`. Use to detect ephemeral
+    storage at boot before identity churn silently breaks longitudinal
+    scoring (PoB §2.4 S-factor decay window cannot accumulate behind an
+    unstable identity).
+
+    Attributes vary by `kind`:
+      - HARDWARE: `hardware_type` (PascalCase variant name string),
+        `blob_path` (informational; useless without HSM)
+      - SOFTWARE_FILE: `path` (the path ephemeral-storage heuristics MUST
+        check)
+      - SOFTWARE_OS_KEYRING: `backend`, `scope`
+      - IN_MEMORY: no extra fields
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    kind: StorageKind
+    # Hardware variant
+    hardware_type: Optional[str] = Field(
+        default=None,
+        description="PascalCase Rust variant name (e.g. 'TpmFirmware', "
+                    "'AndroidStrongbox', 'IosSecureEnclave'). "
+                    "Present iff kind == HARDWARE.",
+    )
+    blob_path: Optional[str] = Field(
+        default=None,
+        description="Path to a hardware-wrapped envelope file, if the "
+                    "backend stores one. Informational — its presence does "
+                    "NOT imply ephemerality risk.",
+    )
+    # SoftwareFile variant
+    path: Optional[str] = Field(
+        default=None,
+        description="Filesystem path to the seed (kind == SOFTWARE_FILE). "
+                    "This IS the path ephemeral-storage heuristics check.",
+    )
+    # SoftwareOsKeyring variant
+    backend: Optional[str] = Field(
+        default=None,
+        description="OS keyring backend (kind == SOFTWARE_OS_KEYRING).",
+    )
+    scope: Optional[KeyringScope] = Field(
+        default=None,
+        description="Keyring scope (kind == SOFTWARE_OS_KEYRING).",
+    )
+
+    def is_hardware_backed(self) -> bool:
+        """True iff the underlying key is protected by a hardware HSM.
+
+        Returns True only for `HARDWARE`. Both software variants and
+        `IN_MEMORY` return False.
+        """
+        return self.kind == StorageKind.HARDWARE
+
+    def disk_path(self) -> Optional[str]:
+        """Filesystem path the descriptor exposes, if any.
+
+        - HARDWARE: returns blob_path (informational; not subject to
+          ephemerality heuristics — file is useless without HSM).
+        - SOFTWARE_FILE: returns the seed path (apply heuristics here).
+        - SOFTWARE_OS_KEYRING / IN_MEMORY: returns None.
+        """
+        if self.kind == StorageKind.HARDWARE:
+            return self.blob_path
+        if self.kind == StorageKind.SOFTWARE_FILE:
+            return self.path
+        return None
+
+
+class ValidationStatus(str, Enum):
+    """Multi-source validation status."""
+    ALL_SOURCES_AGREE = "all_sources_agree"
+    PARTIAL_AGREEMENT = "partial_agreement"  # 2-of-3
+    SOURCES_DISAGREE = "sources_disagree"    # Security alert
+    NO_SOURCES_REACHABLE = "no_sources_reachable"
+    VALIDATION_ERROR = "validation_error"
+
+
+class DisclosureSeverity(str, Enum):
+    """Severity level for mandatory disclosures."""
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class MandatoryDisclosure(BaseModel):
+    """Mandatory disclosure that MUST be shown to users.
+
+    Per FSD-001: Agents MUST display this text when interacting with users.
+    Failure to display is a violation of the CIRIS ecosystem rules.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    text: str = Field(..., description="Disclosure text to display")
+    severity: DisclosureSeverity = Field(..., description="Severity level")
+    locale: str = Field(default="en", description="Locale code")
+    legal_jurisdiction: Optional[str] = Field(default=None, description="Applicable jurisdiction")
+
+
+class LicenseDetails(BaseModel):
+    """Detailed license information when licensed."""
+    model_config = ConfigDict(frozen=True)
+
+    license_id: str = Field(..., description="Unique license identifier")
+    tier: LicenseTier = Field(..., description="License tier level")
+    capabilities: Set[str] = Field(default_factory=set, description="Granted capabilities")
+    prohibited_capabilities: Set[str] = Field(default_factory=set, description="Explicitly prohibited")
+    issued_at: datetime = Field(..., description="License issue timestamp")
+    expires_at: datetime = Field(..., description="License expiration timestamp")
+    issuer: str = Field(..., description="License issuer identifier")
+    holder_name: Optional[str] = Field(default=None, description="License holder name")
+    holder_organization: Optional[str] = Field(default=None, description="License holder org")
+    responsible_party: str = Field(default="", description="Name of the human accountable for this deployment")
+    public_contact_email: str = Field(default="", description="Public-facing org contact (defaults to org owner email)")
+
+    def has_capability(self, capability: str) -> bool:
+        """Check if this license grants a specific capability."""
+        if capability in self.prohibited_capabilities:
+            return False
+        # Wildcard matching
+        for cap in self.capabilities:
+            if cap == capability:
+                return True
+            if cap.endswith("*") and capability.startswith(cap[:-1]):
+                return True
+        return False
+
+
+class SourceDetails(BaseModel):
+    """Details about multi-source validation."""
+    model_config = ConfigDict(frozen=True)
+
+    dns_us_reachable: bool = False
+    dns_eu_reachable: bool = False
+    https_reachable: bool = False
+    validation_status: ValidationStatus = ValidationStatus.NO_SOURCES_REACHABLE
+    sources_agreeing: int = 0
+
+    # Error details for each source (added in v0.6.6)
+    # These expose the actual network error when a source fails
+    dns_us_error: Optional[str] = None
+    dns_us_error_category: Optional[str] = None
+    dns_eu_error: Optional[str] = None
+    dns_eu_error_category: Optional[str] = None
+    https_error: Optional[str] = None
+    https_error_category: Optional[str] = None
+
+
+class AttestationData(BaseModel):
+    """Hardware attestation data."""
+    model_config = ConfigDict(frozen=True)
+
+    hardware_type: HardwareType = HardwareType.SOFTWARE_ONLY
+    attestation_chain: Optional[bytes] = None
+    signature: Optional[bytes] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LicenseStatusResponse(BaseModel):
+    """Complete license status response from CIRISVerify.
+
+    This is the primary response type returned by get_license_status().
+    """
+    model_config = ConfigDict(frozen=True)
+
+    status: LicenseStatus = Field(..., description="Overall license status")
+    license: Optional[LicenseDetails] = Field(default=None, description="License details if licensed")
+    mandatory_disclosure: MandatoryDisclosure = Field(..., description="Required disclosure")
+    hardware_type: HardwareType = Field(default=HardwareType.SOFTWARE_ONLY)
+    source_details: SourceDetails = Field(default_factory=SourceDetails)
+    attestation: Optional[AttestationData] = Field(default=None)
+    cached: bool = Field(default=False, description="Whether response came from cache")
+    cache_age_seconds: Optional[int] = Field(default=None)
+    verification_timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    def allows_licensed_operation(self) -> bool:
+        """Check if professional licensed operations are allowed."""
+        return self.status.allows_licensed_operation()
+
+    def get_prohibited_capabilities(self) -> Set[str]:
+        """Get all prohibited capabilities for current status."""
+        if self.license:
+            return self.license.prohibited_capabilities
+        # Community mode: all professional capabilities prohibited
+        return {"medical:*", "legal:*", "financial:*"}
+
+    def has_capability(self, capability: str) -> bool:
+        """Check if a specific capability is allowed."""
+        if not self.allows_licensed_operation():
+            return False
+        if self.license:
+            return self.license.has_capability(capability)
+        return False
+
+
+class CapabilityCheckResult(BaseModel):
+    """Result of checking a specific capability."""
+    model_config = ConfigDict(frozen=True)
+
+    capability: str = Field(..., description="Capability that was checked")
+    allowed: bool = Field(..., description="Whether capability is allowed")
+    reason: str = Field(..., description="Reason for allow/deny")
+    required_tier: Optional[LicenseTier] = Field(default=None)
+    current_tier: Optional[LicenseTier] = Field(default=None)
+    requires_separate_module: bool = Field(default=False, description="Needs separate licensed repo")
+
+
+class FileCheckStatus(str, Enum):
+    """Status of a single file integrity check."""
+    PASSED = "passed"
+    FAILED = "failed"
+    MISSING = "missing"
+    UNREADABLE = "unreadable"
+
+
+class FileIntegrityResult(BaseModel):
+    """Result of Tripwire-style agent file integrity check.
+
+    ANY failure means the agent distribution has been tampered with
+    and must be shut down immediately.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    integrity_valid: bool = Field(..., description="Whether all checked files passed")
+    total_files: int = Field(default=0, description="Total files in manifest")
+    files_checked: int = Field(default=0, description="Number of files checked")
+    files_passed: int = Field(default=0, description="Files that passed hash check")
+    files_failed: int = Field(default=0, description="Files with hash mismatch")
+    files_missing: int = Field(default=0, description="Files missing from disk")
+    files_unexpected: int = Field(default=0, description="Unexpected files not in manifest")
+    failure_reason: str = Field(default="", description="Opaque failure category")
+    # Per-file results (v0.8.5+)
+    per_file_results: dict = Field(default_factory=dict, description="file_path -> FileCheckStatus")
+    unexpected_files: List[str] = Field(default_factory=list, description="List of unexpected file paths")
+
+    def get_failed_files(self) -> List[str]:
+        """Get list of files that failed hash check."""
+        return [path for path, status in self.per_file_results.items() if status == "failed"]
+
+    def get_missing_files(self) -> List[str]:
+        """Get list of files that are missing from disk."""
+        return [path for path, status in self.per_file_results.items() if status == "missing"]
+
+    def get_passed_files(self) -> List[str]:
+        """Get list of files that passed hash check."""
+        return [path for path, status in self.per_file_results.items() if status == "passed"]
+
+
+class BinaryIntegrityStatus(BaseModel):
+    """Binary self-verification status (v0.6.17).
+
+    Reports whether the running CIRISVerify binary matches its registry manifest.
+    This is the "who watches the watchmen" check.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    status: str = Field(..., description="verified/tampered/unavailable/not_found/pending")
+    version: str = Field(..., description="CIRISVerify binary version")
+    target: str = Field(..., description="Target platform (e.g., x86_64-unknown-linux-gnu)")
+    actual_hash: Optional[str] = Field(default=None, description="Computed hash of running binary")
+    expected_hash: Optional[str] = Field(default=None, description="Expected hash from registry")
+    matches: bool = Field(default=False, description="Whether hashes match")
+    error: Optional[str] = Field(default=None, description="Error message if verification failed")
+    verified_at: int = Field(default=0, description="Unix timestamp of verification")
+
+    def is_verified(self) -> bool:
+        """Check if binary is verified against registry."""
+        return self.status == "verified" and self.matches
+
+    def is_tampered(self) -> bool:
+        """Check if binary is detected as tampered."""
+        return self.status == "tampered"
+
+    def is_available(self) -> bool:
+        """Check if verification was possible (registry reachable)."""
+        return self.status not in ("unavailable", "not_found", "pending")
+
+
+class PythonModuleHashes(BaseModel):
+    """Python module hashes for Android/mobile code integrity (v0.8.1).
+
+    Generated at startup by hashing all Python modules (ciris_engine, etc.).
+    Used for code integrity verification on mobile where Python is embedded in APK.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    total_hash: str = Field(..., description="SHA-256 hex of all module hashes concatenated")
+    module_hashes: dict = Field(default_factory=dict, description="module_name -> SHA-256 hex")
+    module_count: int = Field(default=0, description="Number of modules hashed")
+    agent_version: str = Field(default="", description="Agent version that generated these hashes")
+    computed_at: int = Field(default=0, description="Unix timestamp when hashes were computed")
+
+
+class PythonIntegrityResult(BaseModel):
+    """Result of Python module integrity verification (v0.8.1+).
+
+    Returned when python_hashes is provided to run_attestation().
+    As of v0.9.2+, performs per-module hash validation against registry manifest.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    valid: bool = Field(..., description="Overall integrity valid")
+    modules_checked: int = Field(default=0, description="Total modules checked")
+    modules_passed: int = Field(default=0, description="Modules that passed")
+    modules_failed: int = Field(default=0, description="Modules that failed")
+    total_hash_valid: bool = Field(default=False, description="Whether total_hash matched")
+    expected_total_hash: Optional[str] = Field(default=None, description="Expected hash from manifest")
+    actual_total_hash: str = Field(default="", description="Actual total hash from agent")
+    verification_mode: str = Field(default="", description="total_hash_only, individual_modules, or record_only")
+    failed_modules: dict = Field(default_factory=dict, description="Modules that failed: path -> reason")
+    unexpected_modules: list = Field(default_factory=list, description="Modules not in registry manifest")
+    missing_modules: list = Field(default_factory=list, description="Modules in manifest but not provided")
+    error: Optional[str] = Field(default=None, description="Error message if verification failed")
+
+
+class SecurityAdvisory(BaseModel):
+    """Security advisory affecting hardware trust (v1.2.0+).
+
+    Contains details about CVEs and vulnerabilities that affect
+    hardware-rooted security on specific SoCs.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    cve: str = Field(..., description="CVE identifier (e.g., 'CVE-2026-20435')")
+    title: str = Field(..., description="Short description of the vulnerability")
+    impact: str = Field(..., description="Impact on CIRISVerify attestation")
+    software_patchable: bool = Field(..., description="Whether this can be patched via software")
+    min_patch_level: Optional[str] = Field(default=None, description="Min patch level if patchable")
+
+
+class HardwareLimitation(BaseModel):
+    """Hardware security limitation that affects attestation level (v1.2.0+).
+
+    Devices with hardware limitations have their attestation level capped
+    to SOFTWARE_ONLY, similar to emulator detection.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    # Limitation type - one of these will be set
+    limitation_type: str = Field(..., description="Type: Emulator, VulnerableSoC, WeakTEE, RootedDevice, UnlockedBootloader, OutdatedPatchLevel")
+
+    # For VulnerableSoC
+    manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer (for VulnerableSoC)")
+    advisory: Optional[SecurityAdvisory] = Field(default=None, description="Security advisory (for VulnerableSoC)")
+
+    # For WeakTEE
+    reason: Optional[str] = Field(default=None, description="Reason (for WeakTEE)")
+
+    # For OutdatedPatchLevel
+    current_patch: Optional[str] = Field(default=None, description="Current patch level")
+    minimum_patch: Optional[str] = Field(default=None, description="Minimum required patch level")
+
+    def description(self) -> str:
+        """Human-readable description of this limitation."""
+        if self.limitation_type == "Emulator":
+            return "Running in emulator - no hardware security"
+        elif self.limitation_type == "VulnerableSoC":
+            return f"{self.manufacturer} SoC affected by {self.advisory.cve if self.advisory else 'unknown CVE'}"
+        elif self.limitation_type == "WeakTEE":
+            return f"TEE security weakness: {self.reason}"
+        elif self.limitation_type == "RootedDevice":
+            return "Device is rooted - hardware security bypassed"
+        elif self.limitation_type == "UnlockedBootloader":
+            return "Bootloader unlocked - secure boot compromised"
+        elif self.limitation_type == "OutdatedPatchLevel":
+            return f"Security patch {self.current_patch} is below minimum {self.minimum_patch}"
+        return f"Unknown limitation: {self.limitation_type}"
+
+    def caps_attestation(self) -> bool:
+        """Whether this limitation caps attestation at SOFTWARE_ONLY level."""
+        # OutdatedPatchLevel is a warning only, doesn't cap
+        return self.limitation_type != "OutdatedPatchLevel"
+
+
+class HardwareInfo(BaseModel):
+    """Complete hardware information for a device (v1.2.0+).
+
+    Provides platform-specific hardware detection including:
+    - Emulator/VM detection
+    - Root/jailbreak detection
+    - SoC vulnerability detection (e.g., MediaTek CVE-2026-20435)
+    - TEE implementation identification
+    """
+    model_config = ConfigDict(frozen=True)
+
+    platform: str = Field(..., description="Platform: android, ios, linux, windows, macos")
+    soc_manufacturer: Optional[str] = Field(default=None, description="SoC manufacturer")
+    soc_model: Optional[str] = Field(default=None, description="SoC model")
+    security_patch_level: Optional[str] = Field(default=None, description="Android security patch (YYYY-MM-DD)")
+    is_emulator: bool = Field(default=False, description="Running in emulator/VM")
+    is_suspicious_emulator: bool = Field(default=False, description="Mobile emulator (suspicious)")
+    bootloader_unlocked: Optional[bool] = Field(default=None, description="Bootloader unlocked (Android)")
+    tee_implementation: Optional[str] = Field(default=None, description="TEE: Trustonic, Qualcomm, Apple SEP, etc.")
+    is_rooted: bool = Field(default=False, description="Device is rooted/jailbroken")
+    limitations: List[HardwareLimitation] = Field(default_factory=list, description="Detected limitations")
+    hardware_trust_degraded: bool = Field(default=False, description="Hardware trust is degraded")
+    trust_degradation_reason: Optional[str] = Field(default=None, description="Why trust is degraded")
+
+    def should_cap_attestation(self) -> bool:
+        """Check if attestation should be capped at software-only level."""
+        return self.hardware_trust_degraded
+
+    def security_summary(self) -> str:
+        """Get summary of security concerns."""
+        if not self.limitations:
+            return "No known hardware security limitations"
+        concerns = [lim.description() for lim in self.limitations]
+        return f"Hardware security concerns: {'; '.join(concerns)}"

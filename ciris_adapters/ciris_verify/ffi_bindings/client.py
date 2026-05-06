@@ -312,73 +312,14 @@ class CIRISVerify:
             if path.exists():
                 return path
 
-        suffixes = self._get_platform_binary_suffixes(system)
-
-        # Also check relative to this module (legacy in-repo path — kept
-        # as a no-op-when-empty branch for back-compat with pre-2.8.2
-        # source checkouts that may still have a binary here. The in-repo
-        # binary was deliberately deleted in 2.8.2; desktop FFI is now
-        # pip-resolved via site-packages — see next branch).
+        # Also check relative to this module
         module_dir = Path(__file__).parent
-        for suffix in suffixes:
+        for suffix in [".so", ".dylib", ".dll"]:
             candidate = module_dir / f"libciris_verify_ffi{suffix}"
             if candidate.exists():
                 return candidate
 
-        # Wheel-distributed location (PRIMARY desktop path post-2.8.2):
-        # the `ciris-verify` PyPI package (a Requires-Dist of `ciris-agent`)
-        # installs the binary into site-packages/ciris_verify/
-        # libciris_verify_ffi.{so,dylib,dll}. Version-pinned via
-        # requirements.txt — single source of truth. Without this branch,
-        # fresh `pip install ciris-agent` on Linux fails desktop init at
-        # the audit hash-chain step (see release/2.7.4 incident + 2.8.2
-        # PR review where Codex caught this regression after the in-repo
-        # `.so` deletion).
-        try:
-            import ciris_verify as _ciris_verify_pkg
-
-            pkg_dir_str = getattr(_ciris_verify_pkg, "__file__", None)
-            if pkg_dir_str:
-                pkg_dir = Path(pkg_dir_str).parent
-                for suffix in suffixes:
-                    candidate = pkg_dir / f"libciris_verify_ffi{suffix}"
-                    if candidate.exists():
-                        return candidate
-        except ImportError:
-            # `ciris_verify` package not installed — drop through to the
-            # not-found error below. Production wheel installs always
-            # pull it via Requires-Dist; this branch only fails for
-            # editable / source-only installs that haven't installed
-            # the dep.
-            pass
-
         raise BinaryNotFoundError(f"Searched: {paths}")
-
-    @staticmethod
-    def _get_platform_binary_suffixes(system: str) -> list[str]:
-        """Return library suffixes in platform-preferred order.
-
-        On Darwin a mixed bundle containing both `.so` and `.dylib` should
-        prefer `.dylib`; on Linux it should prefer `.so`; on Windows
-        `.dll`. The test
-        `tests/ciris_adapters/ciris_verify/test_ffi_loading.py::
-        test_find_binary_prefers_platform_suffix_in_module_dir` pins
-        this contract so an iterator-order regression doesn't ship the
-        wrong-platform binary on a host with a mixed checkout.
-        """
-        preferred_suffixes = {
-            "Linux": ".so",
-            "Darwin": ".dylib",
-            "Windows": ".dll",
-        }
-        ordered_suffixes: list[str] = []
-        preferred = preferred_suffixes.get(system)
-        if preferred is not None:
-            ordered_suffixes.append(preferred)
-        for suffix in [".so", ".dylib", ".dll"]:
-            if suffix not in ordered_suffixes:
-                ordered_suffixes.append(suffix)
-        return ordered_suffixes
 
     def _verify_binary_integrity(self) -> None:
         """Verify binary hasn't been tampered with."""
@@ -3421,8 +3362,8 @@ class MockCIRISVerify(CIRISVerify):
             "audit_trail": None,  # Skipped in mock
             "python_integrity": {
                 "valid": True,
-                "modules_checked": python_hashes.module_count,
-                "modules_passed": python_hashes.module_count,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
                 "modules_failed": 0,
                 "total_hash_valid": True,
             } if python_hashes else None,
@@ -3470,8 +3411,8 @@ class MockCIRISVerify(CIRISVerify):
             "audit_trail": None,
             "python_integrity": {
                 "valid": True,
-                "modules_checked": python_hashes.module_count,
-                "modules_passed": python_hashes.module_count,
+                "modules_checked": python_hashes.module_count if python_hashes else 0,
+                "modules_passed": python_hashes.module_count if python_hashes else 0,
                 "modules_failed": 0,
                 "total_hash_valid": True,
             } if python_hashes else None,

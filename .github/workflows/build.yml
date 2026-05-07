@@ -705,7 +705,23 @@ jobs:
           python tools/ops/build_agent_extras.py > build-secrets.json
           cat build-secrets.json
 
-      - name: Sign build manifest (Python source tree)
+      - name: Stage canonical runtime tree
+        # Produce the SAME tree CIRISVerify walks at runtime. Single source of
+        # truth for: (a) the manifest signed below, (b) the wheel content (via
+        # setup.py package_data + MANIFEST.in), (c) Android Chaquopy bundle,
+        # (d) iOS Resources bundle. Every consumer hashes the same bytes, so
+        # the runtime walk produces the same total_hash the signing-time walk
+        # produced — L4 file integrity passes by construction.
+        #
+        # Algorithm matches ciris_verify_core::security::build_manifest::
+        # walk_file_tree + ExemptRules byte-for-byte. See tools/dev/
+        # stage_runtime.py docstring for the full rule set.
+        run: |
+          python3 -m tools.dev.stage_runtime /tmp/ciris-staged --print-manifest > /tmp/ciris-staged-manifest.json
+          # Echo the hash to the workflow log so a green build is auditable.
+          python3 -c "import json; m=json.load(open('/tmp/ciris-staged-manifest.json')); print(f'Staged hash: {m[\"total_hash\"]}'); print(f'Staged files: {m[\"files_copied\"]}')"
+
+      - name: Sign build manifest (Python runtime, staged)
         env:
           # Fleet convention: secrets stored base64-encoded; ciris-build-sign
           # reads the seed/secret as FILE PATHS (not raw values), so we
@@ -745,12 +761,15 @@ jobs:
           fi
           echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
+          # Sign the staged tree. No --tree-include or --tree-exempt-* flags
+          # needed: stage_runtime already applied the canonical filter, so
+          # what's at /tmp/ciris-staged is exactly what gets signed and
+          # exactly what the runtime walks. Target name preserved as
+          # python-source-tree for v1.12.x verify-client compatibility (the
+          # name is historical; the content is now the staged runtime).
           ciris-build-sign sign \
             --primitive agent \
-            --tree . \
-            --tree-include ciris_engine ciris_adapters ciris_sdk \
-            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
-            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
+            --tree /tmp/ciris-staged \
             --tree-extra-hashes-file build-secrets.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA" \

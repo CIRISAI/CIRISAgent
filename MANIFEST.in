@@ -14,9 +14,9 @@ include requirements-dev.txt
 # Package data files
 recursive-include ciris_engine/data *
 
-# Modular services (optional adapters and tools)
+# Modular services (optional adapters and tools).
+# `.md` deliberately excluded — see runtime-shape rules at the bottom.
 recursive-include ciris_adapters *.py
-recursive-include ciris_adapters *.md
 recursive-include ciris_adapters *.json
 recursive-include ciris_adapters *.yaml
 recursive-include ciris_adapters *.txt
@@ -35,3 +35,16 @@ prune tools/test_*
 prune .github
 prune docker
 prune deployment
+
+# Runtime-shape rules — keep wheel content == canonical staged tree.
+# As of 2.8.5, all load-bearing markdown was migrated to .txt
+# (CIRIS_COMPREHENSIVE_GUIDE_*, accord_*, agent_experience). Markdown is now
+# unambiguously devnotes (README.md, CLAUDE.md, in-package design docs) and
+# must NOT be shipped in the runtime wheel — keeps wheel content byte-equal
+# to what tools.dev.stage_runtime emits, so CIRISVerify's runtime walk hashes
+# match the signed manifest and L4 file integrity passes.
+# (The top-level README.md / CHANGELOG.md `include` directives above are
+# project metadata for the sdist, not under any package — those still ship.)
+recursive-exclude ciris_engine *.md
+recursive-exclude ciris_adapters *.md
+recursive-exclude ciris_sdk *.md

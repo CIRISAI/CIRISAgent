@@ -102,6 +102,28 @@ Available modules:
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
     )
 
+    # Staged-env mode (run server from a venv installed from the canonical staged tree)
+    parser.add_argument(
+        "--from-staged",
+        action="store_true",
+        help=(
+            "Run the server under test from a venv with the wheel built from the canonical "
+            "staged tree (tools.dev.stage_runtime). Validates that the shipped wheel — not "
+            "the dev tree — passes QA. Staged env reused at /tmp/ciris-staged-qa across runs."
+        ),
+    )
+    parser.add_argument(
+        "--rebuild-staged",
+        action="store_true",
+        help="Force a clean rebuild of the staged env (implies --from-staged).",
+    )
+    parser.add_argument(
+        "--staged-root",
+        type=Path,
+        default=Path("/tmp/ciris-staged-qa"),
+        help="Staged env root dir (default: /tmp/ciris-staged-qa).",
+    )
+
     # Live LLM configuration (uses real API instead of mock)
     parser.add_argument(
         "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
@@ -436,6 +458,26 @@ def main():
                 print(f"   ⚠️  Failed to wipe data directory: {e}")
         args.wipe_data = True
 
+    # Staged-env preparation (if requested) — must happen BEFORE config
+    # creation so the resulting StagedEnvironment can be passed in.
+    # `--rebuild-staged` implies `--from-staged`.
+    staged_env = None
+    if args.from_staged or args.rebuild_staged:
+        from .staged_env import prepare as prepare_staged_env
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        print(
+            f"[staged] Preparing staged QA environment at {args.staged_root} "
+            f"(rebuild={args.rebuild_staged})"
+        )
+        staged_env = prepare_staged_env(
+            src=repo_root,
+            root=args.staged_root,
+            rebuild=args.rebuild_staged,
+        )
+        print(f"[staged] Ready. Server will run from: {staged_env.ciris_server}")
+        print(f"[staged] Canonical tree hash: {staged_env.total_hash}")
+
     # Create configuration
     # --live implies --no-mock-llm
     use_mock_llm = not args.no_mock_llm and not args.live
@@ -467,6 +509,8 @@ def main():
         live_provider=live_provider,
         # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
+        # Staged-env mode (server runs from canonical-staged-tree wheel in a venv)
+        staged_env=staged_env,
         # Live CIRISNode configuration (for cirisnode tests)
         live_node=args.live_node,
         # Live Portal configuration (for licensed_agent tests)

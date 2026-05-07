@@ -835,15 +835,32 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
 
     src_dir = extract_dir / "ciris_verify"
     if src_dir.exists():
-        # Update Android
+        # The agent's `ciris_adapters/ciris_verify/ffi_bindings/client.py` is
+        # intentionally divergent from the upstream wheel — it adds the
+        # site-packages lookup branch + `_get_platform_binary_suffixes` helper
+        # + `agent_project` parameter that desktop / Linux / multi-project
+        # consumers depend on. The wheel's flatter loader works for in-package
+        # use only. NEVER overwrite client.py from the wheel — that regression
+        # was caught by Codex review on PR #737 (and previously fixed by
+        # commit 284fb659a in the 2.8.2 cycle). Track upstream client.py
+        # changes by hand on this side; the parity gate
+        # (tests/ciris_adapters/ciris_verify/test_ffi_loading.py) catches
+        # loader regressions before merge.
+        AGENT_MANAGED = {"client.py"}
+
+        # Update Android / agent wrapper (skip AGENT_MANAGED files)
         ANDROID_PYTHON_DIR.mkdir(parents=True, exist_ok=True)
         for py_file in src_dir.glob("*.py"):
+            if py_file.name in AGENT_MANAGED:
+                print(f"  -> Android: {py_file.name} (SKIPPED — agent-managed enhanced version)")
+                continue
             dest_file = ANDROID_PYTHON_DIR / py_file.name
             shutil.copy2(py_file, dest_file)
             print(f"  -> Android: {py_file.name}")
 
-        # Update iOS (skip when caller can't also update the framework binary —
-        # avoids desync between the iOS Python wrapper and its still-stale .dylib).
+        # Update iOS app_packages — pure wheel content (the iOS runtime loads
+        # from app_packages/ciris_verify/, not the agent's wrapper, so client.py
+        # there should be the upstream wheel's flatter loader).
         if ios:
             update_ios_python_bindings(src_dir)
     else:
@@ -987,11 +1004,20 @@ def verify_mobile_bundles(version: str, android: bool, ios: bool) -> None:
             print(f"  ✓ android/{arch}: {so.relative_to(REPO_ROOT)}")
             checked += 1
     if ios:
-        ios_so = IOS_ADAPTER_DIR / "ffi_bindings" / "libciris_verify_ffi.so"
-        if ios_so.exists():
-            assert_bundle_contains_version(ios_so, version)
-            print(f"  ✓ ios: {ios_so.relative_to(REPO_ROOT)}")
-            checked += 1
+        # iOS runtime loads from app_packages/ (via Briefcase), and the
+        # binary is a .dylib not a .so. Earlier shape probed the wrong
+        # location AND the wrong extension — Codex review on PR #737
+        # caught this; iOS verification was silently passing because the
+        # path didn't exist so the if-branch was skipped.
+        ios_dylib = IOS_PYTHON_DIR / "libciris_verify_ffi.dylib"
+        if not ios_dylib.exists():
+            raise FileNotFoundError(
+                f"Expected iOS dylib at {ios_dylib} after iOS update — "
+                f"update_ios_dylib() should have placed it here."
+            )
+        assert_bundle_contains_version(ios_dylib, version)
+        print(f"  ✓ ios: {ios_dylib.relative_to(REPO_ROOT)}")
+        checked += 1
     if checked == 0:
         raise RuntimeError("No bundles checked — refusing to claim success.")
     print(f"  All {checked} bundle(s) verified.")

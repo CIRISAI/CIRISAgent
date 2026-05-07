@@ -5,6 +5,53 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2026-05-06
+
+L4 attestation unblock release. Lifts the `ciris-verify` floor to v1.12.1, which lands the per-call project parameter on `RegistryClient` (CIRISVerify#10) — one engine can now self-attest under `?project=ciris-verify` AND fetch the agent build under `?project=ciris-agent` in a single verify cycle. Was 404 in v1.11.x with attestation capping at L3 / `MANIFEST_CACHE MISS`. No agent-behavior changes beyond the attestation-level ceiling lifting from 3 to 5 on properly-registered builds.
+
+### CIRISVerify floor + Python wiring
+
+- **`ciris-verify` floor lifted `>=1.11.1` → `>=1.12.1,<2.0.0`** — closes CIRISVerify #10 (per-call project on agent build fetch), #11 (regional failover hostnames `us./eu.registry.ciris-services-1.ai` were typoed `registry-us`/`registry-eu` NXDOMAIN; v1.12.0 also fixed `eu.registry.ciris-services-eu-1.com` → `eu.registry.ciris-services-1.ai` in `config.rs`'s source-validation list), #12 (Step 5/6 walks `agent_root` for Python integrity when no JSON producer is available — desktop installs reach L4 without `startup_python_hashes.json`; v1.11.2 carryover).
+- **`agent_project="ciris-agent"` passed explicitly** at `verifier_runner.py:_run_attestation_sync`. v1.12.0's per-call API defaults the field to `"ciris-agent"` via `#[serde(default)]`, but explicit avoids the silent-default behavior that caused the underlying bug class.
+- **`ffi_bindings/client.py`**: `agent_project: Optional[str] = None` parameter added to both real and mock `run_attestation_sync` signatures; passed through to the JSON request payload when set.
+- **Companion infra**: CIRISBridge#1 unblocked CIRISVerify#11's failover path by removing the Caddy gate on `us./eu.registry` for public verify routes (`/v1/health`, `/v1/steward-key`, `/v1/builds/{ver}`, `/v1/verify/binary-manifest/{ver}`, `/v1/verify/function-manifest/{ver}/{target}`). All three regional hosts now serve anonymous reads — verify failover is real, not a typo'd dead list.
+
+### Mobile bundle refresh
+
+- **Android JNI binaries refreshed to v1.12.1** — three ABIs (`arm64-v8a`, `armeabi-v7a`, `x86_64`) now embed v1.12.1, version-asserted by the new `verify_mobile_bundles()` check.
+- **iOS bundle refreshed to v1.12.1** — XCFramework device + simulator dylibs (`client/iosApp/Frameworks/CIRISVerify.xcframework/{ios-arm64,ios-arm64-simulator}/CIRISVerify.framework/CIRISVerify`), `Resources.zip` rebuilt (38MB → 32MB), iOS-side adapter + Python bindings synced. Manual macOS step pending CI runner — see CIRISAgent#736.
+
+### `tools/update_ciris_verify.py` cleanup (~290 lines net deletion)
+
+- **Removed dead desktop code**: `--no-desktop` and `--desktop-only` flags, `do_desktop` plumbing, `update_desktop_binary` shim + `_legacy_update_desktop_binary_unused`, `update_desktop_from_local` shim + `_legacy_update_desktop_from_local_unused`, `DESKTOP_WHEEL_PLATFORMS`, `DESKTOP_BINARY_NAMES`, `get_current_platform()`. Desktop has resolved via the pip wheel since 2.8.2 (`requirements.txt` floor + site-packages); the script's only remaining job is mobile bundles. Default invocation simplifies from `python -m tools.update_ciris_verify <v> --no-desktop` to `python -m tools.update_ciris_verify <v>`.
+- **`is_macos()` guard** on the iOS branch in both `main()` and `update_from_local()`. iOS framework assembly needs Xcode CLI tools (`otool`, `install_name_tool`, `codesign`) that exist only on macOS. Linux runs now skip iOS cleanly with a clear message instead of failing mid-flight in `otool` with a misleading "tarball not found" message in the FileNotFoundError handler. Catches the failure mode that left the iOS bundle stale at v1.5.3 across six release cycles.
+- **`verify_mobile_bundles()` post-install assertion** — walks each freshly-installed bundle and asserts the `.so`/`.dylib` embeds the requested version string as bytes (CARGO_PKG_VERSION baked into Rust .rodata as a NUL-bounded token). Catches stale tarballs, wrong-platform extracts, partial copies. Refuses to claim success if zero bundles were checked. Removes the failure mode where a stale tarball cache silently passed verification.
+- **`update_python_bindings(ios=...)` gate** — when iOS is being skipped, doesn't copy the wheel-extracted Python bindings to the iOS dir either. Avoids desync between the iOS Python wrapper and its still-stale .dylib.
+- **`--ios-only` + `--android-only` mutex** — explicit `parser.error` instead of silently doing nothing.
+
+### Follow-ups
+
+- **CIRISAgent#736** — add `macos-latest` GitHub Actions runner so the iOS bundle refresh stops being a manual Mac step on every release. Sketch in the issue body. ~10× per-minute cost vs Linux runners but fires only on CIRISVerify releases (~1× per week typical, more during active development) and runs are short (~3-5 min). Cost well under an hour/month at current cadence.
+- **CIRISVerify#9** (deferred) — runtime tree-walking verifier FFI entrypoint that drops `startup_python_hashes.json` entirely. v1.11.2's Step 5/6 fallback (the #12 fix carried in this release's floor lift) is the tactical fill-in; #9 is the strategic end state.
+
+### Versions bumped
+
+`2.8.3-stable` → `2.8.4-stable`, Android `127` → `128`, iOS `280` → `281`.
+
+## [2.8.3] - 2026-05-05
+
+CI bake-time regeneration of `startup_python_hashes.json` (PR #734). Bridge fix for the L3 attestation ceiling that surfaced after the 2.8.2 admin-merge.
+
+- **Symptom**: CIRISVerify QA reported `validation_status: PartialAgreement` capping at Level 3 because `startup_python_hashes.json` carried `agent_version=2.8.0-stable` — registry queries used the stale lookup key and `expected_total_hash` came back None. The runtime cache had drifted; nothing kept it in sync with `CIRIS_VERSION`.
+- **`tools/dev/regenerate_python_hashes.py`** — standalone regen helper using the canonical algorithm from `client/androidApp/src/main/python/mobile_main.py:_save_hashes_to_file` byte-for-byte (pathlib.rglob over `ciris_engine` + `ciris_adapters`, sha256 per file with `/`-normalized paths, sorted total_hash, JSON schema v1.2). Reads `CIRIS_VERSION` via regex from `constants.py` so it works in CI without import deps.
+- **`.github/workflows/build.yml`** — new step in the docker `build` job (after BUILD_INFO, before Buildx) that regenerates the JSON from the merged-commit source tree. Docker `COPY . .` picks it up automatically; every image now carries hashes matching its source tree + `CIRIS_VERSION`. File is gitignored (runtime artifact), so this is the only path that produces it for docker deployments.
+- **Why CI cut time, not bump time**: between bump and merge there can be review-fix commits that change file hashes. Regen at bump → locks stale hashes the moment a follow-up commit lands. Regen at CI bake → ships from the actual signed source tree.
+- **End-state successor**: CIRISVerify FFI runtime tree-walker (separate CIRISVerify issue) drops the JSON cache entirely. Bridge fix lands here so docker deployments stop capping at L3 in the meantime.
+- **Bug fix carried in**: `MockCIRISVerify` had a dead `if python_hashes else 0` ternary that mypy was flagging — dropped (commit `70dcce294`).
+- **FFI loader carried in**: site-packages lookup + platform-preferred suffix order restored after Codex review (commit `284fb659a`).
+
+Versions bumped: `2.8.2-stable` → `2.8.3-stable`, Android `126` → `127`, iOS `279` → `280`.
+
 ## [2.8.2] - 2026-05-04
 
 Cleanup release. Closes the in-repo desktop FFI drift class that surfaced 5 versions of stale `.so` between pin bumps. No agent-behavior changes.

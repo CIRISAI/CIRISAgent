@@ -123,6 +123,7 @@ def _run_attestation_sync(
         partial_file_check=(attestation_mode == "partial"),
         python_hashes=python_hashes,
         agent_version=agent_version,
+        agent_project="ciris-agent",  # CIRISVerify v1.12.0+ per-call project (#10); explicit, not defaulted
         agent_root=agent_root,
         key_fingerprint=key_fingerprint,
         portal_key_id=key_fingerprint,  # Same as key_fingerprint for signature verification

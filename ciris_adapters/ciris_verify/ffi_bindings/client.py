@@ -1803,6 +1803,7 @@ class CIRISVerify:
         self,
         challenge: bytes,
         agent_version: Optional[str] = None,
+        agent_project: Optional[str] = None,
         agent_root: Optional[str] = None,
         spot_check_count: int = 0,
         audit_entries: Optional[list] = None,
@@ -1852,6 +1853,8 @@ class CIRISVerify:
         }
         if agent_version is not None:
             request_obj["agent_version"] = agent_version
+        if agent_project is not None:
+            request_obj["agent_project"] = agent_project
         if agent_root is not None:
             request_obj["agent_root"] = agent_root
         if spot_check_count > 0:
@@ -3437,6 +3440,7 @@ class MockCIRISVerify(CIRISVerify):
         self,
         challenge: bytes,
         agent_version: Optional[str] = None,
+        agent_project: Optional[str] = None,
         agent_root: Optional[str] = None,
         spot_check_count: int = 0,
         audit_entries: Optional[list] = None,

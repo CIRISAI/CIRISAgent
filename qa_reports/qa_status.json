@@ -1,102 +1,102 @@
 {
   "modules": {
     "streaming": {
-      "last_run": "2026-05-07T15:49:11.210837+00:00",
-      "passed": 1,
-      "failed": 2,
+      "last_run": "2026-05-07T17:05:51.359289+00:00",
+      "passed": 3,
+      "failed": 0,
       "total": 3,
-      "status": "failing",
-      "duration_seconds": 7.45,
+      "status": "passing",
+      "duration_seconds": 6.76,
       "context": null
     },
     "auth": {
-      "last_run": "2026-05-07T15:49:11.211140+00:00",
+      "last_run": "2026-05-07T17:05:51.359546+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "telemetry": {
-      "last_run": "2026-05-07T15:49:11.211489+00:00",
+      "last_run": "2026-05-07T17:05:51.367238+00:00",
       "passed": 9,
       "failed": 0,
       "total": 9,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "agent": {
-      "last_run": "2026-05-07T15:49:11.211890+00:00",
+      "last_run": "2026-05-07T17:05:51.367432+00:00",
       "passed": 12,
       "failed": 0,
       "total": 12,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "system": {
-      "last_run": "2026-05-07T15:49:11.212101+00:00",
+      "last_run": "2026-05-07T17:05:51.367601+00:00",
       "passed": 23,
       "failed": 0,
       "total": 23,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "memory": {
-      "last_run": "2026-05-07T15:49:11.212302+00:00",
+      "last_run": "2026-05-07T17:05:51.367928+00:00",
       "passed": 6,
       "failed": 0,
       "total": 6,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "audit": {
-      "last_run": "2026-05-07T15:49:11.212431+00:00",
+      "last_run": "2026-05-07T17:05:51.368075+00:00",
       "passed": 5,
       "failed": 0,
       "total": 5,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "tools": {
-      "last_run": "2026-05-07T15:49:11.212595+00:00",
+      "last_run": "2026-05-07T17:05:51.368528+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "guidance": {
-      "last_run": "2026-05-07T15:49:11.212736+00:00",
+      "last_run": "2026-05-07T17:05:51.368993+00:00",
       "passed": 2,
       "failed": 0,
       "total": 2,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "multi_occurrence": {
-      "last_run": "2026-05-07T15:49:11.212851+00:00",
+      "last_run": "2026-05-07T17:05:51.369480+00:00",
       "passed": 4,
       "failed": 0,
       "total": 4,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "sdk": {
-      "last_run": "2026-05-07T15:49:11.212962+00:00",
+      "last_run": "2026-05-07T17:05:51.369758+00:00",
       "passed": 8,
       "failed": 0,
       "total": 8,
       "status": "passing",
-      "duration_seconds": 7.45,
+      "duration_seconds": 6.76,
       "context": null
     },
     "degraded_mode": {
@@ -156,9 +156,9 @@
   },
   "summary": {
     "total_modules": 17,
-    "passing": 15,
-    "failing": 2,
+    "passing": 16,
+    "failing": 1,
     "not_run": 0
   },
-  "last_updated": "2026-05-07T15:49:11.212968+00:00"
+  "last_updated": "2026-05-07T17:05:51.369780+00:00"
 }

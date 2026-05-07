@@ -157,8 +157,13 @@ setup(
             "accord_1.2b.txt",  # Accord text file (v1.2-Beta)
             "accord_1.2b_compressed.txt",  # Compressed accord for testing
             "localized/*.json",  # Backend localization files (copied from /localization/)
-            "localized/*.txt",  # Localized ACCORD text files
-            "localized/*.md",  # Localized comprehensive guides
+            "localized/*.txt",  # Localized ACCORD + comprehensive guide text files (guides
+                                # migrated from .md → .txt in 2.8.5 alongside the repo-root
+                                # and docs/ consolidation; staging script can now use a
+                                # clean .md=devnotes denylist)
+            "agent_experience.txt",  # Agent self-help / introspection content (was at
+                                     # docs/agent_experience.md pre-2.8.5; CWD-relative
+                                     # reader broke on installs)
             "geo/cities.db",  # GeoNames cities database for location typeahead
         ],
         "ciris_engine.config": [

@@ -271,7 +271,7 @@ Source of truth: `localization/manifest.json`. To add or remove a language, upda
 ### Key Files
 - **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
 - **ACCORD**: `ciris_engine/data/localized/accord_1.2b_{lang}.txt`
-- **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.md`
+- **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
 - **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
 
 ### Setting Language

@@ -224,7 +224,7 @@ ciris-agent --adapter api
 localization/              # Mobile UI strings (JSON)
 ciris_engine/data/localized/
 ├── accord_1.2b_{lang}.txt           # Localized ACCORD
-└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.md
+└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt
 ciris_engine/logic/dma/prompts/localized/{lang}/
 ├── pdma_ethical.yml       # Ethical evaluation
 ├── csdma_common_sense.yml # Common sense checks

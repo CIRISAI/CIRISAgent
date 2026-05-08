@@ -5,6 +5,45 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.5] - 2026-05-08
+
+Cross-platform packaging alignment. Desktop wheel, Android Chaquopy bundle, iOS Resources bundle, and Docker image now carry **byte-equal** Python runtime trees — closes the structural cause of L4 file integrity mismatches.
+
+### Canonical staging
+- **`tools/dev/stage_runtime.py`** — single source of truth for what ships. Mirrors `ciris_verify_core`'s `walk_file_tree` + `ExemptRules` so the staging hash equals the runtime walk hash. Three modes: write, `--check`, `--print-manifest`.
+- **`python -m tools.qa_runner --from-staged`** — runs QA against `ciris-server` from a venv installed off the staged tree. The wheel artifact, not the dev tree, is what gets validated.
+
+### Cross-platform alignment
+- **Android** (`build.gradle::syncPythonSources`): rewritten as Exec calling `stage_runtime`. **Discord adapter no longer stripped** — ships on every platform now.
+- **iOS** (`prepare_python_bundle.sh`): three rsync-with-excludes overlays collapsed to one stage_runtime call.
+- **Wheel** (`setup.py` + `MANIFEST.in`): added missing `package_data` for `ciris_engine.logic.conscience` prompts (was falling back to inline strings on installs), `ciris_engine.logic.accord/bip39_english.txt`, and `__init__.py` for `ciris_sdk/resources/` + `ciris_sdk/examples/` (17 .py files that weren't shipping). `recursive-exclude` matches staging rules.
+- **Dockerfile** refactored to multi-stage: stage 1 stages, stage 2 `COPY --from=stager /staged /app`. Runtime image no longer carries tests/docs/FSDs/.git.
+
+### Runtime shape
+- 30 guide files (`CIRIS_COMPREHENSIVE_GUIDE.md`/`_{lang}.md`) moved into `ciris_engine/data/localized/` and renamed `.md` → `.txt`. Base guides were at repo root and never shipped; locale guides shipped but no code loaded them. `_load_platform_guide` rewritten to be package-relative + locale-aware via `get_preferred_language()` — the 28 locale guides finally do their job.
+- `docs/agent_experience.md` moved to `ciris_engine/data/agent_experience.txt`; `core_tool_service::_self_help` reader fixed to package-relative.
+- **`.md` is now unambiguously devnotes** — both staging and `MANIFEST.in` exempt it.
+
+### CI
+- New "Stage canonical runtime tree" step before signing; signing now uses `--tree /tmp/ciris-staged` instead of `--tree .`. Target name preserved as `python-source-tree` for v1.12.x verify-client compatibility.
+- New **`staged-qa` job** runs on every PR/push: pre-flight parity assertion (staged hash == wheel install hash) + full QA against the staged venv. ~3-4 min wall, cheap to gate releases on.
+
+### Streaming verification fixes
+- **H3ERE schema verify**: added `parent_event_type` + `parent_attempt_index` to `llm_call` allowlist (required since 2.7.9 per `TRACE_WIRE_FORMAT.md` §5.10).
+- **Backend Localization Change**: capture now includes `*_system_prompt` (where the actual locale templates live, not the agent-identity user-prompt wrapper). Also fixed Amharic marker typo (ሀ → ሐ to match `pdma_ethical.yml`).
+
+### Validation
+- Staged QA: **79/79** in 73.67s against the wheel-installed `ciris-server`
+- Cross-platform parity: `staged hash == wheel install hash == sha256:74000ca6fc...` byte-equal
+- mypy: **0 errors** in branch-authored files
+- Test suite: 13585/13585 (28 `TestGuideCompleteness::test_guide_translation_exists` parametric tests updated to `.txt`)
+
+### Follow-up
+- **CIRISAgent#738** — `gui_static` is desktop-only built artifact; needs a separate integrity story (canonical-and-bundled-everywhere would add ~40MB to mobile, doesn't fit). Not blocking.
+
+### Versions
+`2.8.4-stable` → `2.8.5-stable`, Android `128` → `129`, iOS `281` → `282`.
+
 ## [2.8.4] - 2026-05-06
 
 L4 attestation unblock release. Lifts the `ciris-verify` floor to v1.12.1, which lands the per-call project parameter on `RegistryClient` (CIRISVerify#10) — one engine can now self-attest under `?project=ciris-verify` AND fetch the agent build under `?project=ciris-agent` in a single verify cycle. Was 404 in v1.11.x with attestation capping at L3 / `MANIFEST_CACHE MISS`. No agent-behavior changes beyond the attestation-level ceiling lifting from 3 to 5 on properly-registered builds.

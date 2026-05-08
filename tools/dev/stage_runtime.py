@@ -299,12 +299,19 @@ def main() -> int:
         parser.error("dest required (or pass --check for a dry-run)")
 
     result = stage_runtime(args.src, args.dest)
+    # When --print-manifest, stdout is reserved for the JSON manifest so
+    # `python -m tools.dev.stage_runtime DEST --print-manifest > manifest.json`
+    # produces parseable JSON. Human-readable output goes to stderr in that
+    # mode; otherwise stdout (preserving the non-manifest UX).
+    summary_stream = sys.stderr if args.print_manifest else sys.stdout
     if not args.quiet:
-        print(f"Staged {result['files_copied']:,} files ({result['total_size']:,} bytes) → {args.dest}")
-    print(f"Hash: {result['total_hash']}")
+        print(
+            f"Staged {result['files_copied']:,} files ({result['total_size']:,} bytes) → {args.dest}",
+            file=summary_stream,
+        )
+    print(f"Hash: {result['total_hash']}", file=summary_stream)
 
     if args.print_manifest:
-        print()
         json.dump(
             {
                 "files_copied": result["files_copied"],
@@ -316,7 +323,7 @@ def main() -> int:
             indent=2,
             sort_keys=True,
         )
-        print()
+        sys.stdout.write("\n")
 
     return 0
 

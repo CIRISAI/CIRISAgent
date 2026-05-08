@@ -39,7 +39,7 @@ Cross-platform packaging alignment. Desktop wheel, Android Chaquopy bundle, iOS 
 
 ### Validation
 - Staged QA: **79/79** in 73.67s against the wheel-installed `ciris-server`
-- Cross-platform parity: `staged hash == wheel install hash == sha256:e40e9f7d68...` byte-equal
+- Cross-platform parity: `staged hash == wheel install hash == sha256:11cd2bfa4b...` byte-equal
 - mypy: **0 errors** in branch-authored files
 - Test suite: 13585/13585 (28 `TestGuideCompleteness::test_guide_translation_exists` parametric tests updated to `.txt`)
 

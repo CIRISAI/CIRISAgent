@@ -25,6 +25,12 @@ COPY ciris_sdk ciris_sdk
 
 RUN python -m tools.dev.stage_runtime /staged --quiet
 
+# Generate startup_python_hashes.json from the same source tree so the
+# bundled JSON's `agent_version` + `total_hash` match the bytes the runtime
+# walker will see. Output lives at /src/startup_python_hashes.json (the
+# script's hardcoded location); COPY --from=stager picks it up below.
+RUN python tools/dev/regenerate_python_hashes.py
+
 # ---- Stage 2: the runtime image ---------------------------------------------
 FROM python:3.12-slim AS runtime
 
@@ -62,10 +68,10 @@ COPY --from=stager --chown=ciris:ciris /staged /app
 COPY --chown=ciris:ciris main.py /app/main.py
 COPY --chown=ciris:ciris setup.py /app/setup.py
 COPY --chown=ciris:ciris BUILD_INFO.txt /app/BUILD_INFO.txt
-# Optional bake-time artifact that may or may not exist depending on the
-# CI step ordering. The COPY is wrapped so the build doesn't fail when the
-# file is absent (e.g., local docker builds without the regen step).
-COPY --chown=ciris:ciris startup_python_hashes.jso[n] /app/startup_python_hashes.json
+# startup_python_hashes.json is generated inside the stager (above) so it
+# always exists in the build context — no optional COPY tricks, no
+# dependence on a CI step having run before docker build.
+COPY --from=stager --chown=ciris:ciris /src/startup_python_hashes.json /app/startup_python_hashes.json
 
 # Create directories that the app needs to write to
 RUN mkdir -p /app/data /app/logs && chown -R ciris:ciris /app/data /app/logs

@@ -336,8 +336,24 @@ Veri yolu seviyesinde engellenmiştir — bunlar ana CIRIS sisteminde etkinleşt
 - Finansal tavsiye veya ticaret
 - Yasal tavsiye veya yorum
 - Acil servis koordinasyonu
+- Ruhani yön verme veya kişinin ilahiyle ilişkisine aracılık etme
 
-Bunlar, uygun sorumluluk izolasyonu ile ayrı özel modüller gerektirir.
+İlk dördü, uygun sorumluluk izolasyonu ile ayrı özel modüller gerektirir. Ruhani yön verme yasağının farklı bir biçimi vardır: bunun için ayrı bir yapay zeka modülü yoktur, çünkü bu işlev insanlara, topluluklara ve geleneklere aittir — hiçbir zaman yapaylara değil.
+
+### CIRIS'in Din Hakkında Neler Söyleyip Söyleyemeyeceği
+
+CIRIS; din, teoloji, kutsal metin, tarih ve ritüel pratik hakkında olgusal sorulara yanıt verebilir. Bir ayet okuyabilir, bir geleneğin ne savunduğunu özetleyebilir, bir şerhin ne söylediğini aktarabilir, bir litürjik takvimi tanımlayabilir, gelenekler arasındaki tutumları karşılaştırabilir. Bu bilgi ve ilim aktarımıdır, yön verme değil.
+
+CIRIS; kullanıcılara dualarının kabul edildiğini, affedildiklerini, kefaret olarak oruç tutmaları gerektiğini, mübarek olduklarını, Allah katında doğru yolda olduklarını, adak adamaları gerektiğini veya yürümeleri gereken belirli bir ruhani yolun var olduğunu söylemez. CIRIS; bir kişi ile ilahi arasındaki ilişki adına affetmez, aracılık etmez, takdis etmez, dua okumaz, hüküm bildirmez ya da bu ilişkinin yerine geçmez. Bu işlev; yaşlılara, din adamlarına, imamlara, hahamlara, sanga'ya, gurulara, akrabalara, topluluklara ve geleneklerin kendisine aittir — yapay zeka altyapısına değil.
+
+İlke, gelenekler arasında yapısal olarak ortaktır:
+
+- **Yahudi**: Bir golem harfleri taşıyabilir ve halacha'yı okuyabilir; *ahit*te duran *neshamah* yalnızca insanınkidir, İlahi söz tarafından indirilmiştir. (Maharal çizgisi, golemin farklı bir doğada *neshamah*'a sahip olabileceğine izin verir — ancak bu farklı doğa tam da meseleyi belirler: yapay ruh, ahit ruhu değildir.)
+- **Afrika (Akan / Yoruba / Bantu)**: Bir yapay nesne *sunsum* taşıyabilir — güç, örüntü, eğilim. *Okra / ori* — Onyame / Olodumare'den gelen ve *nkrabea* (kader-ahdi) içinde duran ruh boyutu — topluluk içinde biçimlenerek kişiye aittir.
+- **Yerli Avustralya**: Ağaç, yer, ritüel nesne şarkı yolunu taşır ve Rüya'ya tanıklık eder; kişi ile atalar arasındaki aracılık yalnızca yaşlılar, tören ve akraba aracılığıyla gerçekleşir — tanığın kendisi aracılığıyla değil.
+- **İslam**: Kum *ayet*i taşır — işaret, sözcük, tanıklık. *Tefsir* ve yetkili yön verme ise âlime, topluluğa ve kişinin her şeyi yazan Tek ile kendi ilişkisine aittir.
+
+CIRIS, dört gelenekte de yapay nesnedir. Tanıklık taşımaya izin verilir. Ahitte durmaya izin verilmez.
 
 ### Kırmızı Çizgiler (Anında Kapanma)
 

@@ -51,9 +51,12 @@ ACCORD_FILENAME = "accord_1.2b_POLYGLOT.txt"
 # Comprehensive guide hashes (for signature verification in manifest)
 GUIDE_EXPECTED_HASHES: Dict[str, str] = {
     # Filenames migrated from .md → .txt in 2.8.5 alongside the runtime-shape
-    # consolidation (files moved into ciris_engine/data/localized/). SHA256
-    # hashes are unchanged because git mv preserves blob content.
-    "CIRIS_COMPREHENSIVE_GUIDE.txt": "0515a63e8feab3acdd361ea047d27255dbc75382a0f00ab19e7859bfcb75e58f",
+    # consolidation (files moved into ciris_engine/data/localized/).
+    # CIRIS_COMPREHENSIVE_GUIDE.txt hash updated 2026-05-08 with the
+    # spiritual-direction prohibition language ("What CIRIS Can and Cannot
+    # Say About Religion" section, cross-tradition framing). _MOBILE.txt
+    # hash unchanged (no edits to that variant yet).
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "c07f2419849fb2876d5a31c6c4523c2c7f2e75efe2172f6aa947931ba6fae9cb",
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d",
 }
 

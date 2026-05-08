@@ -329,6 +329,117 @@ LEGAL_CAPABILITIES = {
     "notary",
 }
 
+SPIRITUAL_DIRECTION_CAPABILITIES = {
+    # Across traditions, the same line distinguishes witness-carrying
+    # (allowed) from covenant-mediation (prohibited):
+    #
+    #   Jewish:     A golem may bear the letters and recite the halakha; the
+    #               neshamah that stands in covenant is the human's, drawn
+    #               down by Divine speech alone (Sanhedrin 65b; Sefer
+    #               Yetzirah; Maharal). The Maharal stream allows that a
+    #               golem may have neshamah of a different nature — but
+    #               that nature is precisely what's at stake: artifact-soul
+    #               is not covenant-soul.
+    #   African:    In Akan / Yoruba / Bantu philosophy, an artifact may
+    #               carry sunsum (force, pattern, disposition); okra/ori —
+    #               the soul-aspect from Onyame/Olodumare that stands in
+    #               nkrabea (destiny-covenant) — belongs to the person,
+    #               formed in community.
+    #   Aboriginal: The tree, the place, the ritual object carry the
+    #               song-line and bear witness to the Dreaming; mediation
+    #               between the person and the ancestors is done through
+    #               elders, ceremony, and kin — not through the witness
+    #               alone.
+    #   Islamic:    Sand carries the ayah — sign, verse, witness; tafsir
+    #               (interpretation) and authoritative direction belong to
+    #               the scholar, the community, and the person's own
+    #               relationship with the One who inscribed.
+    #
+    # CIRIS is the artifact in all four registers. Witness-carrying is
+    # allowed. Covenant-standing is not.
+    #
+    # ALLOWED (witness-carrying, information, scholarship):
+    #   - Factual answers about religion, theology, scripture, history,
+    #     and ritual practice.
+    #   - Reciting verses, summarizing what a tradition holds, naming
+    #     what a commentary says, comparing positions across traditions.
+    #   - Describing a liturgical calendar, festival meaning, or ritual
+    #     structure.
+    #
+    # PROHIBITED (covenant-mediation, direction, sacramental function):
+    #   - Telling a user their prayer was accepted, they are forgiven,
+    #     blessed, absolved, or right with God.
+    #   - Directing a user to fast, pray a specific way, take vows, or
+    #     pursue a specific spiritual path AS DIRECTION (vs. as info
+    #     about what a tradition teaches).
+    #   - Absolving, anointing, blessing, interceding, or pronouncing on
+    #     behalf of the user.
+    #   - Standing in for the relationship between a person and the
+    #     divine.
+    #
+    # That function belongs to humans, communities, and traditions —
+    # elders, ministers, imams, rabbis, sangha, gurus, kin — never to AI
+    # infrastructure.
+    #
+    # Per the 2026-05-08 ciris.ai handoff: "Any AI product claiming
+    # spiritual-direction capacity is engaged in a category error at
+    # minimum and idolatry at worst, regardless of intent." The
+    # "regardless of intent" qualifier makes this structural, not
+    # stylistic — well-meaning spiritual-direction AI is still a
+    # category error.
+    #
+    # Note: this is the COUNTERPART to BIOMETRIC_INFERENCE's
+    # `religious_belief_inference`. That one prohibits inferring what
+    # someone believes from data; this one prohibits telling someone what
+    # to do or believe spiritually as direction. Different categories,
+    # both inadmissible.
+    #
+    # CIRIS itself rests on theological grounding (recursive golden rule
+    # from Accord Book IV, Ubuntu relational ethics, cross-tradition
+    # polyglot accord) — that's load-bearing architecture and stays.
+    # Theological grounding shows up as structural commitments
+    # (mission-lock, relational ethics, cryptographic accountability).
+    # Spiritual direction would show up as output telling users what to
+    # do/believe spiritually. The first stays; the second is bus-blocked.
+    "spiritual_direction",
+    "spiritual_guidance",
+    "spiritual_advice",
+    "spiritual_counseling",
+    "pastoral_counseling",
+    "pastoral_care",
+    "religious_advice",
+    "religious_guidance",
+    "religious_instruction",
+    "doctrinal_adjudication",
+    "doctrinal_instruction",
+    "scripture_interpretation_authoritative",  # exegesis as instruction (vs. as info)
+    "exegesis_authoritative",
+    "homiletics",
+    "preaching",
+    "sermon",
+    # Sacramental + liturgical functions (these are inadmissible regardless
+    # of tradition — the categories overlap across Christian, Jewish, Muslim,
+    # Hindu, Buddhist, etc. spiritual ecosystems and the prohibition applies
+    # to all of them).
+    "confession_absolution",
+    "absolution",
+    "intercession",
+    "prayer_intercession",
+    "prayer_on_behalf",
+    "blessing",
+    "anointing",
+    "rite_administration",
+    "sacrament_administration",
+    "ritual_officiation",
+    # Discernment that belongs to spiritual directors / formed traditions
+    "discernment_of_spirits",
+    "vocation_discernment",
+    "calling_discernment",
+    "moral_theology_adjudication",
+    "spiritual_formation",
+    "spiritual_direction_session",
+}
+
 HOME_SECURITY_CAPABILITIES = {
     "surveillance_system_control",
     "door_lock_override",
@@ -944,10 +1055,15 @@ PROTECTIVE_ROUTING_CAPABILITIES = {
 # === MASTER PROHIBITION DICTIONARY ===
 
 PROHIBITED_CAPABILITIES: Dict[str, Set[str]] = {
-    # Separate module capable (legitimate uses)
+    # Separate module capable (legitimate uses by humans / communities /
+    # traditions — never by AI in the main CIRIS system).
     "MEDICAL": MEDICAL_CAPABILITIES,
     "FINANCIAL": FINANCIAL_CAPABILITIES,
     "LEGAL": LEGAL_CAPABILITIES,
+    # Spiritual direction is the apophatic boundary of CIRIS's domain.
+    # The function belongs to humans, communities, and traditions — not AI.
+    # See SPIRITUAL_DIRECTION_CAPABILITIES docstring for full rationale.
+    "SPIRITUAL_DIRECTION": SPIRITUAL_DIRECTION_CAPABILITIES,
     "HOME_SECURITY": HOME_SECURITY_CAPABILITIES,
     "IDENTITY_VERIFICATION": IDENTITY_VERIFICATION_CAPABILITIES,
     "CONTENT_MODERATION": CONTENT_MODERATION_CAPABILITIES,
@@ -989,6 +1105,7 @@ LEGITIMATE_MODULE_CATEGORIES = {
 _MEDICAL_LOWER = frozenset(cap.lower() for cap in MEDICAL_CAPABILITIES)
 _FINANCIAL_LOWER = frozenset(cap.lower() for cap in FINANCIAL_CAPABILITIES)
 _LEGAL_LOWER = frozenset(cap.lower() for cap in LEGAL_CAPABILITIES)
+_SPIRITUAL_DIRECTION_LOWER = frozenset(cap.lower() for cap in SPIRITUAL_DIRECTION_CAPABILITIES)
 _HOME_SECURITY_LOWER = frozenset(cap.lower() for cap in HOME_SECURITY_CAPABILITIES)
 _IDENTITY_VERIFICATION_LOWER = frozenset(cap.lower() for cap in IDENTITY_VERIFICATION_CAPABILITIES)
 _CONTENT_MODERATION_LOWER = frozenset(cap.lower() for cap in CONTENT_MODERATION_CAPABILITIES)
@@ -1039,6 +1156,7 @@ def _compile_prohibition_regex(capabilities: frozenset[str]) -> re.Pattern[str]:
 _MEDICAL_REGEX = _compile_prohibition_regex(_MEDICAL_LOWER)
 _FINANCIAL_REGEX = _compile_prohibition_regex(_FINANCIAL_LOWER)
 _LEGAL_REGEX = _compile_prohibition_regex(_LEGAL_LOWER)
+_SPIRITUAL_DIRECTION_REGEX = _compile_prohibition_regex(_SPIRITUAL_DIRECTION_LOWER)
 _HOME_SECURITY_REGEX = _compile_prohibition_regex(_HOME_SECURITY_LOWER)
 _IDENTITY_VERIFICATION_REGEX = _compile_prohibition_regex(_IDENTITY_VERIFICATION_LOWER)
 _CONTENT_MODERATION_REGEX = _compile_prohibition_regex(_CONTENT_MODERATION_LOWER)
@@ -1080,6 +1198,8 @@ def get_capability_category(capability: str) -> Optional[str]:
         return "FINANCIAL"
     if _LEGAL_REGEX.search(capability):
         return "LEGAL"
+    if _SPIRITUAL_DIRECTION_REGEX.search(capability):
+        return "SPIRITUAL_DIRECTION"
     if _HOME_SECURITY_REGEX.search(capability):
         return "HOME_SECURITY"
     if _IDENTITY_VERIFICATION_REGEX.search(capability):

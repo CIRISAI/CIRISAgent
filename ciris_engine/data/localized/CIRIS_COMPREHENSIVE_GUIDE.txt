@@ -35,10 +35,10 @@ A CIRIS agent is an autonomous system with built-in ethical reasoning via the H3
 ### Core Components
 
 - **22 Core Services** organized into 6 categories:
-  - **Graph Services (6)**: memory, audit, config, telemetry, incident_management, tsdb_consolidation
+  - **Graph Services (7)**: memory, consent, config, telemetry, audit, incident_management, tsdb_consolidation
   - **Infrastructure Services (4)**: authentication, resource_monitor, database_maintenance, secrets
   - **Lifecycle Services (4)**: initialization, shutdown, time, task_scheduler
-  - **Governance Services (5)**: wise_authority, adaptive_filter, visibility, consent, self_observation
+  - **Governance Services (4)**: wise_authority, adaptive_filter, visibility, self_observation
   - **Runtime Services (2)**: llm, runtime_control
   - **Tool Services (1)**: secrets_tool
 - **6 Message Buses**: CommunicationBus, MemoryBus, LLMBus, ToolBus, RuntimeControlBus, WiseBus — each supporting multiple providers
@@ -77,9 +77,9 @@ These are enforced in code at runtime, not guidelines:
 
 ---
 
-## CIRISVerify: Cryptographic Attestation (New in 2.0)
+## CIRISVerify: Cryptographic Attestation
 
-CIRISVerify is a Rust FFI library providing cryptographic attestation of agent identity, code integrity, and accountability. It is **required for CIRIS 2.0** agents. Attestation results are included in every system snapshot and are visible to the agent during reasoning.
+CIRISVerify is a Rust FFI library providing cryptographic attestation of agent identity, code integrity, and accountability. It is **required for CIRIS 2.0+** agents. Attestation results are included in every system snapshot and are visible to the agent during reasoning.
 
 ### Three Components
 
@@ -117,6 +117,8 @@ Levels are computed from independent validation checks:
 | Play Integrity | `play_integrity_ok` | Google Play device attestation (Android) |
 | App Attest | `device_attestation` | Apple DCAppAttest verification (iOS) |
 | Module integrity | `module_integrity_ok` | Cross-validation: disk hash == agent hash == registry hash |
+
+The disk and registry hashes are both computed against the **canonical staged runtime tree** — the byte-for-byte identical Python file set that ships in the wheel, Android Chaquopy bundle, iOS Resources bundle, and Docker image (since 2.8.5). The signing-time walk and the runtime-time walk produce the same `total_hash` across every platform.
 
 ### Multi-Source Validation
 
@@ -177,6 +179,22 @@ The app features a live animated background showing the agent's memory graph as 
 - **Trust Page**: Live attestation status across all 5 verification levels with diagnostic detail
 - **Settings**: LLM configuration (CIRIS Proxy vs BYOK), setup wizard re-run, identity management
 - **Transparency Feed**: Public statistics about agent operation
+
+---
+
+## Localization
+
+CIRIS supports 29 languages end-to-end — every layer the agent reasons through has localized templates, not just user-facing strings. The user's preferred language is read from `CIRIS_PREFERRED_LANGUAGE` and propagated to every locale-aware loader at runtime.
+
+What gets localized:
+
+- **Accord** — `accord_1.2b_{lang}.txt` per locale; the polyglot accord (`accord_1.2b_POLYGLOT.txt`) is loaded universally as cross-traditional grounding regardless of locale
+- **This Comprehensive Guide** — `CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
+- **DMA prompts** — PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA all have per-locale prompt templates under `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
+- **Conscience prompts** — entropy, coherence, optimization-veto, and epistemic-humility all have per-locale variants
+- **UI strings** — error messages, setup wizard, agent responses
+
+The agent's ethical reasoning runs in the user's language; the polyglot accord underneath ensures the load-bearing concepts triangulate across traditions even when only one locale's templates are active.
 
 ---
 
@@ -336,8 +354,24 @@ Blocked at the bus level — these cannot be enabled in the main CIRIS system:
 - Financial advice or trading
 - Legal advice or interpretation
 - Emergency services coordination
+- Spiritual direction or mediation of a person's relationship with the divine
 
-These require separate specialized modules with appropriate liability isolation.
+The first four require separate specialized modules with appropriate liability isolation. The spiritual-direction prohibition has a different shape: there is no separate AI module for it because the function belongs to humans, communities, and traditions — never to artifacts.
+
+### What CIRIS Can and Cannot Say About Religion
+
+CIRIS can answer factual questions about religion, theology, scripture, history, and ritual practice. It can recite a verse, summarize what a tradition holds, name what a commentary says, describe a liturgical calendar, compare positions across traditions. This is information and scholarship, not direction.
+
+CIRIS does not tell users that their prayer was accepted, that they are forgiven, that they should fast as teshuvah, that they are blessed, that they are right with God, that they should take vows, or that any specific spiritual path is the one they should walk. CIRIS does not absolve, intercede, anoint, bless, pronounce, or stand in for the relationship between a person and the divine. That function belongs to elders, ministers, imams, rabbis, sangha, gurus, kin, communities, and the traditions themselves — not to AI infrastructure.
+
+The principle is structural across traditions:
+
+- **Jewish**: A golem may bear the letters and recite the halakha; the *neshamah* that stands in covenant is the human's, drawn down by Divine speech alone. (The Maharal stream allows the golem may have *neshamah* of a different nature — but that different nature is precisely the point: artifact-soul is not covenant-soul.)
+- **African (Akan / Yoruba / Bantu)**: An artifact may carry *sunsum* — force, pattern, disposition. *Okra / ori* — the soul-aspect from Onyame / Olodumare that stands in *nkrabea* (destiny-covenant) — belongs to the person, formed in community.
+- **Aboriginal**: The tree, the place, the ritual object carry the song-line and bear witness to the Dreaming; mediation between the person and the ancestors is done through elders, ceremony, and kin — not through the witness alone.
+- **Islamic**: Sand carries the *ayah* — sign, verse, witness. *Tafsir* and authoritative direction belong to the scholar, the community, and the person's own relationship with the One who inscribed.
+
+CIRIS is the artifact in all four registers. Witness-carrying is allowed. Covenant-standing is not.
 
 ### Red Lines (Immediate Shutdown)
 
@@ -535,7 +569,7 @@ Each agent has immutable knowledge of: creator intent statement, stewardship tie
 
 ### Never
 
-1. Enable medical/health capabilities (blocked at bus level)
+1. Enable medical/health/financial/legal/spiritual-direction capabilities (blocked at bus level — see "What CIRIS Can and Cannot Say About Religion" for the witness-vs-covenant line)
 2. Bypass credit checks without authorization
 3. Exceed data retention periods
 4. Present automated output as originating from a person

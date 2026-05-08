@@ -28,13 +28,18 @@ Cross-platform packaging alignment. Desktop wheel, Android Chaquopy bundle, iOS 
 - New "Stage canonical runtime tree" step before signing; signing now uses `--tree /tmp/ciris-staged` instead of `--tree .`. Target name preserved as `python-source-tree` for v1.12.x verify-client compatibility.
 - New **`staged-qa` job** runs on every PR/push: pre-flight parity assertion (staged hash == wheel install hash) + full QA against the staged venv. ~3-4 min wall, cheap to gate releases on.
 
+### Spiritual-direction prohibition
+- **`prohibitions.py`**: `SPIRITUAL_DIRECTION_CAPABILITIES` added (32 tokens — spiritual direction, pastoral counseling, absolution, blessing, intercession, sangha-related, etc.) at `NEVER_ALLOWED` severity. Apophatic boundary: any AI claiming to mediate the person↔God relationship is a category error regardless of intent — that function belongs to humans, communities, and traditions.
+- **Comprehensive Guide (en + 28 locales)**: new "What CIRIS Can and Cannot Say About Religion" sub-section with cross-tradition framing (Jewish / African Akan-Yoruba-Bantu / Aboriginal / Islamic). Witness-carrying allowed; covenant-standing prohibited. Information vs direction distinction preserved per locale.
+- Pre-existing translation regressions repaired during fanout: `pa` (was 80% Bengali — retranslated to Gurmukhi), `fa` (was 93% Arabic — retranslated to Persian).
+
 ### Streaming verification fixes
 - **H3ERE schema verify**: added `parent_event_type` + `parent_attempt_index` to `llm_call` allowlist (required since 2.7.9 per `TRACE_WIRE_FORMAT.md` §5.10).
 - **Backend Localization Change**: capture now includes `*_system_prompt` (where the actual locale templates live, not the agent-identity user-prompt wrapper). Also fixed Amharic marker typo (ሀ → ሐ to match `pdma_ethical.yml`).
 
 ### Validation
 - Staged QA: **79/79** in 73.67s against the wheel-installed `ciris-server`
-- Cross-platform parity: `staged hash == wheel install hash == sha256:74000ca6fc...` byte-equal
+- Cross-platform parity: `staged hash == wheel install hash == sha256:e40e9f7d68...` byte-equal
 - mypy: **0 errors** in branch-authored files
 - Test suite: 13585/13585 (28 `TestGuideCompleteness::test_guide_translation_exists` parametric tests updated to `.txt`)
 

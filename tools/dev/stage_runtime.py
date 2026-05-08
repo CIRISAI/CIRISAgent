@@ -60,7 +60,16 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, TypedDict
+
+
+class StagingResult(TypedDict):
+    """Return shape for ``stage_runtime`` and ``--check`` mode."""
+
+    files_copied: int
+    total_size: int
+    total_hash: str
+    files: Dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -189,7 +198,7 @@ def stage_runtime(
     src: Path,
     dest: Path,
     rules: ExemptRules = CANONICAL_RULES,
-) -> dict:
+) -> StagingResult:
     """Stage the canonical runtime tree from ``src`` to ``dest``.
 
     If ``dest`` exists, it is removed first. Caller is responsible for

@@ -173,9 +173,29 @@ setup(
             "prompts/*.yml",  # DMA prompt templates (English)
             "prompts/localized/*/*.yml",  # Localized DMA prompt templates
         ],
+        "ciris_engine.logic.conscience": [
+            # Same shape as DMA prompts above. The conscience system reads
+            # entropy/coherence/optimization_veto/epistemic_humility prompt
+            # templates from these YML files at runtime; missing them on a
+            # wheel install means the conscience falls back to inline strings
+            # (silent degradation). Added in 2.8.5 alongside the canonical
+            # staging work — staging includes them, wheel must too, or the
+            # runtime walk hash diverges from the signed manifest.
+            "prompts/*.yml",
+            "prompts/localized/*/*.yml",
+        ],
         "ciris_engine.logic.persistence": [
             "migrations/sqlite/*.sql",  # SQLite database migrations
             "migrations/postgres/*.sql",  # PostgreSQL database migrations
+        ],
+        "ciris_engine.logic.accord": [
+            "bip39_english.txt",  # BIP39 wordlist used by accord/extractor.py
+                                   # for mnemonic generation. Load-bearing —
+                                   # extractor.py:49 reads from package dir
+                                   # via Path(__file__).parent. Wasn't shipped
+                                   # in 2.8.4 wheels (extractor fell through
+                                   # to /app/tools/security/bip39_english.txt
+                                   # which only exists in docker, breaks elsewhere).
         ],
         "ciris_engine": [
             "ciris_templates/*.yaml",  # Bundled agent identity templates

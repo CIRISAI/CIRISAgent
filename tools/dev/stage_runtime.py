@@ -78,6 +78,7 @@ class ExemptRules:
     )
     exempt_dirs: List[str] = field(
         default_factory=lambda: [
+            # Build / cache / VCS noise
             "__pycache__",
             ".venv",
             "venv",
@@ -92,19 +93,59 @@ class ExemptRules:
             ".tox",
             ".nox",
             ".git",
+            # Non-runtime: tests + examples ship as devnotes only.
+            # Excluding them everywhere keeps Android/iOS/desktop bundles
+            # byte-equal — historically Android stripped them but the others
+            # didn't, which is exactly the kind of cross-platform drift the
+            # canonical staging eliminates.
+            "tests",
+            "examples",
+            # Platform-specific bolt-ons that aren't part of the Python
+            # runtime. Both directories live UNDER ciris_engine but ship as
+            # separate artifacts:
+            #   - gui_static/ = Next.js export from CIRISGUI-Standalone,
+            #     bundled into desktop fat wheels for the desktop GUI server
+            #   - desktop_app/ = CIRIS Desktop UberJar, bundled into desktop
+            #     fat wheels (the Kotlin Compose Multiplatform desktop app)
+            # Mobile doesn't ship either; desktop has both. Excluding them
+            # from canonical staging means the Python runtime hash is the
+            # same across all platforms. The two desktop add-ons get their
+            # own integrity story (separate sign target if/when needed).
+            "gui_static",
+            "desktop_app",
         ]
     )
     exempt_extensions: List[str] = field(
         default_factory=lambda: [
+            # Build / runtime caches
             "pyc",
             "pyo",
+            # Sensitive / runtime-data outputs (never source artifacts)
             "env",
             "log",
             "audit",
             "db",
             "sqlite",
             "sqlite3",
+            # Devnotes (post-2.8.5 — load-bearing markdown migrated to .txt)
             "md",
+            # Type-checker metadata (PEP 561) and static .pyi stubs — not loaded
+            # at runtime, only consumed by mypy/pyright.
+            "pyi",
+            # Stale-deletion markers that occasionally land under a runtime
+            # package directory (e.g. `*.py.deleted` from interrupted refactors).
+            "deleted",
+        ]
+    )
+    exempt_filenames: List[str] = field(
+        default_factory=lambda: [
+            # Dotfiles / metadata files where Path.suffix == "" (so the
+            # extension-based rule above doesn't match). PEP 561 marker
+            # `py.typed` is technically `.typed` extension but cleaner to
+            # gate by filename. `.gitignore` is a build-tool dotfile that
+            # occasionally lands under a runtime package dir.
+            "py.typed",
+            ".gitignore",
         ]
     )
 
@@ -118,6 +159,8 @@ class ExemptRules:
         for seg in parts:
             if seg in self.exempt_dirs:
                 return True
+        if rel_path.name in self.exempt_filenames:
+            return True
         ext = rel_path.suffix.lstrip(".").lower()
         if ext in self.exempt_extensions:
             return True

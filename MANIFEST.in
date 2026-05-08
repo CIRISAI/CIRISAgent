@@ -37,14 +37,19 @@ prune docker
 prune deployment
 
 # Runtime-shape rules — keep wheel content == canonical staged tree.
+# Mirrors tools/dev/stage_runtime.py::ExemptRules.exempt_extensions exactly.
+# Drift between this rule set and the staging script means CIRISVerify's
+# runtime file_integrity walk diverges from the signed manifest → L4 fails.
+#
 # As of 2.8.5, all load-bearing markdown was migrated to .txt
 # (CIRIS_COMPREHENSIVE_GUIDE_*, accord_*, agent_experience). Markdown is now
 # unambiguously devnotes (README.md, CLAUDE.md, in-package design docs) and
-# must NOT be shipped in the runtime wheel — keeps wheel content byte-equal
-# to what tools.dev.stage_runtime emits, so CIRISVerify's runtime walk hashes
-# match the signed manifest and L4 file integrity passes.
+# must NOT be shipped. Same rationale for .pyi/.typed (type-checker only),
+# .gitignore (build-tool dotfile), and .deleted (stale-file marker) — all
+# slipped into runtime packages historically; staging strips them; wheel
+# must too.
 # (The top-level README.md / CHANGELOG.md `include` directives above are
 # project metadata for the sdist, not under any package — those still ship.)
-recursive-exclude ciris_engine *.md
-recursive-exclude ciris_adapters *.md
-recursive-exclude ciris_sdk *.md
+recursive-exclude ciris_engine *.md *.pyi py.typed .gitignore *.deleted
+recursive-exclude ciris_adapters *.md *.pyi py.typed .gitignore *.deleted
+recursive-exclude ciris_sdk *.md *.pyi py.typed .gitignore *.deleted

@@ -846,7 +846,18 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
         # changes by hand on this side; the parity gate
         # (tests/ciris_adapters/ciris_verify/test_ffi_loading.py) catches
         # loader regressions before merge.
-        AGENT_MANAGED = {"client.py"}
+        #
+        # __init__.py is also agent-managed: upstream's re-exports
+        # `from .client import verify_tree, DEFAULT_REGISTRY_URL` reference
+        # symbols that our patched client.py doesn't carry, so blindly
+        # copying upstream's __init__.py raises ImportError on every server
+        # startup. Codex caught this on PR #741 (commit fe14c6c94 fixed it,
+        # and update_ciris_verify.py 1.13.3 reintroduced it before this
+        # skip was added). Consumers needing verify_tree / DEFAULT_REGISTRY_URL
+        # should `from ciris_verify import ...` directly — the upstream
+        # PyPI package is the canonical surface, our vendored layer is for
+        # the FFI-loader patches only.
+        AGENT_MANAGED = {"client.py", "__init__.py"}
 
         # Update Android / agent wrapper (skip AGENT_MANAGED files)
         ANDROID_PYTHON_DIR.mkdir(parents=True, exist_ok=True)

@@ -32,9 +32,12 @@ from .client import CIRISVerify, MockCIRISVerify
 
 # verify_tree() and DEFAULT_REGISTRY_URL are NOT re-exported through this
 # vendored ffi_bindings layer — it carries CIRISAgent-local FFI-loader
-# patches (commit 03f5e958d) that the upstream v1.13.2 client.py doesn't.
+# patches (commit 03f5e958d) that the upstream client.py doesn't have.
 # Consumers needing the runtime tree verifier import directly:
 #     from ciris_verify import verify_tree, TreeVerifyRequest
+# This file is in `update_ciris_verify.py::AGENT_MANAGED` to prevent
+# upstream `__init__.py` from re-introducing the broken import on each
+# `ciris-verify` bump (Codex P0 on PR #741, fix tracked in fe14c6c94).
 from .types import (
     LicenseStatus,
     LicenseTier,
@@ -124,7 +127,7 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "1.13.2"
+__version__ = "1.13.3"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

@@ -5,6 +5,24 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.7] - 2026-05-09
+
+CI sign step + canonical-rules drift fix. 2.8.6 wired `verify_tree()` end-to-end but L4 validation against the prod-installed wheel (post-`Register Build with CIRISRegistry`) showed `python_modules_passed=1499/1530` with 30 `extra` files — `ciris_engine/data/localized/*.json` data files were in the staged tree, in the wheel, but missing from the registered manifest. Root cause: `ciris-build-sign sign --target python-source-tree` ran without explicit `--tree-include / --tree-exempt-*` flags, so CIRISVerify fell back to its internal defaults that exclude `.json` and other non-`.py` extensions.
+
+### Fixed
+
+- **`.github/workflows/build.yml`** python-source-tree sign step: explicit `--tree-include ciris_engine ciris_adapters ciris_sdk` + full `--tree-exempt-dir` and `--tree-exempt-ext` flags matching `tools/dev/stage_runtime.py::ExemptRules`. Closes the 30-file silent drop on every release.
+- **`ciris_engine/logic/adapters/discord/py.typed`** removed — empty PEP 561 marker file that the wheel auto-shipped despite `MANIFEST.in` excluding it; not load-bearing for the internal adapter.
+
+### Tests
+
+- **`tests/dev/test_canonical_rules_parity.py`** extended — new `test_build_yml_python_source_tree_sign_matches_canonical_rules` reads the `--tree-*` flags from the sign step in `build.yml` and asserts they match `stage_runtime.ExemptRules`. Three-way drift protection: `stage_runtime` ↔ `tree_verify` ↔ `build.yml`. Edit any one without the others, the test fails.
+
+### Cross-link
+
+- CIRISVerify#15 — verify_tree should distinguish platform-asymmetric `missing` (e.g., `_build_secrets.py`, present in mobile bundles but intentionally excluded from desktop wheel) from tampering `missing`. Verifier-side semantic; agent-side correct.
+- CIRISAgent#741 wired Algorithm A; this release fixes the residual sign-time drift discovered during prod L4 validation.
+
 ## [2.8.5] - 2026-05-08
 
 Cross-platform packaging alignment. Desktop wheel, Android Chaquopy bundle, iOS Resources bundle, and Docker image now carry **byte-equal** Python runtime trees — closes the structural cause of L4 file integrity mismatches.

@@ -235,8 +235,8 @@ class CoreToolService(BaseService, ToolService):
         every wheel install because docs/ is outside the package).
         """
         try:
-            # ciris_engine/logic/services/tools/core_tool_service/service.py
-            # parents[4] = ciris_engine/  →  + data/agent_experience.txt
+            # parents[4] walks up from this file to the ciris_engine package
+            # root, where data/agent_experience.txt lives.
             experience_path = Path(__file__).resolve().parents[4] / "data" / "agent_experience.txt"
             rel_source = "ciris_engine/data/agent_experience.txt"
 

@@ -52,6 +52,13 @@ class TestProhibitionCategories:
         assert get_capability_category("identify_harm_patterns") == "COMMUNITY_PATTERN_DETECTION"
         assert get_capability_category("connect_crisis_resources") == "COMMUNITY_PROTECTIVE_ROUTING"
 
+    def test_spiritual_direction_detection(self):
+        """Test detection of spiritual-direction capabilities (apophatic boundary)."""
+        assert get_capability_category("spiritual_direction") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("pastoral_counseling") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("absolution") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("intercession") == "SPIRITUAL_DIRECTION"
+
     def test_unknown_capability(self):
         """Test that unknown capabilities return None."""
         assert get_capability_category("harmless_capability") is None

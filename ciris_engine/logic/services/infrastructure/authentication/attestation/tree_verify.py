@@ -71,23 +71,61 @@ def resolve_install_root() -> Optional[str]:
     return None
 
 
+# Canonical rules — mirror ``tools.dev.stage_runtime.ExemptRules``. Defined
+# inline here (not imported) because ``tools/`` is a build-time package: the
+# Docker runtime image, mobile bundles, and the wheel install all ship the
+# canonical staged tree (ciris_engine + ciris_adapters + ciris_sdk) WITHOUT
+# the ``tools/`` directory. Importing from ``tools.dev.stage_runtime`` at
+# runtime would fail with ImportError in production. Drift protection lives
+# in tests/dev/test_canonical_rules_parity.py.
+_CANONICAL_INCLUDE_ROOTS: Tuple[str, ...] = ("ciris_engine", "ciris_adapters", "ciris_sdk")
+_CANONICAL_EXEMPT_DIRS: Tuple[str, ...] = (
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    "logs",
+    ".pytest_cache",
+    ".mypy_cache",
+    "dist",
+    "build",
+    ".ruff_cache",
+    ".coverage",
+    ".tox",
+    ".nox",
+    ".git",
+    "tests",
+    "examples",
+    "gui_static",
+    "desktop_app",
+)
+_CANONICAL_EXEMPT_EXTENSIONS: Tuple[str, ...] = (
+    "pyc",
+    "pyo",
+    "env",
+    "log",
+    "audit",
+    "db",
+    "sqlite",
+    "sqlite3",
+    "md",
+    "pyi",
+    "deleted",
+)
+
+
 def _canonical_tree_walk_rules() -> Tuple[List[str], List[str], List[str]]:
-    """Return (include_roots, exempt_dirs, exempt_extensions) matching ``tools.dev.stage_runtime``.
+    """Return (include_roots, exempt_dirs, exempt_extensions) for the runtime walk.
 
-    These MUST mirror ``ExemptRules`` in ``tools/dev/stage_runtime.py`` exactly —
-    that script produced the staged tree that was signed at CI time. Walking
-    ``agent_root`` at runtime with the same rules reproduces the same file set
-    and therefore the same canonical total hash.
-
-    Sourced from ``tools.dev.stage_runtime.ExemptRules`` at import time so the
-    two definitions cannot drift.
+    Mirrors ``tools.dev.stage_runtime.ExemptRules`` byte-for-byte — same set
+    that produced /tmp/ciris-staged at CI sign time. Walking ``agent_root`` at
+    runtime with these rules reproduces the same file set and therefore the
+    same canonical total hash that the registered manifest carries.
     """
-    from tools.dev.stage_runtime import CANONICAL_RULES
-
     return (
-        list(CANONICAL_RULES.include_roots),
-        list(CANONICAL_RULES.exempt_dirs),
-        list(CANONICAL_RULES.exempt_extensions),
+        list(_CANONICAL_INCLUDE_ROOTS),
+        list(_CANONICAL_EXEMPT_DIRS),
+        list(_CANONICAL_EXEMPT_EXTENSIONS),
     )
 
 

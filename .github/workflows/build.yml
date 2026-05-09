@@ -159,6 +159,19 @@ jobs:
             ${{ runner.os }}-pip-staged-qa-
             ${{ runner.os }}-pip-
 
+      - name: Install TPM2 system libraries
+        # Required by ciris-verify's FFI binary at runtime — without these,
+        # ctypes.CDLL() fails to load libciris_verify_ffi.so (raises OSError
+        # surfacing as "Failed to load library:" through the agent's setup
+        # wizard). The production Dockerfile apt-installs these too; ubuntu-
+        # latest ships without them by default.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libtss2-esys-3.0.2-0t64 \
+            libtss2-tctildr0t64 \
+            libtss2-tcti-device0t64
+
       - name: Install dev deps + build tooling
         run: |
           pip install --upgrade pip wheel

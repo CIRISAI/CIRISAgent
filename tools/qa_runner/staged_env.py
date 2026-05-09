@@ -189,14 +189,12 @@ def prepare(
                     total_hash=fresh_hash,
                 )
             logger.info("staged env exists but no wheel found — rebuilding")
-            needs_full_rebuild = True
         else:
             logger.info(
                 "staged tree hash drift (%s → %s) — rebuilding",
                 recorded[:24],
                 fresh_hash[:24],
             )
-            needs_full_rebuild = True
 
     if root.exists():
         logger.info("removing previous staged env at %s", root)

@@ -194,7 +194,12 @@ def run_tree_verify(
     for f in result.failed_files or []:
         path = getattr(f, "path", None) or str(f)
         kind = getattr(f, "kind", None)
-        kind_str = kind.value if hasattr(kind, "value") else (str(kind) if kind is not None else "failed")
+        if kind is None:
+            kind_str = "failed"
+        elif hasattr(kind, "value"):
+            kind_str = str(kind.value)
+        else:
+            kind_str = str(kind)
         failed_modules[path] = kind_str
     python_integrity: Dict[str, Any] = {
         "valid": bool(result.valid),

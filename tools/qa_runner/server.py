@@ -770,9 +770,21 @@ class APIServerManager:
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 
-        # Build command - main.py is in the root directory
-        main_path = Path(__file__).parent.parent.parent / "main.py"
-        cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
+        # Build command. When --from-staged is set, the server under test is
+        # the wheel installed in the staged venv — that validates the SHIPPED
+        # artifact passes QA, not just the dev tree. Otherwise default to
+        # `sys.executable main.py` from the repo root.
+        if self.config.staged_env is not None:
+            cmd = [str(self.config.staged_env.ciris_server), "--port", str(self.config.api_port)]
+            self.console.print(
+                f"[dim]Using staged ciris-server: {self.config.staged_env.ciris_server}[/dim]"
+            )
+            self.console.print(
+                f"[dim]Canonical tree hash: {self.config.staged_env.total_hash}[/dim]"
+            )
+        else:
+            main_path = Path(__file__).parent.parent.parent / "main.py"
+            cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
 
         if self.config.mock_llm:
             cmd.append("--mock-llm")

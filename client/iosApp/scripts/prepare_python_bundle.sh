@@ -171,15 +171,30 @@ else
     cp -R "$BEEWARE_APP/app_packages" "$RESOURCES_DIR/"
 fi
 
-# Overlay latest CIRIS source from main repo (includes any fixes not in BeeWare build)
-echo "Overlaying latest ciris_engine from main repo..."
-rsync -a --exclude='__pycache__' --exclude='gui_static' --exclude='desktop_app' "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+# Overlay latest CIRIS source from main repo via the CANONICAL STAGING SCRIPT.
+# (2.8.5+) Single source of truth across Android/iOS/wheel/docker — produces
+# byte-identical Python runtime trees on every platform so CIRISVerify's
+# runtime walk hashes match the signed manifest. Replaces the per-platform
+# rsync-with-excludes pattern that drifted (Android stripped discord, tests,
+# examples; iOS only stripped gui_static/desktop_app; wheel skipped conscience
+# prompts; docker COPY'd everything). See tools/dev/stage_runtime.py for the
+# canonical ExemptRules — single change point if rules ever evolve.
+echo "Staging canonical Python runtime from main repo via tools.dev.stage_runtime..."
+STAGED_DIR=$(mktemp -d -t ciris-staged-ios.XXXXXX)
+trap "rm -rf $STAGED_DIR" EXIT
+( cd "$CIRIS_ROOT" && python3 -m tools.dev.stage_runtime "$STAGED_DIR" --quiet )
+# Mirror the staged tree's ciris_engine + ciris_adapters + ciris_sdk over
+# whatever BeeWare bundled.
+for pkg in ciris_engine ciris_adapters ciris_sdk; do
+    if [ -d "$STAGED_DIR/$pkg" ]; then
+        echo "  Overlaying $pkg from staged tree..."
+        rsync -a "$STAGED_DIR/$pkg/" "$RESOURCES_DIR/app/$pkg/"
+    fi
+done
 
-echo "Overlaying latest ciris_adapters from main repo..."
-rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
-
-# Overlay ciris_ios from source (includes kmp_main.py which is not in BeeWare build)
-echo "Overlaying ciris_ios from source (includes kmp_main.py)..."
+# Overlay ciris_ios from source (iOS-specific; includes kmp_main.py which is
+# not in BeeWare build, and is not part of the cross-platform canonical tree).
+echo "Overlaying ciris_ios from source (iOS-specific, includes kmp_main.py)..."
 rsync -a --exclude='__pycache__' "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
 
 # Overlay ciris_verify Python package (FFI bindings for CIRISVerify)

@@ -50,8 +50,14 @@ ACCORD_FILENAME = "accord_1.2b_POLYGLOT.txt"
 # Main ACCORD files (polyglot versions)
 # Comprehensive guide hashes (for signature verification in manifest)
 GUIDE_EXPECTED_HASHES: Dict[str, str] = {
-    "CIRIS_COMPREHENSIVE_GUIDE.md": "0515a63e8feab3acdd361ea047d27255dbc75382a0f00ab19e7859bfcb75e58f",
-    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d",
+    # Filenames migrated from .md → .txt in 2.8.5 alongside the runtime-shape
+    # consolidation (files moved into ciris_engine/data/localized/).
+    # CIRIS_COMPREHENSIVE_GUIDE.txt hash updated 2026-05-08 with the
+    # spiritual-direction prohibition language ("What CIRIS Can and Cannot
+    # Say About Religion" section, cross-tradition framing). _MOBILE.txt
+    # hash unchanged (no edits to that variant yet).
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "c07f2419849fb2876d5a31c6c4523c2c7f2e75efe2172f6aa947931ba6fae9cb",
+    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d",
 }
 
 ACCORD_EXPECTED_HASHES: Dict[str, str] = {
@@ -271,33 +277,58 @@ def _verify_guide_integrity(filename: str, content: str) -> None:
 
 
 def _load_platform_guide(base_path: Path) -> str:
-    """Load the appropriate runtime guide based on platform.
+    """Load the appropriate runtime guide based on platform + locale.
 
-    On mobile (Android/iOS), tries to load CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md first,
-    falls back to the legacy Android guide, then the standard guide.
+    Lookup order:
+      1. ``CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`` for the user's preferred
+         language (read from ``CIRIS_PREFERRED_LANGUAGE`` env via
+         ``get_preferred_language()``). Skipped when the lookup is the
+         English base — the base file is the final fallback below and
+         we don't want to load it twice.
+      2. On mobile, ``CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt`` then the
+         legacy ``_ANDROID.txt`` for older Android builds.
+      3. ``CIRIS_COMPREHENSIVE_GUIDE.txt`` (English base) as the final
+         fallback.
 
-    M1 FIX: Now verifies guide integrity against hashes in the signed manifest.
+    M1 FIX: Now verifies guide integrity against hashes in the signed
+    manifest (only the base + MOBILE variants are pinned today).
 
     Args:
-        base_path: The base directory containing the guide files
+        base_path: The directory containing the guide files. Today this
+            is the package-relative ``ciris_engine/data/localized/``
+            (set in the module-level loader at the bottom of this file).
 
     Returns:
-        The guide content as a string, or empty string if not found
+        The guide content as a string, or empty string if not found.
 
     Raises:
-        RuntimeError: If guide integrity verification fails
+        RuntimeError: If guide integrity verification fails for one of
+            the pinned filenames.
     """
     guide_files = []
 
-    # Platform-specific guide takes priority on mobile
-    if is_android() or is_ios():
-        guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md")
-        # Legacy fallback for older Android builds
-        guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md")
-        logger.debug("Mobile platform detected, will try mobile-specific guide first")
+    # 1. Locale-aware lookup. Get the preferred language from env;
+    # the existing localization helper handles defaulting to "en" and
+    # validation against the supported locale set.
+    try:
+        from ciris_engine.logic.utils.localization import get_preferred_language
 
-    # Standard guide as fallback
-    guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE.md")
+        lang = get_preferred_language()
+    except Exception:
+        lang = "en"
+
+    if lang and lang != "en":
+        guide_files.append(base_path / f"CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt")
+
+    # 2. Platform-specific guide on mobile (after the locale lookup so
+    # an explicitly set non-English locale wins over the platform default).
+    if is_android() or is_ios():
+        guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt")
+        guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE_ANDROID.txt")
+        logger.debug("Mobile platform detected, will try mobile-specific guide after locale match")
+
+    # 3. English base guide as the final fallback.
+    guide_files.append(base_path / "CIRIS_COMPREHENSIVE_GUIDE.txt")
 
     for guide_path in guide_files:
         try:
@@ -380,8 +411,13 @@ try:
         logger.error(f"[ACCORD] CRITICAL: {ACCORD_FILENAME} loaded as empty!")
         ACCORD_TEXT = ""
     else:
-        # Try to append platform-appropriate comprehensive guide
-        _GUIDE_BASE_PATH = Path(__file__).resolve().parents[3]
+        # Try to append platform-appropriate comprehensive guide.
+        # Path is package-relative so the loader works on installed wheels
+        # (was parents[3] = repo root in 2.8.4 and earlier; that path only
+        # resolved correctly in dev tree, returned empty on installs because
+        # the base guide files weren't in the wheel — fixed in 2.8.5 along
+        # with the move into ciris_engine/data/localized/).
+        _GUIDE_BASE_PATH = Path(__file__).resolve().parents[2] / "data" / "localized"
         _guide_content = _load_platform_guide(_GUIDE_BASE_PATH)
 
         if _guide_content:

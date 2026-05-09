@@ -129,6 +129,112 @@ jobs:
           path: test_durations_shard_${{ matrix.shard }}
           retention-days: 7
 
+  # Staged QA — run the full QA suite against a venv installed from the
+  # canonical staged tree (tools.dev.stage_runtime → wheel → venv).
+  # Validates the SHIPPED wheel artifact, not just the source tree. Catches
+  # the class of bug where setup.py / MANIFEST.in / staging diverge silently
+  # and the wheel ships incomplete content (the 2.8.4 thin-wheel + missing
+  # conscience-prompts incident class). Fast (~3–4 min on cold cache) so
+  # cheap to gate releases on.
+  staged-qa:
+    name: Staged QA (canonical wheel parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-staged-qa-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-staged-qa-
+            ${{ runner.os }}-pip-
+
+      - name: Install TPM2 system libraries
+        # Required by ciris-verify's FFI binary at runtime — without these,
+        # ctypes.CDLL() fails to load libciris_verify_ffi.so (raises OSError
+        # surfacing as "Failed to load library:" through the agent's setup
+        # wizard). The production Dockerfile apt-installs these too; ubuntu-
+        # latest ships without them by default.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libtss2-esys-3.0.2-0t64 \
+            libtss2-tctildr0t64 \
+            libtss2-tcti-device0t64
+
+      - name: Install dev deps + build tooling
+        run: |
+          pip install --upgrade pip wheel
+          # qa_runner needs the dev requirements to run (rich, requests, etc.);
+          # the staged venv installs the wheel's runtime deps separately via
+          # tools.qa_runner.staged_env.
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install build  # for stage_env's wheel-build step
+
+      - name: Cross-platform parity assertion (staged tree == wheel install)
+        # Pre-flight: prove the canonical staging algorithm produces the same
+        # bytes the wheel ships. If this fails, every downstream platform
+        # (Android Chaquopy, iOS Resources, docker, wheel install) drifts
+        # from the signed manifest and L4 cannot pass. Cheap to assert here.
+        run: |
+          python3 -m tools.dev.stage_runtime --check --quiet > /tmp/staged-hash
+          # Build a wheel from the staged tree, install into a tempvenv,
+          # walk what got installed and compare. (Reuses staged_env.prepare
+          # which is what qa_runner --from-staged calls.)
+          python3 -m tools.qa_runner.staged_env --rebuild --root /tmp/ciris-staged-qa
+          python3 -m tools.dev.stage_runtime --check --quiet \
+            --src /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages \
+            > /tmp/installed-hash
+          echo "Staged tree hash:    $(cat /tmp/staged-hash)"
+          echo "Wheel-install hash:  $(cat /tmp/installed-hash)"
+          if ! diff -q /tmp/staged-hash /tmp/installed-hash; then
+            echo "::error::Canonical staged tree and wheel install diverge!"
+            echo "::error::See tools/dev/stage_runtime.py::ExemptRules vs setup.py package_data + MANIFEST.in."
+            exit 1
+          fi
+          echo "✓ Canonical staging == wheel install (byte-equal)"
+
+      - name: Run QA against staged venv
+        env:
+          # Force first-run state so the QA runner can drive the setup wizard.
+          CIRIS_FORCE_FIRST_RUN: "1"
+        run: |
+          # --from-staged: server-under-test is the wheel-installed ciris-server
+          # in /tmp/ciris-staged-qa/venv (already prepared by the parity-check
+          # step above; staged_env.prepare is idempotent and reuses it).
+          # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
+          python3 -m tools.qa_runner --from-staged
+
+      - name: Upload qa_status snapshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staged-qa-status
+          path: qa_reports/qa_status.json
+          retention-days: 14
+
+      - name: Upload server logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: staged-qa-server-logs
+          path: |
+            logs/
+            /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages/logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Combine coverage and run SonarQube after all shards complete
   test-summary:
     name: Test Summary
@@ -705,7 +811,23 @@ jobs:
           python tools/ops/build_agent_extras.py > build-secrets.json
           cat build-secrets.json
 
-      - name: Sign build manifest (Python source tree)
+      - name: Stage canonical runtime tree
+        # Produce the SAME tree CIRISVerify walks at runtime. Single source of
+        # truth for: (a) the manifest signed below, (b) the wheel content (via
+        # setup.py package_data + MANIFEST.in), (c) Android Chaquopy bundle,
+        # (d) iOS Resources bundle. Every consumer hashes the same bytes, so
+        # the runtime walk produces the same total_hash the signing-time walk
+        # produced — L4 file integrity passes by construction.
+        #
+        # Algorithm matches ciris_verify_core::security::build_manifest::
+        # walk_file_tree + ExemptRules byte-for-byte. See tools/dev/
+        # stage_runtime.py docstring for the full rule set.
+        run: |
+          python3 -m tools.dev.stage_runtime /tmp/ciris-staged --print-manifest > /tmp/ciris-staged-manifest.json
+          # Echo the hash to the workflow log so a green build is auditable.
+          python3 -c "import json; m=json.load(open('/tmp/ciris-staged-manifest.json')); print(f'Staged hash: {m[\"total_hash\"]}'); print(f'Staged files: {m[\"files_copied\"]}')"
+
+      - name: Sign build manifest (Python runtime, staged)
         env:
           # Fleet convention: secrets stored base64-encoded; ciris-build-sign
           # reads the seed/secret as FILE PATHS (not raw values), so we
@@ -745,12 +867,15 @@ jobs:
           fi
           echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
           GIT_SHA=$(git rev-parse HEAD)
+          # Sign the staged tree. No --tree-include or --tree-exempt-* flags
+          # needed: stage_runtime already applied the canonical filter, so
+          # what's at /tmp/ciris-staged is exactly what gets signed and
+          # exactly what the runtime walks. Target name preserved as
+          # python-source-tree for v1.12.x verify-client compatibility (the
+          # name is historical; the content is now the staged runtime).
           ciris-build-sign sign \
             --primitive agent \
-            --tree . \
-            --tree-include ciris_engine ciris_adapters ciris_sdk \
-            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git \
-            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 \
+            --tree /tmp/ciris-staged \
             --tree-extra-hashes-file build-secrets.json \
             --binary-version "$VERSION" \
             --build-id "$GIT_SHA" \

@@ -14,8 +14,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 128
-        versionName "2.8.4"
+        versionCode 129
+        versionName "2.8.5"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -279,42 +279,33 @@ task cleanChaquopyOutputs(type: Delete) {
 
 // Sync Python sources from main repo before building
 // This ensures mobile always uses the latest ciris_engine and ciris_adapters
-// IMPORTANT: Depends on clean tasks to guarantee fresh sync and rebuild every time
-task syncPythonSources(type: Sync) {
-    description = "Sync ciris_engine and ciris_adapters from main repo"
+// Stage the canonical Python runtime tree via tools.dev.stage_runtime (2.8.5+).
+//
+// Single source of truth across all platforms — replaces the per-platform
+// Sync-with-excludes pattern that drifted between Android, iOS, wheel, and
+// docker (Android stripped discord adapter + tests + examples; iOS/desktop
+// kept them; wheel skipped conscience prompts; docker COPY'd everything).
+// Stage_runtime applies the canonical ExemptRules so the bytes that land in
+// `${buildDir}/python-src` are identical to what desktop wheel and iOS
+// bundle ship. CIRISVerify's runtime walk produces the same total_hash
+// across all platforms → L4 file integrity passes everywhere by construction.
+//
+// What stage_runtime excludes (canonical):
+//   - __pycache__, .pyc, .pyo, .pytest_cache, .mypy_cache, build/dist caches
+//   - tests/, examples/ (not runtime)
+//   - gui_static/, desktop_app/ (desktop-specific bolt-ons)
+//   - *.md (devnotes only, post-2.8.5 migration of load-bearing markdown to .txt)
+//
+// Notably NOT excluded anymore: adapters/discord/. The discord adapter
+// source files now ship on every platform; whether discord.py is actually
+// loaded at runtime depends on adapter configuration, not bundle content.
+task syncPythonSources(type: Exec) {
+    description = "Stage canonical Python runtime via tools.dev.stage_runtime (parity with iOS/wheel/docker)"
     dependsOn cleanPythonSources
     dependsOn cleanChaquopyOutputs
 
-    from("../../ciris_engine") {
-        into "ciris_engine"
-    }
-    from("../../ciris_adapters") {
-        into "ciris_adapters"
-    }
-    into "${buildDir}/python-src"
-
-    // Exclude unnecessary files to speed up build and reduce APK size
-    exclude "**/__pycache__/**"
-    exclude "**/*.pyc"
-    exclude "**/*.pyo"
-    exclude "**/.pytest_cache/**"
-    // Exclude web GUI static files (React/Next.js) - not used in mobile KMP app
-    exclude "**/gui_static/**"
-    exclude "**/android_gui_static/**"
-    // Desktop-app sources don't ship in the mobile bundle.
-    exclude "**/desktop_app/**"
-
-    // No point bundling docs/examples/tests on-device — parity with iOS
-    // (client/iosApp/scripts/rebuild_and_deploy.sh IOS_RSYNC_EXCLUDES,
-    // commit e28371555). README* + *.md are the bulk of the savings.
-    exclude "**/README*"
-    exclude "**/*.md"
-    exclude "**/examples/**"
-    exclude "**/tests/**"
-
-    // Exclude adapters that depend on libraries not available on Android
-    // Discord adapter requires discord.py which has no Android wheels
-    exclude "**/adapters/discord/**"
+    workingDir "../.."
+    commandLine "python3", "-m", "tools.dev.stage_runtime", "${buildDir}/python-src", "--quiet"
 }
 
 // Copy backend localization JSON files to ciris_engine/data/localized/

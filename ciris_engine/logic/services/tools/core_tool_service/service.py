@@ -227,19 +227,28 @@ class CoreToolService(BaseService, ToolService):
             return ToolResult(success=False, error=str(e))
 
     async def _self_help(self, parameters: ToolParameters) -> ToolResult:
-        """Access the agent experience document."""
+        """Access the agent experience document.
+
+        Resolves relative to the installed ``ciris_engine`` package so the
+        path works on both dev tree and installed wheels (was a CWD-relative
+        ``docs/agent_experience.md`` lookup in 2.8.4 and earlier — broke on
+        every wheel install because docs/ is outside the package).
+        """
         try:
-            experience_path = Path("docs/agent_experience.md")
+            # parents[4] walks up from this file to the ciris_engine package
+            # root, where data/agent_experience.txt lives.
+            experience_path = Path(__file__).resolve().parents[4] / "data" / "agent_experience.txt"
+            rel_source = "ciris_engine/data/agent_experience.txt"
 
             if not experience_path.exists():
                 return ToolResult(
-                    success=False, error="Agent experience document not found at docs/agent_experience.md"
+                    success=False, error=f"Agent experience document not found at {rel_source}"
                 )
 
             content = experience_path.read_text()
 
             return ToolResult(
-                success=True, data={"content": content, "source": "docs/agent_experience.md", "length": len(content)}
+                success=True, data={"content": content, "source": rel_source, "length": len(content)}
             )
 
         except Exception as e:

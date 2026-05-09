@@ -157,8 +157,13 @@ setup(
             "accord_1.2b.txt",  # Accord text file (v1.2-Beta)
             "accord_1.2b_compressed.txt",  # Compressed accord for testing
             "localized/*.json",  # Backend localization files (copied from /localization/)
-            "localized/*.txt",  # Localized ACCORD text files
-            "localized/*.md",  # Localized comprehensive guides
+            "localized/*.txt",  # Localized ACCORD + comprehensive guide text files (guides
+                                # migrated from .md → .txt in 2.8.5 alongside the repo-root
+                                # and docs/ consolidation; staging script can now use a
+                                # clean .md=devnotes denylist)
+            "agent_experience.txt",  # Agent self-help / introspection content (was at
+                                     # docs/agent_experience.md pre-2.8.5; CWD-relative
+                                     # reader broke on installs)
             "geo/cities.db",  # GeoNames cities database for location typeahead
         ],
         "ciris_engine.config": [
@@ -168,9 +173,29 @@ setup(
             "prompts/*.yml",  # DMA prompt templates (English)
             "prompts/localized/*/*.yml",  # Localized DMA prompt templates
         ],
+        "ciris_engine.logic.conscience": [
+            # Same shape as DMA prompts above. The conscience system reads
+            # entropy/coherence/optimization_veto/epistemic_humility prompt
+            # templates from these YML files at runtime; missing them on a
+            # wheel install means the conscience falls back to inline strings
+            # (silent degradation). Added in 2.8.5 alongside the canonical
+            # staging work — staging includes them, wheel must too, or the
+            # runtime walk hash diverges from the signed manifest.
+            "prompts/*.yml",
+            "prompts/localized/*/*.yml",
+        ],
         "ciris_engine.logic.persistence": [
             "migrations/sqlite/*.sql",  # SQLite database migrations
             "migrations/postgres/*.sql",  # PostgreSQL database migrations
+        ],
+        "ciris_engine.logic.accord": [
+            "bip39_english.txt",  # BIP39 wordlist used by accord/extractor.py
+                                   # for mnemonic generation. Load-bearing —
+                                   # extractor.py:49 reads from package dir
+                                   # via Path(__file__).parent. Wasn't shipped
+                                   # in 2.8.4 wheels (extractor fell through
+                                   # to /app/tools/security/bip39_english.txt
+                                   # which only exists in docker, breaks elsewhere).
         ],
         "ciris_engine": [
             "ciris_templates/*.yaml",  # Bundled agent identity templates

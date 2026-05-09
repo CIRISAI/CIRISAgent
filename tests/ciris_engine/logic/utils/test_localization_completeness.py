@@ -191,8 +191,15 @@ class TestGuideCompleteness:
 
     @pytest.fixture(scope="class")
     def english_guide_lines(self, data_dir: Path) -> int:
-        """Get line count of English Guide."""
-        en_path = data_dir / "CIRIS_COMPREHENSIVE_GUIDE.md"
+        """Get line count of English Guide.
+
+        Path migrated in 2.8.5: was repo-root ``CIRIS_COMPREHENSIVE_GUIDE.md``
+        (not shipped in the wheel — broken on installs); now lives at
+        ``ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt``
+        alongside the locale variants. Extension changed .md → .txt
+        (load-bearing markdown migrated to .txt; .md is now devnotes only).
+        """
+        en_path = data_dir / "localized" / "CIRIS_COMPREHENSIVE_GUIDE.txt"
         if not en_path.exists():
             return 560  # Expected line count
         with open(en_path, "r", encoding="utf-8") as f:
@@ -201,19 +208,20 @@ class TestGuideCompleteness:
     @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_guide_translation_exists(self, data_dir: Path, lang_code: str):
         """Test that Guide translation exists."""
+        # 2.8.5: extension migrated .md → .txt (parity with accord_*.txt convention).
         localized_dir = data_dir / "localized"
-        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md"
+        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt"
 
-        assert guide_path.exists(), f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md does not exist"
+        assert guide_path.exists(), f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt does not exist"
 
     @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
     def test_guide_translation_complete(self, data_dir: Path, english_guide_lines: int, lang_code: str):
         """Test that Guide translation has reasonable line count."""
         localized_dir = data_dir / "localized"
-        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md"
+        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt"
 
         if not guide_path.exists():
-            pytest.skip(f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md does not exist yet")
+            pytest.skip(f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt does not exist yet")
 
         with open(guide_path, "r", encoding="utf-8") as f:
             lang_lines = len(f.readlines())
@@ -222,7 +230,7 @@ class TestGuideCompleteness:
         min_lines = int(english_guide_lines * 0.8)
 
         assert lang_lines >= min_lines, (
-            f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.md has only {lang_lines} lines, "
+            f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt has only {lang_lines} lines, "
             f"expected at least {min_lines} (English has {english_guide_lines})"
         )
 

@@ -285,7 +285,7 @@ workflow** for the 29 supported languages. That layer produces:
 - `/localization/{code}.json` — UI strings, fully translated per locale
 - `ciris_engine/data/localized/accord_1.2b_{code}.txt` — ACCORD
   translated per locale
-- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{code}.md` —
+- `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{code}.txt` —
   guide translated per locale
 - `ciris_engine/logic/dma/prompts/localized/{code}/*.yml` — DMA
   prompts translated per locale

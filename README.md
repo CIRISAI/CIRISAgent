@@ -17,7 +17,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 2.8.4-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 2.8.5-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
@@ -224,7 +224,7 @@ ciris-agent --adapter api
 localization/              # Mobile UI strings (JSON)
 ciris_engine/data/localized/
 ├── accord_1.2b_{lang}.txt           # Localized ACCORD
-└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.md
+└── CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt
 ciris_engine/logic/dma/prompts/localized/{lang}/
 ├── pdma_ethical.yml       # Ethical evaluation
 ├── csdma_common_sense.yml # Common sense checks

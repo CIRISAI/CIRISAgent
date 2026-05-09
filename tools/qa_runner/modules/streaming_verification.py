@@ -1071,6 +1071,13 @@ class StreamingVerificationModule:
                                         "prompt_hash",
                                         "prompt",
                                         "response_text",
+                                        # v2.7.9 (TRACE_WIRE_FORMAT.md §5.10, item #5 of #712):
+                                        # parent-event linkage is REQUIRED on every LLM_CALL —
+                                        # together with (agent_id_hash, trace_id, thought_id)
+                                        # they form the non-forgeable parent-link to the pipeline
+                                        # event that issued the call. Persistence enforces presence.
+                                        "parent_event_type",
+                                        "parent_attempt_index",
                                     },
                                 }
 
@@ -1325,7 +1332,12 @@ class StreamingVerificationModule:
     # DMA prompts are used instead of conscience prompts because they are streamed in events
     DMA_LANGUAGE_MARKERS = {
         "en": ["Context Summary:", "Main Thought:", "Thought to evaluate:"],
-        "am": ["የአውድ ማጠቃለያ:", "ዋና ሀሳብ:", "የሚገመገም ሀሳብ:"],  # Amharic DMA markers
+        "am": [
+            "የአውድ ማጠቃለያ:",   # Context Summary (CSDMA system prompt template)
+            "ዋና ሀሳብ:",        # Main Thought (CSDMA + DSDMA + ASPDMA templates)
+            "የሚገመገም ሐሳብ:",   # Thought to evaluate (PDMA template — uses ሐ not ሀ;
+                              # the Ge'ez ḥa per pdma_ethical.yml:142, NOT a typo)
+        ],
         "ar": ["ملخص السياق:", "الفكرة الرئيسية:", "الفكرة للتقييم:"],  # Arabic
         "de": ["Kontextzusammenfassung:", "Hauptgedanke:", "Zu bewertender Gedanke:"],  # German
         "es": ["Resumen del contexto:", "Pensamiento principal:", "Pensamiento a evaluar:"],  # Spanish
@@ -1790,14 +1802,34 @@ class StreamingVerificationModule:
                                 if event_type not in all_valid_events:
                                     unexpected_events.add(event_type)
 
-                                # Capture DMA prompts for localization analysis (from dma_results event)
+                                # Capture DMA prompts for localization analysis (from dma_results event).
+                                # Capture BOTH the user-prompt (`*_prompt`) and the system-prompt
+                                # (`*_system_prompt`). The user-prompt is wrapped by the agent identity
+                                # template (`ciris_engine/ciris_templates/default.yaml::user_prompt_template`)
+                                # which is locale-agnostic English structure; only the SYSTEM prompts
+                                # carry the locale-specific evaluation templates from
+                                # `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`. Without the
+                                # system-prompt entries, CSDMA/DSDMA appear "not localized" even when
+                                # the agent IS using the localized templates correctly. PDMA happens
+                                # to localize its user-prompt template too, which is why it was the
+                                # only DMA that ever passed the old user-prompt-only check.
                                 if event_type == "dma_results":
-                                    for prompt_key in ["csdma_prompt", "dsdma_prompt", "pdma_prompt"]:
+                                    for prompt_key in (
+                                        "csdma_prompt",
+                                        "dsdma_prompt",
+                                        "pdma_prompt",
+                                        "csdma_system_prompt",
+                                        "dsdma_system_prompt",
+                                        "pdma_system_prompt",
+                                    ):
                                         prompt_value = event.get(prompt_key, "")
                                         if prompt_value:
+                                            # Type label preserves the suffix so the analysis output
+                                            # makes "CSDMA vs CSDMA_SYSTEM" visible in the report.
+                                            type_label = prompt_key.replace("_prompt", "").upper()
                                             dma_prompts.append(
                                                 {
-                                                    "type": prompt_key.replace("_prompt", "").upper(),
+                                                    "type": type_label,
                                                     "prompt": prompt_value,
                                                     "thought_id": event.get("thought_id"),
                                                 }

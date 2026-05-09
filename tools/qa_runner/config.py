@@ -158,6 +158,15 @@ class QAConfig:
     adapter: str = "api"
     wipe_data: bool = False  # Wipe data directory before starting server
 
+    # Staged-environment mode
+    # When set, APIServerManager launches the server from a venv built off the
+    # canonical staged tree (tools.dev.stage_runtime → wheel → venv) instead of
+    # `sys.executable main.py` from the dev tree. Validates that the SHIPPED
+    # wheel passes QA, not just the source tree. Use Any to avoid a circular
+    # import at module-load time; the actual type is StagedEnvironment from
+    # tools.qa_runner.staged_env.
+    staged_env: Optional[Any] = None
+
     # Database backend configuration (for parallel testing)
     database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
     postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"

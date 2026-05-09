@@ -184,12 +184,23 @@ def run_tree_verify(
         logger.warning(f"[tree_verify] verify_tree() raised: {e}")
         return None
 
-    failed_paths = [getattr(f, "path", str(f)) for f in (result.failed_files or [])]
+    # AttestationResult.python_failed_modules is typed Dict[str, str] (path → reason).
+    # CIRISVerify v1.13.2's TreeVerifyResult.failed_files is List[FailedFile{path, kind}],
+    # so collapse to a dict mapping each failed path to its kind label. Empty dict ≠ list:
+    # passing a list here breaks pydantic validation in build_attestation_result and the
+    # cache never populates, which makes every downstream thought error out at
+    # `await_attestation_ready()` (see CIRISAgent#741 root cause).
+    failed_modules: Dict[str, str] = {}
+    for f in result.failed_files or []:
+        path = getattr(f, "path", None) or str(f)
+        kind = getattr(f, "kind", None)
+        kind_str = kind.value if hasattr(kind, "value") else (str(kind) if kind is not None else "failed")
+        failed_modules[path] = kind_str
     python_integrity: Dict[str, Any] = {
         "valid": bool(result.valid),
         "modules_checked": int(result.files_checked),
         "modules_passed": int(result.files_passed),
-        "failed_modules": failed_paths,
+        "failed_modules": failed_modules,
         "total_hash": result.total_hash,
         "expected_total_hash": result.expected_total_hash,
         "registry_match": bool(result.registry_match),

@@ -165,7 +165,7 @@ def test_run_tree_verify_happy_path(tmp_path):
     assert result["registry_match"] is True
     assert result["algorithm"] == "A"
     assert result["binary_version"] == "2.8.6"
-    assert result["failed_modules"] == []
+    assert result["failed_modules"] == {}
 
     # TreeVerifyRequest got the canonical rules.
     call_kwargs = fake_request_cls.call_args.kwargs
@@ -177,8 +177,11 @@ def test_run_tree_verify_happy_path(tmp_path):
 
 
 def test_run_tree_verify_failed_files_captured(tmp_path):
+    # FailedFileKind is an enum at runtime (with .value); accept str too for test stubs.
     failed_one = SimpleNamespace(path="ciris_engine/foo.py", kind="hash_mismatch")
     failed_two = SimpleNamespace(path="ciris_adapters/bar.py", kind="missing")
+    # Reusing the str kind values directly — production sees enum members whose
+    # .value attribute the wrapper unwraps; either path produces the same dict.
     fake_result = _stub_verify_tree_result(
         valid=False,
         files_passed=118,
@@ -198,7 +201,10 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
     assert result["valid"] is False
     assert result["registry_match"] is False
     assert result["registry_error"] == "hash_mismatch"
-    assert result["failed_modules"] == ["ciris_engine/foo.py", "ciris_adapters/bar.py"]
+    assert result["failed_modules"] == {
+        "ciris_engine/foo.py": "hash_mismatch",
+        "ciris_adapters/bar.py": "missing",
+    }
 
 
 def test_run_tree_verify_handles_verify_exception(tmp_path):

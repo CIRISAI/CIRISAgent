@@ -25,22 +25,23 @@ COPY ciris_sdk ciris_sdk
 
 RUN python -m tools.dev.stage_runtime /staged --quiet
 
-# Generate startup_python_hashes.json from the same source tree so the
-# bundled JSON's `agent_version` + `total_hash` match the bytes the runtime
-# walker will see. Output lives at /src/startup_python_hashes.json (the
-# script's hardcoded location); COPY --from=stager picks it up below.
-RUN python tools/dev/regenerate_python_hashes.py
-
 # ---- Stage 2: the runtime image ---------------------------------------------
 FROM python:3.12-slim AS runtime
 
 # Install dependencies including build tools for psutil
 # Using --no-install-recommends to minimize attack surface
-# TPM2 TSS libraries required for CIRISVerify attestation
+# TPM2 TSS libraries required at runtime by ciris-verify v1.13.2's Linux
+# wheel (libtss2-tctildr.so.0 + friends). Without these, `from ciris_verify
+# import verify_tree` fails at ctypes.CDLL with
+# `OSError: libtss2-tctildr.so.0: cannot open shared object file`.
+# Full subset per CIRISAgent#740: tctildr + esys + mu + rc + sys.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     libtss2-esys-3.0.2-0t64 \
+    libtss2-mu-4.0.1-0t64 \
+    libtss2-rc0t64 \
+    libtss2-sys1t64 \
     libtss2-tctildr0t64 \
     libtss2-tcti-device0t64 \
     python3-dev \
@@ -68,10 +69,12 @@ COPY --from=stager --chown=ciris:ciris /staged /app
 COPY --chown=ciris:ciris main.py /app/main.py
 COPY --chown=ciris:ciris setup.py /app/setup.py
 COPY --chown=ciris:ciris BUILD_INFO.txt /app/BUILD_INFO.txt
-# startup_python_hashes.json is generated inside the stager (above) so it
-# always exists in the build context — no optional COPY tricks, no
-# dependence on a CI step having run before docker build.
-COPY --from=stager --chown=ciris:ciris /src/startup_python_hashes.json /app/startup_python_hashes.json
+# Note: startup_python_hashes.json is no longer baked. Desktop / server now
+# call ciris_verify.verify_tree() (Algorithm A) which walks /app directly
+# against the registered manifest — the JSON middleman was the bridge while
+# verify_tree() didn't exist. CIRISVerify#9 / CIRISAgent#740. Mobile
+# (Chaquopy) keeps its own startup_python_hashes.json written by
+# mobile_main.py at app boot for the Algorithm B path.
 
 # Create directories that the app needs to write to
 RUN mkdir -p /app/data /app/logs && chown -R ciris:ciris /app/data /app/logs

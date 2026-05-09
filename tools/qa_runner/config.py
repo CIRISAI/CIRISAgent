@@ -82,6 +82,7 @@ class QAModule(Enum):
     SINGLE_STEP_SIMPLE = "single_step_simple"
     SINGLE_STEP_COMPREHENSIVE = "single_step_comprehensive"
     STREAMING = "streaming"  # H3ERE pipeline streaming verification
+    L4_ATTESTATION = "l4_attestation"  # Algorithm A (verify_tree) runtime contract — staged-QA L3+ floor + cache-population guard
 
     # Full suites
     API_FULL = "api_full"
@@ -370,6 +371,12 @@ class QAConfig:
 
             return StreamingVerificationModule.get_streaming_verification_tests()
 
+        # L4 attestation contract (verify_tree / Algorithm A)
+        elif module == QAModule.L4_ATTESTATION:
+            from .modules.l4_attestation_tests import L4AttestationModule
+
+            return L4AttestationModule.get_l4_attestation_tests()
+
         # Aggregate modules
         elif module == QAModule.API_FULL:
             tests = []
@@ -392,6 +399,10 @@ class QAConfig:
             for m in [
                 # Streaming tests FIRST (requires clean queue state)
                 QAModule.STREAMING,
+                # L4 attestation contract — runs early so failures surface
+                # before downstream modules waste cycles against a broken
+                # attestation cache.
+                QAModule.L4_ATTESTATION,
                 # Core API modules
                 QAModule.AUTH,
                 QAModule.TELEMETRY,

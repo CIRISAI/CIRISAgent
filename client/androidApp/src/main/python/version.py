@@ -7,7 +7,7 @@ The version hash is computed at build time from the main repository.
 
 # Static version - updated at build time by the Android build process
 # This avoids file-system hashing logic that doesn't work in the Android package
-__version__ = "android-2.8.5"
+__version__ = "android-2.8.6"
 
 
 def get_version() -> str:

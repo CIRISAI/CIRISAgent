@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 from .hashes import load_python_hashes
+from .platform import is_mobile
+from .tree_verify import get_default_agent_version, run_tree_verify
 
 # Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
 if sys.version_info >= (3, 11):
@@ -214,8 +216,23 @@ def create_verification_thread_target(
 
             version = _get_verifier_version(verifier)
 
-            # Load Python hashes
-            python_hashes, agent_version = load_python_hashes()
+            # Algorithm selection (CIRISAgent#740 / CIRISVerify#9):
+            #   Mobile (Chaquopy)  → Algorithm B: load_python_hashes() reads
+            #     startup_python_hashes.json that mobile_main.py wrote at boot;
+            #     pass python_hashes to run_attestation_sync. Caps at L3.
+            #   Desktop / server  → Algorithm A: verify_tree() walks agent_root
+            #     against the registered file_manifest_json directly. No JSON
+            #     middleman. Reaches L4. Run BEFORE run_attestation_sync so we
+            #     can overlay python_integrity onto its result regardless of
+            #     what its built-in walker does.
+            python_hashes: Optional[PythonHashesWrapper] = None
+            agent_version: Optional[str] = None
+            tree_verify_result: Optional[Dict[str, Any]] = None
+            if is_mobile():
+                python_hashes, agent_version = load_python_hashes()
+            else:
+                agent_version = get_default_agent_version()
+                tree_verify_result = run_tree_verify(agent_version=agent_version)
 
             # Get paths and fingerprint
             agent_root = get_agent_root()
@@ -235,6 +252,11 @@ def create_verification_thread_target(
 
             if attestation_data is None:
                 attestation_data = {"error": "run_attestation_sync not available"}
+
+            # Algorithm A overlay (desktop/server only). When verify_tree
+            # produced a result, it is authoritative for python_integrity.
+            if tree_verify_result is not None and isinstance(attestation_data, dict):
+                attestation_data["python_integrity"] = tree_verify_result
 
             # Verify audit trail if we have a DB path
             if audit_db_path and attestation_data:

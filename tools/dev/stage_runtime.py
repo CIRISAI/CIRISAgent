@@ -213,8 +213,19 @@ def stage_runtime(
     """
     src = src.resolve()
     dest = dest.resolve()
-    if src == dest or dest.is_relative_to(src):
-        raise ValueError(f"refusing to stage into source tree (src={src}, dest={dest})")
+    # Refuse to clobber the actual source — staging on top of src itself, or
+    # into one of the include_roots whose contents we'd rmtree first. A
+    # generic build dir under the repo (e.g., client/androidApp/build/python-src)
+    # is fine — that's exactly where Gradle wants the staged Python tree for
+    # Chaquopy bundling.
+    if src == dest:
+        raise ValueError(f"refusing to stage into source tree (src=dest={src})")
+    for include_root in rules.include_roots:
+        included = (src / include_root).resolve()
+        if dest == included or dest.is_relative_to(included):
+            raise ValueError(
+                f"refusing to stage into a source include_root (dest={dest} is under {included})"
+            )
 
     if dest.exists():
         shutil.rmtree(dest)

@@ -126,15 +126,17 @@ try:
 except Exception:
     pass  # Fall back to hardcoded version if constants.py is not readable
 
-# Read requirements
+# Read requirements. Explicit utf-8 — comments contain non-ASCII (⚠️, →,
+# release notes from upstream releases) and the Windows wheel build runs
+# under cp1252 by default, which UnicodeDecodeError's on those bytes.
 requirements = []
-with open("requirements.txt") as f:
+with open("requirements.txt", encoding="utf-8") as f:
     requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 # Read dev requirements
 dev_requirements = []
 try:
-    with open("requirements-dev.txt") as f:
+    with open("requirements-dev.txt", encoding="utf-8") as f:
         dev_requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 except FileNotFoundError:
     pass

@@ -94,10 +94,16 @@ def _copy_build_infra(src: Path, dest: Path) -> None:
 
 
 def _build_wheel(tree: Path) -> Path:
-    """Run ``python -m build --wheel`` in the tree dir and return the wheel path."""
+    """Run ``python -m build --wheel`` in the tree dir and return the wheel path.
+
+    Builds in an isolated env (per pyproject.toml's ``[build-system] requires``)
+    so the wheel build doesn't depend on whichever setuptools/wheel happens
+    to be installed in the ambient Python — matters in CI runners that ship
+    pip+wheel but not setuptools.
+    """
     logger.info("building wheel from staged tree: %s", tree)
     subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--no-isolation"],
+        [sys.executable, "-m", "build", "--wheel"],
         cwd=tree,
         check=True,
     )

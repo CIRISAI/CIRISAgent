@@ -201,12 +201,26 @@ def run_tree_verify(
         else:
             kind_str = str(kind)
         failed_modules[path] = kind_str
+    # Field names mirror what result_builder._build_python_integrity_fields()
+    # reads (those keys date back to Algorithm B). Specifically:
+    #   - "actual_total_hash" (NOT "total_hash") — the field result_builder
+    #     copies into AttestationResult.python_total_hash. Using "total_hash"
+    #     leaves the API response field empty even though verify_tree
+    #     produced a real hash. Caught by L4_ATTESTATION QA module.
+    #   - "modules_failed" (count, NOT "failed_modules" the dict) — the field
+    #     result_builder copies into python_modules_failed.
+    #   - "total_hash_valid" — boolean, distinct from registry_match.
     python_integrity: Dict[str, Any] = {
         "valid": bool(result.valid),
         "modules_checked": int(result.files_checked),
         "modules_passed": int(result.files_passed),
+        "modules_failed": int(result.files_checked) - int(result.files_passed),
         "failed_modules": failed_modules,
-        "total_hash": result.total_hash,
+        "actual_total_hash": result.total_hash,
+        "total_hash_valid": (
+            bool(result.expected_total_hash)
+            and result.total_hash == result.expected_total_hash
+        ),
         "expected_total_hash": result.expected_total_hash,
         "registry_match": bool(result.registry_match),
         "registry_error": result.registry_error,

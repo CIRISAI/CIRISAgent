@@ -1423,6 +1423,10 @@ class QARunner:
                             from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
                             custom_result = HE300BenchmarkModule.run_custom_test(test, self.config, self.token)
+                        elif test.module == QAModule.L4_ATTESTATION:
+                            from .modules.l4_attestation_tests import L4AttestationModule
+
+                            custom_result = L4AttestationModule.run_custom_test(test, self.config, self.token)
                         else:
                             # Default to streaming verification module
                             from .modules.streaming_verification import StreamingVerificationModule

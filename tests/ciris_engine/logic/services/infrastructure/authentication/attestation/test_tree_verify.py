@@ -162,10 +162,17 @@ def test_run_tree_verify_happy_path(tmp_path):
     assert result["valid"] is True
     assert result["modules_checked"] == 120
     assert result["modules_passed"] == 120
+    assert result["modules_failed"] == 0
     assert result["registry_match"] is True
     assert result["algorithm"] == "A"
     assert result["binary_version"] == "2.8.6"
     assert result["failed_modules"] == {}
+    # Field names mirror what result_builder._build_python_integrity_fields()
+    # reads (Algorithm B-era keys). Wrong names → result_builder writes None
+    # to AttestationResult.python_total_hash / .python_hash_valid.
+    assert result["actual_total_hash"] == "sha256:abc"
+    assert result["expected_total_hash"] == "sha256:abc"
+    assert result["total_hash_valid"] is True
 
     # TreeVerifyRequest got the canonical rules.
     call_kwargs = fake_request_cls.call_args.kwargs
@@ -205,6 +212,11 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
         "ciris_engine/foo.py": "hash_mismatch",
         "ciris_adapters/bar.py": "missing",
     }
+    assert result["modules_failed"] == 2  # 120 - 118
+    # total_hash_valid is independent of registry_match — pure hash-equality
+    # against expected_total_hash. The stub keeps expected==total here, so
+    # this stays True even though registry_match=False.
+    assert result["total_hash_valid"] is True
 
 
 def test_run_tree_verify_handles_verify_exception(tmp_path):

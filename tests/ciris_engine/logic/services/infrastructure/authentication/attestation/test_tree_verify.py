@@ -11,8 +11,6 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from ciris_engine.logic.services.infrastructure.authentication.attestation import tree_verify
 
 
@@ -82,9 +80,6 @@ def test_resolve_install_root_returns_none_when_package_missing(monkeypatch):
     monkeypatch.delenv("CIRIS_AGENT_ROOT", raising=False)
     monkeypatch.delenv("CIRIS_HOME", raising=False)
     # Patch the import inside resolve_install_root to raise.
-    fake_module = SimpleNamespace()  # No __file__ attribute — falls into except.
-    delattr_target = "ciris_engine"
-
     real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
 
     def fake_import(name, *args, **kwargs):
@@ -157,7 +152,7 @@ def _stub_verify_tree_result(**overrides):
 
 def test_run_tree_verify_happy_path(tmp_path):
     fake_verify_tree = MagicMock(return_value=_stub_verify_tree_result())
-    fake_request_cls = MagicMock(side_effect=lambda **kw: SimpleNamespace(**kw))
+    fake_request_cls = MagicMock(side_effect=SimpleNamespace)
     fake_module = SimpleNamespace(verify_tree=fake_verify_tree, TreeVerifyRequest=fake_request_cls)
 
     with patch.dict(sys.modules, {"ciris_verify": fake_module}):
@@ -193,7 +188,7 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
     )
     fake_module = SimpleNamespace(
         verify_tree=MagicMock(return_value=fake_result),
-        TreeVerifyRequest=MagicMock(side_effect=lambda **kw: SimpleNamespace(**kw)),
+        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
     )
 
     with patch.dict(sys.modules, {"ciris_verify": fake_module}):
@@ -209,7 +204,7 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
 def test_run_tree_verify_handles_verify_exception(tmp_path):
     fake_module = SimpleNamespace(
         verify_tree=MagicMock(side_effect=RuntimeError("registry 5xx")),
-        TreeVerifyRequest=MagicMock(side_effect=lambda **kw: SimpleNamespace(**kw)),
+        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
     )
     with patch.dict(sys.modules, {"ciris_verify": fake_module}):
         result = tree_verify.run_tree_verify(agent_version="2.8.6", agent_root=str(tmp_path))

@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.7] - 2026-05-09
 
-CI sign step + canonical-rules drift fix. 2.8.6 wired `verify_tree()` end-to-end but L4 validation against the prod-installed wheel (post-`Register Build with CIRISRegistry`) showed `python_modules_passed=1499/1530` with 30 `extra` files — `ciris_engine/data/localized/*.json` data files were in the staged tree, in the wheel, but missing from the registered manifest. Root cause: `ciris-build-sign sign --target python-source-tree` ran without explicit `--tree-include / --tree-exempt-*` flags, so CIRISVerify fell back to its internal defaults that exclude `.json` and other non-`.py` extensions.
+CI sign step + canonical-rules drift fix + ciris-verify v1.14.0 floor (platform-asymmetric `missing` semantic). 2.8.6 wired `verify_tree()` end-to-end but L4 validation against the prod-installed wheel (post-`Register Build with CIRISRegistry`) showed `python_modules_passed=1499/1530` with 30 `extra` files — `ciris_engine/data/localized/*.json` data files were in the staged tree, in the wheel, but missing from the registered manifest. Plus 1 `missing` for `_build_secrets.py` (legitimately platform-asymmetric: mobile bundles ship it, desktop wheel intentionally doesn't).
 
 ### Fixed
 
 - **`.github/workflows/build.yml`** python-source-tree sign step: explicit `--tree-include ciris_engine ciris_adapters ciris_sdk` + full `--tree-exempt-dir` and `--tree-exempt-ext` flags matching `tools/dev/stage_runtime.py::ExemptRules`. Closes the 30-file silent drop on every release.
 - **`ciris_engine/logic/adapters/discord/py.typed`** removed — empty PEP 561 marker file that the wheel auto-shipped despite `MANIFEST.in` excluding it; not load-bearing for the internal adapter.
+
+### ciris-verify floor: 1.13.3 → 1.14.0
+
+- **Pin bump**: `>=1.13.3,<2.0.0` → `>=1.14.0,<2.0.0` (CIRISVerify#15 fix).
+- v1.14.0 splits `TreeVerifyResult.failed_files` (hard failures: hash_mismatch, extra) from a new `TreeVerifyResult.missing_files` (in-manifest, not-on-disk — soft / informational).
+- **`tree_verify.py`** updated: `missing_modules` dict surfaced separately from `failed_modules`. Build-time-only artifacts like `_build_secrets.py` no longer hard-fail desktop L4. `getattr(result, "missing_files", None) or []` keeps the wrapper backward-compatible against any transitional <1.14.0 install.
+- **Mobile bundles refreshed to v1.14.0** on all 3 ABIs via `tools/update_ciris_verify.py 1.14.0`.
 
 ### Tests
 

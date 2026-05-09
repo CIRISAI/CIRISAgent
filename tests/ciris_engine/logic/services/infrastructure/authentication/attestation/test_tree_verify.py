@@ -133,17 +133,23 @@ def test_run_tree_verify_returns_none_when_inputs_missing(monkeypatch):
 
 
 def _stub_verify_tree_result(**overrides):
-    """Build a SimpleNamespace mimicking ciris_verify.TreeVerifyResult."""
+    """Build a SimpleNamespace mimicking ciris_verify.TreeVerifyResult.
+
+    `missing_files` is the v1.14.0+ field for files in the manifest but not
+    on disk. Defaults empty; tests that exercise the platform-asymmetric
+    case override.
+    """
     defaults = dict(
         valid=True,
         files_checked=120,
         files_passed=120,
         failed_files=[],
+        missing_files=[],
         total_hash="sha256:abc",
         expected_total_hash="sha256:abc",
         registry_match=True,
         registry_error=None,
-        binary_version="2.8.6",
+        binary_version="2.8.7",
         project="ciris-agent",
     )
     defaults.update(overrides)
@@ -156,17 +162,19 @@ def test_run_tree_verify_happy_path(tmp_path):
     fake_module = SimpleNamespace(verify_tree=fake_verify_tree, TreeVerifyRequest=fake_request_cls)
 
     with patch.dict(sys.modules, {"ciris_verify": fake_module}):
-        result = tree_verify.run_tree_verify(agent_version="2.8.6", agent_root=str(tmp_path))
+        result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
 
     assert result is not None
     assert result["valid"] is True
     assert result["modules_checked"] == 120
     assert result["modules_passed"] == 120
     assert result["modules_failed"] == 0
+    assert result["modules_missing"] == 0
     assert result["registry_match"] is True
     assert result["algorithm"] == "A"
-    assert result["binary_version"] == "2.8.6"
+    assert result["binary_version"] == "2.8.7"
     assert result["failed_modules"] == {}
+    assert result["missing_modules"] == {}
     # Field names mirror what result_builder._build_python_integrity_fields()
     # reads (Algorithm B-era keys). Wrong names → result_builder writes None
     # to AttestationResult.python_total_hash / .python_hash_valid.
@@ -177,7 +185,7 @@ def test_run_tree_verify_happy_path(tmp_path):
     # TreeVerifyRequest got the canonical rules.
     call_kwargs = fake_request_cls.call_args.kwargs
     assert call_kwargs["project"] == "ciris-agent"
-    assert call_kwargs["binary_version"] == "2.8.6"
+    assert call_kwargs["binary_version"] == "2.8.7"
     assert "ciris_engine" in call_kwargs["include_roots"]
     assert "__pycache__" in call_kwargs["exempt_dirs"]
     assert "pyc" in call_kwargs["exempt_extensions"]
@@ -212,11 +220,65 @@ def test_run_tree_verify_failed_files_captured(tmp_path):
         "ciris_engine/foo.py": "hash_mismatch",
         "ciris_adapters/bar.py": "missing",
     }
-    assert result["modules_failed"] == 2  # 120 - 118
+    assert result["modules_failed"] == 2  # only failed_files entries
     # total_hash_valid is independent of registry_match — pure hash-equality
     # against expected_total_hash. The stub keeps expected==total here, so
     # this stays True even though registry_match=False.
     assert result["total_hash_valid"] is True
+
+
+def test_run_tree_verify_missing_files_separate_from_failed(tmp_path):
+    """v1.14.0+ TreeVerifyResult.missing_files lands in `missing_modules`,
+    not `failed_modules`. The platform-asymmetric build artifact case
+    (e.g., `_build_secrets.py` shipped only by mobile bundles) reports here
+    as soft / informational rather than as a hard L4-gating failure.
+    CIRISVerify#15 → CIRISAgent#742.
+    """
+    missing_one = SimpleNamespace(
+        path="ciris_adapters/wallet/providers/_build_secrets.py", kind="missing"
+    )
+    fake_result = _stub_verify_tree_result(
+        valid=True,
+        files_passed=119,
+        failed_files=[],
+        missing_files=[missing_one],
+    )
+    fake_module = SimpleNamespace(
+        verify_tree=MagicMock(return_value=fake_result),
+        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
+    )
+    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+        result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
+
+    assert result is not None
+    # No hard failures.
+    assert result["modules_failed"] == 0
+    assert result["failed_modules"] == {}
+    # Missing landed in the soft bucket.
+    assert result["modules_missing"] == 1
+    assert result["missing_modules"] == {
+        "ciris_adapters/wallet/providers/_build_secrets.py": "missing"
+    }
+
+
+def test_run_tree_verify_handles_v1_13_compat(tmp_path):
+    """If running against a transitional ciris-verify <1.14.0 (no
+    `missing_files` attr), the wrapper must not raise — `missing_modules`
+    stays empty. Caught by getattr(result, 'missing_files', None) or [].
+    """
+    legacy_result = _stub_verify_tree_result(missing_files=None)
+    # Simulate older API: drop the attr entirely.
+    delattr(legacy_result, "missing_files")
+    fake_module = SimpleNamespace(
+        verify_tree=MagicMock(return_value=legacy_result),
+        TreeVerifyRequest=MagicMock(side_effect=SimpleNamespace),
+    )
+    with patch.dict(sys.modules, {"ciris_verify": fake_module}):
+        result = tree_verify.run_tree_verify(agent_version="2.8.7", agent_root=str(tmp_path))
+
+    assert result is not None
+    assert result["modules_missing"] == 0
+    assert result["missing_modules"] == {}
 
 
 def test_run_tree_verify_handles_verify_exception(tmp_path):
